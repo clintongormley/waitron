@@ -4718,7 +4718,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   switches synchronisation on where the system provides it, and says so where it cannot);
   and on one that does, the same advice shows where the clock is right and the latest record's time
   was wrong — neither half clears the stop. The `clock.unusable` email
-  (`apps/server/src/i18n/box-emails.ts`) gives the same advice. Left open by A798-B slice 8 (#2012).
+  (`apps/server/src/i18n/box-emails.ts`) also tells the managers to connect the box to the internet
+  first. Left open by A798-B slice 8 (#2012).
 
 - **The backup verifier does not know `clock_stop_restarts`' links.** Slice 9 adds them with its
   first writer (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by

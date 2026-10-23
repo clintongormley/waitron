@@ -144,8 +144,9 @@ Each person gets one email per problem, in their own language, or the venue's if
 chosen one. If it cannot be sent, because the box has no internet or the mail server refuses it (for
 example, because the mail server settings have a wrong password), the box tries again each minute
 while the problem lasts, until the mail server accepts it. So the email arrives once the connection
-or the settings are fixed. If the problem ends first, for example because space was freed or the
-clock was set right, the box stops trying and sends nothing. A restart while the problem lasts can
+or the settings are fixed. If the problem ends first, for example because the clock was set right,
+the box stops trying and sends nothing. A full disk that is only partly freed is still nearly out of
+space, so anyone the full-disk email did not reach is sent the nearly-out-of-space email instead. A restart while the problem lasts can
 send the same email again. While no mail server is set up, nothing is sent.
 
 A box whose clock reads before 28 October 2024 usually cannot send its email: with a date that

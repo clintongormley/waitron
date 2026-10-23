@@ -98,7 +98,7 @@ function expected(code: BoxEmailCode, recipient: ManagerEmailRecipient) {
 }
 
 describe("startBoxEmailDuty", () => {
-  it("emails each manager once when the disk falls below 2 GB, in their own language", async () => {
+  it("emails each manager once when the low-space warning comes on, in their own language", async () => {
     const d = duty();
     d.state.lowSince = at(1);
     await d.tick();

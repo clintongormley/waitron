@@ -156,8 +156,9 @@ ninguno. Si no se puede enviar, porque el equipo no tiene internet o el servidor
 rechaza (por ejemplo, porque los ajustes del servidor de correo tienen una contraseña equivocada),
 el equipo lo vuelve a intentar cada minuto mientras dura el problema, hasta que el servidor de
 correo lo acepta. Así, el correo llega en cuanto se arregla la conexión o los ajustes. Si el
-problema termina antes, por ejemplo porque se liberó espacio o se puso bien la hora, el equipo deja
-de intentarlo y no envía nada. Un reinicio mientras dura el problema puede enviar el mismo correo
+problema termina antes, por ejemplo porque se puso bien la hora, el equipo deja de intentarlo y no
+envía nada. Un disco lleno al que solo se le libera parte del espacio sigue casi sin espacio, así
+que quien no recibió el correo de disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras dura el problema puede enviar el mismo correo
 otra vez. Mientras no haya ningún servidor de correo configurado, no se envía nada.
 
 Un equipo cuyo reloj marca una fecha anterior al 28 de octubre de 2024 normalmente no puede enviar

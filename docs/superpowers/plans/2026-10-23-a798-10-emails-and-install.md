@@ -79,7 +79,7 @@
   `system.manage`, as the certificate reminders choose them
   (`apps/server/src/certificate-reminder-worker.ts:61-87`).
 
-**Goal:** the managers get one email per episode when the box's disk drops below 2 GB, when it is
+**Goal:** the managers get one email per episode when the box's disk has about 2 GB free or less, when it is
 full, and when its clock is set before 28 October 2024, retried each minute until the mail server
 accepts it; the bell says when a card reader is offline; every till and handheld shows an amber
 line while a kitchen printer is stuck, and a device whose receipts go to a stuck printer shows it
@@ -356,10 +356,10 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
 6. **What is emailed, and an episode of each.**
    - `storage.space_low` and `storage.disk_full` come from the stop and the warning, not from the
      notices. The two share one **disk episode**, from the first check that finds the stop on or the
-     warning on until a check finds both off. In a disk episode, `storage.disk_full` is emailed once,
-     the first time the stop is found on; `storage.space_low` is emailed once, the first time the
-     warning is found on while the stop is off, to each recipient the episode's `storage.disk_full`
-     email has not reached. So a disk going from low to full sends both, once each; a box found full and low at
+     warning on until a check finds both off. In a disk episode, `storage.disk_full` is emailed, while
+     the stop is on, to each recipient it has not reached; `storage.space_low` is emailed, while the
+     warning is on and the stop is off, to each recipient who has been sent neither email in that
+     episode. So a disk going from low to full sends both, once each; a box found full and low at
      once sends only the full disk; a stop that lifts and returns while space stays under 2.5 GiB
      sends nothing more, which keeps a disk hovering at full from emailing every few minutes (the stop
      lifts at 16 MiB, `boot-failure.ts:47`; the warning clears only at 2.5 GiB). Cost: a free-space
@@ -1106,9 +1106,9 @@ as it is.
 
 - `storage.space_low`
   - en subject: `{venue}: the box is nearly out of disk space`
-  - en text: `The box at {venue} has less than 2 GB of disk space left. Everything still works, but if the disk fills up nothing can be saved. See what is using the space on the Box status page: in the dashboard, Settings → Box status.`
+  - en text: `The box at {venue} is nearly out of disk space: it has about 2 GB left, or less. Everything still works, but if the disk fills up nothing can be saved. See what is using the space on the Box status page: in the dashboard, Settings → Box status.`
   - es subject: `{venue}: al equipo le queda poco espacio en disco`
-  - es text: `Al equipo de {venue} le quedan menos de 2 GB de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del equipo: en el panel de gestión, Ajustes → Estado del equipo.`
+  - es text: `Al equipo de {venue} le queda poco espacio en disco: unos 2 GB o menos. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del equipo: en el panel de gestión, Ajustes → Estado del equipo.`
 - `storage.disk_full`
   - en subject: `{venue}: the box is out of disk space and cannot save anything`
   - en text: `The box at {venue} is out of disk space, so nothing can be saved: no orders, payments or clock-ins. Free space on the Box status page (in the dashboard, Settings → Box status): its Free button deletes only files the box no longer needs. If that is not enough, ask whoever installed the box to free more space or fit a bigger disk.`
@@ -1178,7 +1178,6 @@ export function startBoxEmailDuty(deps: {
   send: TextEmailSender;
   isPrimary: () => boolean;
   intervalMs: number;
-  now: () => Date;
   log: Logger;
   timer?: (ms: number, fn: () => void) => Timer;
 }): { stop: () => Promise<void> };
@@ -1189,8 +1188,8 @@ said: Set<string>; logged: Map<string, Set<TextEmailOutcome>> }>`, keyed `storag
 4, 5, 6; Task 9 adds 3, the primary gate and the failure log):
 1. Return (still arming the next timer) if stopped.
 2. **Disk episode** (decision 6): `full = disk.since() !== null`, `low = space.current().lowSince !==
-   null`. Neither → delete both storage episodes. Else want `storage.disk_full` when `full`; want
-   `storage.space_low` when `low && !full && !episodes.has("storage.disk_full")`. Create a wanted
+   null`. Neither → delete both storage episodes. Else, when `full`, `storage.disk_full` is due; otherwise
+   `storage.space_low` is due, skipping every recipient in `storage.disk_full`'s `sentTo`. Create a wanted
    episode if missing.
 3. (Task 9) Module episodes.
 4. If no episode is wanted at this check, done, with nothing read. Otherwise `ctx = await context()`
@@ -1218,9 +1217,8 @@ said: Set<string>; logged: Map<string, Set<TextEmailOutcome>> }>`, keyed `storag
   async () => ({ notices: [], unavailable: [] })`; `context = vi.fn(async () => ({ venue: "Corner
   Bistro", recipients, delivery }))` with `delivery = { mode: "smtp", smtp: { url:
   "smtp://127.0.0.1:1", from: "box@example.test" } }`; recipients `ana@example.test` (`es`) and
-  `ben@example.test` (`en`); `send = vi.fn<TextEmailSender>(async () => "sent")`; a log spy; a settable
-  `now`. Expected messages are built with `boxEmailMessage`. Cases:
-  1. `"emails each manager once when the disk falls below 2 GB, in their own language"`: `lowSince`
+  `ben@example.test` (`en`); `send = vi.fn<TextEmailSender>(async () => "sent")`; a log spy. Expected messages are built with `boxEmailMessage`. Cases:
+  1. `"emails each manager once when the low-space warning comes on, in their own language"`: `lowSince`
      set → tick → two sends, ana with the `es` words and ben with the `en` words of
      `storage.space_low`; tick → no more.
   2. `"a box found full and low at once emails only the full disk"`.
@@ -1280,7 +1278,8 @@ said: Set<string>; logged: Map<string, Set<TextEmailOutcome>> }>`, keyed `storag
   `isBoxEmailCode(code)` and a code not in `STORAGE_EMAIL_CODES`, want episode
   `module:${owner}:${key}` (create if missing). Then delete every `module:` episode whose owner is
   not in `read.unavailable` and which no notice of this read wants. Episodes of an owner in
-  `read.unavailable` are neither created nor deleted by this read.
+  `read.unavailable` are neither created nor deleted by this read, and are due at this check like the
+  ones the read found.
 - **`stop()`** sets `stopped`, cancels the armed timer, and returns the promise of a `context()` or
   `moduleNotices()` call in flight (resolved, whatever it settles to), else a resolved promise. After
   `stopped`, no `context()`, `moduleNotices()` or `send` is started; a `send` already in flight is not
@@ -1426,7 +1425,6 @@ const boxEmails = startBoxEmailDuty({
   send: createTextEmailSender(),
   isPrimary: () => holders.singletonRole.current === "primary",
   intervalMs: BOX_EMAIL_CHECK_MS,
-  now,
   log,
 });
 undoOnFailure.push(() => boxEmails.stop());
@@ -1669,7 +1667,7 @@ nothing more (CLAUDE.md §1); the English guide uses English names in its exampl
   offline.** While the bell or this page is open, the box asks the provider at most every five
   minutes, so it can show a few minutes late." A new section **Emails about the box** `{#emails}`
   after `{#clock-behind}`: who gets them (people who can manage the system and have an email address);
-  when (the disk under 2 GB, the disk full, the clock set before 28 October 2024); one email per
+  when (the disk at about 2 GB free or less, the disk full, the clock set before 28 October 2024); one email per
   problem, and if it cannot be sent — no internet, or the mail server refuses it, for example because
   the email settings have a wrong password — it is tried again each minute while the problem lasts,
   until the mail server accepts it, so it arrives once the connection or the settings are fixed; if the

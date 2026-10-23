@@ -96,8 +96,9 @@ Three parts:
   `venue.db`, which holds the product photos, where a file copy grows with it; and it takes every
   volume at once, so nobody keeps a list of the files a restore needs (the hand-kept list already
   went stale once — B2's whole-state-volume bullet). What it does not cover:
-  - the old image, which is not in the snapshot, and which `waitron.sh install` deletes once the new
-    box is healthy, so before the first order;
+  - the old image, which is not in the snapshot: `waitron.sh install` deletes it once the new box
+    comes up healthy, and on Docker's containerd image store Docker has already deleted it
+    (`deploy/README.md`, Updating and operating);
   - a box whose disk the installer did not lay out (ext4), which needs a fallback copy;
   - the failed attempt's own logs, which a rollback of the logs volume would erase — keep them out
     of the rollback, or send the report before rolling back.

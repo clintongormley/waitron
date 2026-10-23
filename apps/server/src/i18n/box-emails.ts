@@ -2,11 +2,11 @@ export const BOX_EMAIL_WORDS = {
   "storage.space_low": {
     en: {
       subject: "{venue}: the box is nearly out of disk space",
-      text: "The box at {venue} has about 2 GB of disk space left. Everything still works, but if the disk fills up nothing can be saved. See what is using the space on the Box status page: in the dashboard, Settings → Box status.",
+      text: "The box at {venue} is nearly out of disk space: it has about 2 GB left, or less. Everything still works, but if the disk fills up nothing can be saved. See what is using the space on the Box status page: in the dashboard, Settings → Box status.",
     },
     es: {
       subject: "{venue}: al equipo le queda poco espacio en disco",
-      text: "Al equipo de {venue} le quedan unos 2 GB de espacio en disco. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del equipo: en el panel de gestión, Ajustes → Estado del equipo.",
+      text: "Al equipo de {venue} le queda poco espacio en disco: unos 2 GB o menos. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del equipo: en el panel de gestión, Ajustes → Estado del equipo.",
     },
   },
   "storage.disk_full": {
