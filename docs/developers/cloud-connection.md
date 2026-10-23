@@ -346,41 +346,63 @@ from the protocol agreement with Cloud. The owner approved the complete
 Start with Cut A. Keep each affected adapter unstarted until its pre-code agreement
 is recorded; the plan permits isolated foundation fixtures without real admission.
 
-The Cloud source inspected for this intake is
-[`d0f89fbf105f4b15360bf21821b8b22d6fffe0d8`](https://github.com/waitron-io/waitron-cloud/tree/d0f89fbf105f4b15360bf21821b8b22d6fffe0d8).
-Its [A951 section](https://github.com/waitron-io/waitron-cloud/blob/d0f89fbf105f4b15360bf21821b8b22d6fffe0d8/docs/waitron-integration-contract.md#public-access-and-a951-proposed)
-is still labelled “PROPOSED” and states: “This is not a claim that today's gateway
-manifest is an appliance protocol.” It supplies architectural direction; the scoped
-message agreements listed below are not recorded there. The staff certificate exchange v1 has its own existing contract;
-it does not define the appliance or public-upstream exchange.
+### Cloud response published on 23 October 2026
 
-| Plan gate                 | Intake status and required next agreement                                                                                                                                                                                                                                                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| G0, owner                 | Complete plan and all cuts approved. No repeat build question is needed.                                                                                                                                                                                                                                                                                        |
-| G1, appliance and helper  | Pending named Waitron/Cloud owners, exact consumer pins and artifact digests. Agree authenticated bytes/actions, identity bindings, the three counters, certificate invalidation mapping, reports/replay and establishment/recovery. Pin helper framing, owned resources, addresses/ports, IPv4/IPv6 and expiry/removal rules before the T1 codec or T3 helper. |
-| G2, current authority     | Pending the actual A947 interface and Cloud agreement. Inspect its eventual landed source and withdrawal/freshness result before real admission. Membership, installation status and a primary-role boolean supply no substitute. Isolated authority fixtures remain permitted.                                                                                 |
-| G3, staff v1              | Reaffirm the existing opt-in, test-only exchange and response/poll/deadline/renewal limits before T7's adapter. Production issuance stays separately gated.                                                                                                                                                                                                     |
-| G4, public upstream       | Pending an independent issuer/trust, purpose, authentication, bounds, renewal/revocation and connection-closure contract before T10's adapter.                                                                                                                                                                                                                  |
-| G5, moves and replacement | Pending predecessor/phases, conditional commit/status, retirement/drain/expiry and recovery epochs before T11's adapters.                                                                                                                                                                                                                                       |
-| G6, routing and privacy   | Pending shared normalization vectors, routing context, manifest schema/digest and diagnostic bounds before cross-repository parsers or diagnostic export. A980/D101 flow acceptance precedes real metadata/traffic processing. Customer product agreements remain separate.                                                                                     |
-| G7, runtime and devices   | No runtime/device qualification is supplied by this intake. Keep real admission disabled until the applicable helper/host, executable pins, DNS/issuer and device/origin evidence is accepted.                                                                                                                                                                  |
+Cloud published its [Cut A contract review](https://github.com/waitron-io/waitron-cloud/blob/ca5d2a996b93d16c55ccb79b8c3d2228792b5090/docs/waitron-integration-contract.md#a951-cut-a-contract-review-2026-10-23)
+in PR #313 at `ca5d2a996b93d16c55ccb79b8c3d2228792b5090`.
+Its disposition is **amendments required**. Lane G owns the Cloud response; Lane E
+owns this intake, the client and the local helper boundary. Lane D retains D88
+and gateway deployment. The review inspected Cloud
+`b16f3ca630019f693d7db999aadc0167c0ef9027` and Waitron
+`9a016bb85ae0dab7d334b6fd52929f49d3cf042f`; those source revisions do not
+identify a qualified pair of running consumers.
+
+The full published contract has SHA-256
+`57df8883fb8dc50f5e0d93c63779ddb1c4831c16243e0df338a1cd6458522f4a`.
+This pins the review document. **Accepted appliance, helper and parser artifact
+digests: none.** Keep their adapters unstarted while the named owners resolve the
+technical amendments. Existing staff-v1 compatibility is reaffirmed; its client
+policy and the independent public-upstream agreement remain open.
+
+| Published source                                                                                                                                                                               | Source wording                                                                                                                               | Consequence for this intake                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [Cut A review](https://github.com/waitron-io/waitron-cloud/blob/ca5d2a996b93d16c55ccb79b8c3d2228792b5090/docs/waitron-integration-contract.md#a951-cut-a-contract-review-2026-10-23)           | “No A951 wire/helper/parser artifact is accepted by this review.”                                                                            | The response resolves ownership and the disposition, without opening G1 or G6.                  |
+| [Scoped agreements](https://github.com/waitron-io/waitron-cloud/blob/ca5d2a996b93d16c55ccb79b8c3d2228792b5090/docs/waitron-integration-contract.md#what-each-scoped-agreement-still-needs)     | “Internal foundation fixtures may continue under the approved plan with explicit injected policy, no real admission and no customer routes.” | Isolated foundation work remains within the existing build approval.                            |
+| [Staff-v1 compatibility](https://github.com/waitron-io/waitron-cloud/blob/ca5d2a996b93d16c55ccb79b8c3d2228792b5090/docs/waitron-integration-contract.md#existing-staff-v1-compatibility-facts) | “Neither is a transport grant or writer permission.”                                                                                         | Keep the existing control lease and machine proof separate from transport and writer authority. |
+
+| Plan gate                 | Intake status and required next agreement                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0, owner                 | Complete plan and all cuts approved. No repeat build question is needed.                                                                                                                                                                                                                                                                                                                                                      |
+| G1, appliance and helper  | Lane E and Lane G are named; exact consumer pins and accepted artifact digests remain open. Return versioned positive/rejection vectors and agree authenticated bytes/actions, identity bindings, the three counters, certificate invalidation mapping, reports/replay and establishment/recovery. Pin helper framing, owned resources, addresses/ports, IPv4/IPv6 and expiry/removal rules before the T1 codec or T3 helper. |
+| G2, current authority     | Pending the actual A947 interface and Cloud agreement. Inspect its eventual landed source and withdrawal/freshness result before real admission. Membership, installation status and a primary-role boolean supply no substitute. Isolated authority fixtures remain permitted.                                                                                                                                               |
+| G3, staff v1              | Existing opt-in, test-only v1 compatibility reaffirmed. Agree response-byte/request-time bounds, polling/jitter/retry hints, reconciliation deadline, renewal and key cadence before T7/T8. Production issuance stays separately gated.                                                                                                                                                                                       |
+| G4, public upstream       | Pending an independent issuer/trust, purpose, authentication, bounds, renewal/revocation and connection-closure contract before T10's adapter.                                                                                                                                                                                                                                                                                |
+| G5, moves and replacement | Pending predecessor/phases, conditional commit/status, retirement/drain/expiry and recovery epochs before T11's adapters.                                                                                                                                                                                                                                                                                                     |
+| G6, routing and privacy   | Return the versioned empty manifest and canonical digest, shared raw-request normalization vectors, authenticated gateway/venue/endpoint/epoch context and bounded diagnostic schema before cross-repository parsers or diagnostic export. A980/D101 flow acceptance precedes real metadata/traffic processing. Customer product agreements remain separate.                                                                  |
+| G7, runtime and devices   | No runtime/device qualification is supplied by this intake. Keep real admission disabled until the applicable helper/host, executable pins, DNS/issuer and device/origin evidence is accepted.                                                                                                                                                                                                                                |
 
 Keep timer policy explicit in synthetic fixtures. The plan's proposed ten-minute
 transport grant, one-minute attempts, 30-second drain and CSR backoff are not accepted
 runtime defaults. The existing one-hour control lease and 60-second proof window
 keep their staff-v1 meanings.
 
-Lane E owns the Waitron intake. Request Cloud's contract owner and acceptance from
-Lanes D and G in their campaign questions files. Record their reply in both sides'
-ledgers, then pin the canonical Cloud publication here with the named owners,
-consumer revisions, accepted artifact digests and scope before coding the affected
-adapter. A proposed pin or an unanswered request is not acceptance.
+Resolve the remaining artifact requests between Lane E and Lane G in both sides'
+ledgers, coordinating D88 and gateway deployment with Lane D. Before coding each
+affected adapter, record its versioned artifact, acceptance digest, both consumer
+revisions and allowed scope in the canonical Cloud contract and this intake. The
+published review is a response to the request, not acceptance of those artifacts.
+No repeat owner build question is needed. Keep A947's actual authority interface,
+the revised A1018 handover and D88 cold recovery as their separate dependencies.
 
-The inspected document digests below bind this intake to source bytes. They qualify
-source inspection only, not runtime behavior. Recheck the affected section if Cloud
-publishes a replacement; retain unrelated changes and the A1018 handover revision.
+### Earlier source inventory
 
-| Cloud document at the pin above                                     | SHA-256                                                            |
+The document digests below retain the initial inspection at Cloud
+`d0f89fbf105f4b15360bf21821b8b22d6fffe0d8`. They are historical source
+receipts, not accepted artifact digests or runtime qualification. Use the dated
+response above for the current disposition; retain the A1018 handover revision
+when reconciling later Cloud publications.
+
+| Cloud document at the earlier pin                                   | SHA-256                                                            |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `docs/waitron-integration-contract.md`                              | `1b0f35cff8cc7a69b79d9d785fa0f6058f387f385fadec63a97c3f6f720ef4b3` |
 | `docs/product-and-platform.md`                                      | `f3ccc126d829b380d2bf31a4983406a4a15c05fc156454e8cd359ff9bbbb18ff` |

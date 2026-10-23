@@ -469,9 +469,12 @@ pages, exact route/assets, customer authentication, business operations and serv
 availability. Connecting Cloud enables none of them. The earlier per-service
 publication question is superseded and is not asked again.
 
-The joint home remains Cloud's [Public access and A951](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/waitron-integration-contract.md#L115),
-proposed at that full baseline. Reconcile the actual consumer pins before scoped
-acceptance. Cloud's existing [confirmed architecture](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/product-and-platform.md#L89)
+Cloud's published [Cut A review](https://github.com/waitron-io/waitron-cloud/blob/ca5d2a996b93d16c55ccb79b8c3d2228792b5090/docs/waitron-integration-contract.md#a951-cut-a-contract-review-2026-10-23)
+requires amendments; no appliance, helper or parser artifact is accepted. Lane E
+owns the client and local helper boundary; Lane G owns the Cloud response, with
+Lane D retaining D88 and gateway deployment. The [intake](../developers/cloud-connection.md#a951-build-intake)
+pins the review document and remaining scoped requests. Reconcile exact artifact
+digests and both consumer revisions before each affected adapter. Cloud's existing [confirmed architecture](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/product-and-platform.md#L89)
 is separate from acceptance of every contract detail. Cloud sees customer plaintext
 for filtering; that grants no general retention authority. A980/D101 must accept
 metadata fields, purpose, access, location, bounds and retention for the affected
