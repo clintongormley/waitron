@@ -2,20 +2,7 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts.
 
-import {
-  and,
-  count,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  min,
-  ne,
-  notExists,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, ne, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/catalogue";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -38,8 +25,8 @@ import {
   DEMO_READER_ID,
   type CardProviderRuntimeDeps,
   cardReaders,
+  type ReaderStatus,
 } from "@waitron/payments";
-import { PRINTER_UNPAIRED } from "@waitron/printing";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -48,7 +35,7 @@ import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-
 import type { PageTestPages } from "./page-test-pages.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
-import { printJobInTrouble } from "./print-job-trouble.js";
+import { printersInTrouble } from "./print-job-trouble.js";
 import {
   passScreensDark,
   stationPrintersDown,
@@ -414,32 +401,13 @@ export function printingAlertSource(): AlertSource {
         });
       }
 
-      const rows = await tx
-        .select({
-          id: printers.id,
-          printer: printers.name,
-          n: count(),
-          oldest: min(printJobs.createdAt),
-        })
-        .from(printers)
-        .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
-        .where(
-          and(
-            eq(printers.active, true),
-            printJobInTrouble(now),
-            // Ended on purpose by an Unpair, not a fault to fix.
-            or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
-          ),
-        )
-        .groupBy(printers.id, printers.name);
-      for (const r of rows) {
-        // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.
+      for (const r of await printersInTrouble(tx, now)) {
         alerts.push({
           key: `printer.jobs_waiting:${r.id}`,
           code: "printer.jobs_waiting",
-          params: { printer: r.printer, count: Number(r.n) },
+          params: { printer: r.name, count: r.count },
           severity: "error",
-          since: new Date(r.oldest!).toISOString(),
+          since: new Date(r.oldest).toISOString(),
           screen: "printers",
         });
       }
@@ -767,13 +735,15 @@ export const BATTERY_ERROR = 10;
 const BATTERY_CHECK_LIMIT_MS = 45_000;
 
 /**
- * The card-reader battery alert source. A reader whose provider reports no battery raises nothing.
- * Readings are cached per reader id so a polling dashboard does not call the provider every time.
+ * The card-reader alert source: a reader its provider reports offline, and a low battery. A reader
+ * whose provider reports no battery raises no battery alert, and a status the provider could not
+ * read (`unreachable`) raises no offline alert. Status answers are cached per reader id so a
+ * polling dashboard does not call the provider every time.
  */
 export function batteryAlertSource(deps: {
   providers: readonly CardProviderContribution[];
   runtimeDeps: () => CardProviderRuntimeDeps;
-  cache: Pick<TtlCache<number | null>, "get">;
+  cache: Pick<TtlCache<ReaderStatus>, "get">;
 }): AlertSource {
   return {
     area: "card_reader",
@@ -793,19 +763,16 @@ export function batteryAlertSource(deps: {
       const deadline = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, BATTERY_CHECK_LIMIT_MS);
       });
-      let results: ({ kind: "reading"; percent: number | null } | { kind: "unavailable" })[];
+      let results: ({ kind: "reading"; status: ReaderStatus } | { kind: "unavailable" })[];
       try {
         // One deadline bounds the whole batch while each reader retains its own result.
         const pending = readers.map((r) => {
           const seat = cardProviderById(deps.providers, r.provider);
           return Promise.race([
             deps.cache
-              .get(r.id, async () => {
-                const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
-                return status.batteryPercent ?? null;
-              })
+              .get(r.id, () => seat.readers.status(deps.runtimeDeps(), r.ref))
               .then(
-                (percent) => ({ kind: "reading" as const, percent }),
+                (status) => ({ kind: "reading" as const, status }),
                 () => ({ kind: "unavailable" as const }),
               ),
             deadline.then(() => ({ kind: "unavailable" as const })),
@@ -829,7 +796,17 @@ export function batteryAlertSource(deps: {
           });
           return;
         }
-        const percent = result.percent;
+        const { status } = result;
+        if (status.online === false && status.unreachable !== true)
+          alerts.push({
+            key: `reader.offline:${r.id}`,
+            code: "reader.offline",
+            params: { reader: r.name },
+            severity: "warning",
+            since: null,
+            screen: "payments",
+          });
+        const percent = status.batteryPercent ?? null;
         if (percent === null || percent > BATTERY_WARN) return;
         alerts.push({
           key: `reader.battery_low:${r.id}`,

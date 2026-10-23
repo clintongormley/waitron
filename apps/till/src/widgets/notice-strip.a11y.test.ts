@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { StaffNotice } from "../api/client.js";
@@ -47,6 +47,19 @@ describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (
     );
     await userEvent.click(el.shadowRoot!.querySelector("button")!);
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with sixteen open, scrolling inside itself", async () => {
+    const { el, host } = await mountWidget<TillNoticeStrip>(
+      "till-notice-strip",
+      { notices: Array.from({ length: 16 }, (_, i) => ({ ...SPACE, key: `space-${i}` })) },
+      theme,
+    );
+    await userEvent.click(el.shadowRoot!.querySelector("button")!);
+    await el.updateComplete;
+    const list = el.shadowRoot!.querySelector("ul")!;
+    expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
     await expectNoA11yViolations(host);
   });
 });

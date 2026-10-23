@@ -1125,7 +1125,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
 
     await expect(readBattery(source)).rejects.toThrow();
@@ -1171,7 +1171,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [provider],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -1212,7 +1212,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [provider],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
 
     expect(await readBattery(source)).toEqual(
@@ -1237,7 +1237,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [provider],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
 
     expect(await readBattery(source)).toEqual(
@@ -1268,7 +1268,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [stubProvider({ battery: () => undefined, calls })],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 60_000, now: () => NOW }),
     });
 
     await expect(readBattery(source)).resolves.toEqual([]);
@@ -1291,7 +1291,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [stubProvider({ battery: (ref) => percentByRef[ref], calls })],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
 
     const alerts = await readBattery(source);
@@ -1323,7 +1323,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [stubProvider({ battery: () => 5, calls })],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => clock }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => clock }),
     });
 
     await readBattery(source, clock);
@@ -1346,7 +1346,7 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [provider],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
 
     expect((await readBattery(source)).map((alert) => alert.key)).toEqual([
@@ -1362,10 +1362,78 @@ describe("batteryAlertSource", () => {
     const source = batteryAlertSource({
       providers: [stubProvider({ battery: () => 5, calls })],
       runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
     expect(await readBattery(source)).toEqual([]);
     expect(calls.n).toBe(0);
+  });
+
+  it("raises reader.offline for a reader its provider reports offline, beside its battery alert", async () => {
+    await seedTenant(batterySuite.db);
+    const terraceId = await seedReader({ providerRef: "terrace", name: "Terrace" });
+    const counterId = await seedReader({ providerRef: "counter", name: "Counter" });
+    const provider = stubProvider({ battery: () => undefined, calls: { n: 0 } });
+    provider.readers.status = async (_deps, ref) =>
+      ref === "terrace" ? { online: false, batteryPercent: 5 } : { online: true };
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    const alerts = await readBattery(source);
+    expect(alerts).toEqual(
+      expect.arrayContaining([
+        {
+          key: `reader.offline:${terraceId}`,
+          code: "reader.offline",
+          params: { reader: "Terrace" },
+          severity: "warning",
+          since: null,
+          screen: "payments",
+        },
+        expect.objectContaining({ key: `reader.battery_low:${terraceId}` }),
+      ]),
+    );
+    expect(alerts.filter((alert) => alert.key.includes(counterId))).toEqual([]);
+  });
+
+  it("says nothing about the connection when the provider could not read the status", async () => {
+    await seedTenant(batterySuite.db);
+    await seedReader({ providerRef: "terrace", name: "Terrace" });
+    const provider = stubProvider({ battery: () => undefined, calls: { n: 0 } });
+    provider.readers.status = async () => ({ online: false, unreachable: true });
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    expect(await readBattery(source)).toEqual([]);
+  });
+
+  it("reads the status once for both checks within five minutes", async () => {
+    await seedTenant(batterySuite.db);
+    await seedReader({ providerRef: "counter", name: "Counter" });
+    let clock = NOW;
+    const calls = { n: 0 };
+    const provider = stubProvider({ battery: () => undefined, calls });
+    provider.readers.status = async () => {
+      calls.n += 1;
+      return { online: false };
+    };
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => clock }),
+    });
+
+    const first = await readBattery(source, clock);
+    clock = new Date(NOW.getTime() + 4 * 60_000);
+    const second = await readBattery(source, clock);
+    expect(calls.n).toBe(1);
+    expect(first.map((alert) => alert.code)).toContain("reader.offline");
+    expect(second.map((alert) => alert.code)).toContain("reader.offline");
   });
 });
 

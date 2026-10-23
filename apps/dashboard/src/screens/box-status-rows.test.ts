@@ -551,6 +551,16 @@ describe("boxStatusRows", () => {
     });
     expect(other).toBe(0);
   });
+
+  it("a reader.offline alert turns the card readers row amber with its sentence", () => {
+    const offline = alert("reader.offline", "card_reader", { params: { reader: "Reader 1" } });
+    const { rows } = boxStatusRows(quietHealth(), [offline]);
+    expect(row(rows, "readers")).toMatchObject({
+      state: "attention",
+      line: alertMessage("reader.offline", { reader: "Reader 1" }, "en"),
+    });
+    expect(row(rows, "readers").line).toContain("Reader 1");
+  });
 });
 
 describe("payments stopped while the box's clock reads behind its last sale", () => {

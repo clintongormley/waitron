@@ -96,7 +96,9 @@ Three parts:
   `venue.db`, which holds the product photos, where a file copy grows with it; and it takes every
   volume at once, so nobody keeps a list of the files a restore needs (the hand-kept list already
   went stale once — B2's whole-state-volume bullet). What it does not cover:
-  - the old image, which is kept by its tag, not in the snapshot;
+  - the old image, which is not in the snapshot: `waitron.sh install` deletes it once the new box
+    comes up healthy, and on Docker's containerd image store Docker has already deleted it
+    (`deploy/README.md`, Updating and operating);
   - a box whose disk the installer did not lay out (ext4), which needs a fallback copy;
   - the failed attempt's own logs, which a rollback of the logs volume would erase — keep them out
     of the rollback, or send the report before rolling back.
@@ -386,14 +388,14 @@ today); generalise archive entry routing off declared source ids when a second n
   the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
   are still to measure.
 - **The box image carries the WireGuard link.**
-- **The box image keeps its clock synchronised, with no terminal** (A798). Nothing in `deploy/` sets up
-  time synchronisation today (grep for NTP, chrony, timesyncd, timedatectl), and the server's
+- **The box image keeps its clock synchronised, with no terminal** (A798). The server's
   `timedatectl` probe reports "unavailable" where the command is absent
   (`apps/server/src/time-health.ts:34-43`). Since A798's revision 5 (owner, 2026-10-19) a box whose clock
   reads earlier than its last recorded sale stops taking payment until the clock is set, so the
   image should also keep time through a power cut (hardware with a battery-backed clock), and set
-  it as soon as it is online. A798-B switches the host's synchronisation on at `waitron.sh install`;
-  the image makes it standing.
+  it as soon as it is online. Since A798-B slice 10, `waitron.sh install` runs `timedatectl
+  set-ntp true` and says so, or says that unless another time service runs nothing keeps the clock
+  right; the image makes it standing.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Kiosk options, none built: Chromium in the box image, every box (the owner's decision in B3's

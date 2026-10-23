@@ -43,9 +43,18 @@ afterEach(() => {
 // unconditionally: the `docker` stub sleeps that many seconds on EVERY invocation.
 // `docker image inspect` reports an image absent when its name contains WT_IMAGE_MISSING, and
 // `docker pull` fails when its arguments contain WT_IMAGE_PULL_FAIL; every other image is present.
+// `compose up` and `compose down` leave a marker file beside the case's log, and `ps -q` answers no
+// container after a `down` until the next `up`, as real compose does once `down` has removed them.
+// WT_NO_CONTAINERS=1 answers no container at all; =before answers none until the first `up`, a first
+// install. WT_OLD_IMAGES=1 makes `inspect -f {{.Image}}` answer sha256:old-app and sha256:old-agent
+// until the first `up`, a box that ran older images before the upgrade. WT_IMAGE_STORE=containerd
+// models Docker's containerd image store, where an image whose tag moved is gone already, so
+// `docker image inspect` reports a sha256:old-* id absent; the default models the classic store,
+// which keeps it. `docker image rm` fails when WT_RMI_FAIL=1.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
-// which has no systemctl). `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
+// which has no systemctl). `timedatectl` is stubbed so no case reaches a real one on a Linux machine,
+// and fails when WT_TIMEDATECTL_FAIL=1. `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
 // reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
 // suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
@@ -102,8 +111,12 @@ case "$1" in
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
       ps)
         case "$args" in
-          *"-q app") [ "\${WT_NO_CONTAINERS}" != 1 ] && echo app-container; exit 0 ;;
-          *"-q print-agent") [ "\${WT_NO_CONTAINERS}" != 1 ] && echo agent-container; exit 0 ;;
+          *"-q app"|*"-q print-agent")
+            [ "\${WT_NO_CONTAINERS}" = 1 ] && exit 0
+            [ "\${WT_NO_CONTAINERS}" = before ] && [ ! -e "\${WT_LOG}.up" ] && exit 0
+            { [ ! -e "\${WT_LOG}.down" ] || [ -e "\${WT_LOG}.up" ]; } || exit 0
+            case "$args" in *"-q app") echo app-container ;; *) echo agent-container ;; esac
+            exit 0 ;;
         esac
         # WT_DOCKER_PS_PENDING probes answer empty before the box reports WT_DOCKER_PS: a container
         # that has no health verdict yet. The counter is a file in the case's own directory, so cases
@@ -141,7 +154,8 @@ case "$1" in
           *--images*) printf '%s\\n' waitron:stub axllent/mailpit:v1.31.2 waitron-print-agent:stub ;;
           *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
         esac ;;
-      up|down) ;;
+      up) : > "\${WT_LOG}.up" ;;
+      down) : > "\${WT_LOG}.down" ;;
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
   inspect)
@@ -149,13 +163,15 @@ case "$1" in
     case "$args" in
       *app-container*)
         case "$args" in
-          *"-f {{.Image}}"*) echo sha256:running-app ;;
+          *"-f {{.Image}}"*)
+            if [ "\${WT_OLD_IMAGES}" = 1 ] && [ ! -e "\${WT_LOG}.up" ]; then echo sha256:old-app; else echo sha256:running-app; fi ;;
           *"-f {{.Config.Image}}"*) echo waitron:newer-tag ;;
           *) exit 97 ;;
         esac ;;
       *agent-container*)
         case "$args" in
-          *"-f {{.Image}}"*) echo sha256:running-agent ;;
+          *"-f {{.Image}}"*)
+            if [ "\${WT_OLD_IMAGES}" = 1 ] && [ ! -e "\${WT_LOG}.up" ]; then echo sha256:old-agent; else echo sha256:running-agent; fi ;;
           *"-f {{.Config.Image}}"*) echo waitron-print-agent:newer-tag ;;
           *) exit 97 ;;
         esac ;;
@@ -167,9 +183,13 @@ case "$1" in
       *--format*sha256:running-app*) printf '%s\\n' "\${WT_APP_LABELS}"; exit 0 ;;
       *--format*sha256:running-agent*) printf '%s\\n' "\${WT_AGENT_LABELS}"; exit 0 ;;
     esac
+    if [ "$2" = inspect ] && [ "\${WT_IMAGE_STORE}" = containerd ]; then
+      case "$3" in sha256:old-*) exit 1 ;; esac
+    fi
     if [ "$2" = inspect ] && [ -n "\${WT_IMAGE_MISSING}" ]; then
       case "$args" in *"\${WT_IMAGE_MISSING}"*) exit 1 ;; esac
-    fi ;;
+    fi
+    [ "$2" = rm ] && [ "\${WT_RMI_FAIL}" = 1 ] && exit 1 ;;
   pull)
     if [ -n "\${WT_IMAGE_PULL_FAIL}" ]; then
       case "$args" in *"\${WT_IMAGE_PULL_FAIL}"*) exit 1 ;; esac
@@ -262,6 +282,10 @@ esac
 exit 0
 `,
 );
+stub(
+  "timedatectl",
+  '[ "${WT_TIMEDATECTL_FAIL}" = "1" ] && { echo "Failed to set ntp: NTP not supported" >&2; exit 1; }; exit 0',
+);
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 
@@ -311,6 +335,10 @@ function sandbox({
   imageMissing = "",
   imagePullFail = "",
   directorySuffix = "",
+  timedatectlFail = false,
+  oldImages = false,
+  imageStore = "classic",
+  rmiFail = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), `waitron-sh-${directorySuffix}`));
   dirs.push(root);
@@ -403,6 +431,10 @@ function sandbox({
       WT_AA_PARSE_FAIL: apparmorParseFail ? "1" : "0",
       WT_IMAGE_MISSING: imageMissing,
       WT_IMAGE_PULL_FAIL: imagePullFail,
+      WT_TIMEDATECTL_FAIL: timedatectlFail ? "1" : "0",
+      WT_OLD_IMAGES: oldImages ? "1" : "0",
+      WT_IMAGE_STORE: imageStore,
+      WT_RMI_FAIL: rmiFail ? "1" : "0",
     },
   };
 }
@@ -1150,6 +1182,124 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     expect(r.stderr).toContain("could not switch off bluetoothd's autopair plugin");
     expect(existsSync(sb.dropIn)).toBe(false);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
+  });
+});
+
+describe("waitron.sh install and the host's time synchronisation", () => {
+  const calls = (sb) => readFileSync(sb.log, "utf8").trimEnd().split("\n");
+
+  it("asks the system to keep its clock in step, and says so", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    const asked = log.indexOf("timedatectl set-ntp true");
+    expect(asked).toBeGreaterThanOrEqual(0);
+    expect(r.stdout).toContain("asked the system to keep its clock in step with internet time");
+    const up = log.findIndex((c) => /^docker compose .*\bup -d\b/.test(c));
+    expect(up).toBeGreaterThan(asked);
+  });
+
+  it("carries on, and says what that means, when the system cannot switch it on", () => {
+    const sb = sandbox({ timedatectlFail: true });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("could not switch on the system's time synchronisation");
+    expect(r.stderr).toContain("Unless another time service runs on this machine");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  });
+
+  it("leaves time synchronisation alone on reset", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    expect(run(sb, ["reset", "--yes"]).status).toBe(0);
+    expect(calls(sb).filter((c) => c.startsWith("timedatectl"))).toEqual([]);
+  });
+
+  it("refuses a production reset install before touching the clock", () => {
+    const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(calls(sb).filter((c) => c.startsWith("timedatectl"))).toEqual([]);
+  });
+});
+
+describe("waitron.sh install deletes the images the box ran before", () => {
+  const removals = (sb) => loggedCalls(sb).filter((c) => c.startsWith("docker image rm"));
+
+  it("on the classic store, deletes both old images once the new box is healthy, and says so", () => {
+    const sb = sandbox({ oldImages: true });
+    const r = run(sb, ["install"]);
+    expect(r.status, r.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    const lastProbe = calls.findLastIndex((c) => c.startsWith("compose ps --format"));
+    expect(lastProbe).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf("docker image rm sha256:old-app")).toBeGreaterThan(lastProbe);
+    expect(calls.indexOf("docker image rm sha256:old-agent")).toBeGreaterThan(lastProbe);
+    expect(r.stdout).toContain("deleted the image this box ran before the upgrade (old-app)");
+  });
+
+  it("keeps the old images when the new box does not come up healthy", () => {
+    const sb = sandbox({ oldImages: true, dockerPs: "unhealthy" });
+    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    expect(r.status).not.toBe(0);
+    expect(removals(sb)).toEqual([]);
+  });
+
+  it("deletes nothing when the box runs the same images as before", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(removals(sb)).toEqual([]);
+  });
+
+  it("deletes nothing on a first install", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"], { WT_NO_CONTAINERS: "before" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(removals(sb)).toEqual([]);
+  });
+
+  it("on the containerd store, where the old images are already gone, deletes nothing and says nothing", () => {
+    const sb = sandbox({ oldImages: true, imageStore: "containerd" });
+    const r = run(sb, ["install"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(removals(sb)).toEqual([]);
+    expect(loggedCalls(sb).filter((c) => c.includes("prune"))).toEqual([]);
+    expect(r.stdout).not.toContain("deleted the image");
+    expect(r.stderr).not.toMatch(/image/i);
+  });
+
+  it("carries on, and says so, when an old image cannot be deleted", () => {
+    const sb = sandbox({ oldImages: true, rmiFail: true });
+    const r = run(sb, ["install"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stderr).toContain(
+      "could not delete the image this box ran before the upgrade, sha256:old-app",
+    );
+    expect(r.stdout).toContain("https://waitron.local/setup/trust");
+  });
+
+  it("records the old images before --reset install takes the box down", () => {
+    const sb = sandbox({ oldImages: true });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install"]);
+    expect(r.status, r.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    const up = calls.findIndex((c) => /^compose up -d\b/.test(c));
+    expect(up).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf("docker image rm sha256:old-app")).toBeGreaterThan(up);
+    expect(calls.indexOf("docker image rm sha256:old-agent")).toBeGreaterThan(up);
+  });
+
+  it("reset deletes no image", () => {
+    const sb = sandbox({ oldImages: true });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(removals(sb)).toEqual([]);
   });
 });
 

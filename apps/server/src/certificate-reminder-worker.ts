@@ -1,13 +1,12 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
 import type { FiscalCertificateSeat } from "@waitron/fiscal";
-import { persons, roleHasPermission } from "@waitron/identity";
 import type {
   CertificateReminderOutcome,
   CertificateReminderSender,
 } from "./certificate-reminder-email.js";
 import type { EmailDelivery } from "./email-delivery.js";
 import { realSleep } from "./loop.js";
+import { readManagerEmailRecipients } from "./manager-email-recipients.js";
 
 export interface CertificateReminderPassDeps {
   db: Database;
@@ -58,33 +57,7 @@ export async function runCertificateReminderPass(
     // The claim commits before SMTP starts, so a crash mid-send is never sent twice.
     const claimed = await withTransaction(deps.db, async (tx) => {
       if (!active()) return null;
-      const people = await tx
-        .select({
-          id: persons.id,
-          email: persons.email,
-          locale: persons.locale,
-          role: persons.role,
-        })
-        .from(persons)
-        .where(
-          and(
-            eq(persons.status, "active"),
-            isNotNull(persons.email),
-            sql`length(trim(${persons.email})) > 0`,
-          ),
-        );
-      const recipients = people
-        .filter((person) => roleHasPermission(person.role, "system.manage"))
-        .map((person) => ({
-          personId: person.id,
-          email: person.email!.trim(),
-          language:
-            person.locale === "es-ES"
-              ? ("es" as const)
-              : person.locale === "en-GB"
-                ? ("en" as const)
-                : deps.venueLanguage,
-        }));
+      const recipients = await readManagerEmailRecipients(tx, deps.venueLanguage);
       return deps.seat.reminders.claim(
         tx,
         { nodeId: deps.nodeId, locationId: deps.locationId },

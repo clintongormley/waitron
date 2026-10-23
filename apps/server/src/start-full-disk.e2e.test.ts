@@ -34,11 +34,13 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { locationId as brandLocationId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { loadKeyRing } from "@waitron/credentials";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
 import { dumpFileName } from "./backup-keys.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
+import { readBoxEmailContext } from "./box-alert-email.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { collectBoxHealth, type BoxHealth } from "./box-health.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -46,6 +48,7 @@ import { loadBoxEnv } from "./box-env.js";
 import { deviceNoticeSources } from "./box-staff-notices.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createDiskFullState, watchForDiskFull, type DiskFullState } from "./disk-full-state.js";
+import { resolveEmailDelivery } from "./email-delivery.js";
 import { readDiskUsage } from "./disk-usage.js";
 import { freeBytes } from "./free-bytes.js";
 import { createSpaceFreer, surveyLeftovers, type FreedSpace } from "./free-space-now.js";
@@ -766,6 +769,57 @@ describe("a start on a real full disk", () => {
 
       small.unfill();
       expect(db.all<{ n: number }>(sql`select count(*) as n from zz`)).toEqual([{ n: 0 }]);
+      expect(db.all<{ id: string }>(sql`select id from change_log`)).toEqual([{ id: "zz1" }]);
+    } finally {
+      small.unfill();
+      await store.close();
+    }
+  });
+
+  it("the managers' email reads its context on a full disk with a change waiting", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("email-context"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    const ring = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    try {
+      await seedTenant(db);
+      const [location] = await db
+        .insert(locations)
+        .values({ name: "Corner Bistro", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
+        .returning({ id: locations.id });
+      const [admin] = await db
+        .insert(persons)
+        .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
+        .returning({ id: persons.id });
+      db.run(
+        sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+
+      for (let i = 0; i < 2; i += 1) {
+        const context = await readBoxEmailContext(db, {
+          ring,
+          practiceMode: true,
+          locationId: location!.id,
+          venueLanguage: "en",
+        });
+        expect(context.venue).toBe("Corner Bistro");
+        expect(context.recipients).toEqual([
+          { personId: admin!.id, email: "admin@example.test", language: "en" },
+        ]);
+        expect(context.delivery.mode).toBe("local_capture");
+      }
+      await expect(resolveEmailDelivery(db, ring, true)).rejects.toEqual(
+        expect.objectContaining({ code: "storage.disk_full" }),
+      );
+
+      small.unfill();
       expect(db.all<{ id: string }>(sql`select id from change_log`)).toEqual([{ id: "zz1" }]);
     } finally {
       small.unfill();

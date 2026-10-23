@@ -2572,6 +2572,12 @@ reads (`GET /management-api/alerts` and `GET /management-api/alerts/handled`,
 is how a manager learns it is full, so neither can be refused by its own housekeeping write. They
 are described below under "The dashboard's full-disk reads".
 
+Since A798-B slice 10, the managers' email check reads the venue's name, the managers' addresses
+and the email settings in one `withWriteLock` turn with no drain (`readBoxEmailContext`,
+`apps/server/src/box-alert-email.ts`), so the full-disk email can be prepared on a full disk. The
+case is "the managers' email reads its context on a full disk with a change waiting" in
+`apps/server/src/start-full-disk.e2e.test.ts`.
+
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a

@@ -41,9 +41,11 @@ Cuando no pasa nada, cada fila dice:
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
-- **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. La
-  página no comprueba si cada lector está encendido: solo muestra los problemas que el equipo ya
-  conoce. Esta fila no aparece cuando los pagos con tarjeta están desactivados.
+- **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un
+  lector que su proveedor de tarjetas da como sin conexión aparece aquí, como **«Barra» está sin
+  conexión.** Mientras la campana o esta página están abiertas, el equipo pregunta al proveedor como
+  mucho cada cinco minutos, así que puede aparecer con unos minutos de retraso. Esta fila no aparece
+  cuando los pagos con tarjeta están desactivados.
 - **Reloj**: **Correcto**, y cuándo comparó el equipo su hora con la de Hacienda por última vez.
   Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el equipo, dice
   **Aún no se ha comparado con Hacienda**.
@@ -138,3 +140,26 @@ hasta que un encargado pulsa **Marcar como resuelto** en él.
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran en su lugar
 **No se pueden registrar ventas: la hora del equipo es incorrecta**. La salida es la misma: poner la
 hora bien.
+
+## Correos sobre el equipo {#emails}
+
+El equipo envía un correo a todas las personas que pueden gestionar el sistema y tienen dirección de
+correo cuando:
+
+- a su disco le quedan unos 2 GB libres o menos;
+- su disco está lleno, así que no se puede guardar nada;
+- su reloj marca una fecha anterior al 28 de octubre de 2024, así que no se puede registrar ninguna
+  venta.
+
+Cada persona recibe un correo por problema, en su propio idioma, o en el del local si no ha elegido
+ninguno. Si no se puede enviar, porque el equipo no tiene internet o el servidor de correo lo
+rechaza (por ejemplo, porque los ajustes del servidor de correo tienen una contraseña equivocada),
+el equipo lo vuelve a intentar cada minuto mientras dura el problema, hasta que el servidor de
+correo lo acepta. Así, el correo llega en cuanto se arregla la conexión o los ajustes. Si el
+problema termina antes, por ejemplo porque se puso bien la hora, el equipo deja de intentarlo y no
+envía nada. Un disco lleno al que solo se le libera parte del espacio sigue casi sin espacio, así
+que quien no recibió el correo de disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras dura el problema puede enviar el mismo correo
+otra vez. Mientras no haya ningún servidor de correo configurado, no se envía nada.
+
+Un equipo cuyo reloj marca una fecha anterior al 28 de octubre de 2024 normalmente no puede enviar
+su correo: con una fecha tan temprana no puede comprobar el certificado del servidor de correo.

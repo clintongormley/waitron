@@ -4643,16 +4643,49 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora) is parked for the owner; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration) landed in #2012; slice 9 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora) is parked for the owner; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration) landed in #2012; slice 10 (emails to the managers about the disk and a clock before 28-10-2024, `reader.offline`, the printer notice on every till, and `waitron.sh` switching on time synchronisation and deleting the images an upgrade replaced) landed in #2019; slice 9 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
 
-- **The clock stop's email is slice 9's.** Its subject and body are design §4.8 c's. Slice 9 sends
-  it once per stop through slice 10's once-per-episode sender, so slice 9 depends on 10 too; slice
-  10 does not depend on 8. Slice 10 cannot build it: it lands itself, and the email asks slice 8's
-  seat (`clockBehindLatestRecord`), which landed in #2012. Left open by A798-B slice 8
-  (#2012).
+- **The clock stop's email is slice 9's.** Its subject and body are design §4.8 c's. Left open by A798-B slice 8
+  (#2012). Slice 10's sender (`apps/server/src/box-alert-email.ts`) sends any module notice code
+  that has words in `apps/server/src/i18n/box-emails.ts`, but fills only `{venue}`: slice 9 adds
+  `clock.behind_chain`'s words there and also carries the notice's values (`{clockAt}`,
+  `{lastRecordAt}`) into them — the episode keeps the notice's params and passes them to
+  `boxEmailMessage`, which gains the placeholders. A clock set earlier than the mail server's
+  certificate start cannot send either (an inference from slice 10's plan P8, not measured).
+
+- **The bell's printer check reads every print job.** `EXPLAIN QUERY PLAN` shows `SCAN
+  print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant
+  status condition did not change the plan; why SQLite scans is not established. The bell pays it
+  on every read; the till's printer notices share one read per ten seconds. Left open by A798-B
+  slice 10.
+
+- **A card reader whose status the provider could not read raises nothing.** SumUp and Stripe
+  answer `{ online: false, unreachable: true }` rather than throwing, so
+  `reader.status_unavailable` comes only from a throw or the 45 s deadline (slice 10 plan P2). Left
+  open by A798-B slice 10.
+
+- **Does a SumUp Solo that is on but idle report itself offline?** The owner's unused Solo read
+  `OFFLINE` (slice 10 plan P11), and SumUp's client maps anything but `ONLINE` to offline, so if an
+  idle Solo does the same, the bell carries a standing `reader.offline` warning. For the owner to
+  check against the reader. Left open by A798-B slice 10.
+
+- **The email about a clock set before 28 October 2024 rarely leaves the box.** With a date that
+  early the box cannot check a mail server's certificate (`CERT_NOT_YET_VALID`, slice 10 plan P8),
+  so the email waits until the clock is fixed, when there is nothing left to say. A plain relay or
+  the practice box's local capture does receive it. For the owner to know. Left open by A798-B
+  slice 10.
+
+- **`waitron.sh` deletes only the images the box ran just before an upgrade.** Images left by
+  upgrades before slice 10 and the mail capture's old images are not deleted, nor is Docker's build
+  cache from branch installs, which holds most of a rebuilt image's space. Left open by A798-B
+  slice 10.
+
+- **A printer that prints some documents and fails others loses its till notice.** The notice goes
+  once any later document on the printer prints (slice 10 decision 18), while the bell keeps
+  naming the printer until the failed ticket is reprinted or resent. Left open by A798-B slice 10.
 
 - **`sale.charged_not_recorded` for the clock answers HTTP 507.** The till reads the code and
   reason; a status by reason needs the error boundary to take a function. Left open by A798-B
@@ -4681,9 +4714,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   the stop a bill not filed before it cannot be printed. Left open by A798-B slice 8 (#2012).
 
 - **The Clock row says 'connect the box to the internet' where that may not help.** On a box that
-  does not keep its clock in step with internet time, until slice 10 switches that on at install;
+  does not keep its clock in step with internet time (since A798-B slice 10, `waitron.sh install`
+  switches synchronisation on where the system provides it, and says so where it cannot);
   and on one that does, the same advice shows where the clock is right and the latest record's time
-  was wrong — neither half clears the stop. Left open by A798-B slice 8 (#2012).
+  was wrong — neither half clears the stop. The `clock.unusable` email
+  (`apps/server/src/i18n/box-emails.ts`) also tells the managers to connect the box to the internet
+  first. Left open by A798-B slice 8 (#2012).
 
 - **The backup verifier does not know `clock_stop_restarts`' links.** Slice 9 adds them with its
   first writer (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by
@@ -4706,9 +4742,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   own route for Reintentar ahora — which changes when records reach AEAT, so it is parked for the
   owner — and, with it, the last accepted record's time. Left open by A798-B slice 7.
   [Detail](backlog/box.md#slice-7b-reintentar-ahora-and-the-hacienda-rows-last-accepted-record)
-
-- **The card readers row does not say whether a reader is switched on.** It lists the readers set
-  up and shows the bell's reader alerts; `reader.offline` is slice 10's. Left open by A798-B slice 7.
 
 - **Liberar cannot be pressed on a mirror or a fenced node.** The read-only gate refuses every
   POST there, so the page draws it quiet and says why; a mirror's disk can fill too. Left open by
@@ -4786,11 +4819,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   requests are served on a full disk but its last-seen time is not saved, so the dark-screen check
   (`SCREEN_DARK_MS`, `apps/server/src/station-outputs-down.ts`) raises it after three minutes,
   beside the full disk's own alert. Left open by A798-B slice 6 (#1977).
-
-- **The open notice list cannot be scrolled from the keyboard once it overflows.** It takes no
-  focus; axe flags it only at about eight wrapped notices, and today's sources give at most three.
-  Add `tabindex="0"` and an overflowing-list accessibility case when per-printer notices land
-  (slice 10). Left open by A798-B slice 6 (#1977).
 
 - **The refund guide does not say that recording a separate-terminal refund is refused during a
   full-disk stop.** `apps/server/src/guide/en/table-service.md` `{#separate-terminal}` (and its

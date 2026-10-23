@@ -103,7 +103,9 @@ export class TillNoticeStrip extends LitElement {
         cursor: pointer;
       }
 
-      button.line:focus-visible {
+      /* The strip spans the screen, so a ring drawn outside it would lose its sides. */
+      button.line:focus-visible,
+      ul:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
@@ -170,7 +172,12 @@ export class TillNoticeStrip extends LitElement {
       </button>
       ${
         this.open
-          ? html`<ul id="notice-list" data-notice-list aria-label=${t("staff_notice.list")}>
+          ? html`<ul
+              id="notice-list"
+              data-notice-list
+              tabindex="0"
+              aria-label=${t("staff_notice.list")}
+            >
               ${this.notices.map(
                 (notice) =>
                   html`<li class="line" data-notice-tone=${toneOf(notice.severity)}>

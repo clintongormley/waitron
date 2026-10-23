@@ -39,8 +39,9 @@ When nothing is wrong, each row says:
 - **Bucket copy**: **Up to date**, and when the last upload was confirmed. It says **Not set up**
   when no copy is set up, and how many minutes behind the copy is when it falls behind.
 - **Printers**: **No problems reported**, and the names of the printers set up.
-- **Card readers**: **No problems reported**, and the names of the readers set up. The page does
-  not check whether each reader is switched on: it only shows problems the box already knows about.
+- **Card readers**: **No problems reported**, and the names of the readers set up. A reader its
+  card provider reports as offline shows here, as **“Bar” is offline.** While the bell or this page
+  is open, the box asks the provider at most every five minutes, so it can show a few minutes late.
   This row is not there when card payments are turned off.
 - **Clock**: **Correct**, and when the box last compared its clock with the tax agency's. When it
   has no usable comparison, for example just after the box starts, it says **Not yet compared with
@@ -130,3 +131,23 @@ back, but the alert stays in the bell until a manager presses **Mark handled** o
 
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
 box's clock is wrong** instead. The way out is the same: set the clock right.
+
+## Emails about the box {#emails}
+
+The box emails everyone who can manage the system and has an email address when:
+
+- its disk has about 2 GB free or less;
+- its disk is full, so nothing can be saved;
+- its clock is set before 28 October 2024, so no sale can be recorded.
+
+Each person gets one email per problem, in their own language, or the venue's if they have not
+chosen one. If it cannot be sent, because the box has no internet or the mail server refuses it (for
+example, because the mail server settings have a wrong password), the box tries again each minute
+while the problem lasts, until the mail server accepts it. So the email arrives once the connection
+or the settings are fixed. If the problem ends first, for example because the clock was set right,
+the box stops trying and sends nothing. A full disk that is only partly freed is still nearly out of
+space, so anyone the full-disk email did not reach is sent the nearly-out-of-space email instead. A restart while the problem lasts can
+send the same email again. While no mail server is set up, nothing is sent.
+
+A box whose clock reads before 28 October 2024 usually cannot send its email: with a date that
+early it cannot check the mail server's certificate.

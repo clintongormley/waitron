@@ -1,8 +1,12 @@
+import type { Transaction } from "@waitron/db";
+import { readPrinterRoles } from "@waitron/layouts";
 import type { StaffNotice, StaffNoticeSource, WaitronModule } from "@waitron/module";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { enabledStaffNoticeSources } from "./modules.js";
+import { printersInTrouble, type PrinterInTrouble } from "./print-job-trouble.js";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
+import { createTtlCache } from "./ttl-cache.js";
 
 /** Owner name of the notices the box itself gives; no module is named this. */
 export const BOX_NOTICE_OWNER = "box";
@@ -45,5 +49,86 @@ export function deviceNoticeSources(
   return [
     { owner: BOX_NOTICE_OWNER, source: boxStaffNoticeSource(box) },
     ...enabledStaffNoticeSources(modules),
+  ];
+}
+
+/** Owner name of the printer notices; no module is named this. */
+export const PRINTER_NOTICE_OWNER = "printers";
+/** How long one read of the printers in trouble serves every device. */
+export const PRINTER_NOTICE_CACHE_MS = 10_000;
+
+const DOCUMENT_ROLES: ReadonlySet<string> = new Set(["receipt", "payment_slip", "invoice"]);
+
+/** The printers the device's receipts, payment slips and full invoices resolve to. */
+export async function documentPrintersOf(
+  tx: Transaction,
+  deviceId: string,
+): Promise<ReadonlySet<string>> {
+  const roles = await readPrinterRoles(tx, deviceId);
+  return new Set(
+    roles
+      .filter((r) => DOCUMENT_ROLES.has(r.role) && r.resolvedId !== null)
+      .map((r) => r.resolvedId!),
+  );
+}
+
+/** A stuck kitchen printer for any device; another stuck printer only for a device in
+ * `documentPrinters`. */
+export function printerStaffNoticeSource(deps: {
+  deviceId: string;
+  trouble: (tx: Transaction, now: Date) => Promise<readonly PrinterInTrouble[]>;
+  documentPrinters?: (tx: Transaction, deviceId: string) => Promise<ReadonlySet<string>>;
+}): StaffNoticeSource {
+  const documentPrinters = deps.documentPrinters ?? documentPrintersOf;
+  return {
+    async read({ tx, reading }) {
+      const rows = (await deps.trouble(tx, reading.instant)).filter((r) => r.stuckSince !== null);
+      if (rows.length === 0) return [];
+      const mine = rows.every((r) => r.kitchen)
+        ? new Set<string>()
+        : await documentPrinters(tx, deps.deviceId);
+      return rows
+        .filter((r) => r.kitchen || mine.has(r.id))
+        .sort(
+          (x, y) =>
+            Date.parse(x.stuckSince!) - Date.parse(y.stuckSince!) || x.name.localeCompare(y.name),
+        )
+        .map((r): StaffNotice => ({
+          key: `printer.jobs_waiting:${r.id}`,
+          code: "printer.jobs_waiting",
+          severity: "warning",
+          params: { printer: r.name, since: new Date(r.stuckSince!).toISOString() },
+        }));
+    },
+  };
+}
+
+/** One source per device, all reading the box location's printers in trouble through one cache. */
+export function devicePrinterNoticeSources(deps: {
+  now: () => Date;
+  locationId: string;
+  cacheMs?: number;
+  trouble?: (
+    tx: Transaction,
+    now: Date,
+    options: { locationId: string },
+  ) => Promise<readonly PrinterInTrouble[]>;
+  documentPrinters?: (tx: Transaction, deviceId: string) => Promise<ReadonlySet<string>>;
+}): (deviceId: string) => readonly OwnedStaffNoticeSource[] {
+  const trouble = deps.trouble ?? printersInTrouble;
+  const cache = createTtlCache<readonly PrinterInTrouble[]>({
+    ttlMs: deps.cacheMs ?? PRINTER_NOTICE_CACHE_MS,
+    now: deps.now,
+  });
+  return (deviceId) => [
+    {
+      owner: PRINTER_NOTICE_OWNER,
+      source: printerStaffNoticeSource({
+        deviceId,
+        trouble: (tx, at) =>
+          cache.get("all", () => trouble(tx, at, { locationId: deps.locationId })),
+        documentPrinters: deps.documentPrinters,
+      }),
+    },
   ];
 }

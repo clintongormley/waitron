@@ -1,8 +1,15 @@
-import { and, eq, gte, inArray, lt, not, or, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, lt, min, ne, not, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { SQL } from "drizzle-orm";
-import { kitchenPrintJobs, printJobs } from "@waitron/db";
-import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import {
+  kitchenPrintJobs,
+  kitchenStations,
+  printJobs,
+  printers,
+  stationPrinters,
+  type Transaction,
+} from "@waitron/db";
+import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
 
 /** A document job older than this that has not printed counts as in trouble. */
 export const JOBS_WAITING_MS = 2 * 60 * 1000;
@@ -13,6 +20,7 @@ const reprintLink = alias(kitchenPrintJobs, "trouble_reprint_link");
 const reprintJob = alias(printJobs, "trouble_reprint_job");
 const saleCopy = alias(printJobs, "trouble_sale_copy");
 const printedResend = alias(printJobs, "trouble_printed_resend");
+const laterPrinted = alias(printJobs, "trouble_later_printed");
 
 /** `job` has printed, itself or through a printed Printers-screen resend of it. */
 export function printedOrResent(job: typeof printJobs | typeof reprintJob): SQL {
@@ -75,4 +83,80 @@ export function printJobInTrouble(now: Date): SQL {
         and ${saleCopy}.rowid > ${printJobs}.rowid)`,
     ),
   )!;
+}
+
+const noLaterPrintedDocument = sql`not exists (select 1 from ${printJobs} as ${laterPrinted}
+  where ${laterPrinted.printerId} = ${printJobs.printerId}
+  and ${laterPrinted.kind} = 'document'
+  and ${laterPrinted.status} = 'done'
+  and ${laterPrinted}.rowid > ${printJobs}.rowid)`;
+
+export interface PrinterInTrouble {
+  readonly id: string;
+  readonly name: string;
+  /** How many of its document jobs are in trouble. */
+  readonly count: number;
+  /** The oldest of them, as stored. */
+  readonly oldest: string;
+  /** The oldest of them with no later document printed on this printer, as stored; null when a
+   * later document has printed after every one of them. */
+  readonly stuckSince: string | null;
+  /** An active kitchen station prints to it. */
+  readonly kitchen: boolean;
+}
+
+/** Every active printer with a job in trouble at `now` ({@link printJobInTrouble}), leaving out jobs
+ * an Unpair ended; given `locationId`, only that location's printers. */
+export async function printersInTrouble(
+  tx: Transaction,
+  now: Date,
+  options: { locationId?: string } = {},
+): Promise<PrinterInTrouble[]> {
+  const rows = await tx
+    .select({
+      id: printers.id,
+      printer: printers.name,
+      n: count(),
+      oldest: min(printJobs.createdAt),
+      stuckSince: sql<
+        string | null
+      >`min(case when ${noLaterPrintedDocument} then ${printJobs.createdAt} end)`,
+    })
+    .from(printers)
+    .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
+    .where(
+      and(
+        eq(printers.active, true),
+        printJobInTrouble(now),
+        // Ended on purpose by an Unpair, not a fault to fix.
+        or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
+        options.locationId === undefined ? undefined : eq(printers.locationId, options.locationId),
+      ),
+    )
+    .groupBy(printers.id, printers.name);
+  if (rows.length === 0) return [];
+
+  const kitchen = await tx
+    .select({ printerId: stationPrinters.printerId })
+    .from(stationPrinters)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
+    .where(
+      and(
+        eq(kitchenStations.active, true),
+        inArray(
+          stationPrinters.printerId,
+          rows.map((r) => r.id),
+        ),
+      ),
+    );
+  const kitchenIds = new Set(kitchen.map((k) => k.printerId));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.printer,
+    count: Number(r.n),
+    // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.
+    oldest: r.oldest!,
+    stuckSince: r.stuckSince,
+    kitchen: kitchenIds.has(r.id),
+  }));
 }

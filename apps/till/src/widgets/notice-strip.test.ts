@@ -132,6 +132,24 @@ describe("till-notice-strip", () => {
     expect(list(el)).toBeNull();
   });
 
+  it("lets the open list take keyboard focus and draws the focus ring inside its edges", async () => {
+    const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+      notices: [DISK, SPACE, UNSENT],
+    });
+    host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
+    host.style.setProperty("--wt-focus-offset", "2px");
+    await userEvent.click(button(el)!);
+    await settle(el);
+    await userEvent.keyboard("{Tab}");
+    expect(root(el).activeElement).toBe(list(el));
+    expect(list(el)!.matches(":focus-visible")).toBe(true);
+    const ring = getComputedStyle(list(el)!);
+    expect(ring.outlineStyle).toBe("solid");
+    expect(ring.outlineColor).toBe("rgb(4, 5, 6)");
+    expect(ring.outlineWidth).toBe("3px");
+    expect(ring.outlineOffset).toBe("-2px");
+  });
+
   it("closes the open list when only one notice is left", async () => {
     const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
       notices: [DISK, SPACE, UNSENT],

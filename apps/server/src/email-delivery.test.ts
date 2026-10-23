@@ -4,7 +4,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
-import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import {
+  resolveEmailDelivery,
+  resolveEmailDeliveryIn,
+  resolveInvoiceEmailDelivery,
+} from "./email-delivery.js";
 
 // `putCredential` refuses a payload missing a field, so a row sealed under an older field list
 // cannot be written through the vault; the read is replaced instead, for the cases that set this.
@@ -30,6 +34,17 @@ const ring = loadKeyRing({
 });
 
 describe("resolveEmailDelivery", () => {
+  it("reads the settings inside a caller's transaction", async () => {
+    await seedTenant(suite.db);
+
+    await expect(
+      withTransaction(suite.db, (tx) => resolveEmailDeliveryIn(tx, ring, false)),
+    ).resolves.toEqual({ mode: "unconfigured" });
+    await expect(
+      withTransaction(suite.db, (tx) => resolveEmailDeliveryIn(tx, ring, true)),
+    ).resolves.toEqual(await resolveEmailDelivery(suite.db, ring, true));
+  });
+
   it("uses Mailpit for a practice installation without configured SMTP", async () => {
     await seedTenant(suite.db);
 

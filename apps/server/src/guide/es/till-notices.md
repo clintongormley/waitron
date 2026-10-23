@@ -10,7 +10,7 @@ Dice qué ocurre y qué hacer. Nunca tapa tu trabajo y nunca tienes que cerrarla
 
 La línea muestra primero el aviso más grave, con su texto principal y, tras " · ", su indicación.
 Por ejemplo, **No se puede guardar nada: el equipo no tiene espacio · Avisa al encargado**. Una
-línea roja significa que algo no se puede guardar, una ámbar que se acerca un problema y una
+línea roja significa que algo no se puede guardar, una ámbar que algo necesita atención pero el trabajo se sigue guardando y una
 azul que es información.
 
 Cuando hay más de un aviso, la línea termina con un número como **+1**. Toca la línea para abrir
@@ -72,6 +72,14 @@ fallado y el equipo sigue intentándolo por sí solo. Las ventas están registra
 que puedes seguir vendiendo. Una venta que necesita que una persona la resuelva no se reintenta,
 así que mientras alguna de las ventas pendientes lo necesite, la indicación dice **Avisa al
 encargado**.
+
+**Impresora «Cocina» no imprime · desde 21:16** es ámbar. Una comanda enviada a esa impresora a
+las 21:16 lleva dos minutos o más sin imprimirse, o el equipo ha dejado de intentar enviarla. El
+aviso de una impresora de cocina aparece en todas las cajas registradoras y todos los terminales de
+camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus recibos, sus
+justificantes de pago o sus facturas completas. Revisa el papel, la corriente y el cable de la
+impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de esa
+comanda; puede que haya que reimprimir la comanda desde la mesa o reenviarla desde **Impresoras**.
 
 **El equipo necesita atención · Avisa al encargado** es un aviso para el que este terminal no tiene
 texto, quizá de una versión más reciente del equipo. Avisa al encargado para que revise el equipo.

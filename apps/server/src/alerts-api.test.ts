@@ -410,7 +410,7 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
       batteryAlertSource({
         providers: [stubCardProvider()],
         runtimeDeps: cardRuntimeDeps,
-        cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+        cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
       }),
     ],
   });
@@ -475,7 +475,7 @@ describe("ongoing alert sources through the route", () => {
     const source = batteryAlertSource({
       providers: [provider],
       runtimeDeps: cardRuntimeDeps,
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
     const app = appFor(createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] }));
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -525,7 +525,7 @@ describe("ongoing alert sources through the route", () => {
         }),
       ],
       runtimeDeps: cardRuntimeDeps,
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
     const app = appFor(createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [source] }));
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -565,7 +565,7 @@ describe("ongoing alert sources through the route", () => {
         }),
       ],
       runtimeDeps: cardRuntimeDeps,
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -628,7 +628,7 @@ describe("ongoing alert sources through the route", () => {
         batteryAlertSource({
           providers: [SUMUP_CARD_PROVIDER],
           runtimeDeps: () => ({ db, ring, fetch }),
-          cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+          cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => NOW }),
         }),
       ],
     });

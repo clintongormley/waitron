@@ -73,6 +73,7 @@ import {
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
   type PaymentProvider,
+  type ReaderStatus,
 } from "@waitron/payments";
 import { recordIncidentOnce } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
@@ -94,6 +95,7 @@ import {
   ALL_MODULE_PERMISSIONS,
   enabledAlertSources,
   enabledFloorAnnotators,
+  enabledStaffNoticeSources,
   enabledTableRemovals,
   VENUE_SERVICE,
 } from "./modules.js";
@@ -167,7 +169,9 @@ import {
 } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
-import { deviceNoticeSources } from "./box-staff-notices.js";
+import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
+import { BOX_EMAIL_CHECK_MS, readBoxEmailContext, startBoxEmailDuty } from "./box-alert-email.js";
+import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -278,7 +282,7 @@ import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
 import { freeBytes } from "./free-bytes.js";
-import { createStaffNoticeLog } from "./staff-notices.js";
+import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
@@ -1844,6 +1848,7 @@ async function bootServer(
         disk: diskFull,
         notices: {
           sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
+          deviceSources: devicePrinterNoticeSources({ now, locationId: till.locationId }),
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
         },
@@ -2154,10 +2159,10 @@ async function bootServer(
     db,
     ring,
   });
-  // The battery reading is reused for five minutes so an open dashboard's minute-by-minute poll does
+  // The reader status is reused for five minutes so an open dashboard's minute-by-minute poll does
   // not hammer the provider; the backup freshness for one minute.
   const backupCache = createTtlCache<BackupStatus>({ ttlMs: 60_000, now });
-  const batteryCache = createTtlCache<number | null>({ ttlMs: 5 * 60_000, now });
+  const batteryCache = createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now });
   const backupSource = backupAlertSource({
     listStatus: () =>
       backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
@@ -2174,6 +2179,37 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(async () => freeSpaceWatch.stop());
+  const emailNoticeLog = createStaffNoticeLog(log);
+  const emailNoticeSources = enabledStaffNoticeSources(setsToMigrate);
+  const boxEmails = startBoxEmailDuty({
+    disk: diskFull,
+    space: freeSpace,
+    moduleNotices: async () => {
+      const reading = emailNoticeLog.begin();
+      const read = await readStaffNoticesInTurns(
+        db,
+        emailNoticeSources.map(({ owner, source }) => ({
+          owner,
+          source: { read: (ctx) => source.read({ ...ctx, filing: { enabled: filesRecords() } }) },
+        })),
+        { reading: tillClock.now(), log: emailNoticeLog.log },
+      );
+      reading.settle(read.unavailable);
+      return read;
+    },
+    context: () =>
+      readBoxEmailContext(db, {
+        ring,
+        practiceMode: config.devMode || till.practiceMode === true,
+        locationId: till.locationId,
+        venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+      }),
+    send: createTextEmailSender(),
+    isPrimary: () => holders.singletonRole.current === "primary",
+    intervalMs: BOX_EMAIL_CHECK_MS,
+    log,
+  });
+  undoOnFailure.push(() => boxEmails.stop());
   const serverAlertSources: AlertSource[] = [
     backupSource,
     storageAlertSource({ space: freeSpace, disk: diskFull }),
@@ -2834,6 +2870,7 @@ async function bootServer(
           () => menuActivation.stop(),
           () => appendOnlyWatch.stop(),
           () => freeSpaceWatch.stop(),
+          () => boxEmails.stop(),
           () => liveEvents.close(),
           () => tunnelController.abort(),
           () => loop,

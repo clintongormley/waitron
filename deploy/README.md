@@ -99,12 +99,22 @@ shows them), and says to delete `waitron-noautopair.conf`, then run `systemctl d
 `systemctl restart bluetooth`, to keep only the other file's command. To undo it, delete the file, then run `systemctl daemon-reload` and
 `systemctl restart bluetooth`.
 
+Every `install`, upgrades included, also runs `timedatectl set-ntp true` as root, with a 60-second
+limit where `timeout` is installed, to ask the system to keep its clock in step with internet time, and prints one line either
+way. Where that fails, or the system has no `timedatectl`, the line says that unless another time
+service runs on the machine nothing keeps its clock right, and to check the clock and install a
+time service such as `systemd-timesyncd`; `install` carries on. It matters because Waitron stops
+taking payments while the box's clock reads earlier than its last sale. `install` switches
+synchronisation back on even where someone switched it off, so a test box whose clock is set wrong
+on purpose needs it switched off again after each `install`. `reset` does not touch it.
+
 A plain `install` on a box without AppArmor writes no `deploy/.env` at all. The box has no secret it
 needs before it boots: the venue's databases are files in the `state` volume that open with no
 password, and every other setting has a default in the image that suits a box reached at
 `waitron.local`. Apart from the AppArmor line above, the only thing that writes `.env` is installing
 a branch or a commit, which records the image tags it built there. So `install` is non-interactive
-and idempotent, and running it again later to update the box does nothing destructive.
+and idempotent, and running it again later to update the box does nothing destructive, apart from deleting the
+images it ran before (see Updating and operating).
 
 It finishes by printing a setup address and QR code, also shown on an attached monitor:
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's
@@ -164,6 +174,18 @@ docker compose logs -f app                    # the server's JSON lines
 
 The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.
+
+After an `install` (or `update`, or `--reset install`) whose box comes up healthy, `install`
+deletes each image the `app` and `print-agent` containers ran before it that Docker still holds and
+no Waitron container runs now, with `docker image rm` (never forced), and prints one line for
+each. A deletion Docker refuses is reported with the command to run later, and does not stop the
+install. On Docker's containerd image store, the default for a fresh Docker Engine 29 install,
+Docker has already deleted the old pulled image and freed its space when the container was
+replaced, so nothing is printed. Not deleted: images left by upgrades before this one, the mail
+capture's old images, and Docker's build cache from branch installs. `docker image prune` and
+`docker builder prune` delete those by hand, and also delete what other software on the machine
+left. A box that does not come up healthy keeps its old images, and `reset` deletes no image. The
+`docker compose pull && docker compose up` shown above deletes nothing.
 
 ### When the app will not boot
 

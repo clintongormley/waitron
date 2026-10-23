@@ -318,6 +318,18 @@ disable_bluetooth_autopair() {
   rm -f "$tmp"
 }
 
+# 2d. A box whose clock reads earlier than its last sale stops taking payments, so install asks the host
+# to keep its clock right where it can.
+enable_time_sync() {
+  local limit
+  limit="$(command -v gtimeout || command -v timeout)" || limit=""
+  if as_root ${limit:+"$limit" 60} timedatectl set-ntp true >/dev/null 2>&1; then
+    echo "waitron.sh: asked the system to keep its clock in step with internet time (timedatectl set-ntp true)"
+  else
+    echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, and Waitron stops taking payments while the clock reads earlier than its last sale — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
+  fi
+}
+
 # 3. main pulls every image in compose.yml and records no override; a branch/commit builds both
 #    Waitron images on the box from the git context and records the tags in .env so the box stays
 #    on them.
@@ -600,6 +612,35 @@ report_unhealthy() {
   die "the box did not come up healthy — see the log lines above"
 }
 
+# The image each Waitron container runs now, one id per line; nothing for a service not running.
+running_images() {
+  local service container image
+  for service in app print-agent; do
+    container="$(docker compose -f "$WAITRON_DIR/compose.yml" ps -q "$service" 2>/dev/null)" || continue
+    [ -n "$container" ] || continue
+    image="$(docker inspect -f '{{.Image}}' "$container" 2>/dev/null)" || continue
+    printf '%s\n' "$image"
+  done
+}
+
+# Deletes each image in $1 that no Waitron container runs any more. On Docker's containerd image
+# store an image whose tag has moved is already gone, so `inspect` skips it; without -f, Docker
+# refuses an image any container still uses.
+delete_previous_images() {
+  local before="$1" now id
+  now="$(running_images)"
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    printf '%s\n' "$now" | grep -qxF -- "$id" && continue
+    docker image inspect "$id" >/dev/null 2>&1 </dev/null || continue
+    if docker image rm "$id" >/dev/null 2>&1 </dev/null; then
+      echo "waitron.sh: deleted the image this box ran before the upgrade (${id#sha256:})"
+    else
+      echo "waitron.sh: could not delete the image this box ran before the upgrade, $id; it still takes disk space — 'docker image rm $id' deletes it once nothing uses it" >&2
+    fi
+  done <<<"$before"
+}
+
 # With --reset, the production check and the confirmation run before the box's files are fetched or
 # any image is built or pulled: the check reads the box with its CURRENT compose.yml and image, which
 # the fetch replaces and the build or pull supersedes. refresh_self, which runs first, may already
@@ -620,14 +661,17 @@ cmd_install() {
   fetch_box_files "$ref"
   load_print_agent_apparmor "$ref"
   disable_bluetooth_autopair
+  enable_time_sync
   select_image "$ref"
   cd "$WAITRON_DIR"
+  local before
+  before="$(running_images)"
   if [ "$wipe" -eq 1 ]; then
     ensure_images_present "$ref"
     wipe_box
   fi
   docker compose up -d --remove-orphans
-  if wait_healthy; then announce_ready; else report_unhealthy; fi
+  if wait_healthy; then delete_previous_images "$before"; announce_ready; else report_unhealthy; fi
 }
 
 # Remove a named volume only if it exists; a removal that FAILS aborts the whole reset (see the loop

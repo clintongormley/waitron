@@ -1,5 +1,5 @@
 import type { StaffNotice } from "../api/client.js";
-import { countText, t } from "./t.js";
+import { clockTime, countText, t } from "./t.js";
 
 const TELL_MANAGER = "staff_notice.tell_manager";
 
@@ -17,14 +17,23 @@ function unknownText(): { main: string; hint: string } {
 }
 
 /** A notice's words in the till's current language: its main words and the hint after " · ". A
- * code the till has no words for, or an unsent count that is not a whole number above 0, is worded
- * as unknown. */
+ * code the till has no words for, or params it cannot word, is worded as unknown. */
 export function staffNoticeText(notice: Pick<StaffNotice, "code" | "params">): {
   main: string;
   hint: string;
 } {
   if (Object.hasOwn(FIXED, notice.code)) {
     return { main: t(FIXED[notice.code as keyof typeof FIXED]), hint: t(TELL_MANAGER) };
+  }
+  if (notice.code === "printer.jobs_waiting") {
+    const { printer, since } = notice.params;
+    if (typeof printer !== "string" || printer === "") return unknownText();
+    if (typeof since !== "string" || Number.isNaN(Date.parse(since))) return unknownText();
+    // A function replacement keeps a name such as "$&" as it is written.
+    return {
+      main: t("staff_notice.printer.jobs_waiting").replace("{printer}", () => printer),
+      hint: t("staff_notice.since").replace("{time}", () => clockTime(Date.parse(since))),
+    };
   }
   if (notice.code === "fiscal.records_unsent") {
     const { count, held } = notice.params;

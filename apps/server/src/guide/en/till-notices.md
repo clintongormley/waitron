@@ -9,7 +9,7 @@ It says what is wrong and what to do. It never covers your work, and you never h
 
 The line shows the most serious notice first, in its main words and then its hint after " · ".
 For example, **Nothing can be saved: the box is out of space · Tell a manager**. A red line means
-something cannot be saved, an amber line means a problem is coming, and a blue line is for information.
+something cannot be saved, an amber line means something needs attention but work is still saved, and a blue line is for information.
 
 When more than one notice is showing, the line ends with a count such as **+1**. Tap the line to
 open the list of every notice, most serious first. The list sits under the line and pushes the
@@ -64,6 +64,13 @@ running out. A manager should free space before it runs out, on the
 tax agency has failed, and the box keeps trying by itself. The sales are recorded on the box, so
 you can keep selling. A sale that needs a person to sort it out is not retried, so while any of the
 waiting sales needs one, the hint reads **Tell a manager** instead.
+
+**Printer “Kitchen” not printing · since 21:16** is amber. A ticket sent to that printer at 21:16
+has waited two minutes or more without printing, or the box has stopped trying to send it. A
+kitchen printer's notice shows on every till and handheld; any other printer's only on the tills
+and handhelds that print their receipts, payment slips or full invoices to it. Check the printer's
+paper, power and cable. The notice goes once the printer prints anything sent to it after that
+ticket; the ticket itself may still need reprinting from the table or resending from **Printers**.
 
 **The box needs attention · Tell a manager** is a notice this till has no words for, perhaps from
 a newer version of the box. Tell a manager so they can check the box.
