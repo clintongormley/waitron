@@ -4,7 +4,7 @@
   "plugins": ["@stryker-mutator/vitest-runner"],
   "testRunner": "vitest",
   "vitest": { "configFile": "vitest.config.ts" },
-  "mutate": ["src/clock.ts", "src/backend.ts"],
+  "mutate": ["src/clock.ts", "src/backend.ts", "src/clock-witnesses.ts"],
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "reporters": ["clear-text", "progress", "html"],
