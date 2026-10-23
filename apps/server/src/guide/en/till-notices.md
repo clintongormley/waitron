@@ -47,11 +47,11 @@ If the till says a card was charged but the sale is not recorded, do not charge 
 happen when a card reader charges a card just as payments stop. What to do next depends on how the
 card was taken:
 
-- **At the counter, or a table's whole bill paid from the presented bill:** once payments are back,
-  pay that order again the same way. The payment is recorded without charging the card a second
-  time.
-- **From the bill's payment options (Pay items, Contribute or Split equally):** the payment stays
-  waiting, and the box records it by itself once payments are back.
+- **At the counter, or a table's bill paid in one go from the presented bill:** once payments are
+  back, pay that order again the same way. The payment is recorded without charging the card a
+  second time.
+- **From the bill's payment options (Whole bill, Pay items, Contribute or Split equally):** the
+  payment stays waiting, and the box records it by itself once payments are back.
 
 A manager fixes this from the [Box status page](box-status.md#clock-behind).
 

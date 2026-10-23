@@ -53,12 +53,12 @@ Si el terminal dice que se ha cobrado con tarjeta pero la venta no se ha registr
 cobrar. Puede pasar cuando un lector de tarjetas cobra una tarjeta justo cuando se paran los cobros.
 Lo que hay que hacer después depende de cómo se cobró la tarjeta:
 
-- **En la barra, o la cuenta entera de una mesa cobrada desde la cuenta presentada:** cuando se
+- **En la barra, o la cuenta de una mesa cobrada de una vez desde la cuenta presentada:** cuando se
   pueda volver a cobrar, cobra ese pedido otra vez de la misma forma. El pago se registra sin cobrar
   la tarjeta otra vez.
-- **Desde las opciones de pago de la cuenta (Pagar artículos, Aportar una cantidad o Dividir a
-  partes iguales):** el pago queda pendiente, y el equipo lo registra por sí solo cuando se puede
-  volver a cobrar.
+- **Desde las opciones de pago de la cuenta (Toda la cuenta, Pagar artículos, Aportar una cantidad o
+  Dividir a partes iguales):** el pago queda pendiente, y el equipo lo registra por sí solo cuando
+  se puede volver a cobrar.
 
 El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind).
 
