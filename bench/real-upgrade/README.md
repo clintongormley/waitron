@@ -6,7 +6,8 @@ historical capture, issued full invoice or successful upgrade is qualified here.
 
 The [implementation plan](../../docs/superpowers/plans/2026-10-22-a799-real-upgrade-testing.md)
 splits the work into seven pull requests. The owner authorised their build on
-23 October 2026. This first cut validates metadata and selects required inputs.
+23 October 2026. Cuts 1–3 validate metadata, select required inputs, compare frozen facts and
+admit downloaded archives through injected transport and placement adapters.
 Runtime, capture, A760 reset, migration, upload, provider and trusted CI activation
 still need their separately recorded authority and qualifying inputs.
 
@@ -103,10 +104,9 @@ unknown engine-assigned ID, which later execution must observe and validate.
 
 The contracts accept parsed objects and reject unknown keys, versions, duplicate
 fixture IDs, duplicate inventory paths, invalid hashes and nonpositive resource
-limits. The future raw JSON ingestion boundary must reject duplicate JSON keys
-before they become an object. These parsers do not read JSON bytes or archives.
-Use the comparison interfaces below for facts and coverage. No raw JSON-byte or
-archive reader is installed by these first two cuts.
+limits. Cut 3’s fetch boundary rejects duplicate JSON keys before they become an object.
+The metadata parsers themselves do not read JSON bytes or archives.
+Use the comparison interfaces below for facts and coverage. Cut 3 supplies the raw JSON-byte and archive boundary described below.
 
 ## Compare original records before making another sale
 
@@ -227,4 +227,106 @@ exclude wildcard sets or excuse an absent target. Descriptor IDs and targets mus
 be unique. Supporting modules keep schema parsing, mapping admission and keyed
 comparison shared between the two public comparison functions. Future execution
 still needs independently reviewed read specifications, actual images and sealed
-facts, containment, issued-F1 history and the remaining five cuts.
+facts, containment, issued-F1 history and the remaining four cuts.
+
+## Admit sealed archives before candidate access
+
+Run the stream, transport and handoff controls:
+
+```sh
+pnpm exec vitest run scripts/a799/archive.test.mjs scripts/a799/fetch.test.mjs
+```
+
+Cut 3 uses invented in-memory archives and HTTP/placement adapters. It has not
+fetched a private release, placed files through a real filesystem adapter or run
+an image. Cut 4 must implement and qualify actual filesystem placement, source
+`lstat` inventory, link rejection and consistent whole-state capture. Cut 7 must
+qualify the trusted GitHub job and credential-free transfer. The qualification
+index remains empty; no candidate runner is wired.
+
+`validateInventory(inventory, limits)` checks every external descriptor before
+I/O. `validateEntry(entry, inventory, limits)` checks a decoded header against it.
+`admitArchive(stream, inventory, limits, io)` consumes gzip containing
+`a799-state-v1\n`, followed by each four-byte unsigned big-endian header length,
+strict UTF-8 JSON header and exact file bytes. Header keys are exactly `path`,
+`kind`, `mode`, `bytes` and `sha256`. Entries follow inventory order. The header
+cap is six times that descriptor's compact JSON byte length; longer whitespace or
+escape spellings are refused. Complete inventory and decompressed EOF are required.
+Compressed and decompressed bytes, entry count and file bytes have explicit caps.
+
+This admission boundary deliberately accepts only file mode `0600` and directory
+mode `0700`. All files are treated as private, including evidence. Qualification
+must supply captured modes that meet this restriction; the reader never changes
+original permissions to make them qualify. Paths reject absolute/drive/backslash,
+dot/empty and control-character aliases, trailing dots/spaces and collisions after
+NFC normalization and upper/lower case folding. Unpaired surrogates and Unicode
+control/format characters are refused. Every parent directory appears first.
+
+`io` supplies `root`, `ownerId`, `signal`, positive `cleanupMs`, optional
+`sourceIdentities: {dev, ino}[]`, and these asynchronous operations:
+`inspectEntry(path)`, `createDirectory(entry)`, `openExclusiveNoFollow(entry)`,
+`writeChunk(handle, bytes)`, `finishVerifiedFile(handle, entry)` and
+`removeOwnedPartial()`. The root inspection uses path `""`. Inspections return
+`{kind, mode, dev, ino, nlink, ownerId}`; the opened handle carries its matching
+`identity`. The parser checks these reports before and after writing and refuses
+changed/shared inodes or multiply linked files. The future real adapter must use
+exclusive no-follow opens, coordinate path replacement, derive those reports from
+actual handles and entries, and remove only its owned partials. On cancellation, the parser first waits within
+the cleanup reserve for pending I/O to settle; an unresolved operation reports
+`archive.cleanup` without racing partial removal. The actual adapter must honour
+the signal and fence later writes before disposal can finish. Injected reports
+are not filesystem evidence. The returned handle contains only root, owner ID,
+cloned inventory and compressed archive hash.
+
+`createGitHubTransport({request, credential, metadataBytes, maxRedirects})` uses
+an injected HTTP request adapter returning `{status, headers, body}`. Headers may
+be a native `Headers` object or a plain object; a successful body is an async
+iterable of bytes. A null body is permitted for redirects/refusals. It requests only Waitron's pinned release ID,
+resolves its tag (including up to eight annotated tags) to the frozen source SHA,
+and checks the asset ID/name/size belongs to that release before requesting it.
+Asset redirects are manual and accept only HTTPS on
+`release-assets.githubusercontent.com` or `objects.githubusercontent.com`, with
+no user information, nondefault port or fragment. Redirected requests carry no
+authorization header. Discarded redirect/refusal bodies are cancelled. Connection failures during
+metadata or asset streaming report `fetch.transient`; HTTP 401/403/404 retain
+their distinct refusal codes. `close()` clears its credential and aborts request signals.
+The future real adapter must honour manual redirects and those signals. Existing
+private access and live GitHub responses remain unqualified.
+
+`fetchInputs(cells, deps)` requires exact cells selected from `deps.indexBytes`
+and `deps.candidate`, the committed raw `indexSha256`, a 40-character
+`trustedRevision`, `deadlines: {totalMs, cleanupMs}`, a finite nonnegative
+`retrySchedule`, optional parent `signal`, `transport`, `scratch` and
+`credentialScope`. It rejects index bytes over 1 MiB, malformed/duplicate-key
+JSON, wrong epochs/cells and missing `facts.json` in an evidence inventory before
+retrieval. It checks exact compressed size and committed hash during streaming.
+Only `fetch.transient` retrieval errors retry, each in a fresh owned root.
+A failed input triggers disposal of all retained assets; unresolved cleanup
+reports `fetch.cleanup`.
+
+`scratch({cellId, kind, signal})` returns `{io, dispose}`. It must honour
+cancellation and settle within the cleanup reserve. A late allocation is collected
+and disposal is attempted within that reserve; an unsettled allocation reports
+`fetch.cleanup`, never a successful handoff. The future adapter must keep roots
+independent, fence in-flight I/O before disposal finishes and make disposal
+idempotent. Disposal calls for one resource share one pending promise. Each
+admitted asset gets a distinct root. The caller must retain its scratch-owner
+registry keyed by root and owner ID: on a successful handoff it releases those
+resources only after the trusted transfer or final consumer finishes. Serialized
+`VerifiedInputs` deliberately carries no functions or credentials. No real
+transfer/release adapter is installed here.
+
+The outer elapsed-time bound uses the monotonic clock and is `totalMs + cleanupMs`; every cleanup step uses only the
+remaining allowance. Unresolved cleanup takes precedence over credential residue,
+which takes precedence over cancellation/deadline reporting. A malformed parent
+signal is refused inside the closure boundary.
+
+Both transport and credential scope close before successful return. The scope adapter's
+`close()` must return `{closed: true, surfaces}` with empty arrays for
+`environment`, `checkoutConfig`, `credentialHelpers`, `registryLogins`,
+`scratchFiles`, `subprocessArguments`, `history` and `dockerConfig`. Tests refuse
+reported residue on every surface and check sentinel credentials stay out of
+returned handles and errors. This is an explicit adapter contract; no real host,
+runner or Docker credential audit has happened. The later trusted job must
+perform that audit. On success, the handoff carries only per-cell state/evidence
+handles, trusted revision/index hash and `credentialScopeClosed: true`.

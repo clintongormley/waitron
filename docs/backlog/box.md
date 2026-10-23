@@ -604,6 +604,14 @@ and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
 ## 2026-10-23 A799 build authority and history selection
 
+**Cut 3, 23 October 2026:** restricted gzip framing, external-inventory checks,
+bounded retrieval, release/source/asset binding and credential-closure contracts
+are implemented with injected HTTP and placement adapters. The [archive contract](../../bench/real-upgrade/README.md#admit-sealed-archives-before-candidate-access)
+names the conservative private modes, supplied inode reports and later adapter
+obligations. No real private download, filesystem placement, image or capture is
+qualified. Four further cuts and the separate execution gates remain open.
+The following cut-2 and cut-1 paragraphs retain their earlier checkpoint status.
+
 **Cut 2, 23 October 2026:** pure typed facts, issued-F1 coverage declarations,
 keyed record/relationship comparisons and complete schema-definition comparison
 are implemented. Exact reviewed nullable-field, table-rename and schema mappings

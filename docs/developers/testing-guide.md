@@ -2817,3 +2817,39 @@ Cost: db's mutation score read about 86% (A539).
 ### The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write lock
 
 While Litestream runs, its own checkpoints restart the side file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`) and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`) bounds it.
+
+
+## Collect an allocation that finishes after its caller stops waiting
+
+When a timed operation allocates an owned resource, pass its cancellation signal
+and account for the allocation itself during cleanup. Ending the caller's wait
+alone does not establish that no resource was created.
+
+A799 cut 3's `scratch allocation custody` case in
+`scripts/a799/fetch.test.mjs` delays the scratch adapter beyond the fetch deadline.
+Before the fix, the fetch returned its deadline failure before the adapter
+returned a root, so the root was absent from its disposal set. The test now checks
+that this late result is collected and disposed within the cleanup reserve.
+The separate never-settling case requires `fetch.cleanup`, recording unresolved
+allocation rather than reporting a completed handoff. These tests use injected
+in-memory resources; the real filesystem adapter remains unqualified.
+
+Run `pnpm exec vitest run scripts/a799/fetch.test.mjs`. The accepting handoff,
+late allocation, cancellation rejection and unresolved allocation cases exercise
+the same resource owner with different completion orders.
+
+
+The same cut's whole-branch review supplied compound-failure and cancellation
+controls. Pending file operations now settle before partial removal is attempted,
+and repeated disposal shares its original promise. A standalone Node probe checks
+that a referenced cleanup timer keeps the caller alive to report its refusal;
+the original exited with status 13 during its unresolved top-level await. A
+separate shared-reserve case caught two overlapping disposals and cleanup steps
+that each consumed a fresh allowance. These are synthetic adapter tests; future
+real adapters must still qualify cancellation, handle identity and custody.
+
+
+A final cut-3 probe moved only the JavaScript wall clock backwards while cleanup
+waited. The Date-based allowance then renewed across steps; the regression now
+checks elapsed time with a monotonic clock. Budget arithmetic uses
+`node:perf_hooks` performance time, independently of captured record timestamps.
