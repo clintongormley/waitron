@@ -95,7 +95,7 @@ function runStamp(input, buildId, metadata = `${input.source}:1792062000`) {
   const instruction = dockerfile.match(/^RUN (?:--network=none )?mkdir -p build(?:.*\\\n)*.*$/m);
   if (!instruction) throw new Error("Missing image release generation instruction");
   const script = instruction[0].replace(/^RUN (?:--network=none )?/, "").replace(/\\\n/g, " ");
-  return spawnSync("sh", ["-ec", script], {
+  return spawnSync("sh", ["-c", script], {
     cwd: input.cwd,
     env: {
       ...environment,

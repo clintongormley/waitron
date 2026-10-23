@@ -3079,9 +3079,27 @@ labels and compares revision, creation time and ref against that build's inputs.
 may have been pulled since those containers started. Branch installs resolve one commit for both
 builds through the commit API, without requiring git on the box.
 
+**2026-10-23, A1036:** branch installs now request JSON and read the SHA and committer date together.
+The SHA-only media type and dated probe below describe the earlier path. The current input feeds
+the [release-metadata build step](#the-images-release-metadata-comes-from-its-source).
+
 | Source | Source wording | Use |
 | --- | --- | --- |
 | [GitHub, Get a commit](https://docs.github.com/en/rest/commits/commits#get-a-commit), checked 2026-10-11 | “Returns the commit's SHA-1 hash.” (`application/vnd.github.sha`) | Resolve a branch, tag or abbreviated commit before building. |
+| [GitHub, Get a commit](https://docs.github.com/en/rest/commits/commits#get-a-commit), checked 2026-10-23 | “Setting to `application/vnd.github+json` is recommended.” Its response example includes `"committer"` and `"date": "2011-04-14T16:00:49Z"` inside `commit`. | Read `.sha` and `.commit.committer.date` from one response. The installer accepts the shown UTC spelling; an unparseable date stops the install before either image build. |
+
+Probe on 2026-10-23:
+
+```bash
+gh api -H 'Accept: application/vnd.github+json' \
+  repos/clintongormley/waitron/commits/b15d22d2aa1aad760a18b89eee2ca9017d48d5f2 \
+  --jq '[.sha, (.commit.committer.date | fromdateiso8601 | tostring)] | join(":")'
+```
+
+This printed `b15d22d2aa1aad760a18b89eee2ca9017d48d5f2:1792771595`, matching
+`git show -s --format='%H:%ct' b15d22d2aa1aad760a18b89eee2ca9017d48d5f2`. The response's
+committer date was `2026-10-23T16:06:35Z`. This compares one pinned revision; the parser refuses
+date spellings it cannot convert.
 
 Probe on 2026-10-11: `curl -fsSL -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/clintongormley/waitron/commits/main`
 printed `fb6a474b830ceb51ce96babd133a6a635e5f725d`. The shell regressions cover resolution failure,
