@@ -62,6 +62,8 @@ export function createClockWitnessStore(
     noteDevice(deviceId, deviceMs, arrived) {
       if (!Number.isSafeInteger(deviceMs) || !writable(deviceMs) || !writable(arrived.wallMs))
         return;
+      const seen = devices.get(deviceId);
+      if (seen !== undefined && seen.at.monoMs > arrived.monoMs) return;
       devices.set(deviceId, {
         witness: {
           kind: "device",
@@ -75,6 +77,7 @@ export function createClockWitnessStore(
     },
     noteAuthority({ authorityMs, uncertaintyMs, at }) {
       if (!writable(authorityMs) || !writable(at.wallMs)) return;
+      if (!Number.isFinite(uncertaintyMs) || uncertaintyMs < 0) return;
       const witness: ClockWitness = {
         kind: "authority",
         id: "authority",

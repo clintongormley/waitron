@@ -185,6 +185,52 @@ describe("createClockWitnessStore", () => {
     ]);
   });
 
+  it("keeps the reading that arrived later when two from one device are noted out of order", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    const earlier = clock.arrived();
+    clock.advance(15_000);
+    const later = clock.arrived();
+    store.noteDevice("till-1", START_WALL + 16_500, later);
+    store.noteDevice("till-1", START_WALL + 1_000, earlier);
+    expect(store.witnesses()).toEqual([
+      expect.objectContaining({
+        boxAt: iso(START_WALL + 15_000),
+        witnessAt: iso(START_WALL + 16_500),
+      }),
+    ]);
+  });
+
+  it("hands a disagreeing AEAT reading to takeNewAuthority once", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteAuthority({
+      authorityMs: START_WALL + 7_200_000,
+      uncertaintyMs: 600,
+      at: clock.arrived(),
+    });
+    expect(store.takeNewAuthority().map((witness) => witness.witnessAt)).toEqual([
+      iso(START_WALL + 7_200_000),
+    ]);
+    expect(store.takeNewAuthority()).toEqual([]);
+  });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "stores no AEAT reading whose uncertainty is %s, even one far from the box",
+    (uncertaintyMs) => {
+      const clock = clocks();
+      const store = storeWith(clock);
+      store.noteAuthority({ authorityMs: START_WALL, uncertaintyMs, at: clock.arrived() });
+      store.noteAuthority({
+        authorityMs: START_WALL + 7_200_000,
+        uncertaintyMs,
+        at: clock.arrived(),
+      });
+      expect(store.witnesses()).toEqual([]);
+      expect(store.takeNewAuthority()).toEqual([]);
+    },
+  );
+
   it("reads the box's own clocks when none are injected", () => {
     const store = createClockWitnessStore();
     const now = Date.now();
