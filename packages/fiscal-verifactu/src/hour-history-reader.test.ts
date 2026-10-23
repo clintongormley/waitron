@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction, readDeploymentEnvironment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -347,6 +347,12 @@ it("retains a later recorded approval time even when its database commit timesta
 });
 
 it("reads the newest fiscal record's time only through the floor reader, never the shared history", async () => {
+  // The activation rows are stamped by the column default's real clock; the record must be newer.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   const identity = "0CNNW";
