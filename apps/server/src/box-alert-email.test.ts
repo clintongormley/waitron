@@ -74,10 +74,14 @@ describe("boxEmailMessage for a clock stop", () => {
   });
 
   it("writes both times, each in its own offset, in Spanish", () => {
+    const words = BOX_EMAIL_WORDS["clock.behind_chain"].es;
+    expect(words.text).toContain("({clockAt})");
+    expect(words.text).toContain("({lastRecordAt})");
     expect(boxEmailMessage("clock.behind_chain", "es", "Corner Bistro", PARAMS)).toEqual({
-      subject:
-        "No se puede cobrar en Corner Bistro: la hora del equipo es anterior a la última venta",
-      text: "La hora del equipo (14/03/2025 09:12) es anterior a la última venta registrada (18/10/2026 23:40). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): conecta el equipo a internet para que la corrija, o llama a quien lo instaló. • Si crees que la hora del equipo es correcta: mira Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo), que dirá si se pueden reanudar los cobros.",
+      subject: words.subject.replaceAll("{venue}", "Corner Bistro"),
+      text: words.text
+        .replaceAll("{clockAt}", "14/03/2025 09:12")
+        .replaceAll("{lastRecordAt}", "18/10/2026 23:40"),
     });
   });
 

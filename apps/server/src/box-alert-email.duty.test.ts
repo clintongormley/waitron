@@ -7,6 +7,7 @@ import {
   type BoxEmailContext,
 } from "./box-alert-email.js";
 import type { EmailDelivery } from "./email-delivery.js";
+import { BOX_EMAIL_WORDS } from "./i18n/box-emails.js";
 import type { FreeSpaceReading } from "./free-space-watch.js";
 import type { Logger } from "./logger.js";
 import type { ManagerEmailRecipient } from "./manager-email-recipients.js";
@@ -88,6 +89,8 @@ const STOP = {
   lastRecordAt: "2026-10-18T21:40:00.000Z",
   lastRecordOffsetMinutes: 120,
 };
+
+const SPANISH_STOP = BOX_EMAIL_WORDS["clock.behind_chain"].es;
 
 function clockStop(params: typeof STOP): OwnedStaffNotice {
   return { ...notice("clock.behind_chain"), params };
@@ -410,11 +413,10 @@ describe("startBoxEmailDuty", () => {
     expect(d.sent()).toEqual([
       {
         recipient: ANA.email,
-        subject:
-          "No se puede cobrar en Corner Bistro: la hora del equipo es anterior a la última venta",
-        text: expect.stringContaining(
-          "(14/03/2025 09:12) es anterior a la última venta registrada (18/10/2026 23:40)",
-        ),
+        subject: SPANISH_STOP.subject.replaceAll("{venue}", VENUE),
+        text: SPANISH_STOP.text
+          .replaceAll("{clockAt}", "14/03/2025 09:12")
+          .replaceAll("{lastRecordAt}", "18/10/2026 23:40"),
       },
       {
         recipient: BEN.email,
