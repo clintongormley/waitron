@@ -18,6 +18,8 @@ export interface PartRow {
   alerts: AlertView[];
   /** The screen the row's action opens; null when the row has none. */
   screen: string | null;
+  /** The latest record a restart of payments would name; null unless the Clock row offers one. */
+  restartRecordId: string | null;
 }
 
 type Notice = BoxHealth["notices"][number];
@@ -97,7 +99,10 @@ export function boxStatusRows(
     const state: PartState =
       stopped.length > 0
         ? "stopped"
-        : notices.length > 0 || rowAlerts.length > 0 || clockOff(id, health)
+        : notices.length > 0 ||
+            rowAlerts.length > 0 ||
+            clockOff(id, health) ||
+            restarted(id, health)
           ? "attention"
           : "ok";
     return {
@@ -107,6 +112,7 @@ export function boxStatusRows(
       details: detailsOf(id, health, notices),
       alerts: rowAlerts,
       screen: SCREENS[id],
+      restartRecordId: restartOffered(id, health, notices) ? health.clockStop!.recordId : null,
     };
   });
   return { rows, other, checksUnavailable: health.noticesUnavailable.length > 0 };
@@ -115,6 +121,18 @@ export function boxStatusRows(
 /** The box's own read can see drift before the bell's slower alert read carries it. */
 function clockOff(id: PartId, health: BoxHealth): boolean {
   return id === "clock" && health.clock.authority.state === "warning";
+}
+
+function restarted(id: PartId, health: BoxHealth): boolean {
+  return id === "clock" && health.clockStop?.offer === "restarted";
+}
+
+function restartOffered(id: PartId, health: BoxHealth, notices: readonly Notice[]): boolean {
+  return (
+    id === "clock" &&
+    health.clockStop?.offer === "offered" &&
+    !notices.some((notice) => notice.code === "clock.unusable")
+  );
 }
 
 function lineOf(
@@ -230,9 +248,13 @@ function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): s
     case "readers":
       return names(health.readers!);
     case "clock":
-      return notices.some((notice) => notice.code === "clock.behind_chain")
-        ? [...clockDetails(health.clock), t("box_status.clock.behind_chain_fix")]
-        : clockDetails(health.clock);
+      return [
+        ...clockDetails(health.clock),
+        ...(notices.some((notice) => notice.code === "clock.behind_chain")
+          ? [t("box_status.clock.behind_chain_fix")]
+          : []),
+        ...(health.clockStop === null ? [] : clockStopDetails(health.clockStop)),
+      ];
     case "disk":
       return diskDetails(health.disk);
     default:
@@ -246,15 +268,53 @@ function names(parts: readonly { name: string }[]): string[] {
 
 function clockDetails(clock: BoxHealth["clock"]): string[] {
   const details: string[] = [];
-  if (clock.authority.state !== "unknown")
+  if (clock.authority.state !== "unknown") {
+    const drift = clock.authority.driftSeconds;
+    // `driftSeconds` is the box's clock less the tax agency's.
+    const key: StringKey =
+      drift > 60
+        ? "box_status.clock.compared_ahead"
+        : drift < -60
+          ? "box_status.clock.compared_behind"
+          : "box_status.clock.compared";
     details.push(
-      fill("box_status.clock.compared", {
+      fill(key, {
         time: formatIsoMinute(clock.authority.measuredAt),
-        seconds: String(Math.abs(clock.authority.driftSeconds)),
+        seconds: String(Math.abs(drift)),
       }),
     );
+  }
   if (clock.sync.source === "timedatectl")
     details.push(t(clock.sync.synced ? "box_status.clock.synced" : "box_status.clock.not_synced"));
+  return details;
+}
+
+function clockStopDetails(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
+  const details: string[] = [];
+  const { authority, devices } = stop.proof;
+  if (authority !== null)
+    details.push(
+      fill("box_status.clock.proof.authority", { time: formatIsoMinute(authority.boxAt) }),
+    );
+  if (devices.length > 0) {
+    const latest = devices.reduce((a, b) => (b.witnessAt > a.witnessAt ? b : a));
+    details.push(
+      fill("box_status.clock.proof.devices", {
+        count: String(devices.length),
+        time: formatIsoMinute(latest.witnessAt),
+      }),
+    );
+  }
+  if (stop.offer === "restarted") {
+    // The seat offers "restarted" only when a restart names the latest record.
+    const restart = stop.restart!;
+    details.push(
+      fill("box_status.clock.restarted", {
+        person: restart.personName ?? t("box_status.clock.someone"),
+        time: formatIsoMinute(restart.restartedAt),
+      }),
+    );
+  } else if (stop.offer !== "offered") details.push(t(`box_status.clock.refused.${stop.offer}`));
   return details;
 }
 

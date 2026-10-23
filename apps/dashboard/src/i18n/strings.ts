@@ -3217,6 +3217,14 @@ export const en = {
   "box_status.clock.ok": "Correct",
   "box_status.clock.unknown": "Not yet compared with the tax agency",
   "box_status.clock.compared": "Compared with the tax agency at {time} · {seconds} s apart",
+  "box_status.clock.compared_ahead":
+    "Compared with the tax agency at {time} · the box was {seconds} s ahead",
+  "box_status.clock.compared_behind":
+    "Compared with the tax agency at {time} · the box was {seconds} s behind",
+  "box_status.clock.proof.authority": "Tax agency: matches (checked {time})",
+  "box_status.clock.proof.devices": "Devices: {count} read {time}",
+  "box_status.clock.restarted": "Payments restarted by {person} at {time}",
+  "box_status.clock.someone": "someone",
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.behind_chain_fix":
@@ -6517,6 +6525,14 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.ok": "Correcto",
   "box_status.clock.unknown": "Aún no se ha comparado con Hacienda",
   "box_status.clock.compared": "Comparado con Hacienda el {time} · diferencia {seconds} s",
+  "box_status.clock.compared_ahead":
+    "Comparado con Hacienda el {time} · el equipo iba {seconds} s adelantado",
+  "box_status.clock.compared_behind":
+    "Comparado con Hacienda el {time} · el equipo iba {seconds} s atrasado",
+  "box_status.clock.proof.authority": "Hacienda: coincide (comprobado {time})",
+  "box_status.clock.proof.devices": "Dispositivos: {count} marcan {time}",
+  "box_status.clock.restarted": "Cobros reanudados por {person} el {time}",
+  "box_status.clock.someone": "alguien",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":

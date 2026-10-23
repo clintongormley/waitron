@@ -34,6 +34,7 @@ function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
       lowSince: null,
       reclaimable: { bytes: 45_000_000, backupRunning: false },
     },
+    clockStop: null,
     ...overrides,
   };
 }

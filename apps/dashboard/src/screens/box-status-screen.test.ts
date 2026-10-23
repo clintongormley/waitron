@@ -59,6 +59,7 @@ function health(overrides: Partial<BoxHealth> = {}, disk: Partial<BoxHealth["dis
       reclaimable: { bytes: 45_000_000, backupRunning: false },
       ...disk,
     },
+    clockStop: null,
   } satisfies BoxHealth;
 }
 
