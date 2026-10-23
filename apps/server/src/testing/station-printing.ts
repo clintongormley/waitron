@@ -24,10 +24,17 @@ export async function setStationPrinting(
   if (choices.printMovedSlips !== undefined) set.printMovedSlips = choices.printMovedSlips;
   if (Object.keys(set).length === 0) return;
   const update = tx.update(kitchenStations).set(set);
-  await (stationIds === undefined
-    ? update
-    : update.where(inArray(kitchenStations.id, [...stationIds])));
-  if (stationIds !== undefined) return;
+  if (stationIds !== undefined) {
+    const updated = await update
+      .where(inArray(kitchenStations.id, [...stationIds]))
+      .returning({ id: kitchenStations.id });
+    if (updated.length !== stationIds.length)
+      throw new Error(
+        `setStationPrinting: ${stationIds.length - updated.length} id(s) match no station`,
+      );
+    return;
+  }
+  await update;
   // Writes the venue's value too until A756 PR 6 Task 38.
   if (set.printHeldWork !== undefined) await writePrintHeldWork(tx, set.printHeldWork);
   if (set.ticketGrouping !== undefined) await writeKitchenTicketGrouping(tx, set.ticketGrouping);

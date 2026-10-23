@@ -547,6 +547,21 @@ async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[])
   });
 }
 
+/** The id of the active station named `name` at the venue's location. */
+async function activeStationId(tx: Transaction, v: PartyVenue, name: string): Promise<string> {
+  const [row] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(
+        eq(kitchenStations.locationId, v.cfg.locationId),
+        eq(kitchenStations.name, name),
+        eq(kitchenStations.active, true),
+      ),
+    );
+  return row!.id;
+}
+
 describe("a MOVED slip per order per station", () => {
   it("prints one slip for each order at each station, listing that order's dishes there", async () => {
     const v = await setupPartyVenue(db);
@@ -1024,7 +1039,9 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
-    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const mesa112 = await v.table("Mesa 112");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 111"));
     await burgerAndHeldPaella(v, partyId, tabId);
@@ -1054,7 +1071,9 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
-    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const mesa119 = await v.table("Mesa 119");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 118"));
     const line = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
@@ -1112,7 +1131,9 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
-    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const { partyId, tabId } = await seat(v, await v.table("Mesa 115"));
     await burgerAndHeldPaella(v, partyId, tabId);
     const before = (await printedBy(grill)).length;
@@ -1149,7 +1170,9 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
-    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const { partyId, tabId } = await seat(v, await v.table("Mesa 117"));
     await burgerAndHeldPaella(v, partyId, tabId);
     const second = await split(v, partyId, tabId, [1]);
@@ -1189,8 +1212,10 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
       setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }),
     );
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
-    await inTx(v, (tx) =>
-      setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }, [grill]),
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }, [
+        await activeStationId(tx, v, "Grill"),
+      ]),
     );
     const mesa122 = await v.table("Mesa 122");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 121"));
