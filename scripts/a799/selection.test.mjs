@@ -55,7 +55,7 @@ const index = (count = 4) => ({
     id: "post-reset",
     a760ResetReceipt: "actual-reset-receipt",
     baselineSourceSha: sha(1),
-    baselineMigrationHashes: [hash(1)],
+    baselineMigrationHashes: [{ set: "core", table: "__core_migrations", hash: hash(1) }],
   },
   fixtures: Array.from({ length: count }, (_, i) => [
     fixture(i + 1),
@@ -117,10 +117,7 @@ describe("required historical release selection", () => {
     ]);
   });
   it("selects the previous retained ancestor, excluding captures at or after the candidate", () => {
-    expect(sources(select(index(4), { ...candidate(), image: image(3) }))).toEqual([
-      sha(1),
-      sha(2),
-    ]);
+    expect(sources(select(index(4), candidate(3)))).toEqual([sha(1), sha(2)]);
   });
   it("keeps never-enabled distinct from disabled-retained", () => {
     const i = index();
@@ -135,7 +132,7 @@ describe("required historical release selection", () => {
       effectiveCandidateSha: sha(5),
       ownerReceipt: "owner-R5",
     });
-    expect(sources(select(i, { ...candidate(), image: image(4) }))).toEqual([sha(1), sha(3)]);
+    expect(sources(select(i, candidate(4)))).toEqual([sha(1), sha(3)]);
     expect(sources(select(i))).toEqual([sha(2), sha(4)]);
     expect(sources(select(i, candidate(6)))).toEqual([sha(2), sha(4)]);
     expect(i.fixtures).toHaveLength(8);
@@ -175,9 +172,9 @@ describe("required historical release selection", () => {
       "history.epoch",
     ],
     [
-      "source missing from ancestry",
+      "source ordinal order disagrees with ancestry",
       (i, c) => {
-        c.orderedSourceShas.splice(1, 1);
+        c.orderedSourceShas = [sha(1), sha(3), sha(2), sha(4), sha(5)];
       },
       "history.ancestry",
     ],
@@ -189,18 +186,19 @@ describe("required historical release selection", () => {
       "history.ancestry",
     ],
     [
-      "retirement with unqualified ancestry",
-      (i) => {
+      "retirement replacement outside candidate ancestry",
+      (i, c) => {
+        c.orderedSourceShas = [sha(1), sha(3), sha(4), sha(5)];
         i.retirements = [
           {
             retired: sha(1),
             replacement: sha(2),
-            effectiveCandidateSha: sha(99),
+            effectiveCandidateSha: sha(5),
             ownerReceipt: "owner",
           },
         ];
       },
-      "history.ancestry",
+      "history.retirement",
     ],
     [
       "duplicate ancestor",
@@ -238,9 +236,11 @@ describe("required historical release selection", () => {
       "history.variant",
     ],
     [
-      "two optional-off variants",
+      "ambiguous optional-off version",
       (i) => {
-        i.fixtures.push(fixture(1, "never-enabled"));
+        const duplicate = fixture(1, "disabled-retained");
+        duplicate.id += "-duplicate";
+        i.fixtures.push(duplicate);
       },
       "history.variant",
     ],
@@ -409,7 +409,7 @@ describe("strict published input admission", () => {
     [
       "duplicate baseline hash",
       (i) => {
-        i.epoch.baselineMigrationHashes.push(hash(1));
+        i.epoch.baselineMigrationHashes.push({ ...i.epoch.baselineMigrationHashes[0] });
       },
     ],
     [
@@ -547,15 +547,16 @@ describe("pending packaged migration classification", () => {
       kind: "restart-only",
     });
   });
-  it("keeps never-enabled absence explicit and applies a newly enabled set", () => {
+  it("keeps never-enabled absence explicit", () => {
     expect(
       classify([journal()], [packaged(), packaged("optional", [1], false)]).expectedAfter,
     ).toEqual([journal()]);
-    expect(
-      classify([journal()], [packaged(), packaged("new")], ["core", "new"]).pending.map(
-        (p) => p.set,
-      ),
-    ).toEqual(["new"]);
+  });
+  it("review M3: refuses first-time module enablement as historical upgrade evidence", () => {
+    refuse(
+      () => classify([journal()], [packaged(), packaged("new")], ["core", "new"]),
+      "history.module_state",
+    );
   });
   it.each([
     [
@@ -577,7 +578,7 @@ describe("pending packaged migration classification", () => {
       "history.journal",
     ],
     ["removed old migration", () => classify([journal("core", [1, 2])]), "history.journal"],
-    ["unknown retained set", () => classify([journal("unknown")]), "history.journal"],
+    ["unknown retained set", () => classify([journal(), journal("unknown")]), "history.journal"],
     [
       "changed journal table",
       () => {
@@ -667,7 +668,7 @@ describe("post-reset baseline admission", () => {
   });
   it("refuses old journals missing a baseline hash even if packaged SQL matches", () => {
     const epoch = index().epoch;
-    epoch.baselineMigrationHashes = [hash(999)];
+    epoch.baselineMigrationHashes = [{ set: "core", table: "__core_migrations", hash: hash(999) }];
     refuse(
       () => selection.classifyWork(image(1), image(5), [journal()], [packaged()], ["core"], epoch),
       "history.epoch",
@@ -675,7 +676,7 @@ describe("post-reset baseline admission", () => {
   });
   it("does not replace recorded baseline hashes with a candidate's SQL", () => {
     const epoch = index().epoch;
-    epoch.baselineMigrationHashes = [hash(2)];
+    epoch.baselineMigrationHashes = [{ set: "core", table: "__core_migrations", hash: hash(2) }];
     refuse(
       () =>
         selection.classifyWork(
@@ -893,4 +894,125 @@ describe("new reviewed versions retain their originals", () => {
     i.fixtures.push(duplicate);
     refuse(() => select(i), "history.variant");
   });
+});
+
+describe("review H1: keep every previously qualified original", () => {
+  it("refuses dropping the original oldest and moving its pointer", () => {
+    const i = index();
+    i.fixtures = i.fixtures.filter((f) => f.retainedOrdinal !== 1);
+    i.oldestSource = sha(2);
+    refuse(() => select(i), "history.ancestry");
+  });
+  it("refuses a missing intermediate retained ordinal", () => {
+    const i = index();
+    i.fixtures = i.fixtures.filter((f) => f.retainedOrdinal !== 2);
+    refuse(() => select(i), "history.ancestry");
+  });
+  it("rejects deleting the newest original against the previous committed index", () => {
+    const next = index(3);
+    refuse(() => selection.validateIndexUpdate(index(), next), "history.retained");
+  });
+  it("rejects replacing original metadata under the same fixture id", () => {
+    const next = index();
+    next.fixtures[0].bundle.sha256 = hash(900);
+    refuse(() => selection.validateIndexUpdate(index(), next), "history.retained");
+  });
+  it("accepts a first qualification and an append without changing originals", () => {
+    const empty = { version: 1, epoch: null, fixtures: [], oldestSource: null, retirements: [] };
+    expect(selection.validateIndexUpdate(empty, index())).toEqual(index());
+    expect(selection.validateIndexUpdate(index(3), index())).toEqual(index());
+  });
+  it("rejects changing a qualified epoch or oldest pointer", () => {
+    const next = index();
+    next.epoch.a760ResetReceipt = "different-reset";
+    refuse(() => selection.validateIndexUpdate(index(), next), "history.retained");
+    next.epoch = index().epoch;
+    next.oldestSource = sha(2);
+    refuse(() => selection.validateIndexUpdate(index(), next), "history.retained");
+  });
+  it("retains existing owner retirement decisions", () => {
+    const old = index();
+    old.retirements = [
+      {
+        retired: sha(1),
+        replacement: sha(2),
+        effectiveCandidateSha: sha(5),
+        ownerReceipt: "owner",
+      },
+    ];
+    refuse(() => selection.validateIndexUpdate(old, index()), "history.retained");
+    expect(selection.validateIndexUpdate(old, globalThis.structuredClone(old))).toEqual(old);
+  });
+});
+
+describe("review M1: retain the strongest qualified optional-off coverage", () => {
+  it("keeps disabled-retained coverage when a newer never-enabled version is added", () => {
+    const i = index();
+    const newer = fixture(1, "never-enabled");
+    newer.version = 2;
+    i.fixtures.push(newer);
+    expect(select(i)[1].fixture.id).toBe("R1-disabled-retained");
+    expect(i.fixtures).toHaveLength(9);
+  });
+  it("accepts both optional-off kinds at the same version and selects retained data", () => {
+    const i = index();
+    i.fixtures.push(fixture(1, "never-enabled"));
+    expect(select(i)[1].fixture.moduleVariant).toBe("disabled-retained");
+  });
+});
+
+describe("review M2: use only actual candidate ancestors", () => {
+  it("ignores later original sources when checking an earlier candidate", () => {
+    expect(sources(select(index(), candidate(3)))).toEqual([sha(1), sha(2)]);
+  });
+  it("does not apply a retirement on main to a branch that does not contain it", () => {
+    const i = index();
+    i.retirements = [
+      {
+        retired: sha(1),
+        replacement: sha(2),
+        effectiveCandidateSha: sha(5),
+        ownerReceipt: "owner",
+      },
+    ];
+    const branch = { ...candidate(6), orderedSourceShas: [sha(1), sha(2), sha(3), sha(6)] };
+    expect(sources(select(i, branch))).toEqual([sha(1), sha(3)]);
+  });
+  it("refuses descendants included as if they were ancestors of the candidate", () => {
+    refuse(() => select(index(), { ...candidate(), image: image(3) }), "history.ancestry");
+  });
+});
+
+describe("review L1/L2: migration identities include their set and journal table", () => {
+  it("refuses a baseline hash found only in a different set", () => {
+    refuse(
+      () =>
+        classify(
+          [journal("core", [9]), journal("other", [1])],
+          [packaged("core", [9]), packaged("other", [1], false)],
+        ),
+      "history.epoch",
+    );
+  });
+  it("refuses two captured sets sharing one journal table", () => {
+    const other = journal("other");
+    other.table = "__core_migrations";
+    const otherPackage = packaged("other", [1], false);
+    otherPackage.table = "__core_migrations";
+    refuse(() => classify([journal(), other], [packaged(), otherPackage]), "history.invalid");
+  });
+  it("refuses two packaged sets sharing one journal table", () => {
+    const other = packaged("other", [1], false);
+    other.table = "__core_migrations";
+    refuse(() => classify([journal()], [packaged(), other]), "history.invalid");
+  });
+});
+
+it.each(["set", "table"])("rejects a baseline bound to an absent %s", (field) => {
+  const epoch = index().epoch;
+  epoch.baselineMigrationHashes[0][field] = "missing";
+  refuse(
+    () => selection.classifyWork(image(1), image(5), [journal()], [packaged()], ["core"], epoch),
+    "history.epoch",
+  );
 });

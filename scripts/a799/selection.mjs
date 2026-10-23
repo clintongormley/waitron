@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   fail,
   parseCandidate,
@@ -29,7 +30,7 @@ export function selectCells(rawIndex, rawCandidate) {
   const position = (sha) => order.indexOf(sha);
   if (
     new Set(order).size !== order.length ||
-    position(candidate.image.sourceSha) < 0 ||
+    order.at(-1) !== candidate.image.sourceSha ||
     position(index.epoch.baselineSourceSha) !== 0
   )
     fail("history.ancestry", "candidate order");
@@ -39,7 +40,6 @@ export function selectCells(rawIndex, rawCandidate) {
   for (const fixture of index.fixtures) {
     if (fixture.epochId !== index.epoch.id) fail("history.epoch", fixture.id);
     const sha = fixture.image.sourceSha;
-    if (position(sha) < 0) fail("history.ancestry", sha);
     if (fixture.image.platform !== candidate.image.platform) fail("history.platform", fixture.id);
     const group = sources.get(sha) ?? [];
     if (group.length) {
@@ -52,20 +52,32 @@ export function selectCells(rawIndex, rawCandidate) {
     group.push(fixture);
     sources.set(sha, group);
   }
-  const retained = [...sources.keys()].sort((a, b) => position(a) - position(b));
+  const retained = [...sources.keys()].sort(
+    (a, b) => sources.get(a)[0].retainedOrdinal - sources.get(b)[0].retainedOrdinal,
+  );
   let lastOrdinal = 0;
+  let lastPosition = -1;
   for (const sha of retained) {
     const group = sources.get(sha);
-    if (group[0].retainedOrdinal <= lastOrdinal) fail("history.ancestry", "retained ordinal order");
+    if (group[0].retainedOrdinal !== lastOrdinal + 1)
+      fail("history.ancestry", "retained ordinal order");
     lastOrdinal = group[0].retainedOrdinal;
-    const required = group.filter((f) => f.moduleVariant === "required-verifactu");
-    const optional = group.filter((f) => f.moduleVariant !== "required-verifactu");
-    const latest = (captures) => {
-      if (captures.length === 0 || new Set(captures.map((f) => f.version)).size !== captures.length)
+    if (position(sha) >= 0) {
+      if (position(sha) <= lastPosition) fail("history.ancestry", "retained source order");
+      lastPosition = position(sha);
+    }
+    const latest = (kind) => {
+      const captures = group.filter((f) => f.moduleVariant === kind);
+      if (new Set(captures.map((f) => f.version)).size !== captures.length)
         fail("history.variant", sha);
-      return captures.reduce((a, b) => (a.version > b.version ? a : b));
+      return captures.reduce((a, b) => (a === null || a.version < b.version ? b : a), null);
     };
-    sources.set(sha, [latest(required), latest(optional)]);
+    const required = latest("required-verifactu");
+    const retainedData = latest("disabled-retained");
+    const neverEnabled = latest("never-enabled");
+    if (required === null || (retainedData === null && neverEnabled === null))
+      fail("history.variant", sha);
+    sources.set(sha, [required, retainedData ?? neverEnabled]);
   }
   if (!sources.has(index.oldestSource)) fail("history.source", "oldest");
   if (index.oldestSource !== retained[0])
@@ -75,14 +87,13 @@ export function selectCells(rawIndex, rawCandidate) {
     .filter((r) => {
       if (!sources.has(r.retired) || !sources.has(r.replacement))
         fail("history.source", "retirement");
-      if (position(r.effectiveCandidateSha) < 0)
-        fail("history.ancestry", "retirement effective candidate");
-      return position(r.effectiveCandidateSha) <= position(candidate.image.sourceSha);
+      return position(r.effectiveCandidateSha) >= 0;
     })
     .sort((a, b) => position(a.effectiveCandidateSha) - position(b.effectiveCandidateSha));
   for (const retirement of retirements) {
     if (
       retirement.retired !== oldest ||
+      position(oldest) < 0 ||
       position(retirement.replacement) <= position(oldest) ||
       position(retirement.replacement) >= position(retirement.effectiveCandidateSha)
     )
@@ -90,9 +101,13 @@ export function selectCells(rawIndex, rawCandidate) {
     oldest = retirement.replacement;
   }
   const previous = retained
-    .filter((sha) => position(sha) < position(candidate.image.sourceSha))
+    .filter((sha) => position(sha) >= 0 && position(sha) < position(candidate.image.sourceSha))
     .at(-1);
-  if (previous === undefined || position(oldest) >= position(candidate.image.sourceSha))
+  if (
+    previous === undefined ||
+    position(oldest) < 0 ||
+    position(oldest) >= position(candidate.image.sourceSha)
+  )
     fail("history.source", "no earlier source");
   return [...new Set([oldest, previous])].flatMap((sha) =>
     sources.get(sha).map((fixture) => ({
@@ -122,12 +137,16 @@ export function classifyWork(
   const equal = sameImage(source, candidate);
   if ((source.sourceSha === candidate.sourceSha) !== equal)
     fail("history.image", "source identity");
-  const capturedHashes = new Set(inputs.oldJournals.flatMap((j) => j.rows.map((r) => r.hash)));
-  for (const baselineHash of epoch.baselineMigrationHashes) {
-    if (!capturedHashes.has(baselineHash))
-      fail("history.epoch", "missing captured baseline migration");
-  }
   const journals = new Map(inputs.oldJournals.map((j) => [j.set, j]));
+  for (const baseline of epoch.baselineMigrationHashes) {
+    const captured = journals.get(baseline.set);
+    if (
+      captured === undefined ||
+      captured.table !== baseline.table ||
+      !captured.rows.some((row) => row.hash === baseline.hash)
+    )
+      fail("history.epoch", "missing captured baseline migration in its set and table");
+  }
   const packages = new Map(inputs.packagedSets.map((p) => [p.set, p]));
   for (const old of inputs.oldJournals) {
     if (!packages.has(old.set)) fail("history.journal", `removed set ${old.set}`);
@@ -141,6 +160,7 @@ export function classifyWork(
     if (packaged.enabled !== inputs.enabledSets.includes(packaged.set))
       fail("history.journal", `enabled ${packaged.set}`);
     const old = journals.get(packaged.set);
+    if (packaged.enabled && !old) fail("history.module_state", `newly enabled set ${packaged.set}`);
     if (old && old.table !== packaged.table) fail("history.journal", `table ${packaged.set}`);
     let watermark = 0n;
     for (const migration of packaged.sql) {
@@ -169,4 +189,25 @@ export function classifyWork(
   }
   if (equal && pending.length) fail("history.image", "same image has pending SQL");
   return { pending, expectedAfter, kind: pending.length ? "pending-upgrade" : "restart-only" };
+}
+
+/** Check updates against the previously committed trusted index before using the new one. */
+export function validateIndexUpdate(rawPrevious, rawNext) {
+  const previous = parseIndex(rawPrevious);
+  const next = parseIndex(rawNext);
+  if (
+    previous.epoch !== null &&
+    (!isDeepStrictEqual(previous.epoch, next.epoch) || previous.oldestSource !== next.oldestSource)
+  )
+    fail("history.retained", "qualified epoch or oldest pointer changed");
+  const fixtures = new Map(next.fixtures.map((fixture) => [fixture.id, fixture]));
+  for (const fixture of previous.fixtures) {
+    if (!isDeepStrictEqual(fixture, fixtures.get(fixture.id)))
+      fail("history.retained", `original fixture ${fixture.id}`);
+  }
+  for (const retirement of previous.retirements) {
+    if (!next.retirements.some((entry) => isDeepStrictEqual(entry, retirement)))
+      fail("history.retained", "owner retirement removed or changed");
+  }
+  return next;
 }

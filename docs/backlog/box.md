@@ -612,7 +612,7 @@ activation retain their separate gates.
 The first cut adds metadata admission, required release selection and pending SQL
 classification. The [rig README](../../bench/real-upgrade/README.md) records its
 executable examples, the trusted ancestry input boundary and two plan adjustments:
-`classifyWork` takes the epoch explicitly to reject missing baseline hashes, and
+`classifyWork` takes a set-qualified epoch explicitly to reject missing baseline hashes, and
 `parseFacts` travels with cut 2's typed facts/schema/coverage model rather than a
 shallow placeholder in cut 1. Pending journal IDs remain explicitly unknown until
 observed. These changes add no product writer or execution path.

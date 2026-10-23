@@ -1,3 +1,19 @@
+## 2026-10-23 build approval and first-cut execution contract
+
+The owner authorised building every published A799 plan cut on 23 October 2026
+with “Go ahead and build.” This dated record supersedes the planning-only authority
+in the unchanged historical plan below. Runtime, capture, A760 reset,
+migration, upload, provider and trusted CI activation keep their separate gates.
+
+The [first-cut contract](../../../bench/real-upgrade/README.md) records the actual
+interfaces: explicit set-qualified epoch inputs, preservation of previously
+committed index entries, actual candidate ancestry, strongest optional-off
+coverage and refusal of first-time module enablement as upgrade evidence.
+`parseFacts` belongs with cut 2's complete typed facts/schema/coverage model.
+No capture, issued full invoice, real upgrade or access qualification is established.
+
+---
+
 # A799 Real Database Upgrade Testing Implementation Plan
 
 > **For agentic workers:** After separate owner approval, use `superpowers:executing-plans` and implement routine tasks inline. Read `superpowers:test-driven-development` before writing implementation or tests. No subagent-driven execution is required. All checkboxes below describe future work, not authority to start it.

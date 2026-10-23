@@ -19,21 +19,28 @@ rows. `never-enabled` records that retained-data coverage is still missing; a la
 runner must report that gap.
 
 For sources R1 through R4 and candidate R5, selection requires R1 and R4. It
-counts equal endpoints once. For a source with revised qualified captures, it selects
-the highest version of each required variant and keeps earlier versions in the index.
-Equal version numbers for one variant are ambiguous and are refused. An owner retirement naming R2 as R1's replacement,
-effective at R5, changes R5's selection to R2 and R4. Every original remains in
-the index. `oldestSource` stays the original earliest retained source; retirement
-records derive the effective oldest, so changing the pointer cannot erase the
-requirement for an owner decision.
+counts equal endpoints once. Within each kind it selects the highest qualified
+capture version, retaining the originals in the index. Disabled-retained coverage
+takes precedence over never-enabled coverage, even if the latter has a higher
+version. Equal versions within one kind are ambiguous and are refused.
 
-`candidate.orderedSourceShas` supplies a pinned ancestry chain, including the
-baseline, all indexed sources, retirement effective candidates and the candidate.
-It may include later descendants when checking an earlier candidate. The selector
-checks membership, uniqueness and retained ordinal order. It performs no Git
-access and cannot establish that the supplied chain is true: the future trusted
-caller must verify that chain against Git before candidate access. Tags, names and
-capture timestamps do not establish ancestry.
+An owner retirement naming R2 as R1's replacement, effective at R5, changes R5's
+selection to R2 and R4. `oldestSource` stays the original earliest retained source;
+retirement records derive the effective oldest. Ordinals must begin at 1 with no
+gaps, which detects removal of the oldest or an intermediate source. Before using
+an updated index, the future trusted caller must call
+`validateIndexUpdate(previousCommittedIndex, nextIndex)`. That check preserves each
+original descriptor and owner retirement exactly, including the latest source,
+whose deletion a single index cannot detect. No persistent updater is wired yet.
+
+`candidate.orderedSourceShas` supplies the candidate's actual ancestor chain from
+the baseline through the candidate itself. Later sources stay in the index but do
+not participate in this candidate's selection. A retirement whose effective commit
+is absent from the candidate's ancestors does not apply, including on a branch
+that has not incorporated that commit. The selector checks unique membership and
+retained source order; it performs no Git access. The future trusted caller must
+verify actual Git ancestry and validate the index transition before candidate
+access. Tags, names and capture timestamps do not establish ancestry.
 
 Run the executable examples and refusal cases:
 
@@ -78,13 +85,18 @@ container runner in this cut.
 epoch)` validates a reviewed SQL inventory against captured journal rows. Pass the
 validated epoch explicitly: the five inputs in the original plan cannot establish
 which baseline hashes a captured journal must contain. The epoch binds this
-metadata check to the recorded reset receipt and baseline hashes. It does not
-verify the receipt's authenticity or a database's actual bytes.
+metadata check to set-qualified baseline hashes: each entry names its `set`,
+`table` and `hash`. The receipt is required reviewed metadata, not authenticated by
+this function. Neither the receipt's authenticity nor a database's actual bytes
+is verified here.
 
 Every old hash and stored migration timestamp must remain an exact prefix of its
 set's packaged SQL. Disabled sets retain their old rows and apply nothing. An
-absent, disabled set stays absent. Enabled sets contribute pending SQL after the
-old prefix. An identical image with pending SQL is refused. A later image without
+absent, disabled set stays absent. Previously present enabled sets contribute
+pending SQL after the old prefix.
+First-time module enablement is refused with `history.module_state`, because
+initialising a new module cannot replace upgrading captured history. An identical
+image with pending SQL is refused. A later image without
 pending SQL returns `restart-only`, which cannot satisfy the required real upgrade.
 `expectedAfter` preserves old IDs; pending rows use `id: null` as an explicit
 unknown engine-assigned ID, which later execution must observe and validate.

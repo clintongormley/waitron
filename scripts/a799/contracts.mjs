@@ -68,11 +68,19 @@ function epoch(value, path) {
       id: text,
       a760ResetReceipt: text,
       baselineSourceSha: source,
-      baselineMigrationHashes: array(hash, 1),
+      baselineMigrationHashes: array(
+        (entry, p) => object(entry, { set: text, table: text, hash }, p),
+        1,
+      ),
     },
     path,
   );
-  unique(value.baselineMigrationHashes, path);
+  unique(
+    value.baselineMigrationHashes.map((entry) =>
+      JSON.stringify([entry.set, entry.table, entry.hash]),
+    ),
+    path,
+  );
 }
 function inventoryEntry(value, path) {
   object(
@@ -275,6 +283,14 @@ export function parseWorkInputs(oldJournals, packagedSets, enabledSets) {
     packagedSets.map((p) => p.set),
     "packaged",
   );
+  unique(
+    oldJournals.map((j) => j.table),
+    "journal tables",
+  );
+  unique(
+    packagedSets.map((p) => p.table),
+    "packaged journal tables",
+  );
   unique(enabledSets, "enabledSets");
   return globalThis.structuredClone({ oldJournals, packagedSets, enabledSets });
 }
@@ -294,7 +310,7 @@ export function parseWorkInputs(oldJournals, packagedSets, enabledSets) {
  * @property {string} id
  * @property {string} a760ResetReceipt
  * @property {string} baselineSourceSha
- * @property {string[]} baselineMigrationHashes
+ * @property {{set:string, table:string, hash:string}[]} baselineMigrationHashes
  *
  * @typedef {object} InventoryEntry
  * @property {string} path
