@@ -1,7 +1,7 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { LeaveController, applyTokens, type WtCombobox } from "@waitron/ui";
+import { LeaveController, applyTokens, type WtSwitch } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { VenueServiceApi, VenueServiceSettingsView } from "./client.js";
 import "./service-settings-panel.js";
@@ -101,7 +101,7 @@ async function change(
   choice: (typeof choices)[number],
 ) {
   const control = panel.shadowRoot!.querySelector<HTMLElement>(`[name=${choice.name}]`)!;
-  await (control as WtCombobox).updateComplete;
+  await (control as WtSwitch).updateComplete;
   const input = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   input.focus();
   await userEvent.keyboard(" ");
@@ -118,7 +118,7 @@ for (const choice of choices) {
       await leaveWithoutWarning();
       if (outcome === "stored") pending.resolve();
       else pending.reject(new Error("refused"));
-      const control = panel.shadowRoot!.querySelector<WtCombobox>(`[name=${choice.name}]`)!;
+      const control = panel.shadowRoot!.querySelector<WtSwitch>(`[name=${choice.name}]`)!;
       await expect.poll(() => control.disabled).toBe(false);
       if (outcome === "refused") {
         expect(
@@ -164,7 +164,7 @@ it("an immediate setting write cannot clear a different owner's pending draft de
   await expect.poll(() => warning.open).toBe(true);
   pending.resolve();
   await expect
-    .poll(() => panel.shadowRoot!.querySelector<WtCombobox>("[name=editSentLines]")!.disabled)
+    .poll(() => panel.shadowRoot!.querySelector<WtSwitch>("[name=editSentLines]")!.disabled)
     .toBe(false);
   expect(warning.open).toBe(true);
   expect(input.value).toBe("edited");

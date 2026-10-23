@@ -38,7 +38,7 @@ it("shows the settings panel to a read-only viewer with every control disabled",
   expect(api.loadSettingsReadOnly).toHaveBeenCalledTimes(1);
   expect(kitchen.shadowRoot!.querySelector('[data-test="kitchen-changes"]')).not.toBeNull();
   for (const control of kitchen.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
-    "wt-switch, wt-combobox",
+    "wt-switch",
   )) {
     expect(control.disabled).toBe(true);
   }
