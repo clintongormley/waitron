@@ -712,11 +712,8 @@ all browser test steps took 26–237 seconds, read from the jobs API's step time
 
 Browser package test commands run through
 `node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm …`; fiscal-verifactu
-uses 420 seconds. Its later A798 run `39902897605`, job `120248392824`, spent
-332 seconds in the test step and 379 seconds in the job. A six-minute command cap
-would leave only 28 seconds above that test step, so the seven-minute fiscal cap
-leaves 88 seconds. Its runtime above the four-minute target remains
-[separate performance work](../backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target).
+uses 420 seconds. A1041 retains that fiscal diagnostic limit while splitting its
+work across four runners; see [Fiscal coverage uses four file shards](#fiscal-coverage-uses-four-file-shards).
 
 These limits leave room under the ten-minute job limit for a two-second process
 snapshot, the five-second termination grace and artifact uploads on those measured
