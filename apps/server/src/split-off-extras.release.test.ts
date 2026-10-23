@@ -3,11 +3,16 @@ import { sendLines, setLineCourse } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  kitchenStations,
+  printJobs,
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readPrintHeldWork } from "@waitron/venue-service";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
@@ -118,7 +123,11 @@ describe("releasing split-off extras", () => {
       const venue = await setupSplitExtrasVenue();
       await withTransaction(db, async (tx) => {
         await setStationPrinting(tx, { printHeldWork: true });
-        expect(await readPrintHeldWork(tx)).toBe(true);
+        const stations = await tx
+          .select({ printHeldWork: kitchenStations.printHeldWork })
+          .from(kitchenStations);
+        expect(stations.length).toBeGreaterThan(0);
+        expect(stations.every((station) => station.printHeldWork)).toBe(true);
         const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
           operatorId: OPERATOR,
           groups: [{ lines: [pick(venue, product)], release: "hold" }],

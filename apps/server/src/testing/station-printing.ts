@@ -1,10 +1,5 @@
 import { kitchenStations, type Transaction } from "@waitron/db";
 import type { TicketGrouping } from "@waitron/shared";
-import {
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  writePrintMovedSlips,
-} from "@waitron/venue-service";
 import { inArray } from "drizzle-orm";
 
 export interface StationPrintingChoices {
@@ -35,8 +30,4 @@ export async function setStationPrinting(
     return;
   }
   await update;
-  // Writes the venue's value too until A756 PR 6 Task 38.
-  if (set.printHeldWork !== undefined) await writePrintHeldWork(tx, set.printHeldWork);
-  if (set.ticketGrouping !== undefined) await writeKitchenTicketGrouping(tx, set.ticketGrouping);
-  if (set.printMovedSlips !== undefined) await writePrintMovedSlips(tx, set.printMovedSlips);
 }

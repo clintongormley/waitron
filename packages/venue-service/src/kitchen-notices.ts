@@ -16,7 +16,7 @@ import {
   kitchenNoticeKind,
   kitchenNotices,
 } from "./schema/kitchen-notices.js";
-import { serviceSettings, type KitchenTicketGrouping } from "./schema/settings.js";
+import { serviceSettings } from "./schema/settings.js";
 import "./errors.js";
 
 export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];
@@ -327,55 +327,4 @@ export async function writeEditSentLines(tx: Transaction, value: boolean): Promi
     .insert(serviceSettings)
     .values({ id: 1, editSentLines: value })
     .onConflictDoUpdate({ target: serviceSettings.id, set: { editSentLines: value } });
-}
-
-/** Whether held groups print in advance, marked HOLD. A venue with no row reads OFF. */
-export async function readPrintHeldWork(tx: Transaction): Promise<boolean> {
-  const [row] = await tx
-    .select({ printHeldWork: serviceSettings.printHeldWork })
-    .from(serviceSettings)
-    .where(eq(serviceSettings.id, 1));
-  return row?.printHeldWork ?? false;
-}
-
-export async function writePrintHeldWork(tx: Transaction, value: boolean): Promise<void> {
-  await tx
-    .insert(serviceSettings)
-    .values({ id: 1, printHeldWork: value })
-    .onConflictDoUpdate({ target: serviceSettings.id, set: { printHeldWork: value } });
-}
-
-/** The venue's MOVED slips choice, which a prep station left as the venue follows. No row reads ON. */
-export async function readPrintMovedSlips(tx: Transaction): Promise<boolean> {
-  const [row] = await tx
-    .select({ printMovedSlips: serviceSettings.printMovedSlips })
-    .from(serviceSettings)
-    .where(eq(serviceSettings.id, 1));
-  return row?.printMovedSlips ?? true;
-}
-
-export async function writePrintMovedSlips(tx: Transaction, value: boolean): Promise<void> {
-  await tx
-    .insert(serviceSettings)
-    .values({ id: 1, printMovedSlips: value })
-    .onConflictDoUpdate({ target: serviceSettings.id, set: { printMovedSlips: value } });
-}
-
-/** How identical dishes print on a kitchen ticket. A venue with no row reads `combined`. */
-export async function readKitchenTicketGrouping(tx: Transaction): Promise<KitchenTicketGrouping> {
-  const [row] = await tx
-    .select({ kitchenTicketGrouping: serviceSettings.kitchenTicketGrouping })
-    .from(serviceSettings)
-    .where(eq(serviceSettings.id, 1));
-  return row?.kitchenTicketGrouping ?? "combined";
-}
-
-export async function writeKitchenTicketGrouping(
-  tx: Transaction,
-  value: KitchenTicketGrouping,
-): Promise<void> {
-  await tx
-    .insert(serviceSettings)
-    .values({ id: 1, kitchenTicketGrouping: value })
-    .onConflictDoUpdate({ target: serviceSettings.id, set: { kitchenTicketGrouping: value } });
 }
