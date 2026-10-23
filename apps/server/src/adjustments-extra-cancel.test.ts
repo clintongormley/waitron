@@ -3,13 +3,14 @@ import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   devices,
   drawerOpens,
+  kitchenStations,
   printJobs,
   printers,
   products,
@@ -687,9 +688,13 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         { kind: "changed", lineName: "SCRB", cancelledExtra: "Gherkins" },
       ]);
     } finally {
-      await inTx(venue, (tx) =>
-        setStationPrinting(tx, { printHeldWork: false }, [venue.stationId]),
-      );
+      await inTx(venue, async (tx) => {
+        await setStationPrinting(tx, { printHeldWork: false }, [venue.stationId]);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(inArray(kitchenStations.id, [barId, screenId]));
+      });
     }
   });
 

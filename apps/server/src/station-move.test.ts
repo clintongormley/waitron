@@ -3444,6 +3444,7 @@ describe("moveDishesToStation", () => {
         expect(fired).toHaveLength(1);
         expect(fired[0]).toContain("From Bar");
         expect(fired[0]).toContain("BURG");
+        expect(fired[0]).not.toContain("***");
         expect(
           (await noticesAt(bar, at))
             .filter((notice) => notice.workingOrderId === held.tabId)

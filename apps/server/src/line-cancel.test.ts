@@ -1,16 +1,18 @@
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustments, createAdjustmentReason, deleteAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import {
+  kitchenStations,
   lineServiceCancellations,
   billPayments,
   parties,
   printJobs,
+  products,
   sales,
   saleLines,
   tenders,
@@ -21,7 +23,9 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { listStationNotices, setRoutingCell } from "@waitron/venue-service";
+import { clearRoutingCell, listStationNotices, setRoutingCell } from "@waitron/venue-service";
+import { createPrinter } from "@waitron/printing";
+import { attachPrinterToStation } from "./station-printers.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
@@ -1048,6 +1052,118 @@ describe("Cancel item service command", () => {
       }
     },
   );
+
+  it("a keep-charge cancel of printed held work prints HOLD CANCELLED only at a station recorded for the group, and every station's screen is told", async () => {
+    const { barId, screenId, barPrinterId, cells } = await inTx(venue, async (tx) => {
+      const barId = (await createStation(tx, venue.cfg, { name: `Bar ${randomUUID()}` })).id;
+      const screenId = (await createStation(tx, venue.cfg, { name: `Screen ${randomUUID()}` })).id;
+      const printer = await createPrinter(
+        tx,
+        { locationId: venue.cfg.locationId },
+        { name: `Bar ${randomUUID()}`, transport: "cloud_poll", pollId: randomUUID() },
+      );
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: barId,
+        printerId: printer.id,
+      });
+      const cells = [];
+      for (const [name, stationId] of [
+        ["Fish", barId],
+        ["Salad", screenId],
+      ] as const) {
+        const [product] = await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(eq(products.name, name));
+        const cell = { row: { kind: "product" as const, productId: product!.id }, zoneId: null };
+        await setRoutingCell(tx, venue.cfg, cell, { kind: "station", stationId });
+        cells.push(cell);
+      }
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stationId, screenId]);
+      await setStationPrinting(tx, { printHeldWork: false }, [barId]);
+      return { barId, screenId, barPrinterId: printer.id, cells };
+    });
+    try {
+      const order = await billWith(
+        venue,
+        [{ name: "Steak" }, { name: "Fish" }, { name: "Salad" }],
+        { release: "hold" },
+      );
+      await payWorkingOrder(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        { id: order.billId, tender: { method: "cash", amount: "47.99" }, lines: [] },
+      );
+      const lines = await inTx(venue, (tx) =>
+        tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, order.billId))
+          .orderBy(workingOrderLines.lineNo),
+      );
+      const paper = async () =>
+        (
+          await inTx(venue, (tx) =>
+            tx
+              .select()
+              .from(printJobs)
+              .orderBy(sql`rowid`),
+          )
+        ).map((job) => ({ printerId: job.printerId, lines: printedLines(job.payload) }));
+      const before = (await paper()).length;
+
+      for (const line of lines)
+        await inTx(venue, async (tx) => {
+          const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
+          const [bill] = await tx
+            .select()
+            .from(workingOrders)
+            .where(eq(workingOrders.id, order.billId));
+          await cancelItem(
+            tx,
+            venue.cfg,
+            order.partyId,
+            line.id,
+            {
+              quantity: "1",
+              expectedEdit: await readBillEditState(tx, order.billId),
+              outcome: "keep_charge",
+              reasonId: venue.reasonId.houseVoid,
+              expectedPartyRevision: party!.revision,
+              expectedBillRevision: bill!.revision,
+              expectedContext: await readCancellationContext(tx, order.partyId, line.id),
+              submissionId: randomUUID(),
+            },
+            venue.staffId,
+          );
+        });
+
+      const printed = (await paper()).slice(before);
+      expect(
+        printed.filter((job) => job.printerId === barPrinterId).map((job) => job.lines),
+      ).toEqual([]);
+      expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
+      expect(printed[0]!.lines).toContain("*** HOLD CANCELLED ***");
+      expect(printed[0]!.lines.join("\n")).toContain("1.000 x CHULETA");
+      const told = async (stationId: string) =>
+        (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId)))
+          .filter((notice) => notice.workingOrderId === order.billId)
+          .map((notice) => ({ kind: notice.kind, lineName: notice.lineName }));
+      expect(await told(venue.stationId)).toEqual([{ kind: "void", lineName: "CHULETA" }]);
+      expect(await told(barId)).toEqual([{ kind: "void", lineName: "MERLUZA" }]);
+      expect(await told(screenId)).toEqual([{ kind: "void", lineName: "ENSAL" }]);
+    } finally {
+      await inTx(venue, async (tx) => {
+        for (const cell of cells) await clearRoutingCell(tx, venue.cfg, cell);
+        await setStationPrinting(tx, { printHeldWork: false }, [venue.stationId]);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(inArray(kitchenStations.id, [barId, screenId]));
+      });
+    }
+  });
 
   it("rolls back the charge-preserving cancellation, corrections and command when its transaction fails", async () => {
     const order = await fixture();

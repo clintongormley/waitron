@@ -23,7 +23,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { kitchenNotices, serviceSettings, workingLineContexts } from "@waitron/venue-service";
+import {
+  clearRoutingCell,
+  kitchenNotices,
+  serviceSettings,
+  workingLineContexts,
+} from "@waitron/venue-service";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
@@ -1173,10 +1178,11 @@ describe("party Recall to draft", () => {
   it("recalling a held dish cancels it on paper only at a station recorded for the group, and every screen is told", async () => {
     const kitchenPrinter = `Kitchen-${randomUUID()}`;
     const barPrinterName = `Bar-${randomUUID()}`;
-    const { barId, screenId, printerIds } = await inTx(venue, async (tx) => {
+    const { barId, screenId, printerIds, routed } = await inTx(venue, async (tx) => {
       const barId = (await createStation(tx, venue.cfg, { name: `Bar-${randomUUID()}` })).id;
       const screenId = (await createStation(tx, venue.cfg, { name: `Screen-${randomUUID()}` })).id;
       const printerIds: string[] = [];
+      const routed: string[] = [];
       for (const [name, station] of [
         [kitchenPrinter, stationId],
         [barPrinterName, barId],
@@ -1202,10 +1208,11 @@ describe("party Recall to draft", () => {
           .from(products)
           .where(eq(products.name, name));
         await routeProductTo(tx, venue.cfg, product!.id, station);
+        routed.push(product!.id);
       }
       await setStationPrinting(tx, { printHeldWork: true }, [stationId, screenId]);
       await setStationPrinting(tx, { printHeldWork: false }, [barId]);
-      return { barId, screenId, printerIds };
+      return { barId, screenId, printerIds, routed };
     });
     const [kitchenPrinterId, barPrinterId] = printerIds as [string, string];
     const paperAt = async (printerId: string) =>
@@ -1262,7 +1269,18 @@ describe("party Recall to draft", () => {
       expect(await told(barId)).toEqual([{ kind: "void", lineName: "PAELLA" }]);
       expect(await told(screenId)).toEqual([{ kind: "void", lineName: "PULPO" }]);
     } finally {
-      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }, [stationId]));
+      await inTx(venue, async (tx) => {
+        for (const productId of routed)
+          await clearRoutingCell(tx, venue.cfg, {
+            row: { kind: "product", productId },
+            zoneId: null,
+          });
+        await setStationPrinting(tx, { printHeldWork: false }, [stationId]);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(inArray(kitchenStations.id, [barId, screenId]));
+      });
     }
   });
 });
