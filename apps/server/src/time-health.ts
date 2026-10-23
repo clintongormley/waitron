@@ -47,8 +47,6 @@ export async function checkTimeHealth(deps: { run?: CommandRunner } = {}): Promi
 export type AuthorityClockStatus =
   { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
 
-/** AEAT's `TimestampPresentacion` is read to the second, so its instant is taken as the middle of
- * that second, with half a second more uncertainty. */
 const WHOLE_SECOND_MS = 500;
 
 export function createAuthorityClockStatus(

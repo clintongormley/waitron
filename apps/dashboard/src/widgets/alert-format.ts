@@ -16,10 +16,10 @@ export function wholeTimes(text: string): (string | TemplateResult)[] {
 }
 
 /** For the styles of any element that draws `wholeTimes`; the part reaches a span drawn inside a
- * child's shadow root, such as a `wt-data-table` cell. */
+ * `wt-data-table` cell's shadow root. */
 export const wholeTimesStyles = css`
   .time,
-  *::part(time) {
+  wt-data-table::part(time) {
     white-space: nowrap;
   }
 `;

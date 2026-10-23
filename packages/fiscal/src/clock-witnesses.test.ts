@@ -115,7 +115,7 @@ describe("a single witness against the box", () => {
     });
   });
 
-  it("drops a device whose LATEST reading says nothing, even though an older one agreed", () => {
+  it("does not count a device as agreeing when its LATEST reading disagrees, even though an older one agreed", () => {
     const verdict = judgeClockWitnesses([device("a", 0, -10_000), device("a", 61_000, 10_000)]);
     expect(verdict.agreeing).toEqual([]);
   });
