@@ -49,7 +49,6 @@ async function splitPicture(reversed: boolean): Promise<PreparedImage> {
 }
 
 const suite = useVenueDb({
-  resetPerTest: false,
   migrations: [
     CORE_MIGRATIONS,
     IDENTITY_MIGRATIONS,
@@ -57,32 +56,33 @@ const suite = useVenueDb({
     VENUE_SERVICE_MIGRATIONS,
     MEDIA_MIGRATIONS,
   ],
-  setup: async (db) => {
-    await seedTenant(db);
-    const images = [await splitPicture(false), await splitPicture(true)];
-    images.push(await samplePreparedImage({ width: 40 }));
-    [managerCookie, supervisorCookie, A, B, C] = await withTransaction(db, async (tx) => {
-      const cookieFor = async (role: "manager" | "supervisor") => {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: role, role })
-          .returning({ id: persons.id });
-        const session = await startManagementSession(tx, { personId: person!.id });
-        return `${MANAGEMENT_COOKIE}=${session.token}`;
-      };
-      const cookies = [await cookieFor("manager"), await cookieFor("supervisor")];
-      const names: string[] = [];
-      for (const image of images) {
-        names.push((await uploadImage(tx, { image, names: { en: "Logo" } })).image.filename);
-      }
-      return [...cookies, ...names] as [string, string, string, string, string];
-    });
-  },
 });
+const images = [
+  await splitPicture(false),
+  await splitPicture(true),
+  await samplePreparedImage({ width: 40 }),
+];
 
+// Every row is emptied after each case, so each one starts from these images unframed.
 beforeEach(async () => {
-  await suite.db.execute(sql`delete from custom_themes`);
   forgetVenueTheme();
+  await seedTenant(suite.db);
+  [managerCookie, supervisorCookie, A, B, C] = await withTransaction(suite.db, async (tx) => {
+    const cookieFor = async (role: "manager" | "supervisor") => {
+      const [person] = await tx
+        .insert(persons)
+        .values({ displayName: role, role })
+        .returning({ id: persons.id });
+      const session = await startManagementSession(tx, { personId: person!.id });
+      return `${MANAGEMENT_COOKIE}=${session.token}`;
+    };
+    const cookies = [await cookieFor("manager"), await cookieFor("supervisor")];
+    const names: string[] = [];
+    for (const image of images) {
+      names.push((await uploadImage(tx, { image, names: { en: "Logo" } })).image.filename);
+    }
+    return [...cookies, ...names] as [string, string, string, string, string];
+  });
 });
 
 afterEach(() => {
@@ -219,6 +219,7 @@ describe("a theme's logo dots", () => {
 });
 
 const ABSENT = `${"ab".repeat(32)}.webp`;
+const REFRAMED_ZOOM = 150;
 
 async function reframe(filename: string, zoom: number): Promise<unknown> {
   const current = await withTransaction(suite.db, (tx) => readCurrentImage(tx, filename));
@@ -319,7 +320,7 @@ describe("refusals", () => {
     vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
       if (!reframed) {
         reframed = true;
-        await reframe(A, 120);
+        await reframe(A, REFRAMED_ZOOM);
       }
       return draw(bytes);
     });
@@ -339,7 +340,7 @@ describe("refusals", () => {
     let fresh: unknown;
     vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
       const kept = await real(snapshot);
-      fresh = await reframe(A, 130);
+      fresh = await reframe(A, REFRAMED_ZOOM);
       return kept;
     });
     const revision = await revisionOf(A);
@@ -409,7 +410,7 @@ describe("refusals", () => {
     vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
       if (!reframed) {
         reframed = true;
-        await reframe(B, 125);
+        await reframe(B, REFRAMED_ZOOM);
       }
       return draw(bytes);
     });
@@ -522,7 +523,7 @@ describe("GET /api/theme with a logo", () => {
     const id = await inUseWith({ light: A, dark: B });
     const before = await themeAnswer();
     const text = await rowText(id);
-    await reframe(A, 141);
+    await reframe(A, REFRAMED_ZOOM);
     const after = await themeAnswer();
     expect(after.hash).not.toBe(before.hash);
     expect(after.logo).toEqual({ light: await displayOf(A), dark: await displayOf(B) });
@@ -545,7 +546,7 @@ describe("GET /api/theme with a logo", () => {
     const id = await inUseWith({ light: A, dark: B });
     const before = await themeAnswer();
     const text = await rowText(id);
-    await reframe(B, 142);
+    await reframe(B, REFRAMED_ZOOM);
     const after = await themeAnswer();
     expect(after.hash).not.toBe(before.hash);
     expect(after.logo).toEqual({ light: await displayOf(A), dark: await displayOf(B) });
