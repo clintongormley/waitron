@@ -1110,7 +1110,8 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
         expect(wordLines()).toBe(1);
         expect(narrow.undoOnColourLine, JSON.stringify(narrow)).toBe(false);
         expect(narrow.drawn, JSON.stringify(narrow)).toBe(false);
-        const wide = await at(1000);
+        // One column with room to spare; at 1000 px the editor has two and this line wraps.
+        const wide = await at(oneColumn);
         expect(wide.undoOnColourLine, JSON.stringify(wide)).toBe(true);
         expect(wide.drawn, JSON.stringify(wide)).toBe(true);
         expect(wide.dotOnColourLine, JSON.stringify(wide)).toBe(true);

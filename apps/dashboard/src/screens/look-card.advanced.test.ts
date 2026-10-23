@@ -520,6 +520,28 @@ describe("fixes and Undo in Advanced", () => {
     );
   });
 
+  it("a fix taken back by Use worked-out colour shows no fixed line when a newer read sets its shade", async () => {
+    const sunken: ThemeChoices = {
+      ...WAITRON_CHOICES,
+      handSet: { light: { "surface-sunken": "#bbbbbb" }, dark: {} },
+    };
+    const { el } = await mountChoices(sunken);
+    await typeHand(el, "light", "text", "#6a6a6a");
+    await press(el, "hand-fix-light-text");
+    expect(handCode(el, "light", "text").value).toBe("#4a4a4a");
+    await press(el, "hand-worked-out-light-text");
+    expect(button(el, "save").disabled).toBe(true);
+    const newer = theme("t-hand", "By hand", {
+      ...sunken,
+      handSet: { light: { ...sunken.handSet.light, text: "#4a4a4a" }, dark: {} },
+    });
+    el.list = { themes: [newer], inUse: newer.id };
+    await settle(el);
+    expect(advanced(el).draft.choices.handSet.light.text).toBe("#4a4a4a");
+    expect(inAdvanced(el, "hand-fixed-light-text")).toBeNull();
+    expect(inAdvanced(el, "hand-undo-light-text")).toBeNull();
+  });
+
   it("Fix all clears a refusal shown under a colour", async () => {
     const { el, saveTheme } = await mountChoices(TWO_FIXES);
     await typeHand(el, "light", "bg", "#fafafa");

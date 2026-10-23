@@ -101,10 +101,8 @@ function brandRow(view: ThemeView | undefined, choices: ThemeChoices): TemplateR
   const versions = MODES.flatMap((mode: Mode) => {
     const hand = choices.handSet[mode].primary;
     if (hand !== undefined) {
-      return [
-        html` · ${t(`appearance.saved_fix_${mode}`)}
-        ${chip(hand)}${fill("appearance.saved_hand", { colour: hand })}`,
-      ];
+      const set = fill("appearance.saved_hand", { colour: hand });
+      return [html` · ${t(`appearance.saved_fix_${mode}`)} ${chip(hand)}${set}`];
     }
     const shade =
       brandColor !== null && choices.brandFix[mode] ? view?.[mode]?.[PRIMARY] : undefined;
