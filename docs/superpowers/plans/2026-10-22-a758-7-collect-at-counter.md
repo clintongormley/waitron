@@ -237,18 +237,18 @@ the owner points at the end.
     `apps/server/src/receipt-guests.ts:115-126`), so when one of two paid bills moves, a full
     invoice of the bill left behind **gains** a guests line on its later copies. A simplified receipt
     keeps its stored count either way. **Default:**
-    accept, pinned by a test in Task 5 so the change is seen, and backlog **A1027**. *The other way:*
+    accept, pinned by a test in Task 5 so the change is seen, and backlog **A1033**. *The other way:*
     store a full invoice's guests too, which changes `recordReceiptGuests`
     (`receipt-guests.ts:41-49`, which skips a full invoice) and its two readers.
 11. **The pass and Waiting orders do not say "counter".** A moved order is named by its number and
     the table it was paid at, with no group (measured: `[1, "Probe table"]`), as Move this bill → The
     counter names an order today; the MOVED slip and the station notice are what say "counter".
-    **Default:** no change; backlog **A1026**.
+    **Default:** no change; backlog **A1032**.
 12. **A till or pass limited to the counter's zone does not see the moved order**, because the order
     keeps its table's zone (Decision 5): Waiting orders filters by zone (`visibleOrders`,
     `till-api.ts:2274`) and so do pass screens (the zone-scoped reads in
     `pass-lifetime.test.ts:256-276`). A till with that table's zone, or with no zone limit, sees it.
-    **Default:** accept; owner point, in A1025.
+    **Default:** accept; owner point, in A1031.
 13. **An unconfirmed send.** A lost answer resends the same command, as Finish does today
     (`#resend`, `till-app.ts:15098-15108`). While an unconfirmed collect waits, the main button is
     disabled and the collect button resends it; while an unconfirmed cancel waits, the collect button
@@ -263,10 +263,10 @@ the owner points at the end.
     Owner point: the guard does not hold the exception's cases.
 15. **A758 is finished.** The docs task deletes the A758 entry from `docs/backlog.md` and its detail
     from `docs/backlog/till.md`, adds the decision in Decision 2 to `docs/backlog/till.md`'s
-    "Decisions and deliberate limits", and adds **A1025** (the owner looks at A758-7's choices),
-    **A1026** (Decision 11) and **A1027** (Decision 10). The numbers were first taken
+    "Decisions and deliberate limits", and adds **A1031** (the owner looks at A758-7's choices),
+    **A1032** (Decision 11) and **A1033** (Decision 10). The numbers were first taken
     from `~/waitron-campaign-shared/next-item-number` as A1023–A1025; other lanes took those
-    meanwhile, so the build renumbered them A1025–A1027 (2026-10-23). The build also found A1029 and A1030.
+    meanwhile, so the build renumbered them A1025–A1027 and, when those too were taken on `main`, A1031–A1033 (2026-10-23). The build also found A1029 and A1030.
 
 ---
 
@@ -643,8 +643,8 @@ bill's own (Decision 5).
   bill with a dish to come, the other all served. Before: `readReceiptGuests` answers nothing for
   either (two bills in the family, `receipt-guests.ts:115-126`). After the collect: nothing for the
   moved bill, the party's count for the bill left behind. The cases are named "a full invoice's later
-  copies lose their guests line when the bill moves to the counter (A1027)" and "…and the bill left
-  behind gains one (A1027)". Run
+  copies lose their guests line when the bill moves to the counter (A1033)" and "…and the bill left
+  behind gains one (A1033)". Run
   the file. Expected: (a)'s refusing case answers 200 (the route checks the party's zone only); (b)–(d)
   pass already, Task 4 having landed — they pin the promise end to end, and one that fails is a
   defect in Tasks 1–4 to report, not a check to change.
@@ -812,7 +812,7 @@ its header, beside the A758-6 one at `:3-5`).
   suites.
 - [ ] **`docs/backlog.md`:** delete the A758 entry (CLAUDE.md §6: a change that finishes an entry
   deletes it). Add, in the same area, beside A1020 and A1021:
-  - "**A1025. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
+  - "**A1031. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
     owner may want it different: held dishes fired on the way to the counter; each bill with food
     still to come moved as its own counter order; the order keeping its table's zone, so a till or
     pass limited to the counter's zone does not show it; a bill whose food to come has no kitchen
@@ -820,11 +820,11 @@ its header, beside the A758-6 one at `:3-5`).
     freeze now letting any paid table bill not yet handed over leave its party — only the server
     limits that to Finish table — an exception `scripts/behavioural-triggers.test.ts` does not yet
     hold. [Plan](superpowers/plans/2026-10-22-a758-7-collect-at-counter.md#owner-points-each-with-the-default-this-pr-builds)"
-  - "**A1026. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
+  - "**A1032. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
     order a finished table sent to the counter is named on the pass and in Waiting orders by its
     number and the table it was paid at ("#12 Mesa 4"), as Move this bill → The counter names one
     today; only the MOVED slip and the station notice say "counter"."
-  - "**A1027. A full invoice's later copies change their guests line when a bill moves to the
+  - "**A1033. A full invoice's later copies change their guests line when a bill moves to the
     counter (left open by A758-7).** A full invoice reads its guests from the bill's party each time
     it prints, and only while the party's family holds exactly one bill (`readReceiptGuests`,
     `apps/server/src/receipt-guests.ts`): the moved bill's copies lose the line, and when one of two
@@ -844,7 +844,7 @@ its header, beside the A758-6 one at `:3-5`).
   built as Finish table's counter collection ([plan](../plans/2026-10-22-a758-7-collect-at-counter.md));
   the database's settled-order freeze gained the one exception it needed. A758 is finished: its
   backlog entry and its detail in `docs/backlog/till.md` are deleted, so the link above to that
-  detail no longer resolves; what it left open is A1020, A1021 and A1025–A1027."
+  detail no longer resolves; what it left open is A1020, A1021 and A1031–A1033."
 - [ ] `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`. Commit —
   "Guides and backlog: A758-7, and A758 is finished".
 
@@ -917,8 +917,8 @@ If a suite turns red on a check not in this table, it is a stop and a report, th
 4. **The order keeps its table's zone** (Decisions 5 and 12): a till or pass limited to the counter's
    zone does not show it; one with the table's zone, or no zone limit, does.
 5. **The words after:** the toast reuses "Moved to the counter" («Pasado al mostrador») (Decision 9).
-6. **Nothing on the pass says "counter"** (Decision 11, A1026).
+6. **Nothing on the pass says "counter"** (Decision 11, A1032).
 7. **A full invoice's later copies change their guests line** — lost on the moved bill's, gained on
-   the bill left behind when one of two moves (Decision 10, A1027).
+   the bill left behind when one of two moves (Decision 10, A1033).
 8. **A bill whose food to come has no kitchen ticket stays with the table** (Decision 3), and the
    button is not offered when no dish has one.

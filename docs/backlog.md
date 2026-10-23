@@ -1862,7 +1862,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   receipt's refund refuses a reason over 500 characters (`tender-refund-reservation.ts`), which the
   till marks `bill_refund.reason_long`.
 
-- **A1025. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
+- **A1031. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
   owner may want it different: held dishes fired on the way to the counter; each bill with food
   still to come moved as its own counter order; the order keeping its table's zone, so a till or
   pass limited to the counter's zone does not show it; a bill whose food to come has no kitchen
@@ -1871,12 +1871,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   limits that to Finish table — an exception `scripts/behavioural-triggers.test.ts` does not yet
   hold. [Plan](superpowers/plans/2026-10-22-a758-7-collect-at-counter.md#owner-points-each-with-the-default-this-pr-builds)
 
-- **A1026. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
+- **A1032. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
   order a finished table sent to the counter is named on the pass and in Waiting orders by its
   number and the table it was paid at ("#12 Mesa 4"), as Move this bill → The counter names one
   today; only the MOVED slip and the station notice say "counter".
 
-- **A1027. A full invoice's later copies change their guests line when a bill moves to the
+- **A1033. A full invoice's later copies change their guests line when a bill moves to the
   counter (left open by A758-7).** A full invoice reads its guests from the bill's party each time
   it prints, and only while the party's family holds exactly one bill (`readReceiptGuests`,
   `apps/server/src/receipt-guests.ts`): the moved bill's copies lose the line, and when one of two

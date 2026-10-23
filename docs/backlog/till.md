@@ -1460,7 +1460,7 @@ about a paid bill may change; it cannot join a party, change party, or leave one
 The database allows this for every paid table bill not yet handed over, a party closed days ago
 included; only the server code limits it to Finish table's collection at the counter
 (`finishPartyService`, `apps/server/src/finish-party-service.ts`). Decision 2 of the
-[plan](../superpowers/plans/2026-10-22-a758-7-collect-at-counter.md) has the reasons; A1025 is the
+[plan](../superpowers/plans/2026-10-22-a758-7-collect-at-counter.md) has the reasons; A1031 is the
 owner's look at it.
 
 ### A841 slice 2's review points kept as built (lane A, 2026-10-21, before slice 3)

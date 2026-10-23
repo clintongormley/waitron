@@ -936,8 +936,8 @@ async function guestsOf(billId: string) {
   });
 }
 
-describe("a full invoice's guests line follows the bill's party (A1027)", () => {
-  it("a full invoice's later copies lose their guests line when the bill moves to the counter (A1027)", async () => {
+describe("a full invoice's guests line follows the bill's party (A1033)", () => {
+  it("a full invoice's later copies lose their guests line when the bill moves to the counter (A1033)", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], [null]);
     await seatGuests(t.partyId, 4);
     await payAsFullInvoice(t.billIds[0]!, 1200);
@@ -949,7 +949,7 @@ describe("a full invoice's guests line follows the bill's party (A1027)", () => 
     expect(await guestsOf(t.billIds[0]!)).toBeUndefined();
   });
 
-  it("…and the bill left behind gains one (A1027)", async () => {
+  it("…and the bill left behind gains one (A1033)", async () => {
     const t = await table([{ name: "Burger" }, { name: "Water" }], "fire", [[2]], [null, null]);
     await seatGuests(t.partyId, 4);
     await serveAll(t, t.billIds[1]!);
