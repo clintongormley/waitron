@@ -589,8 +589,9 @@ until A977).
   (`apps/server/scripts/demo-seed/testing/provision-venue.ts`) has English location, street and
   administrator labels. Its Spanish operation description remains open because
   `seed-sales.golden.test.ts` compares it with the filed rows in
-  `spanish-practice-sales.golden.json`; a decision on that protected check is needed before
-  translating the description. The bill, party, adjustment, split-extras, boot, stream and clock
+  `spanish-practice-sales.golden.json`. The owner allowed it on 2026-10-23: translate the
+  description and update only the description fields in that golden file, after measuring the
+  row diff; a diff touching any other field goes back to the owner. The bill, party, adjustment, split-extras, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults. Screen tests take translated expectations from their strings file.
   Keep accent tests, AEAT names and official text. Later cleanup goes package by package from
