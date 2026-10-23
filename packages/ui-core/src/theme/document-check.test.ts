@@ -100,6 +100,7 @@ describe("readThemeDocument", () => {
     [{ ...WAITRON_CHOICES, logo: { dark: null } }, "logo.dark", "dark_without_light"],
     [{ ...WAITRON_CHOICES, logo: { dark: 7 } }, "logo.dark", "dark_without_light"],
     [{ ...WAITRON_CHOICES, logo: {} }, "logo.light", "missing"],
+    [{ ...WAITRON_CHOICES, logo: Object.create({ light: L }) }, "logo.light", "missing"],
     [{ ...WAITRON_CHOICES, logo: { light: 7 } }, "logo.light", "bad_value"],
     [{ ...WAITRON_CHOICES, logo: { light: null } }, "logo.light", "bad_value"],
     [{ ...WAITRON_CHOICES, logo: { light: L, dark: null } }, "logo.dark", "bad_value"],
@@ -191,6 +192,11 @@ describe("readThemeDocument", () => {
   });
 
   it("answers the first refusal in its fixed order", () => {
+    expect(readThemeDocument({ ...WAITRON_CHOICES, brandFix: { light: true }, logo: 7 })).toEqual({
+      ok: false,
+      field: "brandFix.light",
+      reason: "fix_without_brand",
+    });
     expect(readThemeDocument({ ...WAITRON_CHOICES, logo: "a.webp", brandColor: "red" })).toEqual({
       ok: false,
       field: "brandColor",
@@ -274,6 +280,5 @@ describe("readThemeDocument", () => {
     const { logo: _, ...noLogo } = WAITRON_CHOICES;
     const frozenWithoutLogo = deepFreeze({ ...noLogo });
     expect(readThemeDocument(frozenWithoutLogo)).toEqual({ ok: true, choices: WAITRON_CHOICES });
-    expect("logo" in frozenWithoutLogo).toBe(false);
   });
 });

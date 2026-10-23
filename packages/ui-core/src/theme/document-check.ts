@@ -105,13 +105,14 @@ function checkLogo(value: unknown): Refusal | null {
   if (!isObject(value)) return refuse("logo", "bad_value");
   const unknown = unknownKey(value, ["light", "dark"], "logo");
   if (unknown) return unknown;
-  if (!("light" in value)) {
-    return "dark" in value
+  if (!Object.hasOwn(value, "light")) {
+    return Object.hasOwn(value, "dark")
       ? refuse("logo.dark", "dark_without_light")
       : refuse("logo.light", "missing");
   }
   if (typeof value.light !== "string") return refuse("logo.light", "bad_value");
-  if ("dark" in value && typeof value.dark !== "string") return refuse("logo.dark", "bad_value");
+  if (Object.hasOwn(value, "dark") && typeof value.dark !== "string")
+    return refuse("logo.dark", "bad_value");
   return null;
 }
 
