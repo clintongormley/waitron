@@ -1281,9 +1281,9 @@ export function collectFailure(
   return chargedNotRecorded(deps.log, workingOrderId, "disk_full");
 }
 
-/** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
 type NotRecordedReason = "disk_full" | "clock_behind_chain";
 
+/** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
 function chargedNotRecorded(
   log: Logger | undefined,
   workingOrderId: string,
@@ -1303,9 +1303,10 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
   /** The chosen reader's `card_readers.id`, passed to `collect`; absent for the simulator. */
   readerId?: string;
   /**
-   * Set by the till's routes: a full disk after `collect` returned a charge, or on the SumUp or
-   * Stripe terminal adapter's own save of one inside it, answers `sale.charged_not_recorded`, so
-   * staff are told not to charge again. Unset, it answers `storage.disk_full`.
+   * Set by the till's routes: a full disk or a clock behind the latest fiscal record after
+   * `collect` returned a charge, or a full disk on the SumUp or Stripe terminal adapter's own save
+   * of one inside it, answers `sale.charged_not_recorded`, so staff are told not to charge again.
+   * Unset, the refusal passes through: `storage.disk_full` or `clock.behind_chain`.
    */
   sayCardChargedNotRecorded?: boolean;
 };

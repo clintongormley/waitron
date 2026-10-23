@@ -2485,7 +2485,9 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   to charge again (`afterCardCharged`, `bill-payments.ts`). Only the till's two card routes ask for
   it (`sayCardChargedNotRecorded`, set in `till-api.ts`'s `POST /api/pay` and
   `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
-  them, still answers `storage.disk_full`. The same answer covers a charge whose capture the
+  them, still answers `storage.disk_full`. On those two routes the same 507 answers a card charged
+  while the box's clock comes to read behind the latest fiscal record, with
+  `reason: "clock_behind_chain"` (`apps/server/src/clock-behind-stop.charged.test.ts`). The same answer covers a charge whose capture the
   provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`
   (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
   that save failed for a full disk, and the two routes translate only that error
