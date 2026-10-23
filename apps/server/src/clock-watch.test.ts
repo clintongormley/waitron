@@ -326,6 +326,27 @@ describe("startClockWatch", () => {
     expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(2);
   });
 
+  it("still reads the stop and asks AEAT on every check while a record keeps failing", async () => {
+    const h = harness();
+    h.backend.noteClockProvedWrong.mockRejectedValue(new AppError("storage.disk_full", {}));
+    await h.tick({ monoMs: 60_000, wallMs: 121_000 });
+    await h.tick();
+    expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(2);
+    expect(h.backend.clockStopState).toHaveBeenCalledTimes(2);
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(2);
+    expect(h.store.takeNewAuthority).toHaveBeenCalledTimes(2);
+    expect(h.store.endStop).not.toHaveBeenCalled();
+    h.state.stop = null;
+    await h.tick();
+    expect(h.store.endStop).toHaveBeenCalledTimes(1);
+    expect(h.store.takeNewAuthority).toHaveBeenCalledTimes(3);
+    expect(h.logs.map((line) => line.event)).toEqual([
+      "clock_watch.check_failed",
+      "clock_watch.check_failed",
+      "clock_watch.check_failed",
+    ]);
+  });
+
   it("records AEAT disagreements oldest first, and retries both when the first fails", async () => {
     const older = authority(START_MS + 10_000, 3_600_000);
     const newer = authority(START_MS + 50_000, 3_600_000);

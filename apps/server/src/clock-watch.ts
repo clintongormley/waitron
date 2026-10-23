@@ -100,7 +100,14 @@ export function startClockWatch(deps: {
         reason: "jump",
       });
     }
-    await recordPending();
+    let recorded = true;
+    try {
+      await recordPending();
+    } catch (error) {
+      // A record that keeps failing must not keep the stop read and AEAT's time from running.
+      recorded = false;
+      deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+    }
     if (stopped) return;
     let stop = null;
     if (deps.backend.clockStopState !== undefined) {
@@ -128,7 +135,8 @@ export function startClockWatch(deps: {
         reason: "authority",
       });
     }
-    await recordPending();
+    // Each entry is tried at most once a check; `endStop` and the drain above have already run.
+    if (recorded) await recordPending();
   }
 
   function scheduled(): void {
