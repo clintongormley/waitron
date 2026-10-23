@@ -13,7 +13,6 @@ export interface StationPrintingChoices {
   printMovedSlips?: boolean;
 }
 
-/** Sets the given printing choices on every station, or only on `stationIds`. */
 export async function setStationPrinting(
   tx: Transaction,
   choices: StationPrintingChoices,

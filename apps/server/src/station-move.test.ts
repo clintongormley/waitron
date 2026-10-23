@@ -1529,6 +1529,7 @@ describe("moveDishesToStation", () => {
         name: `Downstairs bar ${randomUUID()}`,
       }),
     );
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }, [downstairs.id]));
     const listed = [[bar, grill, downstairs.id], [bar], [downstairs.id]] as const;
     const printerIds = await inTx(venue, async (tx) => {
       const ids: string[] = [];

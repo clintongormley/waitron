@@ -1024,6 +1024,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
     const mesa112 = await v.table("Mesa 112");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 111"));
     await burgerAndHeldPaella(v, partyId, tabId);
@@ -1053,6 +1054,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
     const mesa119 = await v.table("Mesa 119");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 118"));
     const line = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
@@ -1110,6 +1112,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
     const { partyId, tabId } = await seat(v, await v.table("Mesa 115"));
     await burgerAndHeldPaella(v, partyId, tabId);
     const before = (await printedBy(grill)).length;
@@ -1146,6 +1149,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
     const { partyId, tabId } = await seat(v, await v.table("Mesa 117"));
     await burgerAndHeldPaella(v, partyId, tabId);
     const second = await split(v, partyId, tabId, [1]);
@@ -1174,19 +1178,20 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
 describe("a MOVED slip lays out each line by the ticket grouping and never adds two lines together (§4)", () => {
   afterEach(() =>
     withTransaction(db, async (tx) => {
-      await setStationPrinting(tx, { ticketGrouping: "combined" });
-      await setStationPrinting(tx, { printHeldWork: false });
+      await setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: false });
     }),
   );
   const dishLines = (lines: readonly string[]) => lines.filter((text) => / x [A-Z]+$/.test(text));
 
   it("with separate quantities, a fired 3 Burger and a held 2 Paella print one entry of 1 each, as their tickets did", async () => {
     const v = await setupPartyVenue(db);
-    await inTx(v, async (tx) => {
-      await setStationPrinting(tx, { ticketGrouping: "separate" });
-      await setStationPrinting(tx, { printHeldWork: true });
-    });
+    await inTx(v, (tx) =>
+      setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }),
+    );
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, (tx) =>
+      setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }, [grill]),
+    );
     const mesa122 = await v.table("Mesa 122");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 121"));
     const tickets = (await printedBy(grill)).length;

@@ -317,6 +317,7 @@ describe("A669 lifecycle", () => {
       const destination = reroute
         ? await inTx(v, async (tx) => {
             const station = await createStation(tx, v.cfg, { name: "Release cook" });
+            await setStationPrinting(tx, { printHeldWork: true }, [station.id]);
             await routeProductTo(tx, v.cfg, v.productId("Burger"), station.id);
             await tx
               .update(kitchenStations)
