@@ -233,6 +233,11 @@ export function validateCoverage(rawFacts) {
   }
   for (const invoice of facts.coverage.issuedF1) {
     const fields = rows.get(rowKey(invoice)).fields;
+    if (
+      new Set([invoice.typeField, invoice.numberField, invoice.nameField, invoice.addressField])
+        .size !== 4
+    )
+      bad(`issuedF1:${rowKey(invoice)}: aliased fields`);
     const nonemptyText = (v) => v.kind === "text" && Buffer.from(v.base64, "base64").length > 0;
     if (
       !isDeepStrictEqual(fields[invoice.typeField], { kind: "text", base64: "RjE=" }) ||

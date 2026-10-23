@@ -1,5 +1,22 @@
 # Testing guide
 
+## Keep original identities distinct after applying comparison mappings
+
+When an upgrade comparator renames an original object, refuse two source tables
+that name the same destination before building a map of rows. Validate exceptions
+against the facts they protect: an operational rule cannot rewrite an issued
+invoice, and an ordinary-labelled trigger or index cannot exempt its protected
+target table.
+
+A799 cut 2's Claude review on 23 October 2026 reproduced two original tables with
+equal row keys collapsing into one expected destination. The comparison accepted
+one actual row for both originals. Its other probes accepted aliased F1 recipient
+fields, an operational rule changing an original recipient and a mapped trigger
+body on a fiscal target. The cases in `scripts/a799/compare.test.mjs` and
+`scripts/a799/schema.test.mjs` now refuse those inputs and retain accepting
+ordinary-table controls. Run both files with root Vitest. No captured fiscal row
+was changed for these synthetic probes.
+
 This file holds the evidence behind waitron's testing rules — the mechanism, the measurement, and
 the incident that paid for each one. The one-line rules themselves live in the repository root
 `CLAUDE.md`, section 4 ("Testing"), which points here. A few receipts that other sections of

@@ -17,7 +17,7 @@ export function sqlTokens(sql) {
   const tokens = [];
   let i = 0;
   while (i < sql.length) {
-    if (/\s/.test(sql[i])) {
+    if (/[\t\n\f\r ]/.test(sql[i])) {
       i++;
       continue;
     }
@@ -66,8 +66,8 @@ export function sqlTokens(sql) {
         break;
       }
       if (!closed) invalid("sql: unterminated quote");
-    } else if (/[\p{L}\p{N}_$]/u.test(opener)) {
-      while (i < sql.length && /[\p{L}\p{N}_$]/u.test(sql[i])) i++;
+    } else if (/[a-zA-Z0-9_$\u0080-\uffff]/.test(opener)) {
+      while (i < sql.length && /[a-zA-Z0-9_$\u0080-\uffff]/.test(sql[i])) i++;
     } else i++;
     tokens.push(sql.slice(start, i));
   }

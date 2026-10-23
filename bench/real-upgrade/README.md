@@ -160,8 +160,10 @@ toColumns}[]`. A nullable relationship uses `toKey: null`. Tuple column order
   never its private bytes.
 - `operationalRules: {table, key, field, before, after, cause,
 approvalReceipt}[]`, identifying each permitted read/session effect exactly.
-  The original field must match `before`. Fiscal and disabled tables cannot use
-  these rules; neighbouring fields remain exact.
+  The original field must match `before`. Fiscal and disabled tables, and every
+  row named by issued-F1 coverage, cannot use these rules; neighbouring fields
+  remain exact. Rule descriptors keep their original table names across a row
+  rename, and both reports repeat those original descriptors unchanged.
 - `newSale`, with independently specified typed `quantity`, `unitPrice`,
   `total`, `tender` and `change`. Comparing this declaration performs no sale.
 
@@ -187,7 +189,7 @@ deferred}[]`. Key kind is `primary` or `unique`; `primaryKey` is the column's
 - An index: `unique`, `expressions: string[]` and `predicate: string|null`.
 - A trigger: `target` and full `body`; a view: full `body`.
 
-SQL comparisons tokenize whitespace outside quotes while keeping quoted content,
+SQL comparisons tokenize ASCII spacing outside quotes while keeping quoted content,
 comments, numbers and operator boundaries exact. Raw SQL stays in each input;
 SQL differences report token arrays. This is a lexical comparison, not a SQL
 validity check or proof that structured declarations describe the raw SQL. Later
@@ -211,13 +213,16 @@ Only these transformations are supported:
   absent on every old row, `before: null`, `after: {kind: "null"}`.
 - `rename-object`: subject `rows`, field `table`, with the old/new table names as
   `before`/`after`. Original row keys and values stay exact. Relationship endpoints
-  and scenario references follow the rename. A colliding table is refused.
+  and scenario references follow the rename. Existing tables and repeated rename
+  destinations are refused.
 - `replace-exact`: subject `schema`, key `kind:name`, field `object`, with complete
   old and new schema objects as `before`/`after`. The original definition must
   match exactly. A table rename or added column also needs its independent schema
   mapping; a row mapping does not generate expected SQL.
 
-Mappings cannot transform fiscal or disabled tables, apply numeric/time tolerance,
+Mapped triggers and indexes require their target table definitions in both schema
+inventories, and each target must be ordinary regardless of the object's own
+label. Mappings cannot transform fiscal or disabled tables, apply numeric/time tolerance,
 exclude wildcard sets or excuse an absent target. Descriptor IDs and targets must
 be unique. Supporting modules keep schema parsing, mapping admission and keyed
 comparison shared between the two public comparison functions. Future execution

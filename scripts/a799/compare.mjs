@@ -15,6 +15,7 @@ export function compareFacts(rawExpected, rawActual, rawMappings = [], cell) {
     const row = expected.rows.find((r) => rowKey(r) === rowKey(rule));
     if (
       table?.protection !== "ordinary" ||
+      expected.coverage.issuedF1.some((invoice) => rowKey(invoice) === rowKey(rule)) ||
       !row ||
       !isDeepStrictEqual(row.fields[rule.field], rule.before)
     )

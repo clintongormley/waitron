@@ -93,6 +93,10 @@ export function validateMappings(mappings, cell) {
       mappings.map((m) => fingerprint([m.object, m.field])),
       "mapping targets",
     );
+    unique(
+      mappings.filter((m) => m.exactTransform === "rename-object").map((m) => m.after),
+      "rename destinations",
+    );
   } catch (error) {
     mappingFailure(error.message);
   }
@@ -105,6 +109,21 @@ export function applySchemaMappings(schema, mappings) {
     const i = result.findIndex((s) => `${s.kind}:${s.name}` === m.object.key);
     if (i < 0 || !isDeepStrictEqual(result[i], m.before)) mappingFailure(`${m.id}: schema before`);
     result[i] = globalThis.structuredClone(m.after);
+  }
+  for (const m of mappings) {
+    for (const [definition, objects] of [
+      [m.before, schema],
+      [m.after, result],
+    ]) {
+      if (!["trigger", "index"].includes(definition.kind)) continue;
+      const targets =
+        definition.kind === "trigger" ? [definition.table, definition.target] : [definition.table];
+      for (const target of targets) {
+        const table = objects.find((s) => s.kind === "table" && s.name === target);
+        if (table?.protection !== "ordinary")
+          mappingFailure(`${m.id}: protected or absent target ${target}`);
+      }
+    }
   }
   return result;
 }

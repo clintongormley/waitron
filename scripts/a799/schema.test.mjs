@@ -50,6 +50,115 @@ const view = () => ({
 });
 
 describe("complete historical schema comparison", () => {
+  it.each(["trigger", "index"])(
+    "accepts an exact %s change on an ordinary table and rejects a protected destination",
+    (kind) => {
+      const t = table();
+      const old = kind === "trigger" ? trigger() : index();
+      const next = globalThis.structuredClone(old);
+      if (kind === "trigger") next.body = "BEGIN SELECT 1; END";
+      else next.unique = false;
+      const context = {
+        sourceEpoch: "epoch",
+        sourceSha: "1".repeat(40),
+        candidateSha: "2".repeat(40),
+        migrations: [{ hash: "3".repeat(64), module: "catalogue" }],
+        disabledModules: [],
+      };
+      const mapping = {
+        id: "ordinary-definition",
+        sourceEpoch: "epoch",
+        sourceSha: context.sourceSha,
+        candidateSha: context.candidateSha,
+        migrationHash: "3".repeat(64),
+        module: "catalogue",
+        object: { subject: "schema", key: `${kind}:${old.name}` },
+        field: "object",
+        before: old,
+        after: next,
+        exactTransform: "replace-exact",
+        reason: "Exact reviewed definition",
+        approvalReceipt: "review",
+      };
+      expect(schema.compareSchema([t, old], [t, next], [mapping], context)).toEqual([]);
+      const protectedTable = {
+        ...t,
+        name: "protected",
+        table: "protected",
+        protection: "disabled",
+      };
+      const changedTarget = { ...next, table: "protected" };
+      expect(() =>
+        schema.compareSchema(
+          [t, protectedTable, old],
+          [t, protectedTable, changedTarget],
+          [{ ...mapping, after: changedTarget }],
+          context,
+        ),
+      ).toThrow("history.mapping");
+      expect(() => schema.compareSchema([old], [next], [mapping], context)).toThrow(
+        "history.mapping",
+      );
+    },
+  );
+  it.each(["trigger", "index"])(
+    "refuses an ordinary-labelled %s mapping on a protected table",
+    (kind) => {
+      const t = {
+        ...table(),
+        name: "registros_facturacion",
+        table: "registros_facturacion",
+        module: "fiscal-verifactu",
+        protection: "fiscal",
+      };
+      const old =
+        kind === "trigger"
+          ? { ...trigger(), table: t.name, target: t.name }
+          : { ...index(), table: t.name };
+      const next = globalThis.structuredClone(old);
+      if (kind === "trigger") next.body = "BEGIN SELECT 1; END";
+      else next.unique = false;
+      const context = {
+        sourceEpoch: "epoch",
+        sourceSha: "1".repeat(40),
+        candidateSha: "2".repeat(40),
+        migrations: [{ hash: "3".repeat(64), module: "catalogue" }],
+        disabledModules: [],
+      };
+      const mapping = {
+        id: "alter-protection",
+        sourceEpoch: "epoch",
+        sourceSha: context.sourceSha,
+        candidateSha: context.candidateSha,
+        migrationHash: "3".repeat(64),
+        module: "catalogue",
+        object: { subject: "schema", key: `${kind}:${old.name}` },
+        field: "object",
+        before: old,
+        after: next,
+        exactTransform: "replace-exact",
+        reason: "Change",
+        approvalReceipt: "review",
+      };
+      expect(() => schema.compareSchema([t, old], [t, next], [mapping], context)).toThrow(
+        "history.mapping",
+      );
+    },
+  );
+  it.each(["\u00a0", "·", "\ufeff"])(
+    "preserves non-ASCII characters inside SQL identifiers %#",
+    (char) => {
+      expect(schema.sqlTokens(`SELECT a${char}b FROM t`)).not.toEqual(
+        schema.sqlTokens("SELECT a b FROM t"),
+      );
+      expect(schema.sqlTokens(`SELECT a${char}b FROM t`)).not.toEqual(
+        schema.sqlTokens(`SELECT a ${char} b FROM t`),
+      );
+    },
+  );
+  it("distinguishes a doubled SQL quote from separate literals", () => {
+    expect(schema.sqlTokens("SELECT 'it''s'")).not.toEqual(schema.sqlTokens("SELECT 'it' 's'"));
+  });
   it.each([
     ["SELECT 1_000", "SELECT 1 _000"],
     ["SELECT 0x1_2", "SELECT 0x1 _2"],

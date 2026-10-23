@@ -218,6 +218,38 @@ describe("typed storage", () => {
 });
 
 describe("independent original facts", () => {
+  it("refuses aliased issued-invoice fields when no original recipient or number remains", () => {
+    const f = make();
+    const ref = f.coverage.issuedF1[0];
+    delete f.rows[0].fields.invoiceNumber;
+    delete f.rows[0].fields.recipientName;
+    delete f.rows[0].fields.recipientAddress;
+    Object.assign(ref, {
+      numberField: "type",
+      nameField: "type",
+      addressField: "type",
+      number: txt("F1"),
+      name: txt("F1"),
+      address: txt("F1"),
+    });
+    expect(() => facts.validateCoverage(f)).toThrow("history.coverage");
+  });
+  it("requires each issued invoice in sales coverage independently of other sales", () => {
+    const f = make();
+    f.rows.push(row("sales", "other", { type: txt("F2") }));
+    f.coverage.sales = [{ table: "sales", key: [txt("other")] }];
+    expect(() => facts.validateCoverage(f)).toThrow("history.coverage");
+  });
+  it("refuses duplicate scenario references", () => {
+    const f = make();
+    f.coverage.people.push(f.coverage.people[0]);
+    expect(() => facts.validateCoverage(f)).toThrow("history.invalid");
+  });
+  it("requires retained disabled tables to remain declared disabled", () => {
+    const f = make();
+    f.schema.find((s) => s.name === "bookings").protection = "ordinary";
+    expect(() => facts.validateCoverage(f)).toThrow("history.coverage");
+  });
   it("reports a different fixture identity", () => {
     const f = make();
     f.fixtureId = "other";
@@ -487,6 +519,82 @@ describe("independent original facts", () => {
 });
 
 describe("exact reviewed transformations", () => {
+  it.each(["recipientName", "recipientAddress", "invoiceNumber", "total"])(
+    "refuses an operational exception to issued-invoice %s",
+    (field) => {
+      const expected = make();
+      const actual = make();
+      const before = expected.rows[0].fields[field];
+      const after = field === "total" ? int(999) : txt("changed");
+      const rule = {
+        table: "sales",
+        key: [txt("sale-1")],
+        field,
+        before,
+        after,
+        cause: "Read",
+        approvalReceipt: "review",
+      };
+      expected.operationalRules = [rule];
+      actual.operationalRules = [rule];
+      actual.rows[0].fields[field] = after;
+      expect(() => comparison.compareFacts(expected, actual)).toThrow("history.mapping");
+    },
+  );
+  it("refuses two table renames into one destination before a row can disappear", () => {
+    const old = make();
+    old.schema.push(object("notes_a"), object("notes_b"));
+    old.rows.push(
+      row("notes_a", "n-1", { body: txt("x") }),
+      row("notes_b", "n-1", { body: txt("x") }),
+    );
+    const next = globalThis.structuredClone(old);
+    const view = {
+      kind: "view",
+      name: "notes_b",
+      table: "notes_b",
+      module: "catalogue",
+      protection: "ordinary",
+      rawSql: "CREATE VIEW notes_b AS SELECT * FROM notes",
+      body: "SELECT * FROM notes",
+    };
+    next.schema = next.schema
+      .filter((s) => !["notes_a", "notes_b"].includes(s.name))
+      .concat(object("notes"), view);
+    next.rows = next.rows
+      .filter((r) => !["notes_a", "notes_b"].includes(r.table))
+      .concat(row("notes", "n-1", { body: txt("x") }));
+    const mappings = ["notes_a", "notes_b"].map((name) =>
+      mapping({
+        id: name,
+        object: { subject: "rows", key: name },
+        field: "table",
+        before: name,
+        after: "notes",
+        exactTransform: "rename-object",
+      }),
+    );
+    mappings.push(
+      mapping({
+        id: "schema-a",
+        object: { subject: "schema", key: "table:notes_a" },
+        field: "object",
+        before: object("notes_a"),
+        after: object("notes"),
+        exactTransform: "replace-exact",
+      }),
+      mapping({
+        id: "schema-b",
+        object: { subject: "schema", key: "table:notes_b" },
+        field: "object",
+        before: object("notes_b"),
+        after: view,
+        exactTransform: "replace-exact",
+      }),
+    );
+    expect(() => comparison.validateMappings(mappings, cell())).toThrow("history.mapping");
+    expect(() => comparison.compareFacts(old, next, mappings, cell())).toThrow("history.mapping");
+  });
   it.each([
     ["registros_facturacion", "fiscal-verifactu"],
     ["bookings", "bookings"],
