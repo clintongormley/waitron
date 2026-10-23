@@ -12,14 +12,15 @@ elecciones que lo forman:
 - **Color de marca**: el color de los botones principales y de los elementos seleccionados.
   **De Waitron** significa que el tema conserva el color propio de Waitron. Un color que no es una
   de las muestras aparece como **Personalizado** con su código. Si se eligió un tono legible en
-  lugar del color, la fila también lo indica.
+  lugar del color, la fila también lo indica, y si los botones principales de una versión
+  recibieron un color a mano, la fila nombra ese color seguido de «fijado a mano», por ejemplo
+  «pantallas oscuras #5fa77a, fijado a mano».
 - **Fondo**: **Neutro** conserva los grises de Waitron, y **Teñido** da a la página, al relleno de
   los campos y a los bordes un ligero matiz del color de marca.
 - **Esquinas**: **Rectas**, **Estándar** o **Redondeadas**, para botones, campos y tarjetas.
 - **Colores fijados a mano**: los colores del tema que recibieron un valor propio en lugar de
-  calcularse a partir del color de marca, o **Ninguno**. Esta página no puede fijar un color a
-  mano, pero sus correcciones pueden sustituir uno que se lee mal por un tono legible, y **Usar el
-  aspecto de Waitron** los quita todos.
+  calcularse a partir del color de marca, o **Ninguno**. La sección **Avanzado** del editor los
+  fija, como explica «Fija colores a mano», más abajo.
 
 La nota al pie de la tarjeta explica que un mismo aspecto se aplica al panel y a todas las cajas.
 Cada tema tiene una versión clara y una oscura, y cada pantalla muestra una de ellas, según su
@@ -53,6 +54,13 @@ El editor abre las tres elecciones del tema en el mismo sitio:
 - **Fondo**: **Neutro** o **Teñido**.
 - **Esquinas**: **Rectas**, **Estándar** o **Redondeadas**.
 
+Debajo del color de marca, **Elegir otro color para las pantallas oscuras** da a los botones
+principales de la versión oscura un color propio: abre Avanzado y pone el cursor en la casilla del
+código de **Botones principales** en las pantallas oscuras. Una vez fijado ese color, el enlace deja
+paso a una línea como «Botones en pantallas oscuras: #5fa77a, fijado a mano», y **Usar el color de
+marca**, a su lado, quita ese color, de modo que las pantallas oscuras vuelven a calcular sus
+botones a partir del color de marca.
+
 Al lado o debajo de las elecciones, la **Vista previa** pinta una pequeña muestra del panel con el
 aspecto que estás preparando: una **Versión clara** y una **Versión oscura**, cada una con un
 elemento del menú seleccionado, un campo, los botones Guardar y Cancelar, un interruptor, un enlace
@@ -68,6 +76,38 @@ mientras las elecciones ya son el aspecto de Waitron. **Cancelar** cierra el edi
 Si has cambiado algo, Cancelar, salir de la página y abrir otro tema desde la tarjeta Temas te lo
 preguntan antes.
 
+## Fija colores a mano {#advanced}
+
+Debajo de las elecciones y de la vista previa, el editor tiene una sección titulada **Avanzado:
+fijar colores a mano**. Empieza cerrada cada vez que se abre el editor, y su línea cerrada dice qué
+está fijado a mano: «Ninguno fijado a mano. Waitron calcula todos los colores y tamaños de texto.»,
+o un recuento y los nombres de los colores, por ejemplo «2 fijados a mano: Página (versión clara),
+Texto (versión clara)». Mientras haya colores fijados a mano que se leen mal, la línea añade
+cuántos, como en «1 fijado a mano: Texto (versión clara) · 1 se lee mal». Pulsa el título para
+abrirla.
+
+Dentro, una fila por cada color del tema da su valor en **Pantallas claras** y en **Pantallas
+oscuras**, cada uno con un selector de color y una casilla para un código de color. Debajo de cada
+valor, un color calculado dice **Calculado**; Botones principales dice **Color de marca**, o
+**Corregido** si se eligió un tono legible para ese tipo de pantalla. Cambiar cualquiera de los dos
+valores, con el selector o escribiendo un código, fija ese valor a mano y deja el del otro tipo de
+pantalla como estaba. Un valor fijado a mano lleva la marca **Fijado a mano**, con **Usar el color
+calculado** al lado para volver al valor que calcula Waitron. **Volver a calcularlos todos**, al
+final de la sección, devuelve todos los valores a calculados; aparece desactivado mientras no hay
+nada fijado a mano.
+
+Un color fijado a mano se queda como lo fijaste cuando cambias el color de marca, el fondo o las
+esquinas. Si cambias el color de marca o el fondo mientras hay colores fijados a mano, una nota
+debajo del color de marca lo dice, por ejemplo «Has fijado 1 color a mano y se mantiene: Texto
+(versión clara). Lo verás en Avanzado.»
+
+Fijar a mano **Botones principales** sustituye el color de marca en ese tipo de pantalla, así que
+se descarta el tono legible que se hubiera elegido allí.
+
+Un código debe ser `#` seguido de seis dígitos o letras de la a a la f. Si no lo es, Guardar te lo
+indica debajo de esa casilla y no guarda nada, y Avanzado se abre para mostrarlo y sigue abierto
+hasta que corriges el código.
+
 ## Cuando un color se lee mal {#hard-to-read}
 
 Algunos colores de marca hacen que los botones se vean mal. Un amarillo soleado como `#f2c94c`,
@@ -82,8 +122,22 @@ pantallas claras:» con el tono, y **Deshacer** devuelve tu color.
 Un tono que eliges pertenece a su color. Elegir otro color de marca lo descarta, y volver al color
 guardado del tema recupera su tono guardado. Cambiar el fondo o las esquinas lo conserva.
 
+Un color fijado a mano en Avanzado también se comprueba. Si se lee mal, un aviso debajo de su fila
+nombra el tipo de pantalla y sobre qué cuesta leerlo, o qué cuesta leer encima. Texto fijado en
+`#9a9a9a` en las pantallas claras, por ejemplo, avisa «Pantallas claras: cuesta leerlo sobre Página,
+Tarjetas, …», nombrando cada color sobre el que cuesta leerlo. Si un tono se leería bien, un botón
+lo ofrece: para ese gris dice **Usar #585858**. Púlsalo y el valor toma ese tono, y aparece una
+línea que dice «Pantallas claras: corregido desde #9a9a9a» con **Deshacer**, que devuelve tu color.
+Deshacer sigue ahí hasta que vuelves a cambiar ese valor o se cierra el editor.
+
+Algunos colores fijados a mano no tienen ningún tono que se lea bien. Su aviso termina en «Elige
+otro color.» o, si otro color fijado a mano lo impide, lo nombra: con Página en `#777777` y Texto en
+`#888888` en las pantallas claras, el aviso de Página termina en «mientras el color Texto está
+fijado a mano en #888888».
+
 Cuando dos o más avisos ofrecen cada uno una corrección, una línea debajo del editor cuenta los
-colores que se leen mal y ofrece **Corregir todos**, que aplica todas las correcciones a la vez.
+colores que se leen mal y ofrece **Corregir todos**, que aplica todas las correcciones a la vez,
+también las de los colores fijados a mano.
 
 Waitron nunca rechaza un color. Un aviso es un consejo: puedes guardar el color que elegiste y
 quedarte con él.

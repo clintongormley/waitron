@@ -470,8 +470,9 @@ A user-chosen data colour is the one deliberate exception to "no hex, no hardcod
 colour a person gave a category, a product or a menu section is painted as it is, never mapped to a
 token. Its users are the colour chooser's palette (`apps/dashboard/src/widgets/color-field.ts`), the
 category swatches in the Products tree, the product and section swatches in a menu's Structure tree,
-the brand colour and fix shade chips on Settings → Appearance's Look card
-(`apps/dashboard/src/screens/look-card.ts`), the colour chips in the Themes card's rows
+the brand colour, fix shade and hand-set button colour chips on Settings → Appearance's Look
+card (`apps/dashboard/src/screens/look-card.ts`), the colour pickers in that card's Advanced
+section (`apps/dashboard/src/widgets/theme-advanced.ts`), the colour chips in the Themes card's rows
 (`apps/dashboard/src/screens/themes-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
 tile takes black or white for its labels and its icon, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
@@ -2735,6 +2736,8 @@ and the staffing grid's block editor in the A761 entry):
   translated, and keeps its own variant while its own press is being sent.
   A841 slice 5 brought the Look card's Use Waitron's look under it: drawn `secondary` throughout,
   and disabled while the draft already is Waitron's look or a save is under way.
+  A841 slice 6 brought Advanced's Reset all to worked-out under it: drawn `secondary` throughout,
+  and disabled while nothing is set by hand (no value and no typed code) or a save is under way.
   A798-B slice 7 brought the Box status page's Free ("Liberar") under it. It is not drawn until
   the box's read has answered (the page draws no rows until then, nor until the bell's read has
   answered or failed); once drawn, it is `secondary` and disabled while the box has under 500,000
@@ -2796,7 +2799,7 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/venue-defaults-panel.unsaved.test.ts`;
 - A841 slice 5: the Look card on Settings → Appearance, editing in place
   (`apps/dashboard/src/screens/look-card.ts`). Its leave cases are in `look-card.unsaved.test.ts`
-  beside it;
+  beside it, Advanced's (A841 slice 6) among them;
 - A841 slice 13: the theme name dialog (`apps/dashboard/src/widgets/theme-name-dialog.ts`); Make a
   copy and Save as new theme… open already savable. Its leave cases are in
   `theme-name-dialog.unsaved.test.ts` beside it;
@@ -4027,8 +4030,10 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 (`apps/dashboard/src/screens/themes-card.ts`, A841 slice 13). The Look card:
 
 - **Saved, its rows are** Theme in use, Brand colour (a chip and the value, "Custom · " before a
-  colour that is not a swatch, and the shade of each kind of screen whose fix is taken), Background,
-  Corners and Colours set by hand. Below them comes one warning line for each warning the server
+  colour that is not a swatch, then for each kind of screen, light before dark, " · {light
+  screens / dark screens}" with a chip and either its Main buttons colour set by hand followed by
+  ", set by hand" or the shade of its taken fix — A841 slice 6, D14; a kind of screen cannot hold
+  both), Background, Corners and Colours set by hand. Below them comes one warning line for each warning the server
   sends with the theme, then the note about each screen's own Theme setting.
 - **Edit opens the editor in place**, in the same card. It is offered to a person holding
   `layout.configure`, whichever theme is in use.
@@ -4079,6 +4084,26 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
   line. The "·" before Undo travels with Undo: when Undo wraps onto a line of its own the "·" is
   clipped away, so no line starts with it.
+- **Under Brand colour's lines, the dark version's own button colour** (A841 slice 6, D13): while
+  dark Main buttons is not set by hand, a link "Pick a different colour for dark screens" opens
+  Advanced and focuses that value's code field; once set, the link gives way to "Buttons on dark
+  screens: {colour}, set by hand · Use the brand colour", drawn with the Undo line's markup, and Use
+  the brand colour is Use worked-out colour on that value. Both are disabled while a save is under
+  way. The light version has no such line.
+- **Advanced** (`apps/dashboard/src/widgets/theme-advanced.ts`, A841 slice 6) is a `wt-disclosure`
+  below the editor and preview, closed each time the editor opens. Its closed line is "None set by
+  hand. Waitron works out every colour and text size." or "{n} set by hand: {names}", then " · " and
+  the "{count} hard to read" count while a hand-set value warns (brand warnings are not counted).
+  Inside, one row per theme colour, one flat list until slice 12, each with a Light and a Dark value
+  drawn by `colourValueField` (a native colour picker and a code field); column heads show from a
+  600 px section, and narrower each value carries its own Light or Dark label. Under a value, a
+  worked-out one reads "Worked out" (Main buttons: "Brand colour", or "Fixed" while that kind of
+  screen's fix is taken); a hand-set one carries a "Set by hand" tag and a "Use worked-out colour"
+  link. A hand-set value that warns gets a warning line in the warning colour and icon, a "Use
+  {colour}" fix button when a shade exists, and after a fix a "{screens}: fixed from {colour} ·
+  Undo" line until the value changes or the editor closes. Reset all to worked-out sits at the
+  bottom. While a value shows an error, `has-error` holds the section open; a warning does not open
+  it.
 - **Save, or Save as new theme…, with a warning opens the Hard to read dialog**
   (`apps/dashboard/src/widgets/hard-to-read-dialog.ts`) before any name dialog (D7): one line per warning, then Back, Save
   anyway and, only when fixing all would leave no warning, Fix and save. With Fix and save offered
