@@ -173,6 +173,7 @@ import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-not
 import { BOX_EMAIL_CHECK_MS, readBoxEmailContext, startBoxEmailDuty } from "./box-alert-email.js";
 import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
+import { createClockWitnessStore } from "./clock-witnesses.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
@@ -1836,6 +1837,7 @@ async function bootServer(
     // so a restart or a promotion starts SHUT — a node that has just taken over must not inherit an
     // open door.
     const pairingMode = createPairingMode();
+    const clockWitnesses = createClockWitnessStore();
     mountDeviceApi(
       app,
       {
@@ -1852,6 +1854,7 @@ async function bootServer(
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
         },
+        clockWitnesses,
       },
       log,
     );

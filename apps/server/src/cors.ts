@@ -14,7 +14,7 @@ export function corsForVenue(allow: (origin: string) => Promise<boolean>): Middl
   const middleware = cors({
     origin: async (origin) => ((await allow(origin)) ? origin : null),
     credentials: true,
-    allowHeaders: ["content-type", DEV_DEVICE_HEADER],
+    allowHeaders: ["content-type", DEV_DEVICE_HEADER, "x-waitron-device-clock"],
     allowMethods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     maxAge: 600,
   });
