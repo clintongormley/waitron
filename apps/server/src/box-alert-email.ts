@@ -1,10 +1,16 @@
+import { eq } from "drizzle-orm";
+import type { KeyRing } from "@waitron/credentials";
+import { locations, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import type { DiskFullState } from "./disk-full-state.js";
-import type { EmailDelivery } from "./email-delivery.js";
+import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { BOX_EMAIL_WORDS } from "./i18n/box-emails.js";
 import type { Logger } from "./logger.js";
-import type { ManagerEmailRecipient } from "./manager-email-recipients.js";
+import {
+  readManagerEmailRecipients,
+  type ManagerEmailRecipient,
+} from "./manager-email-recipients.js";
 import type { StaffNoticesRead } from "./staff-notices.js";
 import type { TextEmailOutcome, TextEmailSender } from "./text-email.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
@@ -36,6 +42,30 @@ export interface BoxEmailContext {
   readonly venue: string;
   readonly recipients: readonly ManagerEmailRecipient[];
   readonly delivery: EmailDelivery;
+}
+
+/** Read in one write-lock turn with no change-log drain, so the reads answer on a full disk with a
+ * change waiting. */
+export async function readBoxEmailContext(
+  db: Database,
+  deps: {
+    ring: KeyRing;
+    practiceMode: boolean;
+    locationId: string;
+    venueLanguage: "en" | "es";
+  },
+): Promise<BoxEmailContext> {
+  return db.withWriteLock(async () => {
+    const [location] = await db
+      .select({ name: locations.name })
+      .from(locations)
+      .where(eq(locations.id, deps.locationId));
+    return {
+      venue: location!.name,
+      recipients: await readManagerEmailRecipients(db, deps.venueLanguage),
+      delivery: await resolveEmailDeliveryIn(db, deps.ring, deps.practiceMode),
+    };
+  });
 }
 
 interface Episode {
