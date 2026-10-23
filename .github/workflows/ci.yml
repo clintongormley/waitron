@@ -1192,7 +1192,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:coverage \
+          node scripts/run-with-deadline.mjs 420 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
   # packages/ui alone, with its own browser runner.

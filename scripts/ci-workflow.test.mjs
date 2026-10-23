@@ -2057,9 +2057,12 @@ describe("the sharded jobs", () => {
         .filter((line) => !line.trim().startsWith("#"))
         .join("\n")
         .replace(/\\\n\s*/g, " ");
-      expect(step, shard.id).toMatch(
-        /node scripts\/run-with-deadline\.mjs 360 --diagnostics -- pnpm .*\btest:(?:shard|coverage)\b/,
-      );
+      const deadline =
+        /node scripts\/run-with-deadline\.mjs (\d+) --diagnostics -- pnpm .*\btest:(?:shard|coverage)\b/.exec(
+          step,
+        );
+      expect(deadline, shard.id).not.toBeNull();
+      expect(Number(deadline[1]), shard.id).toBe(pkg === "@waitron/fiscal-verifactu" ? 420 : 360);
       expect(step, shard.id).toContain("set -euo pipefail");
     }
   });

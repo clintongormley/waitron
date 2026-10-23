@@ -329,7 +329,7 @@ on 2026-09-09; [Vitest issue 10791](https://github.com/vitest-dev/vitest/issues/
 called `orchestrator.createTesters()` with no deadline in `BrowserPool.runNextTest`. That is a
 possible mechanism, not a diagnosis of those runs, and the hang was not reproduced locally.
 
-For browser test commands, CI uses the six-minute diagnostic process deadline.
+For browser test commands, CI uses a diagnostic process deadline.
 Read the unfinished-file list and process snapshot before retrying anything; a file
 in that list may still be waiting for a browser worker. See
 [the deadline's evidence and limits](ci-and-gates.md#a-browser-shard-reports-before-its-job-limit).

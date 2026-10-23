@@ -662,11 +662,17 @@ operation remains unknown. The six other till test steps took 72–179 seconds.
 In the following successful run `39898884552`, till steps took 87–167 seconds and
 all browser test steps took 26–237 seconds, read from the jobs API's step timestamps.
 
-Every browser package's test command now runs through
-`node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm …`. The six-minute
-limit leaves room under the ten-minute job limit for a process snapshot, the
-five-second termination grace and artifact uploads on those measured runs.
-Setup still consumes the same job budget; the wrapper does not bound a hung install.
+Browser package test commands run through
+`node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm …`; fiscal-verifactu
+uses 420 seconds. Its later A798 run `39902897605`, job `120248392824`, spent
+332 seconds in the test step and 379 seconds in the job. A six-minute command cap
+would leave only 28 seconds above that test step, so the seven-minute fiscal cap
+leaves 88 seconds. Its runtime above the four-minute target remains
+[separate performance work](../backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target).
+
+These limits leave room under the ten-minute job limit for a two-second process
+snapshot, the five-second termination grace and artifact uploads on those measured
+runs. Setup still consumes the same job budget; the wrapper does not bound a hung install.
 
 The wrapper forwards stdout and stderr and tracks the existing `[file-progress]`
 start/end lines. At expiry it lists files assigned to workers without an end line,
