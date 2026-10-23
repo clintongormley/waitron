@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import {
   FISCAL_PROVISIONING,
   FISCAL_RESTORE,
+  FISCAL_ROUTES,
   FISCAL_SLOT,
   FISCAL_MIGRATIONS,
   FISCAL_VOCABULARY,
@@ -292,6 +293,7 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     const fiscal = ALL_MODULES.find((m) => m.name === "fiscal-verifactu");
     expect(fiscal?.provisioning).toBe(FISCAL_PROVISIONING);
     expect(fiscal?.fiscal).toBe(FISCAL_SLOT);
+    expect(fiscal?.routes).toBe(FISCAL_ROUTES);
   });
   it("the two modules that fill the fiscal slot, in order", () => {
     expect(ALL_MODULES.filter((m) => m.fiscal !== undefined).map((m) => m.name)).toEqual([

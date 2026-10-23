@@ -14,6 +14,7 @@ export { readCloudAllocationReceipt, verifyCloudAllocationEvidence } from "./clo
 export type { CloudAllocationReceipt, ReceiptTrust } from "./cloud-evidence.js";
 export { assertFiscalRestoreCommitted } from "./restore-committed.js";
 export { FISCAL_SLOT } from "./slot.js";
+export { FISCAL_ROUTES } from "./routes.js";
 export { isCertKind } from "./aeat-transport.js";
 export type { CertKind } from "./aeat-transport.js";
 export {

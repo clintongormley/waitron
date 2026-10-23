@@ -1166,9 +1166,15 @@ importers:
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1190,6 +1196,9 @@ importers:
       fontkit:
         specifier: 2.0.4
         version: 2.0.4
+      hono:
+        specifier: ^4.13.13
+        version: 4.13.13
       lit:
         specifier: ^3.2.0
         version: 3.3.3
@@ -1230,15 +1239,9 @@ importers:
       '@waitron/country-packs':
         specifier: workspace:*
         version: link:../country-packs
-      '@waitron/identity':
-        specifier: workspace:*
-        version: link:../identity
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
-      '@waitron/server-kit':
-        specifier: workspace:*
-        version: link:../server-kit
       axe-core:
         specifier: ^4.13.0
         version: 4.14.0

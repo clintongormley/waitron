@@ -37,6 +37,7 @@ import {
   FISCAL_HOUR_BACKUP_STATE,
   FISCAL_BACKUP_VERIFICATION,
   assertFiscalRestoreCommitted,
+  FISCAL_ROUTES,
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
   FISCAL_STAFF_NOTICES,
@@ -294,6 +295,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     provisioning: FISCAL_PROVISIONING,
     operations: FISCAL_OPERATIONS,
     fiscal: FISCAL_SLOT,
+    routes: FISCAL_ROUTES,
     backup: {
       restore: FISCAL_RESTORE,
       recoveryPack: FISCAL_RECOVERY_PACK,
