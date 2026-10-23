@@ -145,8 +145,24 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
-      - name: Download every shard report
+      - id: download
+        name: Download every shard report
         uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          pattern: mutation-report-ui-core-shard-*
+          path: mutation-reports
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "mutation-reports"
+
+      - name: Download every shard report, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
         with:
           pattern: mutation-report-ui-core-shard-*
           path: mutation-reports
@@ -269,8 +285,24 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
-      - name: Download every shard report
+      - id: download
+        name: Download every shard report
         uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          pattern: mutation-report-ui-shard-*
+          path: mutation-reports
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "mutation-reports"
+
+      - name: Download every shard report, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
         with:
           pattern: mutation-report-ui-shard-*
           path: mutation-reports
@@ -421,8 +453,24 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
-      - name: Download every shard report
+      - id: download
+        name: Download every shard report
         uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          pattern: mutation-report-db-shard-*
+          path: mutation-reports
+
+      - name: Clear the partial artifact download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "mutation-reports"
+
+      - name: Download every shard report, second attempt
+        if: steps.download.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
         with:
           pattern: mutation-report-db-shard-*
           path: mutation-reports

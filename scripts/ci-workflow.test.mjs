@@ -30,7 +30,7 @@ import {
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one case
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
-// two apt cases, a `--with-deps` case, the pnpm-setup cases and the checkout cases reading every
+// two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-download cases reading every
 // .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
 // the workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
@@ -3680,5 +3680,179 @@ describe("the workflows' checkouts", () => {
       ),
       'run each checkout as the three steps in docs/developers/ci-and-gates.md, "Every checkout is bounded"',
     ).toEqual([]);
+  });
+});
+
+function downloadAttempts(text) {
+  const isDownload = (step) => step?.uses?.startsWith("actions/download-artifact@") ?? false;
+  const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
+  const sameInputs = (a, b) =>
+    JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+  const attempts = [];
+  for (const { id: job, lines } of jobBlocks(text)) {
+    const steps = workflowSteps(lines.join("\n"));
+    for (let at = 0; at < steps.length; at += 1) {
+      const [first, clear, second] = steps.slice(at, at + 3);
+      if (!isDownload(first)) continue;
+      const failed = `steps.${first.id}.outcome == 'failure'`;
+      const path = first.with.path;
+      const valid =
+        first.id !== undefined &&
+        first.if === undefined &&
+        bounded(first) &&
+        first.continueOnError === "true" &&
+        /^[\w./-]+$/.test(path ?? "") &&
+        path !== "." &&
+        !path.startsWith("/") &&
+        !path.split("/").includes("..") &&
+        clear?.if === failed &&
+        clear.timeoutMinutes === "1" &&
+        clear.continueOnError !== "true" &&
+        clear.command.trim() === `rm -rf -- "${path}"` &&
+        second?.uses === first.uses &&
+        second.if === failed &&
+        bounded(second) &&
+        second.continueOnError !== "true" &&
+        sameInputs(first.with, second.with);
+      attempts.push({ job, bounded: Boolean(valid) });
+      if (isDownload(second) && second.if === failed) at += 2;
+    }
+  }
+  return attempts;
+}
+
+describe("the workflows' artifact downloads", () => {
+  const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
+  const first = `      - id: download
+        uses: actions/download-artifact@v8
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          pattern: service-blob-*
+          path: packages/service/.vitest-reports
+          merge-multiple: true
+`;
+  const clear = `      - name: Clear partial download
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "packages/service/.vitest-reports"
+`;
+  const second = `      - uses: actions/download-artifact@v8
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        with:
+          pattern: service-blob-*
+          path: packages/service/.vitest-reports
+          merge-multiple: true
+`;
+
+  it("accepts the retry with identical inputs and a cleared partial directory", () => {
+    expect(downloadAttempts(workflow(first + clear + second))).toEqual([
+      { job: "a", bounded: true },
+    ]);
+  });
+
+  it("ignores commented downloads", () => {
+    expect(downloadAttempts(workflow("      # - uses: actions/download-artifact@v8\n"))).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ["no retry", first],
+    ["no first timeout", first.replace("        timeout-minutes: 1\n", "") + clear + second],
+    ["no second timeout", first + clear + second.replace("        timeout-minutes: 1\n", "")],
+    [
+      "an excessive timeout",
+      first.replace("timeout-minutes: 1", "timeout-minutes: 10") + clear + second,
+    ],
+    [
+      "no tolerated first failure",
+      first.replace("        continue-on-error: true\n", "") + clear + second,
+    ],
+    ["no cleanup", first + second],
+    ["unbounded cleanup", first + clear.replace("        timeout-minutes: 1\n", "") + second],
+    ["a different retry version", first + clear + second.replace("@v8", "@v7")],
+    [
+      "an unsafe path",
+      (first + clear + second).replaceAll("packages/service/.vitest-reports", "reports$PART"),
+    ],
+    ["cleanup on success", first + clear.replace("== 'failure'", "== 'success'") + second],
+    [
+      "cleanup of the wrong directory",
+      first + clear.replace("packages/service", "packages/other") + second,
+    ],
+    [
+      "ignored cleanup failure",
+      first +
+        clear.replace("        run:", "        continue-on-error: true\n        run:") +
+        second,
+    ],
+    [
+      "an unconditional retry",
+      first + clear + second.replace("        if: steps.download.outcome == 'failure'\n", ""),
+    ],
+    ["different retry inputs", first + clear + second.replace("service-blob-*", "other-blob-*")],
+    [
+      "a tolerated second failure",
+      first +
+        clear +
+        second.replace(
+          "        timeout-minutes:",
+          "        continue-on-error: true\n        timeout-minutes:",
+        ),
+    ],
+    [
+      "a first attempt gated on success",
+      first.replace("        uses:", "        if: success()\n        uses:") + clear + second,
+    ],
+    [
+      "a missing download id",
+      first.replace("      - id: download\n        uses:", "      - uses:") + clear + second,
+    ],
+    [
+      "a parent path",
+      (first + clear + second).replaceAll("packages/service/.vitest-reports", "../reports"),
+    ],
+    [
+      "an absolute path",
+      (first + clear + second).replaceAll("packages/service/.vitest-reports", "/reports"),
+    ],
+    [
+      "the workspace root",
+      (first + clear + second).replaceAll("packages/service/.vitest-reports", "."),
+    ],
+  ])("refuses %s", (_label, steps) => {
+    const attempts = downloadAttempts(workflow(steps));
+    expect(attempts.length).toBeGreaterThan(0);
+    expect(attempts.every((attempt) => attempt.bounded)).toBe(false);
+  });
+
+  it("leaves job time outside both download attempts and cleanup", () => {
+    const found = workflowFiles.flatMap((name) =>
+      jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
+        const steps = workflowSteps(lines.join("\n"));
+        const at = steps.findIndex((step) => step.uses?.startsWith("actions/download-artifact@"));
+        if (at === -1) return [];
+        const downloadBudget = steps
+          .slice(at, at + 3)
+          .reduce((sum, step) => sum + Number(step.timeoutMinutes), 0);
+        const jobBudget = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines.join("\n"))?.[1]);
+        return [{ workflow: name, job: id, fits: jobBudget > downloadBudget }];
+      }),
+    );
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.filter((entry) => !entry.fits)).toEqual([]);
+  });
+
+  it("bounds and retries every artifact download in every workflow", () => {
+    const found = workflowFiles.flatMap((name) =>
+      downloadAttempts(readFileSync(join(workflowsDir, name), "utf8")).map((attempt) => ({
+        workflow: name,
+        ...attempt,
+      })),
+    );
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.filter((attempt) => !attempt.bounded)).toEqual([]);
   });
 });

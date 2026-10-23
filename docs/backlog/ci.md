@@ -563,10 +563,10 @@ not captured. It was not reproduced. **Next action:** reproduce it under load an
 List them with
 
 ```sh
-grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache|upload-artifact|download-artifact)|docker/|github/codeql-action)' .github/workflows/*.yml
+grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache|upload-artifact)|docker/|github/codeql-action)' .github/workflows/*.yml
 ```
 
-On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`, `download-artifact`,
+On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`,
 `docker/*` and `codeql-action` steps carried a step `timeout-minutes`; they rely on their job's
 limit alone, as checkout did. The set-up download ("Download action repository …") is retried by
 the runner, three attempts, each under a 20-minute limit (runner v2.337.0
