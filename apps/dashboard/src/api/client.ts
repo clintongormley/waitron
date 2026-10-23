@@ -1743,7 +1743,6 @@ export interface BoxHealth {
     lowSince: string | null;
     reclaimable: { bytes: number; backupRunning: boolean };
   };
-  /** Null when payments are not stopped for the clock. */
   clockStop: ClockStopView | null;
 }
 

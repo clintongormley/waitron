@@ -715,6 +715,8 @@ describe("the Clock row while payments are stopped for the clock", () => {
     expect(detail(-90)).toBe(fill("box_status.clock.compared_behind", { time, seconds: "90" }));
     expect(detail(61)).toBe(fill("box_status.clock.compared_ahead", { time, seconds: "61" }));
     expect(detail(-60)).toBe(fill("box_status.clock.compared", { time, seconds: "60" }));
+    expect(detail(60)).toBe(fill("box_status.clock.compared", { time, seconds: "60" }));
+    expect(detail(-61)).toBe(fill("box_status.clock.compared_behind", { time, seconds: "61" }));
     expect(detail(2)).toBe(fill("box_status.clock.compared", { time, seconds: "2" }));
     expect(detail(-2)).toBe(fill("box_status.clock.compared", { time, seconds: "2" }));
   });
