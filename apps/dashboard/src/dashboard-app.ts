@@ -38,6 +38,7 @@ import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
 import { applyVenueTheme, readVenueTheme, setContentLanguages } from "@waitron/ui";
+import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
 import { DashboardQueries } from "./api/query-controller.js";
 import { diag } from "./diagnostics.js";
 import { signalAcceptedPasskeys } from "./passkey-signals.js";
@@ -182,13 +183,6 @@ function storeFold(folded: boolean): void {
     // Remembering the choice is a convenience; the sidebar works without it.
   }
 }
-
-const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
-  .href;
-const WAITRON_LOGO_DARK_URL = new URL(
-  "../../../packages/ui/brand/waitron-lockup-dark.svg",
-  import.meta.url,
-).href;
 
 function darkLogoMedia(choice: ThemeChoice): string {
   if (choice === "dark") return "all";
@@ -1747,8 +1741,8 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <picture class="brand-logo-picture">
-          <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOGO_DARK_URL} />
-          <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
+          <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOCKUP_DARK_URL} />
+          <img class="brand-logo" src=${WAITRON_LOCKUP_URL} alt="Waitron" />
         </picture>
         <span class="venue-row"
           ><span class="venue">
