@@ -3616,6 +3616,10 @@ cover the routes they name; a new money route is seen by none.
 
 Added 2026-10-23 by A798-B slice 9 (PR to come); the decisions and measurements named here are in
 [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md).
+Every Q and S label below is a run made for the plan against its PROTOTYPE of `clock-behind.ts`, in
+a throwaway worktree, not against this branch's code; the P labels are requests to AEAT's hosts.
+Where a shipped test checks the same sequence on this branch, it is named beside the label; the
+test file is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`.
 
 **One latest record** (plan decision 8a). `latestRecord` (`packages/fiscal-verifactu/src/clock-behind.ts`)
 orders by `fecha_hora_huso_gen_registro desc, id desc`, and it is the only way the stop and the
@@ -3623,7 +3627,8 @@ restart find the latest record: `clockBehindChain` calls it, and so does `judge`
 (`packages/fiscal-verifactu/src/clock-stop-restart.ts`), which both `clockStopState` and
 `restartAfterClockStop` run. The id is a random UUID, so a tie between two records at one instant
 is broken arbitrarily but always the same way. A restart naming the other of two same-instant
-records lifted nothing (plan Q5); ordering one caller by `id asc` picked the other record in all
+records lifted nothing (plan Q5; shipped: "lifts only for the one of two same-instant records that
+latestRecord names"); ordering one caller by `id asc` picked the other record in all
 eight runs (S13).
 
 **The cover** (decisions 8b, 21). A restart row in `clock_stop_restarts` names the latest record
@@ -3634,7 +3639,9 @@ chain's current largest `secuencia`; and the gap is at most the gap the restart 
 minute, never more than 24 hours (`RESTART_CAP_MS`). Anything else covers nothing and throws
 nothing — a proof that is not JSON, JSON `null`, `heads` missing or an array, a value that is not a
 safe integer `≥ 0` or is past its chain's head (S6, S7; the bound check's deletion let a `1e12` row
-cover, S12). The row's `node_id` is never read, so a wrong one cannot widen the cover (S9). The
+cover, S12; shipped: the cases under "a restart whose stored heads a correct writer never stores
+covers nothing"). The row's `node_id` is never read, so a wrong one cannot widen the cover (S9;
+shipped: "answers the same when the row names the other node"). The
 readers that lift together all reach `clockBehindChain`: `refuseWhileClockBehind` (the append's own
 check and every route's named check), the till's staff notice (`staff-notices.ts`), the bell's
 alert (`clock-behind-alerts.ts`), and the seat's `clockBehindLatestRecord`, which the refund paths
@@ -3648,16 +3655,22 @@ chain's stored head (a chain the map leaves out counts from 0, which can only na
 S10). Before any record is written under the restart, the first step may go a minute further back
 than accepted. Once one is written, every reading is held to the ordinary minute against the
 LATEST TIME among the records written under it, on any chain (`latestWrittenAfter`) — a running
-maximum by time, not the record written last. Measured on a sale at `T = 21:40Z` and a restart
-with `clock_at R = 07:12Z` (Q1 and S1): sales at R + 1 min, R + 10 h, R + 30 min, R + 10 h − 59 s
-and R + 10 h − 2 min answered recorded, recorded, `clock.behind_chain`, recorded,
-`clock.behind_chain`. A clock walking back 59 s at a time is refused at its second step (S5); with
-the read ordered by `secuencia` instead, the walk was admitted (S11). Deleting the check against
-records written under the restart recorded all five of Q1's sales (Q7). Forward control: R + 1 min,
-R + 10 h, R + 10 h + 5 min all recorded (Q2). The first step's margin: R − 61 s refused, R − 59 s
-recorded (Q3). The cap: T − 24 h − 1 s refused, T − 24 h recorded (Q4). The fiscal core's suites,
-the golden huella test and `inmutabilidad` among them, passed unedited with the plan's prototype of the lift
-(Q8, re-run as S14). Then the Clock row says `stepped_back`, and the refusal names the record holding
+maximum by time, not the record written last. On the prototype, with a sale at `T = 21:40Z` and a
+restart with `clock_at R = 07:12Z` (Q1 and S1): sales at R + 1 min, R + 10 h, R + 30 min,
+R + 10 h − 59 s and R + 10 h − 2 min answered recorded, recorded, `clock.behind_chain`, recorded,
+`clock.behind_chain` (shipped: "stops again at a second step back of more than a minute"). A clock
+walking back 59 s at a time was refused at its second step (S5; shipped: "stops a clock walking back
+59 s at a time at its second step"); with the read ordered by `secuencia` instead, the walk was
+admitted (S11, a deletion run on the prototype only). Deleting the check against records written
+under the restart recorded all five of Q1's sales (Q7, prototype only). Forward control: R + 1 min,
+R + 10 h, R + 10 h + 5 min all recorded (Q2; shipped: "keeps recording while the clock only moves
+forward"). The first step's margin: R − 61 s refused, R − 59 s recorded (Q3; shipped: "lets the
+first step go a minute further back than accepted, and no later step"). The cap: T − 24 h − 1 s
+refused, T − 24 h recorded (Q4; shipped: "covers a step back of exactly 24 hours and not a second
+more", and "caps the cover at 24 hours even when the accepted gap is wider"). A map leaving out the
+older chain kept the stop (S10; shipped: "keeps the stop when heads leave out the older chain"). The
+fiscal core's suites, the golden huella test and `inmutabilidad` among them, passed unedited with
+the prototype in place (Q8, re-run as S14). Then the Clock row says `stepped_back`, and the refusal names the record holding
 that latest time (decision 8d). A restart under which a later record's time passes the named one no
 longer applies: the stop then compares against a new latest record with no row.
 
@@ -3704,7 +3717,15 @@ certificate-authenticated `consultar` reply (P11) — no AEAT certificate was us
 
 Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` and
 `packages/fiscal-verifactu/src/clock-stop-restart.test.ts`, weaker than the rule — they cover the
-readings they name.
+readings and the restart presses they name. What nothing checks:
+
+- that the stop reads `clock_stop_restarts` only through `clockBehindChain`. A new file that reads
+  the table to decide a refusal, or a reader of the stop that bypasses `clockBehindChain`, goes
+  unnoticed;
+- that a new reader of the stop lifts with the others: the "answers the same from the stop, the
+  staff notice and the bell" case names those three;
+- that only `restartAfterClockStop` writes the table: nothing refuses another writer, and a row it
+  wrote with well-formed heads would cover.
 
 ## An envío to AEAT carries one taxpayer name
 

@@ -899,14 +899,13 @@ browser test** — most of these rules exist because a test passed while proving
   still stored. Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
   `apps/server/src/payments-api.clock-behind.test.ts` and
   `packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover the
-  routes they name; a new money route is seen by none. A manager's restart (`clock_stop_restarts`)
-  lifts it for ONE step back: once a record is written under it, every reading is held to the minute
-  against the latest time among the records written under it, and the stop reads that table only
-  through `clockBehindChain`; a row whose stored chain heads are malformed covers nothing. Guards:
-  `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` and
-  `packages/fiscal-verifactu/src/clock-stop-restart.test.ts`, weaker than the rule — they cover the
-  readings they name. Receipt:
+  routes they name; a new money route is seen by none. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
+  **A manager's restart (`clock_stop_restarts`) lifts this stop for one step back**, then holds every
+  reading to the minute against the latest time written under it; the stop reads the table only
+  through `clockBehindChain`. Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
+  weaker than the rule — nothing checks that only `clockBehindChain` reads the table. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-managers-restart-lifts-the-stop-for-one-step-back).
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
