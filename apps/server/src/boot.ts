@@ -95,6 +95,7 @@ import {
   ALL_MODULE_PERMISSIONS,
   enabledAlertSources,
   enabledFloorAnnotators,
+  enabledStaffNoticeSources,
   enabledTableRemovals,
   VENUE_SERVICE,
 } from "./modules.js";
@@ -169,6 +170,8 @@ import {
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
+import { BOX_EMAIL_CHECK_MS, readBoxEmailContext, startBoxEmailDuty } from "./box-alert-email.js";
+import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -279,7 +282,7 @@ import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
 import { freeBytes } from "./free-bytes.js";
-import { createStaffNoticeLog } from "./staff-notices.js";
+import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
@@ -2176,6 +2179,38 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(async () => freeSpaceWatch.stop());
+  const emailNoticeLog = createStaffNoticeLog(log);
+  const emailNoticeSources = enabledStaffNoticeSources(setsToMigrate);
+  const boxEmails = startBoxEmailDuty({
+    disk: diskFull,
+    space: freeSpace,
+    moduleNotices: async () => {
+      const reading = emailNoticeLog.begin();
+      const read = await readStaffNoticesInTurns(
+        db,
+        emailNoticeSources.map(({ owner, source }) => ({
+          owner,
+          source: { read: (ctx) => source.read({ ...ctx, filing: { enabled: filesRecords() } }) },
+        })),
+        { reading: tillClock.now(), log: emailNoticeLog.log },
+      );
+      reading.settle(read.unavailable);
+      return read;
+    },
+    context: () =>
+      readBoxEmailContext(db, {
+        ring,
+        practiceMode: config.devMode || till.practiceMode === true,
+        locationId: till.locationId,
+        venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+      }),
+    send: createTextEmailSender(),
+    isPrimary: () => holders.singletonRole.current === "primary",
+    intervalMs: BOX_EMAIL_CHECK_MS,
+    now,
+    log,
+  });
+  undoOnFailure.push(() => boxEmails.stop());
   const serverAlertSources: AlertSource[] = [
     backupSource,
     storageAlertSource({ space: freeSpace, disk: diskFull }),
@@ -2836,6 +2871,7 @@ async function bootServer(
           () => menuActivation.stop(),
           () => appendOnlyWatch.stop(),
           () => freeSpaceWatch.stop(),
+          () => boxEmails.stop(),
           () => liveEvents.close(),
           () => tunnelController.abort(),
           () => loop,

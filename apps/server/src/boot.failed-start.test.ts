@@ -20,6 +20,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { appendOnlyTriggerFaults } from "@waitron/store";
 import { startAppendOnlyWatch } from "./append-only-watch.js";
 import { startFreeSpaceWatch } from "./free-space-watch.js";
+import { startBoxEmailDuty } from "./box-alert-email.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -87,6 +88,11 @@ vi.mock("./append-only-watch.js", async (importOriginal) => {
 vi.mock("./free-space-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./free-space-watch.js")>();
   return { ...actual, startFreeSpaceWatch: vi.fn(actual.startFreeSpaceWatch) };
+});
+
+vi.mock("./box-alert-email.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./box-alert-email.js")>();
+  return { ...actual, startBoxEmailDuty: vi.fn(actual.startBoxEmailDuty) };
 });
 
 vi.mock("./tender-refund-recovery.js", async (importOriginal) => {
@@ -184,6 +190,19 @@ async function spyOnFreeSpaceWatchStop() {
   vi.mocked(startFreeSpaceWatch).mockImplementationOnce((deps) => {
     const watch = realStart(deps);
     stop.mockImplementation(() => watch.stop());
+    return { stop };
+  });
+  return stop;
+}
+
+/** Spies on the stop of the next managers' email check boot starts. */
+async function spyOnBoxEmailDutyStop() {
+  const { startBoxEmailDuty: realStart } =
+    await vi.importActual<typeof import("./box-alert-email.js")>("./box-alert-email.js");
+  const stop = vi.fn<() => Promise<void>>();
+  vi.mocked(startBoxEmailDuty).mockImplementationOnce((deps) => {
+    const duty = realStart(deps);
+    stop.mockImplementation(() => duty.stop());
     return { stop };
   });
   return stop;
@@ -587,6 +606,19 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
+  it("in trading mode, when a step after the listener is started throws, stopping the managers' email check", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const stop = await spyOnBoxEmailDutyStop();
+
+    await expect(startServer(env)).rejects.toBe(failure);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
   it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
@@ -918,6 +950,20 @@ describe("closing a started server", () => {
     const state = await stateDir(undefined, { leaf: true });
     const env = await tradingEnv(venueDir, state);
     const stop = await spyOnFreeSpaceWatchStop();
+    const server = await startServer(env);
+    await listening(Number(env.WAITRON_HTTP_PORT));
+    expect(stop).not.toHaveBeenCalled();
+
+    await server.close();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("stops the managers' email check", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    const stop = await spyOnBoxEmailDutyStop();
     const server = await startServer(env);
     await listening(Number(env.WAITRON_HTTP_PORT));
     expect(stop).not.toHaveBeenCalled();
