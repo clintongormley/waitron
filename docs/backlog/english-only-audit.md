@@ -1,5 +1,8 @@
 # A913 — non-English text in general code: the audit
 
+_2026-10-23, A974: the certificate-check harness now reads `WAITRON_CERT_CHECK_LEGAL_NAME`.
+See the [current operator instructions](../../apps/server/README.md#installing-or-replacing-the-aeat-certificate-after-setup). The earlier setting name below is historical._
+
 _2026-10-22, A973: the invoice-first settlement operator script and its test are retired by owner decision. References to that command below record the earlier tree; current build plans omit it._
 
 Audited 2026-10-20 on main `a3be14ba4`. A dated record: it describes the tree as it was that day.

@@ -1,5 +1,8 @@
 # A795 — Installing or renewing the AEAT certificate after setup — implementation plan
 
+_2026-10-23, A974: the certificate-check harness now reads `WAITRON_CERT_CHECK_LEGAL_NAME`.
+See the [current operator instructions](../../../apps/server/README.md#installing-or-replacing-the-aeat-certificate-after-setup). The earlier setting name below is historical._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (each task
 > to one `subagent_type: "implementer"`, then its reviewer where the task says so). Steps use
 > checkbox (`- [ ]`) syntax. Read `superpowers:test-driven-development` before writing code. An
