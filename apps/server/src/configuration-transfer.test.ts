@@ -2418,6 +2418,7 @@ describe("custom themes in a configuration copy", () => {
     brandFix: {},
     background: "neutral",
     corners: "standard",
+    logo: null,
     handSet: { light: {}, dark: {} },
   };
   const darkGreen = { ...lemon, brandColor: "#1e5b3a", background: "tinted" };

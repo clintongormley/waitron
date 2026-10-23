@@ -27,6 +27,7 @@ const lucia = theme("t-lucia", "Bar Lucía", {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 });
 const twoFixes = theme("t-hand", "By hand", {

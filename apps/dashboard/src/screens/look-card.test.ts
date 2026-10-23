@@ -48,6 +48,7 @@ const LUCIA: ThemeChoices = {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
@@ -345,6 +346,7 @@ describe("editing the Look card in place", () => {
       brandFix: { dark: true },
       background: "neutral",
       corners: "round",
+      logo: null,
       handSet: { light: {}, dark: {} },
     });
     expect(q(el, "[data-test=saved-theme]")).not.toBeNull();

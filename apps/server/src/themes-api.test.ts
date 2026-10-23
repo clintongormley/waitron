@@ -46,6 +46,7 @@ const LEMON: ThemeChoices = {
   brandFix: {},
   background: "neutral",
   corners: "standard",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a" };
@@ -178,7 +179,7 @@ describe("the custom theme routes", () => {
         "brandFix.light",
         "fix_with_hand_set",
       ],
-      [{ ...LEMON, logo: "x" }, "theme", "unknown_key"],
+      [{ ...LEMON, logo: "x" }, "logo", "bad_value"],
       [{ ...LEMON, textScale: 1 }, "theme", "unknown_key"],
       [
         { ...LEMON, handSet: { light: { evil: "#ff0000" }, dark: {} } },

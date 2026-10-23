@@ -7,6 +7,7 @@ const LEMON: ThemeChoices = {
   brandFix: {},
   background: "neutral",
   corners: "standard",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 

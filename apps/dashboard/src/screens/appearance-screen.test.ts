@@ -243,6 +243,7 @@ describe("the page opens the Look card's editor from the Themes card", () => {
       brandColor: "#7a1f2b",
       brandFix: { dark: true },
       corners: "round",
+      logo: null,
     }),
     "t-xmas",
     "Christmas",

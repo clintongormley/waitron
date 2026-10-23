@@ -37,6 +37,7 @@ const LUCIA: ThemeChoices = {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const CHRISTMAS: ThemeChoices = {
@@ -44,6 +45,7 @@ const CHRISTMAS: ThemeChoices = {
   brandFix: { dark: true },
   background: "neutral",
   corners: "standard",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);

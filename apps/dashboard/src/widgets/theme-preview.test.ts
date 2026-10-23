@@ -20,6 +20,7 @@ const LUCIA_DARK_FIX: ThemeChoices = {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
