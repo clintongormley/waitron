@@ -153,8 +153,8 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 built,
-  waiting for the owner to land it.** The producer's statement that a version meets the Veri\*Factu rules, one per release,
+- **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed
+  2026-10-23 (#2000).** The producer's statement that a version meets the Veri\*Factu rules, one per release,
   readable on every terminal and before installation (compliance plan Step 8). The
   [design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md) drafts the text
   from AEAT's worked example, makes `pnpm release prepare` land each version's copy in a pull
@@ -164,11 +164,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   `@waitron/verifactu` library its own declaration. The owner answered all four questions on
   2026-10-21: he is the producer (his name, NIF and a publishable postal address are still to be
   supplied); e) = «S» for this version and f) = «N»; item d) is the draft sent to the asesor as
-  Q53, pending their answer; production boxes run releases only. The first slice is fiscal and the
-  owner lands it. The owner approved the second revision on 2026-10-22 (about 02:45) and chose
-  A993's offline behaviour (about 02:55); the third revision folds those answers in. Slice 1 is
-  built from its [plan](superpowers/plans/2026-10-22-a940-1-software-identity.md) (pull request
-  #2000), parked for the owner: every record kind's software block, built in
+  Q53, pending their answer; production boxes run releases only. The owner approved the second revision on 2026-10-22 (about 02:45) and chose
+  A993's offline behaviour (about 02:55); the third revision folds those answers in. Slice 1,
+  built from its [plan](superpowers/plans/2026-10-22-a940-1-software-identity.md), landed on
+  2026-10-23 (pull request #2000): every record kind's software block, built in
   `buildSistemaInformatico` (`packages/fiscal-verifactu/src/backend.ts`), names "Waitron", the
   build's version (`0.0.0-dev`, plus the build's commit on a published build) instead of `0.0.0`,
   and `TipoUsoPosibleMultiOT = N`. The producer is a marked placeholder until the owner supplies
@@ -176,7 +175,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   published build set to production refuses to trade (`sif.producer_unset`). Two test checks
   changed with it: the Spanish practice sales were re-recorded (only their software block moved),
   and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
-  changed (owner to confirm). Still open: the producer's name and NIF (Task 8 of the plan), then
+  changed (the owner accepted it on 2026-10-23). Still open: the producer's name and NIF (Task 8 of the plan), then
   slices 1b to 6, and A993's plan. Still needed from outside: his name, NIF and publishable
   address, and the asesor's answer to Q53.
   [Mock-ups](backlog/mockups/a940-declaracion-responsable/README.md)
@@ -205,7 +204,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   on 2026-10-22 (A940's second-revision question 2, about 02:55), with one addition: in that stuck
   case the page the box shows instead of trading also accepts a phone's or a till's clock under
   A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
-  picture 6). Needs A940's slice 1 and A947's slice 4a (pull request #1990, open); its plan comes
+  picture 6). Needs A947's slice 4a (pull request #1990, open; A940's slice 1 landed as #2000); its plan comes
   after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
   until the first non-Veri\*Factu mode.
   [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
