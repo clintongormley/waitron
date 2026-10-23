@@ -8,15 +8,34 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin, persons, startManagementSession, type PersonRoleValue } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import type { BoxHealth } from "./box-health.js";
+import { AppError } from "@waitron/shared";
+import { mountAlertsApi } from "./alerts-api.js";
+import { createAlertRegistry } from "./alerts.js";
+import {
+  clockStopReader,
+  collectBoxHealth,
+  type BoxHealth,
+  type BoxHealthReaders,
+  type ClockStopView,
+} from "./box-health.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
+import { mountDeviceApi } from "./device-api.js";
+import { DEVICE_CLOCK_HEADER } from "./device-session.js";
+import {
+  ALL_ALERT_CLAIMS,
+  ALL_MODULES,
+  enabledAlertSources,
+  enabledStaffNoticeSources,
+} from "./modules.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { createStaffNoticeLog } from "./staff-notices.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { systemClock } from "./till-backend.js";
@@ -111,7 +130,41 @@ interface Stop {
   behind: number;
   recordId: string;
   witnesses: ClockWitnessStore;
+  /** Box status, the restart, the equipment read and the managers' alerts, on the box's clock. */
   app: Hono;
+  /** Moves the box's clock, which every route on `app` reads. */
+  setClock(ms: number): void;
+  /** The Box status read over `db`, on the box's clock. */
+  health(db?: Database): Promise<BoxHealth>;
+}
+
+function healthReaders(
+  stop: Pick<Stop, "witnesses">,
+  clock: TrustedClock,
+  backend: FiscalBackend,
+): BoxHealthReaders {
+  return {
+    now: () => clock.now().instant,
+    notices: { sources: [], clock, filing: () => true, log: createStaffNoticeLog(() => {}) },
+    stream: () => ({ state: "off" }),
+    authorityClock: () => ({ state: "ok", driftSeconds: 0, measuredAt: "2026-10-22T09:00:00Z" }),
+    timeHealth: async () => ({ synced: true, source: "timedatectl", warn: false }),
+    disk: { since: () => null },
+    space: { current: () => ({ freeBytes: null, readAt: null, lowSince: null }) },
+    usage: async () => ({
+      freeBytes: 1,
+      totalBytes: 100,
+      databaseBytes: 1,
+      backupsBytes: 1,
+      logBytes: 1,
+      otherBytes: 1,
+    }),
+    free: async () => 1,
+    leftovers: async () => ({ bytes: 0, backupRunning: false }),
+    paymentsEnabled: true,
+    canFree: () => true,
+    clockStop: clockStopReader({ backend, witnesses: () => stop.witnesses.witnesses(), clock }),
+  };
 }
 
 /** A new latest record a second after NOW (records keep whole seconds, so a sale at NOW itself
@@ -123,23 +176,69 @@ async function stoppedBox(gapMs: number, backend: FiscalBackend = venue.backend)
   const record = latest();
   const behind = record.at.getTime() - gapMs;
   const witnesses = createClockWitnessStore({ wall: () => behind, monotonic: () => 0 });
+  let boxMs = behind;
+  const base = systemClock();
+  const clock: TrustedClock = {
+    ...base,
+    now: () => ({ ...base.now(), instant: new Date(boxMs), offsetMinutes: 60 }),
+  };
   const app = new Hono();
+  const health = (db: Database = venue.db) =>
+    collectBoxHealth(db, healthReaders({ witnesses }, clock, backend));
   mountBoxHealthApi(
     app,
     {
       db: venue.db,
-      readHealth: async () => ({}) as BoxHealth,
+      readHealth: () => health(),
       freeSpace: () => Promise.reject(new Error("not freed here")),
       clockRestart: {
         backend,
         witnesses: () => witnesses.witnesses(),
-        clock: clockAt(behind),
+        clock,
         nodeId: venue.cfg.nodeId,
       },
     },
     () => {},
   );
-  return { behind, recordId: record.id, witnesses, app };
+  mountDeviceApi(
+    app,
+    {
+      db: venue.db,
+      cfg: venue.cfg,
+      secureCookies: false,
+      pairingMode: createPairingMode(),
+      notices: {
+        sources: enabledStaffNoticeSources(ALL_MODULES),
+        clock,
+        filing: () => ({ enabled: true }),
+      },
+      clockWitnesses: witnesses,
+      clock: { wall: () => boxMs, monotonic: () => 0 },
+    },
+    () => {},
+  );
+  mountAlertsApi(
+    app,
+    {
+      db: venue.db,
+      registry: createAlertRegistry({
+        claims: ALL_ALERT_CLAIMS,
+        sources: enabledAlertSources(ALL_MODULES),
+      }),
+      now: () => new Date(boxMs),
+    },
+    () => {},
+  );
+  return {
+    behind,
+    recordId: record.id,
+    witnesses,
+    app,
+    setClock: (ms) => {
+      boxMs = ms;
+    },
+    health,
+  };
 }
 
 /** A device whose clock read `offsetMs` from the box's, noted at the box's reading. */
@@ -316,4 +415,189 @@ it("has no restart to offer when the fiscal seat cannot restart", async () => {
 
   expect(answer.status).toBe(404);
   expect(written()).toEqual(before);
+});
+
+/** The equipment read of the till `cookie` names, its clock header reading `deviceMs`. */
+function equipmentRead(stop: Stop, cookie: string, deviceMs?: number) {
+  return stop.app.request("/api/device/equipment", {
+    headers: {
+      cookie,
+      ...(deviceMs === undefined ? {} : { [DEVICE_CLOCK_HEADER]: String(deviceMs) }),
+    },
+  });
+}
+
+async function noticeCodes(stop: Stop): Promise<string[]> {
+  const response = await equipmentRead(stop, venue.cookie);
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { notices: { code: string }[] };
+  return body.notices.map((notice) => notice.code);
+}
+
+async function alertCodes(stop: Stop): Promise<string[]> {
+  const answer = await send(stop.app, marta.cookie, "GET", "/management-api/alerts");
+  expect(answer.status).toBe(200);
+  return (answer.json.alerts as { code: string }[]).map((alert) => alert.code);
+}
+
+async function clockStopOf(stop: Stop): Promise<ClockStopView | null> {
+  const answer = await send(stop.app, marta.cookie, "GET", "/api/box/health");
+  expect(answer.status).toBe(200);
+  return (answer.json as unknown as BoxHealth).clockStop;
+}
+
+/** The newest `clock.behind_chain_restarted` incident's id. */
+function newestRestartedIncident(): string {
+  const [row] = venue.db.all<{ id: string }>(
+    sql`select id from incidents where code = 'clock.behind_chain_restarted' order by rowid desc limit 1`,
+  );
+  return row!.id;
+}
+
+it("leaves payments running when a manager marks the restart's alert handled", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  noteDevice(stop, 0);
+  noteDevice(stop, 0);
+  expect(await alertCodes(stop)).toContain("clock.behind_chain");
+  // Devices with no row of their own are still shown, with no label.
+  expect((await clockStopOf(stop))?.proof.devices.map((device) => device.label)).toEqual([
+    null,
+    null,
+  ]);
+
+  const answer = await press(stop.app, marta.cookie, { recordId: stop.recordId });
+  expect(answer.status).toBe(200);
+  const box = venue.appAt(clockAt(stop.behind));
+  expect((await cashSale(box)).status).toBe(200);
+
+  const handled = await send(
+    stop.app,
+    marta.cookie,
+    "POST",
+    `/management-api/alerts/incidents/${newestRestartedIncident()}/handled`,
+  );
+  expect(handled.status).toBe(204);
+
+  expect((await cashSale(box)).status).toBe(200);
+  expect(await alertCodes(stop)).not.toContain("clock.behind_chain");
+});
+
+it("stops payments again, and says the clock stepped back, when the clock reads 30 minutes behind a sale made after the restart", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  noteDevice(stop, 0);
+  noteDevice(stop, 0);
+  expect((await press(stop.app, marta.cookie, { recordId: stop.recordId })).status).toBe(200);
+  const sold = await cashSale(venue.appAt(clockAt(stop.behind)));
+  expect(sold.status).toBe(200);
+  expect((await clockStopOf(stop))?.offer).toBe("restarted");
+
+  const back = stop.behind - 30 * MINUTE;
+  stop.setClock(back);
+  const refused = await cashSale(venue.appAt(clockAt(back)));
+
+  expect(refused.status).toBe(409);
+  expect(refused.json).toMatchObject({ code: "clock.behind_chain" });
+  expect((await clockStopOf(stop))?.offer).toBe("stepped_back");
+});
+
+it("drops the till's clock notice once payments are restarted", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  noteDevice(stop, 0);
+  noteDevice(stop, 0);
+  expect(await noticeCodes(stop)).toContain("clock.behind_chain");
+
+  expect((await press(stop.app, marta.cookie, { recordId: stop.recordId })).status).toBe(200);
+
+  expect(await noticeCodes(stop)).not.toContain("clock.behind_chain");
+});
+
+it("shows no proof, then the two tills that proved the clock, then who restarted payments", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  const record = latest();
+
+  const none = await clockStopOf(stop);
+  expect(none).toMatchObject({
+    offer: "no_proof",
+    recordId: stop.recordId,
+    clockAt: new Date(stop.behind).toISOString(),
+    lastRecordAt: record.at.toISOString(),
+    gapMs: 10 * MINUTE,
+    restart: null,
+    proof: { authority: null, devices: [] },
+    contrary: { authority: null, devices: [] },
+  });
+
+  for (const cookie of [venue.cookie, venue.cookie2])
+    expect((await equipmentRead(stop, cookie, stop.behind)).status).toBe(200);
+  const offered = await clockStopOf(stop);
+  expect(offered?.offer).toBe("offered");
+  expect(offered?.restart).toBeNull();
+  expect(
+    offered?.proof.devices
+      .map(({ id, label }) => ({ id, label }))
+      .sort((a, b) => a.label!.localeCompare(b.label!)),
+  ).toEqual([
+    { id: venue.deviceId, label: "Barra" },
+    { id: venue.device2Id, label: "Terraza" },
+  ]);
+  expect(offered?.proof.devices[0]).toMatchObject({ kind: "device" });
+
+  expect((await press(stop.app, mario.cookie, { recordId: stop.recordId })).status).toBe(200);
+  const restarted = await clockStopOf(stop);
+  expect(restarted?.offer).toBe("restarted");
+  expect(restarted?.restart).toEqual({
+    personName: "Mario",
+    restartedAt: new Date(stop.behind).toISOString(),
+    clockAt: new Date(stop.behind).toISOString(),
+  });
+});
+
+/** A full disk that refuses any write turn which changed a row; a turn that only reads commits. */
+function writeRefusingDb(): Database {
+  const changes = () => venue.db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
+  return new Proxy(venue.db, {
+    get(target, prop) {
+      if (prop === "withWriteLock") {
+        return <T>(body: () => Promise<T>) =>
+          target.withWriteLock(async () => {
+            const before = changes();
+            const value = await body();
+            if (changes() !== before) throw new AppError("storage.disk_full", {});
+            return value;
+          });
+      }
+      const value = Reflect.get(target, prop, target) as unknown;
+      return typeof value === "function"
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  });
+}
+
+it("reads the clock stop on a full disk with a change waiting, and leaves the change waiting", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  for (const cookie of [venue.cookie, venue.cookie2])
+    expect((await equipmentRead(stop, cookie, stop.behind)).status).toBe(200);
+  venue.db.run(
+    sql`insert into change_log (id, payload) values ('clock-stop-1', '{"resource":"zz","id":"1"}')`,
+  );
+  const waiting = () =>
+    venue.db.all<{ id: string }>(sql`select id from change_log where id = 'clock-stop-1'`).length;
+  try {
+    const db = writeRefusingDb();
+    await expect(withTransaction(db, async () => {})).rejects.toMatchObject({
+      code: "storage.disk_full",
+    });
+
+    const health = await stop.health(db);
+
+    expect(health.clockStop).toMatchObject({ offer: "offered", recordId: stop.recordId });
+    expect(health.clockStop?.proof.devices.map((device) => device.label).sort()).toEqual([
+      "Barra",
+      "Terraza",
+    ]);
+    expect(waiting()).toBe(1);
+  } finally {
+    venue.db.run(sql`delete from change_log where id = 'clock-stop-1'`);
+  }
 });

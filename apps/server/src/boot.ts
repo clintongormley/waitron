@@ -279,7 +279,7 @@ import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
-import { collectBoxHealth } from "./box-health.js";
+import { clockStopReader, collectBoxHealth } from "./box-health.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
@@ -2336,6 +2336,11 @@ async function bootServer(
           leftovers: () => surveyLeftovers(leftoverDeps),
           paymentsEnabled,
           canFree: () => !isReadOnly(),
+          clockStop: clockStopReader({
+            backend: tillBackend,
+            witnesses: () => clockWitnesses.witnesses(),
+            clock: tillClock,
+          }),
         }),
       freeSpace: createSpaceFreer({
         ...leftoverDeps,
