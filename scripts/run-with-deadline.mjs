@@ -50,7 +50,7 @@ export function createDeadlineDiagnostics({
 }
 
 /** The parent owns the deadline: a blocked worker or browser cannot disable this timer.
- * A separate POSIX process group lets cancellation reach workers and browsers as well as pnpm. */
+ * Cancellation targets the launched POSIX process group. */
 export async function runWithDeadline(
   command,
   args,
@@ -73,6 +73,11 @@ export async function runWithDeadline(
     }
     let result;
     let escalation;
+    let pipeDrain;
+    const closeDiagnosticPipes = () => {
+      child.stdout.destroy();
+      child.stderr.destroy();
+    };
     let closed = false;
     const signalGroup = (signal) => {
       try {
@@ -85,6 +90,7 @@ export async function runWithDeadline(
     };
     const finish = () => {
       clearTimeout(deadline);
+      clearTimeout(pipeDrain);
       signals.off("SIGINT", interrupt);
       signals.off("SIGTERM", terminate);
       resolve(result);
@@ -98,6 +104,7 @@ export async function runWithDeadline(
       escalation = setTimeout(() => {
         signalGroup("SIGKILL");
         escalation = undefined;
+        if (report) closeDiagnosticPipes();
         if (closed) finish();
       }, graceMs);
     };
@@ -114,9 +121,8 @@ export async function runWithDeadline(
       console.error(`Cannot start command: ${error.message}`);
       result = 1;
     });
-    child.once("close", (code) => {
-      closed = true;
-      // pnpm can exit on the first failure while another package's workers are still alive.
+    child.once("exit", (code) => {
+      // A surviving worker can hold a diagnostic pipe open after pnpm exits.
       if (result === undefined) {
         let survivors = false;
         try {
@@ -127,6 +133,14 @@ export async function runWithDeadline(
         }
         if (survivors) stop(code ?? 1);
       }
+      result ??= code ?? 1;
+      clearTimeout(deadline);
+      // A process outside this group can retain a pipe; draining cannot wait for its exit.
+      if (report && escalation === undefined) pipeDrain = setTimeout(closeDiagnosticPipes, graceMs);
+    });
+    child.once("close", (code) => {
+      closed = true;
+      clearTimeout(pipeDrain);
       result ??= code ?? 1;
       if (escalation === undefined) finish();
     });

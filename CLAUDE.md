@@ -778,6 +778,9 @@ browser test** — most of these rules exist because a test passed while proving
 - **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included**, or it kills
   the child and returns `status: null`, which reads as a broken test. Cut the WAIT, not the retrying
   (`WAITRON_SH_HEALTH_DELAY`). Nothing guards the rule in general.
+- **Stop a finished command's leftover workers on `exit`, not on its output pipes' `close`;
+  bound pipe draining too.** Guard: `scripts/run-with-deadline.test.mjs`. Cost and receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#a-browser-shard-reports-before-its-job-limit).
 - **A `spawnSync` timeout kills only the process it started; the script's own children keep running,
   so each run of a script keeps its files apart from the next.** Cost: lane G's push failed
   `ci-workflow`'s paging case on a killed run's leftover call (A751). Receipt:

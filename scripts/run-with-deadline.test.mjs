@@ -1,8 +1,9 @@
+import { clearTimeout, setTimeout } from "node:timers";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import { URL } from "node:url";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -10,6 +11,92 @@ import * as deadlineRunner from "./run-with-deadline.mjs";
 const { runWithDeadline } = deadlineRunner;
 
 describe("test process deadline", () => {
+  it("finishes when a separate process group retains a diagnostic pipe after the command exits", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-diagnostic-detached-"));
+    const pidFile = join(dir, "pid");
+    let worker;
+    let timer;
+    const done = runWithDeadline(
+      process.execPath,
+      [
+        "-e",
+        `
+      const {spawn}=require("node:child_process");
+      const worker=spawn(process.execPath,["-e", 'require("node:fs").writeFileSync(process.argv[1],String(process.pid));process.send("ready");setInterval(()=>{},1000)', process.argv[1]],{detached:true,stdio:["ignore","inherit","inherit","ipc"]});
+      worker.on("message",()=>process.exit(7));
+    `,
+        pidFile,
+      ],
+      { timeoutMs: 2000, graceMs: 100, diagnostics: true },
+    );
+    try {
+      await expect.poll(() => existsSync(pidFile), { timeout: 1000 }).toBe(true);
+      worker = Number(readFileSync(pidFile, "utf8"));
+      expect(
+        await Promise.race([
+          done,
+          new Promise((resolve) => {
+            timer = setTimeout(() => resolve("still waiting on a pipe"), 3000);
+          }),
+        ]),
+      ).toBe(7);
+      expect(() => process.kill(worker, 0)).not.toThrow();
+    } finally {
+      clearTimeout(timer);
+      if (worker !== undefined) process.kill(worker, "SIGKILL");
+      await done;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([0, 7])(
+    "diagnostic cleanup keeps exit %i when a surviving worker holds its output pipes",
+    async (code) => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-diagnostic-survivor-"));
+      const pidFile = join(dir, "pid");
+      let worker;
+      try {
+        const result = await runWithDeadline(
+          process.execPath,
+          [
+            "-e",
+            `
+        const {spawn}=require("node:child_process");
+        const worker=spawn(process.execPath,["-e", 'process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(process.argv[1],String(process.pid));process.send("ready");setInterval(()=>{},1000)', process.argv[1]],{stdio:["ignore","inherit","inherit","ipc"]});
+        worker.on("message",()=>process.exit(${code}));
+      `,
+            pidFile,
+          ],
+          { timeoutMs: 2000, graceMs: 100, diagnostics: true },
+        );
+        worker = Number(readFileSync(pidFile, "utf8"));
+        expect(result).toBe(code);
+        await expect
+          .poll(
+            () => {
+              try {
+                process.kill(worker, 0);
+                return true;
+              } catch {
+                return false;
+              }
+            },
+            { timeout: 1000 },
+          )
+          .toBe(false);
+      } finally {
+        if (worker !== undefined) {
+          try {
+            process.kill(worker, "SIGKILL");
+          } catch {
+            /* The runner has already stopped this worker. */
+          }
+        }
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("prints a real process snapshot through the diagnostic runner's deadline", async () => {
     const lines = [];
     const error = vi.spyOn(console, "error").mockImplementation((line) => lines.push(line));

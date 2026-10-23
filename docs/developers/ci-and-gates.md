@@ -674,7 +674,9 @@ then runs `ps` with a two-second limit to show process ids, parents, states, ela
 time, CPU, memory and command lines. Assignment does not mean a browser has loaded
 the file. An empty file list may indicate a startup or teardown wait. A failed
 snapshot is reported, and the command still fails with exit 124. The existing
-process-group stop reaches workers and browsers; other jobs' groups are not signalled.
+stop signals only the launched POSIX process group. After the command exits, cleanup
+preserves its exit code even if a worker holds a diagnostic pipe open. Pipe draining
+is bounded by the same grace period when a process outside the group retains it.
 
 Run `pnpm exec vitest run scripts/run-with-deadline.test.mjs
 scripts/ci-workflow.test.mjs scripts/root-scope-consumers.test.mjs`. The diagnostic
@@ -683,6 +685,13 @@ the child and ignores SIGTERM. With a one-second test limit it exits 124, names 
 the unfinished file and includes the still-running child in its process snapshot.
 Healthy exit codes and both output streams are also asserted. These controls do
 not reproduce the unknown CI hang.
+
+The A1027 review reproduced a pipe-lifetime regression: a command exited 0 or 7
+while a worker kept its captured output pipes open, so cleanup placed on `close`
+waited until the deadline and returned 124. New cases observed both failures before
+cleanup moved to `exit`. A separate-group pipe holder then kept the promise pending
+beyond a three-second control; bounding the pipe drain made that case return 7
+without signalling the separate group. The fixture stops its own recorded worker.
 
 On macOS, Node v26.11.1 and Vitest 4.1.12, the same till shard command
 (`pnpm --filter @waitron/till test:shard --shard=2/7`, with the file-progress
