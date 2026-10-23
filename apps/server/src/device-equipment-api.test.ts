@@ -8,10 +8,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   devices,
+  kitchenStations,
   locations,
   pagePrinters,
   printerHolders,
   printers,
+  printJobs,
+  stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -30,11 +33,15 @@ import {
   setProfileReaderList,
   type CardProviderContribution,
 } from "@waitron/payments";
+import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { printingAlertSource } from "./alert-sources.js";
 import {
   BOX_NOTICE_OWNER,
   boxStaffNoticeSource,
   deviceNoticeSources,
+  devicePrinterNoticeSources,
+  documentPrintersOf,
 } from "./box-staff-notices.js";
 import { prepareCardReaderDelete } from "./card-reader-delete.js";
 import { mountDeviceApi, type DeviceApiDeps } from "./device-api.js";
@@ -1592,6 +1599,128 @@ describe("GET /api/device/equipment's notices", () => {
     expect(res.status).toBe(200);
     expect(res.json).not.toHaveProperty("notices");
     expect(res.json).not.toHaveProperty("noticesUnavailable");
+  });
+
+  describe("printer notices", () => {
+    const ago = (ms: number) => new Date(READING.instant.getTime() - ms).toISOString();
+    const MINUTE = 60_000;
+
+    const printerApp = () =>
+      noticeApp([], {
+        deviceSources: devicePrinterNoticeSources({
+          now: () => READING.instant,
+          locationId: venue.cfg.locationId,
+          cacheMs: 0,
+        }),
+      });
+
+    async function job(
+      printerId: string,
+      createdAt: string,
+      over: { status?: "queued" | "done" | "failed"; attempts?: number } = {},
+    ): Promise<string> {
+      const [row] = await suite.db
+        .insert(printJobs)
+        .values({
+          locationId: venue.cfg.locationId,
+          printerId,
+          payload: Uint8Array.from([1]),
+          kind: "document",
+          status: over.status ?? "queued",
+          attempts: over.attempts ?? 0,
+          createdAt,
+        })
+        .returning({ id: printJobs.id });
+      return row!.id;
+    }
+
+    async function kitchenPrinter(): Promise<string> {
+      const id = await seedPrinter("Kitchen");
+      const [station] = await suite.db
+        .insert(kitchenStations)
+        .values({ locationId: venue.cfg.locationId, name: "Kitchen", isDefault: false })
+        .returning({ id: kitchenStations.id });
+      await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId: id });
+      return id;
+    }
+
+    async function noticesOf(app: Hono, cookie: string) {
+      const res = await send(app, cookie, "GET", "/api/device/equipment");
+      expect(res.status).toBe(200);
+      return (res.json as { notices: (StaffNotice & { owner: string })[] }).notices;
+    }
+    const printerNotices = async (app: Hono, cookie: string) =>
+      (await noticesOf(app, cookie)).filter((n) => n.owner === "printers");
+
+    it("a stuck kitchen printer shows on both tills", async () => {
+      const id = await kitchenPrinter();
+      const since = ago(3 * MINUTE);
+      await job(id, since);
+      const app = printerApp();
+      for (const cookie of [venue.cookie, venue.cookie2]) {
+        expect(await noticesOf(app, cookie)).toContainEqual({
+          owner: "printers",
+          key: `printer.jobs_waiting:${id}`,
+          code: "printer.jobs_waiting",
+          severity: "warning",
+          params: { printer: "Kitchen", since },
+        });
+      }
+    });
+
+    it("a kitchen printer that printed a later ticket shows nothing, and the bell still names it", async () => {
+      const id = await kitchenPrinter();
+      await job(id, ago(10 * MINUTE), { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+      const done = await job(id, ago(5 * MINUTE), { status: "done" });
+      const app = printerApp();
+      for (const cookie of [venue.cookie, venue.cookie2]) {
+        expect(await printerNotices(app, cookie)).toEqual([]);
+      }
+      const alerts = await inTx((tx) =>
+        printingAlertSource().read({ tx, now: READING.instant } as never),
+      );
+      expect(alerts.map((alert) => alert.key)).toContain(`printer.jobs_waiting:${id}`);
+
+      await suite.db.delete(printJobs).where(eq(printJobs.id, done));
+      expect((await printerNotices(app, venue.cookie)).map((n) => n.key)).toEqual([
+        `printer.jobs_waiting:${id}`,
+      ]);
+    });
+
+    it("a receipt printer's notice shows only on the till whose receipts go to it, and on one whose slips do", async () => {
+      expect((await choose(venue.cookie, "receipt", { id: fp }, "list")).status).toBe(200);
+      expect((await choose(venue.cookie2, "receipt", { id: pp }, "list")).status).toBe(200);
+      expect(await inTx((tx) => documentPrintersOf(tx, b))).not.toContain(fp);
+      await job(fp, ago(3 * MINUTE));
+      const app = printerApp();
+      const key = `printer.jobs_waiting:${fp}`;
+      expect((await printerNotices(app, venue.cookie)).map((n) => n.key)).toEqual([key]);
+      expect(await printerNotices(app, venue.cookie2)).toEqual([]);
+
+      expect((await choose(venue.cookie2, "payment_slip", { id: fp }, "list")).status).toBe(200);
+      expect((await printerNotices(app, venue.cookie2)).map((n) => n.key)).toEqual([key]);
+    });
+
+    it("a ticket under two minutes old shows nothing", async () => {
+      const id = await kitchenPrinter();
+      await job(id, ago(MINUTE));
+      const app = printerApp();
+      for (const cookie of [venue.cookie, venue.cookie2]) {
+        expect(await printerNotices(app, cookie)).toEqual([]);
+      }
+    });
+
+    it("a failing printer check names only its owner, and the box's notices still come", async () => {
+      const body = await read(
+        noticeApp([answering("box", notice("box-error", "error"))], {
+          deviceSources: () => [
+            { owner: "printers", source: { read: () => Promise.reject(new Error("boom")) } },
+          ],
+        }),
+      );
+      expect(body.noticesUnavailable).toEqual(["printers"]);
+      expect(body.notices.map((n) => n.key)).toContain("box-error");
+    });
   });
 
   it("the box's red comes before a module's red", async () => {

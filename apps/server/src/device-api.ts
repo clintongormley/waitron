@@ -132,6 +132,8 @@ export interface DeviceApiDeps {
   /** What the equipment read tells staff about the box. Absent, it answers no notices. */
   notices?: {
     sources: readonly OwnedStaffNoticeSource[];
+    /** Sources that depend on which device asks; read after `sources`. */
+    deviceSources?: (deviceId: string) => readonly OwnedStaffNoticeSource[];
     clock: Pick<TrustedClock, "now">;
     filing: () => { enabled: boolean };
   };
@@ -403,7 +405,11 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       if (deps.notices === undefined) {
         return c.json({ ...equipment, notices: [], noticesUnavailable: [] });
       }
-      const { sources, clock } = deps.notices;
+      const { clock } = deps.notices;
+      const sources = [
+        ...deps.notices.sources,
+        ...(deps.notices.deviceSources?.(device.deviceId) ?? []),
+      ];
       const reading = clock.now();
       const filing = deps.notices.filing();
       const noticeRead = noticeLog.begin();
