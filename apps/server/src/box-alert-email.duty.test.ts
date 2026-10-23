@@ -82,6 +82,17 @@ function notice(code: string): OwnedStaffNotice {
   return { owner: "fiscal-verifactu", key: code, code, severity: "error", params: {} };
 }
 
+const STOP = {
+  clockAt: "2025-03-14T08:12:00.000Z",
+  offsetMinutes: 60,
+  lastRecordAt: "2026-10-18T21:40:00.000Z",
+  lastRecordOffsetMinutes: 120,
+};
+
+function clockStop(params: typeof STOP): OwnedStaffNotice {
+  return { ...notice("clock.behind_chain"), params };
+}
+
 const turn = () => new Promise((resolve) => setImmediate(resolve));
 
 function held<T>() {
@@ -389,6 +400,65 @@ describe("startBoxEmailDuty", () => {
     await d.tick();
     expect(d.context).not.toHaveBeenCalled();
     expect(d.send).not.toHaveBeenCalled();
+  });
+
+  it("emails each manager once per clock stop, with the stop's two times", async () => {
+    const d = duty();
+    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([
+      {
+        recipient: ANA.email,
+        subject:
+          "No se puede cobrar en Corner Bistro: la hora del equipo es anterior a la última venta",
+        text: expect.stringContaining(
+          "(14/03/2025 09:12) es anterior a la última venta registrada (18/10/2026 23:40)",
+        ),
+      },
+      {
+        recipient: BEN.email,
+        subject:
+          "Payments stopped at Corner Bistro: the box's clock reads earlier than its last sale",
+        text: expect.stringContaining(
+          "(14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40)",
+        ),
+      },
+    ]);
+  });
+
+  it("a clock stop keeps its first notice's times when a later read differs", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
+    await d.tick();
+    d.state.notices = {
+      notices: [clockStop({ ...STOP, clockAt: "2025-03-14T08:13:00.000Z" })],
+      unavailable: [],
+    };
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toHaveLength(2);
+    expect(d.sent()[1]!.text).toContain("(14/03/2025 09:12)");
+    expect(d.sent()[1]!.text).not.toContain("09:13");
+  });
+
+  it("a clock stop that goes and comes back emails again, with the new stop's times", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
+    await d.tick();
+    d.state.notices = { notices: [], unavailable: [] };
+    await d.tick();
+    d.state.notices = {
+      notices: [clockStop({ ...STOP, clockAt: "2025-03-14T08:13:00.000Z" })],
+      unavailable: [],
+    };
+    await d.tick();
+    expect(d.sent()).toHaveLength(2);
+    expect(d.sent()[0]!.text).toContain("(14/03/2025 09:12)");
+    expect(d.sent()[1]!.text).toContain("(14/03/2025 09:13)");
   });
 
   it("a node that is not the primary reads and sends nothing", async () => {

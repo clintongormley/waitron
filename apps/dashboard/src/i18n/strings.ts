@@ -3221,6 +3221,13 @@ export const en = {
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.behind_chain_fix":
     "Connect the box to the internet so it can correct its clock, or call whoever installed it.",
+  "box_status.clock.refused.no_proof": "There is no fresh proof that the box's clock is right.",
+  "box_status.clock.refused.contrary_proof": "Other clocks say the box's clock is wrong.",
+  "box_status.clock.refused.too_far": "The box's clock is more than 24 hours behind the last sale.",
+  "box_status.clock.refused.stepped_back":
+    "Payments were already restarted, and the box's clock has gone back since. Get the clock checked.",
+  "box_status.clock.refused.record_changed": "The last sale changed. Look at the page again.",
+  "box_status.clock.refused.not_stopped": "Payments are not stopped.",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -6514,6 +6521,16 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":
     "Conecta el equipo a internet para que corrija la hora, o llama a quien lo instaló.",
+  "box_status.clock.refused.no_proof":
+    "No hay ninguna prueba reciente de que la hora del equipo sea correcta.",
+  "box_status.clock.refused.contrary_proof": "Otros relojes dicen que la hora del equipo está mal.",
+  "box_status.clock.refused.too_far":
+    "La hora del equipo está más de 24 horas por detrás de la última venta.",
+  "box_status.clock.refused.stepped_back":
+    "Ya se reanudaron los cobros y la hora del equipo ha retrocedido desde entonces. Haz que revisen la hora.",
+  "box_status.clock.refused.record_changed":
+    "La última venta ha cambiado. Vuelve a mirar la página.",
+  "box_status.clock.refused.not_stopped": "Los cobros no están parados.",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",
