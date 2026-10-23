@@ -21,14 +21,14 @@ import { boxStatusRows, clockStopProof, type PartRow } from "./box-status-rows.j
 const LEAST_TO_FREE = 500_000;
 
 /** The reasons a refused restart names that have their own sentence. */
-const RESTART_REFUSALS = new Set([
-  "no_proof",
-  "contrary_proof",
-  "too_far",
-  "stepped_back",
-  "record_changed",
-  "not_stopped",
-]);
+const RESTART_REFUSALS = {
+  no_proof: "box_status.clock.refused.no_proof",
+  contrary_proof: "box_status.clock.refused.contrary_proof",
+  too_far: "box_status.clock.refused.too_far",
+  stepped_back: "box_status.clock.refused.stepped_back",
+  record_changed: "box_status.clock.refused.record_changed",
+  not_stopped: "box_status.clock.refused.not_stopped",
+} as const satisfies Record<string, StringKey>;
 
 type ReadName = "getBoxHealth" | "listAlerts";
 
@@ -267,6 +267,18 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
+  override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    // A dialog whose stop has ended must not reopen by itself, with an old refusal, at the next one.
+    if (!changed.has("health") && !changed.has("alerts")) return;
+    const health = this.health;
+    if (health === null || this.restarting || this.restartRecord === null) return;
+    const { rows } = boxStatusRows(health, this.alerts ?? []);
+    if (rows.some((row) => row.restartRecordId !== null)) return;
+    this.restartOpen = false;
+    this.restartRecord = null;
+    this.restartError = "";
+  }
+
   #openRestart(recordId: string): void {
     this.restartRecord = recordId;
     this.restartError = "";
@@ -295,7 +307,7 @@ export class BoxStatusScreen extends LitElement {
     return html`<wt-dialog
       data-test="restart-dialog"
       .open=${this.restartOpen}
-      ?dismissible=${!this.restarting}
+      .dismissible=${!this.restarting}
       heading=${t("box_status.clock.restart.title")}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
@@ -531,8 +543,8 @@ function restartRefusal(error: unknown): string {
   const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
   return code === "clock.restart_refused" &&
     typeof reason === "string" &&
-    RESTART_REFUSALS.has(reason)
-    ? t(`box_status.clock.refused.${reason}` as StringKey)
+    Object.hasOwn(RESTART_REFUSALS, reason)
+    ? t(RESTART_REFUSALS[reason as keyof typeof RESTART_REFUSALS])
     : codeMessage(code);
 }
 

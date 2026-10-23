@@ -783,6 +783,85 @@ describe("dashboard-box-status-screen's restart of payments", () => {
     expect(footerMessage(el)).toBeNull();
   });
 
+  it("forgets an open dialog once a read shows no stop, so the next stop does not open it", async () => {
+    const restartClockPayments = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "clock.restart_refused", params: { reason: "not_stopped" } })
+      .mockResolvedValue(undefined);
+    const api = stubApi(
+      {
+        restartClockPayments,
+        getBoxHealth: vi
+          .fn()
+          .mockResolvedValueOnce(stopped())
+          .mockResolvedValueOnce(health())
+          .mockResolvedValue(stopped({ recordId: "rec-43" })),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(footerMessage(el)).toBeNull();
+
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-43");
+  });
+
+  it("closes an open dialog when a read shows no stop, with the bell's read failing", async () => {
+    const api = stubApi(
+      {
+        listAlerts: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
+        getBoxHealth: vi.fn().mockResolvedValueOnce(stopped()).mockResolvedValue(health()),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    expect(dialog(el).open).toBe(true);
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped());
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("stays open through a read that still offers the restart", async () => {
+    const api = stubApi({}, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped());
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+  });
+
+  it("stays open on Escape while the request is sent", async () => {
+    const sent = deferred<void>();
+    const api = stubApi({ restartClockPayments: vi.fn().mockReturnValue(sent.promise) }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+    const close = closed(el);
+    sent.resolve();
+    await close;
+    expect(dialog(el).open).toBe(false);
+  });
+
   it("closes on Cancel and on Escape without sending", async () => {
     const api = stubApi({ restartClockPayments: vi.fn() }, stopped());
     const { el } = await mount(api);

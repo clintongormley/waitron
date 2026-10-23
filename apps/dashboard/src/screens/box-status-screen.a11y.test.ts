@@ -142,7 +142,6 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       () => stubApi(TROUBLED, PRINTER_ALERTS),
     ],
     ["a failed read", () => stubApi(new Error("read"))],
-    ["a stop the box offers to restart", () => stubApi(OFFERED)],
     ["a failed alert read", () => stubApi(TROUBLED, new Error("alerts"))],
   ];
   it.each(cases)("renders accessibly with %s", async (_name, api) => {
@@ -152,6 +151,19 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with a stop the box offers to restart", async () => {
+    const { el, host } = await mountWidget<BoxStatusScreen>(
+      "dashboard-box-status-screen",
+      { api: stubApi(OFFERED), canOpen: () => true },
+      theme,
+    );
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=row-clock] [data-test=restart]"),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
