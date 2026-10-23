@@ -1533,7 +1533,9 @@ export function releaseReminder(
   };
 }
 
-/** Each party's reminder interval, from its department ({@link partyFirstZones}); null when none. */
+/**
+ * Each party's reminder interval, from its department ({@link partyFirstZones}); null when none.
+ */
 async function partyReminderMinutes(
   tx: Transaction,
   partyIds: readonly string[],
