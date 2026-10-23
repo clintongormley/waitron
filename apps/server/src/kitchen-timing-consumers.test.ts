@@ -28,7 +28,7 @@ const suite = useVenueDb({
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("effective kitchen timing across consumers", () => {
+describe("each station's own minutes across consumers", () => {
   it.each([
     [1, "fresh", "fresh"],
     [2, "warm", "fresh"],
@@ -37,11 +37,11 @@ describe("effective kitchen timing across consumers", () => {
     [7, "forgotten", "forgotten"],
   ] as const)(
     "classifies age %i by each station's own minutes, including an inactive station's work",
-    async (age, inheritedBand, overriddenBand) => {
+    async (age, kitchenBand, barBand) => {
       const v = await setupPartyVenue(suite.db);
       const now = Date.now();
       vi.spyOn(Date, "now").mockReturnValue(now);
-      const { inherited, overridden } = await inTx(v, async (tx) => {
+      const { kitchenId, barId } = await inTx(v, async (tx) => {
         const [kitchen] = await tx
           .select({ id: kitchenStations.id })
           .from(kitchenStations)
@@ -56,10 +56,10 @@ describe("effective kitchen timing across consumers", () => {
           .set({ warmAfterMinutes: 3, overdueAfterMinutes: 5, forgottenAfterMinutes: 7 })
           .where(eq(kitchenStations.id, bar.id));
         await routeProductTo(tx, v.cfg, v.productId("Caña"), bar.id);
-        return { inherited: kitchen!.id, overridden: bar.id };
+        return { kitchenId: kitchen!.id, barId: bar.id };
       });
-      const first = await v.table("Inherited");
-      const second = await v.table("Overridden");
+      const first = await v.table("Kitchen table");
+      const second = await v.table("Bar table");
       const a = await seat(v, first);
       const b = await seat(v, second);
       await order(v, a.tabId, "Burger");
@@ -69,18 +69,18 @@ describe("effective kitchen timing across consumers", () => {
         await tx
           .update(kitchenStations)
           .set({ active: false })
-          .where(eq(kitchenStations.id, overridden));
+          .where(eq(kitchenStations.id, barId));
         for (const [stationId, billId, band, thresholds] of [
           [
-            inherited,
+            kitchenId,
             a.tabId,
-            inheritedBand,
+            kitchenBand,
             { warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 6 },
           ],
           [
-            overridden,
+            barId,
             b.tabId,
-            overriddenBand,
+            barBand,
             { warmAfterMinutes: 3, overdueAfterMinutes: 5, forgottenAfterMinutes: 7 },
           ],
         ] as const) {
@@ -98,16 +98,16 @@ describe("effective kitchen timing across consumers", () => {
         const overdue = await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId });
         expect.soft(overdue.map((row) => ({ id: row.orderId, band: row.band }))).toEqual(
           [
-            [a.tabId, inheritedBand],
-            [b.tabId, overriddenBand],
+            [a.tabId, kitchenBand],
+            [b.tabId, barBand],
           ]
             .filter(([, band]) => band === "overdue" || band === "forgotten")
             .map(([id, band]) => ({ id, band })),
         );
       });
       for (const [tableId, band] of [
-        [first, inheritedBand],
-        [second, overriddenBand],
+        [first, kitchenBand],
+        [second, barBand],
       ] as const) {
         const row = await floorRow(v, tableId);
         expect.soft(row.timingBand).toBe(band);

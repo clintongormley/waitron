@@ -4508,9 +4508,9 @@ describe("Save follows changes", () => {
   });
   it("a minute typed back in another spelling is no change, and a cleared one is", async () => {
     const server = structuredClone(ticketView);
-    server.stations[0]!.warmAfterMinutes = 5;
+    server.stations[0]!.warmAfterMinutes = 7;
     const form = await openSave("timing", { load: vi.fn().mockResolvedValue(server) });
-    await form.edit("05");
+    await form.edit("07");
     await state(form.button(), false);
     await form.edit("");
     await state(form.button(), true);

@@ -4295,8 +4295,9 @@ it("refuses an imported minute that is not a whole number", async () => {
   transferred.tables.kitchen_stations!.find(
     (row) => row.name === "Fractional imported timing",
   )!.warm_after_minutes = 2.5;
+  const target = venue("B97531868");
   await expect(
-    applyVenue(planVenue(venue("B97531868"), ALL_MODULES), {
+    applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: (tx, result) =>
@@ -4306,6 +4307,19 @@ it("refuses an imported minute that is not a whole number", async () => {
     code: "station.thresholds_invalid",
     params: { field: "warmAfterMinutes", name: "Fractional imported timing" },
   });
+  expect(
+    (
+      await targetSuite.db.execute<{ count: number }>(
+        sql`select count(*) as count from tenants where tax_id = ${target.taxId}`,
+      )
+    ).rows[0]!.count,
+  ).toBe(0);
+  expect(
+    await targetSuite.db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, "Fractional imported timing")),
+  ).toEqual([]);
 });
 
 describe("venue detail edits and configuration boundaries", () => {

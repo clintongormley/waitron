@@ -103,3 +103,13 @@ it("assertImportedStationTimings reads a missing minute as its default and names
       }),
     );
 });
+
+it("assertImportedStationTimings names a station with no text name by an empty name", () => {
+  for (const name of [undefined, null, 7])
+    expect(() => assertImportedStationTimings([{ id: "a", name, warm_after_minutes: 10 }])).toThrow(
+      expect.objectContaining({
+        code: "station.thresholds_invalid",
+        params: { field: "overdueAfterMinutes", name: "" },
+      }),
+    );
+});

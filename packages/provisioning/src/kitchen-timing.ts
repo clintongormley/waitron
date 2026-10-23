@@ -43,13 +43,18 @@ export function assertStationTiming(
   }
 }
 
-function invalidTimingField(timing: StationThresholds): string | undefined {
+function invalidTimingField(
+  timing: Readonly<Record<(typeof fields)[number], unknown>>,
+): string | undefined {
+  const minutes = {} as StationThresholds;
   for (const field of fields) {
     const value = timing[field];
-    if (!Number.isInteger(value) || value < 1 || value > 2_147_483_647) return field;
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 2_147_483_647)
+      return field;
+    minutes[field] = value;
   }
-  if (timing.overdueAfterMinutes <= timing.warmAfterMinutes) return "overdueAfterMinutes";
-  if (timing.forgottenAfterMinutes <= timing.overdueAfterMinutes) return "forgottenAfterMinutes";
+  if (minutes.overdueAfterMinutes <= minutes.warmAfterMinutes) return "overdueAfterMinutes";
+  if (minutes.forgottenAfterMinutes <= minutes.overdueAfterMinutes) return "forgottenAfterMinutes";
   return undefined;
 }
 
@@ -61,7 +66,11 @@ const columns = {
 
 /** A bundle's station ids are the exporting venue's, so a refusal names the station only. */
 export function assertImportedStationTimings(rows: readonly Record<string, unknown>[]): void {
-  const stations = rows.map((row) => ({ id: String(row.id), name: String(row.name), row }));
+  const stations = rows.map((row) => ({
+    id: String(row.id),
+    name: typeof row.name === "string" ? row.name : "",
+    row,
+  }));
   stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   for (const { name, row } of stations) {
     const timing = {} as Record<(typeof fields)[number], unknown>;
@@ -69,7 +78,7 @@ export function assertImportedStationTimings(rows: readonly Record<string, unkno
       const value = row[columns[field]];
       timing[field] = value === undefined ? DEFAULT_STATION_THRESHOLDS[field] : value;
     }
-    const field = invalidTimingField(timing as unknown as StationThresholds);
+    const field = invalidTimingField(timing);
     if (field !== undefined) throw new AppError("station.thresholds_invalid", { field, name });
   }
 }

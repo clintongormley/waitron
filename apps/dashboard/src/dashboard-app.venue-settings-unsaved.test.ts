@@ -162,6 +162,7 @@ it("the actual Venue details tab keeps a Venue details draft through Keep and re
   await expect.poll(() => selected(app)).toBe("kitchen");
   expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
   await panel.updateComplete;
+  expect(inViewMode(panel)).toBe(true);
   expect(savedStreet(panel)).toBe("Calle Mayor 1");
   expect(input.checkVisibility()).toBe(false);
 });
@@ -181,6 +182,7 @@ it("real history Back waits for a Venue details draft decision and Forward resto
   history.forward();
   await expect.poll(() => selected(app)).toBe("venue-details");
   await panel.updateComplete;
+  expect(inViewMode(panel)).toBe(true);
   expect(savedStreet(panel)).toBe("Calle Mayor 1");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });
@@ -310,6 +312,7 @@ it("a real Venue details draft stays visible through its container tab warning",
   await panel.updateComplete;
   expect(street.isConnected).toBe(false);
   expect(panel.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(inViewMode(panel)).toBe(true);
   expect(
     panel.shadowRoot!.querySelector("[data-test=saved-addressLine1]")!.textContent!.trim(),
   ).toBe("Calle Mayor 1");
