@@ -10,8 +10,11 @@ import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/i
 import {
   MEDIA_MIGRATIONS,
   prepareImage,
+  deleteImage,
   readCurrentImage,
+  readCurrentImageMetadata,
   renderRendition,
+  saveImage,
   uploadImage,
   type PreparedImage,
 } from "@waitron/media";
@@ -20,10 +23,12 @@ import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import * as logoModule from "./receipt-logo.js";
+import * as themeLogoModule from "./theme-logo.js";
 import { mountThemesApi } from "./themes-api.js";
 import { forgetVenueTheme } from "./venue-theme.js";
 
 let managerCookie: string;
+let supervisorCookie: string;
 let A: string;
 let B: string;
 let C: string;
@@ -54,22 +59,21 @@ const suite = useVenueDb({
     await seedTenant(db);
     const images = [await splitPicture(false), await splitPicture(true)];
     images.push(await samplePreparedImage({ width: 40 }));
-    [managerCookie, A, B, C] = await withTransaction(db, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "manager", role: "manager" })
-        .returning({ id: persons.id });
-      const session = await startManagementSession(tx, { personId: person!.id });
+    [managerCookie, supervisorCookie, A, B, C] = await withTransaction(db, async (tx) => {
+      const cookieFor = async (role: "manager" | "supervisor") => {
+        const [person] = await tx
+          .insert(persons)
+          .values({ displayName: role, role })
+          .returning({ id: persons.id });
+        const session = await startManagementSession(tx, { personId: person!.id });
+        return `${MANAGEMENT_COOKIE}=${session.token}`;
+      };
+      const cookies = [await cookieFor("manager"), await cookieFor("supervisor")];
       const names: string[] = [];
       for (const image of images) {
         names.push((await uploadImage(tx, { image, names: { en: "Logo" } })).image.filename);
       }
-      return [`${MANAGEMENT_COOKIE}=${session.token}`, ...names] as [
-        string,
-        string,
-        string,
-        string,
-      ];
+      return [...cookies, ...names] as [string, string, string, string, string];
     });
   },
 });
@@ -100,18 +104,29 @@ function app(): Hono {
   return hono;
 }
 
-const create = (body: unknown) =>
+const create = (body: unknown, cookie = managerCookie) =>
   app().request(PATH, {
     method: "POST",
-    headers: { cookie: managerCookie, "content-type": "application/json" },
+    headers: { cookie, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-const save = (id: string, body: unknown) =>
+const save = (id: string, body: unknown, cookie = managerCookie) =>
   app().request(`${PATH}/${id}`, {
     method: "PUT",
-    headers: { cookie: managerCookie, "content-type": "application/json" },
+    headers: { cookie, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+
+const refusal = (code: string, params: Record<string, unknown> = {}) => ({
+  error: { code, params },
+});
+
+async function themeRows(): Promise<{ id: string; name: string; theme: string }[]> {
+  const { rows } = await suite.db.execute<{ id: string; name: string; theme: string }>(
+    sql`select id, name, theme from custom_themes order by id`,
+  );
+  return rows;
+}
 
 async function storedTheme(id: string): Promise<Record<string, unknown>> {
   const rows = await suite.db.execute<{ theme: string }>(
@@ -198,5 +213,166 @@ describe("a theme's logo dots", () => {
     expect(absent.status).toBe(200);
     expect(await storedTheme(second.id)).toEqual(LEMON);
     expect(draw).toHaveBeenCalledTimes(1);
+  });
+});
+
+const ABSENT = `${"ab".repeat(32)}.webp`;
+
+async function reframe(filename: string, zoom: number): Promise<unknown> {
+  const current = await withTransaction(suite.db, (tx) => readCurrentImage(tx, filename));
+  const rasters = await logoModule.drawLogoRasters(
+    await renderRendition(current!.bytes, "display", { x: 5000, y: 5000, zoom }),
+  );
+  await withTransaction(suite.db, (tx) =>
+    saveImage(
+      tx,
+      current!.imageId,
+      {
+        names: { en: "Logo" },
+        expectedRevision: current!.revision,
+        framing: { x: 5000, y: 5000, zoom },
+      },
+      null,
+      rasters,
+      "en",
+    ),
+  );
+  return JSON.parse(JSON.stringify(rasters));
+}
+
+async function revisionOf(filename: string): Promise<number> {
+  const image = await withTransaction(suite.db, (tx) => readCurrentImageMetadata(tx, filename));
+  return image!.revision;
+}
+
+describe("refusals", () => {
+  it("refuses a logo naming no library image, and never draws", async () => {
+    const { id } = await createdWithLogo();
+    const before = await themeRows();
+    const draw = vi.spyOn(logoModule, "drawLogoRasters");
+    for (const [logo, field] of [
+      [{ light: "logo.png" }, "logo.light"],
+      [{ light: ABSENT }, "logo.light"],
+      [{ light: "" }, "logo.light"],
+      [{ light: A, dark: ABSENT }, "logo.dark"],
+      [{ light: A, dark: "logo.png" }, "logo.dark"],
+    ] as const) {
+      const res = await save(id, { theme: { ...LEMON, logo } });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(
+        refusal("theme.invalid", { field, reason: "image_not_found" }),
+      );
+    }
+    const res = await create({ name: "Lime", theme: { ...LEMON, logo: { light: ABSENT } } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      refusal("theme.invalid", { field: "logo.light", reason: "image_not_found" }),
+    );
+    expect(draw).not.toHaveBeenCalled();
+    expect(await themeRows()).toEqual(before);
+  });
+
+  it("refuses a version for dark screens without a main logo", async () => {
+    const draw = vi.spyOn(logoModule, "drawLogoRasters");
+    const res = await create({ name: "Lime", theme: { ...LEMON, logo: { dark: B } } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      refusal("theme.invalid", { field: "logo.dark", reason: "dark_without_light" }),
+    );
+    expect(draw).not.toHaveBeenCalled();
+    expect(await themeRows()).toEqual([]);
+  });
+
+  it("a supervisor is refused before anything is read or drawn", async () => {
+    const { id } = await createdWithLogo();
+    const before = await themeRows();
+    const draw = vi.spyOn(logoModule, "drawLogoRasters");
+    const theme = { ...LEMON, logo: { light: B } };
+    for (const res of [
+      await create({ name: "Lime", theme }, supervisorCookie),
+      await save(id, { theme }, supervisorCookie),
+    ]) {
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(
+        refusal("authorization.not_permitted", { permission: "layout.configure" }),
+      );
+    }
+    const unknown = await save("no-such-theme", { theme });
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toEqual(refusal("theme.not_found"));
+    const reserved = await create({ name: "Waitron", theme });
+    expect(reserved.status).toBe(400);
+    expect(await reserved.json()).toEqual(
+      refusal("theme.invalid", { field: "name", reason: "reserved" }),
+    );
+    expect(draw).not.toHaveBeenCalled();
+    expect(await themeRows()).toEqual(before);
+  });
+
+  it("refuses a photo changed while its dots were drawn", async () => {
+    const imageId = (await withTransaction(suite.db, (tx) => readCurrentImageMetadata(tx, A)))!
+      .imageId;
+    const draw = logoModule.drawLogoRasters;
+    let reframed = false;
+    vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
+      if (!reframed) {
+        reframed = true;
+        await reframe(A, 120);
+      }
+      return draw(bytes);
+    });
+    const res = await create({ name: "Lemon", theme: { ...LEMON, logo: { light: A } } });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual(refusal("image.changed", { imageId }));
+    expect(reframed).toBe(true);
+    expect(await themeRows()).toEqual([]);
+  });
+
+  it("a kept-dots save refuses a reframe queued between its read and its write", async () => {
+    const first = await create({ name: "Lemon", theme: { ...LEMON, logo: { light: A } } });
+    const { id, choices } = (await first.json()) as { id: string; choices: ThemeChoices };
+    const imageId = (await withTransaction(suite.db, (tx) => readCurrentImageMetadata(tx, A)))!
+      .imageId;
+    const real = themeLogoModule.printedLogoFor;
+    let fresh: unknown;
+    vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
+      const kept = await real(snapshot);
+      fresh = await reframe(A, 130);
+      return kept;
+    });
+    const revision = await revisionOf(A);
+    const res = await save(id, {
+      theme: { ...LEMON, brandColor: "#1e5b3a", logo: { light: A } },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual(refusal("image.changed", { imageId }));
+    expect(await revisionOf(A)).toBe(revision + 1);
+    const stored = await storedTheme(id);
+    expect({ ...stored, printedLogo: undefined }).toEqual({ ...choices, printedLogo: undefined });
+    expect(stored.printedLogo).toEqual(fresh);
+  });
+
+  it("an image deleted between the read and the write is not found", async () => {
+    const dark = await withTransaction(suite.db, async (tx) =>
+      uploadImage(tx, { image: await samplePreparedImage({ width: 41 }), names: { en: "Dark" } }),
+    );
+    const first = await create({ name: "Lemon", theme: { ...LEMON, logo: { light: A } } });
+    const { id } = (await first.json()) as { id: string };
+    const before = await themeRows();
+    const real = themeLogoModule.printedLogoFor;
+    vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
+      const dots = await real(snapshot);
+      const result = await withTransaction(suite.db, (tx) => deleteImage(tx, dark.image.id));
+      expect(result.deleted).toBe(true);
+      return dots;
+    });
+    const res = await save(id, {
+      theme: { ...LEMON, logo: { light: A, dark: dark.image.filename } },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      refusal("theme.invalid", { field: "logo.dark", reason: "image_not_found" }),
+    );
+    expect(await themeRows()).toEqual(before);
   });
 });

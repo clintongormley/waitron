@@ -25,7 +25,7 @@ import { AppError } from "@waitron/shared";
 import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/ui-core/theme";
 import type { Logger } from "./logger.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
-import { printedLogoFor, snapshotThemeLogo } from "./theme-logo.js";
+import { printedLogoFor, recheckThemeLogo, snapshotThemeLogo } from "./theme-logo.js";
 import { venueThemeAnswer } from "./venue-theme.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -37,6 +37,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "theme.invalid": 400,
   "theme.name_taken": 409,
   "theme.not_found": 404,
+  "image.changed": 409,
 };
 
 const run = createErrorBoundary(STATUS, "themes.failed");
@@ -89,14 +90,19 @@ async function saveWithLogo<T>(
   ) => Promise<{ choices: ThemeChoices; keptPrintedLogo: ReceiptLogoRasters | null }>,
   write: (tx: Transaction, printedLogo: ReceiptLogoRasters) => Promise<T>,
 ): Promise<T> {
-  const snapshot = await withTransaction(db, async (tx) => {
+  const { logo, snapshot } = await withTransaction(db, async (tx) => {
     const { choices, keptPrintedLogo } = await prepare(tx);
-    return snapshotThemeLogo(tx, choices.logo!, keptPrintedLogo);
+    const logo = choices.logo!;
+    return { logo, snapshot: await snapshotThemeLogo(tx, logo, keptPrintedLogo) };
   });
   // A commented split (D4): sharp must not run holding the write lock; the image's revision is
   // checked again in the write.
   const printedLogo = await printedLogoFor(snapshot);
-  return withTransaction(db, (tx) => write(tx, printedLogo));
+  return withTransaction(db, async (tx) => {
+    const stored = await write(tx, printedLogo);
+    await recheckThemeLogo(tx, logo, snapshot);
+    return stored;
+  });
 }
 
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
