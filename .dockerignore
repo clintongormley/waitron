@@ -1,6 +1,3 @@
-# Build context for deploy/Dockerfile. The build stage installs the workspace itself, so anything
-# generated on the host is both useless and wrong here: host node_modules carry darwin/arm64
-# binaries (esbuild, pglite) that a linux image cannot run.
 node_modules
 **/node_modules
 dist
