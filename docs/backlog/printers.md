@@ -25,6 +25,14 @@ only after that contract and the overlapping paths are released. Full invoice re
 for an already-issued simplified sale remains A556's separate fiscal work, with public F1/F3
 gated. The [design's dated precedence](../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
 preserves all earlier proposals and static boards as history.
+
+It specifies proposed durable print
+and Invoice-setting request identities, local storage, retention, migration boundaries and
+independently checked tasks. Preserve sale-location/permission checks and the
+shared original/copy guard.
+
+[Historical M boards](mockups/a790-document-and-printer-choice/revision-m-agreed/README.md).
+
 ## Show a failed automatic invoice copy to staff
 
 Found in A366 slice 7 Part A's two run-it reviews. The plan keeps optional document failures
@@ -516,6 +524,9 @@ The earlier malformed-JSON speculation is retired by the bounded-reader case in
 `{}`, `getPrintedReceipt` returns `{ receipt: {}, logo: null }`, and `getStoredLogoRasters`
 returns `null`. This checks those readers, not every sale path.
 
+A841's design adds the venue's logo as a second kind of logo use that only the app keeps from
+deletion (its section 8a).
+
 ## A change is refused while an open order at the location holds a line
 
 - **A change is refused while an open order at the location holds a line**
@@ -538,6 +549,107 @@ returns `null`. This checks those readers, not every sale path.
   while half the row stands empty; and the till's option picker, 1024px wide on a 1280px screen,
   puts each price far from its name (which adds to the "prices are not a column" item in the till
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
+
+## A drawer kick for a USB printer that is not connected waits with no expiry
+
+- **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
+  the printer reappears, so the drawer can open long after the sale (`packages/printing/src/runtime.ts`). (A Bluetooth printer's jobs end when
+  it is unpaired or the agent reports no Bluetooth printing; the design's §11 says "USB or Bluetooth".) [Design §11](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
+
+## Loose ends left by #367
+
+- **Loose ends left by #367.**
+  - Follow-up (ruling C): the preview no longer shows the QR link as text for a raster receipt. A
+    possible fix is to carry the link alongside the print job so the preview can still show it as
+    text.
+  - Deferred (ruling H): decide whether to warn when no legal QR dot size exists. Re-check the
+    valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
+
+## Loose ends left by A662 (#1803)
+
+- **Loose ends left by A662 (#1803).**
+  - Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes.
+    With Veri\*Factu always offering a default description, the Departments readiness list is empty
+    either way, so `apps/server/src/boot.departments-readiness.test.ts` no longer sees that flag;
+    only `packages/venue-service/src/routes.test.ts` covers "required, no default".
+
+## Loose ends left by A663 Part 3b (#1827)
+
+- **Loose ends left by A663 Part 3b (#1827).**
+  - The default guests count is worked out twice, kept equal by hand: on the till to fill the
+    field (`defaultReceiptGuests`, `apps/till/src/state/receipt-guests.ts`) and on the server when
+    no count is sent (`storableDefault` and `readReceiptGuests`, `apps/server/src/receipt-guests.ts`).
+    A change to one that misses the other shows the waiter one number and stores another.
+  - Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
+    amount does ask. The plan chose this; the owner has not said whether leaving should ask.
+  - The number is `guests` on the wire and in the `sale_receipt_guests` column, but `guestCount` on
+    the seat-a-table route, and Split a table uses `guests` for something else. Free to rename
+    before go-live.
+  - On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
+    (`guestsAttempted` is cleared only on a new payment, `#startAgain`,
+    `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guests` shows only at
+    the bottom: `refusalField` has no `guests` case.
+  - `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
+    shapes only so older tests that pin the exact argument count keep passing; one call per path
+    sends the same request.
+
+## Loose ends left by A661 (#1745)
+
+- **Loose ends left by A661 (#1745).**
+  - The till's payment-time options and a staged A4 choice resolve the device's invoice printer
+    without the sale's location. Both call `resolveInvoicePrinter` with no `at`
+    (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
+    another location is believed refused when the delivery is reserved; untested.
+  - The print queue's Resend does not follow the till's rule for a full invoice's printer. A till
+    refuses to resend an original a print request sent, when that printer is not the till's invoice
+    printer (`receiptPrinterWithdrawn`, `apps/server/src/invoice-delivery-status.ts`). The
+    dashboard's `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does
+    not apply that rule. Decide whether a manager's resend should.
+
+## Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768)
+
+- [The till's on-screen receipt is a second copy of the layout](#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout).
+- [On an A4 full invoice, a caption and its amount can split across pages](#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages).
+- [The A4 item table's header can sit alone at a page foot](#the-a4-item-tables-header-can-sit-alone-at-a-page-foot).
+- [Quantities print with "." whatever the receipt language](#quantities-print-with--whatever-the-receipt-language).
+- Equipment labels draw their double-size heading by hand (Part 1a).
+  `apps/server/src/equipment-label.ts` scales a `drawTextBand` picture itself; `@waitron/printing`
+  now draws double-size lines (`line(…, { double: true })`). Move the heading onto it and check
+  its layout, which uses a different grid.
+- Receipt test tidy-ups (Part 1b). Six receipt test sites repeat the same filter that skips dashed
+  rule lines; give them one shared helper beside `printedLines`
+  (`apps/server/src/testing/decode-ticket.ts`). `receipt-preview-api.test.ts`'s `legal()` and
+  `nif()` can be plain constants.
+
+## A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).
+
+- **A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full
+  comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).**
+  The receipt table (`apps/server/src/receipt-table.ts`) wraps item text longer than the item
+  column — 14 characters on that bill, narrowed by the VAT-rate column, less a 2-character indent
+  for a row under a dish — just as a 100% percentage discount or a long dish name already wraps
+  there. Decide whether a short label should be kept whole. The wrapped text is pinned in
+  `apps/server/src/receipt-ticket.test.ts`, in the case "prints F1 reductions before VAT, at their
+  rate, on '80mm' in 'eu-ES'".
+
+## A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento 100%» whenever every line at its rate was filed at zero (left open by A758-4).
+
+- **A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento
+  100%» whenever every line at its rate was filed at zero (left open by A758-4).** `named` is null
+  when no one adjustment names the row, for instance a dish with two or more comps of its own
+  (`GroupDiscount`, `apps/server/src/receipt-figures.ts`), and the row then falls back to the
+  zero-base flag. A finish-branch probe on 2026-10-21 rendered two €6.00 amounts that took a €12.00
+  dish to zero as one «Descuento 100%» row, though neither amount counts as full by A911's rule.
+  And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
+  only its own part (the A758-4 plan's owner point 3). Owner to confirm.
+
+## Loose ends left by A331 batch 3b (#1415)
+
+- **Loose ends left by A331 batch 3b (#1415).**
+  - A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
+    2026-10-08, for the owner to confirm.
+  - The printer name dialog is titled "Add a printer" when its button says Enable — seen and not
+    changed.
 
 ## Decisions and deliberate limits
 
@@ -708,8 +820,7 @@ construct a friendly computer name from a printer label. See the
 
 ## A sweep in flight keeps connecting after the discovery window closes
 
-- **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
-  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer capability
+- **A sweep in flight keeps connecting after the discovery window closes**. Pass the deadline through `Host.scan`. The office-printer capability
   queries that follow the scan have no deadline either: at most eight at a time, each up to
   1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
 - **The office-printer check and the check of addresses typed into the dashboard still run inside
