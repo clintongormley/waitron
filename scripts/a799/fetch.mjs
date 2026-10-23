@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { Buffer } from "node:buffer";
 import { setTimeout, clearTimeout } from "node:timers";
 import { TextDecoder } from "node:util";
@@ -272,7 +273,7 @@ export async function fetchInputs(cells, deps) {
   const controller = new globalThis.AbortController();
   let timer;
   let signal = controller.signal;
-  let hardDeadline = Date.now() + 1000;
+  let hardDeadline = performance.now() + 1000;
   const disposing = new Map();
   function remember(code, detail) {
     const rank = (value) =>
@@ -294,7 +295,7 @@ export async function fetchInputs(cells, deps) {
     const cleanup = new globalThis.AbortController();
     const remaining = Math.max(
       0,
-      Math.min(deps.deadlines?.cleanupMs || 1000, hardDeadline - Date.now()),
+      Math.min(deps.deadlines?.cleanupMs || 1000, hardDeadline - performance.now()),
     );
     const timeout = setTimeout(() => cleanup.abort(), remaining);
     try {
@@ -323,7 +324,7 @@ export async function fetchInputs(cells, deps) {
       deps.retrySchedule.some((n) => !Number.isSafeInteger(n) || n < 0)
     )
       fail("fetch.index", "explicit finite budgets required");
-    hardDeadline = Date.now() + deps.deadlines.totalMs + deps.deadlines.cleanupMs;
+    hardDeadline = performance.now() + deps.deadlines.totalMs + deps.deadlines.cleanupMs;
     try {
       signal = deps.signal
         ? globalThis.AbortSignal.any([deps.signal, controller.signal])

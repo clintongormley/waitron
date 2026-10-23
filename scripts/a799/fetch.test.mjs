@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { setTimeout } from "node:timers";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as fetcher from "./fetch.mjs";
 import { selectCells } from "./selection.mjs";
 
@@ -1070,4 +1070,31 @@ it("classifies a reset inside release metadata as retryable", async () => {
     },
   });
   await expect(download(s)).rejects.toThrow("fetch.transient");
+});
+
+it("keeps one cleanup allowance when the wall clock moves backwards", async () => {
+  const s = setup();
+  s.deps.deadlines = { totalMs: 40, cleanupMs: 40 };
+  const scratch = s.deps.scratch;
+  s.deps.scratch = async (...args) => {
+    const r = await scratch(...args);
+    r.dispose = () => new Promise(() => {});
+    return r;
+  };
+  s.deps.transport.close = () => new Promise(() => {});
+  s.deps.credentialScope.close = () => new Promise(() => {});
+  let wall = 1000000;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => (wall -= 1000));
+  const start = globalThis.performance.now();
+  let error;
+  try {
+    await run(s);
+  } catch (e) {
+    error = e;
+  } finally {
+    clock.mockRestore();
+  }
+  expect(error).toBeInstanceOf(Error);
+  expect(globalThis.performance.now() - start).toBeLessThan(180);
+  expect(error.message).toMatch(/^fetch.cleanup:/);
 });

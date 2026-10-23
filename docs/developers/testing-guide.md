@@ -2847,3 +2847,9 @@ the original exited with status 13 during its unresolved top-level await. A
 separate shared-reserve case caught two overlapping disposals and cleanup steps
 that each consumed a fresh allowance. These are synthetic adapter tests; future
 real adapters must still qualify cancellation, handle identity and custody.
+
+
+A final cut-3 probe moved only the JavaScript wall clock backwards while cleanup
+waited. The Date-based allowance then renewed across steps; the regression now
+checks elapsed time with a monotonic clock. Budget arithmetic uses
+`node:perf_hooks` performance time, independently of captured record timestamps.

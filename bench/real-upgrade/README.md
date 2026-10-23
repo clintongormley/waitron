@@ -316,7 +316,7 @@ resources only after the trusted transfer or final consumer finishes. Serialized
 `VerifiedInputs` deliberately carries no functions or credentials. No real
 transfer/release adapter is installed here.
 
-The outer time bound is `totalMs + cleanupMs`; every cleanup step uses only the
+The outer elapsed-time bound uses the monotonic clock and is `totalMs + cleanupMs`; every cleanup step uses only the
 remaining allowance. Unresolved cleanup takes precedence over credential residue,
 which takes precedence over cancellation/deadline reporting. A malformed parent
 signal is refused inside the closure boundary.
