@@ -6,6 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
+  AuthorityTimeSample,
   ClockBehindLatestRecord,
   ClockProvedWrong,
   ClockRestart,
@@ -53,6 +54,7 @@ import {
   noteClockProvedWrong,
   restartAfterClockStop,
 } from "./clock-stop-restart.js";
+import { readAuthorityTime } from "./authority-time.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
@@ -205,6 +207,10 @@ export class VerifactuBackend implements FiscalBackend {
     input: ClockProvedWrong,
   ): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
     return noteClockProvedWrong(tx, input);
+  }
+
+  readAuthorityTime(): Promise<AuthorityTimeSample | null> {
+    return readAuthorityTime(this.deploymentEnvironment);
   }
 
   /**

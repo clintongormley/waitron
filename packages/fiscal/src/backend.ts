@@ -297,6 +297,10 @@ export interface FiscalBackend {
     input: ClockProvedWrong,
   ): Promise<{ recorded: string[]; unused: string[]; held: string[] }>;
 
+  /** One reading of the tax authority's time; null when it could not be read. Absent when the
+   * regime has no authority whose time it can read. */
+  readAuthorityTime?(): Promise<AuthorityTimeSample | null>;
+
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 
   /**
