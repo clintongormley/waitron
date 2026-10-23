@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   CATEGORY_PALETTE,
   baseStyles,
@@ -19,6 +20,7 @@ import {
   BUILT_IN_THEME_NAME,
   CORNER_CHOICES,
   MODES,
+  THEME_COLOURS,
   WAITRON_CHOICES,
   canFixAll,
   fixAll,
@@ -38,16 +40,23 @@ import { fixLineStyles } from "../widgets/fix-line-styles.js";
 import { repaintVenueTheme } from "../widgets/venue-theme-repaint.js";
 import {
   codeInvalid,
+  invalidHandCodes,
   isWaitronLook,
   openDraft,
   pickBrand,
   sameDraft,
   setBackground,
   setCorners,
+  setHand,
   typeCode,
+  typeHandCode,
+  useWorkedOut,
   waitronLook,
+  type HandField,
   type LookDraft,
 } from "../widgets/look-draft.js";
+import "../widgets/theme-advanced.js";
+import type { HandAction } from "../widgets/theme-advanced.js";
 import { copyName } from "../widgets/theme-names.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import "../widgets/hard-to-read-dialog.js";
@@ -90,6 +99,14 @@ function brandRow(view: ThemeView | undefined, choices: ThemeChoices): TemplateR
       : [html` · ${t(`appearance.saved_fix_${mode}`)} ${chip(shade)}${shade}`];
   });
   return html`${chip(brandColor)}${value}${fixes}`;
+}
+
+const HAND_FIELDS: ReadonlySet<unknown> = new Set(
+  MODES.flatMap((mode) => THEME_COLOURS.map((key): HandField => `handSet.${mode}.${key}`)),
+);
+
+function isHandField(field: unknown): field is HandField {
+  return HAND_FIELDS.has(field);
 }
 
 function handRow(choices: ThemeChoices): string {
@@ -181,6 +198,7 @@ export class LookCard extends LitElement {
   @state() private draft?: LookDraft;
   @state() private submitted = false;
   @state() private refusedCode = "";
+  @state() private refusedHand: HandField | "" = "";
   @state() private actionError = "";
   @state() private submitting = false;
   @state() private asking = false;
@@ -192,6 +210,8 @@ export class LookCard extends LitElement {
   #leave?: LeaveCoordinator;
   #generation = 0;
   #target: Target = "save";
+  /** Keys the Advanced section, so every edit session starts with it closed. */
+  #session = 0;
 
   constructor() {
     super();
@@ -268,8 +288,10 @@ export class LookCard extends LitElement {
     this.#editing = editing;
     this.#expected = openDraft(choices);
     this.draft = this.#expected;
+    this.#session++;
     this.submitted = false;
     this.refusedCode = "";
+    this.refusedHand = "";
     this.actionError = "";
     this.asking = false;
     this.#registerDraft();
@@ -340,6 +362,7 @@ export class LookCard extends LitElement {
     this.#editing = undefined;
     this.submitted = false;
     this.refusedCode = "";
+    this.refusedHand = "";
     this.actionError = "";
     this.asking = false;
     if (wasEditing) this.#announce(null);
@@ -365,6 +388,29 @@ export class LookCard extends LitElement {
     if (codeChanged) this.refusedCode = "";
     this.actionError = "";
     this.#scope?.changed();
+  }
+  #hand(action: HandAction): void {
+    this.#change((d) => {
+      switch (action.kind) {
+        case "pick":
+          return setHand(d, action.mode, action.key, action.colour);
+        case "type":
+          return typeHandCode(d, action.mode, action.key, action.text);
+        case "worked-out":
+          return useWorkedOut(d, action.mode, action.key);
+        default:
+          return d;
+      }
+    });
+    this.refusedHand = "";
+  }
+  #handErrors(draft: LookDraft): Partial<Record<HandField, string>> {
+    const errors: Partial<Record<HandField, string>> = {};
+    if (this.submitted) {
+      for (const field of invalidHandCodes(draft)) errors[field] = t("appearance.bad_code");
+    }
+    if (this.refusedHand) errors[this.refusedHand] = t("appearance.bad_code");
+    return errors;
   }
   #setBrandFix(mode: Mode, taken: boolean): void {
     this.#change((d) => {
@@ -440,8 +486,9 @@ export class LookCard extends LitElement {
     this.#target = target;
     this.submitted = true;
     this.refusedCode = "";
+    this.refusedHand = "";
     this.actionError = "";
-    if (codeInvalid(draft)) {
+    if (codeInvalid(draft) || invalidHandCodes(draft).length > 0) {
       await this.#focusInvalid();
       return;
     }
@@ -478,6 +525,9 @@ export class LookCard extends LitElement {
       this.submitting = false;
       if (code === "theme.invalid" && field === "brandColor") {
         this.refusedCode = t("appearance.bad_code");
+        await this.#focusInvalid();
+      } else if (code === "theme.invalid" && isHandField(field)) {
+        this.refusedHand = field;
         await this.#focusInvalid();
       } else this.actionError = codeMessage(code);
     } finally {
@@ -537,9 +587,12 @@ export class LookCard extends LitElement {
     const editing = this.#editing!;
     const inUse = this.#inUse(editing);
     const name = this.#name(editing);
-    const badCode = this.submitted && codeInvalid(draft);
-    const codeError = badCode ? t("appearance.bad_code") : this.refusedCode;
-    const message = codeError ? t("form.fix_fields") : this.actionError;
+    const badForm = this.submitted && (codeInvalid(draft) || invalidHandCodes(draft).length > 0);
+    const codeError =
+      this.submitted && codeInvalid(draft) ? t("appearance.bad_code") : this.refusedCode;
+    const handErrors = this.#handErrors(draft);
+    const message =
+      codeError || Object.keys(handErrors).length > 0 ? t("form.fix_fields") : this.actionError;
     const saveAction = saveActionState(this.#scope);
     const busy = this.submitting;
     return html`<p class="editing-line" data-test="editing-line">
@@ -607,6 +660,19 @@ export class LookCard extends LitElement {
           </div>
           <dashboard-theme-preview .theme=${this.#derived!} .name=${name}></dashboard-theme-preview>
         </div>
+        ${keyed(
+          this.#session,
+          html`<dashboard-theme-advanced
+            .draft=${draft}
+            .derived=${this.#derived!}
+            .errors=${handErrors}
+            ?busy=${busy}
+            @hand-change=${(event: CustomEvent<HandAction>) => {
+              event.stopPropagation();
+              this.#hand(event.detail);
+            }}
+          ></dashboard-theme-advanced>`,
+        )}
         ${this.#fixAllLine(busy)}
         <div class="buttons">
           <wt-button
@@ -624,7 +690,7 @@ export class LookCard extends LitElement {
                     slot="secondary"
                     data-test="save-as-new"
                     variant="secondary"
-                    ?disabled=${busy || badCode}
+                    ?disabled=${busy || badForm}
                     @click=${() => void this.#save("save-as-new")}
                     >${t("appearance.save_as_new")}</wt-button
                   >`
@@ -641,7 +707,7 @@ export class LookCard extends LitElement {
               data-test="save"
               variant=${saveAction.variant}
               ?loading=${busy}
-              ?disabled=${saveAction.unchanged || busy || badCode}
+              ?disabled=${saveAction.unchanged || busy || badForm}
               @click=${() => void this.#save("save")}
               >${t("action.save")}</wt-button
             >
