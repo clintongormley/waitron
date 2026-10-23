@@ -19,8 +19,8 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
     "timing invalid",
     "colour refused",
     "colour popup",
-    "moved slips as the venue, venue off",
-    "moved slips own choice",
+    "moved slips print",
+    "moved slips don't print",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed(
@@ -33,9 +33,9 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       colour: "orange",
       active: true,
       showsRestOfOrder: true,
-      printMovedSlips: state !== "moved slips own choice",
-      ticketGrouping: "combined",
-      printHeldWork: false,
+      printMovedSlips: state !== "moved slips don't print",
+      ticketGrouping: state === "moved slips don't print" ? "separate" : "combined",
+      printHeldWork: state === "moved slips don't print",
       printerIds: ["epson"],
       warmAfterMinutes: 3,
       overdueAfterMinutes: 5,
@@ -113,10 +113,19 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       const moved = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
         "wt-combobox[name=printMovedSlips]",
       )!;
-      expect(moved.value).toBe(state === "moved slips own choice" ? "dont-print" : "venue");
-      expect(moved.options[0]!.label).toBe(
-        state === "moved slips own choice" ? "Venue setting: Print" : "Venue setting: Don't print",
-      );
+      const printing = state === "moved slips print";
+      expect(moved.value).toBe(printing ? "print" : "dont-print");
+      expect(moved.options[0]!.label).toBe("Print");
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "wt-combobox[name=ticketGrouping]",
+        )!.value,
+      ).toBe(printing ? "combined" : "separate");
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "wt-switch[name=printHeldWork]",
+        )!.checked,
+      ).toBe(!printing);
     }
     for (const name of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"]) {
       await timing(name).updateComplete;

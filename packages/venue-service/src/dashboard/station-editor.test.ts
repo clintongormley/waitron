@@ -767,11 +767,7 @@ it.each([390, 1280])("A725 groups late minutes on one row at %ipx", async (width
       "On this station's tickets and kitchen screen",
     );
     expect(movedField(el).label).toBe("Print a slip when sent dishes move table");
-    expect(movedField(el).options.map(({ label }) => label)).toEqual([
-      "Venue setting: Print",
-      "Print",
-      "Don't print",
-    ]);
+    expect(movedField(el).options.map(({ label }) => label)).toEqual(["Print", "Don't print"]);
   } finally {
     await page.viewport(previous[0]!, previous[1]!);
   }
