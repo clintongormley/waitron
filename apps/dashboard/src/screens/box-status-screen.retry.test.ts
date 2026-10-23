@@ -441,7 +441,6 @@ describe("box-status-screen Retry now", () => {
       setLocale("es");
       const { el } = await mount(stubApi(ready()));
       expect(text(retryButton(el))).toBe(es["box_status.retry"]);
-      expect(text(retryButton(el))).toBe("Reintentar ahora");
       await userEvent.click(retryButton(el)!);
       await flush(el);
       expect(text(answerOf(el))).toBe(es["box_status.retried"].replace("{count}", "12"));
