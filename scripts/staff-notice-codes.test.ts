@@ -46,7 +46,12 @@ function wordedAsUnknown(codes: readonly string[]): string[] {
       LOCALES.some((locale) => {
         setLocale(locale);
         const unknown = staffNoticeText({ code: "", params: {} }).main;
-        return staffNoticeText({ code, params: { count: 2, held: 0 } }).main === unknown;
+        return (
+          staffNoticeText({
+            code,
+            params: { count: 2, held: 0, printer: "Kitchen", since: "2026-10-23T19:16:00.000Z" },
+          }).main === unknown
+        );
       }),
     );
   } finally {
