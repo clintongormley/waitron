@@ -98,7 +98,7 @@ describe("collectBoxHealth's outbox", () => {
   it("degrades only the outbox when its read throws", async () => {
     const log = vi.fn();
     const outbox = outboxReader(async () => {
-      throw new AppError("server.internal", {});
+      throw new AppError("storage.disk_full", {});
     });
     const without = await collectBoxHealth(suite.db, stubReaders());
     const health = await collectBoxHealth(suite.db, stubReaders({ outbox }, true, log));
@@ -108,7 +108,7 @@ describe("collectBoxHealth's outbox", () => {
       noticesUnavailable: [...without.noticesUnavailable, "fiscal-outbox"],
     });
     expect(log).toHaveBeenCalledWith("error", "box_health.outbox_failed", {
-      errorCode: "server.internal",
+      errorCode: "storage.disk_full",
     });
   });
 
