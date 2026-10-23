@@ -5,7 +5,7 @@ import {
   parseStationTimingPatch,
 } from "./kitchen-timing.js";
 
-const defaults = { warmAfterMinutes: 3, overdueAfterMinutes: 7, forgottenAfterMinutes: 12 };
+const stored = { warmAfterMinutes: 3, overdueAfterMinutes: 7, forgottenAfterMinutes: 12 };
 const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 
 it("retains omitted fields and refuses null", () => {
@@ -27,7 +27,7 @@ it.each(
   fields.flatMap((field) =>
     [0, -1, 1.5, "3", [], true, NaN, Infinity, 2_147_483_648].map((value) => ({ field, value })),
   ),
-)("refuses an invalid $field override: $value", ({ field, value }) => {
+)("refuses an invalid $field minute: $value", ({ field, value }) => {
   expect(() => parseStationTimingPatch({ [field]: value })).toThrow(
     expect.objectContaining({ code: "management.request_invalid", params: { field } }),
   );
@@ -35,32 +35,30 @@ it.each(
 
 it("names the station and the field an edit puts out of order over its stored minutes", () => {
   expect(() =>
-    assertStationTiming({ warmAfterMinutes: 7 }, defaults, { id: "station", name: "Grill" }),
+    assertStationTiming({ warmAfterMinutes: 7 }, stored, { id: "station", name: "Grill" }),
   ).toThrow(
     expect.objectContaining({
       code: "station.thresholds_invalid",
       params: { field: "overdueAfterMinutes", stationId: "station", name: "Grill" },
     }),
   );
-  expect(() =>
-    assertStationTiming({ overdueAfterMinutes: 12 }, defaults, { name: "Grill" }),
-  ).toThrow(
+  expect(() => assertStationTiming({ overdueAfterMinutes: 12 }, stored, { name: "Grill" })).toThrow(
     expect.objectContaining({
       code: "station.thresholds_invalid",
       params: { field: "forgottenAfterMinutes", name: "Grill" },
     }),
   );
-  expect(() => assertStationTiming({ warmAfterMinutes: 0 }, defaults, { name: "Grill" })).toThrow(
+  expect(() => assertStationTiming({ warmAfterMinutes: 0 }, stored, { name: "Grill" })).toThrow(
     expect.objectContaining({
       code: "station.thresholds_invalid",
       params: { field: "warmAfterMinutes", name: "Grill" },
     }),
   );
   expect(() =>
-    assertStationTiming({ warmAfterMinutes: undefined }, defaults, { name: "Grill" }),
+    assertStationTiming({ warmAfterMinutes: undefined }, stored, { name: "Grill" }),
   ).not.toThrow();
   expect(() =>
-    assertStationTiming({ warmAfterMinutes: 2, overdueAfterMinutes: 4 }, defaults, {
+    assertStationTiming({ warmAfterMinutes: 2, overdueAfterMinutes: 4 }, stored, {
       name: "Grill",
     }),
   ).not.toThrow();

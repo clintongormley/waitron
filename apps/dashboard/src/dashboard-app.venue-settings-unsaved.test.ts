@@ -503,9 +503,14 @@ it("the Receipts tab's Cancel protects the appearance before closing", async () 
     const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => warning.open).toBe(true);
     await warning.updateComplete;
+    const closed =
+      decision === "discard"
+        ? new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }))
+        : undefined;
     await userEvent.click(
       page.elementLocator(warning.shadowRoot!.querySelector(`[data-choice=${decision}]`)!),
     );
+    await closed;
     await expect.poll(() => dialog.open).toBe(decision === "keep");
     if (decision === "keep") expect(input.value).toBe("Edited heading");
   }

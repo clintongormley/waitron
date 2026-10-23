@@ -107,7 +107,7 @@ it("keeps Save working after a refusal and disabled while saving", async () => {
   expect((await saveState(el)).disabled).toBe(true);
 });
 
-it("compares a timing as its number: 05 over an override of 5 stays quiet, abc wakes Save, undo quiets", async () => {
+it("compares a timing as its number: 05 over a stored 5 stays quiet, abc wakes Save, undo quiets", async () => {
   const el = await mount();
   const overdue = "wt-input[name=overdueAfterMinutes]";
   await change(el, overdue, { value: "05" });
