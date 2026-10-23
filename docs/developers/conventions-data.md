@@ -2509,10 +2509,12 @@ the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose cloc
 `recordSale` call in `apps/server/src`, outside its tests and `src/testing/`, takes; before the
 reader for a new sale (`payIntegrated`); and on every bill payment, cash included
 (`beginBillPayment`). `refuseWhileClockBehind` (`packages/fiscal-verifactu/src/clock-behind.ts`)
-checks this rule before the clock-behind one, so each check
+checks this rule before the clock-behind one, so each route check
 [the clock-behind section](#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves)
-lists refuses `clock.unusable` under such a clock, refunds and the dashboard's resolutions among
-them, and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
+lists, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
+clock; the refund loops' checks at the start of each pass and `clockStopsRefund` ask
+`clockBehindLatestRecord`, which has no date rule, so under such a clock they hold a refund only
+while the database holds a record; and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
 any record dated before it (`chain.clock-behind.test.ts`). Run 2026-10-23 on a 2001 clock, on
 `provisionBillVenue`'s venue: a tender refund, a bill payment's refund and a bill card payment each
 answered `409 clock.unusable`, and neither refund reached the provider.
@@ -3556,8 +3558,9 @@ the pending replay, and every new refund); `beginSettledTenderRefund`
 (`settlePendingBillRefunds`, `apps/server/src/bill-payments-loop.ts`) ask
 `clockBehindLatestRecord` once at their top and, during the stop, touch no refund row and raise no
 unresolved alert, because a completed refund's time places it in a cash-up window
-(`clock-behind-stop.refunds.test.ts`). A pass that began before the stop is held by the next
-paragraph's check. The pass, `settlePendingBillPayments`, runs its payment half
+(`clock-behind-stop.refunds.test.ts`). A pass that began before the stop still looks refunds up
+and can raise an unresolved alert while the stop is on; the next paragraph's check holds only the
+outcomes it would record. The pass, `settlePendingBillPayments`, runs its payment half
 first and then its refund half; the payment half has no check of its own and keeps running. A
 completion that would file is refused by the append, and the pass then raises
 `payment.bill_settle_failed` for it (plan decision 17; `raiseSettleFailed` in

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentRefunds, sales, tenderRefunds, tenders } from "@waitron/db";
@@ -205,14 +205,14 @@ function steppingClock(fromMs: number) {
 
 /** Runs `step` once the fake provider has answered each `method` call, until the answer is called. */
 function stepAfter(method: "lookupRefund" | "sendRefund", step: () => void): () => void {
-  const card = venue.card as unknown as Record<string, (query: unknown) => Promise<unknown>>;
-  const original = card[method]!.bind(venue.card);
-  card[method] = async (query) => {
+  const card = venue.card as unknown as Record<typeof method, (query: unknown) => Promise<unknown>>;
+  const original = card[method].bind(venue.card);
+  const spy = vi.spyOn(card, method).mockImplementation(async (query) => {
     const answer = await original(query);
     step();
     return answer;
-  };
-  return () => void Reflect.deleteProperty(venue.card, method);
+  });
+  return () => spy.mockRestore();
 }
 
 const loopDeps = (clock: TrustedClock) => ({
