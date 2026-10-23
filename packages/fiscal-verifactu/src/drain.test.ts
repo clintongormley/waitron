@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -8,6 +8,8 @@ import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
+import { SOFTWARE_IDENTITY, type SoftwareIdentity } from "./software-identity.js";
+import { nifWithControlLetter } from "./testing/seed.js";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 import {
   DEFAULT_SKIP_RETRY_MS,
@@ -102,38 +104,50 @@ describe("drain — happy path", () => {
   });
 });
 
+async function sellAndVoid(options: {
+  resolveClient: DrainDeps["resolveClient"];
+  nif?: string;
+  identity?: SoftwareIdentity;
+}): Promise<{ nodeId: string }> {
+  const { locationId, nodeId, seriesId } = await seedTenantWithSif(
+    suite.db,
+    options.nif === undefined ? {} : { nif: options.nif },
+  );
+  // `recordVoid` requires `sale.void`, so a manager's session authorizes it. `id` and
+  // `created_at` are supplied because their defaults are drizzle `$defaultFn`s, which raw SQL
+  // never runs.
+  const { rows: mgr } = await suite.db.execute<{ id: string }>(
+    sql`insert into persons (id, created_at, display_name, pin_hash, role)
+        values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+  );
+  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
+  const voidSession = await withTransaction(suite.db, (tx) =>
+    loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
+  );
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "production",
+    clock: steadyClock,
+    db: suite.db,
+    resolveClient: options.resolveClient,
+    ...(options.identity === undefined ? {} : { identity: options.identity }),
+  });
+  const sale = await withTransaction(suite.db, async (tx) => {
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
+  });
+  await withTransaction(suite.db, async (tx) => {
+    await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
+  });
+  return { nodeId };
+}
+
 /**
  * `toEnvioRegistro`'s anulación branch, end to end through `@waitron/core`'s `recordSale`/
  * `recordVoid`: `seedPendingEnvios` seeds altas only.
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
-    const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
-    // `recordVoid` requires `sale.void`, so a manager's session authorizes it. `id` and
-    // `created_at` are supplied because their defaults are drizzle `$defaultFn`s, which raw SQL
-    // never runs.
-    const { rows: mgr } = await suite.db.execute<{ id: string }>(
-      sql`insert into persons (id, created_at, display_name, pin_hash, role)
-          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
-    );
-    const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
-    const voidSession = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
-    );
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: steadyClock,
-      db: suite.db,
-      resolveClient: staticResolver(aeat.client()),
-    });
-
-    const sale = await withTransaction(suite.db, async (tx) => {
-      return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
-    });
-    await withTransaction(suite.db, async (tx) => {
-      await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
-    });
+    const { nodeId } = await sellAndVoid({ resolveClient: staticResolver(aeat.client()) });
 
     // Both envíos default to the wall-clock insert time, so a minute past it has them due.
     const first = await drain(
@@ -164,6 +178,33 @@ describe("drain — happy path, an anulación row", () => {
     expect(rows.rows).toHaveLength(2);
     expect(rows.rows.every((r) => r.estado === "aceptado")).toBe(true);
     expect(rows.rows.every((r) => r.csv !== null)).toBe(true);
+  });
+});
+
+describe("drain — a cancellation's submission header", () => {
+  it("a cancellation goes out under the taxpayer's name when the software names a producer", async () => {
+    const nif = nifWithControlLetter(30_000_001);
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    // Every `aeat.client()` call builds a new client, so the spy must sit on the one client
+    // shared by the backend and both passes.
+    const client = aeat.client();
+    const submit = vi.spyOn(client, "submit");
+    await sellAndVoid({
+      resolveClient: staticResolver(client),
+      nif,
+      identity: { ...SOFTWARE_IDENTITY, producer: { name: "Producer Person", nif: "12345678Z" } },
+    });
+
+    const first = await drain(drainDeps(staticResolver(client)), new Date(Date.now() + 60_000));
+    expect(first.recordsSubmitted).toBe(1);
+    const second = await drain(drainDeps(staticResolver(client)), first.nextDueAt!);
+    expect(second.recordsSubmitted).toBe(1);
+
+    expect(submit).toHaveBeenCalledTimes(2);
+    expect(submit.mock.calls[1]![0].ObligadoEmision).toEqual({
+      NombreRazon: "Waitron SL",
+      NIF: nif,
+    });
   });
 });
 

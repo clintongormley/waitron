@@ -16,6 +16,8 @@ import {
   saleId as brandSaleId,
 } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
+import { currentSif } from "./registro-sif.js";
+import { SOFTWARE_IDENTITY } from "./software-identity.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -167,6 +169,83 @@ describe("the taxpayer every record is filed as", () => {
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect((error as Error).message).toContain("tenants is empty");
+  });
+});
+
+describe("the software block", () => {
+  async function storedRecord(saleId: string) {
+    const [row] = await suite.db
+      .select({
+        sistemaInformatico: registrosFacturacion.sistemaInformatico,
+        idEmisorFactura: registrosFacturacion.idEmisorFactura,
+        nombreRazonEmisor: registrosFacturacion.nombreRazonEmisor,
+      })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, saleId));
+    return row!;
+  }
+
+  it("files the owner's answers and the build's version", async () => {
+    const { saleId } = await sell();
+    const row = await storedRecord(saleId);
+    expect(row.sistemaInformatico).toMatchObject({
+      NombreSistemaInformatico: "Waitron",
+      Version: "0.0.0-dev",
+      TipoUsoPosibleSoloVerifactu: "S",
+      TipoUsoPosibleMultiOT: "N",
+      IndicadorMultiplesOT: "N",
+      NombreRazon: "Waitron SL",
+      NIF: row.idEmisorFactura,
+    });
+  });
+
+  it("names the producer, and only in the software block", async () => {
+    backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+      identity: {
+        ...SOFTWARE_IDENTITY,
+        onlyVerifactu: "N",
+        multipleTaxpayersPossible: "S",
+        multipleTaxpayersNow: "N",
+        producer: { name: "Producer Person", nif: "12345678Z" },
+      },
+    });
+    const { saleId } = await sell();
+    const row = await storedRecord(saleId);
+    expect(row.sistemaInformatico).toMatchObject({
+      NombreRazon: "Producer Person",
+      NIF: "12345678Z",
+      TipoUsoPosibleSoloVerifactu: "N",
+      TipoUsoPosibleMultiOT: "S",
+      IndicadorMultiplesOT: "N",
+    });
+    const sif = await withTransaction(suite.db, (tx) => currentSif(tx, nodeId));
+    expect(row.idEmisorFactura).toBe(sif.nif);
+    expect(row.idEmisorFactura).not.toBe("12345678Z");
+    expect(row.nombreRazonEmisor).toBe("Waitron SL");
+  });
+
+  it("files several taxpayers now when the software says so", async () => {
+    backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+      identity: {
+        ...SOFTWARE_IDENTITY,
+        multipleTaxpayersPossible: "S",
+        multipleTaxpayersNow: "S",
+      },
+    });
+    const { saleId } = await sell();
+    const row = await storedRecord(saleId);
+    expect(row.sistemaInformatico).toMatchObject({
+      TipoUsoPosibleMultiOT: "S",
+      IndicadorMultiplesOT: "S",
+    });
   });
 });
 

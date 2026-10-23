@@ -324,6 +324,33 @@ describe("the page's language", () => {
   });
 });
 
+describe("the producer the build does not yet name", () => {
+  const code = "sif.producer_unset";
+
+  it("names the missing producer, in each language", async () => {
+    const english = await pageFor(code, undefined, "en-GB");
+    expect(english).toContain(
+      escapeHtml(
+        "This version of Waitron does not yet name its producer, so it cannot be used for real sales.",
+      ),
+    );
+    expect(english).toContain(
+      escapeHtml("Ask whoever installed this box to install a version that names its producer."),
+    );
+    const spanish = await pageFor(code, undefined, SPANISH);
+    expect(spanish).toContain(
+      escapeHtml(
+        "Esta versión de Waitron todavía no indica quién la produce, así que no puede usarse para ventas reales.",
+      ),
+    );
+    expect(spanish).toContain(
+      escapeHtml(
+        "Pide a quien instaló este equipo que instale una versión que indique quién la produce.",
+      ),
+    );
+  });
+});
+
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table, in each language", async () => {
@@ -401,7 +428,8 @@ describe("curated operator text", () => {
   // worst (CLAUDE.md §5); `restore.membership_invalid` because the page's Retry reads the same copy
   // again, which the generic line does not say; `append_only.triggers_changed` because a box that
   // stopped itself reaches the page at once, and the generic line says only that Waitron could not
-  // start.
+  // start; `sif.producer_unset` because a retry of the same version and settings refuses again,
+  // and the generic line does not say what to change.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -423,6 +451,7 @@ describe("curated operator text", () => {
       "deployment.environment_mismatch",
       "restore.membership_invalid",
       "append_only.triggers_changed",
+      "sif.producer_unset",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),

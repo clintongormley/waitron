@@ -23,7 +23,12 @@ afterEach(async () => {
   directory = undefined;
 });
 
-async function append(till: SeededTill, number: number, kind = "alta") {
+async function append(
+  till: SeededTill,
+  number: number,
+  kind = "alta",
+  producer?: { NombreRazon: string; NIF: string },
+) {
   const sale = await seedSale(suite.db, till, number);
   const [sif] = suite.db.all<{
     nif: string;
@@ -40,8 +45,10 @@ async function append(till: SeededTill, number: number, kind = "alta") {
     IDOtro: undefined,
     NIF: sif!.nif,
     NumeroInstalacion: sif!.numero_instalacion,
+    ...producer,
   };
   if (pending.tipo === "alta") {
+    pending.input.IDEmisorFactura = sif!.nif;
     pending.input.NumSerieFactura = `${till.nodeId}/${number}`;
     pending.input.DescripcionOperacion = "Fixture meal";
     if (kind === "correction") {
@@ -69,6 +76,7 @@ async function append(till: SeededTill, number: number, kind = "alta") {
       };
     }
   } else {
+    pending.input.IDEmisorFacturaAnulada = sif!.nif;
     pending.input.NumSerieFacturaAnulada = `${till.nodeId}/${number - 1}`;
   }
   return suite.db.transaction((tx) => appendToChain(tx, till.nodeId, pending));
@@ -204,6 +212,15 @@ describe("complete captured fiscal chains", () => {
   it("accepts genuine record kinds, retired segments and a reset empty current identity without writing", async () => {
     await capture();
     expect(await verify()).toBe(true);
+    expect(await verify()).toBe(true);
+  });
+
+  it("accepts records whose software block names a producer other than the taxpayer", async () => {
+    const till = await seedTill(suite.db, "Producer");
+    const producer = { NombreRazon: "Producer Person", NIF: "12345678Z" };
+    await append(till, 1, "alta", producer);
+    await append(till, 2, "void", producer);
+    await capture(false);
     expect(await verify()).toBe(true);
   });
 
@@ -438,6 +455,18 @@ describe("complete captured fiscal chains", () => {
           "' where secuencia = 3",
       );
       rehash(side, 3);
+    }
+    expect(await verify()).toBe(false);
+  });
+
+  it("rejects a record issued under another taxpayer's NIF even with consistent hashes", async () => {
+    await capture();
+    for (const side of ["before", "after"] as const) {
+      damage(
+        side,
+        "update registros_facturacion set id_emisor_factura = '00000000T' where secuencia = 1",
+      );
+      rehash(side);
     }
     expect(await verify()).toBe(false);
   });

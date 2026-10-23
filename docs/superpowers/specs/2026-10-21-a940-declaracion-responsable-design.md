@@ -304,6 +304,13 @@ informático comercializado sin dicha certificación».
 
 ## 3. What exists today, and what is missing
 
+> **2026-10-23:** slice 1 changed what facts 1, 3 and 4 describe, and the two readers fact 2
+> names: a cancellation's stored issuer name now comes from the taxpayer record, and the backup
+> check compares the issuer's NIF. The producer fields still carry the taxpayer's until the
+> owner's name and NIF are added, and meanwhile a published build set to production refuses to
+> trade (`sif.producer_unset`). See `packages/fiscal-verifactu/src/software-identity.ts`. The line
+> numbers below were taken before slice 1, on 2026-10-21 and 2026-10-22, and are not kept current.
+
 There is no declaration, no About screen on any terminal, and no release (`git ls-remote --tags
 origin` lists only `pre-sqlite-migration`; `gh api repos/clintongormley/waitron/releases --jq
 length` answers `0`). Five facts from the code shape the design. Each was found by reading the

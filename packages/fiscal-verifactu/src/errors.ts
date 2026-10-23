@@ -68,6 +68,8 @@ declare module "@waitron/shared" {
      * (`environment` describes the first such value), or none was named (`"none"`). Thrown by
      * ./throwaway-allocation.ts before any key is made. */
     "sif.throwaway_allocation_refused": { environment: string };
+    /** A published production build has no software producer yet (./software-identity.ts). */
+    "sif.producer_unset": { environment: string };
 
     /**
      * Thrown by `appendToChain` (./chain.ts) once `MAX_APPEND_ATTEMPTS` attempts have each lost a

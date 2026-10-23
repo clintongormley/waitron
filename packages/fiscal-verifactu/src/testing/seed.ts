@@ -286,6 +286,7 @@ export function anulacionFor(
     saleId,
     origin: deviceOrigin(till.deviceId),
     entorno,
+    nombreRazonEmisor: "Waitron SL",
     input,
   };
 }

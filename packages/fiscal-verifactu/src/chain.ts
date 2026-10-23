@@ -66,6 +66,8 @@ export type PendingRegistro =
       saleId: SaleId;
       origin: SaleOrigin;
       entorno: Entorno;
+      /** The taxpayer's name. Outside `input`, so it never reaches the huella. */
+      nombreRazonEmisor: string;
       input: Omit<AnulacionInput, "Encadenamiento">;
     };
 
@@ -201,6 +203,7 @@ async function attemptAppend(
     secuencia,
     offsetMinutes: registro.input.offsetMinutes,
     entorno: registro.entorno,
+    ...(registro.tipo === "anulacion" ? { nombreRazonEmisor: registro.nombreRazonEmisor } : {}),
   });
 
   const [inserted] = await tx

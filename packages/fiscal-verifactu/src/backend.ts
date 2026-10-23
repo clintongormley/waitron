@@ -27,7 +27,6 @@ import type {
   Environment,
   IDFacturaARInput,
   RegistroAlta,
-  SiNo,
   SistemaInformatico,
   VerifactuClient,
 } from "@waitron/verifactu";
@@ -40,6 +39,8 @@ import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
+import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
+import type { SoftwareIdentity } from "./software-identity.js";
 
 /** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
  * "which module produced this" tag. */
@@ -48,34 +49,6 @@ const BACKEND_ID = "verifactu";
 /** The owner's €3,000 (A741), inside the validator's `F2_AMOUNT_LIMIT` (3,010.00 with its
  * tolerance); ./record-limits.test.ts checks it. */
 const SIMPLIFIED_INVOICE_LIMIT = decimal("3000.00");
-
-/**
- * Software-identity fields of `SistemaInformatico` that describe THIS PRODUCT rather than any
- * one venue, till, or sale — Waitron's own claims about what it is and how it may be used.
- * `IdSistemaInformatico` and `NumeroInstalacion` are deliberately absent from this shape: both
- * are per-(NIF, node) facts already minted by `registerSif` and read back from `registro_sif` via
- * `currentSif`, never configuration.
- *
- * **Unverified**: `tipoUsoPosibleSoloVerifactu`/`tipoUsoPosibleMultiOT`/`indicadorMultiplesOT`
- * describe how this product may be used under Veri*Factu. The defaults below are a plausible
- * starting point for a one-taxpayer-per-installation POS, not a value taken from a primary source,
- * and are overridable via `VerifactuBackendOptions.systemInfo` for exactly that reason.
- */
-interface SystemInfoDefaults {
-  nombreSistemaInformatico: string;
-  version: string;
-  tipoUsoPosibleSoloVerifactu: SiNo;
-  tipoUsoPosibleMultiOT: SiNo;
-  indicadorMultiplesOT: SiNo;
-}
-
-const DEFAULT_SYSTEM_INFO: SystemInfoDefaults = {
-  nombreSistemaInformatico: "Waitron POS",
-  version: "0.0.0",
-  tipoUsoPosibleSoloVerifactu: "S",
-  tipoUsoPosibleMultiOT: "S",
-  indicadorMultiplesOT: "N",
-};
 
 export interface VerifactuBackendOptions {
   /**
@@ -101,9 +74,8 @@ export interface VerifactuBackendOptions {
    * mis-stamp every registro from a host that forgot to set it.
    */
   deploymentEnvironment: Entorno;
-  /** Overrides for this installation's software-identity claims. See `SystemInfoDefaults`'s own
-   * doc comment for why these are configuration rather than hardcoded constants. */
-  systemInfo?: Partial<SystemInfoDefaults>;
+  /** Tests only; production passes none (./slot.ts). */
+  identity?: SoftwareIdentity;
   /** Accepted but NOT consumed by this class: the skip-retry cadence belongs to the standalone
    * `drain` (`DrainDeps.skipRetryMs`). */
   skipRetryMs?: number;
@@ -170,14 +142,14 @@ export class VerifactuBackend implements FiscalBackend {
   private readonly clock: TrustedClock;
   private readonly environment: Environment;
   private readonly deploymentEnvironment: Entorno;
-  private readonly systemInfo: SystemInfoDefaults;
+  private readonly identity: SoftwareIdentity;
 
   constructor(options: VerifactuBackendOptions) {
     this.db = options.db;
     this.clock = options.clock;
     this.environment = options.environment ?? "production";
     this.deploymentEnvironment = options.deploymentEnvironment;
-    this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
+    this.identity = options.identity ?? SOFTWARE_IDENTITY;
   }
 
   assertRecordableAt(reading: { instant: Date; offsetMinutes: number }): void {
@@ -235,7 +207,10 @@ export class VerifactuBackend implements FiscalBackend {
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
       ImporteTotal: sale.total,
-      SistemaInformatico: this.buildSistemaInformatico(sif, tenant.legalName),
+      SistemaInformatico: this.buildSistemaInformatico(sif, {
+        legalName: tenant.legalName,
+        nif: sif.nif,
+      }),
       generadoEn: sale.issuedAt,
       offsetMinutes: sale.offsetMinutes,
     };
@@ -357,7 +332,10 @@ export class VerifactuBackend implements FiscalBackend {
       FechaExpedicionFacturaAnulada: new Date(
         Date.parse(`${original.fecha_expedicion_factura}T00:00:00Z`) - now.offsetMinutes * 60_000,
       ),
-      SistemaInformatico: this.buildSistemaInformatico(sif, tenant.legalName),
+      SistemaInformatico: this.buildSistemaInformatico(sif, {
+        legalName: tenant.legalName,
+        nif: sif.nif,
+      }),
       generadoEn: now.instant,
       offsetMinutes: now.offsetMinutes,
     };
@@ -365,7 +343,14 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       nodeId,
-      { tipo: "anulacion", saleId, origin, entorno: this.deploymentEnvironment, input },
+      {
+        tipo: "anulacion",
+        saleId,
+        origin,
+        entorno: this.deploymentEnvironment,
+        nombreRazonEmisor: tenant.legalName,
+        input,
+      },
       sif,
     );
 
@@ -447,7 +432,10 @@ export class VerifactuBackend implements FiscalBackend {
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
       ImporteTotal: sale.total,
-      SistemaInformatico: this.buildSistemaInformatico(sif, tenant.legalName),
+      SistemaInformatico: this.buildSistemaInformatico(sif, {
+        legalName: tenant.legalName,
+        nif: sif.nif,
+      }),
       generadoEn: sale.issuedAt,
       offsetMinutes: sale.offsetMinutes,
     };
@@ -567,7 +555,10 @@ export class VerifactuBackend implements FiscalBackend {
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
       ImporteTotal: sale.total,
-      SistemaInformatico: this.buildSistemaInformatico(sif, tenant.legalName),
+      SistemaInformatico: this.buildSistemaInformatico(sif, {
+        legalName: tenant.legalName,
+        nif: sif.nif,
+      }),
       generadoEn: sale.issuedAt,
       offsetMinutes: sale.offsetMinutes,
     };
@@ -643,17 +634,19 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
-  private buildSistemaInformatico(sif: SifRegistration, legalName: string): SistemaInformatico {
+  private buildSistemaInformatico(
+    sif: SifRegistration,
+    taxpayer: { legalName: string; nif: string },
+  ): SistemaInformatico {
     return {
-      NombreRazon: legalName,
-      NIF: sif.nif,
-      NombreSistemaInformatico: this.systemInfo.nombreSistemaInformatico,
+      ...producerFields(this.identity, taxpayer),
+      NombreSistemaInformatico: this.identity.name,
       IdSistemaInformatico: sif.idSistemaInformatico,
-      Version: this.systemInfo.version,
+      Version: softwareVersion(),
       NumeroInstalacion: String(sif.numeroInstalacion),
-      TipoUsoPosibleSoloVerifactu: this.systemInfo.tipoUsoPosibleSoloVerifactu,
-      TipoUsoPosibleMultiOT: this.systemInfo.tipoUsoPosibleMultiOT,
-      IndicadorMultiplesOT: this.systemInfo.indicadorMultiplesOT,
+      TipoUsoPosibleSoloVerifactu: this.identity.onlyVerifactu,
+      TipoUsoPosibleMultiOT: this.identity.multipleTaxpayersPossible,
+      IndicadorMultiplesOT: this.identity.multipleTaxpayersNow,
     };
   }
 

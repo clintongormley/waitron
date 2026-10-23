@@ -287,7 +287,7 @@ describe("a full comp's filed record and the receipt's words", () => {
       huella: "60A40E8701DAB1526AC551BEF1FF522BCD88CE3471DCECBBFB10828374748E94",
     });
     expect(createHash("sha256").update(shipped.xml).digest("hex")).toBe(
-      "0f6468b1b3efb1b5acaee335371d486204adacac45a1b1ed64dbfee313c3517b",
+      "b2e296be90f1d3eb959eaf2d988078ac920e60fb6c90a2f6138a13464a983e17",
     );
   });
 

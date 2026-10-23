@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -19,7 +19,7 @@ import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { VerifactuBackend } from "./backend.js";
-import { FISCAL_SLOT, rejectResolveClient } from "./slot.js";
+import { FISCAL_SLOT, makeVerifactuBackend, rejectResolveClient } from "./slot.js";
 
 // Never the real mtlsFetch: no test may open a connection to AEAT.
 const refusedFetch = vi.fn<typeof globalThis.fetch>(async () => {
@@ -60,6 +60,59 @@ describe("FISCAL_SLOT", () => {
 
   it("never resolves an AEAT client on the sale path", async () => {
     await expect(rejectResolveClient()).rejects.toThrow(/never be called/);
+  });
+});
+
+describe("refuses a published production build while the producer is pending", () => {
+  it("refuses production on a published build", () => {
+    expect(() =>
+      makeVerifactuBackend({ db: STUB_DB, clock, environment: "production" }, true),
+    ).toThrow(expect.objectContaining({ code: "sif.producer_unset" }));
+  });
+
+  it("serves preproduction on a published build", () => {
+    const backend = makeVerifactuBackend(
+      { db: STUB_DB, clock, environment: "preproduction" },
+      true,
+    );
+    expect(backend.id).toBe("verifactu");
+  });
+
+  it("serves production on an unpublished build", () => {
+    const backend = makeVerifactuBackend({ db: STUB_DB, clock, environment: "production" }, false);
+    expect(backend.id).toBe("verifactu");
+  });
+
+  it("serves production through the slot when the run carries no build stamp", () => {
+    const backend = FISCAL_SLOT.makeBackend({ db: STUB_DB, clock, environment: "production" });
+    expect(backend.id).toBe("verifactu");
+  });
+
+  describe("on a build whose bundle carries a stamp", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    });
+
+    async function stampedSlot() {
+      vi.stubGlobal("__WAITRON_HOUR_RELEASE__", { sourceCommit: "a".repeat(40) });
+      vi.resetModules();
+      return (await import("./slot.js")).FISCAL_SLOT;
+    }
+
+    it("refuses production through the slot", async () => {
+      const slot = await stampedSlot();
+      expect(() => slot.makeBackend({ db: STUB_DB, clock, environment: "production" })).toThrow(
+        expect.objectContaining({ code: "sif.producer_unset" }),
+      );
+    });
+
+    it("serves preproduction through the slot", async () => {
+      const slot = await stampedSlot();
+      expect(slot.makeBackend({ db: STUB_DB, clock, environment: "preproduction" }).id).toBe(
+        "verifactu",
+      );
+    });
   });
 });
 
