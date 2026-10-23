@@ -168,7 +168,7 @@ Two consequences:
   **A798 update, 2026-10-20:** the owner chose one exception — a box clock that reads more than a
   minute earlier than the last recorded sale stops payments until it is fixed
   ([A798 design, revision 5, §4.8](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md)).
-  **2026-10-23:** built by A798-B slice 8 (PR to follow); the rule and where it is checked are in
+  **2026-10-23:** built by A798-B slice 8 (#2012); the rule and where it is checked are in
   [conventions-data.md](../developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
 - **The two margins are different things.** One minute is the standard the system must be built
   to; 240 seconds is the tolerance a submission is judged against. Conflating them would lead to

@@ -4919,7 +4919,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   2026-10-20). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora) is parked for the owner; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration; parked for the owner) is #PR; slice 9 is next. Open asesor questions:
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora) is parked for the owner; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration; parked for the owner) is #2012; slice 9 is next. Open asesor questions:
   [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
   and
   [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
@@ -4928,48 +4928,48 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   it once per stop through slice 10's once-per-episode sender, so slice 9 depends on 10 too; slice
   10 does not depend on 8. Slice 10 cannot build it: it lands itself, and the email asks slice 8's
   seat (`clockBehindLatestRecord`), which sits in a parked pull request. Left open by A798-B slice 8
-  (#PR).
+  (#2012).
 
 - **`sale.charged_not_recorded` for the clock answers HTTP 507.** The till reads the code and
   reason; a status by reason needs the error boundary to take a function. Left open by A798-B
-  slice 8 (#PR).
+  slice 8 (#2012).
 
 - **A Pay of an order whose invoice was already filed says 'Sale not recorded' during the clock
-  stop**, where the payment is what is not recorded. Left open by A798-B slice 8 (#PR).
+  stop**, where the payment is what is not recorded. Left open by A798-B slice 8 (#2012).
 
 - **The till's card-charged sentence for the clock says "press Pay", which does not fit a bill's
   card.** For a card taken from a bill's payment options (Whole bill, Pay items, Contribute, Split
   equally), Pay answers `order.payment_in_flight` until the box records the pending payment itself
   (probed during the build: a second card contribution on the charged bill was refused 409 and
-  charged nothing). A bill variant of the sentence is open. Left open by A798-B slice 8 (#PR).
+  charged nothing). A bill variant of the sentence is open. Left open by A798-B slice 8 (#2012).
 
 - **A collect refused with both times shows the payment sentence** ("Sale not recorded…",
   `clockBehindText` in `apps/till/src/widgets/find-bill-dialog.ts`), not the "Can't be recorded"
-  sentence the plan's decision 20 lists for a collect. Left open by A798-B slice 8 (#PR).
+  sentence the plan's decision 20 lists for a collect. Left open by A798-B slice 8 (#2012).
 
 - **A clock that jumps before 28-10-2024 while a card is charged answers `clock.unusable`, and the
   till never says the card was charged.** Only a full disk and `clock.behind_chain` become
   `sale.charged_not_recorded` (`apps/server/src/bill-payments.ts`, `apps/server/src/till-sale.ts`;
-  read, not run). Left open by A798-B slice 8 (#PR).
+  read, not run). Left open by A798-B slice 8 (#2012).
 
 - **The design's "printing a bill carries on" is wider than the product.** No route prints a bill
   for checking; the prints are a filed sale's receipt and reprint and the kitchen reprint, so during
-  the stop a bill not filed before it cannot be printed. Left open by A798-B slice 8 (#PR).
+  the stop a bill not filed before it cannot be printed. Left open by A798-B slice 8 (#2012).
 
 - **The Clock row says 'connect the box to the internet' where that may not help.** On a box that
   does not keep its clock in step with internet time, until slice 10 switches that on at install;
   and on one that does, the same advice shows where the clock is right and the latest record's time
-  was wrong — neither half clears the stop. Left open by A798-B slice 8 (#PR).
+  was wrong — neither half clears the stop. Left open by A798-B slice 8 (#2012).
 
 - **The backup verifier does not know `clock_stop_restarts`' links.** Slice 9 adds them with its
   first writer (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by
-  A798-B slice 8 (#PR).
+  A798-B slice 8 (#2012).
 
 - **The clock stop's look differs from pictures 8 and 9.** The counter refusal shows in the till's
   top banner, not under the strip; the Clock row's fix advice follows " · " on the comparison line
   rather than on a line of its own; the Box status page shows the alert sentence "Sort it out on the
   Box status page" while on that page; and the dashboard joins date and time with a plain space, so
-  they can split on a narrow screen. Left open by A798-B slice 8 (#PR).
+  they can split on a narrow screen. Left open by A798-B slice 8 (#2012).
 
 - **'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
   'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
@@ -5482,7 +5482,7 @@ values rather than PIN substrings inside random IDs. See the
   tests.** The park, place and fire-all clock cases (A798-B slice 8, Task 13b) failed that way and
   were changed to start the till in the language instead; the table-service and parties cases
   switch mid-screen and pass. Not diagnosed: a test-harness effect, or a refusal a language change
-  hides. Left open by A798-B slice 8 (#PR).
+  hides. Left open by A798-B slice 8 (#2012).
 
 - **The UI showcase overflows a phone and inherits black text in its dark panel.**
   [Detail](backlog/ci.md#the-ui-showcase-overflows-a-phone-and-inherits-black-text-in-its-dark-panel).
@@ -5941,7 +5941,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Spanish text in a server test venue, for A913's English-only audit.**
   `apps/server/src/testing/bill-venue.ts` names its products "Paella" and "Caña", and in the look
   test's venue the Spanish refund dialog shows the reason "Mistake" in English. Found by A798-B
-  slice 8 (#PR).
+  slice 8 (#2012).
 
 - **A971. Spain's pack provides English for every word it shows** (holiday names, area labels,
   notices) — check first; a holiday with two names may need a schema change. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
