@@ -51,6 +51,15 @@ const LUCIA: ThemeChoices = {
   handSet: { light: {}, dark: {} },
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
+const DARK_OWN = theme("t-lucia", "Bar Lucía", {
+  ...LUCIA,
+  brandFix: {},
+  handSet: { light: {}, dark: { primary: "#5fa77a" } },
+});
+const LIGHT_OWN = theme("t-own", "Own buttons", {
+  ...WAITRON_CHOICES,
+  handSet: { light: { primary: "#7a1f2b" }, dark: {} },
+});
 const inUse = (view: ThemeView): ThemeList => ({ themes: [view], inUse: view.id });
 
 async function mount(list: ThemeList, canEdit = true): Promise<Card> {
@@ -115,6 +124,33 @@ describe("the read-only Look card", () => {
     expect(row(el, "background")).toBe("Tinted");
     expect(row(el, "corners")).toBe("Round");
     expect(text(q(el, "[data-test=edit]"))).toBe(t("action.edit"));
+  });
+
+  it("names a version's Main buttons set by hand in the brand row, one chip each", async () => {
+    setLocale("en-GB");
+    const chipsOf = (el: Card) =>
+      [...el.shadowRoot!.querySelectorAll("[data-test=saved-brand] .chip")].map((chip) =>
+        chip.getAttribute("style"),
+      );
+    const own = await mount(inUse(DARK_OWN));
+    expect(row(own, "brand")).toBe("Custom · #1e5b3a · dark screens #5fa77a, set by hand");
+    expect(chipsOf(own)).toEqual(["background:#1e5b3a", "background:#5fa77a"]);
+    cleanupWidgets();
+    const waitron = await mount(inUse(LIGHT_OWN));
+    expect(row(waitron, "brand")).toBe("Waitron's · light screens #7a1f2b, set by hand");
+    expect(chipsOf(waitron)).toEqual([
+      `background:${WAITRON_DEFAULTS.light["--wt-color-primary"]}`,
+      "background:#7a1f2b",
+    ]);
+    cleanupWidgets();
+    setLocale("es-ES");
+    const spanish = await mount(inUse(DARK_OWN));
+    expect(row(spanish, "brand")).toBe(
+      [
+        es["appearance.brand_custom"].replace("{colour}", "#1e5b3a"),
+        `${es["appearance.saved_fix_dark"]} ${es["appearance.saved_hand"].replace("{colour}", "#5fa77a")}`,
+      ].join(" · "),
+    );
   });
 
   it("offers no Edit to a session that cannot change the look", async () => {
@@ -1030,6 +1066,54 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
           if (locale === "en-GB" && cardWidth === 800) expect(found.drawn, label).toBe(true);
           cleanupWidgets();
         }
+      });
+    });
+  }
+
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    it(`drops the "·" when Use the brand colour wraps to a line of its own (${locale})`, async () => {
+      await onDesk(async () => {
+        setLocale(locale);
+        const { el } = await mountEditing(inUse(DARK_OWN));
+        const words = q(el, "[data-test=dark-own]")!;
+        const link = button(el, "use-brand");
+        const at = async (cardWidth: number) => {
+          await resize(el, cardWidth);
+          // elementFromPoint sees only what is inside the viewport.
+          words.scrollIntoView({ block: "center" });
+          return dotOf(el.shadowRoot!, words, link);
+        };
+        const wordLines = () => {
+          const range = document.createRange();
+          range.selectNodeContents(words);
+          return range.getClientRects().length;
+        };
+        // Below the width at which the editor takes two columns, measured in this browser's fonts.
+        const oneColumn = 880;
+        await at(oneColumn);
+        const left = el.getBoundingClientRect().left;
+        const slack =
+          el.getBoundingClientRect().right - words.parentElement!.getBoundingClientRect().right;
+        const between = Math.round(
+          (words.getBoundingClientRect().right - left + link.getBoundingClientRect().right - left) /
+            2 +
+            slack,
+        );
+        const fits = async (width: number) =>
+          !(await at(width)).undoOnColourLine && wordLines() === 1;
+        let narrowWidth = (await fits(between)) ? between : 0;
+        for (let width = oneColumn; narrowWidth === 0 && width > 0; width -= 2) {
+          if (await fits(width)) narrowWidth = width;
+        }
+        expect(narrowWidth).toBeGreaterThan(0);
+        const narrow = await at(narrowWidth);
+        expect(wordLines()).toBe(1);
+        expect(narrow.undoOnColourLine, JSON.stringify(narrow)).toBe(false);
+        expect(narrow.drawn, JSON.stringify(narrow)).toBe(false);
+        const wide = await at(1000);
+        expect(wide.undoOnColourLine, JSON.stringify(wide)).toBe(true);
+        expect(wide.drawn, JSON.stringify(wide)).toBe(true);
+        expect(wide.dotOnColourLine, JSON.stringify(wide)).toBe(true);
       });
     });
   }

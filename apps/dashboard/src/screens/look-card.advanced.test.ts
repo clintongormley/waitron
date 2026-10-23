@@ -5,6 +5,7 @@ import {
   WAITRON_CHOICES,
   fixAll,
   normaliseChoices,
+  readThemeDocument,
   type ThemeChoices,
 } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
@@ -485,6 +486,40 @@ describe("fixes and Undo in Advanced", () => {
     expect(inAdvanced(el, "hand-undo-light-text-muted")).toBeNull();
   });
 
+  it("a fixed value picked away and back with the colour picker brings back no fixed line", async () => {
+    const { el } = await mountChoices(CREAM_SAGE);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text-muted");
+    expect(inAdvanced(el, "hand-fixed-light-text-muted")).not.toBeNull();
+    for (const colour of ["#8fa898", "#526a5b"]) {
+      const input = picker(el, "light", "text-muted");
+      input.value = colour;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await nextFrame();
+      await settle(el);
+    }
+    expect(handCode(el, "light", "text-muted").value).toBe("#526a5b");
+    expect(inAdvanced(el, "hand-fixed-light-text-muted")).toBeNull();
+    expect(inAdvanced(el, "hand-undo-light-text-muted")).toBeNull();
+  });
+
+  it("a fix's record goes with Use worked-out colour, so Fix all records the value set after", async () => {
+    const { el } = await mountChoices(TWO_FIXES);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text");
+    expect(advanced(el).fixed).toEqual({
+      "handSet.light.text": { from: "#6a6a6a", to: "#4a4a4a" },
+    });
+    await press(el, "hand-worked-out-light-text");
+    expect(advanced(el).draft.choices.handSet.light.text).toBeUndefined();
+    expect(advanced(el).fixed).toEqual({});
+    await typeHand(el, "light", "text", "#6b6b6b");
+    await press(el, "fix-all");
+    expect(words(inAdvanced(el, "hand-fixed-light-text"))).toBe(
+      "Light screens: fixed from #6b6b6b",
+    );
+  });
+
   it("Fix all clears a refusal shown under a colour", async () => {
     const { el, saveTheme } = await mountChoices(TWO_FIXES);
     await typeHand(el, "light", "bg", "#fafafa");
@@ -635,4 +670,125 @@ describe("putting every colour back", () => {
     expect(saveTheme).not.toHaveBeenCalled();
     expect(words(q(el, "[data-test=saved-hand]"))).toBe(handNames(CREAM_SAGE).join(", "));
   });
+});
+
+describe("the dark version's own button colour", () => {
+  async function typeBrand(el: Card, value: string) {
+    const inner = q(el, "wt-input[name=brandColor]")!.shadowRoot!.querySelector("input")!;
+    await page.elementLocator(inner).fill(value);
+    await settle(el);
+  }
+
+  async function darkOwn(colour = "#5fa77a") {
+    const opened = await mountEditing();
+    await typeHand(opened.el, "dark", "primary", colour);
+    return opened;
+  }
+
+  it("Pick a different colour for dark screens opens Advanced at the dark Main buttons code, changing nothing", async () => {
+    const { el } = await mountEditing();
+    const fixedLine = q(el, "[data-test=brand-fixed-dark]")!;
+    expect(words(fixedLine)).toBe("Buttons on dark screens: #437e5b");
+    const link = button(el, "pick-dark");
+    expect(words(link)).toBe("Pick a different colour for dark screens");
+    expect(fixedLine.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(q(el, "[data-test=dark-own]")).toBeNull();
+    expect(disclosure(el).open).toBe(false);
+
+    await userEvent.click(link);
+    await settle(el);
+    expect(disclosure(el).open).toBe(true);
+    const inner = handCode(el, "dark", "primary").shadowRoot!.querySelector("input");
+    await expect.poll(() => focused(el)).toBe(inner);
+    expect(button(el, "save").variant).toBe("secondary");
+    expect(button(el, "save").disabled).toBe(true);
+  });
+
+  it("a dark Main buttons colour set by hand paints dark screens only and is sent without the fix", async () => {
+    const { el, saveTheme } = await darkOwn();
+    expect(preview(el).theme.dark["--wt-color-primary"]).toBe("#5fa77a");
+    expect(preview(el).theme.dark["--wt-color-primary-hover"]).toBe("#72ba8c");
+    expect(preview(el).theme.light["--wt-color-primary"]).toBe("#1e5b3a");
+    expect(q(el, "[data-test=brand-fixed-dark]")).toBeNull();
+    expect(q(el, "[data-test=pick-dark]")).toBeNull();
+    const own = q(el, "[data-test=dark-own]")!;
+    expect(words(own)).toBe("Buttons on dark screens: #5fa77a, set by hand");
+    expect(words(own.nextElementSibling)).toBe("·");
+    expect(own.nextElementSibling!.nextElementSibling).toBe(button(el, "use-brand"));
+    expect(words(button(el, "use-brand"))).toBe("Use the brand colour");
+
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    const sent = saveTheme.mock.calls[0]![1];
+    expect(sent.brandFix).toEqual({});
+    expect(sent.handSet.dark.primary).toBe("#5fa77a");
+    expect(readThemeDocument(sent).ok).toBe(true);
+  });
+
+  it("Use the brand colour works dark Main buttons out again and offers the fix without taking it", async () => {
+    const { el } = await darkOwn();
+    await userEvent.click(button(el, "use-brand"));
+    await settle(el);
+    expect(advanced(el).draft.choices.handSet.dark.primary).toBeUndefined();
+    expect(advanced(el).draft.choices.brandFix).toEqual({});
+    expect(q(el, "[data-test=brand-warning-dark]")).not.toBeNull();
+    expect(words(q(el, "[data-test=brand-fix-dark]"))).toBe("Use #437e5b on dark screens");
+    expect(q(el, "[data-test=dark-own]")).toBeNull();
+    expect(q(el, "[data-test=pick-dark]")).not.toBeNull();
+  });
+
+  it("the brand colour changed away and back keeps the fix out while dark Main buttons are set by hand", async () => {
+    const { el, saveTheme } = await darkOwn();
+    await userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!);
+    await settle(el);
+    await typeBrand(el, "#1e5b3a");
+    expect(advanced(el).draft.choices.brandColor).toBe("#1e5b3a");
+    expect(advanced(el).draft.choices.brandFix).toEqual({});
+    expect(q(el, "[data-test=brand-fixed-dark]")).toBeNull();
+    expect(q(el, "[data-test=brand-undo-dark]")).toBeNull();
+
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    const sent = saveTheme.mock.calls[0]![1];
+    expect(sent.brandFix).toEqual({});
+    expect(sent.handSet.dark.primary).toBe("#5fa77a");
+    expect(readThemeDocument(sent).ok).toBe(true);
+  });
+
+  it("a readable dark Main buttons code warns of nothing, and its worked-out colour warns with the fix", async () => {
+    const { el } = await darkOwn("#5a9c74");
+    expect(preview(el).theme.dark["--wt-color-primary"]).toBe("#5a9c74");
+    expect(advanced(el).derived.warnings).toEqual([]);
+    expect(q(el, "[data-test=brand-warning-dark]")).toBeNull();
+    expect(inAdvanced(el, "hand-warning-dark-primary")).toBeNull();
+
+    await press(el, "hand-worked-out-dark-primary");
+    expect(preview(el).theme.dark["--wt-color-primary"]).toBe("#1e5b3a");
+    expect(q(el, "[data-test=brand-warning-dark]")).not.toBeNull();
+    expect(words(q(el, "[data-test=brand-fix-dark]"))).toBe("Use #437e5b on dark screens");
+  });
+
+  for (const [colour, link] of [
+    [undefined, "pick-dark"],
+    ["#5fa77a", "use-brand"],
+  ] as const) {
+    it(`disables ${link} while a save is under way`, async () => {
+      const { el, saveTheme } = await mountEditing();
+      let release!: () => void;
+      saveTheme.mockImplementationOnce(
+        (id, choices) =>
+          new Promise((resolve) => {
+            release = () => resolve(theme(id, "Bar Lucía", choices));
+          }),
+      );
+      if (colour === undefined) await typeHand(el, "light", "bg", "#f8f1e1");
+      else await typeHand(el, "dark", "primary", colour);
+      expect(button(el, link).disabled).toBe(false);
+      await userEvent.click(button(el, "save"));
+      await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+      await settle(el);
+      expect(button(el, link).disabled).toBe(true);
+      release();
+    });
+  }
 });

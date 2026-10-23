@@ -90,19 +90,29 @@ function chip(colour: string): TemplateResult {
 
 function brandRow(view: ThemeView | undefined, choices: ThemeChoices): TemplateResult {
   const { brandColor } = choices;
-  if (brandColor === null) {
-    return html`${chip(WAITRON_DEFAULTS.light[PRIMARY]!)}${t("appearance.brand_waitron")}`;
-  }
-  const value = (CATEGORY_PALETTE as readonly string[]).includes(brandColor)
-    ? brandColor
-    : fill("appearance.brand_custom", { colour: brandColor });
-  const fixes = MODES.flatMap((mode: Mode) => {
-    const shade = choices.brandFix[mode] ? view?.[mode]?.[PRIMARY] : undefined;
+  const brand =
+    brandColor === null
+      ? html`${chip(WAITRON_DEFAULTS.light[PRIMARY]!)}${t("appearance.brand_waitron")}`
+      : html`${chip(brandColor)}${
+          (CATEGORY_PALETTE as readonly string[]).includes(brandColor)
+            ? brandColor
+            : fill("appearance.brand_custom", { colour: brandColor })
+        }`;
+  const versions = MODES.flatMap((mode: Mode) => {
+    const hand = choices.handSet[mode].primary;
+    if (hand !== undefined) {
+      return [
+        html` · ${t(`appearance.saved_fix_${mode}`)}
+        ${chip(hand)}${fill("appearance.saved_hand", { colour: hand })}`,
+      ];
+    }
+    const shade =
+      brandColor !== null && choices.brandFix[mode] ? view?.[mode]?.[PRIMARY] : undefined;
     return shade === undefined
       ? []
       : [html` · ${t(`appearance.saved_fix_${mode}`)} ${chip(shade)}${shade}`];
   });
-  return html`${chip(brandColor)}${value}${fixes}`;
+  return html`${brand}${versions}`;
 }
 
 const HAND_FIELDS: ReadonlySet<unknown> = new Set(
@@ -526,7 +536,7 @@ export class LookCard extends LitElement {
   }
   #brandLines(draft: LookDraft, busy: boolean): TemplateResult[] {
     const derived = this.#derived!;
-    return MODES.flatMap((mode: Mode) => {
+    const lines = MODES.flatMap((mode: Mode) => {
       if (draft.choices.brandFix[mode]) {
         return [
           html`<p class="undo-line">
@@ -566,6 +576,38 @@ export class LookCard extends LitElement {
           }`,
       ];
     });
+    return [...lines, this.#darkLine(draft, busy)];
+  }
+  /** The dark version's own Main buttons colour, or the way to pick one (D13). */
+  #darkLine(draft: LookDraft, busy: boolean): TemplateResult {
+    const own = draft.choices.handSet.dark.primary;
+    if (own === undefined) {
+      return html`<p class="fixed">
+        <wt-button
+          data-test="pick-dark"
+          class="link"
+          variant="ghost"
+          size="sm"
+          ?disabled=${busy}
+          @click=${() => void this.#advanced()!.reveal("dark", "primary")}
+          >${t("appearance.pick_dark")}</wt-button
+        >
+      </p>`;
+    }
+    return html`<p class="undo-line">
+      <span class="fixed-text" data-test="dark-own"
+        >${fill("appearance.dark_own", { colour: own })} </span
+      ><span class="dot" aria-hidden="true">· </span
+      ><wt-button
+        data-test="use-brand"
+        class="link"
+        variant="ghost"
+        size="sm"
+        ?disabled=${busy}
+        @click=${() => this.#hand({ kind: "worked-out", mode: "dark", key: "primary" })}
+        >${t("appearance.use_brand")}</wt-button
+      >
+    </p>`;
   }
   #keptNote(draft: LookDraft): TemplateResult | typeof nothing {
     const note = this.showKeptNote ? keptNote(draft.choices) : "";
