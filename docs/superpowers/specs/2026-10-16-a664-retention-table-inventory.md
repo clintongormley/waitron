@@ -260,6 +260,8 @@ These additions also change incoming closure for original rows: `parties` receiv
 
 **2026-10-19:** `table_service_statuses` was dropped (A757 slice 2, core migration 0181); `dining_tables` lost `status_id` and its key to it. This removes `dining_tables(status_id)` from the table's incoming closure.
 
+**2026-10-23:** `kitchen_timing_defaults` and `kitchen_station_timing` were dropped (A756 PR 5, core migration 0186); this removes `kitchen_timing_defaults(location_id)` from `locations`' incoming closure and `kitchen_station_timing(station_id)` from `kitchen_stations`'.
+
 ## Local application tables
 
 | Module      | Table                | appendOnly | Policy and retirement event                                                                                                                                        | Retained purpose/privacy                                                                                                                                                      | Concrete dependencies, source-reading-only                                                                                               | Source sites                                                                                              |

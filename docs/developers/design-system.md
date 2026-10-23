@@ -2767,7 +2767,7 @@ and nothing guards it across screens:
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
 - batch 3a (the service-status rows and the new status's Save were retired by A757 slice 2,
   2026-10-19): the
-  kitchen's late flags; the venue details editor (now the Venue card, A755 below); My schedule's cover and time-off requests; the
+  kitchen's late flags (retired by A756 PR 5, 2026-10-23); the venue details editor (now the Venue card, A755 below); My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
   form;
@@ -4457,8 +4457,8 @@ Prep stations itself has only Stations and Routes. The former Times tab and each
 "When it gets orders" link are retired. Station lists use name order, with the Default badge at
 its alphabetical place and a colour square on every Stations row. Add and Edit use
 `wt-colour-chooser`; a missing creation colour takes the first unused active-local station colour,
-or red when all choices are occupied. The Edit window groups its late-flag minutes into one row
-with one inheritance hint. There is no station order field or drag handle.
+or red when all choices are occupied. The Edit window groups its late-flag minutes into one row.
+There is no station order field or drag handle.
 
 ### Tabbed management pages
 
@@ -4619,12 +4619,10 @@ Stations row's menu, opens the station editor (`station-editor.ts`): name, Colou
 late-flag fields in one row under "Late flags (minutes)", "Also list the order's dishes from other
 stations" with "On this station's tickets and kitchen screen", and "Print a slip when sent dishes
 move table". The slip choices are "Venue setting: Print" (or "Venue setting: Don't print"), "Print"
-and "Don't print"; choosing the venue setting again sends null. One note below the minutes fields
-says "Leave a field blank to use the venue setting".
-Save sends only what changed, in one request. A minutes field left blank follows the venue's
-Kitchen default, which it shows as its placeholder, and clearing one sends `null` so the station
-follows the default again. Save first checks that each filled minutes field is a whole number from
-1 to 2147483647 and that warm < overdue < forgotten, counting a blank field as its default; it
+and "Don't print"; choosing the venue setting again sends null.
+Save sends only what changed, in one request. Each minutes field is required and opens on the
+station's own value; a blank one is marked like any other invalid value. Save first checks that
+each minutes field is a whole number from 1 to 2147483647 and that warm < overdue < forgotten; it
 marks the field that fails and stays disabled until that field is fixed. A refusal from the server
 that names a minutes field (`station.thresholds_invalid` or `management.request_invalid`) shows
 under that field. Printers offers every active printer, shows a
@@ -5306,7 +5304,7 @@ preferences and restored URLs retain their capability checks.
 
 A menu's Device Home Page, receipt configuration, custom themes and the floor-plan editor remain
 independent. Profile writes and `/api/till` carry no authored canvas; the boot response carries the
-device's `formFactor`. Configuration exports use format 6; an older export is refused as outdated,
+device's `formFactor`. Configuration exports use format 7; an older export is refused as outdated,
 including one with an empty canvas list. No earlier canvas settings are carried over.
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.

@@ -503,6 +503,9 @@ Each point is (read); the plan confirms it before relying on it.
   The till then turns the bar amber when any station's dishes at a table pass their own limit, so a
   salad and a secreto at one table are judged separately. A cross-package contract. If the owner
   picks the department alternative, the signal carries one limit per table instead.
+  **2026-10-23 (A756 PR 5):** the two late-flag tables named above were dropped; each station's
+  late flags are its own `kitchen_stations` columns, so a Ready warning time would be a further
+  station column.
 - **From when A757's waiting clock counts for a dish that is ready but not served** (the owner asked):
   **from when it was fired.** The table's Waiting, Overdue and Forgotten come from every fired,
   unserved dish (`apps/server/src/table-signals.ts:74-75`), timed from `queued_at`
