@@ -148,7 +148,7 @@ describe("validateThemeConfiguration", () => {
       ).not.toThrow();
     });
 
-    it("accepts a document copied before logos, with no logo key and no dots", () => {
+    it("accepts a document with no logo key and no dots", () => {
       expect(refusal([themed(noLogo)])).toBeUndefined();
     });
 
@@ -170,6 +170,11 @@ describe("validateThemeConfiguration", () => {
         { ...noLogo, printedLogo: PRINTABLE },
         images,
       ],
+      [
+        "a logo key given again with a NUL after it",
+        { ...WITH_LOGO, "logo\u0000": { light: D } },
+        images,
+      ],
     ])("refuses %s as custom_themes.theme", (_label, document, carried) => {
       expect(refusal([themed(document)], carried)).toMatchObject({
         code: "setup.request_invalid",
@@ -187,6 +192,10 @@ describe("validateThemeConfiguration", () => {
       [
         "a logo key given twice, once escaped",
         lightOnly.replace('"logo":{', `"logo":null,${escapedLogo}:{`),
+      ],
+      [
+        "a logo key given twice, once holding an escaped quote",
+        lightOnly.replace('"logo":{', '"logo":"a\\"b\\\\","logo":{'),
       ],
       [
         "a logo key given twice in spaced-out text",
