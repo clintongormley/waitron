@@ -43,6 +43,23 @@ describe("assertRecordableAt", () => {
   });
 });
 
+describe("clockBehindLatestRecord and refuseWhileClockBehind", () => {
+  it("never stop a clock, even one a year before a recorded sale or before the first date", () => {
+    const fake: FiscalBackend = backend;
+    return suite.db.transaction(async (tx) => {
+      await backend.registerNode(tx, NODE_A);
+      await backend.recordSale(tx, saleOn(NODE_A, 1));
+      for (const reading of [
+        { instant: new Date("2026-03-14T10:00:00.000Z"), offsetMinutes: 60 },
+        { instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 },
+      ]) {
+        expect(await fake.clockBehindLatestRecord(tx, reading)).toBeNull();
+        await expect(fake.refuseWhileClockBehind(tx, reading)).resolves.toBeUndefined();
+      }
+    });
+  });
+});
+
 describe("registration", () => {
   it("records a registration and returns an opaque registration id", () => {
     return suite.db.transaction(async (tx) => {

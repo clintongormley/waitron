@@ -156,6 +156,8 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     simplifiedInvoiceLimit: fake.simplifiedInvoiceLimit,
     recipientNameMaxLength: fake.recipientNameMaxLength,
     assertRecordableAt: () => fake.assertRecordableAt(),
+    clockBehindLatestRecord: () => fake.clockBehindLatestRecord(),
+    refuseWhileClockBehind: () => fake.refuseWhileClockBehind(),
     registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),

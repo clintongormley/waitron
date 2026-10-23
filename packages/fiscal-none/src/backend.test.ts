@@ -57,6 +57,18 @@ describe("NoneBackend records nothing", () => {
     ).toBeUndefined();
   });
 
+  it("never stops a clock, even one a year before a recorded sale or before the first date", async () => {
+    const backend = make();
+    await backend.recordSale(tx, sampleSale());
+    for (const reading of [
+      { instant: new Date("2026-03-14T10:00:00.000Z"), offsetMinutes: 60 },
+      { instant: new Date("2001-01-01T11:00:00.000Z"), offsetMinutes: 60 },
+    ]) {
+      expect(await backend.clockBehindLatestRecord(tx, reading)).toBeNull();
+      await expect(backend.refuseWhileClockBehind(tx, reading)).resolves.toBeUndefined();
+    }
+  });
+
   it("recordSale writes nothing and returns a recorded ref carrying the sale's own instants", async () => {
     const sale = sampleSale();
     const ref = await make().recordSale(tx, sale);

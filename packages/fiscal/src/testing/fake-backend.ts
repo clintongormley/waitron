@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
+  ClockBehindLatestRecord,
   FiscalBackend,
   FiledReceipt,
   FiscalRecordRef,
@@ -115,6 +116,14 @@ export class FakeFiscalBackend implements FiscalBackend {
   }
 
   assertRecordableAt(): void {}
+
+  clockBehindLatestRecord(): Promise<ClockBehindLatestRecord | null> {
+    return Promise.resolve(null);
+  }
+
+  refuseWhileClockBehind(): Promise<void> {
+    return Promise.resolve();
+  }
 
   async registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
     const registrationId = nextId();

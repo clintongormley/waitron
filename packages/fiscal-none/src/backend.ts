@@ -1,4 +1,5 @@
 import type {
+  ClockBehindLatestRecord,
   FiscalBackend,
   FiledReceipt,
   FiscalRecordRef,
@@ -29,6 +30,14 @@ export class NoneBackend implements FiscalBackend {
   readonly recipientNameMaxLength = null;
 
   assertRecordableAt(): void {}
+
+  clockBehindLatestRecord(): Promise<ClockBehindLatestRecord | null> {
+    return Promise.resolve(null);
+  }
+
+  refuseWhileClockBehind(): Promise<void> {
+    return Promise.resolve();
+  }
 
   registerNode(_tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
     return Promise.resolve({

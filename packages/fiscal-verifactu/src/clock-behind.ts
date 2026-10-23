@@ -1,18 +1,10 @@
 import "./errors.js";
 import { desc } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import type { ClockBehindLatestRecord } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { registrosFacturacion } from "./schema/registros.js";
-
-/** The reading, and the latest record time across every chain this database holds, when the
- * reading is more than a minute earlier than it; each time with its own offset. */
-export interface ClockBehind {
-  clockAt: string;
-  offsetMinutes: number;
-  lastRecordAt: string;
-  lastRecordOffsetMinutes: number;
-}
 
 /** A reading exactly this much earlier than the latest record still sells. */
 export const CLOCK_BEHIND_MARGIN_MS = 60_000;
@@ -22,7 +14,7 @@ export const CLOCK_BEHIND_MARGIN_MS = 60_000;
 export async function clockBehindChain(
   tx: Transaction,
   reading: { instant: Date; offsetMinutes: number },
-): Promise<ClockBehind | null> {
+): Promise<ClockBehindLatestRecord | null> {
   const [latest] = await tx
     .select({
       at: registrosFacturacion.fechaHoraHusoGenRegistro,

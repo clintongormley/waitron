@@ -164,6 +164,15 @@ export interface ReconcileResult {
   incidentsRaised: number;
 }
 
+/** A clock reading, and the time of the latest record the regime holds, when the reading is more
+ * than a minute earlier; each time with its own offset. */
+export interface ClockBehindLatestRecord {
+  readonly clockAt: string;
+  readonly offsetMinutes: number;
+  readonly lastRecordAt: string;
+  readonly lastRecordOffsetMinutes: number;
+}
+
 /**
  * The sale-path boundary between the POS and a fiscal regime. It names no regime mechanism; the
  * guard is ./no-regime-vocabulary.test.ts. The submission pass (`drain`) is not on it: that runs
@@ -195,6 +204,19 @@ export interface FiscalBackend {
    * caller can refuse before money moves. A regime with no such rule returns.
    */
   assertRecordableAt(reading: Pick<TrustedReading, "instant" | "offsetMinutes">): void;
+
+  /** The reading and this regime's latest record time when the reading is more than a minute
+   * earlier; null when it is not, or when the regime keeps no such records. */
+  clockBehindLatestRecord(
+    tx: Transaction,
+    reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
+  ): Promise<ClockBehindLatestRecord | null>;
+
+  /** Throws this regime's refusal when nothing may take or give back money at `reading`. */
+  refuseWhileClockBehind(
+    tx: Transaction,
+    reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
+  ): Promise<void>;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 
