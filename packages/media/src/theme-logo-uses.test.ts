@@ -51,6 +51,14 @@ it("lists and counts a theme's logo, light or dark, once per theme", async () =>
   });
 });
 
+it("counts a theme naming one image as both its light and dark logo once", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    const a = await upload(tx, photoA, "Logo");
+    await addTheme(tx, "Bar", { light: a.filename, dark: a.filename });
+    expect(await counts(tx, a.id)).toEqual([1, 1]);
+  });
+});
+
 it("refuses to delete an image a theme names, and frees it when no theme does", async () => {
   await withTransaction(suite.db, async (tx) => {
     const a = await upload(tx, photoA, "Logo");

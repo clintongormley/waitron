@@ -45,9 +45,9 @@ export interface ImageRecord extends ImageMetadataInput {
   sourceFilename: string;
   originalFilename: string | null;
   /** How many products (variants among them), sections, include folders, live or queued menu
-   * versions, receipt logos and theme logos reference this photo. `readImage` uses `listImageUsagesForFilename`
-   * and `listImages` uses `countUsages`; the counters must stay in step or the library shows a free
-   * photo that then refuses to delete. */
+   * versions, receipt logos and theme logos reference this photo. `readImage` uses
+   * `listImageUsagesForFilename` and `listImages` uses `countUsages`; the counters must stay in step
+   * or the library shows a free photo that then refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -549,9 +549,9 @@ export async function listImages(
 }
 
 /**
- * How many products (variants among them), sections, include folders, live or queued menu versions
- * receipt logos and theme logos name each of `filenames`; a theme naming one photo as both its
- * light and dark logo counts once.
+ * How many products (variants among them), sections, include folders, live or queued menu versions,
+ * receipt logos and theme logos name each of `filenames`; a theme naming one photo as both its light
+ * and dark logo counts once.
  *
  * The reads count the sources `listImageUsages` lists, and a source added there is added here too
  * — or the library shows a free photo that then refuses to delete. They are separate statements on
@@ -564,7 +564,6 @@ async function countUsages(
   const counts = new Map<string, number>();
   if (filenames.length === 0) return counts;
   const wanted = [...filenames];
-  const isWanted = new Set(filenames);
   const tally = (image: string | null): void => {
     if (image !== null) counts.set(image, (counts.get(image) ?? 0) + 1);
   };
@@ -619,8 +618,8 @@ async function countUsages(
     .select({ light: themeLogoName("light"), dark: themeLogoName("dark") })
     .from(customThemes)
     .where(or(inArray(themeLogoName("light"), wanted), inArray(themeLogoName("dark"), wanted)))) {
-    if (row.light !== null && isWanted.has(row.light)) tally(row.light);
-    if (row.dark !== null && row.dark !== row.light && isWanted.has(row.dark)) tally(row.dark);
+    tally(row.light);
+    if (row.dark !== row.light) tally(row.dark);
   }
   return counts;
 }
