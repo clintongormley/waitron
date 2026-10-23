@@ -3616,8 +3616,9 @@ cover the routes they name; a new money route is seen by none.
 
 Added 2026-10-23 by A798-B slice 9 (PR to come); the decisions and measurements named here are in
 [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md).
-Every Q and S label below is a run made for the plan against its PROTOTYPE of `clock-behind.ts`, in
-a throwaway worktree, not against this branch's code; the P labels are requests to AEAT's hosts.
+Every Q and S label below is a run made for the plan against a PROTOTYPE of `clock-behind.ts` — the
+Q labels against revision 2's, the S labels against revision 3's — in a throwaway worktree, not
+against this branch's code; the P labels are requests to AEAT's hosts.
 Where a shipped test checks the same sequence on this branch, it is named beside the label; the
 test file is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`.
 
@@ -3725,7 +3726,7 @@ readings and the restart presses they name. What nothing checks:
 - that a new reader of the stop lifts with the others: the "answers the same from the stop, the
   staff notice and the bell" case names those three;
 - that only `restartAfterClockStop` writes the table: nothing refuses another writer, and a row it
-  wrote with well-formed heads would cover.
+  wrote that passes the cover's checks would cover.
 
 ## An envío to AEAT carries one taxpayer name
 

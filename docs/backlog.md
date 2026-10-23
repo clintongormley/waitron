@@ -4228,8 +4228,9 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   restart proof, the bell and the Alerts screen keep each `YYYY-MM-DD HH:MM` whole (`wholeTimes`,
   `apps/dashboard/src/widgets/alert-format.ts`); the pop-up (`wt-toast`) takes a plain string, so
   keeping times whole there needs `wt-toast` to take more than a string, or no-break characters in
-  the text. The page's 'Updated' line does not use `wholeTimes` either. Left open by A798-B slice 9
-  (#…).
+  the text. The page's 'Updated' line does not use `wholeTimes` either, nor do the restart dialog's
+  two times (the box's clock and the latest sale, `formatIsoMinute` in
+  `apps/dashboard/src/screens/box-status-screen.ts`). Left open by A798-B slice 9 (#…).
 
 ### Working time and staff
 
@@ -4691,8 +4692,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   slice 9 (#…).
   [Detail](backlog/box.md#aeats-time-for-a-restart-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
 
-- **A clock set back before the mail server's certificate start cannot send the clock-stop
-  email.** An inference from slice 10's plan P8, not measured. Left open by A798-B slice 9 (#…).
+- **A clock set back before the mail server's certificate start may not be able to send the
+  clock-stop email.** An inference from slice 10's plan P8, not measured. Left open by A798-B
+  slice 9 (#…).
 
 - **Two devices can fake a restart's proof.** A device's clock reading is whatever it sends; the
   restart still needs a manager's press and a gap of at most 24 hours. Left open by A798-B slice 9
@@ -4795,9 +4797,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **The clock stop's look differs from pictures 8 and 9.** The counter refusal shows in the till's
   top banner, not under the strip; the Clock row's fix advice follows " · " on the comparison line
   rather than on a line of its own; the Box status page shows the alert sentence "Sort it out on the
-  Box status page" while on that page; and the alert pop-up and the Box status page's 'Updated' line join date and
-  time with a plain space, so they can split on a narrow screen. Left open by A798-B slice 8
-  (#2012).
+  Box status page" while on that page; and the alert pop-up, the Box status page's 'Updated' line
+  and the restart dialog's two times join date and time with a plain space, so they can split on a
+  narrow screen. Left open by A798-B slice 8 (#2012).
 
 - **'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
   'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,

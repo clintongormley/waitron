@@ -903,7 +903,7 @@ browser test** — most of these rules exist because a test passed while proving
   [conventions-data.md](docs/developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
   **A manager's restart (`clock_stop_restarts`) lifts this stop for one step back**, then holds every
   reading to the minute against the latest time written under it; the stop reads the table only
-  through `clockBehindChain`. Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
+  through `clockBehindChain`. Guard: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
   weaker than the rule — nothing checks that only `clockBehindChain` reads the table. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#a-managers-restart-lifts-the-stop-for-one-step-back).
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
