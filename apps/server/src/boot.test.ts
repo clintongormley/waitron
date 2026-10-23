@@ -34,8 +34,10 @@ import { Agent } from "undici";
 import {
   captureError,
   deviceProfiles,
+  kitchenStations,
   printJobs,
   printers,
+  stationPrinters,
   openVenueDatabase,
   readDeploymentEnvironment,
   readMembershipTrustSet,
@@ -2798,6 +2800,74 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
         await server.close();
       }
     });
+  }, 60_000);
+
+  it("the equipment read names a stuck kitchen printer", async () => {
+    const cfg = loadTillConfig(TILL_ENV);
+    const [printer] = await sharedDb
+      .insert(printers)
+      .values({
+        locationId: cfg.locationId,
+        name: "Probe kitchen",
+        transport: "network_tcp",
+        host: "10.0.0.9",
+      })
+      .returning({ id: printers.id });
+    const [station] = await sharedDb
+      .insert(kitchenStations)
+      .values({ locationId: cfg.locationId, name: "Probe kitchen", isDefault: false })
+      .returning({ id: kitchenStations.id });
+    await sharedDb
+      .insert(stationPrinters)
+      .values({ stationId: station!.id, printerId: printer!.id });
+    const [job] = await sharedDb
+      .insert(printJobs)
+      .values({
+        locationId: cfg.locationId,
+        printerId: printer!.id,
+        payload: Uint8Array.from([1]),
+        kind: "document",
+        status: "queued",
+        createdAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+      })
+      .returning({ id: printJobs.id });
+    try {
+      await withCapturedStdout(async () => {
+        const port = await freePort();
+        const server = await startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "dev",
+          WAITRON_MIN_TICK_MS: "50",
+          WAITRON_MAX_TICK_MS: "200",
+          WAITRON_SKIP_RETRY_MS: "100",
+        });
+        try {
+          const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+            headers: { [DEV_DEVICE_HEADER]: deviceId1 },
+          });
+          expect(res.status).toBe(200);
+          const body = (await res.json()) as { notices: unknown[] };
+          expect(body.notices).toContainEqual(
+            expect.objectContaining({
+              owner: "printers",
+              code: "printer.jobs_waiting",
+              params: expect.objectContaining({ printer: "Probe kitchen" }),
+            }),
+          );
+        } finally {
+          await server.close();
+        }
+      });
+    } finally {
+      await sharedDb.delete(printJobs).where(eq(printJobs.id, job!.id));
+      await sharedDb.delete(stationPrinters).where(eq(stationPrinters.stationId, station!.id));
+      await sharedDb.delete(kitchenStations).where(eq(kitchenStations.id, station!.id));
+      await sharedDb.delete(printers).where(eq(printers.id, printer!.id));
+    }
   }, 60_000);
 
   it("passes the development device identity to an Orders receipt-copy request", async () => {
