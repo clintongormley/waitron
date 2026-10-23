@@ -487,6 +487,28 @@ describe("independent original facts", () => {
 });
 
 describe("exact reviewed transformations", () => {
+  it.each([
+    ["registros_facturacion", "fiscal-verifactu"],
+    ["bookings", "bookings"],
+  ])("refuses a correctly bound row mapping to protected %s", (table, module) => {
+    const context = cell();
+    context.disabledModules = [];
+    context.migrations.push({ hash: "4".repeat(64), module });
+    expect(() =>
+      comparison.compareFacts(
+        make(),
+        make(),
+        [
+          mapping({
+            module,
+            migrationHash: "4".repeat(64),
+            object: { subject: "rows", key: table },
+          }),
+        ],
+        context,
+      ),
+    ).toThrow("history.mapping");
+  });
   it("validates each complete schema mapping before returning an admitted descriptor", () => {
     const before = object("products");
     const after = { ...before, extra: true };
