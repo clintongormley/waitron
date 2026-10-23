@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { staffNoticeText } from "./staff-notices.js";
 import { en, es } from "./strings.js";
-import { setLocale } from "./t.js";
+import { clockTime, setLocale } from "./t.js";
 
 afterEach(() => {
   setLocale("en-GB");
@@ -84,6 +84,42 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
       main: words["staff_notice.unknown"],
       hint: words["staff_notice.tell_manager"],
     });
+  });
+
+  it("words a printer notice with the printer's name and the time its oldest ticket was sent", () => {
+    setLocale(locale);
+    expect(words["staff_notice.printer.jobs_waiting"]).toBeTypeOf("string");
+    expect(words["staff_notice.since"]).toBeTypeOf("string");
+    const since = "2026-10-23T19:16:00.000Z";
+    expect(
+      staffNoticeText({ code: "printer.jobs_waiting", params: { printer: "Kitchen", since } }),
+    ).toEqual({
+      main: words["staff_notice.printer.jobs_waiting"].replace("{printer}", "Kitchen"),
+      hint: words["staff_notice.since"].replace("{time}", clockTime(Date.parse(since))),
+    });
+  });
+
+  const since = "2026-10-23T19:16:00.000Z";
+  it.each([
+    {},
+    { printer: "", since },
+    { printer: "Kitchen" },
+    { printer: "Kitchen", since: "not a time" },
+    { printer: 7, since },
+  ])("words a printer notice with %j as unknown", (params) => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "printer.jobs_waiting", params })).toEqual({
+      main: words["staff_notice.unknown"],
+      hint: words["staff_notice.tell_manager"],
+    });
+  });
+
+  it("keeps a printer name that looks like a replacement pattern", () => {
+    setLocale(locale);
+    expect(
+      staffNoticeText({ code: "printer.jobs_waiting", params: { printer: "$& {time}", since } })
+        .main,
+    ).toContain("$& {time}");
   });
 
   it("words a code the till does not know as unknown", () => {

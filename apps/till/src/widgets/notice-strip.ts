@@ -170,7 +170,12 @@ export class TillNoticeStrip extends LitElement {
       </button>
       ${
         this.open
-          ? html`<ul id="notice-list" data-notice-list aria-label=${t("staff_notice.list")}>
+          ? html`<ul
+              id="notice-list"
+              data-notice-list
+              tabindex="0"
+              aria-label=${t("staff_notice.list")}
+            >
               ${this.notices.map(
                 (notice) =>
                   html`<li class="line" data-notice-tone=${toneOf(notice.severity)}>
