@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
+import { setHelpMode } from "@waitron/ui";
 import type {
   AlertView,
   AlertsResponse,
@@ -202,6 +203,44 @@ describe("box-status-screen Retry now", () => {
     expect(retry).toBeGreaterThanOrEqual(0);
     expect(goTo).toBeGreaterThanOrEqual(0);
     expect(retry).toBeLessThan(goTo);
+  });
+
+  it("hangs each help badge over its own button's top trailing corner while help is on", async () => {
+    setHelpMode(true);
+    try {
+      const { el } = await mount(
+        stubApi(health({ outbox: outbox({ waiting: 12 }), notices: [UNSENT] })),
+      );
+      for (const action of ["retry", "free"]) {
+        const button = q(el, `[data-test=${action}]`)!.getBoundingClientRect();
+        const badge = q(el, `.${action} wt-help-tooltip`)!.getBoundingClientRect();
+        expect(badge.width).toBeGreaterThan(0);
+        const [x, y] = [badge.left + badge.width / 2, badge.top + badge.height / 2];
+        expect(Math.abs(x - button.right)).toBeLessThanOrEqual(1);
+        expect(Math.abs(y - button.top)).toBeLessThanOrEqual(1);
+      }
+    } finally {
+      setHelpMode(false);
+    }
+  });
+
+  it("keeps Retry now's help badge clear of the Go to beside it", async () => {
+    setHelpMode(true);
+    try {
+      const { el } = await mount(
+        stubApi(
+          health({ outbox: outbox({ waiting: 12, awaitingCertificate: true }), notices: [UNSENT] }),
+          [{ ...CERTIFICATE_ALERT, screen: "venue-settings" }],
+        ),
+        (screen) => screen === "venue-settings",
+      );
+      const badge = q(el, ".retry wt-help-tooltip")!.getBoundingClientRect();
+      const goTo = q(el, "[data-test=row-tax] [data-test=go-to]")!.getBoundingClientRect();
+      expect(badge.width).toBeGreaterThan(0);
+      expect(badge.right).toBeLessThanOrEqual(goTo.left);
+    } finally {
+      setHelpMode(false);
+    }
   });
 
   describe("pressed", () => {

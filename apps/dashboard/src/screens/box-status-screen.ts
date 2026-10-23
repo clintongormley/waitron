@@ -133,9 +133,15 @@ export class BoxStatusScreen extends LitElement {
       }
       .free,
       .retry {
+        position: relative;
         display: flex;
         gap: var(--wt-space-1);
         align-items: center;
+      }
+      /* Room for the half of its help badge that hangs past its end, help on or off, so the
+         badge never covers a Go to after it and turning help on moves nothing. */
+      .retry {
+        margin-inline-end: max(0px, calc(var(--wt-help-badge-target) / 2 - var(--wt-space-2)));
       }
       .other {
         display: flex;
