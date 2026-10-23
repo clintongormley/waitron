@@ -13,11 +13,13 @@ import {
   createCustomTheme,
   deleteCustomTheme,
   listCustomThemes,
+  prepareThemeSave,
   readThemeInUse,
   renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
 } from "./theme-store.js";
+import type { ReceiptLogoRasters } from "./types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
@@ -470,4 +472,252 @@ describe("custom theme store against a real migrated database", () => {
       expect(await rawRow(a.id)).toEqual(before);
     },
   );
+});
+
+const PRINTABLE: ReceiptLogoRasters = {
+  "58mm": { widthDots: 8, heightDots: 1, data: "/w==" },
+  "80mm": { widthDots: 8, heightDots: 1, data: "/w==" },
+};
+
+const L = `${"a".repeat(64)}.webp`;
+const M = `${"b".repeat(64)}.webp`;
+const D = `${"c".repeat(64)}.webp`;
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { logo: _, ...noLogo } = LEMON;
+
+async function storedTheme(id: string): Promise<unknown> {
+  const rows = await suite.db.execute<{ theme: string }>(
+    sql`select theme from custom_themes where id = ${id}`,
+  );
+  return JSON.parse(rows.rows[0]!.theme);
+}
+
+function createWithDots(
+  manager: string,
+  name: string,
+  theme: unknown,
+  printedLogo?: ReceiptLogoRasters,
+  inUse?: boolean,
+) {
+  return inTx((tx) =>
+    createCustomTheme(tx, { managementSessionId: manager, name, theme, inUse, printedLogo }),
+  );
+}
+
+function saveWithDots(
+  manager: string,
+  id: string,
+  theme: unknown,
+  printedLogo?: ReceiptLogoRasters,
+) {
+  return inTx((tx) =>
+    saveCustomTheme(tx, { managementSessionId: manager, id, theme, printedLogo }),
+  );
+}
+
+function prepare(manager: string, id: string | null, theme: unknown, name?: string) {
+  return inTx((tx) => prepareThemeSave(tx, { managementSessionId: manager, id, name, theme }));
+}
+
+async function insertRaw(text: string, inUse: 0 | 1 = 0): Promise<string> {
+  const id = randomUUID();
+  await suite.db.execute(
+    sql`insert into custom_themes (id, name, name_key, in_use, theme, updated_at)
+        values (${id}, ${`Old ${id}`}, ${`old ${id}`}, ${inUse === 1 ? 1 : null}, ${text},
+                '2026-10-01T00:00:00.000Z')`,
+  );
+  return id;
+}
+
+describe("a theme logo's printed dots", () => {
+  it("stores the printed logo beside a logo and never answers it as a choice", async () => {
+    const { manager } = await setup();
+    const expected = { ...LEMON, logo: { light: L } };
+    const created = await createWithDots(manager, "A", expected, PRINTABLE, true);
+    expect(await storedTheme(created.id)).toEqual({ ...expected, printedLogo: PRINTABLE });
+    const answered = [
+      created.choices,
+      (await inTx(listCustomThemes)).themes[0]!.choices,
+      (await inTx(readThemeInUse))!.choices,
+    ];
+    for (const choices of answered) {
+      expect(choices).toEqual(expected);
+      expect(Object.keys(choices!)).not.toContain("printedLogo");
+    }
+  });
+
+  it.each([
+    ["no dots", undefined],
+    [
+      "dots a paper cannot print",
+      { ...PRINTABLE, "58mm": { widthDots: 8, heightDots: 1, data: "x" } },
+    ],
+  ] as const)("refuses a logo with %s, writing nothing", async (_label, dots) => {
+    const { manager } = await setup();
+    const theme = { ...LEMON, logo: { light: L } };
+    await expect(
+      createWithDots(manager, "A", theme, dots as ReceiptLogoRasters | undefined),
+    ).rejects.toThrow("a theme logo needs printable dots for both papers");
+    expect(await rowCount()).toBe(0);
+    const a = await create(manager, "A");
+    const before = await rawRow(a.id);
+    await expect(
+      saveWithDots(manager, a.id, theme, dots as ReceiptLogoRasters | undefined),
+    ).rejects.toThrow("a theme logo needs printable dots for both papers");
+    expect(await rawRow(a.id)).toEqual(before);
+  });
+
+  it("stores no dots without a logo", async () => {
+    const { manager } = await setup();
+    const a = await createWithDots(manager, "A", LEMON, PRINTABLE);
+    expect(await storedTheme(a.id)).toEqual(LEMON);
+    await saveWithDots(manager, a.id, { ...LEMON, logo: { light: L } }, PRINTABLE);
+    expect(await storedTheme(a.id)).toEqual({
+      ...LEMON,
+      logo: { light: L },
+      printedLogo: PRINTABLE,
+    });
+    await saveWithDots(manager, a.id, { ...LEMON, logo: null }, PRINTABLE);
+    expect(await storedTheme(a.id)).toEqual(LEMON);
+  });
+
+  it("a document without a logo key saves as no logo", async () => {
+    const { manager } = await setup();
+    const a = await createWithDots(manager, "A", { ...LEMON, logo: { light: L } }, PRINTABLE);
+    const saved = await saveWithDots(manager, a.id, noLogo);
+    expect(saved.choices!.logo).toBeNull();
+    expect(await storedTheme(a.id)).toEqual({ ...LEMON, logo: null });
+  });
+
+  it("a theme stored before this slice still reads", async () => {
+    await setup();
+    const id = await insertRaw(JSON.stringify(noLogo), 1);
+    expect((await inTx(listCustomThemes)).themes[0]!.choices).toEqual({ ...LEMON, logo: null });
+    expect(await inTx(readThemeInUse)).toEqual({ id, choices: { ...LEMON, logo: null } });
+  });
+
+  it("a sent printedLogo is refused as an unknown key", async () => {
+    const { manager } = await setup();
+    const a = await create(manager, "A");
+    expect(
+      await errorOf(() =>
+        saveWithDots(manager, a.id, { ...LEMON, logo: null, printedLogo: PRINTABLE }),
+      ),
+    ).toEqual({ code: "theme.invalid", params: { field: "theme", reason: "unknown_key" } });
+  });
+
+  it.each(["{broken", "[1]"])("still reads the broken row %s as null choices", async (text) => {
+    await setup();
+    const id = await insertRaw(text);
+    expect((await inTx(listCustomThemes)).themes).toEqual([
+      { id, name: `Old ${id}`, choices: null, updatedAt: "2026-10-01T00:00:00.000Z" },
+    ]);
+  });
+});
+
+describe("prepareThemeSave", () => {
+  async function withStoredLogo(manager: string, dots: unknown = PRINTABLE): Promise<string> {
+    const a = await createWithDots(manager, "A", { ...LEMON, logo: { light: L } }, PRINTABLE);
+    await suite.db.execute(
+      sql`update custom_themes set theme = ${JSON.stringify({
+        ...LEMON,
+        logo: { light: L },
+        printedLogo: dots,
+      })} where id = ${a.id}`,
+    );
+    return a.id;
+  }
+
+  it.each([
+    ["the same pictures", { light: L }],
+    ["a changed dark picture", { light: L, dark: D }],
+  ])("keeps the stored dots for %s", async (_label, logo) => {
+    const { manager } = await setup();
+    const id = await withStoredLogo(manager);
+    const theme = { ...LEMON, logo, brandColor: "#1E5B3A" };
+    expect(await prepare(manager, id, theme)).toEqual({
+      choices: { ...LEMON, logo, brandColor: "#1e5b3a" },
+      keptPrintedLogo: PRINTABLE,
+    });
+  });
+
+  it("keeps no dots for another light picture", async () => {
+    const { manager } = await setup();
+    const id = await withStoredLogo(manager);
+    expect(await prepare(manager, id, { ...LEMON, logo: { light: M } })).toEqual({
+      choices: { ...LEMON, logo: { light: M } },
+      keptPrintedLogo: null,
+    });
+  });
+
+  it("keeps no dots a paper cannot print", async () => {
+    const { manager } = await setup();
+    const id = await withStoredLogo(manager, {
+      "58mm": PRINTABLE["58mm"],
+      "80mm": { ...PRINTABLE["80mm"], data: "x" },
+    });
+    expect(
+      (await prepare(manager, id, { ...LEMON, logo: { light: L } })).keptPrintedLogo,
+    ).toBeNull();
+  });
+
+  it.each(["{broken", "[1]", JSON.stringify(noLogo)])(
+    "keeps no dots from the stored document %s",
+    async (text) => {
+      const { manager } = await setup();
+      const id = await insertRaw(text);
+      expect(
+        (await prepare(manager, id, { ...LEMON, logo: { light: L } })).keptPrintedLogo,
+      ).toBeNull();
+    },
+  );
+
+  it("keeps no dots when the sent document has no logo", async () => {
+    const { manager } = await setup();
+    const id = await withStoredLogo(manager);
+    expect(await prepare(manager, id, LEMON)).toEqual({ choices: LEMON, keptPrintedLogo: null });
+  });
+
+  it("keeps no dots for a new theme", async () => {
+    const { manager } = await setup();
+    await withStoredLogo(manager);
+    expect(await prepare(manager, null, { ...LEMON, logo: { light: L } }, "B")).toEqual({
+      choices: { ...LEMON, logo: { light: L } },
+      keptPrintedLogo: null,
+    });
+  });
+
+  it("authorizes, then finds, then parses, as the store does", async () => {
+    const { manager } = await setup();
+    const id = await withStoredLogo(manager);
+    const supervisor = await seedSession("supervisor");
+    const bad = { ...LEMON, logo: "x" };
+    expect(await codeOf(() => prepare(supervisor, id, LEMON))).toBe("authorization.not_permitted");
+    expect(await codeOf(() => prepare(manager, randomUUID(), bad))).toBe("theme.not_found");
+    expect(await errorOf(() => prepare(manager, id, bad))).toEqual({
+      code: "theme.invalid",
+      params: { field: "logo", reason: "bad_value" },
+    });
+  });
+
+  it("checks a new theme's name after its document", async () => {
+    const { manager } = await setup();
+    expect(await errorOf(() => prepare(manager, null, LEMON, "Waitron"))).toEqual({
+      code: "theme.invalid",
+      params: { field: "name", reason: "reserved" },
+    });
+    expect(await errorOf(() => prepare(manager, null, LEMON, ""))).toEqual({
+      code: "theme.invalid",
+      params: { field: "name", reason: "empty" },
+    });
+    expect(await errorOf(() => prepare(manager, null, LEMON))).toEqual({
+      code: "theme.invalid",
+      params: { field: "name", reason: "empty" },
+    });
+    expect(await errorOf(() => prepare(manager, null, { ...LEMON, logo: "x" }, ""))).toEqual({
+      code: "theme.invalid",
+      params: { field: "logo", reason: "bad_value" },
+    });
+  });
 });
