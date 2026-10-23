@@ -1,5 +1,13 @@
 # A798-B slice 9 — devices report their clock, `clock.disagrees`, `clock.unusable` in the bell, the manager's restart, and the clock-stop email
 
+> **Revision 3 (2026-10-23).** Folds in the narrow round-3 check
+> (`~/waitron-campaign-b/a798-9-plan-review/round3.md`, logs in `r3/`: I1, I2, M1–M6), marked
+> **[r3 …]**. Under a restart each reading is now held to the LATEST TIME among the records written
+> under it (a running maximum), so a clock walking back 59 s at a time stops at its second step; and
+> the anchor of "written under it" is a map of every chain's head, which fails closed for any value a
+> correct writer never stores (decisions 8c, 10, 21). Receipts: "Measured for revision 3"
+> (`~/waitron-campaign-b/a798-9-plan-probe/r3/`).
+>
 > **Revision 2 (2026-10-23).** Folds in plan review round 1
 > (`~/waitron-campaign-b/a798-9-plan-review/round1.md`: C1, I1–I7, M1–M12) and its claim check
 > (`claim-check.md` beside it: FALSE 1–5, TOO WIDE 1–3, UNVERIFIED 1–2) under the coordinator's
@@ -7,7 +15,7 @@
 > **[CC n]**, by the row number in that file. New receipts are under "Measured for revision 2"
 > (`~/waitron-campaign-b/a798-9-plan-probe/r2/`). The biggest change: a restart now covers ONE
 > backward step; after the first record written under it, every record is held to the one-minute
-> rule against the record written just before it (decision 8).
+> rule against the latest time among the records written under it (decision 8; revision 3).
 >
 > **No migration.** The table this slice writes, `clock_stop_restarts`, and the index the stop reads
 > were created by slice 8 (`packages/fiscal-verifactu/drizzle/0010_clock_stop.sql`). Nothing here
@@ -102,16 +110,20 @@
 - A **restart** is one row of `clock_stop_restarts`
   (`packages/fiscal-verifactu/src/schema/clock-stop-restarts.ts`): who, when, the reading accepted
   (`clock_at`), the record it names (`registro_id`, unique), that record's time (`record_at`) and
-  the proof, which also carries `recordsBefore`: how many records the box's own chain held when the
-  restart was made (decision 10) **[C1]**. The **accepted gap** is `record_at − clock_at`.
-- A record **written under a restart** is a record of the restart's `node_id` whose `secuencia` is
-  larger than the restart's `recordsBefore` (and not larger than a later restart's on the same
-  node). The **newest written record** is the box's own chain's record with the largest
-  `secuencia`, which is write order, not time order **[C1]**.
-- A restart **covers** a reading when all three hold (decision 8): it names the latest record; the
-  gap is at most `min(accepted gap + 60 000, 86 400 000)` ms **[M1]**; and, once a record has been
-  written under it, the reading is no more than 60 000 ms earlier than the newest written record
-  **[C1]**.
+  the proof, which also carries `heads`: for every chain in the database when the restart was made,
+  its node and the largest `secuencia` it held (decisions 10 and 21) **[C1, r3 I2]**. The
+  **accepted gap** is `record_at − clock_at`.
+- A record **written under a restart** is a record, in any chain, whose `secuencia` is larger than
+  its node's entry in the restart's `heads` (0 for a node the map does not name), and, when a later
+  restart exists, not larger than that later restart's entry. That is write order per chain, which
+  is the chain code's own order (`chain.ts:150`, `:225`; review round 3, read), not time order.
+  The **latest time written under it** is the largest generation time among those records
+  **[r3 I1]**.
+- A restart **covers** a reading when all four hold (decision 8): its `heads` are well formed and
+  none is larger than its chain's current head (decision 21) **[r3 I2]**; it names the latest record;
+  the gap is at most `min(accepted gap + 60 000, 86 400 000)` ms **[M1]**; and, once a record has been
+  written under it, the reading is no more than 60 000 ms earlier than the latest time written under
+  it **[C1, r3 I1]**.
 - A **witness** is a reading of another clock taken by the box: a **device witness** (a till's or
   handheld's own clock, sent on its equipment read) or an **AEAT witness** (AEAT's time from the
   drain's submission reply or from the HEAD of decision 1). Each carries `boxAt`, the box's own
@@ -325,13 +337,15 @@ memory 81%). Logs and scripts under `~/waitron-campaign-b/a798-9-plan-probe/r2/`
   R + 10 h, R + 10 h + 5 min → `["recorded","recorded","recorded"]`.
 - **Q3 — the first step and its margin**: before any record under the restart, R − 61 s →
   `clock.behind_chain`, R − 59 s → `recorded`; then R + 1 min → `recorded`; then R − 59 s →
-  `clock.behind_chain` (two minutes before the newest written record).
+  `clock.behind_chain` (two minutes before the one record written under the restart).
 - **Q4 — the cap is exactly 24 hours [M1]**: a restart accepted at exactly 24 h; a sale at
   T − 24 h − 1 s → `clock.behind_chain`; at T − 24 h → `recorded`.
 - **Q5 — one total order for "latest" [I7]**: two sales at the same instant; `latestRecord` named
-  secuencia 2; a restart naming the OTHER same-second record left the sale refused
+  one of them (which one follows the random ids; review round 3's X1 saw the other **[r3 M2]**); a
+  restart naming the OTHER same-second record left the sale refused
   (`clock.behind_chain`); a restart naming `latestRecord()`'s record let it through (`recorded`).
 - **Q6 — a restart row whose proof lacks `recordsBefore` covers nothing**: the sale was refused.
+  (Revision 2's anchor; revision 3 replaces it, S6–S10.)
 - **Q8 — the fiscal core's suites with the revised prototype** (`q8-fiscal-suites-r2.log`):
   `pnpm exec vitest run inmutabilidad src/write-path.e2e.test.ts src/clock-behind.test.ts src/chain.clock-behind.test.ts src/clock-behind-alerts.test.ts src/staff-notices.test.ts src/backend.clock-behind.test.ts src/clock-stop-restarts.test.ts src/chain.test.ts src/chain.concurrency.test.ts`
   in `packages/fiscal-verifactu` → `Test Files 10 passed (10)`, `Tests 87 passed (87)`, the golden
@@ -342,7 +356,8 @@ memory 81%). Logs and scripts under `~/waitron-campaign-b/a798-9-plan-probe/r2/`
   of waiting → `station shown true lock shown false poll starts 0`; the control, a till signed in by
   the lock screen's `logged-in` event → `poll starts 1`. The path (read): the poll starts only in
   `#enterSignedIn` (`till-app.ts:5082`), reached from `#onLoggedIn` (`:4934-4938`, the lock screen's
-  sign-in), `#enterSwitchedProfile` (`:9620`) and the shell's resume button (`:17853`); a
+  sign-in), `#enterSwitchedProfile` (`:9620`) and the Retry button of the empty-service-zone section (`:17853`,
+  `data-retry-device-zones`, inside `#activeTabBody`) **[r3 M6]**; a
   `kds_station` boot sets `deviceMode` and the station screen without a sign-in (`:4110-4128`), as
   the existing test says ("A KDS never logs in", `till-app.test.ts:8252`). So kitchen screens are
   not witnesses (decision 3). If a later change makes them poll, their readings would count like any
@@ -354,6 +369,61 @@ memory 81%). Logs and scripts under `~/waitron-campaign-b/a798-9-plan-probe/r2/`
   `registros_facturacion.sale_id` is `notNull` (`schema/registros.ts:49-50`), so every named record
   has a sale; the bell never shows an incident's sale (`apps/server/src/alerts.ts:63-76`, read).
 - **Q11 — the certificate search, re-run**: see P11.
+
+## Measured for revision 3
+
+Run on 2026-10-23, macOS, Node v26.11.1, in a throwaway worktree of `de73c6144`
+(`~/waitron-campaign-b/a798-9-plan-probe/r3/wt`, `pnpm install --frozen-lockfile --offline`
+"Done in 3.5s", removed with `git worktree remove --force`). Prototype:
+`r3/prototype-clock-behind-r3.diff` (`clock-behind.ts` only: `latestRecord`, `storedHeads`,
+`latestWrittenAfter`, and the cover with the bound check, the 24 h cap and the running maximum).
+Test: `r3/scripts/zz-restart-r3.test.ts`, run as
+`TESTCONTAINERS_RYUK_DISABLED=true env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run src/zz-restart-r3.test.ts --silent=false`
+in `packages/fiscal-verifactu`; log `r3/s-restart-r3.log`, `Tests 17 passed (17)`. Restart rows carry
+`{ heads }` read from the database as decision 10 says.
+- **S1 (Q1 again)**: `[R+1m, R+10h, R+30m, R+10h−59s, R+10h−2m]` →
+  `["recorded","recorded","clock.behind_chain","recorded","clock.behind_chain"]`.
+- **S2 (forward control)**: `[R+1m, R+10h, R+10h+5m]` → all `recorded`.
+- **S3 (first step)**: `[R−61s, R−59s, R+1m, R−59s]` →
+  `["clock.behind_chain","recorded","recorded","clock.behind_chain"]`.
+- **S4 (cap)**: `[T−24h−1s, T−24h]` → `["clock.behind_chain","recorded"]`.
+- **S5 — the review's twelve-step walk [r3 I1]**: restart, `R + 1 min`, `R + 10 h`, then
+  `R + 10 h − 59 s × 1 … 12` → `recorded` ×3 (the first 59 s step sells), then `clock.behind_chain`
+  ×11 — the second 59 s step is refused. The failing case is S11.
+- **S11 — proof by deletion of the running maximum** (`r3/s11-mutation-last-written.log`): the
+  "latest time written under it" read ordered by `secuencia` instead of by time (revision 2's rule)
+  → S5 prints `recorded` ×14, the walk admitted, as the review's X12 printed.
+- **S6 — a JSON `null` proof [r3 I2]** (raw SQL `proof = 'null'`): a sale at `R + 1 min` →
+  `clock.behind_chain`, no `TypeError` (the review's X4 printed `TypeError: Cannot read properties of
+  null` with revision 2's prototype).
+- **S7 — each impossible stored value fails closed [r3 I2]**: a proof with no `heads`, `heads` an
+  array, a value `"1"`, `-1`, `0.5`, `1e12` (larger than the chain's head), an empty map, and a map
+  naming a node with no records → each `clock.behind_chain` at `R + 1 min`.
+- **S12 — proof by deletion of the bound check** (`r3/s12-mutation-no-bound.log`): with "a head
+  larger than its chain's current head covers nothing" deleted, the `1e12` row → `recorded`.
+- **S8 — a restored database [r3 I2]**: the latest record on a second node's chain at `T`, the
+  box's chain empty, `heads` from the database (one entry, the older chain); the box sells
+  `[R+1m, R+10h, R+30m, R+10h+1m]` → `["recorded","recorded","clock.behind_chain","recorded"]`.
+- **S9 — the row names another node**: `heads` right, `node_id` the second node →
+  `[R+1m, R+10h, R+30m]` → `["recorded","recorded","clock.behind_chain"]`. The rule does not read the
+  row's `node_id`, so a wrong one cannot widen it (the review's X6b admitted the step with revision
+  2's anchor).
+- **S10 — `heads` leaving out the older chain** (`{}` on S8's database): `R + 1 min` →
+  `clock.behind_chain` — the older chain's records count as written under the restart, the named
+  record among them, so the stop stays.
+- **S13 — the tie-break's proof by deletion made reliable [r3 M2]** (`r3/s13-tiebreak.log`): two
+  sales at one instant, eight runs, picking the latest by `… desc, id desc` and by `… desc, id asc`:
+  the two picks differed in all eight (`differ true`). So a deletion that makes ONE caller order by
+  `id asc` always picks the other record, and Task 5 case 7 fails every run.
+- **S14 — the fiscal core's suites with the revised prototype** (`r3/s14-fiscal-suites-r3.log`):
+  Q8's command → `Test Files 10 passed (10)`, `Tests 87 passed (87)`, the golden huella test
+  (`write-path.e2e.test.ts`) and `inmutabilidad` among them, unedited.
+- **S15 — what the route logs for a refused duplicate insert [r3 M4]** (`r3/p-unique-error.log`):
+  `node:sqlite`'s refusal of a second row on a unique column is a plain `Error`
+  (`{"code":"ERR_SQLITE_ERROR","errcode":2067}`, `UNIQUE constraint failed: r.registro_id`).
+  `isAppError` is `value instanceof AppError` (`packages/shared/src/errors.ts:97-99`) and `codeOf`
+  answers `"unknown"` for anything else (`packages/server-kit/src/error-code.ts:7-9`, read), so the
+  boundary logs `errorCode: "unknown"`, not the index.
 
 ---
 
@@ -439,27 +509,32 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
 8. **The lift, and the one step back it allows [C1].**
    - **8a. One latest record [I7].** `latestRecord(tx)` in `clock-behind.ts` orders by
      `fecha_hora_huso_gen_registro desc, id desc` and is the only way any code finds the latest
-     record: `clockBehindChain`, `clockStopState`, `restartAfterClockStop` and the disproof all call
-     it. `id` is a random UUID (`newId`, `packages/db/src/schema/columns.ts:178`), so the tie-break
+     record: `clockBehindChain`, `clockStopState` and `restartAfterClockStop` call it. The
+     disproof does not need it: it picks restarts by their `[restarted_at, record_at)` window
+     (decision 14) **[r3 M5]**. `id` is a random UUID (`newId`, `packages/db/src/schema/columns.ts:178`), so the tie-break
      is arbitrary but total and stable.
    - **8b. The cover.** `clockBehindChain` answers `null` when the raw comparison is behind and a
      restart covers the reading (Words). Every reader of the stop then lifts together: the strip,
      the bell's `clock.behind_chain`, the named check on every money route, the chain check inside
      the append, the drift suppression and the email's episode. No edit to `chain.ts` (Q1–Q8).
    - **8c. One step back, then the ordinary rule.** Before any record is written under the restart,
-     the first step may go up to a minute further back than accepted (Q3). Once one is written,
-     each reading is held to the ordinary one-minute rule against the newest written record — write
-     order on the box's own chain, by `secuencia`, not the latest time across chains (Q1). A second
-     step back of more than a minute stops payments again, and the Clock row says `stepped_back`;
-     a second press of the same record is refused `stepped_back` (decision 9). The same holds for
-     the chain's own check, so no record can be written past it.
+     the first step may go up to a minute further back than accepted (Q3, S3). Once one is written,
+     each reading is held to the ordinary one-minute rule against the **latest time written under
+     the restart** — a running maximum over those records, exactly the ordinary rule applied to
+     them **[r3 I1]**. So a second step back of more than a minute stops payments again (Q1, S1), and
+     so does a clock walking back 59 s at a time, at its second step (S5; it is not the record
+     written just before that counts, which revision 2 used and S11 shows admits the walk). The
+     Clock row then says `stepped_back`; a second press of the same record is refused
+     `stepped_back` (decision 9). The same holds for the chain's own check, so no record can be
+     written past it.
    - **8d. What the refusal names then.** When the stop is open because of 8c, `clock.behind_chain`'s
-     `lastRecordAt` and `lastRecordOffsetMinutes` are the newest written record's, the one the
-     reading is more than a minute behind; otherwise the latest record's.
+     `lastRecordAt` and `lastRecordOffsetMinutes` are those of the record holding the latest time
+     written under the restart; otherwise the latest record's. (Not probed: S1 checks only the code;
+     Task 5 case 2 pins the params.)
    - **What the owner chose under question 4, as built:** "The first sale after the restart steps the
      chain back by up to 24 hours; later sales carry times earlier than the last sale until real time
      passes it." Later sales do carry times earlier than the NAMED record, but never more than a
-     minute earlier than the sale written before them. The pull request says so.
+     minute earlier than the latest sale written under the restart. The pull request says so.
 9. **The restart's checks, in this order**, each refusing `clock.restart_refused { reason, … }`
    (HTTP 409) unless it says otherwise:
    1. a reading before 28-10-2024 → `clock.unusable` itself (design §4.8 d);
@@ -476,10 +551,11 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
 10. **What a restart row holds:** `node_id` the box's node, `person_id` the manager, `restarted_at`
     and `clock_at` both the route's one reading, `registro_id` and `record_at` the latest record,
     `proof` the agreeing witnesses only — `{ authority: { boxAt, witnessAt, uncertaintyMs } | null,
-    devices: [{ deviceId, boxAt, witnessAt }], recordsBefore }` — where `recordsBefore` is the
-    largest `secuencia` of the box's own chain at that moment, 0 when it is empty **[C1]**. Why in
-    `proof`: it is the one free JSON column and this slice adds no migration; a row without it
-    covers nothing (Q6). The insert is a plain insert, with no conflict clause **[I2]**: two presses
+    devices: [{ deviceId, boxAt, witnessAt }], heads: { [nodeId]: largestSecuencia } }` — `heads`
+    read in the restart's transaction as `select node_id, max(secuencia) from registros_facturacion
+    group by node_id`, one entry per chain the database holds **[r3 I2]**. Why in `proof`: it is the
+    one free JSON column and this slice adds no migration. Decision 21 says what a wrong value
+    does. The insert is a plain insert, with no conflict clause **[I2]**: two presses
     cannot overlap (one write transaction at a time, E3), so the second meets decision 9.4 first; a
     duplicate that ever reached the insert would be refused by the unique index and answer
     `500 server.internal` (E2; `error-boundary.ts:48-49`), never a silent drop.
@@ -531,11 +607,15 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     Either calls `noteClockProvedWrong(tx, { trustedUntil, reason })`. For each restart **in force**
     at `trustedUntil` (`restarted_at ≤ trustedUntil < record_at`) with no `clock.behind_chain_disproved`
     yet (acknowledged or not, matched by `params.restartId`), it records one with **`from` the
-    generation time of the first record written under that restart and `to` the generation time of
-    the newest record written under it when the disproof is observed [I4]**. A restart under which
-    no record was written gets no alert, since no sale carries its clock; the watch logs
-    `clock_watch.disproved_unused { restartId }`. A backward step is not disproof; it stops payments
-    again (decision 8c). Nothing else changes (design, decision 13).
+    EARLIEST and `to` the LATEST generation time among the records written under that restart when
+    the disproof is observed [I4, r3 M1]** — by time, not write order: the first record written can
+    be later than the second (review round 3's X9: secuencia 2 at `07:13:00`, secuencia 3 at
+    `07:12:02`). A restart under which no record was written gets no alert, since no sale carries its
+    clock; the watch logs `clock_watch.disproved_unused { restartId }`. A backward step is not
+    disproof; it stops payments again (decision 8c). Nothing else changes (design, decision 13):
+    **after a disproof the restart still covers**, so sales recorded later fall after `to`, and no
+    second alert is recorded for that restart (it already has one). The guide says so and Task 19
+    records it **[r3 M1]**.
 15. **`clock.unusable` in the bell.** The module's clock source (`clockBehindSource`, the name kept)
     answers `clock.unusable` instead of `clock.behind_chain` while the reading is before
     28-10-2024: error, area `box`, `system.manage`, `since: null`, `screen: "box-status"`, params
@@ -568,12 +648,29 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     (`["clock_stop_restarts", "node_id", "nodes", "id"]`,
     `["clock_stop_restarts", "registro_id", "registros_facturacion", "id"]`).
 20. **Parked**, as the build plan's row 9 says.
+21. **The anchor of "written under a restart" is a map of every chain's head, and it fails closed
+    [r3 I2].** Revision 2 stored one count for "the box's own chain"; the rule then had to know which
+    node sells, which the append's own check cannot be told (`refuseWhileClockBehind` gets only the
+    reading, and `chain.ts` is not edited), and a wrong value or a wrong `node_id` widened the cover
+    (the review's X5, X6b). Instead the row stores `heads`, every chain's largest `secuencia` at the
+    restart (decision 10), and the rule never reads the row's `node_id`. One definition, used by the
+    writer and the reader alike. The cover is NOTHING — the stop stays, and nothing throws — unless
+    `proof` is a non-null, non-array object whose `heads` is a non-null, non-array object in which
+    every value is a safe integer `≥ 0` and no value is larger than its node's current largest
+    `secuencia` (0 for a node with no records). A node the map leaves out counts from 0, so its
+    records all count as written under the restart, which can only narrow the cover (S10). Since
+    `clock_stop_restarts` is append-only, a bad row is harmless for ever: it covers nothing and
+    cannot be corrected or removed, and the next stop is a new latest record with no row. Measured:
+    S6–S10, S12. Cost: one `group by node_id` read of `registros_facturacion` per covered reading
+    (the cover runs only while the raw comparison is behind), on a database with a handful of
+    chains.
 
 ## Behaviour this slice changes
 
 1. While the stop is open and a manager restarts with proof, every action slice 8 stops works again;
    the next record carries the box's clock, earlier than the named record's (P6b, P7), and every
-   record after it is held to the one-minute rule against the one written before it (Q1).
+   record after it is held to the one-minute rule against the latest time among the records written
+   under the restart (S1, S5).
 2. New in the bell: `clock.disagrees`, `clock.unusable`, `clock.behind_chain_restarted`,
    `clock.behind_chain_disproved`. Under a clock before 28-10-2024 the bell shows `clock.unusable`
    instead of `clock.behind_chain`.
@@ -643,7 +740,8 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
    clock; taken before the stop; one device twice; an AEAT disagreement older than five minutes
    still counting against (Tasks 1, 2, 6).
 3. **The one step back [C1].** A covering restart sells; a second step back of more than a minute
-   after a record is written stops again; a forward-moving clock keeps selling; the strip, the bell,
+   after a record is written stops again, and so does a clock walking back 59 s at a time, at its second
+   step **[r3 I1]**; a malformed restart row covers nothing **[r3 I2]**; a forward-moving clock keeps selling; the strip, the bell,
    the named check and the chain check agree (Task 5; Task 9b case 2).
 4. **One latest record [I7].** Two records in one second: the restart, the stop and the page name
    the same one (Task 5 case 7).
@@ -671,7 +769,7 @@ before implementers start. The slice is **parked** for the owner.
 
 **The pull request description says**, in its first lines: it is parked (a manager's restart lets
 ONE record carry a time earlier than the record before it; every later record is held to the
-one-minute rule against the one written before it — the reading of the owner's question-4 answer
+one-minute rule against the latest time among the records written under the restart — the reading of the owner's question-4 answer
 that was built, decision 8); the box asks AEAT's QR validation host for its time during a stop;
 no migration; `chain.ts`, the golden test and `inmutabilidad` unchanged; AEAT's time comes from the
 QR host's `Date` header, not from `consultar`, which was not measured (departure 1, P11).
@@ -692,7 +790,9 @@ QR host's `Date` header, not from `consultar`, which was not measured (departure
 **Codex seat 2 (told to set the checklist aside).** Find a way to restart without proof or to write
 a record further back than the rules allow: replay a device header from an old request; send one
 device's header from two browsers; step the box's clock back by 30 s, 61 s and 2 min after a restart;
-restart, sell for an hour, then step back 30 min **[C1]**; restart, let real time pass the record,
+restart, sell for an hour, then step back 30 min **[C1]**; restart, sell, then walk the clock back
+59 s per sale **[r3 I1]**; store a restart row with a hand-made `heads` (too large, negative, a
+string, `null`) and sell **[r3 I2]**; restart, let real time pass the record,
 then step back; race two presses; restart under a clock before 28-10-2024; two records in one second.
 
 ---
@@ -877,23 +977,28 @@ export function createClockWitnessStore(deps?: { wall?: () => number; monotonic?
 ### Task 5: The lift — one latest record, one step back
 
 **Files:**
-- Modify: `packages/fiscal-verifactu/src/clock-behind.ts` (decision 8; the shape is
-  `~/waitron-campaign-b/a798-9-plan-probe/r2/prototype-clock-behind-r2.diff`; export `latestRecord`)
+- Modify: `packages/fiscal-verifactu/src/clock-behind.ts` (decisions 8 and 21; the shape is
+  `~/waitron-campaign-b/a798-9-plan-probe/r3/prototype-clock-behind-r3.diff`; export `latestRecord`,
+  `storedHeads` and `latestWrittenAfter`, which Tasks 6 and 7 reuse)
 - Create: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`
 
 The test inserts restart rows directly (the writer is Task 6), as `clock-stop-restarts.test.ts:20-37`
-does, with `proof: { recordsBefore }`, and records through `VerifactuBackend` and `recordSale` as
-`chain.clock-behind.test.ts:31-55` does. Q1–Q6 are its cases.
+does, with `proof: { heads }` read from the database as decision 10 says (or hand-made for the
+impossible values), and records through `VerifactuBackend` and `recordSale` as
+`chain.clock-behind.test.ts:31-55` does. S1–S10 are its cases.
 
 - [ ] **Step 1: Write the failing tests:**
   1. a record at `T`; a sale at `R = T − 14.5 h` → `clock.behind_chain`; a restart naming it
-     (`clock_at R`, `record_at T`, `recordsBefore 1`); a sale at `R + 1 min` → recorded, its
+     (`clock_at R`, `record_at T`, `heads` from the database); a sale at `R + 1 min` → recorded, its
      `anterior_huella` the first's `huella`;
   2. **[C1]** after the restart: `R + 1 min`, `R + 10 h`, `R + 30 min`, `R + 10 h − 59 s`,
      `R + 10 h − 2 min` → recorded, recorded, `clock.behind_chain`, recorded, `clock.behind_chain`
-     (Q1); the third refusal's params name the newest written record (`lastRecordAt` `R + 10 h`,
-     decision 8d);
-  3. **[C1] control:** `R + 1 min`, `R + 10 h`, `R + 10 h + 5 min` → all recorded (Q2);
+     (S1); the third refusal's params name the record holding the latest time written under the
+     restart (`lastRecordAt` `R + 10 h`, decision 8d);
+  3. **[C1] control:** `R + 1 min`, `R + 10 h`, `R + 10 h + 5 min` → all recorded (S2);
+  3b. **[r3 I1] the twelve-step walk:** `R + 1 min`, `R + 10 h`, then `R + 10 h − 59 s × 1 … 12` →
+     recorded, recorded, recorded, then `clock.behind_chain` for each of the eleven after it: the
+     second 59 s step is refused (S5);
   4. the first step: before any record under the restart, `R − 61 s` refused, `R − 59 s` recorded;
      then `R + 1 min` recorded and `R − 59 s` refused (Q3);
   5. **[M1]** a restart accepted at exactly 24 h: `T − 24 h − 1 s` refused, `T − 24 h` recorded (Q4);
@@ -902,26 +1007,42 @@ does, with `proof: { recordsBefore }`, and records through `VerifactuBackend` an
   7. **[I7]** two records at the same instant: `latestRecord` names one; a restart naming the other
      leaves the stop on; one naming `latestRecord()`'s lifts it (Q5);
   8. a restart naming a record that is no longer the latest (real time passed it) does not lift a
-     new stop; a restart whose proof lacks `recordsBefore` covers nothing (Q6); a reading before
-     28-10-2024 with a restart → `refuseWhileClockBehind` still throws `clock.unusable`;
+     new stop; a reading before 28-10-2024 with a restart → `refuseWhileClockBehind` still throws
+     `clock.unusable`;
+  8b. **[r3 I2] the anchor fails closed and never throws**, each a sale at `R + 1 min` →
+     `clock.behind_chain`: a proof stored as JSON `null` (raw SQL); a proof with no `heads`; `heads`
+     an array; a value `"1"`, `-1`, `0.5` and one larger than its chain's head; an empty map; a map
+     naming a node with no records (S6, S7);
+  8c. **[r3 I2] two chains**: the latest record on an older chain of a second node, the box's chain
+     empty — `R + 1 min`, `R + 10 h`, `R + 30 min`, `R + 10 h + 1 min` → recorded, recorded,
+     `clock.behind_chain`, recorded (S8); the same with the row's `node_id` the other node → the
+     same answers (S9); `heads` leaving out the older chain → `clock.behind_chain` at `R + 1 min`
+     (S10);
   9. an invoice dated a day earlier than the record it links to (P7) → recorded, and
      `verifyBackupFiscalChains` over a backup copy answers `true`.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-behind.restart.test.ts` →
   every case that expects `recorded` after a restart fails `clock.behind_chain`; 7 fails to import
   `latestRecord`.
-- [ ] **Step 3: Implement** `latestRecord` and the cover (one unique-index read and one read of the
-  box's chain head by `registros_node_secuencia_idx`, only when the raw comparison is behind).
+- [ ] **Step 3: Implement** `latestRecord`, `storedHeads` and the cover (one unique-index read, one
+  `group by node_id` read of the chains' heads, and one read per chain of the latest time after its
+  stored head, served by `registros_node_secuencia_idx`; all only when the raw comparison is
+  behind). Nothing in it may throw for any stored `proof`.
 - [ ] **Step 4: Run** the new file and Q8's list → PASS; the fiscal-core check of Global constraints
   prints nothing.
 - [ ] **Step 5: Proofs by deletion**, each restored and re-run, each failure named in the report:
-  delete the newest-written-record rule → case 2 records `R + 30 min` (Q7); drop the margin from
+  order the "latest time written under it" read by `secuencia` instead of by time → case 3b
+  prints `recorded` for every step (S11); delete the rule altogether → case 2 records `R + 30 min`
+  (Q7); delete the bound check → case 8b's too-large head is `recorded` (S12); drop the margin from
   the cover → case 4's `R − 59 s` is refused; drop the cap → case 5's `T − 24 h − 1 s` is recorded;
-  drop the `id` tie-break → case 7 fails on the order E4 printed.
+  make `clockStopState` (Task 6) or the test's second reader order by `id asc` while
+  `latestRecord` keeps `id desc` → case 7 fails on every run, since two distinct ids always order
+  differently (S13) **[r3 M2]**. (Deleting the tie-break outright is not a reliable proof: the
+  engine's pick then matches the larger id only some of the time, review round 3's X14.)
 - [ ] **Step 6: Commit.**
   ```bash
   git add packages/fiscal-verifactu/src/clock-behind.ts packages/fiscal-verifactu/src/clock-behind.restart.test.ts
-  git commit -s -m "A manager's restart lifts the payment stop for one step back; a later step back of more than a minute stops it again"
+  git commit -s -m "A manager's restart lifts the payment stop for one step back; any later step back of more than a minute, even in small steps, stops it again"
   ```
 
 ### Task 6: The restart rule and its writer
@@ -956,8 +1077,13 @@ alert**: Task 7 adds that, so this task never makes the alert guard red **[M4]**
 - [ ] **Step 1: Write the failing tests** (`useVenueDb`, a record at `T`, witness fixtures with
   `boxAt` behind `T`):
   1. two devices agreeing, gap 14.5 h → `offer: "offered"`; restart → one row with decision 10's
-     columns, `proof.recordsBefore` the chain's largest `secuencia`, `replayed: false`; a sale at
-     the reading → recorded;
+     columns, `proof.heads` equal to `select node_id, max(secuencia) … group by node_id` read just
+     before the press (one entry per chain), `replayed: false`; a sale at the reading → recorded;
+  1b. **[r3 I2] a restored database through the writer**: an older chain on a second node holds the
+     latest record, the box's chain is empty; the restart written by `restartAfterClockStop` (not by
+     hand); then a sale at the reading → recorded; then a reading 30 min behind that sale →
+     `clock.behind_chain`. A writer that stored only the box's chain, or counted all records as one
+     number, fails this case or case 1;
   2. **no proof** (no witnesses; one device; an AEAT witness that says nothing) → `"no_proof"`;
      restart refused `clock.restart_refused { reason: "no_proof" }`, row count unchanged;
   3. **contrary proof**: two agreeing devices plus an AEAT witness that disagrees → `"contrary_proof"`;
@@ -1006,8 +1132,9 @@ alert**: Task 7 adds that, so this task never makes the alert guard red **[M4]**
      the named record's sale, params decision 13) in the restart's transaction; a refused restart
      records none; a replay records none.
   2. `noteClockProvedWrong` with `trustedUntil` inside a restart's `[restarted_at, record_at)`, after
-     two records written under it, records one `clock.behind_chain_disproved` with `from` the first
-     of them and `to` the second **[I4]**; a second call records none (also after the first is
+     records written under it at `R + 1 min`, `R + 2 s` and `R + 90 s` (written in that order),
+     records one `clock.behind_chain_disproved` with `from` `R + 2 s` and `to` `R + 90 s` — the
+     earliest and latest by time, not the first and last written **[I4, r3 M1]**; a second call records none (also after the first is
      acknowledged); `trustedUntil` after `record_at` or before `restarted_at` → none; a restart with
      no record written under it → none, answered in `unused`; nothing in `registros_facturacion` or
      `clock_stop_restarts` changes (counts).
@@ -1083,8 +1210,8 @@ alert**: Task 7 adds that, so this task never makes the alert guard red **[M4]**
   6. **[I2] two simultaneous presses**: `Promise.all` of two `POST`s with the same `recordId` → one
      200 `replayed: false`, one 200 `replayed: true`, one row, one `clock.behind_chain_restarted`.
      Proof by deletion: delete decision 9.4's replay branch → the second press answers
-     `500 server.internal`, its log naming the unique index's refusal (E2), so the case fails on its
-     status; restore.
+     `500 server.internal` (the engine's unique refusal is not an `AppError`, so the boundary logs
+     only `errorCode: "unknown"`, S15 **[r3 M4]**), and the case fails on its status; restore.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/clock-restart.route.test.ts src/box-health-api.test.ts`.
 - [ ] **Step 3: Implement.**
@@ -1393,9 +1520,10 @@ What they say, in the guides' plain style (`~/.claude/docs-writing-style.md`):
   during the stop, and at most 24 hours behind; who can (people who manage the system); what it does
   and never does (no recorded sale changes; the next sale carries an earlier time than the last; it
   is noted who did it); it allows one step back only — if the clock goes back again by more than a
-  minute after a sale, payments stop again and the page says to get the clock checked **[C1]**; a
-  second press shows the first; if the accepted clock later proves wrong, the bell says which sales
-  are affected and to ask the tax adviser. Rewrite "Wait … This is the only way out when the clock is
+  minute behind the latest sale made since the restart, even a little at a time, payments stop
+  again and the page says to get the clock checked **[C1, r3 I1]**; a second press shows the first;
+  if the accepted clock later proves wrong, the bell says which sales are affected and to ask the
+  tax adviser, and that sales made after that alert are not added to it **[r3 M1]**. Rewrite "Wait … This is the only way out when the clock is
   right…" (EN `:118-120`), which this slice makes false.
 - `{#clock-witnesses}`: tills and handhelds send their clock to the box (kitchen screens do not);
   the bell warns when two agree the box is off; staff see nothing for that.
@@ -1419,8 +1547,9 @@ What they say, in the guides' plain style (`~/.claude/docs-writing-style.md`):
 
 - [ ] **Step 1: CLAUDE.md §5.** Add to the clock-stop rule, keeping it a rule **[M10, C1]**: "A
   manager's restart (`clock_stop_restarts`) lifts it for ONE step back: once a record is written
-  under it, every reading is held to the minute against the record written before it, and
-  `clockBehindChain` is the one place that reads the table. Guards:
+  under it, every reading is held to the minute against the latest time among the records written
+  under it, and the stop reads that table only through `clockBehindChain`; a row whose stored chain
+  heads are malformed covers nothing **[r3 I1, I2, M3]**. Guards:
   `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` and
   `packages/fiscal-verifactu/src/clock-stop-restart.test.ts`, weaker than the rule — they cover the
   readings they name." Run `pnpm exec prettier --check CLAUDE.md` and
@@ -1504,6 +1633,13 @@ The till is unchanged on screen (it only sends a header), so no till LOOK.
     stepped.** The owner may prefer it to lapse at a step (slice 9 decision 4)." **[I5]**
   - "**A restart under which no sale was recorded raises no 'disproved' alert** when its clock later
     proves wrong; the box logs it." (decision 14)
+  - "**After a 'disproved' alert, the restart still covers and later sales are not added to the
+    alert.** Its `{to}` is the latest sale when the disproof was seen; sales made afterwards on the
+    same clock appear in no alert. Whether a disproof should stop payments again is for the owner
+    (slice 9 decision 14)." **[r3 M1]**
+  - "**A malformed restart row covers nothing, for ever.** `clock_stop_restarts` is append-only, so a
+    row whose stored chain heads are wrong cannot be corrected; it lifts no stop (slice 9 decision
+    21)." **[r3 I2]**
 - [ ] **Step 4: Outside A798, in `docs/backlog/fiscal.md`**: "**A679's internet time reading came
   back unavailable against pre-production in each of four runs on 2026-10-23.**
   `observeInternetHourClock` asks the submission host, which answered a certificate-less request with
@@ -1556,6 +1692,27 @@ The till is unchanged on screen (it only sends a header), so no till LOOK.
 - §4.8 d: what clears it — the restart (Task 5); devices and AEAT never lift it themselves; the
   28-10-2024 rule first (decision 9.1, Task 11).
 - §7: no new table; witnesses in memory (decision 4).
+
+## Revision 3, finding by finding
+
+- **r3 I1**: decision 8c now holds each reading to the latest TIME among the records written under
+  the restart (a running maximum); Words, 8d, Behaviour 1, the PR description, the guide and the
+  CLAUDE.md sentence reworded; Task 5 case 3b (the twelve-step walk, S5) with its proof by deletion
+  (S11); Codex seat 2's list; golden and `inmutabilidad` re-run unedited (S14).
+- **r3 I2**: one definition — `heads`, every chain's largest `secuencia` (decisions 10, 21);
+  fails closed with no throw for a `null` proof and every impossible value (S6, S7, proof by
+  deletion S12); the row's `node_id` is not read (S9); two chains (S8, S10); Task 5 cases 8b–8c and
+  Task 6 case 1b through the real writer.
+- **r3 M1**: `from`/`to` are the earliest and latest generation times, not write order (decision 14,
+  Task 7 case 2); after a disproof the restart still covers and later sales join no alert — the guide
+  and a backlog entry say so.
+- **r3 M2**: the tie-break's proof by deletion is now one reader ordering by `id asc` (S13: eight of
+  eight runs differ); Q5's "named secuencia 2" dropped.
+- **r3 M3**: the CLAUDE.md sentence says the stop reads the table through `clockBehindChain`, not
+  that it is the only reader.
+- **r3 M4**: Task 9a case 6 no longer says the 500's log names the index (S15).
+- **r3 M5**: decision 8a no longer lists the disproof among `latestRecord`'s callers.
+- **r3 M6**: `till-app.ts:17853` is the empty-service-zone section's Retry button.
 
 ## Revision 2, finding by finding
 
