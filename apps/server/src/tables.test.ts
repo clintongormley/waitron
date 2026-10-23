@@ -13,7 +13,6 @@ import {
   floorZones,
   parties,
   partyTables,
-  kitchenTimingDefaults,
   locations,
   nowIso,
   ticketItems,
@@ -81,7 +80,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
       timeZone,
     })
     .returning({ id: locations.id });
-  await db.insert(kitchenTimingDefaults).values({ locationId: location!.id });
   const locationId = location!.id;
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
@@ -414,7 +412,6 @@ async function setupTabVenue(): Promise<{
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  await db.insert(kitchenTimingDefaults).values({ locationId: location!.id });
   const locationId = location!.id;
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const nodeId = await seedNode(db, brandLocationId(locationId));

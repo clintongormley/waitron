@@ -18,7 +18,6 @@ import {
   diningTables,
   tableInService,
   locations,
-  kitchenTimingDefaults,
   nowIso,
   printJobs,
   ticketItems,
@@ -116,7 +115,6 @@ async function setupVenue(): Promise<Seeded> {
     .returning({ id: locations.id });
   const locationId = location!.id;
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),

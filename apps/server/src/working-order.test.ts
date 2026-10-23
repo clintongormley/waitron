@@ -20,7 +20,6 @@ import {
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
-  kitchenTimingDefaults,
   locations,
   nowIso,
   orderGroupEvents,
@@ -184,7 +183,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
 
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =

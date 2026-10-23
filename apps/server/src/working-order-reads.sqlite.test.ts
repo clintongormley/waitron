@@ -4,7 +4,6 @@ import {
   floorZones,
   kitchenStations,
   locations,
-  kitchenTimingDefaults,
   nowIso,
   parties,
   partyTables,
@@ -51,7 +50,6 @@ beforeAll(async () => {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   [{ id: stationId }] = await db
     .insert(kitchenStations)

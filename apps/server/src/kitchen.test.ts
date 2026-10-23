@@ -8,7 +8,6 @@ import {
   catalogues,
   kitchenCourses,
   kitchenStations,
-  kitchenTimingDefaults,
   locations,
   products,
   withTransaction,
@@ -63,7 +62,6 @@ async function setupVenue(): Promise<TillConfig> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     nodeId: brandNodeId(nodeId),
