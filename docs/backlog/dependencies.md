@@ -140,6 +140,45 @@ code only creates and signs certificates and certificate requests with it
 `apps/server/src/cloud-remote.ts`); it checks signatures with it only in tests. **Next action:**
 bump it when a fixed version is published, and run the certificate suites in those three packages.
 
+## Zod security refresh (A1039, 2026-10-23)
+
+Dependabot alert [#26](https://github.com/clintongormley/waitron/security/dependabot/26)
+names Zod versions below 4.6.6. The lockfile now resolves 4.6.7, through
+`@stryker-mutator/core@10.0.0` and `mutation-server-protocol@0.4.1`.
+`pnpm -r why zod` reports that path under development dependencies in the five packages
+that declare Stryker. No manifest or override changed.
+
+The parent's published range already permits the fix. `pnpm -r update zod --lockfile-only`
+changed only Zod's package, integrity and dependency snapshot entries; the subsequent
+`pnpm install --frozen-lockfile` succeeded. Dependabot's
+[failed security run](https://github.com/clintongormley/waitron/actions/runs/40007419026)
+reported 4.4.3 as the latest resolvable version with no conflicting dependencies, even though
+its update command exited successfully. This local refresh does not establish why its updater
+failed to recognise the new resolution.
+
+The release notes from 4.5.0 through 4.6.7 were read. Changes relevant to validation include
+stricter string formats, code-point length checks, record and intersection handling, lazy error
+construction, recursive-schema memory retention and early collection-size checks. The installed
+protocol schemas use objects, strings, numbers, arrays, records, enums and optional fields.
+The small mutation check below exercises the CLI and test runner, not every protocol schema.
+
+From `packages/shared`'s mutation script, the baseline and updated installs each killed all
+seven mutants in `src/capitalise.ts`, with 125 tests in the initial run and a 100% mutation
+score. Reproduce the updated check from the repository root:
+
+```sh
+pnpm --filter @waitron/shared mutation --mutate src/capitalise.ts --force --concurrency 1 --reporters clear-text
+```
+
+Sources read on 2026-10-23:
+
+| Source | Source wording | What it establishes |
+| --- | --- | --- |
+| [GitHub advisory GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5) | Affected: “< 4.6.6”; patched: “4.6.6” | The new resolution is outside the advisory's affected range. |
+| [Published protocol metadata](https://registry.npmjs.org/mutation-server-protocol/0.4.1) | `"zod": "^4.1.12"` | The parent's range admits 4.6.7. |
+| [Zod 4.6.6 release](https://github.com/colinhacks/zod/releases/tag/v4.6.6) | “check array, set and map size bounds before parsing elements” | The release lists the collection-size fix. |
+| [Zod 4.6.7 release](https://github.com/colinhacks/zod/releases/tag/v4.6.7) | “4.6.7” | Its sole listed commit is the version bump. |
+
 ## Whether the vulnerability the upgrade fixes is reachable in this product is open
 
 **Left behind by the passkey library upgrade (#453, 2026-09-19).** `@simplewebauthn/server` and

@@ -5598,7 +5598,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 ### Dependency upgrades
 
-_Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/dependencies.md).
+_Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
+[backlog/dependencies.md](backlog/dependencies.md).
 
 - **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it** — left
   behind by the Stryker upgrade (#447, 2026-09-19). The retry removes the Vitest-major ignore in
