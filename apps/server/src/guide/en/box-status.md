@@ -124,5 +124,9 @@ the clock reads no more than a minute before the latest sale, the next payment i
 for the clock. The tills' notice and this page's red rows clear within about 15 seconds. The bell,
 and the bell's alert shown under the **Clock** row, clear within about a minute.
 
+A card taken from a bill's payment options just as payments stop can show in the bell as a card
+payment that Waitron could not record. The box records that payment by itself once payments are
+back, but the alert stays in the bell until a manager presses **Mark handled** on it.
+
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
 box's clock is wrong** instead. The way out is the same: set the clock right.

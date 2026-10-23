@@ -130,6 +130,11 @@ siguiente cobro ya no se rechaza por la hora. El aviso de los terminales y las f
 página desaparecen en unos 15 segundos. La campana, y el aviso de la campana que aparece bajo la
 fila **Reloj**, desaparecen en un minuto, más o menos.
 
+Una tarjeta cobrada desde las opciones de pago de una cuenta justo cuando se paran los cobros puede
+aparecer en la campana como un pago con tarjeta que Waitron no ha podido registrar. El equipo
+registra ese pago por sí solo cuando se puede volver a cobrar, pero el aviso sigue en la campana
+hasta que un encargado pulsa **Marcar como resuelto** en él.
+
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran en su lugar
 **No se pueden registrar ventas: la hora del equipo es incorrecta**. La salida es la misma: poner la
 hora bien.
