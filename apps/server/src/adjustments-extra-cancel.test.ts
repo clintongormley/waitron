@@ -22,6 +22,7 @@ import { createPrinter } from "@waitron/printing";
 import { listStationNotices } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import { createStation } from "./kitchen.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
@@ -568,6 +569,127 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       ]);
     } finally {
       await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
+    }
+  });
+
+  it("cancelling a held dish's extra prints only at a station recorded for the group", async () => {
+    const { barId, screenId, barPrinterId, offers } = await inTx(venue, async (tx) => {
+      const barId = (await createStation(tx, venue.cfg, { name: `Bar-${randomUUID()}` })).id;
+      const screenId = (await createStation(tx, venue.cfg, { name: `Screen-${randomUUID()}` })).id;
+      const printer = await createPrinter(
+        tx,
+        { locationId: venue.cfg.locationId },
+        { name: `Bar ${randomUUID()}`, transport: "cloud_poll", pollId: randomUUID() },
+      );
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: barId,
+        printerId: printer.id,
+      });
+      const [burger] = await tx
+        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.name, "Burger"));
+      const ids: string[] = [];
+      for (const [kitchenName, stationId] of [
+        ["BARB", barId],
+        ["SCRB", screenId],
+      ] as const) {
+        const product = await createProduct(tx, {
+          catalogueId: burger!.catalogueId,
+          categoryId: burger!.categoryId!,
+          name: `${kitchenName} ${randomUUID()}`,
+          customerName: { [venue.cfg.locale]: kitchenName },
+          kitchenName,
+          pricingUnit: "each",
+          unitPrice: "9.00",
+          vatClass: "general",
+        });
+        await writeProductModifiers(tx, product.id, [{ kind: "extras", id: extras.listId }]);
+        await setRoutingCell(
+          tx,
+          venue.cfg,
+          { row: { kind: "product", productId: product.id }, zoneId: null },
+          { kind: "station", stationId },
+        );
+        ids.push(product.id);
+      }
+      const offered = await offerProducts(tx, venue.cfg, { zone: "tables", productIds: ids });
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stationId, screenId]);
+      await setStationPrinting(tx, { printHeldWork: false }, [barId]);
+      return {
+        barId,
+        screenId,
+        barPrinterId: printer.id,
+        offers: ids.map((id) => offered.offerFor(id)),
+      };
+    });
+    try {
+      const billId = await inTx(venue, async (tx) => {
+        const table = await createTable(tx, venue.cfg, {
+          label: `M-${randomUUID().slice(0, 8)}`,
+          zoneId: venue.tables.zoneId,
+        });
+        const seated = await seatTable(tx, venue.cfg, {
+          tableId: table.id,
+          guestCount: null,
+          operatorId: venue.staffId,
+        });
+        await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, venue.staffId);
+        await placeGroups(tx, venue.cfg, seated.partyId, {
+          groups: [
+            {
+              lines: [offer.hamburger, ...offers].map((menuItemId) => withSides(menuItemId)),
+              release: "hold",
+            },
+          ],
+          operatorId: venue.staffId,
+          billId: seated.tabId,
+        });
+        return seated.tabId;
+      });
+      const noticesOf = (stationId: string) =>
+        inTx(venue, async (tx) =>
+          (await listStationNotices(tx, venue.cfg, stationId)).map((notice) => ({
+            kind: notice.kind,
+            lineName: notice.lineName,
+            cancelledExtra: notice.cancelledExtra,
+          })),
+        );
+
+      const printed = await jobsDuring(async () => {
+        // Each dish is followed by its three extras, gherkins last.
+        for (const lineNo of [4, 8, 12]) {
+          const lineId = await lineIdOf(venue, billId, lineNo);
+          const command = await inTx(venue, async (tx) => ({
+            orderId: billId,
+            expectedEdit: await readBillEditState(tx, billId),
+            submissionId: randomUUID(),
+            expectedRevision: await revisionOf(tx, billId),
+            lineId,
+            action: "cancel" as const,
+            reasonId: venue.reasonId.houseVoid,
+            note: null,
+            operatorId: venue.staffId,
+          }));
+          await inTx(venue, (tx) => apply(tx, command));
+        }
+      });
+
+      expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
+      expect(printed[0]!.lines[0]).toBe("*** HOLD CHANGED ***");
+      expect(printed[0]!.lines).toContain("1.000 x HAMB");
+      expect(printed.some((job) => job.printerId === barPrinterId)).toBe(false);
+      expect(await noticesOf(barId)).toEqual([
+        { kind: "changed", lineName: "BARB", cancelledExtra: "Gherkins" },
+      ]);
+      expect(await noticesOf(screenId)).toEqual([
+        { kind: "changed", lineName: "SCRB", cancelledExtra: "Gherkins" },
+      ]);
+    } finally {
+      await inTx(venue, (tx) =>
+        setStationPrinting(tx, { printHeldWork: false }, [venue.stationId]),
+      );
     }
   });
 

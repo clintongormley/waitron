@@ -141,6 +141,7 @@ export async function rerouteHeldAtRelease(
               quantity: row.quantity,
               wasStarted: false,
               group,
+              holdGroupId: row.groupId!,
             },
           ];
     });
@@ -407,7 +408,7 @@ export async function moveDishesToStation(
               stationId: oldStationId,
               quantity: row.quantity,
               wasStarted: false,
-              ...(row.firedAt === null ? { group } : {}),
+              ...(row.firedAt === null ? { group, holdGroupId: row.groupId! } : {}),
             },
           ];
         });

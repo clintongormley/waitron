@@ -277,6 +277,7 @@ export async function recallToDraft(
               quantity: item.firedQuantity,
               wasStarted: false,
               group: group.displayNumber,
+              holdGroupId: group.id,
             })),
           { kind: "HOLD CANCELLED" },
         );

@@ -3055,7 +3055,13 @@ async function tellKitchenOfCancelledExtra(
   if (extra.dishGroupId === null) return;
   const group = (await printedHeldGroups(tx, [extra.dishGroupId])).get(extra.dishGroupId);
   if (group === undefined) return;
-  await enqueueExtraCancelled(tx, cfg, tabId, { ...correction, group }, extra.label);
+  await enqueueExtraCancelled(
+    tx,
+    cfg,
+    tabId,
+    { ...correction, group, holdGroupId: extra.dishGroupId },
+    extra.label,
+  );
 }
 
 /**
