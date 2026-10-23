@@ -3220,6 +3220,20 @@ export const en = {
   "box_status.tax.unsent_one": "1 record not yet sent · the box retries by itself",
   "box_status.tax.unsent_held": "{count} records not yet sent · a manager needs to act",
   "box_status.tax.unsent_held_one": "1 record not yet sent · a manager needs to sort it out",
+  "box_status.tax.last_accepted": "Last accepted {time}",
+  "box_status.tax.none_accepted": "None accepted yet",
+  "box_status.retry": "Retry now",
+  "box_status.retry_help_label": "What Retry now does",
+  "box_status.retry_help":
+    "Tries the records waiting after a failed send again, instead of waiting out their pause. The tax agency's wait between sends still applies, except that a full batch of 1,000 records may go at once. Records stopped after repeated refusals stay stopped. While the box has no certificate for the tax agency nothing is sent, so it can't be pressed.",
+  "box_status.retry_help_guide": "More about trying again",
+  "box_status.retried":
+    "{count} records will be tried again as soon as the tax agency allows the next send.",
+  "box_status.retried_one":
+    "1 record will be tried again as soon as the tax agency allows the next send.",
+  "box_status.retried_none": "No record was waiting to be tried again.",
+  "box_status.retry_awaiting_certificate":
+    "Nothing can be sent until the tax agency's certificate is installed.",
   "box_status.bucket.off": "Not set up",
   "box_status.bucket.starting": "Starting",
   "box_status.bucket.ok": "Up to date",
@@ -6530,6 +6544,20 @@ export const es: Record<StringKey, string> = {
   "box_status.tax.unsent_one": "1 registro sin enviar · el equipo reintenta solo",
   "box_status.tax.unsent_held": "{count} registros sin enviar · el encargado tiene que actuar",
   "box_status.tax.unsent_held_one": "1 registro sin enviar · el encargado tiene que resolverlo",
+  "box_status.tax.last_accepted": "Último aceptado {time}",
+  "box_status.tax.none_accepted": "Aún no se ha aceptado ninguno",
+  "box_status.retry": "Reintentar ahora",
+  "box_status.retry_help_label": "Qué hace Reintentar ahora",
+  "box_status.retry_help":
+    "Vuelve a intentar los registros que esperan tras un envío fallido, sin esperar a que acabe su pausa. La espera entre envíos que pide Hacienda sigue valiendo, salvo que un lote completo de 1.000 registros puede salir enseguida. Los registros parados tras varios rechazos siguen parados. Mientras el equipo no tenga el certificado de la AEAT no se envía nada, así que no se puede pulsar.",
+  "box_status.retry_help_guide": "Más sobre volver a intentar",
+  "box_status.retried":
+    "{count} registros se volverán a intentar en cuanto Hacienda permita el siguiente envío.",
+  "box_status.retried_one":
+    "1 registro se volverá a intentar en cuanto Hacienda permita el siguiente envío.",
+  "box_status.retried_none": "Ningún registro esperaba para volver a intentarse.",
+  "box_status.retry_awaiting_certificate":
+    "No se puede enviar nada hasta que se instale el certificado de la AEAT.",
   "box_status.bucket.off": "No configurada",
   "box_status.bucket.starting": "Arrancando",
   "box_status.bucket.ok": "Al día",

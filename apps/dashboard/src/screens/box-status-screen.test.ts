@@ -30,6 +30,7 @@ function health(overrides: Partial<BoxHealth> = {}, disk: Partial<BoxHealth["dis
     notices: [],
     noticesUnavailable: [],
     filing: true,
+    outbox: null,
     stream: {
       state: "streaming",
       generation: "g1",
