@@ -5404,7 +5404,8 @@ alert list, and holds no staged input.
   `clock.unusable`, `clock.behind_chain`); amber is any other notice and any bell alert on that row, whatever the alert's
   own severity, because amber means everything still works. The legend says "red: something can't
   be saved", not "nothing", because an unusable clock refuses sales while orders still save.
-- **Under the rows.** A note when a staff-notice check could not be made; a note when the bell's
+- **Under the rows.** A note when a staff-notice check, or the read of the records waiting to be
+  sent, could not be made; a note when the bell's
   alerts could not be read (the rows still show, from the box's read); "{n} other alerts" with
   See all alerts when some alert or notice belongs to no row; and how to free more space, and who
   can. What fills the disk (database, backups on the box, logs, the rest of the disk) is the Disk
@@ -5420,13 +5421,15 @@ alert list, and holds no staged input.
   its working files are not counted.
 - **Retry now.** On the Tax agency row, before its Go to buttons, "Retry now" and a help-mode "?"
   that opens the guide's `retry-now` section. It is drawn only while the box's read carries
-  `outbox`, which is `null` when the box does not send records or reading them failed. Its states
+  `outbox`, which is `null` when the box does not send records, when its fiscal module has no
+  reader for them, or when reading them failed. Its states
   follow the button rule (Forms, above): quiet and disabled while no record waits, while the row
   has no `fiscal.records_unsent` notice, while the box waits for its tax-agency certificate, and
   after a press the box answered until the box is read again; `primary` with `loading` while its
-  own press is sent. While the box waits for its certificate and the row carries no
-  `fiscal.awaiting_certificate` alert, "Nothing can be sent until the tax agency's certificate is
-  installed." is shown under the row's words. No confirmation. After a press, "{count} records will
+  own press is sent. While the box waits for its certificate, the bell's
+  `fiscal.awaiting_certificate` alert (area `fiscal`) sits on the Tax agency row and says why; only
+  when the row carries no such alert is "Nothing can be sent until the tax agency's certificate is
+  installed." shown under the row's words. No confirmation. After a press, "{count} records will
   be tried again as soon as the tax agency allows the next send." (or "1 record …") is announced
   under the row's words and every open read, the bell's too, is read again; the first box read that
   shows no record waiting, or shows no `fiscal.records_unsent` notice, takes the sentence away, but
