@@ -74,7 +74,7 @@ While the box has no certificate for the tax agency, nothing is sent, so **Retry
 pressed and the row says why. Install the certificate in **Venue settings**. The box tries again
 within five minutes, and after that the button can be pressed while records are still not sent.
 
-Records stopped after the tax agency refused several of them in a row for the same reason are not
+Records stopped after the tax agency refused several records in a row for the same reason are not
 released by **Retry now**. The box keeps trying the first of them every hour, and the bell's alert
 says why they stopped.
 
