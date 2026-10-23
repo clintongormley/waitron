@@ -139,16 +139,17 @@ muestra esa prueba y un botón **Reanudar los cobros**. La prueba es una de esta
   camarero enviaron una hora a menos de un minuto de la del equipo. La [sección
   siguiente](box-status.md#clock-witnesses) explica qué dispositivos envían su hora.
 
-Solo cuenta una prueba tomada desde que se pararon los cobros, y solo durante cinco minutos. Tampoco
-cuenta una prueba tomada antes de un cambio en el reloj del equipo.
+Solo cuenta una prueba tomada mientras el reloj del equipo marcaba más de un minuto por detrás de la
+última venta, y solo durante cinco minutos. Tampoco cuenta una prueba tomada antes de un cambio en el
+reloj del equipo.
 
 La página no ofrece reanudar, y explica por qué bajo la fila **Reloj**, cuando:
 
 - no hay ninguna prueba reciente: **No hay ninguna prueba reciente de que la hora del equipo sea
   correcta.**
 - dos o más dispositivos coinciden entre sí en que el reloj del equipo va desviado más de un minuto,
-  o Hacienda no ha coincidido con él desde que el reloj del equipo quedó por detrás de la última
-  venta. El equipo solo guarda ese desacuerdo en su memoria, así que lo olvida si el propio equipo se
+  o Hacienda no ha coincidido con él mientras el reloj del equipo marcaba más de un minuto por
+  detrás de la última venta. El equipo solo guarda ese desacuerdo en su memoria, así que lo olvida si el propio equipo se
   reinicia durante la parada; mientras Hacienda siga sin coincidir, el bloqueo vuelve con su
   siguiente respuesta, que un equipo que envía registros a Hacienda pide más o menos una vez por
   minuto durante una parada: **Otros relojes dicen que la hora del equipo está mal.**
