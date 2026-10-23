@@ -80,7 +80,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/vitest-duration-sequencer.mjs", ["apps/server"]],
   [
     "scripts/vitest-shard-coverage-merge.mjs",
-    ["apps/dashboard", "apps/till", "packages/venue-service"],
+    ["apps/dashboard", "apps/till", "packages/fiscal-verifactu", "packages/venue-service"],
   ],
 ]);
 
