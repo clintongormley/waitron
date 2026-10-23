@@ -3156,3 +3156,67 @@ In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a sourc
 Stryker
 counts the case as covering the module's load-time code and runs those mutants against it alone. Cost: db's mutation score
 read about 86% on three weekly runs (A539).
+
+
+## Root receipt excerpts moved on 2026-10-23
+
+These passages retain the root instruction receipts moved by A1026. They are excerpts
+from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.
+
+### `apps/server`'s shards are packed by a committed duration table (`apps/server/test-durations.json`, read by `scripts/vitest-duration-sequencer.mjs`), not by Vitest's hash split
+
+Cost: A938, the hash split's slowest server job took 349–410 s on six `main` runs.
+
+### Every CI test job — one shard of one package — should finish in about 4 minutes
+
+Cost: `test-server (5)` ran a 5.3-minute median.
+
+### A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`, never a plain `--merge-reports`
+
+Cost: the venue-service merge read functions low.
+
+### Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and mutation
+
+Cost: `packages/db`'s branch coverage fell below its bar.
+
+### Two pushes to `main` must never share a CI concurrency group
+
+Cost: a code merge that got NO run at all, so check after a merge that its own run exists.
+
+### Every workflow job carries `timeout-minutes`, except one that calls a reusable workflow, whose called jobs carry it
+
+Cost: PR #1399's image smoke sat 46 minutes.
+
+### An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image runs under an outer `timeout`, and is retried when it stalls or exits non-zero
+
+Cost: main run 37771042263's image smoke hit its 15-minute limit.
+
+### Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh` — each attempt under `timeout`, three attempts, then fail — never `pnpm/action-setup`, whose self-installer has no time limit of its own
+
+Cost: main run 38799624567's `test-dashboard (2)` sat 260 s in it.
+
+### Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes` with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a second attempt run only when the first failed
+
+Cost: run 39446310822's `test-dashboard (2)` fetch printed nothing for 353 s.
+
+### Two TypeScript compilers are installed on purpose, and there is no `tsc` at the ROOT
+
+Cost: raising the root to version 7 makes `pnpm lint` refuse to start with no results at all.
+
+### A migration can fail on a box that already has a trigger naming what it changes
+
+Cost: an earlier bricked box that was wiped, and a box that failed three starts on 2026-09-26.
+
+`applyMigrations` removes the change feed first for that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it);
+
+### The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`), which picks `/dev/shm` when it exists, because every commit waits for the disk
+
+Cost: it timed out in CI five times.
+
+### The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set `TMPDIR=/dev/shm`, in CI only
+
+Cost: the pause test failed its bound; a venue-service shard hit its 10-minute limit. The disk explanation for the shard is an inference.
+
+### The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only
+
+Cost: the pause test's last restore failed twice in CI.

@@ -480,3 +480,25 @@ at `pnpm lint` on an explicit `any` in its completed `.superpowers/sdd/.../guide
 probe. `git ls-files` returned no entry and `git check-ignore` named the file: Git ignored it,
 but `eslint .` still read it. Keep completed executable probes outside the checkout; the driver
 preserved this one in the campaign receipts before rerunning the normal hook.
+
+
+## Root receipt excerpts moved on 2026-10-23
+
+These passages retain the root instruction receipts moved by A1026. They are excerpts
+from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.
+
+### Read a review report for completed findings, not just a successful wrapper exit
+
+Cost: A284's first report was only pending prose.
+
+### Every agent that edits files or runs tests works in its own worktree
+
+Cost: one agent's commit carried another's staged renames, and a test run beside another agent's in the same package printed `no tests`.
+
+### The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or `wa-wt onboarding <worktree-name>`
+
+The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or `wa-wt onboarding <worktree-name>`, never a bare `pnpm dev*` — compose names its project after the directory, so an unqualified `docker compose up` starts a SECOND `mailpit` fighting for the fixed 1025 and 8025 ports.
+
+### The first dev stack's venue is a seeded directory of SQLite files on the host, shared by worktrees that take the first port slot. Moving between worktrees on the same target does not wipe that slot's venue — so a branch's migrations can fail on the rows already in it
+
+Cost: repeated dead boots with only a driver stack trace to read.

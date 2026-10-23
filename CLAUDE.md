@@ -32,54 +32,43 @@ to check a claim rather than follow it.
 
 Comments and docs that assert more than the code delivers are this repo's most common defect, by a
 wide margin. This section stays in full deliberately: it applies to every change, in every area.
-The instances behind each rule are in [writing-claims.md](docs/developers/writing-claims.md).
+The instances behind each rule are in [writing-claims.md](docs/developers/writing-claims.md#root-receipt-excerpts-moved-on-2026-10-23).
 
 - **A claim of necessity or impossibility needs a receipt** — the command that was run, or a cited
-  `file:line`. Good shape: _"Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one
-  transaction: a duplicate key, a null in a `not null` column and an append-only trigger's
-  `raise(abort)` each left the transaction usable, and the rows written beside them committed."_ —
-  it names the engine, the version, the conditions and what happened, so a reader can re-run it.
-  Cost: three false claims in one day on one file, each one born correcting the last.
-- **Reading is not verification.** Run the thing. Cost: a false "superuser is unavoidable" survived a
-  correction pass, a four-agent simplify, a fresh-context review and Copilot — all of them reading.
-- **State the experiment, not the conclusion.** "I deleted the tenant predicate and the test failed"
-  is checkable; "the guard is proven" is not. If the sentence describes more than what you ran, narrow
-  it.
-- **A measurement taken where both answers look alike measures nothing.** Before running a probe, say
-  what the FAILING case would print; if that is what you expect to see anyway, you are not running a
-  probe. A control in the other direction is the cheapest fix. A receipt someone hands you is still a
-  claim. Cost: a zero-byte filter reading offered as proof, taken where zero was also the correct
-  answer.
+  `file:line`.
+- **Reading is not verification.** Run the thing.
+- **State the experiment, not the conclusion.** If the sentence describes more than what you ran,
+  narrow it.
+- **A measurement taken where both answers look alike measures nothing.** Before running a probe,
+  say what the FAILING case would print; if that is what you expect to see anyway, you are not
+  running a probe. A control in the other direction is the cheapest fix. A receipt someone hands you
+  is still a claim.
 - **A sentence about what ANOTHER part of the system does is checked by following the call chain to
-  that part, not by reading the boundary you just edited.** The fix can be right and the sentence
-  describing it still too wide: you had one edge open, and you wrote about the whole path.
+  that part, not by reading the boundary you just edited.**
 - **"Pre-existing", "not a regression", "harmless", "unreachable" and "narrow" are claims.** Check
   with `git log`/`git blame` first; unchecked, say "I believe this predates the branch".
-- **The correction is a new claim, and deserves MORE scrutiny than the text it replaces.** This is the
-  single most productive source of false claims in the repository's history.
-- **Before asserting a convention, grep the siblings** — identifiers AND prose. Cost: an error code
-  prefixed `payments.` landed beside its `payment.` siblings.
-- **A behaviour change retires every receipt about the old behaviour — editing a file is not auditing
-  it.** Read the runbooks and the README paraphrases across the whole base-to-tip range, not the three
-  lines of context a diff shows; per-task review cannot see this class. **The PATH SET matters:** read
-  every claim stated in prose, wherever it lives, not only the ones written beside an identifier.
-  Cost: three stale claims in two READMEs, one a documented operator procedure.
+- **The correction is a new claim, and deserves MORE scrutiny than the text it replaces.**
+- **Before asserting a convention, grep the siblings** — identifiers AND prose.
+- **A behaviour change retires every receipt about the old behaviour — editing a file is not
+  auditing it.** Read the runbooks and the README paraphrases across the whole base-to-tip range,
+  not the three lines of context a diff shows; per-task review cannot see this class. **The PATH SET
+  matters:** read every claim stated in prose, wherever it lives, not only the ones written beside
+  an identifier.
 - **Claims about the outside world need receipts too — and the source's own words.** Every external
   claim gets a provenance row. Quote, then paraphrase. Two sources that seem to contradict usually
-  describe different paths. Cost: an API limit of Square's paraphrased into a product limitation.
+  describe different paths.
 - **A class's representative has to be a value the two sides could treat differently.** Pick it from
-  what the FORMAT allows, not from the first value that comes to mind. Cost: a `fast-xml-parser`
-  4 → 5 probe missed a decoding change because its example was one neither version decodes.
+  what the FORMAT allows, not from the first value that comes to mind.
 - **The code is what matters; comments go stale.** Keep a comment only for an invariant, or a
   non-obvious why, that the code cannot show — never history, narrative, or a restatement of the
   code. The receipt lives in the commit message and the PR thread, with at most a one-line pointer.
-  Cut on touch, and deliberate pruning sweeps are wanted (owner decision 2026-09-23). Prefer deleting
-  to rewording: a rewording is a new claim. A comment another rule here requires at its site stays:
-  a guard's "weaker than its name" hedge, a decision "stated at its site", a "commented decision".
-  A sweep shows it changed nothing but comments with `node scripts/comments-only.mjs <base>`, weaker
-  than its name: it reads committed changes only and never reads a changed `.md` file — its full
-  limits are in [writing-claims.md](docs/developers/writing-claims.md). Cost: about three in ten non-blank lines of non-test code were
-  comment-only on 2026-09-24.
+  Cut on touch, and deliberate pruning sweeps are wanted (owner decision 2026-09-23). Prefer
+  deleting to rewording: a rewording is a new claim. A comment another rule here requires at its
+  site stays: a guard's "weaker than its name" hedge, a decision "stated at its site", a "commented
+  decision". A sweep shows it changed nothing but comments with
+  `node scripts/comments-only.mjs <base>`, weaker than its name: it reads committed changes only and
+  never reads a changed `.md` file — its full limits are in
+  [writing-claims.md](docs/developers/writing-claims.md).
 
 ---
 
@@ -110,7 +99,7 @@ name — it reads the workflow as TEXT for the sharded packages' bars (db, ui an
 package bites where: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in
-[ci-and-gates.md](docs/developers/ci-and-gates.md) — read it before changing anything about CI, the
+[ci-and-gates.md](docs/developers/ci-and-gates.md#root-receipt-excerpts-moved-on-2026-10-23) — read it before changing anything about CI, the
 hook, or how tests are scheduled:
 
 - **`prettier --check` on an IGNORED path prints the same line as a clean one.** `docs/` is ignored
@@ -130,21 +119,21 @@ hook, or how tests are scheduled:
   (`apps/server/test-durations.json`, read by `scripts/vitest-duration-sequencer.mjs`), not by
   Vitest's hash split.** A file missing from the table is packed at the table's mean and started
   first in its shard; refresh the table with `scripts/test-durations.mjs` when a server shard drifts
-  past 4 minutes. Cost: A938, the hash split's slowest server job took 349–410 s on six `main` runs. Guard:
-  `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name — it checks the packing over a
-  walk of `apps/server`'s `*.test.ts` files, never a Vitest run, and never that the table is fresh. Receipt:
+  past 4 minutes. Guard: `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name — it
+  checks the packing over a walk of `apps/server`'s `*.test.ts` files, never a Vitest run, and never
+  that the table is fresh. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration).
 - **Every CI test job — one shard of one package — should finish in about 4 minutes** (owner,
   2026-10-09 and 2026-10-11). Fix a job over it at the cause: a slow file, too few shards, slow
-  setup; never by cutting a check. Cost: `test-server (5)` ran a 5.3-minute median. Guards, weaker than the rule: the reporter only warns; `scripts/ci-workflow.test.mjs`
-  pins shard counts and 10-minute limits. Receipt:
+  setup; never by cutting a check. Guards, weaker than the rule: the reporter only warns;
+  `scripts/ci-workflow.test.mjs` pins shard counts and 10-minute limits. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-ci-test-job-should-finish-in-about-4-minutes).
 - **A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`,
-  never a plain `--merge-reports`**. Cost: the venue-service merge read functions low. Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its
-  name — reads text, not the Vitest config. Receipt:
+  never a plain `--merge-reports`**. Guard: the browser-merge case in
+  `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, not the Vitest config. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
-  mutation**, depending on the package's coverage settings and Stryker `mutate` list. Cost: `packages/db`'s branch coverage fell below its bar.
+  mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
@@ -155,38 +144,36 @@ hook, or how tests are scheduled:
   bundle-smoke (weaker than their names: read text, with bundle-smoke limited to `dist/server.js`),
   and image-smoke's sharp step.
   Detail: [ci-and-gates.md](docs/developers/ci-and-gates.md).
-- **Two pushes to `main` must never share a CI concurrency group.** Cost: a code merge that got NO
-  run at all, so check after a merge that its own run exists. Publishing asks
-  `scripts/main-tag-guard.sh` before moving `:main`. Guards: `scripts/ci-workflow.test.mjs`
-  (reads ci.yml alone, as TEXT) and `scripts/main-tag-guard.test.mjs`.
+- **Two pushes to `main` must never share a CI concurrency group.** Check after a merge that its own
+  run exists. Publishing asks `scripts/main-tag-guard.sh` before moving `:main`. Guards:
+  `scripts/ci-workflow.test.mjs` (reads ci.yml alone, as TEXT) and
+  `scripts/main-tag-guard.test.mjs`.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
 - **The GHA cache is a shared per-repository budget, evicted least-recently-used.** Name the entries
   a new exporter would compete with before adding it.
 - **Every workflow job carries `timeout-minutes`, except one that calls a reusable workflow, whose
-  called jobs carry it**; GitHub's default is six hours. Cost: PR #1399's image smoke sat 46 minutes. Guard: the job-time-limit cases in `scripts/ci-workflow.test.mjs`, weaker
-  than its name — it reads text, does not judge the number, and never reads a called workflow kept
-  in another repository.
+  called jobs carry it**; GitHub's default is six hours. Guard: the job-time-limit cases in
+  `scripts/ci-workflow.test.mjs`, weaker than its name — it reads text, does not judge the number,
+  and never reads a called workflow kept in another repository.
 - **An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image
   runs under an outer `timeout`, and is retried when it stalls or exits non-zero**. A workflow's
-  `playwright install --with-deps` runs apt too, so it takes the same outer `timeout`. Cost: main run 37771042263's image smoke hit its 15-minute limit. Guards: the apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs`
-  and the apt-wait cases in `scripts/deploy-image-env.test.ts`, weaker than their names — they read
-  text and do not check the retries; the `apt_get` wrapper cases in `scripts/waitron-sh.test.mjs` run
-  waitron.sh's retries under stubs. Receipt:
+  `playwright install --with-deps` runs apt too, so it takes the same outer `timeout`. Guards: the
+  apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs` and the apt-wait cases in
+  `scripts/deploy-image-env.test.ts`, weaker than their names — they read text and do not check the
+  retries; the `apt_get` wrapper cases in `scripts/waitron-sh.test.mjs` run waitron.sh's retries
+  under stubs. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-apt-wait-is-bounded).
 - **Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh` — each attempt under `timeout`,
-  three attempts, then fail — never `pnpm/action-setup`,
-  whose self-installer has no time limit of its own.** Cost: main run 38799624567's
-  `test-dashboard (2)` sat 260 s in it. Guards: the pnpm-setup cases in
-  `scripts/ci-workflow.test.mjs`, weaker than their names — they read text — and
-  `scripts/ci-setup-pnpm.test.mjs`. Receipt:
+  three attempts, then fail — never `pnpm/action-setup`, whose self-installer has no time limit of
+  its own.** Guards: the pnpm-setup cases in `scripts/ci-workflow.test.mjs`, weaker than their names
+  — they read text — and `scripts/ci-setup-pnpm.test.mjs`. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/checkout` runs as three steps: a first attempt under a step `timeout-minutes`
   with git's low-speed limit and `continue-on-error`, a step that stops its leftover git, and a
-  second attempt run only when the first failed.** Cost: run 39446310822's `test-dashboard (2)`
-  fetch printed nothing for 353 s. Guard: the checkout cases in `scripts/ci-workflow.test.mjs`,
-  weaker than their name — they read text and never run a workflow. Receipt:
-  [ci-and-gates.md](docs/developers/ci-and-gates.md#every-checkout-is-bounded).
+  second attempt run only when the first failed.** Guard: the checkout cases in
+  `scripts/ci-workflow.test.mjs`, weaker than their name — they read text and never run a workflow.
+  Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md#every-checkout-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
 - **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS. Both
@@ -198,7 +185,6 @@ hook, or how tests are scheduled:
   `eslint.config.js` is not type-aware.
 - **Two TypeScript compilers are installed on purpose, and there is no `tsc` at the ROOT.** A
   package's `tsc` is version 7; the root resolves `typescript` to the version 6 API (binary `tsc6`).
-  Cost: raising the root to version 7 makes `pnpm lint` refuse to start with no results at all.
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage.
@@ -214,27 +200,24 @@ hook, or how tests are scheduled:
   SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
-- **A migration can fail on a box that already has a trigger naming what it changes.** `applyMigrations` removes the change feed first for
-  that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild
-  of a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
-  than its name — its rows are synthetic and counted, not compared, and it installs today's
+- **A migration can fail on a box that already has a trigger naming what it changes.** A rebuild of
+  a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`,
+  weaker than its name — its rows are synthetic and counted, not compared, and it installs today's
   change-feed list, and today's append-only list less the tables the previous step lacked, at every
-  step. Cost: an earlier bricked box that was wiped, and a box that failed three starts on
-  2026-09-26. Receipt:
+  step. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them).
 - **The upgrade test makes its scratch directory under `scratchParent()`
-  (`scripts/scratch-dir.mjs`),
-  which picks `/dev/shm` when it exists, because every commit waits for the disk.** Cost: it timed out in CI five times. Nothing guards it. Receipt:
+  (`scripts/scratch-dir.mjs`), which picks `/dev/shm` when it exists, because every commit waits for
+  the disk.** Nothing guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set
-  `TMPDIR=/dev/shm`, in CI only.** Cost: the pause test failed its bound; a venue-service shard
-  hit its 10-minute limit. The disk explanation for the shard is an inference. Guard:
-  `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
-  `ci.yml` as text and never reads the steps' test files. Receipts:
+  `TMPDIR=/dev/shm`, in CI only.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it
+  reads `ci.yml` as text and never reads the steps' test files. Receipts:
   [testing-guide.md](docs/developers/testing-guide.md), "In CI their temporary files are in memory",
-  and [ci-and-gates.md](docs/developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
-- **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Cost: the pause test's last restore failed twice in CI.
-  Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
+  and
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
+- **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-stream-tests-ci-job-gives-loopback-a-normal-networks-packet-size).
 
 **Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
@@ -250,7 +233,7 @@ One line each; the receipt for every one is in its topic file. **Read that file 
 area** — these lines tell you what the rule is, not why it exists or how it broke. Where a guard is
 called weaker than its name, the topic file lists what it does not see.
 
-### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md)
+### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-receipt-excerpts-moved-on-2026-10-23)
 
 - **New or changed forms use the shared UI contract in [design-system.md](docs/developers/design-system.md) → Forms.**
   Required fields visibly marked; an invalid submission explains itself beside every bad field and in
@@ -268,10 +251,9 @@ called weaker than its name, the topic file lists what it does not see.
   semantic `name`, never a generated widget id. The owner's other dated decisions, and the sign-in
   exception, are in [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
-  comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Cost:
-  a native dropdown cannot take the approved look (A178). Guard: `scripts/native-form-fields.test.ts`,
-  weaker than its name — it reads string literals, and holds the files it allows by name only to a
-  line count.
+  comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Guard:
+  `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals, and holds
+  the files it allows by name only to a line count.
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -285,26 +267,23 @@ called weaker than its name, the topic file lists what it does not see.
   the screen does or was updated with it; the second's check that only `help-guide.ts` writes a
   guide path reads only `apps/dashboard/src` and `apps/till/src`, as text. See
   [conventions-ui.md](docs/developers/conventions-ui.md).
-- **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
-  try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;
-  receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
-- **Normalising a field while typing preserves the native selection.** Cost: A284's decimal-mark
-  conversion moved the cursor to the end during a middle edit. Guards: the EN/ES caret cases in
-  `wt-input.test.ts` and `wt-price-input.test.ts`; see [conventions-ui.md](docs/developers/conventions-ui.md).
+- **Before treating a numeric field as whole numbers, follow its checks and wire conversion and try
+  a fraction.** Receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
+- **Normalising a field while typing preserves the native selection.** Guards: the EN/ES caret cases
+  in `wt-input.test.ts` and `wt-price-input.test.ts`; see
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A new dashboard dialog or page holding staged input takes a draft scope from `draftScopeFor`
-  (which resolves `leaveCoordinatorFor`) and has a `*.unsaved.test.ts`.** Cost: W98's Menu timetable screen reached review without one.
-  Nothing checks it across screens. See [design-system.md](docs/developers/design-system.md).
+  (which resolves `leaveCoordinatorFor`) and has a `*.unsaved.test.ts`.** Nothing checks it across
+  screens. See [design-system.md](docs/developers/design-system.md).
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names.
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
   fixture gives the three DIFFERENT text**, or the test passes whether the surface reads the right
   name or the wrong one. Which surface reads which: [products.md](docs/developers/products.md).
-- **A replay reports the original transaction facts; side effects are gated separately.** Cost: cash
-  change returned as zero on a retry, because displaying change was treated as dispensing it.
+- **A replay reports the original transaction facts; side effects are gated separately.**
 - **Compare saved selections by values — not by JSON key order, not by the order they were sent, and
-  not by the order they were OFFERED in either**, and see which LIST a stored row came from. Cost: a
-  quantity-only held-order edit deleted every line and re-priced the dish. Guard: the quantity-only
-  held-order edit case in `apps/server/src/working-order.test.ts`.
+  not by the order they were OFFERED in either**, and see which LIST a stored row came from. Guard:
+  the quantity-only held-order edit case in `apps/server/src/working-order.test.ts`.
 - **A screen puts a refusal beside a field by what the error CARRIES, checked where it is thrown.**
   `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE.
 - **A successful write followed by a failed refresh is a load failure, not a failed save.** Close the
@@ -319,12 +298,12 @@ called weaker than its name, the topic file lists what it does not see.
   guards it across screens. See
   [dashboard-live-updates.md](docs/developers/dashboard-live-updates.md).
 - **A one-off reload beside a live subscription keeps a snapshot delivered after the reload began,
-  and both paths apply the same replacement checks.** Cost: A413's reopening read hid a newer ask
-  and left its replaced Pair dialog open. Covered in `apps/dashboard/src/screens/devices-screen.test.ts`;
-  the receipt is in [conventions-ui.md](docs/developers/conventions-ui.md).
-- **A value the till takes from its start read either refreshes through `setupRevision` or is
-  listed as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
-  Cost: courses stayed missing from an open table until a reload (A768). Nothing guards it.
+  and both paths apply the same replacement checks.** Covered in
+  `apps/dashboard/src/screens/devices-screen.test.ts`; the receipt is in
+  [conventions-ui.md](docs/developers/conventions-ui.md).
+- **A value the till takes from its start read either refreshes through `setupRevision` or is listed
+  as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
+  Nothing guards it.
 - **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**
   (`apps/till/src/i18n/staff-notices.ts`, from `staff_notice.<code>` in English and Spanish); a
   code it does not name is drawn as "The box needs attention". Guard:
@@ -363,25 +342,22 @@ called weaker than its name, the topic file lists what it does not see.
   `apps/server/src/till-api.profile-actions.test.ts` leaves unchecked by decision; the profile's
   zones bound where it serves, and its admission list who may sign in. A new till route adds a row
   to that map and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
-  refusing case — weaker than that sounds: both route maps are comments. Cost: W97's per-task
-  review found a bill refund route checking no action.
+  refusing case — weaker than that sounds: both route maps are comments.
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
   menu stays on a phone's screen (owner decision, A155). Guard: `scripts/pinned-actions-column.test.ts`,
   weaker than its name — it knows a menu column only by the literal `key: "actions"`, so every
   object with that key is held to the rule and a data column must take another key. See
   [design-system.md](docs/developers/design-system.md).
-- **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
-  class.** Cost: the categories screen's swatches and thumbnails never rendered, through review and
-  a green suite. Receipt: [design-system.md](docs/developers/design-system.md#primitives).
+- **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a
+  CSS class.** Receipt: [design-system.md](docs/developers/design-system.md#primitives).
 - **Every colour, spacing, radius and font reads a `--wt-*` token**, and the name read must be
   declared. No hex, no named colours, no `rem`/`em`. Guards: `packages/ui/src/no-hardcoded-chrome.test.ts`
   (scans `packages/ui` alone; the rule covers any component or view) and
   `scripts/style-token-names.test.ts`, weaker than its name — it reads text and matches a read
   against declarations anywhere in the tree.
 - **Text in the brand colour reads `--wt-color-primary-text`; `--wt-color-primary` paints fills,
-  lines and icons.** Cost: Waitron's own blue read 4.33:1 as text on its light page, under 4.5:1
-  (A841). Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name — it reads `color:`
-  declarations as text, in tracked files only; what it misses is in
+  lines and icons.** Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name — it reads
+  `color:` declarations as text, in tracked files only; what it misses is in
   [design-system.md](docs/developers/design-system.md).
 - **A new `wt-*` primitive needs two specific tests**, not "some tests": a token-painting test, and an
   axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes.
@@ -394,8 +370,8 @@ called weaker than its name, the topic file lists what it does not see.
   disabled printers and card readers, and a disabled device's browser asks to rejoin; Enable brings
   each back under its existing id. A deleted printer, card reader or device is matched by neither
   and returns with a new id.
-- **A narrower roll in a wider receipt printer needs an explicit print area before native centring.**
-  Cost: a shifted, clipped 58mm receipt. Guard: `apps/server/src/receipt-ticket.test.ts`.
+- **A narrower roll in a wider receipt printer needs an explicit print area before native
+  centring.** Guard: `apps/server/src/receipt-ticket.test.ts`.
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
   other package in this repo, and `@waitron/printing` depends on IT, never the reverse. The guard is
   the `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.
@@ -405,15 +381,14 @@ called weaker than its name, the topic file lists what it does not see.
 - **The print agent runs under `deploy/apparmor/waitron-print-agent`, named through
   `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it; a `bluetoothctl` call that
   sends a bus message the profile does not list is refused until the profile gains a rule for it.**
-  Cost: the agent silently listed no Bluetooth printers on the owner's box. Guards, weaker than
-  their names: image-smoke (no Bluetooth on the runner) and `scripts/deploy-image-env.test.ts`
-  (reads the profile as TEXT).
+  Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and
+  `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code; its log tail shows the failed start's own lines through `redactSecrets` and HTML-escaped**
   (owner decision 2026-09-26). That redaction masks only a password in a URL, which is why no
   code's params and no logged message may carry a secret.
 
-### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md)
+### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-receipt-excerpts-moved-on-2026-10-23)
 
 - **Default optional request fields only when absent, and check enum types before comparing values.**
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
@@ -430,20 +405,18 @@ called weaker than its name, the topic file lists what it does not see.
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19): no Spanish, Catalan or other
-  non-English text in any general package or app — not in a literal, comment, identifier, file
-  name, seed or starter content, or test. It belongs only in `packages/fiscal-verifactu`, AEAT's
+  non-English text in any general package or app — not in a literal, comment, identifier, file name,
+  seed or starter content, or test. It belongs only in `packages/fiscal-verifactu`, AEAT's
   wire-protocol names, translation files (such as a module's `dashboard/strings.ts`, an app's
   `apps/<app>/src/i18n/`, and the guides under `apps/server/src/guide/<language>/`), and the
   packages written for Spain (`country-es`, `workforce-es`, `reporting`'s modelo 303), which hold
   text official only in Spain, Spanish-specific terms, and Spain-only printed text in Spain's
-  official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and demo
-  data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in Spain
-  prints in the venue's receipt language, never English; A963 and A965 fix what does not
-  yet. Starter
-  content a module writes into a new venue is English, translated when the box is set up; a test
-  of a non-English screen reads its expected text from the strings file. A Spanish domain term has one declaring home, its module's
-  vocabulary; a fiscal term never goes in the base list. Cost: A758-1's starter reasons «Cambio del
-  cliente» were refused only because «cliente» is a declared fiscal word. Guard:
+  official languages (owner, 2026-10-20, A913). Every country pack must also provide English, and
+  demo data belongs in its country's pack — neither is true yet (A965, A971, A972); a receipt in
+  Spain prints in the venue's receipt language, never English; A963 and A965 fix what does not yet.
+  Starter content a module writes into a new venue is English, translated when the box is set up; a
+  test of a non-English screen reads its expected text from the strings file. A Spanish domain term
+  has one declaring home, its module's vocabulary; a fiscal term never goes in the base list. Guard:
   `scripts/english-only.test.ts`, weaker than its name — it refuses only listed words, scans only
   the packages `GENERIC_PACKAGES` names and never `apps/*`, so review greps the diff. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -460,12 +433,11 @@ called weaker than its name, the topic file lists what it does not see.
 - **A country pack is a browser-safe preset over modules, not a module.** Packs name contribution ids
   as strings and never carry an external-provider credential. Setup derives geography-dependent values
   in the browser and repeats the derivation at the server boundary.
-- **A command name is declared under `waitron.commands`, never `bin`.** Nothing builds at install
-  time, so a `bin` under `dist/` is never linked by the install that reads it.
+- **A command name is declared under `waitron.commands`, never `bin`.**
 - **A change adding third-party code or a binary to the image carries its licence notices, shipped
-  in `/app/third-party/`** (owner, 2026-09-24). Cost: Litestream shipped without its Go modules'
-  notices. Guard: the third-party blocks in `scripts/deploy-image-env.test.ts`, weaker than their
-  name — they read text, and a new binary or system package is seen by none of them.
+  in `/app/third-party/`** (owner, 2026-09-24). Guard: the third-party blocks in
+  `scripts/deploy-image-env.test.ts`, weaker than their name — they read text, and a new binary or
+  system package is seen by none of them.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
   its `errors.ts`.
 - **Never build SQL by string concatenation — except where the engine takes no bound value**: an
@@ -500,33 +472,30 @@ called weaker than its name, the topic file lists what it does not see.
   under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
   transactions is a commented decision, never a default.** **Queries on one transaction are awaited
   in turn, never `Promise.all`.** No guard enforces it.
-- **A housekeeping write on a read path must not take the read down on a full disk.** The
-  last-seen stamp gives way to a full disk (`readDeviceProof`, `requireSession`, and the session
-  checks of the Box status routes in `box-health-api.ts` and the bell's reads in `alerts-api.ts`); a
-  read that must answer while a change waits reads in `withWriteLock` turns with no drain, as the
-  equipment and Box status reads do, and the bell's reads after a full-disk refusal — a stated
-  exception to one `withTransaction` per route. Cost: the equipment read and every non-passive
-  session-checked read answered 507 on a full disk once a stamp was due (A798-B slice
-  6). Guard: the full-disk cases in `apps/server/src/start-full-disk.e2e.test.ts`, weaker than the
-  rule — they cover the routes they name. Receipt:
+- **A housekeeping write on a read path must not take the read down on a full disk.** The last-seen
+  stamp gives way to a full disk (`readDeviceProof`, `requireSession`, and the session checks of the
+  Box status routes in `box-health-api.ts` and the bell's reads in `alerts-api.ts`); a read that
+  must answer while a change waits reads in `withWriteLock` turns with no drain, as the equipment
+  and Box status reads do, and the bell's reads after a full-disk refusal — a stated exception to
+  one `withTransaction` per route. Guard: the full-disk cases in
+  `apps/server/src/start-full-disk.e2e.test.ts`, weaker than the rule — they cover the routes they
+  name. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write).
 - **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** Three
-  shapes are outside the rule, each stated at its site. Cost: a concurrent read returned rows a
-  rollback then removed. Guard: the routing cases in `packages/store/src/index.test.ts` and
-  `connections.test.ts`, weaker than the set looks. Receipt:
+  shapes are outside the rule, each stated at its site. Guard: the routing cases in
+  `packages/store/src/index.test.ts` and `connections.test.ts`, weaker than the set looks. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#a-read-taken-while-another-callers-write-transaction-is-open-sees-committed-rows-only).
-- **A statement this engine refuses backs out ITSELF, not the transaction around it — except a
-  full disk, which sometimes ends the whole transaction** (as `RAISE(ROLLBACK)`,
-  `INSERT OR ROLLBACK` and `ON CONFLICT ROLLBACK` always do), **and a `RAISE(FAIL)`,
-  `INSERT OR FAIL` or `ON CONFLICT FAIL`, which keep the rows their statement wrote before it**
-  (no product code uses any of the six). So, apart from those exceptions, catching a refusal and
-  carrying on in the same `tx` is safe. A full disk answers `storage.disk_full`, and after one
-  that ended the transaction the store refuses every later statement in that body — inside the
-  write queue; a transaction opened outside it in between defeats this. **A TEST still catches
-  such a refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard
-  enforces that. Cost: a full disk read as `cannot rollback`, and a statement after it committed
-  by itself. Guard: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than
-  their names — a page limit, not a real disk, and both at-commit cases are a stand-in. Receipt:
+- **A statement this engine refuses backs out ITSELF, not the transaction around it — except a full
+  disk, which sometimes ends the whole transaction** (as `RAISE(ROLLBACK)`, `INSERT OR ROLLBACK` and
+  `ON CONFLICT ROLLBACK` always do), **and a `RAISE(FAIL)`, `INSERT OR FAIL` or `ON CONFLICT FAIL`,
+  which keep the rows their statement wrote before it** (no product code uses any of the six). So,
+  apart from those exceptions, catching a refusal and carrying on in the same `tx` is safe. A full
+  disk answers `storage.disk_full`, and after one that ended the transaction the store refuses every
+  later statement in that body — inside the write queue; a transaction opened outside it in between
+  defeats this. **A TEST still catches such a refusal OUTSIDE the transaction**, around the whole
+  `withTransaction`, and no guard enforces that. Guard: `packages/store/src/disk-full.test.ts` and
+  `write-queue.test.ts`, weaker than their names — a page limit, not a real disk, and both at-commit
+  cases are a stand-in. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#a-refused-statement-does-not-abort-the-transaction-here-and-all-a-savepoint-still-buys-is-confinement-of-a-losing-attempts-own-writes).
 - **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
   `ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
@@ -534,9 +503,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A full disk is not one error code**: measured 13, 14, 4874 and the system's `ENOSPC`, by
   filesystem and by step, and 14 also comes from a missing folder; the start names one with
   `fullDiskFailure` (`apps/server/src/boot-failure.ts`) — 13 always, the others only under 16 MiB
-  free. Cost: a database refused on a nearly full disk was recorded `unknown`. Guard: its cases in
-  `apps/server/src/boot-failure.test.ts`, weaker than the rule — stubbed errors, and no real-disk
-  case reaches `ENOSPC`. Receipt:
+  free. Guard: its cases in `apps/server/src/boot-failure.test.ts`, weaker than the rule — stubbed
+  errors, and no real-disk case reaches `ENOSPC`. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#a-full-disk-is-not-one-error-code).
 - **One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` and refuses a
   second PROCESS (`provisioning.database_in_use`); opens inside one process share the hold. A tool
@@ -548,8 +516,7 @@ called weaker than its name, the topic file lists what it does not see.
   holder file and the watchdog are in [conventions-data.md](docs/developers/conventions-data.md).
 - **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
   (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
-  which runs while no backup supervisor is running in this process**. Cost: deleting a dump a run
-  reads frees nothing until the run closes it (A798-B slice 7 plan, M3). Guard:
+  which runs while no backup supervisor is running in this process**. Guard:
   `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never checks
   that a file takes the turn; the turn is in-process only. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
@@ -585,9 +552,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **The database never rounds a quantity — `decimalToThousandths` owns the third place.** A test
   asking storage to round is testing something no product path does.
 - **A time stored as text and compared or sorted as text is right only while every writer stores one
-  spelling**. Normalise at the writer, as `shiftInterval` and the `storedTime` helpers do. Cost: W22
-  (#1134), a valid shift refused or listed out of order. Nothing guards the one-spelling rule across
-  the columns.
+  spelling**. Normalise at the writer, as `shiftInterval` and the `storedTime` helpers do. Nothing
+  guards the one-spelling rule across the columns.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and a table that must never be corrected is declared with `appendOnly()` instead of
   `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair,
@@ -636,21 +602,18 @@ called weaker than its name, the topic file lists what it does not see.
 - **A constraint that lives only in hand-written migration SQL is one regeneration away from gone,
   and nothing else in the tree notices.** Declare every foreign key and every unique index in the
   TypeScript schema; where one genuinely cannot be declared, say at the column what it cost and
-  where the refusal moved to. Cost: a regeneration dropped 33 foreign keys and 13 unique indexes.
-  Guard: `scripts/schema-constraints.test.ts`, weaker than its name — it reads the built schema
-  rather than trying an offending insert, and matches a unique index by NAME.
+  where the refusal moved to. Guard: `scripts/schema-constraints.test.ts`, weaker than its name — it
+  reads the built schema rather than trying an offending insert, and matches a unique index by NAME.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
   RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
   `scripts/behavioural-triggers.test.ts`, `scripts/migrations-match-schema.test.ts` and
   `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
 - **A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently
-  deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding rows.**
-  Before shipping a rebuild, list the foreign keys that point at the table. Cost: rebuilds emptied
-  `product_categories` and three menu tables while reporting success.
+  deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding
+  rows.** Before shipping a rebuild, list the foreign keys that point at the table.
 - **A drizzle-kit 0.31.10–0.31.11 generation that rebuilds a table must not also add a column to
-  it** (`no such column`). Add the column in one generation and its CHECK in the next. Cost: paid
-  three times.
+  it** (`no such column`). Add the column in one generation and its CHECK in the next.
 - **A drizzle-kit 0.31.11 table rebuild writes an expression index back as quoted column names,
   which this engine refuses.** Take the index out of the schema for every generation that rebuilds
   its table and add it back in a generation of its own, with a note at the index.
@@ -659,8 +622,7 @@ called weaker than its name, the topic file lists what it does not see.
   through it.
 - **Editing a shipped migration file — even only its comments — makes every venue it already
   migrated refuse to start** with `provisioning.database_ahead`. Such an edit ships only with a
-  venue reset, said in the PR's first line. Nothing guards it. Cost: #1036 restored two edited files
-  byte for byte.
+  venue reset, said in the PR's first line. Nothing guards it.
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:
   `scripts/journal-monotonic.test.ts`, which bites only on a set with more than one entry. A drizzle
@@ -685,7 +647,7 @@ called weaker than its name, the topic file lists what it does not see.
 ## 4. Testing
 
 One line each; the mechanism, the measurement and the incident behind every one are in
-[testing-guide.md](docs/developers/testing-guide.md). **Read it before writing a database or
+[testing-guide.md](docs/developers/testing-guide.md#root-receipt-excerpts-moved-on-2026-10-23). **Read it before writing a database or
 browser test** — most of these rules exist because a test passed while proving nothing.
 
 - **One target.** A suite that needs a database gets a REAL one: `useVenueDb`. Guard:
@@ -696,13 +658,11 @@ browser test** — most of these rules exist because a test passed while proving
   `scripts/guarded-teardowns.test.ts`.
 - **A test file whose awaits are all synchronous `node:sqlite` work gives the event loop no timer
   turn, so the venue watchdog kills its worker once the file outlasts `WATCHDOG_KILL_MS`;
-  `useVenueDb` waits one real timer after every test.** Cost: main run 38932759150's venue-service
-  shard 1 lost its worker to the watchdog. Guard: two cases in
+  `useVenueDb` waits one real timer after every test.** Guard: two cases in
   `packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
-  folder without `useVenueDb` gets no turn. The watchdog's stamp reads `process.hrtime.bigint` and
-  `setInterval` captured when `@waitron/store` loads. Guard: the cases under "a holder whose test
-  fakes the clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default
-  options only, and only when the store loads before the clock is faked. Receipt:
+  folder without `useVenueDb` gets no turn. Guard: the cases under "a holder whose test fakes the
+  clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options
+  only, and only when the store loads before the clock is faked. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
 - **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
   **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
@@ -710,13 +670,12 @@ browser test** — most of these rules exist because a test passed while proving
   Never a blanket `docker volume prune`, and `docker volume inspect` before any manual `rm`.
 - **The stream loop test and the stream pause test need two pinned binaries: without them they are
   SKIPPED locally and FAIL in CI.** Install both with
-  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. A skipped run prints `1 skipped` and nothing else, so a local
-  green run of `apps/server` may not have run them. The S3 rehearsal scenarios, send gate and
-  interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. The S3 rehearsal
+  scenarios, send gate and interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
   `aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
   and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
-  `ci.yml` as TEXT, so install
-  commands left only in a YAML comment, or in a step an `if:` switches off, pass it. Receipt:
+  `ci.yml` as TEXT, so install commands left only in a YAML comment, or in a step an `if:` switches
+  off, pass it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-stream-loop-test-skips-locally-without-its-two-binaries-and-a-skip-reads-as-a-pass).
 - **The full-disk start tests need a small real filesystem**: on macOS they make one with
   `hdiutil`; on Linux they read `WAITRON_FULL_DISK_DIR`, are SKIPPED locally without it, and FAIL
@@ -726,7 +685,7 @@ browser test** — most of these rules exist because a test passed while proving
   [testing-guide.md](docs/developers/testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem).
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
   OUTER config's `test.browser` block**; the command-line flag and that project's own `browser`
-  block are ignored without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:
+  block are ignored without a word. Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only).
 - **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
   output**; unset both to see it.
@@ -737,33 +696,28 @@ browser test** — most of these rules exist because a test passed while proving
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
   container.
 - **A test that starts the server in its own process writes to the venue database only before
-  `startServer` or after `close()`**. Cost: main run 38430159396 failed
-  `boot.backup-network.test.ts`. Guard: that file's `beforeServerStarts`, weaker than the rule — it
-  covers the file's two write helpers only. Receipt:
+  `startServer` or after `close()`**. Guard: `apps/server/src/boot.backup-network.test.ts`'s
+  `beforeServerStarts`, weaker than the rule — it covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
 - **In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be
-  one an earlier test's rows still name**, so a test that finds a row by address checks that the
-  row is its own. Cost: main run 39537349722's `test-server (16)` failed
-  `print-agent-e2e.test.ts`'s discovery check, which a forced port collision reproduces (A945).
-  Guard: that file's `portsNoPrinterNames` and pre-discovery row check, weaker than the rule — they
-  cover that one test. Receipt:
+  one an earlier test's rows still name**, so a test that finds a row by address checks that the row
+  is its own. Guard: `apps/server/src/print-agent-e2e.test.ts`'s `portsNoPrinterNames` and
+  pre-discovery row check, weaker than the rule — they cover that one test. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered).
 - **A fiscal record in a test's database must not be dated more than a minute after the clock of a
   later write that records**, or the chain refuses that write as `clock.behind_chain`: a fixture
   dated in the past recorded after a newer record, or a case that records ahead of the real clock
   before a real-clock write. In a file that shares one database, every write takes its clock from
-  the latest record time, helpers included, or the case gets a database of its own. Cost: the
-  check turned fiscal and server fixtures red (A798-B slice 8 plan, E8, E9, decision 13). Nothing
-  guards it. Receipt:
+  the latest record time, helpers included, or the case gets a database of its own. Nothing guards
+  it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-fiscal-record-dated-after-a-later-writes-clock-makes-the-chain-refuse-that-write).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
-  one belongs OUTSIDE the package.** Vitest cleans a shared directory, so two overlapping runs over
-  the same package end in `ENOENT`.
+  one belongs OUTSIDE the package.**
 - **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline,
   and never a retry as proof of repair. Browser shards use the diagnostic deadline wrapper; guard:
@@ -790,8 +744,7 @@ browser test** — most of these rules exist because a test passed while proving
   bound pipe draining too.** Guard: `scripts/run-with-deadline.test.mjs`. Cost and receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#a-browser-shard-reports-before-its-job-limit).
 - **A `spawnSync` timeout kills only the process it started; the script's own children keep running,
-  so each run of a script keeps its files apart from the next.** Cost: lane G's push failed
-  `ci-workflow`'s paging case on a killed run's leftover call (A751). Receipt:
+  so each run of a script keeps its files apart from the next.** Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-spawnsync-timeout-kills-only-the-process-it-started).
   Guard: the leftover-call case in `scripts/ci-workflow.test.mjs`, weaker than the rule — it covers
   that one script; nothing guards the rule in general.
@@ -801,8 +754,7 @@ browser test** — most of these rules exist because a test passed while proving
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
   every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
   `GIT_DIR` before trusting it.
-- **A test that changes the screen's global language restores it before the next case.** Cost:
-  A284's split test changed the labels in later transfer cases; receipt:
+- **A test that changes the screen's global language restores it before the next case.** Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#restore-the-screen-language-after-a-test).
 - **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A
   module mock cannot replace an already-loaded browser ES module.
@@ -814,30 +766,24 @@ browser test** — most of these rules exist because a test passed while proving
   first**, or it stalls on its own paused `requestAnimationFrame`.
 - **A browser test that checks something a screen does on a dialog's `wt-close` waits for that event
   first, or for the close event the screen sends from it, never for `vi.waitFor`'s one second alone,
-  nor for the dialog's `open` to turn false.** Cost: a devices-screen test failed A441's CI (#1477),
-  and a finish-table test failed once in an 18-file till run and in 3 of 42 runs under CPU load
-  (A927). Nothing guards it. Receipt:
+  nor for the dialog's `open` to turn false.** Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-browser-test-waits-for-a-dialogs-close-event-not-a-timer).
 - **A browser test sees whether a push happened by spying on `history.pushState` and `replaceState`,
-  never by counting `history.length`**, which Chromium stops at 50. Cost: A506-12's Times tab check
-  failed beside other files, and the unsaved-changes audit met it first. Nothing guards it. Receipt:
+  never by counting `history.length`**, which Chromium stops at 50. Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-browser-test-sees-a-push-through-pushstate-not-historylength).
 - **A test waits for a browser grant, such as a Web Lock, by tracking the request until it is
-  answered — never by a fixed sleep.** Cost: the Payments screen's reader-status tests failed CI on
-  a late grant, fixed twice — W59 (#1168), then A320 (#1342). Nothing guards it. Receipt:
+  answered — never by a fixed sleep.** Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-waits-for-a-browser-grant-by-tracking-the-request-never-by-a-fixed-sleep).
 - **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
   empty path, so the test can pass without reaching the branch it claims to check.
 - **A click whose outcome depends on whether an update one listener schedules has run before a later
-  listener sees the click is tested with `userEvent.click`, not `element.click()`.** Cost: A505's
-  row menu stayed open on the real page while every scripted test closed it. Nothing guards it.
-  Receipt:
+  listener sees the click is tested with `userEvent.click`, not `element.click()`.** Nothing guards
+  it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-scripted-click-runs-microtasks-only-after-the-whole-dispatch).
 - **Position a native popover before its first paint.** Positioning from the asynchronous `toggle`
   event left the menu at `(0, 0)` for its first frame.
 - **A placement check measures a box after the content that sizes it arrives, with room for CI's
-  larger fonts on the side it expects the box.** Cost: A771, the check failed 3 of 7 main runs.
-  Nothing guards it. Receipt:
+  larger fonts on the side it expects the box.** Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-placement-check-measures-a-box-at-its-final-size-with-room-for-cis-fonts).
 - **Test public recovery links through the real boot modes that serve them.** Mounting a route on a
   bare Hono app cannot establish that trading or recovery boot installs it.
@@ -854,19 +800,15 @@ browser test** — most of these rules exist because a test passed while proving
   measured at all, and excluded from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
 - **A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own
-  case** — the legitimate call that must still be served. Cost: a write-queue re-entrancy guard
-  turned every concurrent request in `packages/payments` into a 500.
+  case** — the legitimate call that must still be served.
 - **A proof-by-deletion belongs to the SHAPE of the code it was taken against.** Restructure that
   code and the deletion can stop failing while every test stays green — re-run the control, and move
   the proof to whatever still catches it.
 - **Measure the old version in a throwaway worktree, never by swapping files in the working one.**
   `git worktree add --detach <dir> <base-sha>`, `pnpm install` in it, and `git worktree remove` it
-  after; a copy set aside that cannot be avoided goes in `mktemp -d`. Cost: a stash pop that took
-  another session's stash, and edits and test files lost to swaps.
+  after; a copy set aside that cannot be avoided goes in `mktemp -d`.
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
-  Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect
-  in `recordSale`. When a fixture describes something an authority will judge, run the real check
-  over it.
+  When a fixture describes something an authority will judge, run the real check over it.
 - **Treat "there is a test" as an unfinished sentence.** Coverage proves a line executed, not that
   anything asserted on the result. Ask which assertion would fail if the behaviour were deleted; "it
   doesn't throw" is not an answer. `pnpm --filter @waitron/ui mutation` checks this systematically.
@@ -887,12 +829,11 @@ browser test** — most of these rules exist because a test passed while proving
 - **A page asserted as a STRING, or reached only through its API, has nothing checking that it
   renders.** Open it and LOOK, in both themes and at phone width. `apps/server`'s string-rendered
   pages have no harness: write the rendered string to a file and open it with the workspace's
-  playwright Chromium. Cost: a corrupted colour on `/setup/trust`, and an image library that
-  answered 500 to the first person who opened it.
+  playwright Chromium.
 - **In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a source module with
   `import()` inside a case only when that case asserts on what the module builds as it loads** (as
-  `describeSchemaConformance`'s `reload` does); otherwise it imports at the top of the file. Cost:
-  db's mutation score read about 86% (A539). Nothing guards it. Receipt:
+  `describeSchemaConformance`'s `reload` does); otherwise it imports at the top of the file. Nothing
+  guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#reading-packagesdbs-score-by-hand).
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
 - **A default you did not state is not a value you tested**, and a library default can be computed
@@ -919,11 +860,9 @@ browser test** — most of these rules exist because a test passed while proving
   `drawer` job without `drawerPrinter` or taking cash without `assertTakesCash`. Detail:
   [conventions-ui.md](docs/developers/conventions-ui.md#a-device-opens-the-drawer-when-its-profile-allows-it-a-handheld-does-what-a-till-does).
 
-- **One database per environment.** A pre-production database is never promoted:
-  `invoice_series.next_number` carries across and pre-production sales would leave a permanent hole
-  in the production series — which is what Veri\*Factu detects. `WAITRON_ENV` governs this; unset
-  means `preproduction`, `production` must be typed out, and `dev` is preproduction plus
-  `config.devMode`.
+- **One database per environment.** A pre-production database is never promoted. `WAITRON_ENV`
+  governs this; unset means `preproduction`, `production` must be typed out, and `dev` is
+  preproduction plus `config.devMode`.
 - **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
   and the internet are never on the sale path of whichever node is primary: records chain locally and
   the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
@@ -933,15 +872,11 @@ browser test** — most of these rules exist because a test passed while proving
   [conventions-data.md](docs/developers/conventions-data.md).
 - **The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
-  lock**. A copy fifteen minutes behind raises
-  `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
-  (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side
-  file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`)
-  and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`)
-  bounds it. Guards, narrower than the rule:
-  `apps/server/src/stream-pause.e2e.test.ts`, `apps/server/src/stream-loop.e2e.test.ts` (both
-  skipped locally without their binaries) and the bucket-copy cases in
-  `apps/server/src/health.test.ts`. Receipt:
+  lock**. A copy fifteen minutes behind raises `backup.stream_behind`, unless a stopped, refused or
+  unusable-settings alert already explains it (`apps/server/src/alert-sources.ts`). Guards, narrower
+  than the rule: `apps/server/src/stream-pause.e2e.test.ts`,
+  `apps/server/src/stream-loop.e2e.test.ts` (both skipped locally without their binaries) and the
+  bucket-copy cases in `apps/server/src/health.test.ts`. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-sale-can-wait-behind-litestreams-own-checkpoint).
 - **`registros_facturacion` is immutable**: it is declared `appendOnly()`
   (`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`
@@ -957,12 +892,10 @@ browser test** — most of these rules exist because a test passed while proving
   seat's `refuseWhileClockBehind` after its replay answer and before any reader, refund or drawer,
   and both refund recovery loops pause. A card refund's send and outcome are judged again in the
   transaction that dates them, after any provider wait. A payment whose money has already moved is
-  still stored.
-  Cost: before the route checks, a probe charged a card on a clock a day behind (A798-B slice 8
-  plan, E10). Guards:
-  `apps/server/src/clock-behind-stop.*.test.ts`, `apps/server/src/payments-api.clock-behind.test.ts`
-  and `packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover
-  the routes they name; a new money route is seen by none. Receipt:
+  still stored. Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
+  `apps/server/src/payments-api.clock-behind.test.ts` and
+  `packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover the
+  routes they name; a new money route is seen by none. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
@@ -987,7 +920,7 @@ browser test** — most of these rules exist because a test passed while proving
 ## 6. Workflow
 
 The commands, the dev stack and the receipts are in
-[workflow-guide.md](docs/developers/workflow-guide.md). **Model selection is not a waitron rule** —
+[workflow-guide.md](docs/developers/workflow-guide.md#root-receipt-excerpts-moved-on-2026-10-23). **Model selection is not a waitron rule** —
 it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. When CODEX drives, the roles reverse: Codex implements and Claude reviews — so establish who is driving
 before treating an implementation as a rule violation.
 
@@ -1009,8 +942,8 @@ before treating an implementation as a rule violation.
   [workflow-guide.md](docs/developers/workflow-guide.md) → _Dependabot pull requests_.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch` is that
   approval; nothing else is.
-- **Read a review report for completed findings, not just a successful wrapper exit.** Cost: A284's
-  first report was only pending prose. Receipt: [workflow-guide.md](docs/developers/workflow-guide.md).
+- **Read a review report for completed findings, not just a successful wrapper exit.** Receipt:
+  [workflow-guide.md](docs/developers/workflow-guide.md).
 - **Merging requires resolved conversations.** Copilot is off here; the second model on the diff is
   Codex in `/finish-branch`'s run-it seat, before the PR exists. Verify CI runs belong to the current
   head SHA.
@@ -1021,20 +954,16 @@ before treating an implementation as a rule violation.
   untracked file there can block the post-merge `git pull --ff-only` — diff it before deleting.
 - **Before a PR, run focused behavior checks, then `/finish-branch`.** §2 says what runs where.
 - **Every agent that edits files or runs tests works in its own worktree**, or the agents take
-  turns. Cost: one agent's commit carried another's staged renames, and a test run beside another
-  agent's in the same package printed `no tests`.
+  turns.
 - **Development and loopback-only servers must not advertise the appliance's LAN name.** A laptop
   and box both answered `waitron.local`, sending some lookups to the laptop. Guard:
   `apps/server/src/mdns.test.ts`.
 - **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
-  `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
-  directory, so an unqualified `docker compose up` starts a SECOND `mailpit` fighting for the fixed
-  1025 and 8025 ports.
+  `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*`.
 - **The first dev stack's venue is a seeded directory of SQLite files on the host, shared by
-  worktrees that take the first port slot. Moving between worktrees on the same target does not
-  wipe that slot's venue — so a branch's migrations can fail on the rows already in it.**
-  `wa-wt reset demo <name>` rebuilds it. Cost: repeated dead boots with only a driver stack trace
-  to read.
+  worktrees that take the first port slot. Moving between worktrees on the same target does not wipe
+  that slot's venue — so a branch's migrations can fail on the rows already in it.**
+  `wa-wt reset demo <name>` rebuilds it.
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
 unprompted, and **update it in the same change that makes it stale** (the moment it goes stale most
