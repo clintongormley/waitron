@@ -26,42 +26,73 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("saves a normalized non-secret request before a lost answer and reuses it after reopening", async () => {
-  const sent: TenderRefundRequest[] = [];
-  const api = {
-    refundTransaction: vi.fn(async (_sale: string, request: TenderRefundRequest) => {
-      sent.push(structuredClone(request));
-      expect(new TenderRefundAttempts().read(scope, "sale-1")!.request).toEqual({
-        ...ask,
-        manualConfirmed: false,
-        submissionId: request.submissionId,
-      });
-      if (sent.length === 1) throw new TypeError("Lost response after acceptance");
-      return reply();
-    }),
-    getTenderRefund: vi.fn(async () => reply()),
-    retryTenderRefund: vi.fn(async () => reply()),
-  };
-  const first = new TenderRefundSession(scope, api);
-  await expect(
-    first.submit(
-      "sale-1",
-      { ...ask, appliedAmount: "012.5", reason: " Courtesy return " },
-      { personId: "approver", pin: "1234" },
-    ),
-  ).rejects.toThrow("Lost response");
-  const reopened = new TenderRefundSession(scope, api);
-  expect(reopened.read("sale-1")!.request.submissionId).toBe(sent[0]!.submissionId);
-  await reopened.resume("sale-1");
-  expect(sent).toHaveLength(2);
-  expect(sent[1]).toEqual({ ...ask, manualConfirmed: false, submissionId: sent[0]!.submissionId });
-  expect(sent[0]!.override).toEqual({ personId: "approver", pin: "1234" });
-  const stored = JSON.stringify(Object.values(localStorage));
-  expect(stored).not.toContain("1234");
-  expect(stored).not.toContain("override");
-  expect(stored).not.toContain("approver");
-  expect(reopened.read("sale-1")!.refundId).toBe("refund-1");
-});
+it.each([
+  {
+    label: "a submission id containing the PIN digits",
+    submissionId: "a11234a4-2836-4178-8508-c9cdc414fead",
+    unrelated: false,
+  },
+  {
+    label: "unrelated storage containing the PIN digits",
+    submissionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    unrelated: true,
+  },
+] as const)(
+  "saves a normalized non-secret request before a lost answer and reuses it after reopening, with $label",
+  async ({ submissionId, unrelated }) => {
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(submissionId);
+    if (unrelated) localStorage.setItem("waitron.unrelated", "1234");
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    const sent: TenderRefundRequest[] = [];
+    const api = {
+      refundTransaction: vi.fn(async (_sale: string, request: TenderRefundRequest) => {
+        sent.push(structuredClone(request));
+        expect(new TenderRefundAttempts().read(scope, "sale-1")!.request).toEqual({
+          ...ask,
+          manualConfirmed: false,
+          submissionId: request.submissionId,
+        });
+        if (sent.length === 1) throw new TypeError("Lost response after acceptance");
+        return reply();
+      }),
+      getTenderRefund: vi.fn(async () => reply()),
+      retryTenderRefund: vi.fn(async () => reply()),
+    };
+    const first = new TenderRefundSession(scope, api);
+    await expect(
+      first.submit(
+        "sale-1",
+        { ...ask, appliedAmount: "012.5", reason: " Courtesy return " },
+        { personId: "approver", pin: "1234" },
+      ),
+    ).rejects.toThrow("Lost response");
+    const reopened = new TenderRefundSession(scope, api);
+    expect(reopened.read("sale-1")!.request.submissionId).toBe(sent[0]!.submissionId);
+    await reopened.resume("sale-1");
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual({
+      ...ask,
+      manualConfirmed: false,
+      submissionId: sent[0]!.submissionId,
+    });
+    expect(sent[0]!.override).toEqual({ personId: "approver", pin: "1234" });
+    const key = 'waitron.tender-refund:["device-1","person-1"]:"sale-1"';
+    const expected = {
+      version: 1,
+      saleId: "sale-1",
+      request: { ...ask, manualConfirmed: false, submissionId },
+    };
+    expect(writes.mock.calls).toEqual([
+      [key, JSON.stringify({ ...expected, refundId: null })],
+      [key, JSON.stringify({ ...expected, refundId: "refund-1" })],
+    ]);
+    const stored = localStorage.getItem(key)!;
+    expect(stored).not.toContain('"1234"');
+    expect(stored).not.toContain("override");
+    expect(stored).not.toContain("approver");
+    expect(reopened.read("sale-1")!.refundId).toBe("refund-1");
+  },
+);
 
 it("uses status and same-attempt retry after the refund id is known, releasing only terminal results", async () => {
   const api = {

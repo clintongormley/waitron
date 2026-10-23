@@ -5829,6 +5829,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+For browser storage checks, inspect the operation's own entry and every write, comparing complete
+values rather than PIN substrings inside random IDs. See the
+[testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
+
 - **The original release-source network stall is undiagnosed.** Main run
   [39868989648](https://github.com/clintongormley/waitron/actions/runs/39868989648/job/120139166601)
   timed out after 20 seconds. A1024 (#2001) adds bounded retries; if it recurs, retain the attempt logs
