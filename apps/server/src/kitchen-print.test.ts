@@ -43,7 +43,7 @@ import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { createOpenOrder, fireOrderLines, fireLines } from "./working-order.js";
-import { listStationNotices, setStationToday } from "@waitron/venue-service";
+import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/venue-service";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -73,6 +73,7 @@ import {
   pay,
   revisionOf,
   seat,
+  seatWithNoAllergies,
   setupPartyVenue,
   split,
   tableAt,
@@ -1926,6 +1927,53 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     const reprint = decodeTicket(reprinted[0]!.payload);
     expect(reprint).toContain(`${thousandthsToDecimal(3000)} x Sopa`);
     expect(reprint).toContain(`${thousandthsToDecimal(2000)} x Chuleton`);
+  });
+
+  it("a reprint prints the HOLD part only for a station recorded for the group", async () => {
+    const v = await setupPartyVenue(db);
+    const { kitchen, bar, screen } = await inTx(v, async (tx) => {
+      const station = async (name: string, dish: string, withPrinter: boolean) => {
+        const { id } = await createStation(tx, v.cfg, { name });
+        await routeProductTo(tx, v.cfg, v.productId(dish), id);
+        const printerId = withPrinter ? await makeSharedPrinter(tx, v.cfg, name, [id]) : null;
+        return { id, printerId };
+      };
+      const kitchen = await station("Kitchen", "Burger", true);
+      const bar = await station("Bar", "Paella", true);
+      const screen = await station("Screen", "Flan", false);
+      await setStationPrinting(tx, { printHeldWork: true }, [kitchen.id]);
+      return { kitchen, bar, screen };
+    });
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Mesa 131"));
+    const dish = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [dish("Burger"), dish("Paella"), dish("Flan")], release: "hold" }],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const jobsAt = async (printerId: string) =>
+      (await asApp(v.cfg, (tx) => printJobsFor(tx)))
+        .filter((job) => job.printerId === printerId)
+        .map((job) => printedLines(job.payload));
+    expect(await jobsAt(kitchen.printerId!)).toHaveLength(1);
+    expect(await jobsAt(bar.printerId!)).toEqual([]);
+
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, tabId));
+
+    const reprinted = (await jobsAt(kitchen.printerId!)).slice(1);
+    expect(reprinted).toHaveLength(1);
+    expect(reprinted[0]![0]).toBe("*** REPRINT ***");
+    expect(reprinted[0]![1]).toBe("*** HOLD ***");
+    expect(reprinted[0]).toContain("1.000 x BURG");
+    expect(await jobsAt(bar.printerId!)).toEqual([]);
+    expect(
+      await db
+        .select({ kind: kitchenNotices.kind })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.stationId, screen.id)),
+    ).toEqual([]);
   });
 
   it("enqueues nothing (and does NOT throw) for an order with no fired items", async () => {

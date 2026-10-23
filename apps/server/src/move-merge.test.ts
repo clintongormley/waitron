@@ -1067,6 +1067,66 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     ]);
   });
 
+  it("a MOVED slip lists under HOLD only the held dishes of a station recorded for the group", async () => {
+    const v = await setupPartyVenue(db);
+    const kitchen = await stationWithPrinter(v, "Kitchen", ["Burger"]);
+    const bar = await stationWithPrinter(v, "Bar", ["Paella"]);
+    const screenId = await inTx(v, async (tx) => {
+      const station = await createStation(tx, v.cfg, { name: "Screen" });
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
+        { kind: "station", stationId: station.id },
+      );
+      await setStationPrinting(tx, { printHeldWork: true }, [
+        await activeStationId(tx, v, "Kitchen"),
+      ]);
+      return station.id;
+    });
+    const mesa122 = await v.table("Mesa 122");
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 121"));
+    const line = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [line("Burger"), line("Paella"), line("Flan")], release: "hold" }],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const numbers = await numbersOf([tabId]);
+    const before = {
+      kitchen: (await printedBy(kitchen)).length,
+      bar: (await printedBy(bar)).length,
+    };
+    expect(before).toEqual({ kitchen: 1, bar: 0 });
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa122, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    expect(await slipsSince(kitchen, before.kitchen)).toEqual([
+      movedSlip("Kitchen", `Pedido ${numbers.get(tabId)}`, "Mesa 121", "Mesa 122", [
+        "HOLD",
+        "GROUP 1",
+        "1.000 x BURG",
+      ]),
+    ]);
+    expect(await slipsSince(bar, before.bar)).toEqual([]);
+    expect(byDish(await noticesOf([tabId]))).toEqual([
+      ["BURG", tabId, "Mesa 122"],
+      ["FLAN", tabId, "Mesa 122"],
+      ["PAELLA", tabId, "Mesa 122"],
+    ]);
+    expect(
+      await db
+        .select({ kind: kitchenNotices.kind, lineName: kitchenNotices.lineName })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.stationId, screenId)),
+    ).toEqual([{ kind: "moved", lineName: "FLAN" }]);
+  });
+
   it("lists each held group on a HOLD ticket under its own GROUP line, its dishes in line order", async () => {
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);

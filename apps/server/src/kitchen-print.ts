@@ -52,7 +52,7 @@ import {
 import { readRestOfOrder } from "./rest-of-order.js";
 import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import { readGroupNumberLabels } from "./order-groups.js";
+import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
@@ -806,6 +806,9 @@ export interface CorrectionItem {
   /** The permanent number on the HOLD ticket being corrected. */
   group?: number;
   numberPartyLabel?: string;
+  /** Held work corrected against this group's HOLD ticket: its slip prints only at a station
+   *  recorded for the group ({@link heldPaperStations}). */
+  holdGroupId?: string;
 }
 
 /** What a correction slip says happened; the slip's header and its sign follow from it. */
@@ -832,6 +835,8 @@ export async function enqueueOrderKitchenNoteChange(
       quantity: firedQuantity,
       state: ticketItems.state,
       group: orderGroups.displayNumber,
+      groupId: workingOrderLines.groupId,
+      firedAt: ticketItems.firedAt,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -854,9 +859,14 @@ export async function enqueueOrderKitchenNoteChange(
     )
     .orderBy(workingOrderLines.lineNo, ticketItems.id);
   const byOrder = new Map<string, CorrectionItem[]>();
-  for (const { orderId, group, state, ...row } of rows) {
+  for (const { orderId, group, groupId, firedAt, state, ...row } of rows) {
     const items = byOrder.get(orderId) ?? [];
-    items.push({ ...row, wasStarted: isStarted(state), ...(group === null ? {} : { group }) });
+    items.push({
+      ...row,
+      wasStarted: isStarted(state),
+      ...(group === null ? {} : { group }),
+      ...(firedAt === null && groupId !== null ? { holdGroupId: groupId } : {}),
+    });
     byOrder.set(orderId, items);
   }
   for (const [orderId, items] of byOrder) {
@@ -1094,7 +1104,17 @@ async function printCorrectionSlips(
   items: CorrectionItem[],
   change: CorrectionChange,
 ): Promise<void> {
+  const heldGroups = items.flatMap((item) => item.holdGroupId ?? []);
+  if (heldGroups.length > 0) {
+    const recorded = await heldPaperStations(tx, heldGroups);
+    items = items.filter(
+      (item) =>
+        item.holdGroupId === undefined ||
+        recorded.get(item.holdGroupId)?.has(item.stationId) === true,
+    );
+  }
   const stationIds = [...new Set(items.map((i) => i.stationId))];
+  if (stationIds.length === 0) return;
   const mappingRows = await printerMappings(tx, stationIds);
   if (mappingRows.length === 0) return;
 
@@ -1217,6 +1237,36 @@ async function readSentItems(
     known.heldItemIds.add(item.id);
   }
   return sent;
+}
+
+/**
+ * Whether each of the held `items` is at a station recorded for its line's group
+ * ({@link heldPaperStations}): the held work whose HOLD paper that station has.
+ */
+async function onHeldPaper(
+  tx: Transaction,
+  items: readonly { workingOrderLineId: string; stationId: string | null }[],
+): Promise<(item: { workingOrderLineId: string; stationId: string | null }) => boolean> {
+  if (items.length === 0) return () => false;
+  const lines = await tx
+    .select({ id: workingOrderLines.id, groupId: workingOrderLines.groupId })
+    .from(workingOrderLines)
+    .where(
+      inArray(workingOrderLines.id, [...new Set(items.map((item) => item.workingOrderLineId))]),
+    );
+  const groupOf = new Map(lines.map((line) => [line.id, line.groupId]));
+  const recorded = await heldPaperStations(
+    tx,
+    lines.flatMap((line) => line.groupId ?? []),
+  );
+  return (item) => {
+    const groupId = groupOf.get(item.workingOrderLineId);
+    return (
+      groupId != null &&
+      item.stationId !== null &&
+      recorded.get(groupId)?.has(item.stationId) === true
+    );
+  };
 }
 
 /**
@@ -1372,11 +1422,14 @@ async function notifyMoved(
     return items.length === 0 ? [] : [{ ...move, items }];
   });
   if (told.length === 0) return;
-  const printing = await readMovedSlipPrinting(
+  const onPaper = await onHeldPaper(
     tx,
-    cfg,
-    told.flatMap((move) => move.items),
+    told.flatMap((move) => move.items.filter((item) => item.held)),
   );
+  const printable = (items: readonly MovedItem[]) =>
+    items.filter((item) => !item.held || onPaper(item));
+  const toPrint = told.flatMap((move) => printable(move.items));
+  const printing = toPrint.length === 0 ? null : await readMovedSlipPrinting(tx, cfg, toPrint);
   const kitchenNotes = await readOrderKitchenNotes(
     tx,
     printing === null ? [] : told.map((move) => move.to),
@@ -1388,10 +1441,11 @@ async function notifyMoved(
       movedTo: after.places.counter ? null : texts.toText,
       fromNumber: before.places.orderNumber,
     });
-    if (printing === null) continue;
+    const slipItems = printable(items);
+    if (printing === null || slipItems.length === 0) continue;
     const partyName = after.partyId === null ? before.places.partyName : after.sittingWith;
     const toNumber = after.places.orderNumber;
-    await printMovedSlips(tx, cfg, printing, items, {
+    await printMovedSlips(tx, cfg, printing, slipItems, {
       kitchenNote:
         kitchenNotes.get(to)!.note === null
           ? undefined
@@ -1640,7 +1694,9 @@ async function readReprintParts(
         eq(ticketItems.madeHere, false),
       ),
     );
-  const held = await readOnHoldTickets(tx, orderIds);
+  const onHold = await readOnHoldTickets(tx, orderIds);
+  const onPaper = await onHeldPaper(tx, onHold);
+  const held = onHold.filter(onPaper);
   const byOrder = (rows: typeof fired) => {
     const items = new Map<string, FiredItem[]>(orderIds.map((id) => [id, []]));
     for (const { workingOrderId, workingOrderLineId, stationId, quantity } of rows) {
