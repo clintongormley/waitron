@@ -220,6 +220,15 @@ function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): s
           ? t("box_status.sales.none")
           : fill("box_status.sales.last", { time: formatIsoMinute(health.sales.lastAt) }),
       ];
+    case "tax":
+      if (health.outbox === null) return [];
+      return [
+        health.outbox.lastAcceptedAt === null
+          ? t("box_status.tax.none_accepted")
+          : fill("box_status.tax.last_accepted", {
+              time: formatIsoMinute(health.outbox.lastAcceptedAt),
+            }),
+      ];
     case "bucket": {
       const last =
         "lastConfirmedUploadAt" in health.stream ? health.stream.lastConfirmedUploadAt : null;
