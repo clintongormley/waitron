@@ -9,7 +9,7 @@ export class ColorSchemeController implements ReactiveController {
   readonly #host: ReactiveControllerHost & HTMLElement;
   readonly #onChange: (() => void) | undefined;
   #dark = false;
-  #stop = (): void => {};
+  #stop!: () => void;
 
   constructor(host: ReactiveControllerHost & HTMLElement, onChange?: () => void) {
     this.#host = host;

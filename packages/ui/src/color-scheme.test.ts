@@ -155,13 +155,19 @@ describe("ColorSchemeController", () => {
     const probe = (await mount("<scheme-probe></scheme-probe>")) as SchemeProbe;
     startThemeChoice(host);
     await probe.updateComplete;
+    const control = document.createElement("silent-scheme-probe") as SilentSchemeProbe;
+    host.append(control);
+    await control.updateComplete;
     const before = probe.updates;
     probe.remove();
-    host.append(document.createElement("span"));
 
-    chooseTheme("dark");
     await commands.emulateColorScheme("dark");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(text(control)).toBe("true"));
+    expect(probe.updates).toBe(before);
+
+    chooseTheme("light");
+    await control.updateComplete;
+    expect(text(control)).toBe("false");
     expect(probe.updates).toBe(before);
     expect(onChange).not.toHaveBeenCalled();
   });
