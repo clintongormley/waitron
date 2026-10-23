@@ -579,11 +579,13 @@ until A977).
   example in `modelo-303-demo.ts` into Spain's reporting area. The demo seed itself is A972's;
   the script-suite test fixtures belong to A976 below. Low priority; A977 cannot scan
   `apps/*/scripts` until this work and the test-fixture cleanup land.
-- **A976 — point 7's first step.** The server's test venues default to English, including the
-  helpers in `apps/server/scripts/testing/venue.ts` and
-  `apps/server/scripts/demo-seed/testing/provision-venue.ts`. Tests that read a screen take their
-  text from the strings file. Accent tests, AEAT names and official text stay. Low priority. The
-  rest of the test cleanup is one low-priority item per package, taken from A977's list.
+- **A976 — remaining test-venue defaults.** The shared script-suite fixture
+  (`apps/server/scripts/testing/venue.ts`) now uses English location, operation, street and
+  administrator text (#2004). The other server helpers still need English defaults, including
+  `apps/server/scripts/demo-seed/testing/provision-venue.ts` and the bill, party, adjustment,
+  split-extras, boot, stream and clock fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts).
+  Screen tests take translated expectations from their strings file. Keep accent tests, AEAT names
+  and official text. Later cleanup goes package by package from A977's list. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the
