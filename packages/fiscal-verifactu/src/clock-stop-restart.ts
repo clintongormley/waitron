@@ -107,9 +107,13 @@ async function judge(
   const verdict = judgeClockWitnesses(
     witnesses.filter((witness) => Date.parse(witness.boxAt) < stopBeganBeforeMs),
   );
-  const agreeingDevices = verdict.agreeing.filter((witness) => witness.kind === "device");
+  // A witness taken after the reading may describe the clock before it stepped back.
+  const agreeing = verdict.agreeing.filter(
+    (witness) => Date.parse(witness.boxAt) <= reading.instant.getTime(),
+  );
+  const agreeingDevices = agreeing.filter((witness) => witness.kind === "device");
   const proof = {
-    authority: verdict.agreeing.find((witness) => witness.kind === "authority") ?? null,
+    authority: agreeing.find((witness) => witness.kind === "authority") ?? null,
     devices: agreeingDevices.length >= 2 ? [...agreeingDevices] : [],
   };
   const contrary = {
@@ -179,8 +183,9 @@ function refuse(params: ErrorParams["clock.restart_refused"]): never {
 }
 
 /** A manager's restart of payments while the clock reads behind the latest record. Refuses
- * `clock.restart_refused` unless the Clock row would offer it; a press on a record a restart
- * already names and covers answers that restart. Records no alert. */
+ * `clock.unusable` for a reading before 28-10-2024, else `clock.restart_refused` unless the Clock
+ * row would offer it; a press on a record a restart already names and covers answers that
+ * restart. Records no alert. */
 export async function restartAfterClockStop(
   tx: Transaction,
   input: {

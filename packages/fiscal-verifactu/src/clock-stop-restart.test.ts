@@ -335,7 +335,7 @@ describe("witnesses taken before the stop", () => {
   it("count from just over a minute before the latest record", async () => {
     await sale(T);
     const witnesses = [device("till-1", T - M - 1), device("till-2", T - M - 1)];
-    expect((await stateAt(R, witnesses))!.offer).toBe("offered");
+    expect((await stateAt(T - M - 1, witnesses))!.offer).toBe("offered");
   });
 
   it("an AEAT disagreement taken before the stop is no contrary proof", async () => {
@@ -348,6 +348,53 @@ describe("witnesses taken before the stop", () => {
     await sale(T);
     const witnesses = [...twoDevices(R), { ...authority(R - M, 2 * H, 500), boxAt: "garbage" }];
     expect((await stateAt(R, witnesses))!.offer).toBe("offered");
+  });
+});
+
+describe("the checks' order, where two reasons hold at once", () => {
+  it("a gap over 24 hours is refused as too far, whatever the witnesses say", async () => {
+    await sale(T);
+    const at = T - 25 * H;
+    const witnesses = [...twoDevices(at), authority(at - M, 2 * H, 500)];
+    expect((await stateAt(at, witnesses))!.offer).toBe("too_far");
+    expect(await refusal(() => press(at, witnesses))).toEqual(refused("too_far"));
+  });
+
+  it("contrary proof with no proof is refused as contrary proof", async () => {
+    await sale(T);
+    const witnesses = [authority(R - M, 2 * H, 500)];
+    expect((await stateAt(R, witnesses))!.offer).toBe("contrary_proof");
+    expect(await refusal(() => press(R, witnesses))).toEqual(refused("contrary_proof"));
+  });
+
+  it("an older record is refused as changed even when a restart covers the latest", async () => {
+    await sale(T - H);
+    const older = latestId();
+    await sale(T);
+    await press(R, twoDevices(R));
+    expect(await refusal(() => press(R, twoDevices(R), { recordId: older }))).toEqual(
+      refused("record_changed"),
+    );
+  });
+});
+
+describe("witnesses taken after the reading", () => {
+  it("are no proof: the box's clock may have stepped back since", async () => {
+    await sale(T);
+    const witnesses = [device("till-1", R + 30 * S), device("till-2", R + S)];
+    expect((await stateAt(R, witnesses))!.offer).toBe("no_proof");
+    expect(await refusal(() => press(R, witnesses))).toEqual(refused("no_proof"));
+    expect(await refusal(() => press(R, [authority(R + S, 0, 500)]))).toEqual(refused("no_proof"));
+  });
+
+  it("control: taken at the reading itself, they are proof", async () => {
+    await sale(T);
+    const witnesses = [device("till-1", R), device("till-2", R), authority(R, 0, 500)];
+    expect((await stateAt(R, witnesses))!.proof).toEqual({
+      authority: witnesses[2],
+      devices: witnesses.slice(0, 2),
+    });
+    expect((await press(R, witnesses)).restart.proofKind).toBe("authority_and_devices");
   });
 });
 
