@@ -2651,3 +2651,18 @@ A1003 ([PR #1973](https://github.com/clintongormley/waitron/pull/1973), 2026-10-
 import above each header. CI run `39759743880` and the local unchanged guard both reported two
 failures: the headers appeared to have zero arguments. Moving the helper into each existing import
 block left the guard unchanged; the argument and affected script suites then passed 23 cases.
+
+
+## Check stored secrets as values and inspect every write
+
+A short PIN can occur inside a random submission ID. Check the operation's own storage key and
+compare the complete saved shape. Inspect each write as well as the final entry, so a later clean
+write cannot hide an earlier secret.
+
+A1025's retained main CI log (`39870293918`, job `120143085271`) shows `1234` only inside submission
+ID `a11234a4-2836-4178-8508-c9cdc414fead`. In Chromium, forcing that ID reproduced the original
+`tender-refund.test.ts` failure. A second case with a different ID and an unrelated storage entry
+holding `1234` failed the same all-storage substring check. Both now check the refund's own entry
+and every `setItem` call against the full expected non-secret shape. The PIN check includes its JSON
+quotes, which distinguish a complete PIN value from digits inside the UUID. The original request,
+retry, approval and recovery assertions remain.
