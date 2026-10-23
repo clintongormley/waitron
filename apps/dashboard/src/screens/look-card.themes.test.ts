@@ -125,8 +125,10 @@ const hardButton = (el: Card, name: string) =>
   hardToRead(el).shadowRoot!.querySelector<WtButton>(`[data-test=${name}]`)!;
 
 async function typeInCode(el: Card, value: string): Promise<void> {
-  const inner = codeField(el).shadowRoot!.querySelector("input")!;
-  await page.elementLocator(inner).fill(value);
+  // An exact name: Advanced's code fields' labels end in "colour code" too.
+  const inner = page.getByRole("textbox", { name: t("appearance.brand_code"), exact: true });
+  expect(inner.element()).toBe(codeField(el).shadowRoot!.querySelector("input"));
+  await inner.fill(value);
   await el.updateComplete;
 }
 

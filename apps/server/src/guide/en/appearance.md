@@ -11,14 +11,15 @@ choices it is made of:
 
 - **Brand colour**: the colour of the main buttons and of selected items. **Waitron's** means the
   theme keeps Waitron's own colour. A colour that is not one of the swatches shows as **Custom**
-  with its code. Where a readable shade was taken in place of the colour, the row names it too.
+  with its code. Where a readable shade was taken in place of the colour, the row names it too,
+  and where a version's main buttons were given a colour by hand, the row names that colour
+  followed by "set by hand", such as "dark screens #5fa77a, set by hand".
 - **Background**: **Neutral** keeps Waitron's greys, and **Tinted** gives the page, field fills
   and borders a faint cast of the brand colour.
 - **Corners**: **Square**, **Standard** or **Round**, for buttons, fields and cards.
 - **Colours set by hand**: any of the theme's colours that were given a value of their own rather
-  than worked out from the brand colour, or **None**. This page cannot set a colour by hand, but
-  its fixes can replace one that is hard to read with a readable shade, and **Use Waitron's look**
-  removes them all.
+  than worked out from the brand colour, or **None**. The editor's **Advanced** section sets them,
+  as "Set colours by hand" below describes.
 
 The note at the bottom of the card explains that one look covers the dashboard and every till.
 Each theme has a light version and a dark version, and each screen shows one of them, as its own
@@ -51,6 +52,12 @@ The editor opens the theme's three choices in place:
 - **Background**: **Neutral** or **Tinted**.
 - **Corners**: **Square**, **Standard** or **Round**.
 
+Under the brand colour, **Pick a different colour for dark screens** gives the dark version's main
+buttons a colour of their own: it opens Advanced and puts the cursor in the code box of **Main
+buttons** on dark screens. Once that colour is set, the link gives way to a line such as "Buttons on
+dark screens: #5fa77a, set by hand", and **Use the brand colour** beside it takes the colour away
+again, so dark screens work their buttons out from the brand colour once more.
+
 Beside or below the choices, the **Preview** paints a small sample of the dashboard in the look you
 are building: a **Light version** and a **Dark version**, each with a selected menu item, a field,
 Save and Cancel buttons, a switch, a link and a Light and Dark choice. It is a picture, so its
@@ -65,6 +72,37 @@ set by hand. It saves nothing by itself, and it is greyed out while the choices 
 Waitron's look. **Cancel** closes the editor without saving. If you have changed something, Cancel,
 leaving the page, and opening another theme from the Themes card ask you first.
 
+## Set colours by hand {#advanced}
+
+Below the choices and the preview, the editor has a section headed **Advanced: set colours by
+hand**. It starts closed each time the editor opens, and its closed line says what is set by hand:
+"None set by hand. Waitron works out every colour and text size.", or a count and the colours'
+names, such as "2 set by hand: Page (light), Text (light)". While colours set by hand are hard to
+read, the line adds how many, as in "1 set by hand: Text (light) · 1 hard to read". Press the
+heading to open it.
+
+Inside, a row for each of the theme's colours gives its value on light screens and on dark
+screens, under the headings **Light screens** and **Dark screens** on a wide card, or each labelled
+**Light** or **Dark** on a narrow one, each with a colour picker and a box for a colour code. Beside each value's code, or under it
+on a narrow screen, a colour that is worked out reads **Worked out**; Main buttons reads **Brand colour**, or **Fixed** where a
+readable shade was taken for that kind of screen. Changing either value, with the picker or by
+typing a code, sets that value by hand and leaves the other kind of screen's value as it was. A
+value set by hand is marked **Set by hand**, with **Use worked-out colour** under it to go back to
+the value Waitron works out. **Reset all to worked-out**, at the bottom of the section, puts every
+value back to worked out; it is greyed out while nothing is set by hand.
+
+A colour set by hand stays as you set it when you change the brand colour, the background or the
+corners. When you change the brand colour or the background while some colours are set by hand, a
+note under the brand colour says so, such as "You set 1 colour by hand, and it is kept: Text
+(light). Advanced shows it."
+
+Setting **Main buttons** by hand replaces the brand colour on that kind of screen, so a readable
+shade taken for it there is dropped.
+
+A code must be `#` followed by six digits or letters a to f. When one is not, Save says so under
+that code box and saves nothing, and Advanced opens to show it, and it cannot be closed until the
+code is fixed.
+
 ## When a colour is hard to read {#hard-to-read}
 
 Some brand colours make buttons hard to see. A sunny yellow such as `#f2c94c`, for example, barely
@@ -77,10 +115,24 @@ light screens use the shade, while dark screens keep your colour. The line then 
 **Undo** puts your colour back.
 
 A shade you take belongs to its colour. Picking another brand colour drops it, and returning to the
-theme's saved colour brings its saved shade back. Changing the background or the corners keeps it.
+theme's saved colour brings its saved shade back, except on a kind of screen whose **Main buttons**
+is set by hand in Advanced. Changing the background or the corners keeps it.
+
+A colour set by hand in Advanced is checked too. When it is hard to read, a warning under its row
+names the kind of screen and what it is hard to read on, or what is hard to read on it. Text set
+to `#9a9a9a` on light screens, for example, warns "Light screens: hard to read on Page, Cards, …",
+naming every colour it is hard to read on. When a shade would read well, a button offers it: for that
+grey it reads **Use #585858**. Press it and the value takes the shade, and a line reading "Light
+screens: fixed from #9a9a9a" shows with **Undo**, which puts your colour back. Undo stays until you
+change that value again or the editor closes.
+
+Some colours set by hand have no shade that reads well. Their warning ends "Pick another colour.", or, where
+another colour set by hand is in the way, names it: with Page set to `#777777` and Text to `#888888`
+on light screens, Page's warning ends "while Text is set by hand to #888888".
 
 When two or more of the warnings each offer a fix, a line under the editor counts the colours that
-are hard to read and offers **Fix all**, which takes every fix at once.
+are hard to read and offers **Fix all**, which takes every fix at once, colours set by hand
+included.
 
 Waitron never refuses a colour. A warning is advice: you can save the colour you chose and live
 with it.

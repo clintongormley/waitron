@@ -300,3 +300,86 @@ function codeInput(code: NonNullable<ColorFieldOptions["code"]>, busy: boolean):
     }}
   ></wt-input>`;
 }
+
+/** A host adds these, after `baseStyles`, whose `:focus-visible` ring the picker keeps. */
+export const colourValueStyles = css`
+  .colour-value {
+    display: flex;
+    align-items: center;
+    gap: var(--wt-space-2);
+    min-width: 0;
+  }
+  .colour-value > wt-input {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  /* A #rrggbb code's seven characters, the field's own padding, and a little room; the ch is
+     this element's own font's. */
+  .colour-value > wt-input::part(field) {
+    flex: none;
+    width: calc(7ch + 2 * var(--wt-space-3) + var(--wt-space-1));
+    font-family: var(--wt-font-family-mono);
+    font-size: var(--wt-font-size-sm);
+  }
+  .colour-value input[type="color"] {
+    flex: none;
+    width: var(--wt-space-6);
+    height: var(--wt-space-6);
+    padding: 0;
+    border: 1px solid var(--wt-color-border);
+    border-radius: var(--wt-radius-sm);
+    cursor: pointer;
+  }
+  .colour-value input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .colour-value input[type="color"]::-webkit-color-swatch {
+    border: none;
+  }
+  .colour-value input[type="color"]::-moz-color-swatch {
+    border: none;
+  }
+`;
+
+export interface ColourValueOptions {
+  /** The `#rrggbb` the picker shows. */
+  colour: string;
+  /** The code field's text. */
+  code: string;
+  name: string;
+  pickerName: string;
+  /** The picker's accessible name. */
+  label: string;
+  /** The code field's label, not drawn. */
+  codeLabel: string;
+  error: string;
+  busy: boolean;
+  pick(colour: string): void;
+  type(text: string): void;
+}
+
+/** One colour as a picker and a code field, with no palette. */
+export function colourValueField(options: ColourValueOptions): TemplateResult {
+  return html`<span class="colour-value"
+    ><input
+      type="color"
+      name=${options.pickerName}
+      aria-label=${options.label}
+      .value=${options.colour}
+      .disabled=${options.busy}
+      @input=${(event: Event) => {
+        event.stopPropagation();
+        options.pick((event.target as HTMLInputElement).value);
+      }}
+    />${codeInput(
+      {
+        name: options.name,
+        label: options.codeLabel,
+        value: options.code,
+        error: options.error,
+        change: options.type,
+      },
+      options.busy,
+    )}</span
+  >`;
+}

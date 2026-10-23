@@ -14,7 +14,13 @@ import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  computedColour,
+  dialogClosed,
+  dotOf,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import "./look-card.js";
 
 type Card = HTMLElementTagNameMap["dashboard-look-card"];
@@ -45,6 +51,15 @@ const LUCIA: ThemeChoices = {
   handSet: { light: {}, dark: {} },
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
+const DARK_OWN = theme("t-lucia", "Bar Lucía", {
+  ...LUCIA,
+  brandFix: {},
+  handSet: { light: {}, dark: { primary: "#5fa77a" } },
+});
+const LIGHT_OWN = theme("t-own", "Own buttons", {
+  ...WAITRON_CHOICES,
+  handSet: { light: { primary: "#7a1f2b" }, dark: {} },
+});
 const inUse = (view: ThemeView): ThemeList => ({ themes: [view], inUse: view.id });
 
 async function mount(list: ThemeList, canEdit = true): Promise<Card> {
@@ -109,6 +124,33 @@ describe("the read-only Look card", () => {
     expect(row(el, "background")).toBe("Tinted");
     expect(row(el, "corners")).toBe("Round");
     expect(text(q(el, "[data-test=edit]"))).toBe(t("action.edit"));
+  });
+
+  it("names a version's Main buttons set by hand in the brand row, one chip each", async () => {
+    setLocale("en-GB");
+    const chipsOf = (el: Card) =>
+      [...el.shadowRoot!.querySelectorAll("[data-test=saved-brand] .chip")].map((chip) =>
+        chip.getAttribute("style"),
+      );
+    const own = await mount(inUse(DARK_OWN));
+    expect(row(own, "brand")).toBe("Custom · #1e5b3a · dark screens #5fa77a, set by hand");
+    expect(chipsOf(own)).toEqual(["background:#1e5b3a", "background:#5fa77a"]);
+    cleanupWidgets();
+    const waitron = await mount(inUse(LIGHT_OWN));
+    expect(row(waitron, "brand")).toBe("Waitron's · light screens #7a1f2b, set by hand");
+    expect(chipsOf(waitron)).toEqual([
+      `background:${WAITRON_DEFAULTS.light["--wt-color-primary"]}`,
+      "background:#7a1f2b",
+    ]);
+    cleanupWidgets();
+    setLocale("es-ES");
+    const spanish = await mount(inUse(DARK_OWN));
+    expect(row(spanish, "brand")).toBe(
+      [
+        es["appearance.brand_custom"].replace("{colour}", "#1e5b3a"),
+        `${es["appearance.saved_fix_dark"]} ${es["appearance.saved_hand"].replace("{colour}", "#5fa77a")}`,
+      ].join(" · "),
+    );
   });
 
   it("offers no Edit to a session that cannot change the look", async () => {
@@ -542,6 +584,9 @@ describe("readability warnings in the editor", () => {
     const warning = q(el, "[data-test=brand-warning-light]")!;
     expect(text(warning)).toBe(t("appearance.brand_warning_light"));
     expect(warning.querySelector("wt-icon")?.getAttribute("name")).toBe("warning");
+    expect(getComputedStyle(warning.querySelector("wt-icon")!).color).toBe(
+      computedColour(el.shadowRoot!, "var(--wt-color-warning)"),
+    );
     expect(text(q(el, "[data-test=brand-fix-light]"))).toBe("Use #9d8a15 on light screens");
     expect(q(el, "[data-test=brand-warning-dark]")).toBeNull();
     expect(preview(el).theme.light["--wt-color-primary"]).toBe("#f2d300");
@@ -783,7 +828,7 @@ describe("saving a draft that is hard to read", () => {
     await userEvent.click(button(opened.el, "save"));
     await expect.poll(() => dialogOf(opened.el).open).toBe(true);
     expect(dialogLines(opened.el)).toEqual([
-      "Sunken areas (light) is hard to read.",
+      "Sunken areas (light): Text hard to read on it.",
       "Text (light): no shade can be read while Sunken areas is set by hand to #555555.",
     ]);
     expect(dialogButton(opened.el, "fix-and-save")!.variant).toBe("primary");
@@ -995,31 +1040,6 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
     });
   }
 
-  /** Where the fixed line's "·" is: drawn or not, and whether Undo shares the colour's line. */
-  function dotOf(el: Card, mode: "light" | "dark") {
-    const span = q(el, `[data-test=brand-fixed-${mode}]`)!;
-    const dot = span.nextElementSibling!;
-    const undo = button(el, `brand-undo-${mode}`);
-    const words = document.createRange();
-    words.selectNodeContents(span);
-    const rects = words.getClientRects();
-    const last = rects[rects.length - 1]!;
-    const sameLine = (box: DOMRect) => {
-      const middle = (box.top + box.bottom) / 2;
-      return middle > last.top && middle < last.bottom;
-    };
-    const box = rect(dot);
-    const hit = el.shadowRoot!.elementFromPoint(
-      (box.left + box.right) / 2,
-      (box.top + box.bottom) / 2,
-    );
-    return {
-      drawn: hit === dot,
-      dotOnColourLine: sameLine(box) && box.left >= last.right - 1,
-      undoOnColourLine: sameLine(rect(undo)),
-    };
-  }
-
   for (const [locale, cardWidth] of [
     ["es-ES", 358],
     ["en-GB", 358],
@@ -1034,7 +1054,11 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
         for (const mode of ["light", "dark"] as const) {
           const { el } = await fixedLine(mode);
           await resize(el, cardWidth);
-          const found = dotOf(el, mode);
+          const found = dotOf(
+            el.shadowRoot!,
+            q(el, `[data-test=brand-fixed-${mode}]`)!,
+            button(el, `brand-undo-${mode}`),
+          );
           const label = `${mode} ${JSON.stringify(found)}`;
           expect(found.drawn, label).toBe(found.undoOnColourLine);
           if (found.drawn) expect(found.dotOnColourLine, label).toBe(true);
@@ -1042,6 +1066,54 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
           if (locale === "en-GB" && cardWidth === 800) expect(found.drawn, label).toBe(true);
           cleanupWidgets();
         }
+      });
+    });
+  }
+
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    it(`drops the "·" when Use the brand colour wraps to a line of its own (${locale})`, async () => {
+      await onDesk(async () => {
+        setLocale(locale);
+        const { el } = await mountEditing(inUse(DARK_OWN));
+        const words = q(el, "[data-test=dark-own]")!;
+        const link = button(el, "use-brand");
+        const at = async (cardWidth: number) => {
+          await resize(el, cardWidth);
+          // elementFromPoint sees only what is inside the viewport.
+          words.scrollIntoView({ block: "center" });
+          return dotOf(el.shadowRoot!, words, link);
+        };
+        const wordLines = () => {
+          const range = document.createRange();
+          range.selectNodeContents(words);
+          return range.getClientRects().length;
+        };
+        const oneColumn = 880;
+        await at(oneColumn);
+        const left = el.getBoundingClientRect().left;
+        const slack =
+          el.getBoundingClientRect().right - words.parentElement!.getBoundingClientRect().right;
+        const between = Math.round(
+          (words.getBoundingClientRect().right - left + link.getBoundingClientRect().right - left) /
+            2 +
+            slack,
+        );
+        const fits = async (width: number) =>
+          !(await at(width)).undoOnColourLine && wordLines() === 1;
+        let narrowWidth = (await fits(between)) ? between : 0;
+        for (let width = oneColumn; narrowWidth === 0 && width > 0; width -= 2) {
+          if (await fits(width)) narrowWidth = width;
+        }
+        expect(narrowWidth).toBeGreaterThan(0);
+        const narrow = await at(narrowWidth);
+        expect(wordLines()).toBe(1);
+        expect(narrow.undoOnColourLine, JSON.stringify(narrow)).toBe(false);
+        expect(narrow.drawn, JSON.stringify(narrow)).toBe(false);
+        // One column with room to spare; at 1000 px the editor has two and this line wraps.
+        const wide = await at(oneColumn);
+        expect(wide.undoOnColourLine, JSON.stringify(wide)).toBe(true);
+        expect(wide.drawn, JSON.stringify(wide)).toBe(true);
+        expect(wide.dotOnColourLine, JSON.stringify(wide)).toBe(true);
       });
     });
   }
@@ -1055,6 +1127,51 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
       await opened.el.updateComplete;
     }
     return opened;
+  }
+
+  for (const cardWidth of [358, 1000]) {
+    it(`sets Pick a different colour for dark screens flush under the dark-screens line (${cardWidth}px)`, async () => {
+      await onDesk(async () => {
+        setLocale("en-GB");
+        const { el } = await mountEditing(inUse(lucia));
+        await resize(el, cardWidth);
+        const words = q(el, "[data-test=brand-fixed-dark]")!;
+        const link = button(el, "pick-dark");
+        const startOf = (node: Element) => {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getClientRects()[0]!.left;
+        };
+        expect(Math.abs(startOf(link) - startOf(words))).toBeLessThanOrEqual(1);
+        expect(rect(link).top - rect(words.parentElement!).bottom).toBeLessThanOrEqual(4);
+      });
+    });
+  }
+
+  for (const [shown, code] of [
+    ["light", "#f2d300"],
+    ["dark", undefined],
+  ] as const) {
+    it(`keeps the ${shown} brand warning's gap to its fix, and the dark-screens link's below it`, async () => {
+      await onDesk(async () => {
+        setLocale("en-GB");
+        const { el } = await mountEditing(inUse(lucia));
+        await resize(el, 1000);
+        await userEvent.click(button(el, "brand-undo-dark"));
+        await el.updateComplete;
+        if (code !== undefined) await typeInCode(el, code);
+        expect(q(el, "[data-test=brand-fixed-dark]")).toBeNull();
+        const warnings = [...el.shadowRoot!.querySelectorAll("[data-test^=brand-warning-]")];
+        expect(warnings.map((w) => w.getAttribute("data-test"))).toEqual([
+          `brand-warning-${shown}`,
+        ]);
+        // The choices' own gap, --wt-space-4.
+        const fix = button(el, `brand-fix-${shown}`).parentElement!;
+        expect(rect(fix).top - rect(warnings[0]!).bottom).toBeGreaterThanOrEqual(15);
+        const link = button(el, "pick-dark").parentElement!;
+        expect(rect(link).top - rect(fix).bottom).toBeGreaterThanOrEqual(15);
+      });
+    });
   }
 
   it("keeps the saved warning's icon its full size when the line wraps", async () => {

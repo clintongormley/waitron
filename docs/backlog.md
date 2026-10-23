@@ -2939,7 +2939,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   manager adds, copies, renames, deletes and switches themes, edits any of them, and names a draft
   with Save as new theme…; Edit works while Waitron's theme is in use, so a new venue makes its first
   theme from the screen. The create button reads "Add theme", not the design's "New theme", by the
-  house Wording rule (`design-system.md`). Next: 6, 7 and 10.
+  house Wording rule (`design-system.md`). Slice
+  6 landed 2026-10-23 (#2021): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
+  value each, set by hand with a picker or a code, put back one at a time or all at once, with
+  warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
+  its own button colour. Until slice 11 its heading and opening line leave out text, and until slice
+  12 it is one flat list. Next: 7 and 10, then 11 and 12.
 
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
@@ -2974,6 +2979,35 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the colour field's refused chip value, disabled code box while saving and same-row placement; the
   warning text's colour; the preview's colour-rebuild check (`theme-preview.test.ts`); Bar Lucía and
   lemon fixtures repeated across test files.
+
+- **A841 slice 6 wording to confirm (2026-10-23).** For the owner: Advanced's heading "Advanced:
+  set colours by hand" and opening line "A colour you set here stays as you set it when you change
+  the brand colour, background or corners. Waitron still checks it can be read.", shortened from the
+  design's until slice 11; the names given to colours outside the 22 (Error colour, Delete buttons
+  switched off, Warning colour, Google button outline, Search highlight, Floor map tables, Table
+  card edge) and the folded "zone tab colours"; the two-sentence warning for a colour drawn both
+  ways, and the one sentence when it has no fix; the row buttons' spoken names, "Use worked-out
+  colour: Page, light screens"; "Brand colour" on Main buttons with Waitron's; and the light form
+  of the saved row's "set by hand".
+
+- **A colour picked in Advanced within one animation frame of leaving the editor is lost, and
+  nothing asks (A841 slice 6's review, 2026-10-23).** A picker drag sends at most one change per
+  frame (`dashboard-theme-advanced`'s `flush`); the Look card's own buttons, Save and Cancel send a
+  waiting colour first, but the leave question reads the draft (`current: () => this.draft!` in
+  `look-card.ts`) without sending it. A reviewer's probe, with frames held back, saw navigation go
+  ahead and no unload warning; Edit on another theme reads the draft the same way (read, not
+  tried). Sending the colour inside that read re-enters the draft scope while it reads, so the fix
+  is likelier a hook the leave coordinator calls before it compares.
+
+- **The Look card's Fix all button breaks onto two lines ("Fix / all") on a phone (A841 slice 5).**
+  It sits in the `.warning` line (`apps/dashboard/src/widgets/fix-line-styles.ts`), where nothing
+  stops it shrinking beside the sentence (read, not tried); picture 15 keeps it on one line.
+  Measured on the code slice 6 branched from (`de73c6144`, the Look card test rig, two fixable
+  warnings): two lines in a card 300 px wide or narrower, one from 320 px. Slice 6's visual check
+  saw it at a 390 px window, and slice 6 makes the line more common, since colours set by hand add
+  warnings with fixes. The measurement is in slice 6's pull request. In slice 6's shots, slice 5's Undo after
+  "Buttons on dark screens: …" wraps onto a line of its own at phone width and starts 12 px in
+  (the link button's padding) rather than flush with the line above.
 
 - **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
   them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`

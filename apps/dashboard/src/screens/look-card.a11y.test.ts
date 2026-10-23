@@ -65,6 +65,29 @@ async function openSaveDialog(el: Card, canFix: boolean): Promise<string> {
   return "dashboard-hard-to-read-dialog";
 }
 
+const advanced = (el: Card) => q(el, "dashboard-theme-advanced")!;
+const inAdvanced = (el: Card, selector: string) =>
+  advanced(el).shadowRoot!.querySelector<HTMLElement>(selector);
+
+async function openAdvanced(el: Card) {
+  const disclosure = inAdvanced(
+    el,
+    "[data-test=advanced]",
+  ) as HTMLElementTagNameMap["wt-disclosure"];
+  if (!disclosure.open) {
+    await userEvent.click(disclosure.shadowRoot!.querySelector("button.header")!);
+    await disclosure.updateComplete;
+  }
+  expect(disclosure.open).toBe(true);
+}
+
+async function typeHand(el: Card, mode: string, key: string, value: string) {
+  await openAdvanced(el);
+  const field = inAdvanced(el, `wt-input[name="handSet.${mode}.${key}"]`)!;
+  await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill(value);
+  await el.updateComplete;
+}
+
 const states: Record<string, { list: ThemeList; reach: (el: Card) => Promise<string> }> = {
   "editing Bar Lucía": { list: inUse(lucia), reach: async () => "[data-test=brand-fixed-dark]" },
   "the lemon warning": {
@@ -138,6 +161,58 @@ const states: Record<string, { list: ThemeList; reach: (el: Card) => Promise<str
       await typeInCode(el, "#12");
       await press(el, "save");
       return "wt-input[name=brandColor]";
+    },
+  },
+  "Advanced open, nothing set by hand": {
+    list: inUse(lucia),
+    reach: async (el) => {
+      await openAdvanced(el);
+      return "dashboard-theme-advanced";
+    },
+  },
+  "Advanced open with two warnings": {
+    list: inUse(twoFixes),
+    reach: async (el) => {
+      await openAdvanced(el);
+      expect(inAdvanced(el, "[data-test=hand-warning-light-text]")).not.toBeNull();
+      expect(inAdvanced(el, "[data-test=hand-warning-light-surface-sunken]")).not.toBeNull();
+      return "dashboard-theme-advanced";
+    },
+  },
+  "a fixed-from line": {
+    list: inUse(twoFixes),
+    reach: async (el) => {
+      await press(el, "fix-all");
+      await openAdvanced(el);
+      await expect.poll(() => inAdvanced(el, "[data-test=hand-fixed-light-text]")).toBeTruthy();
+      return "dashboard-theme-advanced";
+    },
+  },
+  "a hand code's error": {
+    list: inUse(lucia),
+    reach: async (el) => {
+      await typeHand(el, "light", "bg", "#12");
+      await press(el, "save");
+      await expect
+        .poll(
+          () =>
+            (
+              inAdvanced(
+                el,
+                'wt-input[name="handSet.light.bg"]',
+              ) as HTMLElementTagNameMap["wt-input"]
+            ).error,
+        )
+        .not.toBe("");
+      return "dashboard-theme-advanced";
+    },
+  },
+  "the dark own colour line": {
+    list: inUse(lucia),
+    reach: async (el) => {
+      await press(el, "pick-dark");
+      await typeHand(el, "dark", "primary", "#5fa77a");
+      return "[data-test=dark-own]";
     },
   },
 };

@@ -447,3 +447,36 @@ export function combinedFixture(
     }),
   };
 }
+
+/**
+ * Where a "fixed from … · Undo" line's "·" is: drawn or not, and whether Undo shares the colour's
+ * line. `words` is the span holding the fixed words; the "·" is the element after it.
+ */
+export function dotOf(root: ShadowRoot, words: Element, undo: Element) {
+  const dot = words.nextElementSibling!;
+  const range = document.createRange();
+  range.selectNodeContents(words);
+  const rects = range.getClientRects();
+  const last = rects[rects.length - 1]!;
+  const sameLine = (box: DOMRect) => {
+    const middle = (box.top + box.bottom) / 2;
+    return middle > last.top && middle < last.bottom;
+  };
+  const box = dot.getBoundingClientRect();
+  const hit = root.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+  return {
+    drawn: hit === dot,
+    dotOnColourLine: sameLine(box) && box.left >= last.right - 1,
+    undoOnColourLine: sameLine(undo.getBoundingClientRect()),
+  };
+}
+
+/** The colour `value` (a CSS colour, `var(...)` included) computes to inside `root`. */
+export function computedColour(root: ShadowRoot, value: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = value;
+  root.append(probe);
+  const colour = getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
+}

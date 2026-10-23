@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import {
+  anyHandSet,
   codeInvalid,
+  handTouched,
+  invalidHandCodes,
   isWaitronLook,
   openDraft,
   pickBrand,
+  resetAllHand,
   sameDraft,
   setBackground,
   setCorners,
+  setHand,
   typeCode,
+  typeHandCode,
+  useWorkedOut,
   waitronLook,
 } from "./look-draft.js";
 
@@ -22,12 +29,20 @@ const LUCIA: ThemeChoices = {
 
 describe("the Look card's draft", () => {
   it("opens on the stored choices with the brand colour as its code", () => {
-    expect(openDraft(LUCIA)).toEqual({ choices: LUCIA, code: "#1e5b3a" });
+    expect(openDraft(LUCIA)).toEqual({
+      choices: LUCIA,
+      code: "#1e5b3a",
+      handCodes: { light: {}, dark: {} },
+    });
   });
 
   it("opens an unreadable theme on Waitron's look", () => {
     const draft = openDraft(null);
-    expect(draft).toEqual({ choices: WAITRON_CHOICES, code: "" });
+    expect(draft).toEqual({
+      choices: WAITRON_CHOICES,
+      code: "",
+      handCodes: { light: {}, dark: {} },
+    });
     expect(isWaitronLook(draft)).toBe(true);
   });
 
@@ -94,7 +109,11 @@ describe("the Look card's draft", () => {
 
   it("puts everything back to Waitron's look, and knows only that draft as it", () => {
     const draft = waitronLook();
-    expect(draft).toEqual({ choices: WAITRON_CHOICES, code: "" });
+    expect(draft).toEqual({
+      choices: WAITRON_CHOICES,
+      code: "",
+      handCodes: { light: {}, dark: {} },
+    });
     expect(draft.choices.handSet).toEqual({ light: {}, dark: {} });
     expect(isWaitronLook(draft)).toBe(true);
     expect(isWaitronLook(openDraft(LUCIA))).toBe(false);
@@ -154,5 +173,114 @@ describe("the Look card's draft", () => {
     expect(sameWith({ corners: "square" })).toBe(false);
     expect(sameWith({ brandColor: "#1e5b3b" })).toBe(false);
     expect(sameDraft(a, { ...a, code: "#1e5b3b" })).toBe(false);
+  });
+});
+
+describe("the Look card's draft colours set by hand", () => {
+  it("sets a colour by hand in lower case, in its mode only, with no typed text", () => {
+    const draft = setHand(openDraft(LUCIA), "light", "bg", "#F8F1E1");
+    expect(draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
+    expect(draft.choices.handSet.dark).toEqual({});
+    expect(draft.handCodes).toEqual({ light: {}, dark: {} });
+  });
+
+  it("keeps a typed code as typed, and sets the colour only once it is a whole code", () => {
+    const opened = openDraft(LUCIA);
+    const whole = typeHandCode(opened, "light", "bg", "#F8F1E1 ");
+    expect(whole.choices.handSet.light.bg).toBe("#f8f1e1");
+    expect(whole.handCodes.light.bg).toBe("#F8F1E1 ");
+    expect(invalidHandCodes(whole)).toEqual([]);
+    const partial = typeHandCode(opened, "light", "bg", "#12");
+    expect(partial.choices).toBe(opened.choices);
+    expect(partial.handCodes.light.bg).toBe("#12");
+    expect(invalidHandCodes(partial)).toEqual(["handSet.light.bg"]);
+    expect(invalidHandCodes(typeHandCode(opened, "light", "bg", ""))).toEqual(["handSet.light.bg"]);
+  });
+
+  it("lists invalid typed codes in theme colour order, light first", () => {
+    let draft = openDraft(LUCIA);
+    draft = typeHandCode(draft, "dark", "bg", "#1");
+    draft = typeHandCode(draft, "light", "text", "#2");
+    draft = typeHandCode(draft, "light", "bg", "#3");
+    expect(invalidHandCodes(draft)).toEqual([
+      "handSet.light.bg",
+      "handSet.light.text",
+      "handSet.dark.bg",
+    ]);
+  });
+
+  it("drops a mode's brand fix when its Main buttons are set by hand, and does not bring it back", () => {
+    const opened = openDraft(LUCIA);
+    const set = setHand(opened, "dark", "primary", "#5fa77a");
+    expect(set.choices.brandFix).toEqual({});
+    const typed = typeHandCode(opened, "dark", "primary", "#5fa77a");
+    expect(typed.choices.brandFix).toEqual({});
+    expect(typed.choices.handSet.dark.primary).toBe("#5fa77a");
+    const back = useWorkedOut(typed, "dark", "primary");
+    expect(back.choices.handSet.dark.primary).toBeUndefined();
+    expect(back.choices.brandFix).toEqual({});
+    expect(typeHandCode(opened, "dark", "primary", "#5f").choices.brandFix).toEqual({ dark: true });
+    expect(setHand(opened, "light", "bg", "#ffffff").choices.brandFix).toEqual({ dark: true });
+  });
+
+  it("does not take back the opened fix for a mode whose Main buttons are set by hand", () => {
+    const opened = openDraft(LUCIA);
+    const byHand = setHand(opened, "dark", "primary", "#5fa77a");
+    const returned = pickBrand(pickBrand(byHand, "#b12525", opened), "#1e5b3a", opened);
+    expect(returned.choices.brandFix).toEqual({});
+    const control = pickBrand(pickBrand(opened, "#b12525", opened), "#1e5b3a", opened);
+    expect(control.choices.brandFix).toEqual({ dark: true });
+  });
+
+  it("puts a colour back to worked out, value and typed text, and resets every one", () => {
+    const opened = openDraft(LUCIA);
+    const typed = typeHandCode(setHand(opened, "dark", "text", "#eeeeee"), "light", "bg", "#12");
+    const back = useWorkedOut(typed, "light", "bg");
+    expect(back.choices.handSet.light).toEqual({});
+    expect(back.handCodes.light).toEqual({});
+    expect(back.choices.handSet.dark).toEqual({ text: "#eeeeee" });
+    const reset = resetAllHand(typeHandCode(typed, "dark", "bg", "#000000"));
+    expect(reset.choices.handSet).toEqual({ light: {}, dark: {} });
+    expect(reset.handCodes).toEqual({ light: {}, dark: {} });
+  });
+
+  it("compares typed codes as the colour they name, and invalid ones by their trimmed text", () => {
+    const opened = openDraft(LUCIA);
+    expect(sameDraft(typeHandCode(opened, "light", "bg", "#F8F1E1"), opened)).toBe(true);
+    expect(sameDraft(opened, typeHandCode(opened, "light", "bg", "#F8F1E1"))).toBe(true);
+    const partial = typeHandCode(opened, "light", "bg", "#12");
+    expect(sameDraft(partial, opened)).toBe(false);
+    expect(sameDraft(opened, partial)).toBe(false);
+    expect(sameDraft(typeHandCode(opened, "light", "bg", "#12 "), partial)).toBe(true);
+    expect(sameDraft(typeHandCode(opened, "light", "bg", "#13"), partial)).toBe(false);
+    expect(sameDraft(typeHandCode(opened, "light", "text", "#12"), partial)).toBe(false);
+    expect(isWaitronLook(typeHandCode(waitronLook(), "light", "bg", "#12"))).toBe(false);
+  });
+
+  it("knows a colour touched by hand, by value or by typed text alone", () => {
+    const opened = openDraft(LUCIA);
+    expect(handTouched(opened, "light", "bg")).toBe(true);
+    expect(handTouched(opened, "light", "text")).toBe(false);
+    expect(handTouched(opened, "dark", "bg")).toBe(false);
+    expect(handTouched(typeHandCode(opened, "dark", "bg", "#1"), "dark", "bg")).toBe(true);
+    expect(anyHandSet(waitronLook())).toBe(false);
+    expect(anyHandSet(opened)).toBe(true);
+    expect(anyHandSet(typeHandCode(waitronLook(), "dark", "bg", "#1"))).toBe(true);
+  });
+
+  it("keeps the typed hand codes through a brand change", () => {
+    const opened = openDraft(LUCIA);
+    const typed = typeHandCode(opened, "light", "bg", "#12");
+    for (const changed of [
+      pickBrand(typed, "#b12525", opened),
+      typeCode(typed, "#b12525", opened),
+    ]) {
+      expect(changed.choices.brandColor).toBe("#b12525");
+      expect(changed.handCodes.light.bg).toBe("#12");
+      expect(invalidHandCodes(changed)).toEqual(["handSet.light.bg"]);
+      expect(sameDraft(changed, opened)).toBe(false);
+    }
+    const back = pickBrand(pickBrand(typed, "#b12525", opened), "#1e5b3a", opened);
+    expect(sameDraft(back, opened)).toBe(false);
   });
 });
