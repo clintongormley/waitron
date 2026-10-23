@@ -57,6 +57,21 @@ function fixture() {
     },
     timeout: 10_000,
   });
+  const pinnedSource = git(source, "rev-parse", "HEAD");
+  git(
+    source,
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "user.name=Release fixture",
+    "-c",
+    "user.email=release@example.invalid",
+    "commit",
+    "-s",
+    "-qm",
+    "Later source",
+    "--allow-empty",
+  );
   const cwd = directory();
   mkdirSync(join(cwd, "scripts"));
   copyFileSync(
@@ -71,7 +86,7 @@ function fixture() {
     cwd,
     bin,
     sourceDirectory: source,
-    source: git(source, "rev-parse", "HEAD"),
+    source: pinnedSource,
     log: join(cwd, "fetch.log"),
   };
 }
@@ -95,6 +110,21 @@ function runStamp(input, buildId, metadata = `${input.source}:1792062000`) {
 }
 
 describe("the image release step uses its source context", () => {
+  it("prefers an explicit pinned input over a stale metadata file", () => {
+    const input = fixture();
+    mkdirSync(join(input.cwd, "build"));
+    writeFileSync(join(input.cwd, "build/source-metadata"), "stale:0\n");
+    const result = runStamp(input, input.source);
+    expect(result.status, result.stderr).toBe(0);
+    expect(
+      JSON.parse(readFileSync(join(input.cwd, "build/hour-release.json"), "utf8")),
+    ).toMatchObject({
+      sourceCommit: input.source,
+      instantMs: 1792062000000,
+    });
+    expect(existsSync(input.log)).toBe(false);
+  });
+
   it.each([".github/workflows/ci.yml", ".github/workflows/image-smoke.yml"])(
     "%s prepares the requested commit's time, replacing an earlier input",
     (workflow) => {

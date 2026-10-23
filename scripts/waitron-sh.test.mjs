@@ -656,6 +656,30 @@ describe("waitron.sh image provenance", () => {
       expect(line).toContain(`--build-arg WAITRON_SOURCE_METADATA=${app}:1792062000`);
   });
 
+  it.each([false, true])("installs a missing metadata reader, with apt failure = %s", (fails) => {
+    const sb = sandbox();
+    const startup = join(sb.root, "hide-jq.sh");
+    writeFileSync(
+      startup,
+      'command() { if [ "$1" = -v ] && [ "$2" = jq ]; then return 1; fi; builtin command "$@"; }\n',
+    );
+    const r = run(sb, ["install", "my-branch"], {
+      BASH_ENV: startup,
+      WT_APT_FAIL: fails ? "3" : "0",
+    });
+    const calls = readFileSync(sb.log, "utf8");
+    if (fails) {
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("apt-get update failed or stalled");
+      expect(calls).not.toContain("docker build");
+      expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
+    } else {
+      expect(r.status, r.stderr).toBe(0);
+      expect(calls).toContain("install -y --no-install-recommends jq");
+      expect(calls).toContain("docker build");
+    }
+  });
+
   it.each(["invalid", "", "2026-10-15T11:00:00+02:00"])(
     "refuses unusable source commit time %s before building or pinning an image",
     (time) => {
