@@ -602,6 +602,26 @@ moves the database into place, so a full disk at that move leaves the old databa
 active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
 and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
+## 2026-10-23 A799 build authority and history selection
+
+The owner authorised building every published A799 plan cut on 23 October 2026
+with “Go ahead and build.” This supersedes the earlier planning-only authority
+below; runtime, capture, A760 reset, migration, upload, provider and trusted CI
+activation retain their separate gates.
+
+The first cut adds metadata admission, required release selection and pending SQL
+classification. The [rig README](../../bench/real-upgrade/README.md) records its
+executable examples, the trusted ancestry input boundary and two plan adjustments:
+`classifyWork` takes the epoch explicitly to reject missing baseline hashes, and
+`parseFacts` travels with cut 2's typed facts/schema/coverage model rather than a
+shallow placeholder in cut 1. Pending journal IDs remain explicitly unknown until
+observed. These changes add no product writer or execution path.
+
+Keep A799 open. The qualification index is empty; the remaining six cuts and their
+real capture, issued-full-invoice, migration, continued-sale and containment/access
+checks remain unqualified. Historical approval records below retain their dated
+meaning.
+
 ## 2026-10-22 current A799 approval: design agreed for plan preparation
 
 **A799 planning milestone, 22 October 2026:** you approved the complete design
