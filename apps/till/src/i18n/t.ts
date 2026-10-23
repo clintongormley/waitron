@@ -98,7 +98,8 @@ export function clockBehindOf(refusal: {
       };
 }
 
-/** Date and time apart and joined with a space: `en-GB`'s combined format puts a comma between. */
+/** Date and time apart and joined with a no-break space, so a narrow screen never wraps between
+ * them: `en-GB`'s combined format puts a comma between. */
 function readingText(at: string, offsetMinutes: number): string {
   const shifted = new Date(Date.parse(at) + offsetMinutes * 60_000);
   const date = new Intl.DateTimeFormat(locale, {
@@ -113,7 +114,7 @@ function readingText(at: string, offsetMinutes: number): string {
     hourCycle: "h23",
     timeZone: "UTC",
   }).format(shifted);
-  return `${date} ${time}`;
+  return `${date}\u00a0${time}`;
 }
 
 /** Each reading in its own offset, the one its record carries or would carry. */

@@ -10334,8 +10334,8 @@ describe("till-app", () => {
     };
     const clockBehindSentence = () =>
       t("sale.clock_behind_chain")
-        .replace("{clockAt}", "14/03/2025 09:12")
-        .replace("{lastRecordAt}", "18/10/2026 23:40");
+        .replace("{clockAt}", "14/03/2025\u00a009:12")
+        .replace("{lastRecordAt}", "18/10/2026\u00a023:40");
 
     it("a cash sale refused for a clock behind the last sale shows both times, each in its own offset", async () => {
       expect(currentLocale()).toBe("es-ES");
@@ -12188,8 +12188,8 @@ describe("till-app", () => {
           ),
         ).toBe(
           t("sale.clock_behind_chain")
-            .replace("{clockAt}", "14/03/2025 09:12")
-            .replace("{lastRecordAt}", "18/10/2026 23:40"),
+            .replace("{clockAt}", "14/03/2025\u00a009:12")
+            .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
         );
       });
     });

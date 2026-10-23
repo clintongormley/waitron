@@ -2004,8 +2004,8 @@ describe("till-app: a bill payment's refusals and retries", () => {
 
     expect(inDialog(el, "wt-form-actions")!.error).toBe(
       t("sale.clock_behind_chain")
-        .replace("{clockAt}", "14/03/2025 09:12")
-        .replace("{lastRecordAt}", "18/10/2026 23:40"),
+        .replace("{clockAt}", "14/03/2025\u00a009:12")
+        .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
     );
   });
 
