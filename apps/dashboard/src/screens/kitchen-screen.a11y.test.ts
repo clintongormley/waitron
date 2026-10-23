@@ -66,12 +66,6 @@ function stubApi(stations: Station[], courses: Course[] = COURSES): DashboardApi
         removes: [],
       }),
     ),
-    getKitchenTimingDefaults: vi.fn().mockResolvedValue({
-      warmAfterMinutes: 5,
-      overdueAfterMinutes: 10,
-      forgottenAfterMinutes: 15,
-    }),
-    setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
     getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
     setFireControl: vi.fn().mockResolvedValue(undefined),
   } as unknown as DashboardApi;

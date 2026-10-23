@@ -33,7 +33,7 @@ export interface NodeRecoveryPack {
  * the server at compile time. The product and modifier-list shapes are imported instead, from
  * catalogue's type-only leaf files (`scripts/dashboard-browser-purity.test.ts`).
  */
-import type { StationThresholds, TimingBand } from "@waitron/shared";
+import type { TimingBand } from "@waitron/shared";
 import type { RoutingView } from "@waitron/venue-service/routing";
 import {
   createRequest,
@@ -723,8 +723,6 @@ export interface FloorPlanSave {
 }
 
 // ── Kitchen-station + routing types ──────────────────────────────────────────────────────────────
-
-export type KitchenTimingDefaults = StationThresholds;
 
 export interface Station {
   id: string;
@@ -3227,14 +3225,6 @@ export class DashboardApi {
   }
 
   // ── Kitchen stations + routing ─────────────────────────────────────────────────────────────────
-
-  getKitchenTimingDefaults(): Promise<KitchenTimingDefaults> {
-    return this.#request<KitchenTimingDefaults>("/management-api/kitchen-timing-defaults", "GET");
-  }
-
-  setKitchenTimingDefaults(defaults: KitchenTimingDefaults): Promise<void> {
-    return this.#request<void>("/management-api/kitchen-timing-defaults", "PUT", defaults);
-  }
 
   listStations(): Promise<Station[]> {
     return this.#request<Station[]>("/management-api/stations", "GET");

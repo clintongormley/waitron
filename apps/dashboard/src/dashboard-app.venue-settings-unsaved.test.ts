@@ -47,11 +47,6 @@ async function mount(
         getVenueDetails: async () => venueDetailsFixture(),
         listStations: async () => [],
         listCourses: async () => [],
-        getKitchenTimingDefaults: async () => ({
-          warmAfterMinutes: 5,
-          overdueAfterMinutes: 10,
-          forgottenAfterMinutes: 15,
-        }),
         getBumpMode: async () => ({ mode: "line" }),
         getFireControl: async () => ({ mode: "waiter" }),
         getDepartmentReceipt: async () => ({

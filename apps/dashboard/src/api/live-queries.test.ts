@@ -1014,7 +1014,6 @@ const stationDeleteReads = [
   "routing_cells",
   "routing_cell_periods",
   "station_day_states",
-  "kitchen_station_timing",
   "floor_zones",
   "floor_today_tables",
   "floor_today_join_tables",
