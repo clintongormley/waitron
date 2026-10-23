@@ -50,6 +50,7 @@ import {
   mediaImageEdits,
   mediaImageBlobs,
   renderRendition,
+  listImageUsages,
 } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
@@ -90,6 +91,7 @@ import {
   deleteDeviceProfile,
   emptyPrinterLists,
   getReceipt,
+  listCustomThemes,
   readProfilePrinterLists,
   setProfilePrinterLists,
 } from "@waitron/layouts";
@@ -2423,7 +2425,7 @@ describe("custom themes in a configuration copy", () => {
   };
   const darkGreen = { ...lemon, brandColor: "#1e5b3a", background: "tinted" };
 
-  async function themedBundle(taxId: string) {
+  async function themedBundle(taxId: string, withLogo = false) {
     const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -2432,6 +2434,22 @@ describe("custom themes in a configuration copy", () => {
       { name: "Lemon Bar", nameKey: "lemon bar", inUse: null, theme: lemon },
       { name: "Green Room", nameKey: "green room", inUse: 1, theme: darkGreen },
     ]);
+    if (withLogo) {
+      const photo = await samplePreparedImage({ width: 10 });
+      const image = await withTransaction(
+        suite.db,
+        async (tx) => (await uploadImage(tx, { image: photo, names: { es: "Logo" } }, {})).image,
+      );
+      const printedLogo = await drawLogoRasters(
+        await renderRendition(photo.bytes, "display", image.framing),
+      );
+      await suite.db.insert(customThemes).values({
+        name: "Logo Bar",
+        nameKey: "logo bar",
+        inUse: null,
+        theme: { ...lemon, logo: { light: image.filename }, printedLogo },
+      });
+    }
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
     const transferred = await buildConfigurationBundle(
       suite.db,
@@ -2496,6 +2514,81 @@ describe("custom themes in a configuration copy", () => {
       params: { field: "custom_themes.in_use" },
     });
     await expectNothingKept();
+  });
+
+  function themeRow(transferred: ConfigurationBundle, name: string): Record<string, unknown> {
+    const row = transferred.tables.custom_themes!.find((candidate) => candidate.name === name);
+    if (row === undefined) throw new Error(`no theme ${name} in the copy`);
+    return row;
+  }
+
+  function rewriteTheme(
+    transferred: ConfigurationBundle,
+    name: string,
+    change: (theme: Record<string, unknown>) => void,
+  ): void {
+    const row = themeRow(transferred, name);
+    const theme = JSON.parse(row.theme as string) as Record<string, unknown>;
+    change(theme);
+    row.theme = JSON.stringify(theme);
+  }
+
+  it("carries a theme's logo and its printed dots", async () => {
+    const { transferred, versions } = await themedBundle("B13572483", true);
+    await importInto("B97531883", transferred, versions);
+    const [source] = await suite.db
+      .select({ theme: customThemes.theme })
+      .from(customThemes)
+      .where(eq(customThemes.name, "Logo Bar"));
+    const [imported] = await targetSuite.db
+      .select({ id: customThemes.id, theme: customThemes.theme })
+      .from(customThemes)
+      .where(eq(customThemes.name, "Logo Bar"));
+    expect(imported!.theme).toEqual(source!.theme);
+    expect(imported!.theme).toHaveProperty("printedLogo");
+    const filename = (source!.theme as { logo: { light: string } }).logo.light;
+    const [image] = await targetSuite.db
+      .select({ id: mediaImages.id })
+      .from(mediaImages)
+      .where(eq(mediaImages.filename, filename));
+    const uses = await withTransaction(targetSuite.db, (tx) => listImageUsages(tx, image!.id));
+    expect(uses).toEqual([{ kind: "theme_logo", id: imported!.id, name: "Logo Bar" }]);
+  });
+
+  it("refuses a copy whose theme names an image it does not carry", async () => {
+    const { transferred, versions } = await themedBundle("B13572484", true);
+    rewriteTheme(transferred, "Logo Bar", (theme) => {
+      theme.logo = { light: "f".repeat(64) + ".webp" };
+    });
+    await expect(importInto("B97531884", transferred, versions)).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "custom_themes.theme" },
+    });
+    await expectNothingKept();
+  });
+
+  it("refuses a copy whose theme names a logo without its printed dots", async () => {
+    const { transferred, versions } = await themedBundle("B13572485", true);
+    rewriteTheme(transferred, "Logo Bar", (theme) => {
+      delete theme.printedLogo;
+    });
+    await expect(importInto("B97531885", transferred, versions)).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "custom_themes.theme" },
+    });
+    await expectNothingKept();
+  });
+
+  it("imports a theme copied before this slice, with no logo key", async () => {
+    const { transferred, versions } = await themedBundle("B13572486");
+    rewriteTheme(transferred, "Lemon Bar", (theme) => {
+      delete theme.logo;
+    });
+    await importInto("B97531886", transferred, versions);
+    const list = await withTransaction(targetSuite.db, (tx) => listCustomThemes(tx));
+    const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
+    expect(lemonBar?.choices?.logo).toBeNull();
+    expect(lemonBar?.choices).toEqual(lemon);
   });
 
   it("refuses a copy whose name key is not its name's", async () => {
