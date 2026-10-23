@@ -13,12 +13,16 @@ import { AppError, MEDIA_FILENAME } from "@waitron/shared";
 import type { ThemeLogo } from "@waitron/ui-core/theme";
 import { drawLogoRasters } from "./receipt-logo.js";
 
-export interface LogoSnapshot {
+export type LogoSnapshot = {
   readonly imageId: string;
   readonly revision: number;
-  readonly kept: ReceiptLogoRasters | null;
-  readonly source: { readonly bytes: Uint8Array; readonly framing: ImageFraming } | null;
-}
+} & (
+  | { readonly kept: ReceiptLogoRasters; readonly source: null }
+  | {
+      readonly kept: null;
+      readonly source: { readonly bytes: Uint8Array; readonly framing: ImageFraming };
+    }
+);
 
 function notFound(side: "light" | "dark"): AppError {
   return new AppError("theme.invalid", { field: `logo.${side}`, reason: "image_not_found" });
@@ -43,7 +47,7 @@ export async function snapshotThemeLogo(
     snapshot = {
       imageId: image.imageId,
       revision: image.revision,
-      kept,
+      kept: null,
       source: { bytes: image.bytes, framing: image.framing },
     };
   }
@@ -53,12 +57,9 @@ export async function snapshotThemeLogo(
 
 /** Decodes with sharp, so it takes no transaction. */
 export async function printedLogoFor(snapshot: LogoSnapshot): Promise<ReceiptLogoRasters> {
-  return (
-    snapshot.kept ??
-    drawLogoRasters(
-      await renderRendition(snapshot.source!.bytes, "display", snapshot.source!.framing),
-    )
-  );
+  if (snapshot.kept !== null) return snapshot.kept;
+  const { bytes, framing } = snapshot.source;
+  return drawLogoRasters(await renderRendition(bytes, "display", framing));
 }
 
 /** Runs in the write transaction, after the store's write, so a refusal rolls that write back. */
@@ -71,7 +72,7 @@ export async function recheckThemeLogo(
   const found = await readPresentations(tx, names);
   const light = found[logo.light];
   if (light === undefined) throw notFound("light");
-  if (light.revision !== snapshot.revision) {
+  if (light.id !== snapshot.imageId || light.revision !== snapshot.revision) {
     throw new AppError("image.changed", { imageId: snapshot.imageId });
   }
   if (logo.dark !== undefined && found[logo.dark] === undefined) throw notFound("dark");

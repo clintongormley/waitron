@@ -254,8 +254,8 @@ describe("refusals", () => {
       [{ light: "logo.png" }, "logo.light"],
       [{ light: ABSENT }, "logo.light"],
       [{ light: "" }, "logo.light"],
-      [{ light: A, dark: ABSENT }, "logo.dark"],
-      [{ light: A, dark: "logo.png" }, "logo.dark"],
+      [{ light: B, dark: ABSENT }, "logo.dark"],
+      [{ light: B, dark: "logo.png" }, "logo.dark"],
     ] as const) {
       const res = await save(id, { theme: { ...LEMON, logo } });
       expect(res.status).toBe(400);
@@ -394,6 +394,53 @@ describe("refusals", () => {
     expect(await res.json()).toEqual(
       refusal("theme.invalid", { field: "logo.light", reason: "image_not_found" }),
     );
+    expect(await themeRows()).toEqual(before);
+  });
+
+  it("a save drawing a changed light image refuses a photo reframed while drawing", async () => {
+    const { id } = await createdWithLogo();
+    const before = await themeRows();
+    const imageId = (await withTransaction(suite.db, (tx) => readCurrentImageMetadata(tx, B)))!
+      .imageId;
+    const draw = logoModule.drawLogoRasters;
+    let reframed = false;
+    vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
+      if (!reframed) {
+        reframed = true;
+        await reframe(B, 125);
+      }
+      return draw(bytes);
+    });
+    const res = await save(id, { theme: { ...LEMON, logo: { light: B } } });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual(refusal("image.changed", { imageId }));
+    expect(reframed).toBe(true);
+    expect(await themeRows()).toEqual(before);
+  });
+
+  it("a light name that comes to name another library image while drawing is refused", async () => {
+    const prepared = await samplePreparedImage({ width: 43 });
+    const first = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: prepared, names: { en: "Light" } }),
+    );
+    const { id } = await createdWithLogo();
+    const before = await themeRows();
+    const real = themeLogoModule.printedLogoFor;
+    let again: { id: string; filename: string; revision: number } | undefined;
+    vi.spyOn(themeLogoModule, "printedLogoFor").mockImplementation(async (snapshot) => {
+      const dots = await real(snapshot);
+      again = await withTransaction(suite.db, async (tx) => {
+        expect((await deleteImage(tx, first.image.id)).deleted).toBe(true);
+        return (await uploadImage(tx, { image: prepared, names: { en: "Light" } })).image;
+      });
+      return dots;
+    });
+    const res = await save(id, { theme: { ...LEMON, logo: { light: first.image.filename } } });
+    expect(again!.filename).toBe(first.image.filename);
+    expect(again!.id).not.toBe(first.image.id);
+    expect(again!.revision).toBe(first.image.revision);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual(refusal("image.changed", { imageId: first.image.id }));
     expect(await themeRows()).toEqual(before);
   });
 });

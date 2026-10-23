@@ -92,7 +92,8 @@ async function saveWithLogo<T>(
 ): Promise<T> {
   const { logo, snapshot } = await withTransaction(db, async (tx) => {
     const { choices, keptPrintedLogo } = await prepare(tx);
-    const logo = choices.logo!;
+    const { logo } = choices;
+    if (logo === null) throw new Error("A theme document naming a logo was read with none");
     return { logo, snapshot: await snapshotThemeLogo(tx, logo, keptPrintedLogo) };
   });
   // A commented split (D4): sharp must not run holding the write lock; the image's revision is
