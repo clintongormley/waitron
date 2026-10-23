@@ -4799,10 +4799,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **The clock stop's look differs from pictures 8 and 9.** The counter refusal shows in the till's
   top banner, not under the strip; the Clock row's fix advice follows " · " on the comparison line
   rather than on a line of its own; the Box status page shows the alert sentence "Sort it out on the
-  Box status page" while on that page; and the alert pop-up and the Box status page's 'Updated'
-  line join date and time with a plain space, so they can split on a narrow screen; the restart
-  dialog's two times also join them with a plain space, and its test finds them whole at every 8 px
-  from 320 to 1280 px wide, but nothing keeps them whole. Left open by A798-B slice 8 (#2012).
+  Box status page" while on that page. Left open by A798-B slice 8 (#2012).
 
 - **'Equipo' names two things in the Spanish dashboard.** The bell's new area for the box is
   'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,

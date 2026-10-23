@@ -3521,8 +3521,9 @@ opening the folder with `exclusive: false` never files.
 **The comparison.** `clockBehindChain` (`packages/fiscal-verifactu/src/clock-behind.ts`) reads the
 latest `fecha_hora_huso_gen_registro` in `registros_facturacion`, across every chain, and answers
 the four params `clockAt`, `offsetMinutes`, `lastRecordAt` and `lastRecordOffsetMinutes` when the
-reading is more than `CLOCK_BEHIND_MARGIN_MS` (60 000 ms) earlier; a database with no record never
-stops. A reading exactly a minute earlier still sells, a millisecond more stops
+reading is more than `CLOCK_BEHIND_MARGIN_MS` (60 000 ms) earlier — unless a manager's restart covers
+the reading ([below](#a-managers-restart-lifts-the-stop-for-one-step-back)), when it answers null or
+names the latest record written under the restart; a database with no record never stops. A reading exactly a minute earlier still sells, a millisecond more stops
 (`clock-behind.test.ts`, "sells a reading exactly a minute earlier" and "stops a reading a
 millisecond more than a minute earlier"). `refuseWhileClockBehind` checks the 28-10-2024 rule
 first (`clock.unusable`), then throws `clock.behind_chain` with those params. Only the Veri\*Factu

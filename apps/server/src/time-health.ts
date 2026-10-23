@@ -47,7 +47,7 @@ export async function checkTimeHealth(deps: { run?: CommandRunner } = {}): Promi
 export type AuthorityClockStatus =
   { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
 
-const WHOLE_SECOND_MS = 500;
+const HALF_SECOND_MS = 500;
 
 export function createAuthorityClockStatus(
   deps: { onSample?: (sample: AuthorityTimeSample) => void; monotonic?: () => number } = {},
@@ -104,8 +104,8 @@ export function createAuthorityClockStatus(
         measuredAt: receivedAt.toISOString(),
       };
       deps.onSample?.({
-        authorityMs: authority + WHOLE_SECOND_MS,
-        uncertaintyMs: (received - sent) / 2 + WHOLE_SECOND_MS,
+        authorityMs: authority + HALF_SECOND_MS,
+        uncertaintyMs: (received - sent) / 2 + HALF_SECOND_MS,
         at: { wallMs: midpoint, monoMs: monotonic() - (received - midpoint) },
       });
     },

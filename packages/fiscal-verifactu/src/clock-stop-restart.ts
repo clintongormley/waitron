@@ -16,6 +16,7 @@ import { AppError } from "@waitron/shared";
 import type { ErrorParams, NodeId } from "@waitron/shared";
 import {
   CLOCK_BEHIND_MARGIN_MS,
+  RESTART_CAP_MS,
   chainHeads,
   clockBehindChain,
   latestRecord,
@@ -24,9 +25,6 @@ import {
 import { recordDisproofs, recordRestarted } from "./clock-stop-incidents.js";
 import { isBeforeFirstIssueDate, refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
-
-/** No restart is offered for a gap wider than this. */
-const RESTART_MAX_GAP_MS = 86_400_000;
 
 export interface ClockReading {
   instant: Date;
@@ -106,7 +104,7 @@ async function judge(
   let offer: ClockRestartOffer;
   if (stored !== undefined) {
     offer = (await clockBehindChain(tx, reading)) === null ? "restarted" : "stepped_back";
-  } else if (gapMs > RESTART_MAX_GAP_MS) {
+  } else if (gapMs > RESTART_CAP_MS) {
     offer = "too_far";
   } else if (contrary.authority !== null || contrary.devices.length > 0) {
     offer = "contrary_proof";
