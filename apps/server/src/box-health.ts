@@ -86,6 +86,22 @@ export async function displayNameOf(tx: Transaction, personId: string): Promise<
   return row?.displayName ?? null;
 }
 
+/** The seat's raw clock stop at the box's reading; null when the seat has no `clockStopState`. */
+export async function readClockStopState(
+  tx: Transaction,
+  deps: {
+    backend: Pick<FiscalBackend, "clockStopState">;
+    witnesses: () => readonly ClockWitness[];
+    clock: Pick<TrustedClock, "now">;
+  },
+): Promise<ClockStopState | null> {
+  if (deps.backend.clockStopState === undefined) return null;
+  // Before the reading: a witness noted after it would be left out as taken after it.
+  const witnesses = deps.witnesses();
+  const { instant, offsetMinutes } = deps.clock.now();
+  return deps.backend.clockStopState(tx, { instant, offsetMinutes }, witnesses);
+}
+
 /** Reads the seat's clock stop at the box's reading, with device labels and the restart's person
  * named. A seat with no `clockStopState` has none. */
 export function clockStopReader(deps: {
@@ -94,11 +110,7 @@ export function clockStopReader(deps: {
   clock: Pick<TrustedClock, "now">;
 }): (db: Database) => Promise<ClockStopView | null> {
   return async (db) => {
-    if (deps.backend.clockStopState === undefined) return null;
-    // Before the reading: a witness noted after it would be left out as taken after it.
-    const witnesses = deps.witnesses();
-    const { instant, offsetMinutes } = deps.clock.now();
-    const state = await deps.backend.clockStopState(db, { instant, offsetMinutes }, witnesses);
+    const state = await readClockStopState(db, deps);
     if (state === null) return null;
     const ids = [...state.proof.devices, ...state.contrary.devices].map((witness) => witness.id);
     const labelRows =

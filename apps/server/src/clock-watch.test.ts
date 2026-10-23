@@ -119,6 +119,10 @@ function harness(
     watch,
     tick,
     wall: () => wallMs,
+    move: (by: { wallMs: number; monoMs: number }) => {
+      wallMs += by.wallMs;
+      monoMs += by.monoMs;
+    },
   };
 }
 
@@ -142,13 +146,21 @@ describe("startClockWatch", () => {
 
   it("reads AEAT's time once a tick during a stop on a filing primary, and notes the sample", async () => {
     const h = harness();
+    const device: ClockWitness = {
+      kind: "device",
+      id: "device-1",
+      boxAt: "2026-07-20T18:00:30.000Z",
+      witnessAt: "2026-07-20T19:00:30.000Z",
+      uncertaintyMs: 0,
+    };
+    h.store.witnesses.mockReturnValueOnce([device]);
     await h.tick();
     expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
     expect(h.store.noteAuthority).toHaveBeenCalledExactlyOnceWith(h.sample);
-    expect(h.backend.clockStopState).toHaveBeenCalledWith(
+    expect(h.backend.clockStopState).toHaveBeenCalledExactlyOnceWith(
       TX,
       { instant: new Date(h.wall()), offsetMinutes: 120 },
-      [],
+      [device],
     );
     expect(h.store.endStop).not.toHaveBeenCalled();
     await h.tick();
@@ -293,6 +305,105 @@ describe("startClockWatch", () => {
         level: "warn",
         event: "clock_watch.disproved_held",
         fields: { restartId: "r2", reason: "jump" },
+      },
+    ]);
+  });
+
+  it("retries a jump whose record failed on the next check, until it is recorded", async () => {
+    const h = harness({ stop: null });
+    h.backend.noteClockProvedWrong.mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    await h.tick({ monoMs: 60_000, wallMs: 121_000 });
+    const jump = {
+      trustedUntil: new Date(START_MS + 60_000),
+      observedAt: new Date(START_MS + 121_000),
+      reason: "jump",
+    };
+    expect(h.backend.noteClockProvedWrong).toHaveBeenCalledExactlyOnceWith(TX, jump);
+    await h.tick();
+    expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(2);
+    expect(h.backend.noteClockProvedWrong).toHaveBeenLastCalledWith(TX, jump);
+    await h.tick();
+    expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(2);
+  });
+
+  it("records AEAT disagreements oldest first, and retries both when the first fails", async () => {
+    const older = authority(START_MS + 10_000, 3_600_000);
+    const newer = authority(START_MS + 50_000, 3_600_000);
+    const h = harness({ newAuthority: [[newer, older]] });
+    h.backend.noteClockProvedWrong.mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    const asked = (witness: ClockWitness) => ({
+      trustedUntil: new Date(witness.boxAt),
+      observedAt: new Date(witness.witnessAt),
+      reason: "authority",
+    });
+    await h.tick();
+    expect(h.backend.noteClockProvedWrong.mock.calls).toEqual([[TX, asked(older)]]);
+    await h.tick();
+    expect(h.backend.noteClockProvedWrong.mock.calls).toEqual([
+      [TX, asked(older)],
+      [TX, asked(older)],
+      [TX, asked(newer)],
+    ]);
+    await h.tick();
+    expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(3);
+  });
+
+  it("reads no stop when stopped while a disproof is being recorded", async () => {
+    const h = harness();
+    let release!: () => void;
+    h.backend.noteClockProvedWrong.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ recorded: [], unused: [], held: [] });
+        }),
+    );
+    h.move({ wallMs: 121_000, monoMs: 60_000 });
+    h.timers.at(-1)!.fn();
+    await vi.waitFor(() => expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1));
+    const stopping = h.watch.stop();
+    release();
+    await stopping;
+    expect(h.read).not.toHaveBeenCalled();
+  });
+
+  it("records no further disproof once stopped", async () => {
+    const h = harness({
+      newAuthority: [[authority(START_MS + 50_000, 3_600_000), authority(START_MS, 3_600_000)]],
+    });
+    let release!: () => void;
+    h.backend.noteClockProvedWrong.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ recorded: [], unused: [], held: [] });
+        }),
+    );
+    h.timers.at(-1)!.fn();
+    await vi.waitFor(() => expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1));
+    const stopping = h.watch.stop();
+    release();
+    await stopping;
+    expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps one disproof for the same witness noted twice", async () => {
+    const witness = authority(START_MS, 3_600_000);
+    const h = harness({ newAuthority: [[witness, witness]] });
+    await h.tick();
+    expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps at most a day of unrecorded disproofs, logging each one it leaves out", async () => {
+    const many = Array.from({ length: 1_441 }, (_, index) =>
+      authority(START_MS - index * 1_000, 3_600_000),
+    );
+    const h = harness({ newAuthority: [many] });
+    h.backend.noteClockProvedWrong.mockRejectedValue(new AppError("storage.disk_full", {}));
+    await h.tick();
+    expect(h.logs.filter((line) => line.event === "clock_watch.disproof_dropped")).toEqual([
+      {
+        level: "warn",
+        event: "clock_watch.disproof_dropped",
+        fields: { reason: "authority", trustedUntil: many[0]!.boxAt },
       },
     ]);
   });

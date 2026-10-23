@@ -6,6 +6,7 @@ import {
   type TrustedClock,
 } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
+import { readClockStopState } from "./box-health.js";
 import type { BoxClockReading, ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
@@ -15,6 +16,9 @@ export const CLOCK_WATCH_MS = 60_000;
 /** How much further the wall clock may move than the steady clock between two checks before the
  * wall clock is taken to have jumped. */
 const JUMP_MS = 60_000;
+
+/** A day of minutely checks while every record fails; past it the earliest entries are kept. */
+const PENDING_MAX = 1_440;
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
  * last finished, on the primary only. `stop` resolves once a check in flight has finished; nothing
@@ -40,15 +44,43 @@ export function startClockWatch(deps: {
   let running: Promise<void> | null = null;
   let previous: BoxClockReading = { wallMs: wall(), monoMs: monotonic() };
 
-  async function provedWrong(input: ClockProvedWrong): Promise<void> {
-    const note = deps.backend.noteClockProvedWrong;
-    if (stopped || note === undefined) return;
-    const { unused, held } = await deps.transaction((tx) => note(tx, input));
-    for (const restartId of unused) {
-      deps.log("info", "clock_watch.disproved_unused", { restartId, reason: input.reason });
+  /** Disproofs not yet recorded, oldest first; each leaves only once its transaction commits. */
+  const pending: ClockProvedWrong[] = [];
+
+  function keep(input: ClockProvedWrong): void {
+    const same = pending.some(
+      (kept) =>
+        kept.reason === input.reason &&
+        kept.trustedUntil.getTime() === input.trustedUntil.getTime(),
+    );
+    if (same) return;
+    if (pending.length >= PENDING_MAX) {
+      deps.log("warn", "clock_watch.disproof_dropped", {
+        reason: input.reason,
+        trustedUntil: input.trustedUntil.toISOString(),
+      });
+      return;
     }
-    for (const restartId of held) {
-      deps.log("warn", "clock_watch.disproved_held", { restartId, reason: input.reason });
+    pending.push(input);
+  }
+
+  async function recordPending(): Promise<void> {
+    const note = deps.backend.noteClockProvedWrong;
+    if (note === undefined) {
+      pending.length = 0;
+      return;
+    }
+    while (pending.length > 0) {
+      if (stopped) return;
+      const input = pending[0]!;
+      const { unused, held } = await deps.transaction((tx) => note(tx, input));
+      pending.shift();
+      for (const restartId of unused) {
+        deps.log("info", "clock_watch.disproved_unused", { restartId, reason: input.reason });
+      }
+      for (const restartId of held) {
+        deps.log("warn", "clock_watch.disproved_held", { restartId, reason: input.reason });
+      }
     }
   }
 
@@ -62,19 +94,23 @@ export function startClockWatch(deps: {
     }
     const steadyElapsed = current.monoMs - earlier.monoMs;
     if (current.wallMs - earlier.wallMs - steadyElapsed > JUMP_MS) {
-      await provedWrong({
+      keep({
         trustedUntil: new Date(earlier.wallMs + steadyElapsed),
         observedAt: new Date(current.wallMs),
         reason: "jump",
       });
     }
-    const stopState = deps.backend.clockStopState;
+    await recordPending();
+    if (stopped) return;
     let stop = null;
-    if (stopState !== undefined) {
-      // Before the reading: a witness noted after it would be left out as taken after it.
-      const witnesses = deps.store.witnesses();
-      const { instant, offsetMinutes } = deps.clock.now();
-      stop = await deps.read((tx) => stopState(tx, { instant, offsetMinutes }, witnesses));
+    if (deps.backend.clockStopState !== undefined) {
+      stop = await deps.read((tx) =>
+        readClockStopState(tx, {
+          backend: deps.backend,
+          witnesses: () => deps.store.witnesses(),
+          clock: deps.clock,
+        }),
+      );
     }
     if (stopped) return;
     if (stop === null) {
@@ -86,12 +122,13 @@ export function startClockWatch(deps: {
     }
     const disagreeing = judgeClockWitnesses(deps.store.takeNewAuthority()).authorityDisagrees;
     for (const witness of [...disagreeing].reverse()) {
-      await provedWrong({
+      keep({
         trustedUntil: new Date(witness.boxAt),
         observedAt: new Date(witness.witnessAt),
         reason: "authority",
       });
     }
+    await recordPending();
   }
 
   function scheduled(): void {
