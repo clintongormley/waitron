@@ -2981,7 +2981,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Measured on the code slice 6 branched from (`de73c6144`, the Look card test rig, two fixable
   warnings): two lines in a card 300 px wide or narrower, one from 320 px. Slice 6's visual check
   saw it at a 390 px window, and slice 6 makes the line more common, since colours set by hand add
-  warnings with fixes.
+  warnings with fixes. The measurement is in slice 6's look folder
+  (`~/waitron-campaign/a841-6-shots/refix/readings.log`). In the same shots, slice 5's Undo after
+  "Buttons on dark screens: …" wraps onto a line of its own at phone width and starts 12 px in
+  (the link button's padding) rather than flush with the line above.
 
 - **Two icons painted in the brand colour sit, in one state each, on a fill no contrast rule checks
   them against (A841 slice 4).** The till's card-waiting spinner on `--wt-color-surface-sunken`

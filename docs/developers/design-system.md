@@ -4097,7 +4097,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   Inside, one row per theme colour, one flat list until slice 12, each with a Light and a Dark value
   drawn by `colourValueField` (a native colour picker and a code field); column heads show from a
   600 px section, and narrower each value carries its own Light or Dark label. Beside a value's
-  code field, a worked-out one reads "Worked out" (Main buttons: "Brand colour", or "Fixed" while that kind of
+  code field, or under it on a narrow screen, a worked-out one reads "Worked out" (Main buttons: "Brand colour", or "Fixed" while that kind of
   screen's fix is taken); a hand-set one carries a "Set by hand" tag, with a "Use worked-out colour"
   link on the line below. A hand-set value that warns gets a warning line in the warning colour and icon, a "Use
   {colour}" fix button when a shade exists, and after a fix a "{screens}: fixed from {colour} ·

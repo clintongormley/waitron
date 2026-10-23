@@ -434,6 +434,17 @@ describe("colourValueField", () => {
     expect(range.getClientRects()).toHaveLength(1);
   });
 
+  it("sets the code in the fixed-width font, and its error in the ordinary one", async () => {
+    const { el } = await mountValue(options({ code: "#F8F1E", error: "Bad code" }));
+    const field = codeField(el);
+    const mono = getComputedStyle(el).getPropertyValue("--wt-font-family-mono").trim();
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(getComputedStyle(input).fontFamily).toBe(mono);
+    const message = field.shadowRoot!.querySelector("[data-error]")!;
+    expect(getComputedStyle(message).fontFamily).not.toBe(mono);
+    expect(getComputedStyle(message).fontFamily).toBe(getComputedStyle(el).fontFamily);
+  });
+
   it("disables both while busy", async () => {
     const { el } = await mountValue(options({ busy: true }));
     expect(picker(el).disabled).toBe(true);

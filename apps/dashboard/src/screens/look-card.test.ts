@@ -1148,6 +1148,32 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
     });
   }
 
+  for (const [shown, code] of [
+    ["light", "#f2d300"],
+    ["dark", undefined],
+  ] as const) {
+    it(`keeps the ${shown} brand warning's gap to its fix, and the dark-screens link's below it`, async () => {
+      await onDesk(async () => {
+        setLocale("en-GB");
+        const { el } = await mountEditing(inUse(lucia));
+        await resize(el, 1000);
+        await userEvent.click(button(el, "brand-undo-dark"));
+        await el.updateComplete;
+        if (code !== undefined) await typeInCode(el, code);
+        expect(q(el, "[data-test=brand-fixed-dark]")).toBeNull();
+        const warnings = [...el.shadowRoot!.querySelectorAll("[data-test^=brand-warning-]")];
+        expect(warnings.map((w) => w.getAttribute("data-test"))).toEqual([
+          `brand-warning-${shown}`,
+        ]);
+        // The choices' own gap, --wt-space-4.
+        const fix = button(el, `brand-fix-${shown}`).parentElement!;
+        expect(rect(fix).top - rect(warnings[0]!).bottom).toBeGreaterThanOrEqual(15);
+        const link = button(el, "pick-dark").parentElement!;
+        expect(rect(link).top - rect(fix).bottom).toBeGreaterThanOrEqual(15);
+      });
+    });
+  }
+
   it("keeps the saved warning's icon its full size when the line wraps", async () => {
     await onDesk(async () => {
       setLocale("es-ES");

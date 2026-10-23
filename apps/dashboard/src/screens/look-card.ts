@@ -169,7 +169,7 @@ export class LookCard extends LitElement {
       wt-button.link.flush::part(button) {
         padding-inline: 0;
       }
-      /* The way to pick dark screens' own colour sits right under the line it follows. */
+      /* The dark-screens link sits right under the "Buttons on dark screens" line. */
       .dark-lines {
         display: grid;
         min-width: 0;
@@ -547,21 +547,24 @@ export class LookCard extends LitElement {
     const derived = this.#derived!;
     const lines = MODES.flatMap((mode: Mode) => {
       if (draft.choices.brandFix[mode]) {
+        const fixed = html`<p class="undo-line">
+          <span class="fixed-text" data-test="brand-fixed-${mode}"
+            >${brandFixedText(mode, derived[mode][PRIMARY]!)} </span
+          ><span class="dot" aria-hidden="true">· </span
+          ><wt-button
+            data-test="brand-undo-${mode}"
+            class="link"
+            variant="ghost"
+            size="sm"
+            ?disabled=${busy}
+            @click=${() => this.#setBrandFix(mode, false)}
+            >${t("appearance.undo")}</wt-button
+          >
+        </p>`;
         return [
-          html`<p class="undo-line">
-            <span class="fixed-text" data-test="brand-fixed-${mode}"
-              >${brandFixedText(mode, derived[mode][PRIMARY]!)} </span
-            ><span class="dot" aria-hidden="true">· </span
-            ><wt-button
-              data-test="brand-undo-${mode}"
-              class="link"
-              variant="ghost"
-              size="sm"
-              ?disabled=${busy}
-              @click=${() => this.#setBrandFix(mode, false)}
-              >${t("appearance.undo")}</wt-button
-            >
-          </p>`,
+          mode === "dark"
+            ? html`<div class="dark-lines">${fixed}${this.#darkLine(draft, busy)}</div>`
+            : fixed,
         ];
       }
       const warning = derived.warnings.find((w) => w.field === "brandColor" && w.mode === mode);
@@ -585,11 +588,7 @@ export class LookCard extends LitElement {
           }`,
       ];
     });
-    const last = lines.pop();
-    return [
-      ...lines,
-      html`<div class="dark-lines">${last ?? nothing}${this.#darkLine(draft, busy)}</div>`,
-    ];
+    return draft.choices.brandFix.dark ? lines : [...lines, this.#darkLine(draft, busy)];
   }
   /** The dark version's own Main buttons colour, or the way to pick one (D13). */
   #darkLine(draft: LookDraft, busy: boolean): TemplateResult {
