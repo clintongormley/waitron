@@ -3647,7 +3647,8 @@ than a minute behind; restart only with fresh proof, at most 24 hours behind, by
 `system.manage` permission, from the dashboard; every restart kept in an append-only table with who,
 when, both times, the record it names and the proof
 ([design §4.8](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#48-a-clock-behind-the-last-sale-payments-stop-question-3-pictures-8-and-9),
-question 4 in §9). Not built: it is slices 8 and 9 of the A798-B build.
+question 4 in §9). Built by A798-B slices 8 (#2012) and 9 (PR to come), 2026-10-23;
+parked for the owner. One step back per restart; later records are held to the minute.
 
 This records a question; no enquiry has been sent.
 
@@ -3687,8 +3688,9 @@ records, the chain and the box's clock stay as they are
 > la AEAT los aceptó con errores por la hora (código 2004)?
 
 **Proposed interim treatment (design default, A798 revision 5 decision 13):** raise the alert and
-change nothing else; the restart and its proof stay in the append-only table Q51 describes. Not
-built: it is slice 9 of the A798-B build.
+change nothing else; the restart and its proof stay in the append-only table Q51 describes.
+Built by A798-B slices 8 (#2012) and 9 (PR to come), 2026-10-23;
+parked for the owner. One step back per restart; later records are held to the minute.
 
 This records a question; no enquiry has been sent.
 

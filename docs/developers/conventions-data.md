@@ -3612,6 +3612,100 @@ Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
 `packages/fiscal-verifactu/src/chain.clock-behind.test.ts` — weaker than the rule, because they
 cover the routes they name; a new money route is seen by none.
 
+### A manager's restart lifts the stop for one step back
+
+Added 2026-10-23 by A798-B slice 9 (PR to come); the decisions and measurements named here are in
+[the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md).
+
+**One latest record** (plan decision 8a). `latestRecord` (`packages/fiscal-verifactu/src/clock-behind.ts`)
+orders by `fecha_hora_huso_gen_registro desc, id desc`, and it is the only way the stop and the
+restart find the latest record: `clockBehindChain` calls it, and so does `judge`
+(`packages/fiscal-verifactu/src/clock-stop-restart.ts`), which both `clockStopState` and
+`restartAfterClockStop` run. The id is a random UUID, so a tie between two records at one instant
+is broken arbitrarily but always the same way. A restart naming the other of two same-instant
+records lifted nothing (plan Q5); ordering one caller by `id asc` picked the other record in all
+eight runs (S13).
+
+**The cover** (decisions 8b, 21). A restart row in `clock_stop_restarts` names the latest record
+(`registro_id`, unique). `clockBehindChain` answers `null`, lifting every reader of the stop at once,
+when the raw comparison is behind and that row covers the reading: its `record_at` equals the
+record's own time; its `proof.heads` is an object of safe integers `≥ 0`, none larger than its
+chain's current largest `secuencia`; and the gap is at most the gap the restart accepted plus a
+minute, never more than 24 hours (`RESTART_CAP_MS`). Anything else covers nothing and throws
+nothing — a proof that is not JSON, JSON `null`, `heads` missing or an array, a value that is not a
+safe integer `≥ 0` or is past its chain's head (S6, S7; the bound check's deletion let a `1e12` row
+cover, S12). The row's `node_id` is never read, so a wrong one cannot widen the cover (S9). The
+readers that lift together all reach `clockBehindChain`: `refuseWhileClockBehind` (the append's own
+check and every route's named check), the till's staff notice (`staff-notices.ts`), the bell's
+alert (`clock-behind-alerts.ts`), and the seat's `clockBehindLatestRecord`, which the refund paths
+and the AEAT drift alert's suppression (wired in `apps/server/src/boot.ts`) call. `clock-stop-restart.ts` and `clock-stop-incidents.ts` read
+the table too, for the Box status page's Clock row, the restart itself and the disproof alert;
+neither decides whether a sale is refused. `chain.ts` is not edited.
+
+**One step back, then the ordinary rule** (decision 8c). `proof.heads` holds every chain's largest
+`secuencia` at the restart, so a record is "written under it" when its `secuencia` is past its
+chain's stored head (a chain the map leaves out counts from 0, which can only narrow the cover,
+S10). Before any record is written under the restart, the first step may go a minute further back
+than accepted. Once one is written, every reading is held to the ordinary minute against the
+LATEST TIME among the records written under it, on any chain (`latestWrittenAfter`) — a running
+maximum by time, not the record written last. Measured on a sale at `T = 21:40Z` and a restart
+with `clock_at R = 07:12Z` (Q1 and S1): sales at R + 1 min, R + 10 h, R + 30 min, R + 10 h − 59 s
+and R + 10 h − 2 min answered recorded, recorded, `clock.behind_chain`, recorded,
+`clock.behind_chain`. A clock walking back 59 s at a time is refused at its second step (S5); with
+the read ordered by `secuencia` instead, the walk was admitted (S11). Deleting the check against
+records written under the restart recorded all five of Q1's sales (Q7). Forward control: R + 1 min,
+R + 10 h, R + 10 h + 5 min all recorded (Q2). The first step's margin: R − 61 s refused, R − 59 s
+recorded (Q3). The cap: T − 24 h − 1 s refused, T − 24 h recorded (Q4). The fiscal core's suites,
+the golden huella test and `inmutabilidad` among them, passed unedited with the plan's prototype of the lift
+(Q8, re-run as S14). Then the Clock row says `stepped_back`, and the refusal names the record holding
+that latest time (decision 8d). A restart under which a later record's time passes the named one no
+longer applies: the stop then compares against a new latest record with no row.
+
+**The restart's checks, in order** (decision 9; `restartAfterClockStop`): a reading before
+28-10-2024 is refused `clock.unusable`; then `clock.restart_refused` (409, `box-health-api.ts`) with
+`reason` `not_stopped` (the raw comparison is not behind), `record_changed` (the request's
+`recordId` is not `latestRecord`'s), then, when a restart already names that record, the first
+restart answered again (200, `replayed: true`, no row and no alert) if it covers the reading, else
+`stepped_back` with the first restart's `personId` and `restartedAt`; then `too_far` (a gap over
+86 400 000 ms; exactly 24 h is allowed), `contrary_proof`, `no_proof`. The Box status page's offer
+comes from the same `judge`, so it offers exactly what a press would accept at that moment. The
+route (`POST /api/box/clock-restart`, `apps/server/src/box-health-api.ts`) opens one
+`withTransaction` holding the authorization, the reading, the checks, the row and the alert.
+
+**Which witnesses count** (decisions 4–6). `apps/server/src/clock-witnesses.ts` keeps each device's
+latest reading and every AEAT reading with the box's wall and steady clocks. A device reading, and
+an AEAT reading that agrees or says nothing, is handed out only while it is at most five minutes old
+by the steady clock and the wall clock has moved with the steady clock since, to within 1 000 ms. An
+AEAT reading that disagrees is kept with no age limit and through clock steps until the clock watch
+(`apps/server/src/clock-watch.ts`) finds the raw comparison no longer behind, which calls
+`endStop`; a server restart forgets every witness. `judgeClockWitnesses`
+(`packages/fiscal/src/clock-witnesses.ts`): a witness agrees when `|witnessAt − boxAt| +
+uncertaintyMs ≤ 60 000`, disagrees when `|witnessAt − boxAt| − uncertaintyMs > 60 000`, and
+otherwise says nothing; a device's uncertainty is 0; a group of devices is one in which every pair
+agrees with each other, the largest wins, and among groups of one size the one whose newest `boxAt`
+is latest. A witness counts only when its own `boxAt` was more than a minute earlier than the latest
+record's time — gathered during the stop — and an agreeing one only when taken no later than the
+press's reading (`judge`). Proof is AEAT agreeing, or two or more agreeing devices; contrary proof is
+AEAT disagreeing, or a group of two or more devices that all disagree.
+
+**AEAT's time** (decision 1, P3, P5, P11). Two sources feed AEAT witnesses: a submission reply's
+`TimestampPresentacion` (`apps/server/src/time-health.ts`, plus 500 ms, its uncertainty half the
+round trip plus 500 ms), and the `Date` header of an HTTPS `HEAD` to the environment's QR validation
+host (`readAuthorityTime`, `packages/fiscal-verifactu/src/authority-time.ts`), which the clock watch
+runs at most once a minute, on the primary, while the raw comparison is behind on a box that files
+records. Measured
+on 2026-10-23: `curl -I` to `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR` printed `HTTP/2 200`
+and a `date:` line matching `date -u` to the second, with no `age`, `cache-control` or `x-cache`
+(P3); the repository's own TLS-verified HEAD (`authenticatedHourHead`, no client certificate) to the
+same host, three times, answered 200 with a round-tripping `date`, round trips of 177–206 ms and
+the box's midpoint 858, 52 and 229 ms from the header's instant, while the submission host answered
+`302` with no `date` (P5). Not measured: production's QR host, and the `Date` header of a
+certificate-authenticated `consultar` reply (P11) — no AEAT certificate was used for this slice.
+
+Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` and
+`packages/fiscal-verifactu/src/clock-stop-restart.test.ts`, weaker than the rule — they cover the
+readings they name.
+
 ## An envío to AEAT carries one taxpayer name
 
 The envío's header (`Cabecera`) is built from its first record's name, and a legal-name change
