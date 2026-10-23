@@ -244,6 +244,16 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
       "waitron_change_menu_periods_update",
       ' or new."end_offset_minutes" is not old."end_offset_minutes"',
     ],
+    [
+      "waitron_change_service_settings_update",
+      ' or new."release_reminder_minutes" is not old."release_reminder_minutes"',
+    ],
+  ]);
+  const laterColumnAdds = new Map([
+    [
+      "waitron_change_departments_update",
+      ' or new."release_reminder_minutes" is not old."release_reminder_minutes"',
+    ],
   ]);
   expect(
     triggersAfter
@@ -253,7 +263,12 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
           !text.includes('"ticket_item_allergies"') &&
           name !== "waitron_change_kitchen_notices_update",
       )
-      .map(({ name, sql: text }) => ({ name, sql: text })),
+      .map(({ name, sql: text }) => {
+        const added = laterColumnAdds.get(name);
+        if (added === undefined) return { name, sql: text };
+        expect(text).toContain(added);
+        return { name, sql: text.replace(added, "") };
+      }),
   ).toEqual(
     triggersBefore
       .filter(({ name }) => name !== "waitron_change_kitchen_notices_update")
