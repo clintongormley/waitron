@@ -43,14 +43,15 @@ When a payment is refused, the till shows the box's time and the time of the las
 already charged the customer on another card machine, do not charge again: record the payment once
 payments are back.
 
-If a card reader charged the card just as payments stopped, the till says the card was charged but
-the sale is not recorded. Do not charge again. What happens next depends on where the card was
-taken:
+If the till says a card was charged but the sale is not recorded, do not charge again. This can
+happen when a card reader charges a card just as payments stop. What to do next depends on how the
+card was taken:
 
-- **At the counter:** once payments are back, press **Pay** on that order. The payment is recorded
-  without charging the card a second time.
-- **On a table's bill:** the payment stays waiting, and the box records it by itself once payments
-  are back.
+- **At the counter, or a table's whole bill paid from the presented bill:** once payments are back,
+  pay that order again the same way. The payment is recorded without charging the card a second
+  time.
+- **From the bill's payment options (Pay items, Contribute or Split equally):** the payment stays
+  waiting, and the box records it by itself once payments are back.
 
 A manager fixes this from the [Box status page](box-status.md#clock-behind).
 

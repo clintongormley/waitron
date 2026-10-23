@@ -49,14 +49,16 @@ Cuando se rechaza un cobro, el terminal muestra la hora del equipo y la de la ú
 has cobrado al cliente en otro datáfono, no vuelvas a cobrar: registra el pago cuando se pueda
 volver a cobrar.
 
-Si un lector de tarjetas cobró la tarjeta justo cuando se pararon los cobros, el terminal dice que
-se ha cobrado pero la venta no se ha registrado. No vuelvas a cobrar. Lo que pasa después depende de
-dónde se cobró:
+Si el terminal dice que se ha cobrado con tarjeta pero la venta no se ha registrado, no vuelvas a
+cobrar. Puede pasar cuando un lector de tarjetas cobra una tarjeta justo cuando se paran los cobros.
+Lo que hay que hacer después depende de cómo se cobró la tarjeta:
 
-- **En la barra:** cuando se pueda volver a cobrar, pulsa **Cobrar** en ese pedido. El pago se
-  registra sin cobrar la tarjeta otra vez.
-- **En la cuenta de una mesa:** el pago queda pendiente, y el equipo lo registra por sí solo cuando
-  se puede volver a cobrar.
+- **En la barra, o la cuenta entera de una mesa cobrada desde la cuenta presentada:** cuando se
+  pueda volver a cobrar, cobra ese pedido otra vez de la misma forma. El pago se registra sin cobrar
+  la tarjeta otra vez.
+- **Desde las opciones de pago de la cuenta (Pagar artículos, Aportar una cantidad o Dividir a
+  partes iguales):** el pago queda pendiente, y el equipo lo registra por sí solo cuando se puede
+  volver a cobrar.
 
 El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind).
 
