@@ -58,7 +58,9 @@ original y lleva una corrección cuando las instrucciones actuales son distintas
 Un plato en espera puede llegar a una estación en un ticket anticipado de espera. Esa estación
 conserva la copia de alergias enviada con ese ticket y recibe correcciones mientras quede trabajo
 sin servir. Una estación que no ha recibido un ticket anticipado toma su primera copia cuando se
-envía el plato a preparar.
+envía el plato a preparar. Solo una estación con **Imprimir por adelantado los grupos en espera**
+recibe una comanda HOLD, y solo una estación que la recibió imprime sus correcciones y la comanda
+marcada FIRE.
 
 Enviar a preparar el trabajo en espera en la misma estación no duplica una corrección de alergia
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
@@ -101,15 +103,16 @@ Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o
 una mesa pagada se cierra con **Lo recogerán en el mostrador**, sus platos por llegar pasan a ser
 un pedido así: cada estación con un plato por llegar en él recibe el aviso de que el pedido pasó al
 mostrador, e imprime un ticket **MOVIDO** si su ajuste **Imprimir un aviso al cambiar de mesa los
-platos enviados** es **Imprimir**, o sigue el ajuste del local **Imprimir avisos MOVIDO**; los
-platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
+platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
 estaciones y zonas de servicio que tiene asignadas.
 
 Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
 pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa; ya no se
 elige allí un modo de marcha para todo el local. Cada estación de preparación fija sus propios
 avisos de demora al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
-editarla en **Estaciones de preparación**.
+editarla en **Estaciones de preparación**. Cada estación de preparación fija también cómo se
+imprimen los platos iguales en sus comandas y si imprime por adelantado los grupos en espera, en
+**Platos iguales en una comanda de cocina** e **Imprimir por adelantado los grupos en espera**.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 
