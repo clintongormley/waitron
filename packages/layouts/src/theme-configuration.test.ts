@@ -87,6 +87,7 @@ describe("validateThemeConfiguration", () => {
     ["a theme that is not a string", LEMON],
     ["a theme that is not JSON", "{broken"],
     ["a theme that is a JSON array", "[]"],
+    ["a theme that is JSON null", "null"],
     ["a theme document this release refuses", '{"tokens":{}}'],
     ["a theme whose brand colour is not hex", JSON.stringify({ ...LEMON, brandColor: "yellow" })],
   ])("refuses %s as custom_themes.theme", (_label, theme) => {

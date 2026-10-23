@@ -20,10 +20,10 @@ function parsedTheme(text: unknown): unknown {
 }
 
 function checkTheme(value: unknown, carried: ReadonlySet<unknown>): void {
-  if (!isPlainObject(value)) return refuse("theme");
+  if (!isPlainObject(value)) refuse("theme");
   const { printedLogo, ...document } = value;
   const read = readThemeDocument(document);
-  if (!read.ok) return refuse("theme");
+  if (!read.ok) refuse("theme");
   const logo = read.choices.logo;
   if (logo === null) {
     if (printedLogo !== undefined) refuse("theme");
