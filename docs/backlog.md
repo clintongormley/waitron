@@ -5831,7 +5831,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **The original release-source network stall is undiagnosed.** Main run
   [39868989648](https://github.com/clintongormley/waitron/actions/runs/39868989648/job/120139166601)
-  timed out after 20 seconds. A1024 adds bounded retries; if it recurs, retain the attempt logs
+  timed out after 20 seconds. A1024 (#2001) adds bounded retries; if it recurs, retain the attempt logs
   and identify whether connection, negotiation or download stalled.
 
 - **The UI showcase overflows a phone and inherits black text in its dark panel.** At a
