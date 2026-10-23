@@ -2318,6 +2318,102 @@ it("transfers a station's colour", async () => {
   expect(imported).toEqual([{ colour: "teal" }]);
 });
 
+it("transfers each station's ticket grouping and held printing", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values([
+      {
+        locationId: source.locationId,
+        name: "Grill",
+        ticketGrouping: "separate",
+        printHeldWork: true,
+      },
+      {
+        locationId: source.locationId,
+        name: "Cold",
+        ticketGrouping: "combined",
+        printHeldWork: false,
+      },
+    ]),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_stations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "Grill", ticket_grouping: "separate", print_held_work: 1 }),
+      expect.objectContaining({ name: "Cold", ticket_grouping: "combined", print_held_work: 0 }),
+    ]),
+  );
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({
+      name: kitchenStations.name,
+      ticketGrouping: kitchenStations.ticketGrouping,
+      printHeldWork: kitchenStations.printHeldWork,
+    })
+    .from(kitchenStations)
+    .where(inArray(kitchenStations.name, ["Grill", "Cold"]))
+    .orderBy(kitchenStations.name);
+  expect(imported).toEqual([
+    { name: "Cold", ticketGrouping: "combined", printHeldWork: false },
+    { name: "Grill", ticketGrouping: "separate", printHeldWork: true },
+  ]);
+});
+
+it("refuses an imported ticket grouping outside the two values before writing anything", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  const station = transferred.tables.kitchen_stations![0]!;
+  station.ticket_grouping = "bogus";
+  await expect(
+    applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "kitchen_stations.ticket_grouping" },
+  });
+  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+    { n: 0 },
+  ]);
+  expect(
+    (await targetSuite.db.execute(sql`select count(*) as n from kitchen_stations`)).rows,
+  ).toEqual([{ n: 0 }]);
+  expect(
+    await targetSuite.db
+      .select({ name: kitchenStations.name })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, String(station.name))),
+  ).toEqual([]);
+});
+
 it("A725 allocates omitted imported colours after reserving explicit colours later in the bundle", async () => {
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,

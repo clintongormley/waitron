@@ -1,12 +1,15 @@
-import { AppError, isStationColour } from "@waitron/shared";
+import { AppError, isStationColour, isTicketGrouping } from "@waitron/shared";
 import "./errors.js";
 
 export function validateCoreConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
 ): void {
-  for (const row of tables.kitchen_stations ?? [])
+  for (const row of tables.kitchen_stations ?? []) {
     if (row.colour !== undefined && !isStationColour(row.colour))
       throw new AppError("setup.request_invalid", { field: "kitchen_stations.colour" });
+    if (row.ticket_grouping !== undefined && !isTicketGrouping(row.ticket_grouping))
+      throw new AppError("setup.request_invalid", { field: "kitchen_stations.ticket_grouping" });
+  }
   for (const table of ["kitchen_courses", "kitchen_stations", "floor_zones"])
     for (const row of tables[table] ?? [])
       if (row.active === 0 || row.active === false)
