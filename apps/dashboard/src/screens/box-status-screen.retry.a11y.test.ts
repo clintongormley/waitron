@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./box-status-screen.js";
@@ -50,7 +51,7 @@ function stubApi(answer: BoxHealth): DashboardApi {
     getBoxHealth: vi.fn().mockResolvedValue(answer),
     listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
     freeBoxSpace: vi.fn(),
-    retryFiscalSubmissions: vi.fn(),
+    retryFiscalSubmissions: vi.fn().mockResolvedValue({ waiting: 12 }),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
 }
@@ -67,32 +68,48 @@ afterEach(cleanupWidgets);
 describe.each(["light", "dark"] as const)(
   "box-status-screen Retry now a11y (%s theme)",
   (theme) => {
-    const cases: [string, BoxHealth, string][] = [
+    // The last entry presses Retry now before axe runs.
+    const cases: [string, BoxHealth, string, boolean][] = [
       [
         "Retry now enabled",
         health({ lastAcceptedAt: LAST, waiting: 12, awaitingCertificate: false }),
         "[data-test=row-tax] [data-test=retry]:not([disabled])",
+        false,
       ],
       [
         "Retry now disabled",
         health({ lastAcceptedAt: LAST, waiting: 0, awaitingCertificate: false }),
         "[data-test=row-tax] [data-test=retry][disabled]",
+        false,
       ],
       [
         "the certificate aside",
         health({ lastAcceptedAt: null, waiting: 12, awaitingCertificate: true }),
         "[data-test=row-tax] [data-test=awaiting-certificate]",
+        false,
+      ],
+      [
+        "the answer shown",
+        health({ lastAcceptedAt: LAST, waiting: 12, awaitingCertificate: false }),
+        "[data-test=row-tax] [role=status]",
+        true,
       ],
     ];
     it.each(cases)(
       "renders the Tax agency row accessibly with %s",
-      async (_name, answer, drawn) => {
+      async (_name, answer, drawn, press) => {
         const { el, host } = await mountWidget<BoxStatusScreen>(
           "dashboard-box-status-screen",
           { api: stubApi(answer), canOpen: () => true },
           theme,
         );
         await flush(el);
+        if (press) {
+          await userEvent.click(
+            el.shadowRoot!.querySelector("[data-test=row-tax] [data-test=retry]") as HTMLElement,
+          );
+          await flush(el);
+        }
         expect(el.shadowRoot!.querySelector(drawn)).not.toBeNull();
         await expectNoA11yViolations(host);
       },

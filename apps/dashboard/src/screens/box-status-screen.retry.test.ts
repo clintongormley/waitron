@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import type {
   AlertView,
@@ -7,7 +8,9 @@ import type {
   DashboardApi,
   FiscalRetryView,
 } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { guideHref } from "../help-guide.js";
 import "./box-status-screen.js";
@@ -96,10 +99,19 @@ async function flush(el: BoxStatusScreen): Promise<void> {
   }
 }
 
-async function mount(api: DashboardApi) {
-  const mounted = await mountWidget<BoxStatusScreen>("dashboard-box-status-screen", { api });
+async function mount(api: DashboardApi, canOpen: (screen: string) => boolean = () => false) {
+  const mounted = await mountWidget<BoxStatusScreen>("dashboard-box-status-screen", {
+    api,
+    canOpen,
+  });
   await flush(mounted.el);
   return mounted;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
 }
 
 const q = (el: BoxStatusScreen, selector: string) => el.shadowRoot!.querySelector(selector);
@@ -130,6 +142,7 @@ describe("box-status-screen Retry now", () => {
     const button = retryButton(el)!;
     expect(button.getAttribute("variant")).toBe("secondary");
     expect(button.hasAttribute("disabled")).toBe(true);
+    expect(q(el, "[data-test=row-tax] [data-test=awaiting-certificate]")).toBeNull();
   });
 
   describe("while the box waits for its certificate", () => {
@@ -171,5 +184,123 @@ describe("box-status-screen Retry now", () => {
     expect(tooltip.getAttribute("guide-label")).toBe(t("box_status.retry_help_guide"));
     expect(tooltip.getAttribute("aria-label")).toBe(t("box_status.retry_help_label"));
     expect(text(tooltip)).toBe(t("box_status.retry_help"));
+    expect(q(el, "[data-test=row-tax] [data-test=awaiting-certificate]")).toBeNull();
+  });
+
+  it("draws Retry now before the row's Go to buttons", async () => {
+    const certificate = { ...CERTIFICATE_ALERT, screen: "venue-settings" };
+    const { el } = await mount(
+      stubApi(
+        health({ outbox: outbox({ waiting: 12, awaitingCertificate: true }), notices: [UNSENT] }),
+        [certificate],
+      ),
+      (screen) => screen === "venue-settings",
+    );
+    const actions = [...q(el, "[data-test=row-tax] .actions")!.children];
+    const retry = actions.findIndex((child) => child.querySelector("[data-test=retry]") !== null);
+    const goTo = actions.findIndex((child) => child.matches("[data-test=go-to]"));
+    expect(retry).toBeGreaterThanOrEqual(0);
+    expect(goTo).toBeGreaterThanOrEqual(0);
+    expect(retry).toBeLessThan(goTo);
+  });
+
+  describe("pressed", () => {
+    const ready = () => health({ outbox: outbox({ waiting: 12 }), notices: [UNSENT] });
+    const answerOf = (el: BoxStatusScreen) => q(el, "[data-test=row-tax] .words [role=status]");
+    const refusalOf = (el: BoxStatusScreen) => q(el, "[data-test=row-tax] .words [role=alert]");
+
+    it("sends once, stays blue and busy while sent, then says the answer and reads again", async () => {
+      const sent = deferred<FiscalRetryView>();
+      const refreshed = deferred<BoxHealth>();
+      const api = stubApi(ready());
+      vi.mocked(api.getBoxHealth)
+        .mockResolvedValueOnce(ready())
+        .mockReturnValueOnce(refreshed.promise);
+      vi.mocked(api.retryFiscalSubmissions).mockReturnValue(sent.promise);
+      const refresh = vi.spyOn(api.liveData, "refresh");
+      const { el } = await mount(api);
+      const reads = vi.mocked(api.getBoxHealth).mock.calls.length;
+
+      await userEvent.click(retryButton(el)!);
+      await el.updateComplete;
+      expect(retryButton(el)!.getAttribute("variant")).toBe("primary");
+      expect(retryButton(el)!.hasAttribute("loading")).toBe(true);
+      expect(retryButton(el)!.hasAttribute("disabled")).toBe(true);
+      retryButton(el)!.click();
+      await el.updateComplete;
+      expect(api.retryFiscalSubmissions).toHaveBeenCalledTimes(1);
+
+      sent.resolve({ waiting: 12 });
+      await flush(el);
+      expect(text(answerOf(el))).toBe(
+        "12 records will be tried again as soon as the tax agency allows the next send.",
+      );
+      expect(text(answerOf(el))).toBe(fill("box_status.retried", { count: "12" }));
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(api.getBoxHealth).toHaveBeenCalledTimes(reads + 1);
+      expect(retryButton(el)!.hasAttribute("loading")).toBe(false);
+      expect(retryButton(el)!.getAttribute("variant")).toBe("secondary");
+      expect(retryButton(el)!.hasAttribute("disabled")).toBe(true);
+      retryButton(el)!.click();
+      await el.updateComplete;
+      expect(api.retryFiscalSubmissions).toHaveBeenCalledTimes(1);
+
+      refreshed.resolve(ready());
+      await flush(el);
+      expect(retryButton(el)!.getAttribute("variant")).toBe("primary");
+      expect(retryButton(el)!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it.each([
+      [1, "1 record will be tried again as soon as the tax agency allows the next send."],
+      [0, "No record was waiting to be tried again."],
+    ])("words an answer of %i waiting", async (waiting, words) => {
+      const api = stubApi(ready());
+      vi.mocked(api.retryFiscalSubmissions).mockResolvedValue({ waiting });
+      const { el } = await mount(api);
+      await userEvent.click(retryButton(el)!);
+      await flush(el);
+      expect(text(answerOf(el))).toBe(words);
+      expect(text(answerOf(el))).toBe(
+        t(waiting === 1 ? "box_status.retried_one" : "box_status.retried_none"),
+      );
+    });
+
+    it.each(["fiscal.not_filing", "fiscal.awaiting_certificate"])(
+      "shows a press refused with %s on the row, kept through a failed read and beside a refused Free",
+      async (code) => {
+        const api = stubApi(ready());
+        vi.mocked(api.retryFiscalSubmissions).mockRejectedValue({ code });
+        vi.mocked(api.freeBoxSpace).mockRejectedValue({ code: "authorization.not_permitted" });
+        const { el } = await mount(api);
+        await userEvent.click(retryButton(el)!);
+        await flush(el);
+        expect(text(refusalOf(el))).toBe(codeMessage(code));
+        expect(answerOf(el)).toBeNull();
+        expect(retryButton(el)!.getAttribute("variant")).toBe("primary");
+        expect(retryButton(el)!.hasAttribute("disabled")).toBe(false);
+
+        vi.mocked(api.getBoxHealth).mockRejectedValueOnce({ code: "server.internal" });
+        api.liveData.refresh();
+        await flush(el);
+        expect(text(q(el, "p.error[role=alert]"))).toBe(t("box_status.read_error"));
+        expect(text(refusalOf(el))).toBe(codeMessage(code));
+
+        await userEvent.click(q(el, "[data-test=free]") as HTMLElement);
+        await flush(el);
+        expect(text(q(el, "p.error[role=alert]"))).toBe(codeMessage("authorization.not_permitted"));
+        expect(text(refusalOf(el))).toBe(codeMessage(code));
+      },
+    );
+
+    it("reads and answers in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mount(stubApi(ready()));
+      expect(text(retryButton(el))).toBe(es["box_status.retry"]);
+      expect(text(retryButton(el))).toBe("Reintentar ahora");
+      await userEvent.click(retryButton(el)!);
+      await flush(el);
+      expect(text(answerOf(el))).toBe(es["box_status.retried"].replace("{count}", "12"));
+    });
   });
 });

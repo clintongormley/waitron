@@ -5,7 +5,7 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import type { AlertView, BoxHealth, DashboardApi } from "../api/client.js";
+import type { AlertView, BoxHealth, DashboardApi, FiscalRetryView } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -102,6 +102,11 @@ export class BoxStatusScreen extends LitElement {
       .aside {
         color: var(--wt-color-text-muted);
       }
+      .refusal {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
       .actions {
         grid-area: actions;
         display: flex;
@@ -152,6 +157,12 @@ export class BoxStatusScreen extends LitElement {
   /** The bell's own list, as last read; null until it has been read once. */
   @state() private alerts: AlertView[] | null = null;
   @state() private failingReads: ReadonlySet<ReadName> = new Set();
+  @state() private retrying = false;
+  @state() private retryAnswer: FiscalRetryView | null = null;
+  /** The retry press's refusal, drawn on the Tax agency row; no read clears it. */
+  @state() private retryError: string | null = null;
+  /** After a press the waiting count is stale until the box is read again. */
+  @state() private awaitingRetryRead = false;
   /** The free-space press's refusal; no read clears it. */
   @state() private actionError: string | null = null;
   @state() private freeing = false;
@@ -177,6 +188,7 @@ export class BoxStatusScreen extends LitElement {
       .watch("getBoxHealth", [], (health) => {
         this.health = health;
         this.awaitingFigure = false;
+        this.awaitingRetryRead = false;
         this.#readSucceeded("getBoxHealth");
       })
       .catch(() => undefined);
@@ -286,6 +298,7 @@ export class BoxStatusScreen extends LitElement {
   #canRetry(health: BoxHealth): boolean {
     const outbox = health.outbox;
     return (
+      !this.awaitingRetryRead &&
       outbox !== null &&
       outbox.waiting > 0 &&
       !outbox.awaitingCertificate &&
@@ -293,10 +306,38 @@ export class BoxStatusScreen extends LitElement {
     );
   }
 
+  async #retry(): Promise<void> {
+    const health = this.health;
+    if (this.retrying || health === null || !this.#canRetry(health)) return;
+    this.retrying = true;
+    this.retryError = null;
+    this.retryAnswer = null;
+    try {
+      this.retryAnswer = await this.api.retryFiscalSubmissions();
+      this.awaitingRetryRead = true;
+      this.api.liveData.refresh();
+    } catch (error) {
+      this.retryError = codeOf(error);
+    } finally {
+      this.retrying = false;
+    }
+  }
+
+  #retriedWords(waiting: number): string {
+    if (waiting === 0) return t("box_status.retried_none");
+    if (waiting === 1) return t("box_status.retried_one");
+    return fill("box_status.retried", { count: String(waiting) });
+  }
+
   #retryAction(health: BoxHealth): TemplateResult {
     const can = this.#canRetry(health);
     return html`<span class="retry">
-      <wt-button data-test="retry" variant=${can ? "primary" : "secondary"} ?disabled=${!can}
+      <wt-button
+        data-test="retry"
+        variant=${can || this.retrying ? "primary" : "secondary"}
+        ?disabled=${!can || this.retrying}
+        ?loading=${this.retrying}
+        @click=${() => void this.#retry()}
         >${t("box_status.retry")}</wt-button
       ><wt-help-tooltip
         mode="help-mode"
@@ -346,6 +387,20 @@ export class BoxStatusScreen extends LitElement {
           !row.alerts.some((alert) => alert.code === "fiscal.awaiting_certificate")
             ? html`<p class="aside" data-test="awaiting-certificate">
                 ${t("box_status.retry_awaiting_certificate")}
+              </p>`
+            : nothing
+        }
+        ${
+          outbox !== null && this.retryAnswer !== null
+            ? html`<p class="aside" role="status" data-test="retried">
+                ${this.#retriedWords(this.retryAnswer.waiting)}
+              </p>`
+            : nothing
+        }
+        ${
+          outbox !== null && this.retryError !== null
+            ? html`<p class="refusal" role="alert" data-test="retry-refused">
+                ${codeMessage(this.retryError)}
               </p>`
             : nothing
         }
