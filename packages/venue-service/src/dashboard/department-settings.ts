@@ -59,6 +59,7 @@ interface ReceiptEditor {
 type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
   serviceSteps: ServiceStepDraft[];
 };
+const REMINDER_MINUTES = [5, 10, 15, 20, 30];
 type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
@@ -491,6 +492,38 @@ export class DepartmentSettings extends LitElement {
     this.scope?.changed();
     if (saveActionState(this.scope).unchanged) this.failure = "";
   }
+  /** A stored value the list does not offer, which setup can bring in, is offered too so the
+   * dropdown never shows another. */
+  private releaseReminder(minutes: number | null, error: string | undefined, disabled: boolean) {
+    const choices =
+      minutes === null || REMINDER_MINUTES.includes(minutes)
+        ? REMINDER_MINUTES
+        : [...REMINDER_MINUTES, minutes].sort((a, b) => a - b);
+    return html`<wt-combobox
+      name="releaseReminderMinutes"
+      label=${t("venue.release_reminder")}
+      hint=${t("venue.release_reminder_hint")}
+      search="auto"
+      placeholder=${t("venue.release_reminder.off")}
+      searchPlaceholder=${t("venue.combobox_search")}
+      noResultsLabel=${t("venue.combobox_no_results")}
+      .options=${[
+        { value: "", label: t("venue.release_reminder.off") },
+        ...choices.map((choice) => ({
+          value: String(choice),
+          label: t("venue.release_reminder.minutes").replace("{n}", String(choice)),
+        })),
+      ]}
+      .value=${minutes === null ? "" : String(minutes)}
+      error=${error ?? ""}
+      ?disabled=${disabled}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+        e.stopPropagation();
+        const value = e.detail.value;
+        this.changed("releaseReminderMinutes", value === "" ? null : Number(value));
+      }}
+    ></wt-combobox>`;
+  }
   private stepsChanged(steps: ServiceStepDraft[]) {
     const before = new Map(this.draft!.serviceSteps.map((step) => [step.key, step]));
     const kept: ServiceStepErrors = {};
@@ -845,6 +878,10 @@ export class DepartmentSettings extends LitElement {
                   </p>`
                 : nothing
             }
+          </section>
+          <section aria-label=${t("venue.courses_and_kitchen")}>
+            <h3>${t("venue.courses_and_kitchen")}</h3>
+            ${this.releaseReminder(draft.releaseReminderMinutes, errors.releaseReminderMinutes, disabled)}
           </section>
           <section aria-label=${t("venue.table_states")}>
             <h3>${t("venue.table_states")}</h3>

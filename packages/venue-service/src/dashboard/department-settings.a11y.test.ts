@@ -231,6 +231,50 @@ describe.each(["light", "dark"] as const)("department-settings %s", (theme) => {
   });
 });
 
+describe.each(["light", "dark"] as const)("department-settings reminder (%s)", (theme) => {
+  it.each(["reminder", "reminder-refusal"] as const)("%s", async (state) => {
+    setLocale("en");
+    const el = (await mountThemed(
+      "<department-settings></department-settings>",
+      theme,
+    )) as HTMLElementTagNameMap["department-settings"];
+    el.model = { ...structuredClone(model), releaseReminderMinutesByDepartment: { d1: 10 } };
+    el.departmentId = "d1";
+    el.api = new VenueServiceApi((async (path, method) => {
+      if (method === "GET")
+        return path.endsWith("/profiles")
+          ? [{ id: "p1", name: "Restaurant counter" }]
+          : { departmentId: "d1", receivingProfileId: "p1", destinationDepartmentIds: ["d2"] };
+      throw { code: "management.request_invalid", params: { field: "releaseReminderMinutes" } };
+    }) as DashboardRequest);
+    await el.updateComplete;
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
+      .not.toBeNull();
+    const control = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=releaseReminderMinutes]",
+      )!;
+    if (state === "reminder") {
+      await selectDepartmentTab(el, "service");
+      expect(control().value).toBe("10");
+    } else {
+      el.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Revised" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+      await expect.poll(() => el.tab).toBe("service");
+      await expect.poll(() => control().error).toContain("This value was not accepted");
+    }
+    await expectNoA11yViolations(host);
+  });
+});
+
 describe.each(["light", "dark"] as const)("Settings transfers bounds (%s)", (theme) => {
   it.each([
     ["en", 390],

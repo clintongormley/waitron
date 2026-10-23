@@ -1509,6 +1509,200 @@ it("reads in Spanish", async () => {
     "Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.",
   );
 });
+type Reminder = HTMLElementTagNameMap["wt-combobox"];
+function reminder(el: DepartmentSettings) {
+  const control = el.shadowRoot!.querySelector<Reminder>(
+    "wt-combobox[name=releaseReminderMinutes]",
+  );
+  expect(control, "reminder dropdown").not.toBeNull();
+  return control!;
+}
+function reminderView(minutes: number | null) {
+  const view = structuredClone(model);
+  view.releaseReminderMinutesByDepartment = { d1: minutes };
+  return view;
+}
+function shownText(control: Reminder) {
+  return control.shadowRoot!.querySelector(".trigger")!.textContent!.trim();
+}
+async function chooseReminder(el: DepartmentSettings, value: string) {
+  await chooseOption(reminder(el), value);
+  await el.updateComplete;
+}
+async function clickChosenReminder(el: DepartmentSettings): Promise<number> {
+  const box = reminder(el);
+  let sent = 0;
+  const count = () => sent++;
+  box.addEventListener("wt-change", count);
+  await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  const row = box.shadowRoot!.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
+  expect(row).not.toBeNull();
+  await userEvent.click(row!);
+  box.removeEventListener("wt-change", count);
+  await el.updateComplete;
+  return sent;
+}
+it("shows the reminder under Courses and the kitchen, between Orders and payment and Table states", async () => {
+  const { el } = await mount(reminderView(10));
+  await selectDepartmentTab(el, "service");
+  const panel = shownPanel(el);
+  expect([...panel.querySelectorAll("section > h3")].map((h) => h.textContent!.trim())).toEqual([
+    "Orders and payment",
+    "Courses and the kitchen",
+    "Table states",
+  ]);
+  const control = reminder(el);
+  const section = control.closest("section")!;
+  expect(panel.contains(section)).toBe(true);
+  expect(section.getAttribute("aria-label")).toBe("Courses and the kitchen");
+  expect(control.label).toBe("Remind to fire the next course after");
+  expect(control.value).toBe("10");
+});
+it("gives the reminder dropdown its search, Off and its hint", async () => {
+  const { el } = await mount(reminderView(null));
+  const control = reminder(el);
+  await control.updateComplete;
+  expect([control.search, control.placeholder, control.value]).toEqual(["auto", "Off", ""]);
+  expect(control.hint).toContain("marked served");
+  expect(shownText(control)).toBe("Off");
+});
+it("offers Off and 5 to 30 minutes, and keeps a stored value the list does not offer", async () => {
+  const { el } = await mount(reminderView(7));
+  const control = reminder(el);
+  await control.updateComplete;
+  expect(control.options.map((option) => option.value)).toEqual([
+    "",
+    "5",
+    "7",
+    "10",
+    "15",
+    "20",
+    "30",
+  ]);
+  expect(control.options.map((option) => option.label)).toEqual([
+    "Off",
+    "5 minutes",
+    "7 minutes",
+    "10 minutes",
+    "15 minutes",
+    "20 minutes",
+    "30 minutes",
+  ]);
+  expect(control.value).toBe("7");
+  expect(shownText(control)).toBe("7 minutes");
+});
+it("opens quiet on a department with stored minutes", async () => {
+  const { el } = await mount(reminderView(25));
+  await selectDepartmentTab(el, "service");
+  expect(reminder(el).value).toBe("25");
+  expect(save(el).disabled).toBe(true);
+  expect(save(el).variant).toBe("secondary");
+});
+it("choosing 20 enables Save and saves it with the department", async () => {
+  const { el, writes } = await mount();
+  await selectDepartmentTab(el, "service");
+  expect(save(el).disabled).toBe(true);
+  expect(save(el).variant).toBe("secondary");
+  await chooseReminder(el, "20");
+  expect(save(el).disabled).toBe(false);
+  expect(save(el).variant).toBe("primary");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
+  expect(writes[0]!.body).toMatchObject({ releaseReminderMinutes: 20 });
+  await expect.poll(() => save(el).disabled).toBe(true);
+  el.model = reminderView(20);
+  await el.updateComplete;
+  await chooseReminder(el, "");
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]!.body).toMatchObject({ releaseReminderMinutes: null });
+});
+it("choosing the reminder already shown, or Off when Off is shown, leaves Save quiet", async () => {
+  for (const minutes of [10, null]) {
+    const { el, writes } = await mount(reminderView(minutes));
+    await selectDepartmentTab(el, "service");
+    expect(await clickChosenReminder(el)).toBe(1);
+    expect(save(el).disabled).toBe(true);
+    expect(el.hasUnsavedChanges).toBe(false);
+    save(el).click();
+    await el.updateComplete;
+    expect(writes).toEqual([]);
+  }
+});
+it("keeps the reminder's change inside the dialog", async () => {
+  const { el } = await mount();
+  await selectDepartmentTab(el, "service");
+  let heard = 0;
+  const listen = () => heard++;
+  document.addEventListener("wt-change", listen);
+  try {
+    await chooseReminder(el, "5");
+  } finally {
+    document.removeEventListener("wt-change", listen);
+  }
+  expect(reminder(el).value).toBe("5");
+  expect(heard).toBe(0);
+});
+it("a refusal naming the reminder, sent while Details shows, brings back Service and marks it", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "management.request_invalid",
+    params: { field: "releaseReminderMinutes" },
+  });
+  await change(el, "name", "Revised");
+  expect(el.tab).toBe("details");
+  const events = tabEvents(el);
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("service");
+  expect(events).toEqual([{ tab: "service", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
+    "needs fixing",
+    undefined,
+  ]);
+  const control = reminder(el);
+  expect(shownPanel(el).contains(control)).toBe(true);
+  await control.updateComplete;
+  expect(control.error).toBe("This value was not accepted. Change it and save again.");
+  expect(control.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid")).toBe("true");
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(control);
+  expect(save(el).disabled).toBe(false);
+});
+it("follows a reminder another dashboard sets while the form is clean, and keeps a draft while it is not", async () => {
+  const { el } = await mount();
+  el.model = reminderView(15);
+  await el.updateComplete;
+  expect(reminder(el).value).toBe("15");
+  expect(save(el).disabled).toBe(true);
+  await chooseReminder(el, "30");
+  expect(save(el).disabled).toBe(false);
+  const later = reminderView(5);
+  later.departments[0]!.tradingName = "Casa nueva";
+  el.model = later;
+  await el.updateComplete;
+  expect(reminder(el).value).toBe("30");
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(save(el).disabled).toBe(false);
+});
+it("reads the reminder in Spanish", async () => {
+  setLocale("es");
+  const { el } = await mount();
+  const control = reminder(el);
+  expect(control.closest("section")!.querySelector("h3")!.textContent!.trim()).toBe(
+    "Cursos y cocina",
+  );
+  expect(control.label).toBe("Avisar para marchar el siguiente curso tras");
+  expect(control.options.map((option) => option.label)).toEqual([
+    "Deshabilitado",
+    "5 minutos",
+    "10 minutos",
+    "15 minutos",
+    "20 minutos",
+    "30 minutos",
+  ]);
+});
 const stepsView = () => {
   const view = structuredClone(model);
   view.courses = [

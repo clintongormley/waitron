@@ -422,6 +422,7 @@ const en = {
   "venue.department_tab.receipt": "Receipts",
   "venue.department_tab.transfers": "Transfers",
   "venue.orders_and_payment": "Orders and payment",
+  "venue.courses_and_kitchen": "Courses and the kitchen",
   "venue.table_states": "Table states",
   "venue.needs_clearing": "Needs clearing",
   "venue.needs_clearing_hint":
@@ -523,7 +524,7 @@ const en = {
   "venue.kitchen_ticket_grouping.combined": "One line: 3 x Burger",
   "venue.kitchen_ticket_grouping.separate": "A line each: 1 x Burger, three times",
   "venue.kitchen_ticket_grouping_hint": "Applies to new kitchen tickets and to reprints.",
-  "venue.release_reminder": "Reminder to fire the next group",
+  "venue.release_reminder": "Remind to fire the next course after",
   "venue.release_reminder.off": "Off",
   "venue.release_reminder.minutes": "{n} minutes",
   "venue.release_reminder_hint":
@@ -1319,6 +1320,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.department_tab.receipt": "Recibos",
   "venue.department_tab.transfers": "Traslados",
   "venue.orders_and_payment": "Pedidos y cobro",
+  "venue.courses_and_kitchen": "Cursos y cocina",
   "venue.table_states": "Estados de la mesa",
   "venue.needs_clearing": "Por recoger",
   "venue.needs_clearing_hint":
@@ -1422,7 +1424,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.kitchen_ticket_grouping.separate": "Una por plato: 1 x Hamburguesa, tres veces",
   "venue.kitchen_ticket_grouping_hint":
     "Se aplica a las comandas de cocina nuevas y a las reimpresiones.",
-  "venue.release_reminder": "Aviso para marchar el siguiente grupo",
+  "venue.release_reminder": "Avisar para marchar el siguiente curso tras",
   "venue.release_reminder.off": "Deshabilitado",
   "venue.release_reminder.minutes": "{n} minutos",
   "venue.release_reminder_hint":
