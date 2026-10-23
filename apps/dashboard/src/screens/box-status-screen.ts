@@ -140,7 +140,7 @@ export class BoxStatusScreen extends LitElement {
       }
       /* Room for the half of its help badge that hangs past its end, help on or off, so the
          badge never covers a Go to after it and turning help on moves nothing. */
-      .retry {
+      .retry:not(:last-child) {
         margin-inline-end: max(0px, calc(var(--wt-help-badge-target) / 2 - var(--wt-space-2)));
       }
       .other {

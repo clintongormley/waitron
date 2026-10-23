@@ -243,6 +243,19 @@ describe("box-status-screen Retry now", () => {
     }
   });
 
+  it("lines a lone Retry now up with Free at the row's end on a wide page", async () => {
+    const { el, host } = await mount(
+      stubApi(health({ outbox: outbox({ waiting: 12 }), notices: [UNSENT] })),
+    );
+    host.style.width = "1000px";
+    await flush(el);
+    expect(q(el, "[data-test=row-tax] [data-test=go-to]")).toBeNull();
+    const retry = q(el, "[data-test=retry]")!.getBoundingClientRect();
+    const free = q(el, "[data-test=free]")!.getBoundingClientRect();
+    expect(retry.width).toBeGreaterThan(0);
+    expect(retry.right).toBe(free.right);
+  });
+
   describe("pressed", () => {
     const ready = () => health({ outbox: outbox({ waiting: 12 }), notices: [UNSENT] });
     const answerOf = (el: BoxStatusScreen) => q(el, "[data-test=row-tax] .words [role=status]");
