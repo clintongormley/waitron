@@ -318,6 +318,18 @@ disable_bluetooth_autopair() {
   rm -f "$tmp"
 }
 
+# A box whose clock reads earlier than its last sale stops taking payments, so install asks the host
+# to keep its clock right where it can.
+enable_time_sync() {
+  local limit
+  limit="$(command -v gtimeout || command -v timeout)" || limit=""
+  if as_root ${limit:+"$limit" 60} timedatectl set-ntp true >/dev/null 2>&1; then
+    echo "waitron.sh: asked the system to keep its clock in step with internet time (timedatectl set-ntp true)"
+  else
+    echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, and Waitron stops taking payments while the clock reads earlier than its last sale — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
+  fi
+}
+
 # 3. main pulls every image in compose.yml and records no override; a branch/commit builds both
 #    Waitron images on the box from the git context and records the tags in .env so the box stays
 #    on them.
@@ -620,6 +632,7 @@ cmd_install() {
   fetch_box_files "$ref"
   load_print_agent_apparmor "$ref"
   disable_bluetooth_autopair
+  enable_time_sync
   select_image "$ref"
   cd "$WAITRON_DIR"
   if [ "$wipe" -eq 1 ]; then

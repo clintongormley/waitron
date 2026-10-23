@@ -45,7 +45,8 @@ afterEach(() => {
 // `docker pull` fails when its arguments contain WT_IMAGE_PULL_FAIL; every other image is present.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
-// which has no systemctl). `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
+// which has no systemctl). `timedatectl` is stubbed so no case reaches a real one on a Linux machine,
+// and fails when WT_TIMEDATECTL_FAIL=1. `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
 // reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
 // suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
@@ -262,6 +263,10 @@ esac
 exit 0
 `,
 );
+stub(
+  "timedatectl",
+  '[ "${WT_TIMEDATECTL_FAIL}" = "1" ] && { echo "Failed to set ntp: NTP not supported" >&2; exit 1; }; exit 0',
+);
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 
@@ -311,6 +316,7 @@ function sandbox({
   imageMissing = "",
   imagePullFail = "",
   directorySuffix = "",
+  timedatectlFail = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), `waitron-sh-${directorySuffix}`));
   dirs.push(root);
@@ -403,6 +409,7 @@ function sandbox({
       WT_AA_PARSE_FAIL: apparmorParseFail ? "1" : "0",
       WT_IMAGE_MISSING: imageMissing,
       WT_IMAGE_PULL_FAIL: imagePullFail,
+      WT_TIMEDATECTL_FAIL: timedatectlFail ? "1" : "0",
     },
   };
 }
@@ -1150,6 +1157,47 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     expect(r.stderr).toContain("could not switch off bluetoothd's autopair plugin");
     expect(existsSync(sb.dropIn)).toBe(false);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
+  });
+});
+
+describe("waitron.sh install and the host's time synchronisation", () => {
+  const calls = (sb) => readFileSync(sb.log, "utf8").trimEnd().split("\n");
+
+  it("asks the system to keep its clock in step, and says so", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    const asked = log.indexOf("timedatectl set-ntp true");
+    expect(asked).toBeGreaterThanOrEqual(0);
+    expect(r.stdout).toContain("asked the system to keep its clock in step with internet time");
+    const up = log.findIndex((c) => /^docker compose .*\bup -d\b/.test(c));
+    expect(up).toBeGreaterThan(asked);
+  });
+
+  it("carries on, and says what that means, when the system cannot switch it on", () => {
+    const sb = sandbox({ timedatectlFail: true });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("could not switch on the system's time synchronisation");
+    expect(r.stderr).toContain("Unless another time service runs on this machine");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  });
+
+  it("leaves time synchronisation alone on reset", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    expect(run(sb, ["reset", "--yes"]).status).toBe(0);
+    expect(calls(sb).filter((c) => c.startsWith("timedatectl"))).toEqual([]);
+  });
+
+  it("refuses a production reset install before touching the clock", () => {
+    const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(calls(sb).filter((c) => c.startsWith("timedatectl"))).toEqual([]);
   });
 });
 
