@@ -1,8 +1,14 @@
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { ticketItemMoves, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  kitchenStations,
+  ticketItemMoves,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
@@ -14,7 +20,8 @@ import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kit
 import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { printedHeldGroups } from "./order-groups.js";
+import { heldPaperStations, printedHeldGroups, recordHeldPaper } from "./order-groups.js";
+import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { bumpRevision, readOrderRevision } from "./working-order.js";
@@ -154,6 +161,55 @@ export async function rerouteHeldAtRelease(
 
 /** A held or fired record may move while queued, with no part served.
  * Made-here records are always fired and ready, and stay at their sending till's station. */
+/**
+ * The held groups whose HOLD paper a station receiving their moved dishes gets, each answering
+ * whether the station is already recorded for it. A group with HOLD paper elsewhere reaches a
+ * station not recorded only when the station prints held work now and holds no other held work of
+ * the group, so its paper is complete; otherwise the dish prints there at the fire.
+ */
+async function destinationHoldPaper(
+  tx: Transaction,
+  stationId: string,
+  groupIds: readonly string[],
+  arrivingLineIds: readonly string[],
+): Promise<Map<string, boolean>> {
+  const paper = new Map<string, boolean>();
+  if (groupIds.length === 0) return paper;
+  const recorded = await heldPaperStations(tx, groupIds);
+  const [station] = await tx
+    .select({ printHeldWork: kitchenStations.printHeldWork })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.id, stationId));
+  for (const groupId of new Set(groupIds)) {
+    const stations = recorded.get(groupId);
+    if (stations === undefined) continue;
+    if (stations.has(stationId)) {
+      paper.set(groupId, true);
+      continue;
+    }
+    if (!station?.printHeldWork) continue;
+    const others = await tx
+      .select({ lineId: workingOrderLines.id, quantity: workingOrderLines.quantity })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(
+        and(
+          eq(workingOrderLines.groupId, groupId),
+          eq(ticketItems.stationId, stationId),
+          isNull(ticketItems.firedAt),
+          notInArray(workingOrderLines.id, [...arrivingLineIds]),
+        ),
+      );
+    const cancelled = await readLineCancellations(
+      tx,
+      others.map((row) => row.lineId),
+    );
+    if (others.some((row) => (cancelled.get(row.lineId) ?? 0) < row.quantity)) continue;
+    paper.set(groupId, false);
+  }
+  return paper;
+}
+
 export function stillMovable(
   item: { state: TicketState; madeHere: boolean },
   line: { servedAt: string | null; servedQuantity: number },
@@ -360,6 +416,16 @@ export async function moveDishesToStation(
               moving.map((row) => row.id),
             ),
           );
+      const paperAtDestination = await destinationHoldPaper(
+        tx,
+        request.stationId,
+        moving.flatMap((row) =>
+          row.firedAt === null && row.groupId !== null && printed.has(row.groupId)
+            ? [row.groupId]
+            : [],
+        ),
+        moving.map((row) => row.id),
+      );
       for (const [oldStationId, lines] of byStation) {
         const from = stations.get(oldStationId)?.name;
         if (from === undefined) throw new Error("moving ticket has no old station in this venue");
@@ -370,19 +436,23 @@ export async function moveDishesToStation(
             stationId: request.stationId,
             quantity: row.quantity,
           }));
-        const held: FiredItem[] = lines
-          .filter((row) => row.firedAt === null && row.groupId !== null && printed.has(row.groupId))
-          .map((row) => ({
-            workingOrderLineId: row.id,
-            stationId: request.stationId,
-            quantity: row.quantity,
-          }));
         if (fired.length > 0) await enqueueKitchenTickets(tx, cfg, orderId, fired, { from });
-        if (held.length > 0)
-          await enqueueKitchenTickets(tx, cfg, orderId, held, {
+        for (const [groupId, recorded] of paperAtDestination) {
+          const held: FiredItem[] = lines
+            .filter((row) => row.firedAt === null && row.groupId === groupId)
+            .map((row) => ({
+              workingOrderLineId: row.id,
+              stationId: request.stationId,
+              quantity: row.quantity,
+            }));
+          if (held.length === 0) continue;
+          const carried = await enqueueKitchenTickets(tx, cfg, orderId, held, {
             mark: "HOLD",
             from,
           });
+          if (!recorded && carried.has(request.stationId))
+            await recordHeldPaper(tx, groupId, new Set([request.stationId]));
+        }
       }
       await notifyKitchenAllergyDestination(
         tx,

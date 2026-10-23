@@ -21,6 +21,7 @@ import {
   kitchenStations,
   locations,
   orderGroupEvents,
+  orderGroupHoldStations,
   orderGroups,
   printJobs,
   printers,
@@ -5016,6 +5017,152 @@ describe("advance HOLD tickets (Task 6)", () => {
         "*** HOLD CANCELLED ***",
         "*** FIRE ***",
       ]);
+    });
+  });
+
+  describe("each station's own held printing", () => {
+    /**
+     * Kitchen (the venue's station, cooking the Steak) prints held work and Bar (its own printer,
+     * making the Fish) does not, as `kitchenOn`/`barOn` say; every other station is off.
+     */
+    async function twoStations({ kitchenOn, barOn }: { kitchenOn: boolean; barOn: boolean }) {
+      const v = await setupVenue();
+      const barId = await seedKitchenStation(db, {
+        locationId: v.cfg.locationId,
+        name: "Bar",
+        isDefault: false,
+      });
+      const barPrinter = await inTx(async (tx) => {
+        await setRoutingCell(
+          tx,
+          v.cfg,
+          { row: { kind: "product", productId: v.productId.fish }, zoneId: null },
+          { kind: "station", stationId: barId },
+        );
+        const printer = await createPrinter(
+          tx,
+          { locationId: v.cfg.locationId },
+          { name: "Barra", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        );
+        await attachPrinterToStation(tx, {
+          locationId: v.cfg.locationId,
+          stationId: barId,
+          printerId: printer.id,
+        });
+        await setStationPrinting(tx, { printHeldWork: true });
+        await setStationPrinting(tx, { printHeldWork: kitchenOn }, [v.stationId]);
+        await setStationPrinting(tx, { printHeldWork: barOn }, [barId]);
+        return printer.id;
+      });
+      const s = await seated(v);
+      const [group] = (
+        await submit(v, s.partyId, [
+          { release: "hold", lines: [line(v, "steak"), line(v, "fish")] },
+        ])
+      ).groups;
+      return { v, s, barId, barPrinter, group: group!.id };
+    }
+
+    async function paperAt(printerId: string): Promise<string[][]> {
+      const jobs = await db
+        .select({ payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, printerId))
+        .orderBy(sql`rowid`);
+      return jobs.map((job) => ticketLines(printedLines(job.payload).join("\n")));
+    }
+
+    async function recorded(groupId: string) {
+      return db
+        .select({
+          groupId: orderGroupHoldStations.groupId,
+          stationId: orderGroupHoldStations.stationId,
+        })
+        .from(orderGroupHoldStations)
+        .where(eq(orderGroupHoldStations.groupId, groupId));
+    }
+
+    const setHeld = (on: boolean, stationId: string) =>
+      inTx((tx) => setStationPrinting(tx, { printHeldWork: on }, [stationId]));
+
+    it("a held group's HOLD ticket prints only at the stations that print held work, and records them", async () => {
+      const { v, s, barPrinter, group } = await twoStations({ kitchenOn: true, barOn: false });
+
+      expect(await printedSince(v, 0)).toEqual([
+        ["*** HOLD ***", ...(await head(v, s)), "GROUP 1", `1.000 x ${DISHES.steak.kitchen}`],
+      ]);
+      expect(await paperAt(barPrinter)).toEqual([]);
+      expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
+      expect((await groupRow(group)).holdPrintedAt).not.toBeNull();
+    });
+
+    it("with no station printing held work, nothing prints and nothing is recorded", async () => {
+      const { v, barPrinter, group } = await twoStations({ kitchenOn: false, barOn: false });
+
+      expect(await printed(v)).toEqual([]);
+      expect(await paperAt(barPrinter)).toEqual([]);
+      expect(await recorded(group)).toEqual([]);
+      expect((await groupRow(group)).holdPrintedAt).toBeNull();
+    });
+
+    it("firing marks FIRE only on the paper of a station that had the HOLD ticket", async () => {
+      const { v, s, barPrinter, group } = await twoStations({ kitchenOn: true, barOn: false });
+
+      await fire(v, s.partyId, group);
+
+      const kitchen = await printedSince(v, 1);
+      expect(kitchen).toHaveLength(1);
+      expect(kitchen[0]![0]).toBe("*** FIRE ***");
+      expect(kitchen[0]).toContain(`1.000 x ${DISHES.steak.kitchen}`);
+      const bar = await paperAt(barPrinter);
+      expect(bar).toHaveLength(1);
+      expect(bar[0]![0]).toBe("Bar");
+      expect(bar[0]).toContain(`1.000 x ${DISHES.fish.kitchen}`);
+      expect(bar[0]!.join("\n")).not.toContain("***");
+    });
+
+    it("a station switched off after its HOLD ticket printed is still fired marked FIRE", async () => {
+      const { v, s, group } = await twoStations({ kitchenOn: true, barOn: false });
+      await setHeld(false, v.stationId);
+
+      await fire(v, s.partyId, group);
+
+      expect((await printedSince(v, 1)).map((job) => job[0])).toEqual(["*** FIRE ***"]);
+    });
+
+    it("a station switched on after the group was held is fired with an ordinary ticket", async () => {
+      const { v, s, barId, barPrinter, group } = await twoStations({
+        kitchenOn: true,
+        barOn: false,
+      });
+      await setHeld(true, barId);
+
+      await fire(v, s.partyId, group);
+
+      const bar = await paperAt(barPrinter);
+      expect(bar).toHaveLength(1);
+      expect(bar[0]![0]).toBe("Bar");
+      expect(bar[0]!.join("\n")).not.toContain("***");
+      expect((await printedSince(v, 1)).map((job) => job[0])).toEqual(["*** FIRE ***"]);
+    });
+
+    it("Fire now on one held dish marks FIRE only at a station that had the HOLD ticket", async () => {
+      const { v, s, barPrinter, group } = await twoStations({ kitchenOn: true, barOn: false });
+      const steak = await lineOf(s, group, "steak", v);
+      const fish = await lineOf(s, group, "fish", v);
+
+      await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)));
+      const kitchenFire = (await printedSince(v, 1)).filter((job) => job[0] === "*** FIRE ***");
+      expect(kitchenFire).toHaveLength(1);
+      expect(kitchenFire[0]).toContain(`1.000 x ${DISHES.steak.kitchen}`);
+
+      const barBefore = (await paperAt(barPrinter)).length;
+      await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, fish.id, await args(s.partyId)));
+      const bar = (await paperAt(barPrinter)).slice(barBefore);
+      expect(bar.map((job) => job[0])).not.toContain("*** FIRE ***");
+      const fishTicket = bar.filter((job) => job.includes(`1.000 x ${DISHES.fish.kitchen}`));
+      expect(fishTicket).toHaveLength(1);
+      expect(fishTicket[0]![0]).toBe("Bar");
     });
   });
 

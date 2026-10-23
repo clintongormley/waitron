@@ -26,9 +26,11 @@ import { staffPresentationName } from "@waitron/catalogue";
 import {
   devices,
   kitchenCourses,
+  kitchenStations,
   lineServiceCancellations,
   nowIso,
   orderGroupEvents,
+  orderGroupHoldStations,
   orderGroups,
   orderDraftRecalledLines,
   orderDrafts,
@@ -527,6 +529,7 @@ export async function fireHeldLine(
       );
       const source = line.groupId!;
       const printed = (await printedHeldGroups(tx, [source])).get(source);
+      const heldPaper = (await heldPaperStations(tx, [source])).get(source) ?? new Set<string>();
       const labels = await readGroupNumberLabels(tx, [partyId]);
       if (printed !== undefined) {
         const items = (await heldItemsOf(tx, [lineId])).get(lineId) ?? [];
@@ -552,14 +555,7 @@ export async function fireHeldLine(
         .update(workingOrderLines)
         .set({ groupId })
         .where(or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)));
-      await fireOrderLines(
-        tx,
-        cfg,
-        line.workingOrderId,
-        [lineId],
-        printed === undefined ? undefined : "FIRE",
-        routing,
-      );
+      await fireOrderLines(tx, cfg, line.workingOrderId, [lineId], { heldPaper }, routing);
       const snapshot =
         attendance === undefined
           ? undefined
@@ -808,16 +804,12 @@ async function releaseGroup(
   for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
   }
-  const [group] = await tx
-    .select({ holdPrintedAt: orderGroups.holdPrintedAt })
-    .from(orderGroups)
-    .where(eq(orderGroups.id, groupId));
-  // The marker, not the setting: a group whose HOLD ticket was queued is fired by a FIRE slip.
-  const mark = group!.holdPrintedAt === null ? undefined : "FIRE";
+  // The marker, not the setting: a station a HOLD ticket was queued for is fired by a FIRE slip.
+  const fire = { heldPaper: (await heldPaperStations(tx, [groupId])).get(groupId) ?? new Set() };
   // Every bill in this group must use the same station snapshot at the release instant.
   await routing();
   for (const [orderId, lineIds] of byOrder) {
-    await fireOrderLines(tx, cfg, orderId, lineIds, mark, routing);
+    await fireOrderLines(tx, cfg, orderId, lineIds, fire, routing);
   }
   await tx
     .update(orderGroups)
@@ -1999,17 +1991,16 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
 }
 
 /**
- * Print a HOLD ticket for each of these held groups, where the venue prints held work in advance:
- * its held kitchen items, bill by bill in the order the bills were opened, as a fire prints them.
- * A group records when its ticket was queued for a printer, or nothing when no active printer took
- * one, so it then fires with an ordinary ticket.
+ * Print a HOLD ticket for each of these held groups at the stations that print held work in
+ * advance: its held kitchen items there, bill by bill in the order the bills were opened, as a fire
+ * prints them. A group records when its ticket was queued for a printer, and the stations the jobs
+ * carried; with none, it fires with an ordinary ticket.
  */
 export async function printHoldTickets(
   tx: Transaction,
   cfg: TillConfig,
   groupIds: readonly string[],
 ): Promise<void> {
-  if (groupIds.length === 0 || !(await VENUE_SERVICE.readPrintHeldWork(tx))) return;
   for (const groupId of groupIds) {
     const items = await tx
       .select({
@@ -2021,23 +2012,70 @@ export async function printHoldTickets(
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
       .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
-      .where(and(eq(workingOrderLines.groupId, groupId), isNull(ticketItems.firedAt)))
+      .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
+      .where(
+        and(
+          eq(workingOrderLines.groupId, groupId),
+          isNull(ticketItems.firedAt),
+          eq(kitchenStations.printHeldWork, true),
+        ),
+      )
       .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
     const byBill = new Map<string, FiredItem[]>();
     for (const { workingOrderId, ...item } of items) {
       byBill.set(workingOrderId, [...(byBill.get(workingOrderId) ?? []), item]);
     }
-    let printed = false;
+    const carried = new Set<string>();
     for (const [orderId, bill] of byBill) {
-      if (await enqueueKitchenTickets(tx, cfg, orderId, bill, { mark: "HOLD" })) printed = true;
+      for (const stationId of await enqueueKitchenTickets(tx, cfg, orderId, bill, {
+        mark: "HOLD",
+      }))
+        carried.add(stationId);
     }
-    if (printed) {
+    if (carried.size > 0) {
+      await recordHeldPaper(tx, groupId, carried);
       await tx
         .update(orderGroups)
         .set({ holdPrintedAt: nowIso() })
         .where(eq(orderGroups.id, groupId));
     }
   }
+}
+
+/** Records that these stations have the group's HOLD paper. */
+export async function recordHeldPaper(
+  tx: Transaction,
+  groupId: string,
+  stationIds: ReadonlySet<string>,
+): Promise<void> {
+  await tx
+    .insert(orderGroupHoldStations)
+    .values([...stationIds].map((stationId) => ({ groupId, stationId })))
+    .onConflictDoNothing({
+      target: [orderGroupHoldStations.groupId, orderGroupHoldStations.stationId],
+    });
+}
+
+/** The stations each group's HOLD ticket was queued for; a group with none is absent. */
+export async function heldPaperStations(
+  tx: Transaction,
+  groupIds: readonly string[],
+): Promise<Map<string, ReadonlySet<string>>> {
+  if (groupIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      groupId: orderGroupHoldStations.groupId,
+      stationId: orderGroupHoldStations.stationId,
+    })
+    .from(orderGroupHoldStations)
+    .where(inArray(orderGroupHoldStations.groupId, [...new Set(groupIds)]));
+  const byGroup = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const stations = byGroup.get(row.groupId) ?? new Set<string>();
+    stations.add(row.stationId);
+    byGroup.set(row.groupId, stations);
+  }
+  return byGroup;
 }
 
 /** Permanent paper numbers of held groups whose HOLD ticket was queued. */

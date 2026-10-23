@@ -11,6 +11,7 @@ import {
   kitchenStations,
   incidents,
   locations,
+  orderGroupHoldStations,
   orderGroups,
   printJobs,
   printers,
@@ -1895,6 +1896,175 @@ describe("moveDishesToStation", () => {
     );
     expect(newRevision).toBeGreaterThan(revision);
     expect(decodeTicket((await jobs(grillPrinter))[grillBeforeFire]!.payload)).toContain("FIRE");
+  });
+
+  describe("a held dish moved to a station not recorded for its group", () => {
+    /** Sets Bar's and Grill's own held printing for `fn`, then puts back what they were. */
+    async function withHeldPrinting(
+      choices: { bar: boolean; grill: boolean },
+      fn: () => Promise<void>,
+    ) {
+      const before = await inTx(venue, (tx) =>
+        tx
+          .select({ id: kitchenStations.id, printHeldWork: kitchenStations.printHeldWork })
+          .from(kitchenStations)
+          .where(inArray(kitchenStations.id, [bar, grill])),
+      );
+      await inTx(venue, async (tx) => {
+        await setStationPrinting(tx, { printHeldWork: choices.bar }, [bar]);
+        await setStationPrinting(tx, { printHeldWork: choices.grill }, [grill]);
+      });
+      try {
+        await fn();
+      } finally {
+        await inTx(venue, async (tx) => {
+          for (const row of before)
+            await setStationPrinting(tx, { printHeldWork: row.printHeldWork }, [row.id]);
+        });
+      }
+    }
+
+    async function holdGroup(names: string[]) {
+      const tableId = await venue.table(`HM-${randomUUID().slice(0, 8)}`);
+      const { partyId, tabId } = await seat(venue, tableId);
+      const [{ revision }] = (await inTx(venue, (tx) =>
+        tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId)),
+      )) as [{ revision: number }];
+      const submitted = await inTx(venue, (tx) =>
+        submitGroups(tx, venue.cfg, partyId, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: revision,
+          operatorId: OPERATOR,
+          billId: tabId,
+          groups: [
+            {
+              lines: names.map((name) => ({ menuItemId: venue.item(name), quantity: "1" })),
+              release: "hold",
+            },
+          ],
+        }),
+      );
+      const group = submitted.groups[0]!;
+      const lines = await inTx(venue, (tx) =>
+        tx
+          .select({ id: workingOrderLines.id, name: workingOrderLines.name })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
+      );
+      return {
+        partyId,
+        tabId,
+        groupId: group.id,
+        burger: lines.find((line) => line.name === "Burger")!.id,
+        fire: () =>
+          inTx(venue, (tx) =>
+            fireGroup(tx, venue.cfg, partyId, group.id, {
+              submissionId: randomUUID(),
+              expectedPartyRevision: submitted.revision,
+              operatorId: OPERATOR,
+            }),
+          ),
+      };
+    }
+
+    const moveToGrill = (tabId: string, lineId: string) =>
+      inTx(venue, (tx) =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          { submissionId: randomUUID(), lineIds: [lineId], stationId: grill },
+          mover(),
+        ),
+      );
+
+    const recordedFor = async (groupId: string) =>
+      (
+        await inTx(venue, (tx) =>
+          tx
+            .select({ stationId: orderGroupHoldStations.stationId })
+            .from(orderGroupHoldStations)
+            .where(eq(orderGroupHoldStations.groupId, groupId)),
+        )
+      )
+        .map((row) => row.stationId)
+        .sort();
+
+    const grillPaperSince = async (from: number) =>
+      (await jobs(grillPrinter)).slice(from).map((job) => decodeTicket(job.payload));
+
+    it("a held dish moved to a station that prints held work and has none of the group's held work gets a HOLD ticket from X and is fired marked FIRE", async () => {
+      await withHeldPrinting({ bar: true, grill: true }, async () => {
+        const held = await holdGroup(["Burger"]);
+        expect(await recordedFor(held.groupId)).toEqual([bar]);
+        const grillBefore = (await jobs(grillPrinter)).length;
+
+        await moveToGrill(held.tabId, held.burger);
+
+        const moved = await grillPaperSince(grillBefore);
+        expect(moved).toHaveLength(1);
+        expect(moved[0]!.startsWith("*** HOLD ***")).toBe(true);
+        expect(moved[0]).toContain("From Bar");
+        expect(await recordedFor(held.groupId)).toEqual([bar, grill].sort());
+
+        await held.fire();
+        const fired = await grillPaperSince(grillBefore + 1);
+        expect(fired).toHaveLength(1);
+        expect(fired[0]!.startsWith("*** FIRE ***")).toBe(true);
+        expect(fired[0]).toContain("BURG");
+      });
+    });
+
+    it("a held dish moved to a station that does not print held work prints nothing there until an unmarked fire ticket", async () => {
+      await withHeldPrinting({ bar: true, grill: false }, async () => {
+        const held = await holdGroup(["Burger"]);
+        const grillBefore = (await jobs(grillPrinter)).length;
+
+        await moveToGrill(held.tabId, held.burger);
+
+        expect(await grillPaperSince(grillBefore)).toEqual([]);
+        expect(await recordedFor(held.groupId)).toEqual([bar]);
+
+        await held.fire();
+        const fired = await grillPaperSince(grillBefore);
+        expect(fired).toHaveLength(1);
+        expect(fired[0]!.startsWith("Grill")).toBe(true);
+        expect(fired[0]).not.toContain("***");
+        expect(fired[0]).toContain("BURG");
+      });
+    });
+
+    it("a held dish moved to a station already holding unprinted held work of the group prints nothing there until the fire", async () => {
+      const cell = await inTx(venue, (tx) =>
+        routeProduct(tx, venue.productId("Paella"), { kind: "station", stationId: grill }),
+      );
+      try {
+        await withHeldPrinting({ bar: true, grill: false }, async () => {
+          const held = await holdGroup(["Burger", "Paella"]);
+          expect(await recordedFor(held.groupId)).toEqual([bar]);
+          await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }, [grill]));
+          const grillBefore = (await jobs(grillPrinter)).length;
+
+          await moveToGrill(held.tabId, held.burger);
+
+          expect(await grillPaperSince(grillBefore)).toEqual([]);
+          expect(await recordedFor(held.groupId)).toEqual([bar]);
+
+          await held.fire();
+          const fired = await grillPaperSince(grillBefore);
+          expect(fired).toHaveLength(1);
+          expect(fired[0]!.startsWith("Grill")).toBe(true);
+          expect(fired[0]).not.toContain("***");
+          expect(fired[0]).toContain("BURG");
+          expect(fired[0]).toContain("PAELLA");
+        });
+      } finally {
+        await inTx(venue, (tx) => clearRoutingCell(tx, venue.cfg, cell));
+      }
+    });
   });
 
   it("sends added units to the moved station when an edit carries makeAt null", async () => {

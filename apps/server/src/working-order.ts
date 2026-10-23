@@ -2334,7 +2334,7 @@ export async function fireOrderLines(
   cfg: OriginConfig,
   orderId: string,
   lineIds: readonly string[],
-  mark?: "FIRE",
+  fire?: { heldPaper: ReadonlySet<string> },
   routing?: RoutingOnce,
 ): Promise<void> {
   await releaseHeld(
@@ -2343,7 +2343,7 @@ export async function fireOrderLines(
     orderId,
     onDishesOrTheirExtras(tx, lineIds),
     { courseIds: [], lineIds },
-    mark,
+    fire,
     routing,
   );
 }
@@ -2354,7 +2354,7 @@ async function releaseHeld(
   orderId: string,
   ticketScope: SQL,
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
-  mark?: "FIRE",
+  fire?: { heldPaper: ReadonlySet<string> },
   routing = routingOnce(tx, cfg, new Date()),
 ): Promise<number> {
   const firedNow = routing.at.toISOString();
@@ -2391,7 +2391,7 @@ async function releaseHeld(
     noRoute,
     firedNow,
     await isOpenOrder(tx, orderId),
-    mark,
+    fire,
     routing,
     rerouted,
   );
@@ -2407,7 +2407,7 @@ async function finishRelease(
   noRoute: { zoneId: string | null; lines: { id: string; courseId: string | null }[] },
   at: string,
   refuseSoldOut: boolean,
-  mark?: "FIRE",
+  fire?: { heldPaper: ReadonlySet<string> },
   routing = routingOnce(tx, cfg, new Date(at)),
   rerouted: Rerouted = new Map(),
 ): Promise<void> {
@@ -2437,7 +2437,7 @@ async function finishRelease(
     ...fired,
     ...extras.filter((item) => item.firedAt !== null),
   ]);
-  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
+  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { fire });
   const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
   for (const item of fired) {
     const old = rerouted.get(item.workingOrderLineId);

@@ -522,7 +522,7 @@ interface KnownStations {
 /**
  * The kitchen tickets for a set of just-fired lines, routed by {@link routeKitchenTickets} over the
  * involved stations in name order. A `HOLD` ticket's `firedItems` are the held items printed in
- * advance. A printer in `papers` prints the rest of the order as its entry says, in place of what
+ * advance. On a `fire`, a route is marked FIRE when one of its stations is in `heldPaper`. A printer in `papers` prints the rest of the order as its entry says, in place of what
  * its route alone would decide.
  */
 async function planKitchenTickets(
@@ -533,12 +533,14 @@ async function planKitchenTickets(
   {
     reprint,
     mark,
+    fire,
     from,
     papers,
     known,
   }: {
     reprint: boolean;
-    mark?: "HOLD" | "FIRE";
+    mark?: "HOLD";
+    fire?: { heldPaper: ReadonlySet<string> };
     from?: string;
     papers?: ReadonlyMap<string, PaperRest>;
     known?: KnownStations;
@@ -645,7 +647,6 @@ async function planKitchenTickets(
     locale: cfg.locale,
     kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
     reprint,
-    mark,
     from: from === undefined ? undefined : { stationName: from, locale: cfg.locale },
     party: partyName === null ? undefined : { name: partyName, locale: cfg.locale },
     tableLabel: order.tableLabel ?? "",
@@ -658,6 +659,11 @@ async function planKitchenTickets(
       formatKitchenTicket(
         {
           ...head,
+          mark:
+            mark ??
+            (fire !== undefined && route.stationIds.some((id) => fire.heldPaper.has(id))
+              ? "FIRE"
+              : undefined),
           ...(onTicket.length === 1
             ? { scope: "station", stationName: onTicket[0]!.name, items: onTicket[0]!.items }
             : {
@@ -736,22 +742,27 @@ async function enqueueKitchenJobs(
 
 /**
  * Enqueue the kitchen tickets for a set of just-fired lines ({@link planKitchenTickets}). Answers
- * whether any job was enqueued.
+ * the stations the enqueued jobs carried.
  */
 export async function enqueueKitchenTickets(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   firedItems: FiredItem[],
-  { mark, from }: { mark?: "HOLD" | "FIRE"; from?: string } = {},
-): Promise<boolean> {
+  {
+    mark,
+    fire,
+    from,
+  }: { mark?: "HOLD"; fire?: { heldPaper: ReadonlySet<string> }; from?: string } = {},
+): Promise<ReadonlySet<string>> {
   const jobs = await planKitchenTickets(tx, cfg, orderId, firedItems, {
     reprint: false,
     mark,
+    fire,
     from,
   });
   await enqueueKitchenJobs(tx, cfg, orderId, jobs, false);
-  return jobs.length > 0;
+  return new Set(jobs.flatMap((job) => job.stationIds));
 }
 
 /** Record which bill and stations a kitchen ticket's job carried. */
