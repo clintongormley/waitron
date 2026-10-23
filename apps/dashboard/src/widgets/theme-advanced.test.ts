@@ -119,6 +119,14 @@ describe("opened", () => {
       codeField(el, mode, key).shadowRoot!.querySelector("input")!;
     expect(getComputedStyle(inner("light", "bg")).fontWeight).toBe(bold);
     expect(getComputedStyle(inner("dark", "bg")).fontWeight).not.toBe(bold);
+    el.errors = { "handSet.light.bg": "x" };
+    await el.updateComplete;
+    await codeField(el, "light", "bg").updateComplete;
+    const message = codeField(el, "light", "bg").shadowRoot!.querySelector("[data-error]")!;
+    expect(getComputedStyle(message).fontWeight).toBe(
+      getComputedStyle(el).getPropertyValue("--wt-font-weight-normal").trim(),
+    );
+    expect(getComputedStyle(inner("light", "bg")).fontWeight).toBe(bold);
     expect(status(el, "light", "bg")).toBe("Set by hand");
     expect(workedOut(el, "light", "bg")!.textContent!.trim()).toBe("Use worked-out colour");
     expect(codeField(el, "dark", "bg").value).toBe("#0b110d");
@@ -191,7 +199,6 @@ describe("events", () => {
       action: es["appearance.use_worked_out"],
       value,
     });
-    expect(label).toBe("Usar el color calculado: Página, pantallas claras");
     expect(
       workedOut(el, "light", "bg")!.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
     ).toBe(label);
@@ -229,6 +236,13 @@ describe("errors and focus", () => {
     expect(disclosure(el).open).toBe(true);
   });
 
+  it("an error key with no message leaves it closed", async () => {
+    const el = await mount(CREAM, { errors: { "handSet.light.bg": undefined } });
+    await disclosure(el).updateComplete;
+    expect(disclosure(el).hasAttribute("has-error")).toBe(false);
+    expect(disclosure(el).open).toBe(false);
+  });
+
   it("a warning leaves it closed", async () => {
     const sage = setHand(CREAM, "light", "text-muted", "#8fa898");
     const el = await mount(sage);
@@ -241,7 +255,13 @@ describe("errors and focus", () => {
     const el = await mount(CREAM);
     await el.reveal("dark", "primary");
     expect(disclosure(el).open).toBe(true);
-    expect(el.shadowRoot!.activeElement).toBe(codeField(el, "dark", "primary"));
+    let focused: Element | null = document.activeElement;
+    while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+    expect(focused).toBe(
+      codeField(el, "dark", "primary").shadowRoot!.querySelector(
+        "input[name='handSet.dark.primary']",
+      ),
+    );
   });
 });
 

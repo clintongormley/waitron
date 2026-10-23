@@ -65,7 +65,7 @@ export class ThemeAdvanced extends LitElement {
         gap: var(--wt-space-1);
         min-width: 0;
       }
-      .value.hand {
+      .value.hand wt-input::part(field) {
         font-weight: var(--wt-font-weight-bold);
       }
       .mode-label {
@@ -199,7 +199,7 @@ export class ThemeAdvanced extends LitElement {
       data-test="advanced"
       heading=${t("appearance.advanced")}
       summary=${advancedSummary(this.draft.choices, this.derived.warnings)}
-      ?has-error=${Object.keys(this.errors).length > 0}
+      ?has-error=${Object.values(this.errors).some(Boolean)}
     >
       <p class="intro" data-test="advanced-intro">${t("appearance.advanced_intro")}</p>
       <div class="table">
