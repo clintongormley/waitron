@@ -532,7 +532,10 @@ describe("boxStatusRows", () => {
       state: "attention",
       line: alertMessage("fiscal.clock_drift", { seconds: 3600 }, "en"),
       details: [
-        fill("box_status.clock.compared", { time: formatIsoMinute(MEASURED), seconds: "3600" }),
+        fill("box_status.clock.compared_behind", {
+          time: formatIsoMinute(MEASURED),
+          seconds: "3600",
+        }),
       ],
       alerts: [],
     });
