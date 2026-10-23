@@ -43,11 +43,7 @@ import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { createOpenOrder, fireOrderLines, fireLines } from "./working-order.js";
-import {
-  listStationNotices,
-  writeKitchenTicketGrouping,
-  setStationToday,
-} from "@waitron/venue-service";
+import { listStationNotices, setStationToday } from "@waitron/venue-service";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -1234,8 +1230,12 @@ describe("a dish sold by the piece prints no unit", () => {
     async ({ grouping, dish, name, sold, printed }) => {
       const { cfg, catalogueId } = await setupVenue();
       const jobs = await asApp(cfg, async (tx) => {
-        await writeKitchenTicketGrouping(tx, grouping);
         const dishes = await sellInEveryUnit(tx, cfg, catalogueId);
+        const [cocina] = await tx
+          .select({ id: kitchenStations.id })
+          .from(kitchenStations)
+          .where(eq(kitchenStations.name, "Cocina"));
+        await setStationPrinting(tx, { ticketGrouping: grouping }, [cocina!.id]);
         await fireNewOrder(
           tx,
           cfg,
@@ -1250,6 +1250,33 @@ describe("a dish sold by the piece prints no unit", () => {
       );
     },
   );
+
+  it("each station's part of a shared printer's ticket follows its own ticket grouping", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const cold = await createStation(tx, cfg, { name: "Cold" });
+      await setStationPrinting(tx, { ticketGrouping: "separate" }, [grill.id]);
+      await setStationPrinting(tx, { ticketGrouping: "combined" }, [cold.id]);
+      await makeSharedPrinter(tx, cfg, "Pase", [grill.id, cold.id]);
+      const burger = await makeProduct(tx, cfg, catalogueId, "Burger", { stationId: grill.id });
+      const salad = await makeProduct(tx, cfg, catalogueId, "Salad", { stationId: cold.id });
+      await fireNewOrder(tx, cfg, [
+        { productId: burger, quantity: "3" },
+        { productId: salad, quantity: "2" },
+      ]);
+      return printJobsFor(tx);
+    });
+
+    expect(jobs).toHaveLength(1);
+    const lines = printedLines(jobs[0]!.payload);
+    expect(lines.filter((text) => text.endsWith(" x Burger"))).toEqual([
+      at(1000, "x Burger"),
+      at(1000, "x Burger"),
+      at(1000, "x Burger"),
+    ]);
+    expect(lines.filter((text) => text.endsWith(" x Salad"))).toEqual([at(2000, "x Salad")]);
+  });
 });
 
 describe("dish extras on kitchen tickets", () => {

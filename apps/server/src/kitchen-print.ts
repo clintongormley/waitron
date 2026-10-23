@@ -26,7 +26,7 @@ import {
   perDishOptionQuantity,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, TicketGrouping } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { enqueuePrintJob } from "@waitron/printing";
 import type { EscSetting, PaperWidth, PrintConfig, Resolution } from "@waitron/printing";
@@ -351,18 +351,34 @@ async function readStations(
   tx: Transaction,
   stationIds: string[],
 ): Promise<
-  Map<string, { name: string; showsRestOfOrder: boolean; printMovedSlips: boolean | null }>
+  Map<
+    string,
+    {
+      name: string;
+      showsRestOfOrder: boolean;
+      ticketGrouping: TicketGrouping;
+      printHeldWork: boolean;
+      printMovedSlips: boolean;
+    }
+  >
 > {
   const rows = await tx
     .select({
       id: kitchenStations.id,
       name: kitchenStations.name,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
+      ticketGrouping: kitchenStations.ticketGrouping,
+      printHeldWork: kitchenStations.printHeldWork,
       printMovedSlips: kitchenStations.printMovedSlips,
     })
     .from(kitchenStations)
     .where(inArray(kitchenStations.id, stationIds));
-  return new Map(rows.map(({ id, ...station }) => [id, station]));
+  return new Map(
+    rows.map(({ id, printMovedSlips, ...station }) => [
+      id,
+      { ...station, printMovedSlips: printMovedSlips ?? true },
+    ]),
+  );
 }
 
 /** The order's table, as {@link orderTableLabels} names it. */
@@ -558,7 +574,6 @@ async function planKitchenTickets(
   const order = await readOrderHeader(tx, cfg, orderId);
   const partyName = (await readPartyNames(tx, [orderId])).get(orderId)!;
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
-  const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
   const itemsByStation = new Map<
     string,
@@ -590,7 +605,7 @@ async function planKitchenTickets(
           .get(id)!
           .sort(byGroupThenLine)
           .map((entry) => entry.item),
-        grouping,
+        station.ticketGrouping,
       ),
     }))
     .sort((a, b) => compareStationNames(a.name, b.name));
@@ -1396,20 +1411,16 @@ function movedItems({ before, onOrder, splitFrom }: MovedWork): MovedItem[] {
 /** A dish a MOVED slip lists; `held` when it is on a HOLD ticket rather than fired. */
 type MovedItem = CorrectionItem & { held: boolean };
 
-/**
- * What MOVED slips print with: their stations' printers and names, their lines, the ticket
- * grouping.
- */
+/** What MOVED slips print with: their stations' printers and stations, their lines. */
 interface MovedSlipPrinting {
   byStation: MappingsByStation;
   itemsByLine: Awaited<ReturnType<typeof buildTicketItems>>;
   stationNames: Awaited<ReturnType<typeof readStations>>;
-  grouping: Parameters<typeof arrangeTicketItems>[1];
 }
 
 /**
- * {@link MovedSlipPrinting} for every slip of `items`, read once, keeping only the stations that
- * print MOVED slips: by their own choice, else the venue's. Null when no station prints.
+ * {@link MovedSlipPrinting} for every slip of `items`, read once, keeping only the stations whose
+ * own choice prints MOVED slips. Null when no station prints.
  */
 async function readMovedSlipPrinting(
   tx: Transaction,
@@ -1420,31 +1431,26 @@ async function readMovedSlipPrinting(
   const withPrinters = mappingsByStation(await printerMappings(tx, stationIds));
   if (withPrinters.size === 0) return null;
   const stationNames = await readStations(tx, stationIds);
-  const following = [...withPrinters.keys()].some(
-    (id) => stationNames.get(id)!.printMovedSlips === null,
-  );
-  const venue = following && (await VENUE_SERVICE.readPrintMovedSlips(tx));
   const byStation: MappingsByStation = new Map(
-    [...withPrinters].filter(([id]) => stationNames.get(id)!.printMovedSlips ?? venue),
+    [...withPrinters].filter(([id]) => stationNames.get(id)!.printMovedSlips),
   );
   if (byStation.size === 0) return null;
   const itemsByLine = await buildTicketItems(tx, cfg, [
     ...new Set(items.map((item) => item.workingOrderLineId)),
   ]);
-  const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
-  return { byStation, itemsByLine, stationNames, grouping };
+  return { byStation, itemsByLine, stationNames };
 }
 
 /**
  * One MOVED slip per station of `items`, to its printers, listing its fired items and its held
- * ones under HOLD, group by group. The ticket grouping lays out each line on its
+ * ones under HOLD, group by group. The station's ticket grouping lays out each line on its
  * own and never adds two lines together: a link {@link writeLinksAfter} moves or copies loses its
  * reprint mark, so which ticket last carried a line cannot be told.
  */
 async function printMovedSlips(
   tx: Transaction,
   cfg: TillConfig,
-  { byStation, itemsByLine, stationNames, grouping }: MovedSlipPrinting,
+  { byStation, itemsByLine, stationNames }: MovedSlipPrinting,
   items: readonly MovedItem[],
   slip: Pick<
     MovedSlip,
@@ -1471,7 +1477,8 @@ async function printMovedSlips(
         };
       })
       .sort(byGroupThenLine);
-    const laidOut = (item: KitchenTicketItem) => arrangeTicketItems([item], grouping);
+    const { ticketGrouping } = stationNames.get(stationId)!;
+    const laidOut = (item: KitchenTicketItem) => arrangeTicketItems([item], ticketGrouping);
     const held: MovedSlip["held"] = [];
     for (const { item } of listed.filter((entry) => entry.held)) {
       const last = held.at(-1);
