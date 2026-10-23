@@ -5,6 +5,7 @@ import {
   billPayments,
   devices,
   lineServiceCancellations,
+  orderGroupHoldStations,
   orderGroups,
   parties,
   partyTables,
@@ -297,6 +298,15 @@ describe("finishing a table by sending the food still to come to the counter", (
       .update(orderGroups)
       .set({ holdPrintedAt: new Date().toISOString() })
       .where(eq(orderGroups.partyId, t.partyId));
+    const held = await venue.db
+      .selectDistinct({ groupId: orderGroups.id, stationId: ticketItems.stationId })
+      .from(orderGroups)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
+      .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+      .where(eq(orderGroups.partyId, t.partyId));
+    await venue.db
+      .insert(orderGroupHoldStations)
+      .values(held.map(({ groupId, stationId }) => ({ groupId, stationId: stationId! })));
     const body = await collect(t.partyId, await bodyFor(t));
     const lastJob = lastJobRow();
 
