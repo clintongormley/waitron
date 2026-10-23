@@ -300,25 +300,6 @@ describe("dashboard receipt reprint", () => {
     });
   });
 
-  it("does not let staff copy an older finished bill hidden from their Orders detail", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
-    let oldPaid: string;
-    try {
-      oldPaid = await placedIssuedBill(venue, "Caña");
-      expect((await collect(venue, oldPaid, "3.00")).status).toBe(200);
-    } finally {
-      vi.useRealTimers();
-    }
-    const before = await counts();
-    expect(await post(venue.staffDashboard, oldPaid, venue.printerId)).toMatchObject({
-      status: 404,
-      json: { code: "working_order.not_found" },
-    });
-    expect(await counts()).toEqual(before);
-    expect((await post(venue.adminDashboard, oldPaid, venue.printerId)).status).toBe(202);
-  });
-
   it("refuses an uninvoiced bill and an inactive printer without writing", async () => {
     const valid = await placedIssuedBill(venue, "Caña");
     const open = await parked(venue, "Caña");

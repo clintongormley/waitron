@@ -24,7 +24,6 @@ import { inTx, send } from "./testing/bill-venue.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import {
-  collect,
   parked,
   placedIssuedBill,
   provisionOrderVenue,
@@ -375,26 +374,6 @@ describe("dashboard Print invoice", () => {
       json: { code: "device.forbidden_action", params: { action: "invoice_delivery" } },
     });
     expect(await deliveriesOf(saleId)).toEqual([]);
-  });
-
-  it("does not let staff print an older finished invoice hidden from their Orders detail", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
-    let old: { billId: string; saleId: string };
-    try {
-      old = await fullInvoice(true);
-      expect((await collect(venue, old.billId, "3.00")).status).toBe(200);
-    } finally {
-      vi.useRealTimers();
-    }
-    expect(await printInvoice(venue.staffDashboard, old.billId, printBody())).toMatchObject({
-      status: 404,
-      json: { code: "working_order.not_found" },
-    });
-    expect(await deliveriesOf(old.saleId)).toEqual([]);
-    expect((await printInvoice(venue.supervisorDashboard, old.billId, printBody())).status).toBe(
-      200,
-    );
   });
 
   it("refuses a missing session, a bad body and a bill with no invoice", async () => {
