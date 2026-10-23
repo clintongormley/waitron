@@ -145,6 +145,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "Sales recorded between {from:minute} and {to:minute} were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.",
     es: "Las ventas registradas entre {from:minute} y {to:minute} se fecharon con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu asesor.",
   },
+  "clock.unusable": {
+    en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. Connect the box to the internet; if its clock does not correct itself, ask whoever installed it to set it.",
+    es: "El equipo marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Conecta el equipo a internet; si la hora no se corrige sola, pide a quien lo instaló que la ponga.",
+  },
   "clock.disagrees": {
     en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
     es: "{count} dispositivos coinciden en que son las {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
