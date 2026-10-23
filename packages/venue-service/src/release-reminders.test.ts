@@ -146,8 +146,10 @@ describe("listDepartmentReminderMinutes", () => {
       [a.departmentId]: 10,
     });
   });
+});
 
-  it("updateDepartment writes a reminder given alone", async () => {
+describe("updateDepartment", () => {
+  it("writes a reminder given alone", async () => {
     const cfg = { locationId: await seedLocation("Reminder update") };
     const a = await departmentWithZone(cfg, "A");
     await scoped((tx) => updateDepartment(tx, cfg, a.departmentId, { releaseReminderMinutes: 5 }));

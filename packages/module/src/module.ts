@@ -1449,8 +1449,7 @@ export interface VenueServiceContribution {
   /**
    * Each of these zones' department's minutes after the work ahead is served that a held group
    * falls due; null where that department has reminders off. A zone with no department is absent.
-   * An inactive department still answers: deleting one deactivates its zones, so a party seated
-   * there takes no new order and keeps its department's last minutes.
+   * An inactive department still answers.
    */
   readReleaseReminderMinutesByZone(
     tx: Transaction,

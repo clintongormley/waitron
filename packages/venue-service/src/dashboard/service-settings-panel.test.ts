@@ -623,7 +623,6 @@ describe("the kitchen panel's fields", () => {
     ]);
   });
 
-  // Fails if the Kitchen tab still draws the reminder, which each department now sets itself.
   it("the Kitchen tab draws no reminder", async () => {
     const el = await mount({
       loadSettings: vi.fn().mockResolvedValue(model),

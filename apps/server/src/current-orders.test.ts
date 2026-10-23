@@ -659,7 +659,7 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     expect(await floorReminder(v, bare.tableId)).toBeNull();
   });
 
-  it("gives each party on the floor its own reminder from one read", async () => {
+  it("gives each party on the floor its own reminder", async () => {
     const v = await setupVenue();
     const a = await servedUpToGroupTwo(v);
     const b = await fourGroups(v);
@@ -677,8 +677,8 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
   });
 });
 
-// Each party below takes its orders at the venue's own table first, since a zone with no department
-// takes none; only then is its table moved by direct writes. No real path builds these shapes.
+// Where a party below changes department, it takes its orders at the venue's own table first, since
+// a zone with no department takes none; only then is its table moved by direct writes.
 describe("the reminder follows the party's department", () => {
   async function otherDepartment(v: Venue, minutes: number | null): Promise<string> {
     return inTx(async (tx) => {
