@@ -136,6 +136,11 @@ describe("validateThemeConfiguration", () => {
       expect(refusal([themed(WITH_LOGO)], images)).toBeUndefined();
     });
 
+    it("accepts a logo with only a light picture, carried in the copy", () => {
+      const lightOnly = { ...LEMON, logo: { light: L }, printedLogo: PRINTABLE };
+      expect(refusal([themed(lightOnly)], [{ filename: L }])).toBeUndefined();
+    });
+
     it("accepts no logo with no media_images table at all", () => {
       expect(() =>
         validateThemeConfiguration({ custom_themes: [themed({ ...LEMON, logo: null })] }),
