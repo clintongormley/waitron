@@ -73,5 +73,13 @@ que puedes seguir vendiendo. Una venta que necesita que una persona la resuelva 
 así que mientras alguna de las ventas pendientes lo necesite, la indicación dice **Avisa al
 encargado**.
 
+**Impresora «Cocina» no imprime · desde 21:16** es ámbar. Una comanda enviada a esa impresora a
+las 21:16 lleva dos minutos o más sin imprimirse, o el equipo ha dejado de intentar enviarla. El
+aviso de una impresora de cocina aparece en todas las cajas registradoras y todos los terminales de
+camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus recibos, sus
+justificantes de pago o sus facturas completas. Revisa el papel, la corriente y el cable de la
+impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de esa
+comanda; puede que haya que reimprimir la comanda desde la mesa o reenviarla desde **Impresoras**.
+
 **El equipo necesita atención · Avisa al encargado** es un aviso para el que este terminal no tiene
 texto, quizá de una versión más reciente del equipo. Avisa al encargado para que revise el equipo.

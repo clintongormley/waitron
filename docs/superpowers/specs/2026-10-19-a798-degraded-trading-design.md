@@ -1407,6 +1407,8 @@ For the runner to file; none is acted on here.
 
 **2026-10-22:** A798-B slice 4 (#1958) builds the `staffNotices` seat with notices only (`key`, `code`, `severity`, `params`; §5's "tone" is `severity`). The Box status page's row is not in it; slice 7 decides where it goes (`docs/backlog/box.md`, "The Box status page's rows from a module are not in the staff-notice seat"). §5's second shape describes the design before that choice.
 
+**2026-10-23:** A798-B slice 10's plan measured that an `unreachable` reader status raises nothing (P2), so §2.4's `reader.status_unavailable` comes only from a throw or the deadline; that a clock before 28-10-2024 cannot open a TLS mail connection (P8), so that condition's email rarely leaves the box; and that on Docker's containerd image store an upgrade's old pulled image is freed by Docker itself (P10), so on that store the old `app` and `print-agent` images do not pile up; the mail capture's old images stay on both stores.
+
 1. **`Incidencia="S"` is never sent to AEAT.** The house reading of art. 16.4 lists it among the
    duties during an outage (`verifactu-findings.md:359`); the drain raises only a local `incidencia`
    column (`drain.ts:978-993`), and the batch header it builds carries the taxpayer alone

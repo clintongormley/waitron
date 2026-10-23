@@ -65,5 +65,12 @@ tax agency has failed, and the box keeps trying by itself. The sales are recorde
 you can keep selling. A sale that needs a person to sort it out is not retried, so while any of the
 waiting sales needs one, the hint reads **Tell a manager** instead.
 
+**Printer “Kitchen” not printing · since 21:16** is amber. A ticket sent to that printer at 21:16
+has waited two minutes or more without printing, or the box has stopped trying to send it. A
+kitchen printer's notice shows on every till and handheld; any other printer's only on the tills
+and handhelds that print their receipts, payment slips or full invoices to it. Check the printer's
+paper, power and cable. The notice goes once the printer prints anything sent to it after that
+ticket; the ticket itself may still need reprinting from the table or resending from **Printers**.
+
 **The box needs attention · Tell a manager** is a notice this till has no words for, perhaps from
 a newer version of the box. Tell a manager so they can check the box.
