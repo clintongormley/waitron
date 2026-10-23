@@ -471,7 +471,7 @@ describe("theme words", () => {
     expect(summary(WAITRON_CHOICES)).toBe(es["appearance.advanced_none"]);
     expect(summary(CREAM)).toBe(esFill("appearance.advanced_set_one", { names: names[0]! }));
     expect(summary(SAGE)).toBe(
-      `${esFill("appearance.advanced_set", { n: "2", names: names.join(", ") })} · 2 se leen mal`,
+      `${esFill("appearance.advanced_set", { n: "2", names: names.join(", ") })} · ${esFill("appearance.hard_to_read_count", { count: "2" })}`,
     );
   });
 

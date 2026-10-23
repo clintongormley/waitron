@@ -54,7 +54,6 @@ function screens(mode: Mode): string {
 
 type NamedItem = AgainstItem | { readonly kind: "zone-tabs"; readonly count: number };
 
-/** `groupAgainst`, with the zone tab tints folded into one counted item where the first stood. */
 function groupItems(keys: readonly string[]): NamedItem[] {
   const items: NamedItem[] = [];
   let tabs = 0;
@@ -128,14 +127,14 @@ function blockerText(warning: ThemeWarning, choices: ThemeChoices): string {
 
 export function handWarningLines(warning: ThemeWarning, choices: ThemeChoices): string[] {
   const { on, under } = sides(warning);
-  const values = { screens: screens(warning.mode), names: "" };
+  const shown = screens(warning.mode);
   if (warning.fix !== null) {
     return [
       ...(on.length > 0
-        ? [fill("appearance.hand_on", { ...values, names: againstNames(on) })]
+        ? [fill("appearance.hand_on", { screens: shown, names: againstNames(on) })]
         : []),
       ...(under.length > 0
-        ? [fill("appearance.hand_under", { ...values, names: againstNames(under) })]
+        ? [fill("appearance.hand_under", { screens: shown, names: againstNames(under) })]
         : []),
     ];
   }
@@ -144,7 +143,7 @@ export function handWarningLines(warning: ThemeWarning, choices: ThemeChoices): 
   if (on.length > 0 && under.length > 0) {
     return [
       fill(`appearance.hand_none_both${blocked}`, {
-        screens: values.screens,
+        screens: shown,
         on: againstNames(on),
         under: againstNames(under),
         blockers,
@@ -154,7 +153,7 @@ export function handWarningLines(warning: ThemeWarning, choices: ThemeChoices): 
   const side = on.length > 0 ? "on" : "under";
   return [
     fill(`appearance.hand_none_${side}${blocked}`, {
-      ...values,
+      screens: shown,
       names: againstNames(on.length > 0 ? on : under),
       blockers,
     }),

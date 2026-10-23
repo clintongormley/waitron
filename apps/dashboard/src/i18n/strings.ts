@@ -6402,7 +6402,7 @@ export const es: Record<StringKey, string> = {
   "appearance.hand_item": "{name} ({mode})",
   "appearance.advanced": "Avanzado: fijar colores a mano",
   "appearance.advanced_intro":
-    "Un color que fijes aquí se queda como lo fijaste cuando cambias el color de marca, el fondo o las esquinas. Waitron sigue comprobando que se lea bien.",
+    "Un color que fijes aquí se queda como lo has fijado cuando cambias el color de marca, el fondo o las esquinas. Waitron sigue comprobando que se lea bien.",
   "appearance.advanced_none":
     "Ninguno fijado a mano. Waitron calcula todos los colores y tamaños de texto.",
   "appearance.advanced_set": "{n} fijados a mano: {names}",
@@ -6422,11 +6422,11 @@ export const es: Record<StringKey, string> = {
   "appearance.hand_none_on":
     "{screens}: ningún tono de este color se lee bien sobre {names}. Elige otro color.",
   "appearance.hand_none_under":
-    "{screens}: con ningún tono de este color se lee bien {names} encima. Elige otro color.",
+    "{screens}: ningún tono de este color deja leer bien {names} encima. Elige otro color.",
   "appearance.hand_none_on_blocked":
     "{screens}: ningún tono de este color se lee bien sobre {names} mientras {blockers}.",
   "appearance.hand_none_under_blocked":
-    "{screens}: con ningún tono de este color se lee bien {names} encima mientras {blockers}.",
+    "{screens}: ningún tono de este color deja leer bien {names} encima mientras {blockers}.",
   "appearance.hand_none_both":
     "{screens}: ningún tono de este color se lee bien sobre {on} y a la vez deja leer bien {under} encima. Elige otro color.",
   "appearance.hand_none_both_blocked":
@@ -6436,9 +6436,9 @@ export const es: Record<StringKey, string> = {
   "appearance.hand_fixed": "{screens}: corregido desde {colour}",
   "appearance.dialog_on": "{name} ({mode}): cuesta leerlo sobre {names}.",
   "appearance.dialog_under": "{name} ({mode}): cuesta leer {names} encima.",
-  "appearance.kept_one": "Fijaste 1 color a mano y se mantiene: {name}. Lo verás en Avanzado.",
+  "appearance.kept_one": "Has fijado 1 color a mano y se mantiene: {name}. Lo verás en Avanzado.",
   "appearance.kept_many":
-    "Fijaste {n} colores a mano y se mantienen: {names}. Los verás en Avanzado.",
+    "Has fijado {n} colores a mano y se mantienen: {names}. Los verás en Avanzado.",
   "appearance.pick_dark": "Elegir otro color para las pantallas oscuras",
   "appearance.dark_own": "Botones en pantallas oscuras: {colour}, fijado a mano",
   "appearance.use_brand": "Usar el color de marca",
