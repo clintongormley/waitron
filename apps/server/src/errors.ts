@@ -1356,6 +1356,10 @@ declare module "@waitron/shared" {
      * since has reached `SPACE_OK_BYTES`. `freeBytes` is the latest reading. Built as data by the
      * box alert source, never thrown. */
     "storage.space_low": { freeBytes: number };
+    /** Two or more fresh devices agree with each other that the box's clock is more than a minute
+     * off. `deviceAt` is the box's time moved by their mean difference. Built as data by the
+     * clock-disagrees alert source, never thrown. */
+    "clock.disagrees": { count: number; deviceAt: string; boxAt: string };
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */

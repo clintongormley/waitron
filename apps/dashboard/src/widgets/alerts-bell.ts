@@ -16,6 +16,8 @@ import {
   incidentIdOf,
   screenTargetOf,
   severityLabel,
+  wholeTimes,
+  wholeTimesStyles,
 } from "./alert-format.js";
 
 export const PANEL_LIMIT = 5;
@@ -35,6 +37,7 @@ export class AlertsBell extends LitElement {
 
   static override styles = [
     baseStyles,
+    wholeTimesStyles,
     css`
       :host {
         display: inline-flex;
@@ -137,7 +140,7 @@ export class AlertsBell extends LitElement {
     const screen = screenTargetOf(alert, this.canOpen);
     const when = formatAlertTime(alert.since);
     return html`<li data-severity=${alert.severity} data-test="alert-item">
-      <span>${alertMessage(alert.code, alert.params)}</span>
+      <span>${wholeTimes(alertMessage(alert.code, alert.params))}</span>
       ${hasAlertMessage(alert.code) ? nothing : html`<span class="meta">${alert.code}</span>`}
       <span class="meta"
         >${severityLabel(alert.severity)} ·

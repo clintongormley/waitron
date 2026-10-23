@@ -48,6 +48,7 @@ function quietHealth(overrides: Partial<BoxHealth> = {}): BoxHealth {
       lowSince: null,
       reclaimable: { bytes: 45_000_000, backupRunning: false },
     },
+    clockStop: null,
     ...overrides,
   };
 }
@@ -531,7 +532,10 @@ describe("boxStatusRows", () => {
       state: "attention",
       line: alertMessage("fiscal.clock_drift", { seconds: 3600 }, "en"),
       details: [
-        fill("box_status.clock.compared", { time: formatIsoMinute(MEASURED), seconds: "3600" }),
+        fill("box_status.clock.compared_behind", {
+          time: formatIsoMinute(MEASURED),
+          seconds: "3600",
+        }),
       ],
       alerts: [],
     });
@@ -629,5 +633,222 @@ describe("payments stopped while the box's clock reads behind its last sale", ()
     const { rows } = boxStatusRows(quietHealth({ notices: [CLOCK_BEHIND] }), []);
     expect(row(rows, "sales").line).toBe(es["box_status.notice.clock_behind_chain"]);
     expect(row(rows, "clock").details).toContain(es["box_status.clock.behind_chain_fix"]);
+  });
+});
+
+describe("the Clock row while payments are stopped for the clock", () => {
+  const CLOCK_BEHIND = notice("clock.behind_chain", "error", {
+    clockAt: "2025-03-14T09:12:00.000Z",
+    offsetMinutes: 60,
+    lastRecordAt: "2026-10-22T19:43:00.000Z",
+    lastRecordOffsetMinutes: 120,
+  });
+  const CHECKED = "2026-10-22T19:40:00.000Z";
+  const DEVICE_READ = "2026-10-22T19:41:00.000Z";
+  const RESTARTED = "2026-10-22T19:44:00.000Z";
+  type ClockStop = NonNullable<BoxHealth["clockStop"]>;
+
+  const AUTHORITY = {
+    kind: "authority" as const,
+    id: "authority",
+    boxAt: CHECKED,
+    witnessAt: CHECKED,
+    uncertaintyMs: 500,
+  };
+
+  function device(id: string, at: string, label: string | null) {
+    return { kind: "device" as const, id, boxAt: at, witnessAt: at, uncertaintyMs: 500, label };
+  }
+
+  function clockStop(overrides: Partial<ClockStop> = {}): ClockStop {
+    return {
+      clockAt: "2025-03-14T09:12:00.000Z",
+      offsetMinutes: 60,
+      lastRecordAt: "2026-10-22T19:43:00.000Z",
+      lastRecordOffsetMinutes: 120,
+      recordId: "rec-1",
+      gapMs: 50_000_000_000,
+      restart: null,
+      offer: "offered",
+      proof: {
+        authority: AUTHORITY,
+        devices: [
+          device("d1", "2026-10-22T19:39:00.000Z", "Bar till"),
+          device("d2", DEVICE_READ, null),
+          device("d3", "2026-10-22T19:40:00.000Z", "Kitchen"),
+        ],
+      },
+      contrary: { authority: null, devices: [] },
+      ...overrides,
+    };
+  }
+
+  function clockRow(health: Partial<BoxHealth>): PartRow {
+    return row(boxStatusRows(quietHealth(health), []).rows, "clock");
+  }
+
+  const compared = () =>
+    fill("box_status.clock.compared", {
+      time: formatIsoMinute(MEASURED),
+      seconds: "2",
+    });
+  const authorityProof = () =>
+    fill("box_status.clock.proof.authority", {
+      time: formatIsoMinute(CHECKED),
+    });
+  const devicesProof = () =>
+    fill("box_status.clock.proof.devices", {
+      count: "3",
+      time: formatIsoMinute(DEVICE_READ),
+    });
+
+  it("says which way the clock is off past a minute, and only how far apart within one", () => {
+    const detail = (driftSeconds: number) =>
+      clockRow({
+        clock: {
+          authority: { state: "warning", driftSeconds, measuredAt: MEASURED },
+          sync: { synced: false, source: "unavailable", warn: false },
+        },
+      }).details[0];
+    const time = formatIsoMinute(MEASURED);
+    expect(detail(90)).toBe(fill("box_status.clock.compared_ahead", { time, seconds: "90" }));
+    expect(detail(-90)).toBe(fill("box_status.clock.compared_behind", { time, seconds: "90" }));
+    expect(detail(61)).toBe(fill("box_status.clock.compared_ahead", { time, seconds: "61" }));
+    expect(detail(-60)).toBe(fill("box_status.clock.compared", { time, seconds: "60" }));
+    expect(detail(60)).toBe(fill("box_status.clock.compared", { time, seconds: "60" }));
+    expect(detail(-61)).toBe(fill("box_status.clock.compared_behind", { time, seconds: "61" }));
+    expect(detail(2)).toBe(fill("box_status.clock.compared", { time, seconds: "2" }));
+    expect(detail(-2)).toBe(fill("box_status.clock.compared", { time, seconds: "2" }));
+  });
+
+  it("offers the restart with the proof the box has, and no reason line", () => {
+    const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop() });
+    expect(clock.state).toBe("stopped");
+    expect(clock.restartRecordId).toBe("rec-1");
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      authorityProof(),
+      devicesProof(),
+    ]);
+  });
+
+  it("names only the proof there is", () => {
+    const authorityOnly = clockStop({
+      proof: { authority: AUTHORITY, devices: [] },
+    });
+    expect(clockRow({ notices: [CLOCK_BEHIND], clockStop: authorityOnly }).details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      authorityProof(),
+    ]);
+    const devicesOnly = clockStop({
+      proof: { authority: null, devices: clockStop().proof.devices },
+    });
+    expect(clockRow({ notices: [CLOCK_BEHIND], clockStop: devicesOnly }).details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      devicesProof(),
+    ]);
+  });
+
+  it("gives each refusal its reason, without a restart to offer", () => {
+    for (const offer of ["no_proof", "contrary_proof", "too_far", "stepped_back"] as const) {
+      const proof = offer === "no_proof" ? { authority: null, devices: [] } : clockStop().proof;
+      const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop({ offer, proof }) });
+      expect(clock.restartRecordId).toBeNull();
+      expect(clock.state).toBe("stopped");
+      expect(clock.details).toEqual([
+        compared(),
+        t("box_status.clock.behind_chain_fix"),
+        ...(offer === "no_proof" ? [] : [authorityProof(), devicesProof()]),
+        t(`box_status.clock.refused.${offer}`),
+      ]);
+    }
+  });
+
+  it("draws a restart amber, not red, with who restarted and when", () => {
+    const restarted = clockStop({
+      offer: "restarted",
+      restart: { personName: "Ana", restartedAt: RESTARTED, clockAt: "2025-03-14T09:20:00.000Z" },
+    });
+    const { rows } = boxStatusRows(quietHealth({ clockStop: restarted }), []);
+    expect(row(rows, "clock").state).toBe("attention");
+    expect(row(rows, "sales").state).toBe("ok");
+    expect(row(rows, "clock").restartRecordId).toBeNull();
+    expect(row(rows, "clock").details).toEqual([
+      compared(),
+      authorityProof(),
+      devicesProof(),
+      fill("box_status.clock.restarted", {
+        person: "Ana",
+        time: formatIsoMinute(RESTARTED),
+      }),
+    ]);
+  });
+
+  it("words a restart whose person is no longer known", () => {
+    const restarted = clockStop({
+      offer: "restarted",
+      restart: { personName: null, restartedAt: RESTARTED, clockAt: "2025-03-14T09:20:00.000Z" },
+    });
+    expect(clockRow({ clockStop: restarted }).details).toContain(
+      fill("box_status.clock.restarted", {
+        person: t("box_status.clock.someone"),
+        time: formatIsoMinute(RESTARTED),
+      }),
+    );
+  });
+
+  it("never offers the restart while the clock is unusable", () => {
+    const clock = clockRow({ notices: [CLOCK_BEHIND, CLOCK_UNUSABLE], clockStop: clockStop() });
+    expect(clock.restartRecordId).toBeNull();
+    expect(clock.state).toBe("stopped");
+  });
+
+  it("offers no restart on any row while payments are not stopped for the clock", () => {
+    const { rows } = boxStatusRows(quietHealth(), []);
+    expect(rows.map((r) => r.restartRecordId)).toEqual(Array(7).fill(null));
+    expect(row(rows, "clock").details).toEqual([compared()]);
+  });
+
+  it("reads the proof, the reasons and the restart in Spanish", () => {
+    setLocale("es");
+    const offered = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop() });
+    expect(offered.details).toContain(
+      es["box_status.clock.proof.authority"].replace("{time}", formatIsoMinute(CHECKED)),
+    );
+    expect(offered.details).toContain(
+      es["box_status.clock.proof.devices"]
+        .replace("{count}", "3")
+        .replace("{time}", formatIsoMinute(DEVICE_READ)),
+    );
+    const refused = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ offer: "stepped_back" }),
+    });
+    expect(refused.details).toContain(es["box_status.clock.refused.stepped_back"]);
+    const restarted = clockRow({
+      clockStop: clockStop({
+        offer: "restarted",
+        restart: { personName: null, restartedAt: RESTARTED, clockAt: RESTARTED },
+      }),
+    });
+    expect(restarted.details).toContain(
+      es["box_status.clock.restarted"]
+        .replace("{person}", es["box_status.clock.someone"])
+        .replace("{time}", formatIsoMinute(RESTARTED)),
+    );
+    const behind = clockRow({
+      clock: {
+        authority: { state: "warning", driftSeconds: -90, measuredAt: MEASURED },
+        sync: { synced: false, source: "unavailable", warn: false },
+      },
+    });
+    expect(behind.details[0]).toBe(
+      es["box_status.clock.compared_behind"]
+        .replace("{time}", formatIsoMinute(MEASURED))
+        .replace("{seconds}", "90"),
+    );
   });
 });

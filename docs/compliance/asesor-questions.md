@@ -3599,10 +3599,10 @@ last five minutes, each within a minute of the box) and only when the box is at 
 behind the last record
 ([design §4.8 b](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#b-who-can-fix-it-and-how)).
 The next record in the chain then carries a generation time earlier than the record before it, by up
-to 24 hours, and the records after it do too until real time passes the last one. Nothing already
-recorded is changed. Separately, inside the one-minute margin the box keeps selling with no restart,
-so a record can already carry a time up to a minute earlier than the one before it, as after an
-automatic time correction.
+to 24 hours; each later record carries a time no more than a minute earlier than the box's clock
+read at the restart, nor than the latest time written since the restart. Nothing already recorded is changed. Separately, inside the one-minute margin the box keeps
+selling with no restart, so a record can already carry a time up to a minute earlier than the one
+before it, as after an automatic time correction.
 
 Our own reading is that a chain runs in the order records are generated
 ([findings](verifactu-findings.md), "Chain position is unrelated to invoice number"), and the house
@@ -3625,11 +3625,13 @@ preproduction environment.
 > hayan comunicado su hora en los últimos cinco minutos, cada uno con menos de un minuto de
 > diferencia) y si la diferencia con el último registro no supera las 24 horas.
 > Desde ese momento, el siguiente registro de la cadena lleva una fecha y hora de generación anterior a
-> la del registro que le precede (hasta 24 horas antes), y los siguientes también, hasta que la hora
-> real alcance la del último registro. No se modifica ningún registro ya generado, ni su huella ni su
-> encadenamiento. Además, dentro del margen de un minuto el sistema sigue facturando sin reanudación,
-> de modo que un registro puede llevar una hora hasta un minuto anterior a la del registro anterior,
-> por ejemplo tras una corrección automática de la hora.
+> la del registro que le precede (hasta 24 horas antes), y cada registro posterior lleva una hora que,
+> como mucho, es un minuto anterior a la que marcaba el reloj del equipo al reanudar y a la más
+> reciente generada desde la reanudación. No se modifica
+> ningún registro ya generado, ni su huella ni su encadenamiento. Además, dentro del margen de un
+> minuto el sistema sigue facturando sin reanudación, de modo que un registro puede llevar una hora
+> hasta un minuto anterior a la del registro anterior, por ejemplo tras una corrección automática de
+> la hora.
 >
 > **(a)** ¿Admite la normativa (RD 1007/2023 y Orden HAC/1177/2024), y acepta la AEAT, una cadena en
 > la que la fecha y hora de generación de un registro es anterior a la del registro que le precede?
@@ -3647,18 +3649,19 @@ than a minute behind; restart only with fresh proof, at most 24 hours behind, by
 `system.manage` permission, from the dashboard; every restart kept in an append-only table with who,
 when, both times, the record it names and the proof
 ([design §4.8](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#48-a-clock-behind-the-last-sale-payments-stop-question-3-pictures-8-and-9),
-question 4 in §9). Not built: it is slices 8 and 9 of the A798-B build.
+question 4 in §9). Built by A798-B slices 8 (#2012) and 9 (#2025), 2026-10-23;
+parked for the owner. One step back per restart; later records are held to the minute.
 
 This records a question; no enquiry has been sent.
 
 ### Q52. Sales recorded under a restart whose clock later proved wrong (added 2026-10-21)
 
 **Why it matters.** After a manager restarts payments as Q51 describes, the box keeps checking its
-clock: against AEAT's time on the next send, and for a jump forward of more than a minute beyond the
-time that has passed (the wall clock against the server process's own steady clock, so only while the
-server keeps running). Either can prove that the clock the restart accepted was wrong. The records
-generated in between then carry a wrong generation time, and their invoices a wrong issue date,
-because one clock reading dates both
+clock: against AEAT's time on the next send and, while the clock still reads more than a minute
+behind the latest record, once a minute from AEAT's QR validation site; and for a jump forward of
+more than a minute beyond the time that has passed (compared only while the server keeps running).
+Any of these can prove that the clock the restart accepted was wrong. The records generated in between then carry a wrong generation time,
+and their invoices a wrong issue date, because one clock reading dates both
 ([design §2.5](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#25-the-clock)). The
 design's default changes nothing: the managers get an alert, "Sales recorded between {from} and {to}
 were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.", and the
@@ -3667,15 +3670,16 @@ records, the chain and the box's clock stay as they are
 `clock.behind_chain_disproved`). Whether anything more is required is what this asks.
 
 > Tras una reanudación como la de la pregunta anterior (Q51), el sistema sigue comprobando la hora:
-> con la hora de la AEAT en el siguiente envío, y vigilando si el reloj del equipo salta hacia delante
-> más de un minuto respecto al tiempo realmente transcurrido. Si así se demuestra que la hora aceptada
-> al reanudar era incorrecta, los registros generados desde la reanudación hasta ese momento llevan
-> una fecha y hora de generación errónea y, en sus facturas, una fecha de expedición errónea, porque
-> ambas salen de la misma lectura del reloj. Hoy el sistema no modifica nada: avisa a los
-> responsables («Las ventas registradas entre {desde} y {hasta} se fecharon con un reloj que resultó
-> estar mal. Quedan como se registraron; consúltalo con tu asesor.») y los registros, la cadena y la
-> hora del equipo quedan como están. Queda constancia de quién reanudó, cuándo, con qué prueba y entre
-> qué horas.
+> con la hora de la AEAT en el siguiente envío y, mientras la hora del equipo siga siendo más de un
+> minuto anterior a la del último registro, cada minuto con la del sitio de cotejo de códigos QR de
+> la AEAT; y vigilando si el reloj del equipo salta hacia delante más de un minuto respecto al
+> tiempo realmente transcurrido. Si así se demuestra que la hora aceptada al reanudar era
+> incorrecta, los registros generados desde la reanudación hasta ese momento llevan una fecha y hora
+> de generación errónea y, en sus facturas, una fecha de expedición errónea, porque ambas salen de
+> la misma lectura del reloj. Hoy el sistema no modifica nada: avisa a los responsables («Las ventas
+> registradas entre {desde} y {hasta} se fecharon con un reloj que resultó estar mal. Quedan como se
+> registraron; consúltalo con tu asesor.») y los registros, la cadena y la hora del equipo quedan
+> como están. Queda constancia de quién reanudó, cuándo, con qué prueba y entre qué horas.
 >
 > **(a)** ¿Debe hacerse algo con esos registros o facturas (subsanación, anulación y nueva
 > expedición, factura rectificativa, comunicación a la AEAT), o basta con conservar la constancia de
@@ -3687,8 +3691,9 @@ records, the chain and the box's clock stay as they are
 > la AEAT los aceptó con errores por la hora (código 2004)?
 
 **Proposed interim treatment (design default, A798 revision 5 decision 13):** raise the alert and
-change nothing else; the restart and its proof stay in the append-only table Q51 describes. Not
-built: it is slice 9 of the A798-B build.
+change nothing else; the restart and its proof stay in the append-only table Q51 describes.
+Built by A798-B slices 8 (#2012) and 9 (#2025), 2026-10-23;
+parked for the owner. One step back per restart; later records are held to the minute.
 
 This records a question; no enquiry has been sent.
 

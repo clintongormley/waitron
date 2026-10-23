@@ -778,7 +778,9 @@ What does fix it:
    - **If the clock it accepted later proves wrong.** After a restart, the box keeps checking: the
      next comparison with AEAT (on the next send), and a clock that jumps forward by more than a
      minute beyond the time that passed (wall clock against the server process's own steady clock,
-     so only while the server keeps running). Either raises a new recorded alert,
+     so only while the server keeps running; 2026-10-23: the elapsed-time clock is /proc/uptime on
+     Linux, so a resume from suspend is not a jump — `docs/developers/conventions-data.md`, "A
+     jump"). Either raises a new recorded alert,
      `clock.behind_chain_disproved` (error): "Las ventas registradas entre {from} y {to} se fecharon
      con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu asesor." (EN
      "Sales recorded between {from} and {to} were dated by a clock that proved wrong. They stay as

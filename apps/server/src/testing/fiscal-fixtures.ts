@@ -155,6 +155,8 @@ export interface RegistroOptions {
    * and all four are NULL (the "all four null" branch).
    */
   anterior?: AnteriorPointer;
+  /** fecha_hora_huso_gen_registro. Default the fixture sale's issue time. */
+  generatedAt?: Date;
 }
 
 /**
@@ -201,7 +203,7 @@ export async function insertFiscalRegistro(
       anteriorNumSerieFactura: a?.numSerieFactura ?? null,
       anteriorFechaExpedicionFactura: a?.fechaExpedicionFactura ?? null,
       anteriorHuella: a?.huella ?? null,
-      fechaHoraHusoGenRegistro: new Date(ISSUED_AT),
+      fechaHoraHusoGenRegistro: opts.generatedAt ?? new Date(ISSUED_AT),
       offsetMinutos: 60,
       tipoHuella: "01",
       huella,

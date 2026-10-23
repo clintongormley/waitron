@@ -62,4 +62,18 @@ describe("corsForVenue", () => {
     expect(res.status).toBe(200);
     expect(allow).not.toHaveBeenCalled();
   });
+  it("lets an allowed origin send the device's clock header", async () => {
+    const res = await app().request("/api/till", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://cloud.deli.test",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "x-waitron-device-clock",
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get("access-control-allow-headers")?.toLowerCase()).toContain(
+      "x-waitron-device-clock",
+    );
+  });
 });

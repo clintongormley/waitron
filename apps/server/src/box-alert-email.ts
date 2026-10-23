@@ -7,6 +7,7 @@ import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js"
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { BOX_EMAIL_WORDS } from "./i18n/box-emails.js";
 import type { Logger } from "./logger.js";
+import { receiptDateTimeNumeric } from "./receipt-dates.js";
 import {
   readManagerEmailRecipients,
   type ManagerEmailRecipient,
@@ -24,16 +25,33 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
   return Object.hasOwn(BOX_EMAIL_WORDS, code);
 }
 
-/** The subject and text for `code` in `language`, `{venue}` replaced by the venue's name. */
+/** Each time placeholder and the param holding the offset it is written in. */
+const TIME_PLACEHOLDERS = {
+  clockAt: "offsetMinutes",
+  lastRecordAt: "lastRecordOffsetMinutes",
+} as const;
+
+/** The subject and text for `code` in `language`, `{venue}` replaced by the venue's name and each
+ * time placeholder by its param, written `dd/mm/yyyy hh:mm` in its own offset. */
 export function boxEmailMessage(
   code: BoxEmailCode,
   language: "en" | "es",
   venue: string,
+  params?: Readonly<Record<string, unknown>>,
 ): { subject: string; text: string } {
   const words = BOX_EMAIL_WORDS[code][language];
-  // A function replacement, so a name such as "$&" is not read as a pattern.
-  const named = (template: string) => template.replaceAll("{venue}", () => venue);
-  return { subject: named(words.subject), text: named(words.text) };
+  const filled = (template: string) => {
+    // A function replacement, so a name such as "$&" is not read as a pattern.
+    let out = template.replaceAll("{venue}", () => venue);
+    for (const [name, offsetName] of Object.entries(TIME_PLACEHOLDERS)) {
+      const at = params?.[name];
+      const offset = params?.[offsetName];
+      if (typeof at !== "string" || typeof offset !== "number") continue;
+      out = out.replaceAll(`{${name}}`, receiptDateTimeNumeric(at, "en-GB", offset));
+    }
+    return out;
+  };
+  return { subject: filled(words.subject), text: filled(words.text) };
 }
 
 export const BOX_EMAIL_CHECK_MS = 60_000;
@@ -72,6 +90,8 @@ interface Episode {
   readonly code: BoxEmailCode;
   /** The module that gave the notice; absent for the disk's episodes. */
   readonly owner?: string;
+  /** The params of the notice that began the episode, kept for its whole length. */
+  readonly params?: Readonly<Record<string, unknown>>;
   readonly sentTo: Set<string>;
   readonly said: Set<string>;
   readonly logged: Map<string, Set<TextEmailOutcome>>;
@@ -112,12 +132,18 @@ export function startBoxEmailDuty(deps: {
     }
   }
 
-  function begin(key: string, code: BoxEmailCode, owner?: string): Episode {
+  function begin(
+    key: string,
+    code: BoxEmailCode,
+    owner?: string,
+    params?: Readonly<Record<string, unknown>>,
+  ): Episode {
     let episode = episodes.get(key);
     if (episode === undefined) {
       episode = {
         code,
         ...(owner === undefined ? {} : { owner }),
+        ...(params === undefined ? {} : { params }),
         sentTo: new Set(),
         said: new Set(),
         logged: new Map(),
@@ -152,7 +178,7 @@ export function startBoxEmailDuty(deps: {
         outcome = await deps.send({
           smtp: ctx.delivery.smtp,
           recipient: recipient.email,
-          ...boxEmailMessage(episode.code, recipient.language, ctx.venue),
+          ...boxEmailMessage(episode.code, recipient.language, ctx.venue, episode.params),
         });
       } catch {
         outcome = "unknown";
@@ -196,7 +222,7 @@ export function startBoxEmailDuty(deps: {
         if (!isBoxEmailCode(notice.code)) continue;
         if ((STORAGE_EMAIL_CODES as readonly string[]).includes(notice.code)) continue;
         const key = `module:${notice.owner}:${notice.key}`;
-        begin(key, notice.code, notice.owner);
+        begin(key, notice.code, notice.owner, notice.params);
         moduleSeen.add(key);
       }
       for (const [key, episode] of episodes) {

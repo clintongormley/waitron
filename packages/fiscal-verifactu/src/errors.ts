@@ -370,5 +370,37 @@ declare module "@waitron/shared" {
       lastRecordAt: string;
       lastRecordOffsetMinutes: number;
     };
+
+    /**
+     * `restartAfterClockStop` (./clock-stop-restart.ts): a manager's restart of payments was not
+     * accepted. `reason` says which check refused it, in the order they run: no stop, the record
+     * named is no longer the latest, a restart of that record no longer covers the clock (with
+     * that restart's person and time), the gap is over 24 hours, AEAT disagreed with the box during
+     * this stop or two devices that agree with each other both disagree with it, or neither AEAT
+     * nor two devices agree with the box.
+     */
+    "clock.restart_refused":
+      | { reason: "not_stopped" | "record_changed" | "too_far" | "contrary_proof" | "no_proof" }
+      | { reason: "stepped_back"; personId: string; restartedAt: string };
+
+    /**
+     * Recorded, never thrown, by `recordRestarted` (./clock-stop-incidents.ts) for each restart of
+     * payments. `person` is the manager's display name when they pressed; `clockAt` and
+     * `lastRecordAt` are ISO 8601 instants; `proof` names what showed the clock right.
+     */
+    "clock.behind_chain_restarted": {
+      restartId: string;
+      person: string;
+      clockAt: string;
+      lastRecordAt: string;
+      proof: "authority" | "devices" | "authority_and_devices";
+    };
+
+    /**
+     * Recorded, never thrown, by `recordDisproofs` (./clock-stop-incidents.ts) once per restart
+     * whose clock later proved wrong. `from` and `to` are the earliest and latest generation times,
+     * ISO 8601, among the records written under that restart.
+     */
+    "clock.behind_chain_disproved": { restartId: string; from: string; to: string };
   }
 }

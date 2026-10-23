@@ -480,3 +480,24 @@ export function computedColour(root: ShadowRoot, value: string): string {
   probe.remove();
   return colour;
 }
+
+/** Every time `formatIsoMinute` wrote inside `elements`, and those whose characters are drawn on
+ * more than one line. */
+export function timesAcrossLines(elements: readonly Node[]): { checked: number; broken: string[] } {
+  const broken: string[] = [];
+  let checked = 0;
+  for (const element of elements) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      for (const match of node.textContent!.matchAll(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g)) {
+        checked += 1;
+        const range = document.createRange();
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+        if (tops.size > 1) broken.push(match[0]);
+      }
+    }
+  }
+  return { checked, broken };
+}

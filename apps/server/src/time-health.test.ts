@@ -217,3 +217,34 @@ describe("the drift alert while payments are stopped for the clock", () => {
     expect(asked).toBe(0);
   });
 });
+
+describe("each kept comparison with AEAT's reply time is handed on as a witness sample", () => {
+  it("hands on the timestamp plus 500 ms, half the round trip plus 500 ms, and the midpoint", async () => {
+    const { createAuthorityClockStatus } = await import("./time-health.js");
+    const samples: unknown[] = [];
+    const monitor = createAuthorityClockStatus({
+      onSample: (sample) => samples.push(sample),
+      monotonic: () => 90_000,
+    });
+    monitor.observe({
+      authorityTimestamp: "2026-10-05T12:00:00Z",
+      sentAt: new Date("2026-10-05T12:00:00.000Z"),
+      receivedAt: new Date("2026-10-05T12:00:03.000Z"),
+    });
+    expect(samples).toEqual([
+      {
+        authorityMs: Date.parse("2026-10-05T12:00:00.500Z"),
+        uncertaintyMs: 2_000,
+        at: { wallMs: Date.parse("2026-10-05T12:00:01.500Z"), monoMs: 88_500 },
+      },
+    ]);
+  });
+
+  it("hands on nothing for a reply with no timestamp", async () => {
+    const { createAuthorityClockStatus } = await import("./time-health.js");
+    const samples: unknown[] = [];
+    const monitor = createAuthorityClockStatus({ onSample: (sample) => samples.push(sample) });
+    monitor.observe({ authorityTimestamp: null, sentAt: new Date(), receivedAt: new Date() });
+    expect(samples).toEqual([]);
+  });
+});

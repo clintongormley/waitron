@@ -35,12 +35,12 @@ corregir la hora.
 
 **No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado** es
 rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró. Hasta que
-marque como mucho un minuto antes, el equipo rechaza los cobros, las devoluciones y todo lo que
-registraría una venta o movería dinero: cobros en efectivo o con tarjeta, en la barra o en una mesa,
-devoluciones y reintentos de devoluciones, una mesa que se va sin pagar, anular un pedido que ya
-tiene factura, y un cambio o un envío a cocina que terminaría de pagar una cuenta ya pagada en
-parte. En el panel, los encargados tampoco pueden resolver cobros ni devoluciones atascados o
-retenidos.
+marque como mucho un minuto antes, o hasta que un encargado reanude los cobros, el equipo rechaza
+los cobros, las devoluciones y todo lo que registraría una venta o movería dinero: cobros en
+efectivo o con tarjeta, en la barra o en una mesa, devoluciones y reintentos de devoluciones, una
+mesa que se va sin pagar, anular un pedido que ya tiene factura, y un cambio o un envío a cocina que
+terminaría de pagar una cuenta ya pagada en parte. En el panel, los encargados tampoco pueden
+resolver cobros ni devoluciones atascados o retenidos.
 
 El resto del trabajo sigue. Por ejemplo, puedes sentar mesas, tomar pedidos, enviarlos a cocina,
 fichar la entrada y la salida, reimprimir un recibo e imprimir una factura que ya estaba hecha. Un
@@ -61,7 +61,9 @@ Lo que hay que hacer después depende de cómo se cobró la tarjeta:
   Dividir a partes iguales):** el pago queda pendiente, y el equipo lo registra por sí solo cuando
   se puede volver a cobrar.
 
-El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind).
+El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind). Si la hora
+del equipo es correcta y fue la última venta la que llevaba una hora equivocada, un encargado quizá
+pueda reanudar los cobros allí.
 
 **Queda poco espacio en el equipo · Avisa al encargado** es ámbar. El trabajo se sigue guardando,
 pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe, en

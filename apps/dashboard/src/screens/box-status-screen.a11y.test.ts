@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./box-status-screen.js";
@@ -34,6 +34,7 @@ function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
       lowSince: null,
       reclaimable: { bytes: 45_000_000, backupRunning: false },
     },
+    clockStop: null,
     ...overrides,
   };
 }
@@ -73,6 +74,40 @@ const TROUBLED = health({
   ],
   noticesUnavailable: ["fiscal"],
   canFree: false,
+});
+
+const OFFERED = health({
+  notices: [notice("clock.behind_chain", "error")],
+  clockStop: {
+    clockAt: "2026-10-22T18:10:00.000Z",
+    offsetMinutes: 120,
+    lastRecordAt: "2026-10-22T19:30:00.000Z",
+    lastRecordOffsetMinutes: 120,
+    recordId: "rec-42",
+    gapMs: 4_800_000,
+    restart: null,
+    offer: "offered",
+    proof: {
+      authority: {
+        kind: "authority",
+        id: "aeat",
+        boxAt: "2026-10-22T18:05:00.000Z",
+        witnessAt: "2026-10-22T18:05:01.000Z",
+        uncertaintyMs: 500,
+      },
+      devices: [
+        {
+          kind: "device",
+          id: "d1",
+          label: "Bar till",
+          boxAt: "2026-10-22T18:08:00.000Z",
+          witnessAt: "2026-10-22T18:08:00.000Z",
+          uncertaintyMs: 200,
+        },
+      ],
+    },
+    contrary: { authority: null, devices: [] },
+  },
 });
 
 function stubApi(answer: BoxHealth | Error, alerts: AlertView[] | Error = []): DashboardApi {
@@ -116,6 +151,43 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with a stop the box offers to restart", async () => {
+    const { el, host } = await mountWidget<BoxStatusScreen>(
+      "dashboard-box-status-screen",
+      { api: stubApi(OFFERED), canOpen: () => true },
+      theme,
+    );
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=row-clock] [data-test=restart]"),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the open restart dialog accessibly, with a refusal", async () => {
+    const api = stubApi(OFFERED);
+    (api as unknown as { restartClockPayments: unknown }).restartClockPayments = vi
+      .fn()
+      .mockRejectedValue({ code: "clock.restart_refused", params: { reason: "record_changed" } });
+    const { el, host } = await mountWidget<BoxStatusScreen>(
+      "dashboard-box-status-screen",
+      { api, canOpen: () => true },
+      theme,
+    );
+    await flush(el);
+    (el.shadowRoot!.querySelector("[data-test=restart]") as HTMLElement).click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    (el.shadowRoot!.querySelector("[data-test=restart-confirm]") as HTMLElement).click();
+    await flush(el);
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-test=restart-dialog]")!
+        .shadowRoot!.querySelector("[data-error]"),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

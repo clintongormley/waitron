@@ -8,6 +8,8 @@ export type {
   TrustedTimeAnchor,
   TrustedTimeSource,
 } from "./clock.js";
+export { CLOCK_WITNESS_MARGIN_MS, judgeClockWitnesses } from "./clock-witnesses.js";
+export type { ClockWitness, ClockWitnessVerdict } from "./clock-witnesses.js";
 export type {
   FiscalBackendDeps,
   FiscalCertificateAnswer,
@@ -19,7 +21,14 @@ export type {
 export { emptyDrainResult } from "./backend.js";
 export type {
   AckState,
+  AuthorityTimeSample,
   ClockBehindLatestRecord,
+  ClockProvedWrong,
+  ClockRestart,
+  ClockRestartOffer,
+  ClockRestartProofKind,
+  ClockRestartRequest,
+  ClockStopState,
   Counterparty,
   DrainResult,
   FiscalBackend,

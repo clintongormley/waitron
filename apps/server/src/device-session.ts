@@ -23,6 +23,8 @@ const SIGHTING_INTERVAL_MS = 60_000;
  * to the whole browser. NEVER read unless `deps.devMode` is true.
  */
 export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
+/** The device's own clock, in milliseconds since the epoch, sent with its equipment read. */
+export const DEVICE_CLOCK_HEADER = "x-waitron-device-clock";
 
 /** One year: a kitchen display must stay enrolled across reboots and power cuts. Revocation does
  * not wait on it: `requireDevice` rejects an `active = false` device whatever the cookie's

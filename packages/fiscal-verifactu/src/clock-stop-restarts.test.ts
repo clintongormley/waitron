@@ -13,6 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { latestRecordQuery } from "./clock-behind.js";
 import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -78,13 +79,18 @@ describe("clock_stop_restarts", () => {
     expect(await restartRows()).toEqual([]);
   });
 
-  it("reads the latest record time through the index", async () => {
-    const { rows } = await suite.db.execute<{ detail: string }>(
-      sql`explain query plan select fecha_hora_huso_gen_registro, offset_minutos
-        from registros_facturacion order by fecha_hora_huso_gen_registro desc limit 1`,
-    );
-    expect(rows.map((row) => row.detail)).toEqual([
+  it("reads the latest record through the time index, sorting only the ties by id", async () => {
+    const plan = await withTransaction(suite.db, async (tx) => {
+      const query = latestRecordQuery(tx);
+      expect(query.toSQL().sql).toMatch(/ limit \?$/);
+      const { rows } = await tx.execute<{ detail: string }>(
+        sql`explain query plan ${query.getSQL()}`,
+      );
+      return rows.map((row) => row.detail);
+    });
+    expect(plan).toEqual([
       "SCAN registros_facturacion USING INDEX registros_generado_idx",
+      "USE TEMP B-TREE FOR LAST TERM OF ORDER BY",
     ]);
   });
 });

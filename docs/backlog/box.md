@@ -902,6 +902,16 @@ backup settings (they cannot be read, or a reload could not open the database). 
 user guide's "never touches … your backups" (`box-status.md#free-space`, English and Spanish) does
 not hold for such a folder. A fix could refuse such a folder when the settings are saved.
 
+## AEAT's time for a restart comes from its QR validation host, not from a `consultar` reply
+
+Whether a certificate-authenticated `consultar` reply carries a `Date` header is not measured. The
+`verifactu` repository's live workflow can measure it without filing: a manual run in its
+`consult` mode sends one `consultar` (`scripts/live-aeat.mjs:2567-2578` at `754f633`), and one
+added line in its `certificateFetch` wrapper (`:195-223`) writing the raw reply's
+`response.headers.date` to its output would print it. The wrapper hands back a new `Response`
+built without the reply's headers, so reading `date` from what it returns would print nothing.
+The production QR host was not tried either. Left open by A798-B slice 9 (#2025).
+
 ## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
 
 When a first-setup resolution chose a new workspace (`binding` not null), the clean-up that

@@ -4,7 +4,7 @@ import { registrosFacturacion } from "./registros.js";
 
 /**
  * One row per manager's restart of payments while the box's clock read earlier than its latest
- * record. Declared `appendOnly()` in `../classification.ts`. Nothing writes it yet.
+ * record. Declared `appendOnly()` in `../classification.ts`.
  */
 export const clockStopRestarts = table(
   "clock_stop_restarts",

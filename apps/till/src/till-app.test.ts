@@ -30,6 +30,7 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { productUnit } from "./widgets/product-name.js";
 import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { TillApp } from "./till-app.js";
+import { EquipmentPoll } from "./state/equipment-poll.js";
 import { TillApi as CollectApi } from "./api/client.js";
 import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 import { nextFloorMoment } from "./state/floor-today.js";
@@ -1959,6 +1960,55 @@ describe("till-app", () => {
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
     expect(currentLocale()).toBe("en-GB");
+  });
+
+  it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and starts the poll once for a signed-in till", async () => {
+    const start = vi.spyOn(EquipmentPoll.prototype, "start");
+    try {
+      const { el: kds } = await mountApp({
+        getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [], notices: [] }),
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale: "en-GB",
+          formFactor: kdsFormFactor,
+          capabilities: ["act-as-kds"],
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "dev-1",
+          formFactor: "kds",
+          kitchenScreens: [stationScreen],
+        }),
+        getDeviceStationScreen: vi.fn().mockResolvedValue({
+          stations: [
+            {
+              name: "Cocina",
+              available: true,
+              today: {
+                open: true,
+                isDefault: false,
+                byHand: null,
+                sendsTo: null,
+                why: "open" as const,
+              },
+              id: "st-dev",
+              queue: [],
+              notices: [],
+            },
+          ],
+        }),
+      });
+      await flush(kds);
+      expect(station(kds)).not.toBeNull();
+      expect(start).toHaveBeenCalledTimes(0);
+      expect(currentApi.getDeviceEquipment).not.toHaveBeenCalled();
+      kds.remove();
+
+      const { el } = await mountApp();
+      await toCounter(el);
+      expect(start).toHaveBeenCalledTimes(1);
+    } finally {
+      start.mockRestore();
+    }
   });
 
   it("keeps an enrolled kitchen display in the venue language when its browser prefers another", async () => {

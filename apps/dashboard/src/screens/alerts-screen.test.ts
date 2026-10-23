@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { AlertView, AlertsResponse, DashboardApi } from "../api/client.js";
 import "./alerts-screen.js";
@@ -84,6 +84,37 @@ describe("dashboard-alerts-screen", () => {
       "A card payment of €12.50 taken while offline",
     );
     expect(location.pathname).toBe("/manage/alerts/view/open");
+  });
+
+  it("never breaks a written time across two lines", async () => {
+    const restarted = (n: number): AlertView => ({
+      key: `incident:r${n}`,
+      kind: "event",
+      code: "clock.behind_chain_restarted",
+      params: {
+        person: "x".repeat(n),
+        clockAt: "2026-10-19T09:14:00.000Z",
+        lastRecordAt: "2026-10-19T23:40:00.000Z",
+        proof: "devices",
+      },
+      severity: "warning",
+      since: "2026-10-19T09:16:00.000Z",
+      area: "box",
+    });
+    const listAlerts = vi.fn().mockResolvedValue({
+      visible: true,
+      alerts: Array.from({ length: 40 }, (_, n) => restarted(n + 1)),
+    } satisfies AlertsResponse);
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+      api: stubApi({ listAlerts }),
+    });
+    await flush(el);
+    const { checked, broken } = timesAcrossLines(
+      [...rows(el, "open-alerts-table")].map((row) => row.querySelector("td")!),
+    );
+    // Forty name lengths slide the two times along the whole line.
+    expect(checked).toBe(80);
+    expect(broken).toEqual([]);
   });
 
   it("names the device an alert came from, or its source when no device raised it", async () => {

@@ -3469,6 +3469,7 @@ export class TillApi {
       "GET",
       undefined,
       options.signal,
+      { "x-waitron-device-clock": String(Date.now()) },
     );
   }
 
@@ -4757,6 +4758,7 @@ export class TillApi {
     method: string,
     body?: unknown,
     signal?: AbortSignal,
+    headers?: Record<string, string>,
   ): Promise<T> {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
@@ -4768,6 +4770,8 @@ export class TillApi {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           };
+    if (headers !== undefined)
+      init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
     if (signal !== undefined) init.signal = signal;
     const res = await fetchImpl(this.#baseUrl + path, init);
     if (!res.ok) {

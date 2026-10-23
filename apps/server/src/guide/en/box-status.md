@@ -98,10 +98,11 @@ space.
 
 When the box's clock reads more than a minute earlier than the latest sale recorded on the box, the
 box stops taking payments and refunds. A sale recorded then would carry a time before that latest
-one. The stop lasts until the clock reads no more than a minute earlier than that sale. Taking
-orders, the kitchen and clocking in carry on, though a change or a kitchen send that would finish
-paying a part-paid bill, and cancelling an order that already has an invoice, are refused. The [till
-notices guide](till-notices.md#notices) lists what staff can and cannot do meanwhile.
+one. The stop lasts until the clock reads no more than a minute earlier than that sale, or until
+someone restarts payments, as this section explains further down. Taking orders, the kitchen and
+clocking in carry on, though a change or a kitchen send that would finish paying a part-paid bill,
+and cancelling an order that already has an invoice, are refused. The [till notices
+guide](till-notices.md#notices) lists what staff can and cannot do meanwhile.
 
 The tills show **Payments stopped: the box's clock reads earlier than its last sale**. The alerts
 bell says so too, with both times in it: the time on the box's clock and the time of the latest
@@ -110,15 +111,65 @@ adds what to do: **Connect the box to the internet so it can correct its clock, 
 installed it.** Where the box can tell, the row also says whether it is **Kept in time over the
 internet**.
 
-There are two ways out:
+There are three ways out:
 
 - **Set the clock right.** On a box that keeps its clock in time over the internet, connecting it to
   the internet lets it correct the clock by itself. Otherwise, call whoever installed the box: the
   box has no page for setting its clock. This ends the stop unless the latest sale itself carries a
   wrong, later time.
+- **Restart payments**, when the box's clock is right and it was the latest sale that was recorded
+  with a wrong, later time, for example while the clock was running fast. The paragraphs after this
+  list explain when the page offers it.
 - **Wait.** Once the box's clock reaches a minute before the time of the latest sale, the box takes
-  payments again. This is the only way out when the clock is right but the latest sale was recorded
-  with a wrong time, for example while the clock was running fast.
+  payments again.
+
+When the page has fresh proof that the box's clock is right, the **Clock** row shows that proof and
+a **Restart payments** button. The proof is one of these:
+
+- **Tax agency: matches (checked 2026-10-23 21:40)**: during a stop, a box that sends records to the
+  tax agency asks it for its time each minute, and its answer was within a minute of the box's
+  clock.
+- **Devices: 2 read 2026-10-23 21:40**: two or more tills or handhelds sent a clock within a minute
+  of the box's. The [next section](box-status.md#clock-witnesses) explains which devices send their
+  clock.
+
+Only proof taken while the box's clock read more than a minute behind the last sale counts, and
+only for five minutes. Proof taken before a change to the box's clock does not count either.
+
+The page does not offer a restart, and says why under the **Clock** row, when:
+
+- there is no fresh proof: **There is no fresh proof that the box's clock is right.**
+- two or more devices agree with each other that the box's clock is more than a minute off, or the
+  tax agency has disagreed with it while the box's clock read more than a minute behind the last
+  sale. The box keeps that disagreement only in its memory, so it forgets it if the box itself restarts during the stop;
+  while the tax agency still disagrees, the block comes back at its next answer, which a box that
+  sends records to the tax agency asks for about once a minute during a stop: **Other clocks say the
+  box's clock is wrong.**
+- the box's clock is more than 24 hours behind the latest sale: **The box's clock is more than 24
+  hours behind the last sale.**
+
+Only people who can manage the system can restart payments. Pressing **Restart payments** opens a
+dialog that shows the time on the box's clock, the time of the latest sale and the proof. Press
+**Restart payments** in the dialog to confirm. If two people confirm at about the same time, only
+one restart is made, and the second person sees the first one.
+
+After a restart, the box takes payments again straight away. No sale already recorded changes. The
+next sale carries the box's clock, so it is recorded with an earlier time than the latest sale. The
+**Clock** row turns amber and says who restarted payments and when, for example **Payments restarted
+by Ana at 2026-10-23 21:42**, and the bell keeps an alert naming that person, both times and the
+proof.
+
+A restart allows for one step back only. If the box's clock goes back again, so that it reads more
+than a minute further behind than it did at the restart, or more than a minute earlier than a sale
+made since the restart, payments stop again. That holds even when the clock goes back a little at a
+time. The page then does not offer another restart. Instead the **Clock** row says **Payments were
+already restarted, and the box's clock has gone back since. Get the clock checked.**
+
+If the box later finds that the clock it trusted at the restart was wrong, because the tax agency's
+time disagrees with it or the clock jumps forward by more than a minute, and sales were made under
+the restart, the bell says so: **Sales recorded between 2026-10-23 21:42 and 2026-10-23 22:15 were
+dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.** The times in that
+alert are fixed when it is raised, so sales made after it are not added to it.
 
 You do not need to restart the box or the tills. Each payment is checked when it is made, so once
 the clock reads no more than a minute before the latest sale, the next payment is no longer refused
@@ -130,7 +181,22 @@ payment that Waitron could not record. The box records that payment by itself on
 back, but the alert stays in the bell until a manager presses **Mark handled** on it.
 
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
-box's clock is wrong** instead. The way out is the same: set the clock right.
+box's clock is wrong** instead, and the bell says so too, with the date the box's clock reads. The
+page does not offer **Restart payments** then. The way out is to set the clock right.
+
+## Devices as clock witnesses {#clock-witnesses}
+
+A box can't tell by itself that its own clock is wrong, so it compares it with other clocks. Tills
+and handhelds send their own clock to the box about every 15 seconds while someone is signed in on
+them. Kitchen screens do not send theirs.
+
+When two or more devices agree with each other that the box's clock is more than a minute off, the
+bell warns the people who can manage the system, whether or not payments have stopped: **2 devices
+agree that the time is 2026-10-23 21:40, but the box's clock reads 2026-10-23 21:10. Check the box's
+date and time on the Box status page.** Staff on the tills see nothing for this.
+
+The same readings are the device proof that the page needs before it offers **Restart payments**, as
+[When payments stop because of the clock](box-status.md#clock-behind) explains.
 
 ## Emails about the box {#emails}
 
@@ -138,7 +204,8 @@ The box emails everyone who can manage the system and has an email address when:
 
 - its disk has about 2 GB free or less;
 - its disk is full, so nothing can be saved;
-- its clock is set before 28 October 2024, so no sale can be recorded.
+- its clock is set before 28 October 2024, so no sale can be recorded;
+- its clock reads earlier than its last sale, so payments have stopped.
 
 Each person gets one email per problem, in their own language, or the venue's if they have not
 chosen one. If it cannot be sent, because the box has no internet or the mail server refuses it (for
