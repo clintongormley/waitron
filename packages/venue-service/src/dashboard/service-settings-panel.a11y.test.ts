@@ -12,7 +12,6 @@ const model: VenueServiceSettingsView = {
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
   printMovedSlips: true,
-  releaseReminderMinutes: 10,
 };
 
 describe.each(["light", "dark"] as const)("kitchen changes setting accessibility (%s)", (theme) => {
@@ -123,38 +122,6 @@ describe.each(["light", "dark"] as const)(
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
         expect(el.shadowRoot!.querySelector('[data-field-error="printMovedSlips"]')).not.toBeNull();
-      }
-      await expectNoA11yViolations(host);
-    });
-  },
-);
-
-describe.each(["light", "dark"] as const)(
-  "release reminder setting accessibility (%s)",
-  (theme) => {
-    test.each([
-      ["stored", undefined],
-      ["refused", new Error("offline")],
-    ] as const)("the select and its hint, %s", async (_state, refusal) => {
-      setLocale("en");
-      await mountThemed("<div></div>", theme);
-      const el = document.createElement("dashboard-venue-service-settings") as ServiceSettingsPanel;
-      el.api = {
-        loadSettings: vi.fn().mockResolvedValue(model),
-        saveReleaseReminderMinutes: refusal ? vi.fn().mockRejectedValue(refusal) : vi.fn(),
-      } as unknown as VenueServiceApi;
-      host.append(el);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
-      const select = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-        'wt-combobox[name="releaseReminderMinutes"]',
-      )!;
-      expect(select).not.toBeNull();
-      if (refusal) {
-        await chooseOption(select, "5");
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await el.updateComplete;
-        expect(select.error).not.toBe("");
       }
       await expectNoA11yViolations(host);
     });
