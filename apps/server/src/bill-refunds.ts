@@ -70,7 +70,7 @@ export interface BillRefundResult {
  * none is available here. */
 export type RefundProviderFor = (providerName: string) => Promise<PaymentProvider | undefined>;
 
-export type BillRefundDeps = Pick<TillSaleDeps, "db" | "clock"> & {
+export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock"> & {
   refundProviderFor?: RefundProviderFor;
   attendance?: AttendanceRecorder;
 };
@@ -617,6 +617,7 @@ export async function refundBillPayment(
             throw new AppError("submission.id_reused", { submissionId: req.submissionId });
           }
           if (earlier.refund.state === "pending") {
+            await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
             return { kind: "resume" as const, refundId: earlier.refund.id };
           }
           return {
@@ -627,6 +628,8 @@ export async function refundBillPayment(
         if (earlier.payment !== undefined) {
           throw new AppError("submission.id_reused", { submissionId: req.submissionId });
         }
+        const reading = deps.clock.now();
+        await deps.backend.refuseWhileClockBehind(tx, reading);
 
         await requireOpenBill(tx, workingOrderId);
         await refusePaymentInFlight(tx, [workingOrderId]);
@@ -653,7 +656,7 @@ export async function refundBillPayment(
           });
         }
 
-        const createdAt = deps.clock.now().instant.toISOString();
+        const createdAt = reading.instant.toISOString();
         const values = {
           billPaymentId: paymentId,
           submissionId: req.submissionId,

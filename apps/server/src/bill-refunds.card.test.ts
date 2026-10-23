@@ -818,6 +818,7 @@ describe("the provider refunds another refund of the payment already accounts fo
       const resumed = await resumeCardRefund(
         {
           db: venue.db,
+          backend: venue.backend,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -864,6 +865,7 @@ describe("the provider refunds another refund of the payment already accounts fo
       resumeCardRefund(
         {
           db: venue.db,
+          backend: venue.backend,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -934,6 +936,7 @@ describe("the provider's refunds read before the first send", () => {
       const unseen = await resumeCardRefund(
         {
           db: venue.db,
+          backend: venue.backend,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -946,6 +949,7 @@ describe("the provider's refunds read before the first send", () => {
       const seen = await resumeCardRefund(
         {
           db: venue.db,
+          backend: venue.backend,
           clock: systemClock(),
           refundProviderFor: () => Promise.resolve(venue.card),
         },
@@ -1674,6 +1678,7 @@ describe("a refund the provider here cannot answer for", () => {
     resumeCardRefund(
       {
         db: venue.db,
+        backend: venue.backend,
         clock: systemClock(),
         ...(refundProviderFor === undefined ? {} : { refundProviderFor }),
       },
@@ -1781,7 +1786,12 @@ describe("a refund the provider here cannot answer for", () => {
     );
 
     const resumed = await resumeCardRefund(
-      { db: venue.db, clock: systemClock(), refundProviderFor: partial({}) },
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: systemClock(),
+        refundProviderFor: partial({}),
+      },
       stranded!.id,
       "retry",
       venue.cfg.origin,

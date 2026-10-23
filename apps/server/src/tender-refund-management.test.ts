@@ -608,7 +608,7 @@ it("takes one live resolver before provider I/O and refuses competing manager ac
 it("uses the transaction-owning confirmed-outcome helper without a second provider send", async () => {
   const t = await pending();
   const result = await attestTenderRefund(
-    { db: store.db, clock: venue.clock, attendance: recordAttendanceFact },
+    { db: store.db, backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact },
     t.id,
     "failed",
     { attestedBy: venue.adminId, note },

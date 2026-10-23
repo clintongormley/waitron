@@ -1076,6 +1076,7 @@ async function beginBillPayment(
   if (earlier.refund !== undefined) {
     throw new AppError("submission.id_reused", { submissionId: req.submissionId });
   }
+  await backend.refuseWhileClockBehind(tx, reading);
 
   await requireOpenBill(tx, workingOrderId);
   await requireOrderBillEditor(tx, workingOrderId, {

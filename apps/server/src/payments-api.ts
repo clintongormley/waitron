@@ -1357,6 +1357,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
 
   const refundDeps = {
     db: deps.db,
+    backend: deps.backend,
     clock: deps.clock,
     attendance: deps.attendance,
     refundProviderFor: refundProvidersOf({ simulator: deps.simulator, pool: deps.pool }),

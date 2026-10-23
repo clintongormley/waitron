@@ -434,7 +434,12 @@ it("recovers a pending reader-card refund after sign-out and deactivation withou
   await revoke("signed out");
   await revoke("switched off");
   const recovered = await resumeCardRefund(
-    { db: suite.db, clock: venue.clock, refundProviderFor: () => Promise.resolve(venue.card) },
+    {
+      db: suite.db,
+      backend: venue.backend,
+      clock: venue.clock,
+      refundProviderFor: () => Promise.resolve(venue.card),
+    },
     pending!.id,
     "loop",
     jobOrigin("payment_check"),

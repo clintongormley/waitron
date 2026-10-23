@@ -138,6 +138,7 @@ export function mountTenderRefundApi(
   );
   const commandDeps = {
     db: deps.db,
+    backend: deps.backend,
     clock: deps.clock,
     attendance: deps.attendance,
     refundProviderFor: refundProvidersOf({ simulator: deps.cardProvider, pool: deps.pool }),

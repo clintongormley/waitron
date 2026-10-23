@@ -2733,6 +2733,7 @@ async function bootServer(
     isSingletonPrimary && !fencedOrMirror
       ? runTenderRefundRecoveryLoop({
           db,
+          backend: tillBackend,
           clock: tillClock,
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
           attendance: attendanceRecorder,
