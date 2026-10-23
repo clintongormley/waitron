@@ -72,6 +72,7 @@ describe("staff-notice codes are worded by the till", () => {
         "storage.space_low",
         "clock.unusable",
         "fiscal.records_unsent",
+        "printer.jobs_waiting",
       ]),
     );
   });
