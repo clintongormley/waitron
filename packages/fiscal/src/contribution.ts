@@ -108,8 +108,7 @@ export interface FiscalOutboxState {
   /** The box's time when it last saved an acceptance from the authority, with or without
    * errors; null if it never has. */
   readonly lastAcceptedAt: string | null;
-  /** Records the next tries will try: every unsent record not behind a record held after
-   * repeated refusals on its own chain. */
+  /** Every unsent record not behind a record held after repeated refusals on its own chain. */
   readonly waiting: number;
 }
 

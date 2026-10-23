@@ -3,8 +3,8 @@ import type { FiscalOutboxState } from "@waitron/fiscal";
 import { sql, type SQL } from "drizzle-orm";
 import { lastAcceptedQuery } from "./certificate-card.js";
 
-/** The ids of every `pendiente` record not behind a `detenido` record of its own chain: what the
- * next passes will try. */
+/** The ids of every `pendiente` record not behind a `detenido` record of its own chain, by the same
+ * held-chain test as `haltOpenChainClaims` in `drain.ts`. */
 function waitingRecords(): SQL {
   return sql`
     select e.registro_id from envios e
