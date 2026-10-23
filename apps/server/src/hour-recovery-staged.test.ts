@@ -63,7 +63,10 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-history-reader.js", async (original)
   };
 });
 
-/** A backup taken by the release before fiscal-verifactu's last migration (two added columns). */
+/**
+ * A backup taken by the release before fiscal-verifactu's 0009 (two added columns). Each later
+ * migration is undone first, newest first, or drizzle's `max(created_at)` watermark skips 0009.
+ */
 async function olderBackup() {
   const manifest = await buildManifest({
     db: suite.db,
@@ -74,6 +77,12 @@ async function olderBackup() {
   const database = join(root, "older-backup.db");
   await suite.db.archiveTo(database);
   const raw = new DatabaseSync(database);
+  raw.exec("DROP INDEX registros_generado_idx");
+  raw.exec("DROP TABLE clock_stop_restarts");
+  raw.exec(
+    "DELETE FROM __drizzle_migrations_fiscal WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations_fiscal)",
+  );
+  manifest.modules["fiscal-verifactu"] = manifest.modules["fiscal-verifactu"]! - 1;
   raw.exec("ALTER TABLE envio_flujo DROP COLUMN technical_incident_token");
   raw.exec("ALTER TABLE envios DROP COLUMN technical_incidence");
   raw.exec(
