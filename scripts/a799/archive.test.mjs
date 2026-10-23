@@ -604,3 +604,27 @@ it("reports an unresolved placement operation without racing partial removal", a
   await expect(admit(undefined, inventory(), limits, io)).rejects.toThrow("archive.cleanup");
   expect(io.calls.some(([name]) => name === "cleanup")).toBe(false);
 });
+
+it("refuses a post-finish replacement before a later operation can restore the path", async () => {
+  const io = ioFor();
+  const list = [...inventory(), { ...file, path: "state/second" }];
+  const open = io.openExclusiveNoFollow;
+  let original;
+  io.openExclusiveNoFollow = async (entry) => {
+    if (entry.path === "state/second") io.placed.get("state/venue.db").identity.ino = original;
+    const handle = await open(entry);
+    if (entry.path === "state/venue.db") original = handle.identity.ino;
+    return handle;
+  };
+  io.finishVerifiedFile = async (handle) => {
+    if (handle.path === "state/venue.db") handle.identity.ino = 999;
+  };
+  await expect(
+    admit(
+      gzipSync(raw(list, [Buffer.alloc(0), contents, contents])),
+      list,
+      { ...limits, entries: 3 },
+      io,
+    ),
+  ).rejects.toThrow("archive.placement");
+});

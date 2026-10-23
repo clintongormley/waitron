@@ -412,7 +412,7 @@ async function download(s) {
 describe("pinned GitHub release transport", () => {
   it("binds the source tag, release membership and exact asset request to the Waitron repository", async () => {
     const s = httpSetup();
-    expect(await download(s)).toEqual(s.bytes);
+    await expect(download(s)).resolves.toEqual(s.bytes);
     expect(s.requests.map((r) => r.url)).toEqual([
       "https://api.github.com/repos/clintongormley/waitron/releases/100",
       "https://api.github.com/repos/clintongormley/waitron/git/ref/tags/release-1",
@@ -470,7 +470,7 @@ describe("pinned GitHub release transport", () => {
         return response(200, { object: { type: "commit", sha: sha(1) } });
       return request(url, options);
     };
-    expect(await download(s)).toEqual(s.bytes);
+    await expect(download(s)).resolves.toEqual(s.bytes);
   });
   it("strips authorization on the allowed cross-origin asset redirect", async () => {
     const s = httpSetup();
@@ -484,7 +484,7 @@ describe("pinned GitHub release transport", () => {
       }
       return request(url, options);
     };
-    expect(await download(s)).toEqual(s.bytes);
+    await expect(download(s)).resolves.toEqual(s.bytes);
     expect(s.requests.at(-1).url).toBe(
       "https://release-assets.githubusercontent.com/path?signed=value",
     );
@@ -951,7 +951,7 @@ describe("reviewed custody and HTTP boundaries", () => {
             headers: { location: "https://release-assets.githubusercontent.com/file" },
           })
         : request(url, options);
-    expect(await download(s)).toEqual(s.bytes);
+    await expect(download(s)).resolves.toEqual(s.bytes);
   });
   it("bounds all stalled cleanup seats within one fetch-plus-cleanup allowance", async () => {
     const s = setup();
