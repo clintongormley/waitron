@@ -28,21 +28,29 @@ on the box, on the [Box status page](box-status.md#free-space).
 set too far in the past to record a sale for the tax agency. A manager needs to fix the clock.
 
 **Payments stopped: the box's clock reads earlier than its last sale · Tell a manager** is red. The
-box's clock reads more than a minute earlier than the last sale it recorded, and a sale recorded
-now would carry a time before that one. So until the clock is right, the box refuses anything that
-takes or gives back money: payments in cash or by card, at the counter or at a table, refunds and
-retried refunds, a table leaving without paying, cancelling an order that already has an invoice,
-and a change or a kitchen send that would finish paying a bill already paid in part.
+box's clock reads more than a minute earlier than the last sale it recorded. Until it reads no more
+than a minute earlier, the box refuses payments, refunds and anything else that would record a sale
+or settle money: payments in cash or by card, at the counter or at a table, refunds and retried
+refunds, a table leaving without paying, cancelling an order that already has an invoice, and a
+change or a kitchen send that would finish paying a bill already paid in part. On the dashboard,
+managers cannot sort out stuck or held payments and refunds either.
 
-Everything else carries on. You can seat tables, take orders, send them to the kitchen, clock in
-and out, reprint a receipt and print an invoice that was already made. A refused payment leaves
-the order open.
+Other work carries on. For example, you can seat tables, take orders, send them to the kitchen,
+clock in and out, reprint a receipt and print an invoice that was already made. A refused payment
+leaves the order open.
 
 When a payment is refused, the till shows the box's time and the time of the last sale. If you
 already charged the customer on another card machine, do not charge again: record the payment once
-the clock is fixed. If a card reader charged the card just as payments stopped, the till says the
-card was charged but the sale is not recorded. Do not charge again. Once the clock is right, press
-**Pay** on that order: the payment is recorded without charging the card a second time.
+payments are back.
+
+If a card reader charged the card just as payments stopped, the till says the card was charged but
+the sale is not recorded. Do not charge again. What happens next depends on where the card was
+taken:
+
+- **At the counter:** once payments are back, press **Pay** on that order. The payment is recorded
+  without charging the card a second time.
+- **On a table's bill:** the payment stays waiting, and the box records it by itself once payments
+  are back.
 
 A manager fixes this from the [Box status page](box-status.md#clock-behind).
 

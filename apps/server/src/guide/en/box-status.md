@@ -95,11 +95,12 @@ space.
 
 ## When payments stop because of the clock {#clock-behind}
 
-Every sale the box records for the tax agency carries the time it was made, and those times must
-never go backwards. So when the box's clock reads more than a minute earlier than the latest sale
-recorded on the box, the box stops taking payments and refunds until the clock is right again.
-Orders, the kitchen and clocking in carry on. The [till notices guide](till-notices.md#notices)
-lists what staff can and cannot do meanwhile.
+When the box's clock reads more than a minute earlier than the latest sale recorded on the box, the
+box stops taking payments and refunds. A sale recorded then would carry a time before that latest
+one. The stop lasts until the clock reads no more than a minute earlier than that sale. Taking
+orders, the kitchen and clocking in carry on, though a change or a kitchen send that would finish
+paying a part-paid bill, and cancelling an order that already has an invoice, are refused. The [till
+notices guide](till-notices.md#notices) lists what staff can and cannot do meanwhile.
 
 The tills show **Payments stopped: the box's clock reads earlier than its last sale**. The alerts
 bell says so too, with both times in it: the time on the box's clock and the time of the latest
@@ -110,17 +111,18 @@ internet**.
 
 There are two ways out:
 
-- **Set the clock right.** On a box that keeps its clock in time over the internet, connecting it
-  to the internet lets it correct the clock by itself. Otherwise, call whoever installed the box:
-  the box has no page for setting its clock.
-- **Wait.** Once real time passes the time of the latest sale, the box takes payments again. This
-  is the only way out when the clock is right but the latest sale was recorded with a wrong time,
-  for example while the clock was running fast.
+- **Set the clock right.** On a box that keeps its clock in time over the internet, connecting it to
+  the internet lets it correct the clock by itself. Otherwise, call whoever installed the box: the
+  box has no page for setting its clock. This ends the stop unless the latest sale itself carries a
+  wrong, later time.
+- **Wait.** Once the box's clock reaches a minute before the time of the latest sale, the box takes
+  payments again. This is the only way out when the clock is right but the latest sale was recorded
+  with a wrong time, for example while the clock was running fast.
 
-Nobody needs to restart anything. Each payment is checked when it is made, so the first one after
-the clock is right is no longer refused for the clock. The tills' notice and this page's red rows
-clear within about 15 seconds. The bell, and the bell's alert shown under the **Clock** row, clear
-within about a minute.
+You do not need to restart the box or the tills. Each payment is checked when it is made, so once
+the clock reads no more than a minute before the latest sale, the next payment is no longer refused
+for the clock. The tills' notice and this page's red rows clear within about 15 seconds. The bell,
+and the bell's alert shown under the **Clock** row, clear within about a minute.
 
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
 box's clock is wrong** instead. The way out is the same: set the clock right.

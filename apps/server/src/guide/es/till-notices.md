@@ -33,22 +33,30 @@ La hora del equipo está tan atrasada que no se puede registrar una venta para H
 encargado tiene que corregir la hora.
 
 **No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado** es
-rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró, y una
-venta registrada ahora llevaría una hora anterior a esa. Por eso, hasta que la hora sea correcta, el
-equipo rechaza todo lo que cobra o devuelve dinero: cobros en efectivo o con tarjeta, en la barra o
-en una mesa, devoluciones y reintentos de devoluciones, una mesa que se va sin pagar, anular un
-pedido que ya tiene factura, y un cambio o un envío a cocina que terminaría de pagar una cuenta ya
-pagada en parte.
+rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró. Hasta que
+marque como mucho un minuto antes, el equipo rechaza los cobros, las devoluciones y todo lo que
+registraría una venta o movería dinero: cobros en efectivo o con tarjeta, en la barra o en una mesa,
+devoluciones y reintentos de devoluciones, una mesa que se va sin pagar, anular un pedido que ya
+tiene factura, y un cambio o un envío a cocina que terminaría de pagar una cuenta ya pagada en
+parte. En el panel, los encargados tampoco pueden resolver cobros ni devoluciones atascados o
+retenidos.
 
-Todo lo demás sigue funcionando. Puedes sentar mesas, tomar pedidos, enviarlos a cocina, fichar la
-entrada y la salida, reimprimir un recibo e imprimir una factura que ya estaba hecha. Un cobro
-rechazado deja el pedido abierto.
+El resto del trabajo sigue. Por ejemplo, puedes sentar mesas, tomar pedidos, enviarlos a cocina,
+fichar la entrada y la salida, reimprimir un recibo e imprimir una factura que ya estaba hecha. Un
+cobro rechazado deja el pedido abierto.
 
 Cuando se rechaza un cobro, el terminal muestra la hora del equipo y la de la última venta. Si ya
-has cobrado al cliente en otro datáfono, no vuelvas a cobrar: registra el pago cuando se arregle la
-hora. Si un lector de tarjetas cobró la tarjeta justo cuando se pararon los cobros, el terminal dice
-que se ha cobrado pero la venta no se ha registrado. No vuelvas a cobrar. Cuando la hora sea
-correcta, pulsa **Cobrar** en ese pedido: el pago se registra sin cobrar la tarjeta otra vez.
+has cobrado al cliente en otro datáfono, no vuelvas a cobrar: registra el pago cuando se pueda
+volver a cobrar.
+
+Si un lector de tarjetas cobró la tarjeta justo cuando se pararon los cobros, el terminal dice que
+se ha cobrado pero la venta no se ha registrado. No vuelvas a cobrar. Lo que pasa después depende de
+dónde se cobró:
+
+- **En la barra:** cuando se pueda volver a cobrar, pulsa **Cobrar** en ese pedido. El pago se
+  registra sin cobrar la tarjeta otra vez.
+- **En la cuenta de una mesa:** el pago queda pendiente, y el equipo lo registra por sí solo cuando
+  se puede volver a cobrar.
 
 El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind).
 
