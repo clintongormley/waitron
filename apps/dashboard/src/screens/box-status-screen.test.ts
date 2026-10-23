@@ -1,5 +1,5 @@
-import { userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData, formatBytes } from "@waitron/dashboard-kit";
 import type {
   AlertView,
@@ -943,6 +943,52 @@ describe("dashboard-box-status-screen's restart of payments", () => {
     sent.resolve();
     await close;
     expect(dialog(el).open).toBe(false);
+  });
+
+  it("never breaks a written time across two lines, on the Clock row or in the dialog", async () => {
+    const { innerWidth, innerHeight } = window;
+    onTestFinished(() => page.viewport(innerWidth, innerHeight));
+    const { el } = await mount(
+      stubApi(
+        {},
+        stopped({
+          offer: "restarted",
+          restart: {
+            personName: "Ana García",
+            restartedAt: "2026-10-22T18:12:00.000Z",
+            clockAt: STOP.clockAt,
+          },
+        }),
+      ),
+    );
+    const offered = await mount(stubApi({}, stopped()));
+    await open(offered.el);
+    const broken: string[] = [];
+    let checked = 0;
+    for (let width = 320; width <= 1280; width += 8) {
+      await page.viewport(width, 900);
+      await el.updateComplete;
+      const lines = [
+        ...qa(el, "[data-test=row-clock] .words p"),
+        ...qa(offered.el, "[data-test=restart-proof], [data-test=restart-dialog] dd"),
+      ];
+      for (const line of lines) {
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+          for (const match of node.textContent!.matchAll(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g)) {
+            checked += 1;
+            const range = document.createRange();
+            range.setStart(node, match.index);
+            range.setEnd(node, match.index + match[0].length);
+            const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+            if (tops.size > 1) broken.push(`${width}px: ${match[0]}`);
+          }
+        }
+      }
+    }
+    // Each width checks the row's proof and restart times and the dialog's four.
+    expect(checked).toBeGreaterThanOrEqual(121 * 6);
+    expect(broken).toEqual([]);
   });
 
   it("closes on Cancel and on Escape without sending", async () => {

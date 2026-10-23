@@ -169,6 +169,9 @@ export class BoxStatusScreen extends LitElement {
       .times dd {
         margin: 0;
       }
+      .time {
+        white-space: nowrap;
+      }
       .proof {
         margin: 0 0 var(--wt-space-1);
       }
@@ -322,15 +325,15 @@ export class BoxStatusScreen extends LitElement {
       <dl class="times">
         <div>
           <dt>${t("box_status.clock.restart.box_reads")}</dt>
-          <dd>${formatIsoMinute(stop.clockAt)}</dd>
+          <dd class="time">${formatIsoMinute(stop.clockAt)}</dd>
         </div>
         <div>
           <dt>${t("box_status.clock.restart.last_sale_reads")}</dt>
-          <dd>${formatIsoMinute(stop.lastRecordAt)}</dd>
+          <dd class="time">${formatIsoMinute(stop.lastRecordAt)}</dd>
         </div>
       </dl>
       ${clockStopProof(stop).map(
-        (line) => html`<p class="proof" data-test="restart-proof">${line}</p>`,
+        (line) => html`<p class="proof" data-test="restart-proof">${wholeTimes(line)}</p>`,
       )}
       <p class="restart-body" data-test="restart-body">${t("box_status.clock.restart.body")}</p>
       <wt-form-actions slot="footer" .error=${this.restartError}>
@@ -424,13 +427,13 @@ export class BoxStatusScreen extends LitElement {
       >
       <div class="name">${t(`box_status.part.${row.id}` as StringKey)}</div>
       <div class="words">
-        <p class="line">${row.line}</p>
+        <p class="line">${wholeTimes(row.line)}</p>
         ${
           row.details.length === 0
             ? nothing
-            : html`<p class="detail">${row.details.join(" · ")}</p>`
+            : html`<p class="detail">${wholeTimes(row.details.join(" · "))}</p>`
         }
-        ${sentences.map((sentence) => html`<p class="alert" data-test="row-alert">${sentence}</p>`)}
+        ${sentences.map((sentence) => html`<p class="alert" data-test="row-alert">${wholeTimes(sentence)}</p>`)}
         ${
           disk && health.disk.reclaimable.backupRunning
             ? html`<p class="aside" data-test="backup-running">
@@ -541,6 +544,15 @@ export class BoxStatusScreen extends LitElement {
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderRestartDialog()}
     `;
   }
+}
+
+const WRITTEN_TIME = /(\d{4}-\d{2}-\d{2} \d{2}:\d{2})/;
+
+/** Wraps each time `formatIsoMinute` wrote so a line never breaks inside it. */
+function wholeTimes(text: string): (string | TemplateResult)[] {
+  return text
+    .split(WRITTEN_TIME)
+    .map((part, i) => (i % 2 === 1 ? html`<span class="time">${part}</span>` : part));
 }
 
 function restartRefusal(error: unknown): string {
