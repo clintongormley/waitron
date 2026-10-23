@@ -1337,7 +1337,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
   users.
 
 
-## The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
+## The reasons screen keeps its own copy of the role list and role names
 
 - The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
   displayed name, with a separate seniority order for validation) and of the dashboard's
@@ -1398,7 +1398,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
     question, opened by a click.
 
 
-## Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
+## Still open from #298/#305/#317, device checks before deployment
 
 - Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
   passwordless account; an operator screen for Google provider credentials (now part of A646);

@@ -3839,8 +3839,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).**
   [Detail](backlog/dashboard.md#a904-correct-the-list-of-users-in---wt-cell-name-max-widths-comment-packagesui-coresrctokensstructurecss-left-open-by-a827-1889)
 
-- The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
-  [Detail](backlog/dashboard.md#the-reasons-screen-keeps-its-own-copy-of-the-role-list-and-role-names-c51-sorts-its-dropdowns-by)
+- The reasons screen keeps its own copy of the role list and role names
+  [Detail](backlog/dashboard.md#the-reasons-screen-keeps-its-own-copy-of-the-role-list-and-role-names)
 
 - **Override PIN limits (C89, #951), for the owner** — **Next action:** the owner decides whether to
   add the countdown and make the limit required. Left open by service Task 11 (#916).
@@ -3948,8 +3948,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   one has not.**
   [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)
 
-- Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
-  [Detail](backlog/dashboard.md#still-open-from-298305317-device-checks-before-deployment-passkey-reauthentication-for-a)
+- Still open from #298/#305/#317, device checks before deployment
+  [Detail](backlog/dashboard.md#still-open-from-298305317-device-checks-before-deployment)
 
 - **Three older dashboard screens name languages with their own code rather than
   `languageDisplayName` (`packages/shared`)** — left open by C114 (#1022, a copy printed in another
