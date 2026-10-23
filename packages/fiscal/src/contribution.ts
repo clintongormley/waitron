@@ -103,6 +103,21 @@ export interface FiscalCertificateSeat {
   };
 }
 
+/** What the outbox holds, as the Box status page shows it. */
+export interface FiscalOutboxState {
+  /** The box's time when it last saved an acceptance from the authority, with or without
+   * errors; null if it never has. */
+  readonly lastAcceptedAt: string | null;
+  /** Records the next tries will try: every unsent record not behind a record held after
+   * repeated refusals on its own chain. */
+  readonly waiting: number;
+}
+
+export interface FiscalOutboxSeat {
+  /** Select-only; the host calls it in a write-lock turn with no change-log drain. */
+  read(tx: Transaction): Promise<FiscalOutboxState>;
+}
+
 /**
  * A module's contribution to the fiscal slot — the one provision-only, swappable slot. Exactly one
  * enabled module fills it; the framework selects it and refuses zero or two.
@@ -158,4 +173,5 @@ export interface FiscalContribution {
     }): void;
   };
   readonly certificate?: FiscalCertificateSeat;
+  readonly outbox?: FiscalOutboxSeat;
 }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import type { FiscalContribution } from "./contribution.js";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { FiscalContribution, FiscalOutboxSeat, FiscalOutboxState } from "./contribution.js";
 
 describe("FiscalContribution.drain contract", () => {
   it("a contribution can expose an empty drain pass", async () => {
@@ -27,5 +27,14 @@ describe("FiscalContribution.certificate contract", () => {
       certificate: undefined,
     };
     expect(c.certificate).toBeUndefined();
+  });
+});
+
+describe("FiscalContribution.outbox contract", () => {
+  it("the outbox seat is optional and its read answers the outbox state", () => {
+    expectTypeOf<FiscalContribution["outbox"]>().toEqualTypeOf<FiscalOutboxSeat | undefined>();
+    expectTypeOf<
+      Awaited<ReturnType<FiscalOutboxSeat["read"]>>
+    >().toEqualTypeOf<FiscalOutboxState>();
   });
 });

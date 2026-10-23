@@ -36,3 +36,4 @@ export type {
   VatBreakdownLine,
 } from "./backend.js";
 // The fake backend is deliberately not re-exported: it is a test double.
+export type { FiscalOutboxSeat, FiscalOutboxState } from "./contribution.js";
