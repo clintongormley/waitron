@@ -1534,13 +1534,15 @@ export function releaseReminder(
 }
 
 /**
- * Each party's reminder interval, from its department ({@link partyFirstZones}); null when none.
+ * Each party's reminder interval, from the department of its first table's zone — `firstZones`
+ * when given, else {@link partyFirstZones}; null when none.
  */
 async function partyReminderMinutes(
   tx: Transaction,
   partyIds: readonly string[],
+  firstZones?: ReadonlyMap<string, string>,
 ): Promise<Map<string, number | null>> {
-  const zones = await partyFirstZones(tx, partyIds);
+  const zones = firstZones ?? (await partyFirstZones(tx, partyIds));
   const byZone = await VENUE_SERVICE.readReleaseReminderMinutesByZone(tx, [
     ...new Set(zones.values()),
   ]);
@@ -1553,18 +1555,19 @@ async function partyReminderMinutes(
 }
 
 /**
- * Each of these parties' release reminders ({@link releaseReminder}), keyed by party, from two
- * reads of their departments' intervals and one each of the parties' groups and dish lines. A party
- * that is not open has none: it can no longer fire or snooze a group. A line on an abandoned bill
- * is left out, as {@link readCurrentOrders} leaves it out.
+ * Each of these parties' release reminders ({@link releaseReminder}), keyed by party, measured
+ * from the department of each party's first table's zone (`firstZones` when given, else
+ * {@link partyFirstZones}). A party that is not open has none: it can no longer fire or snooze a
+ * group. A line on an abandoned bill is left out, as {@link readCurrentOrders} leaves it out.
  */
 export async function readReleaseReminders(
   tx: Transaction,
   partyIds: readonly string[],
+  firstZones?: ReadonlyMap<string, string>,
 ): Promise<Map<string, ReleaseReminder | null>> {
   const reminders = new Map<string, ReleaseReminder | null>(partyIds.map((id) => [id, null]));
   if (partyIds.length === 0) return reminders;
-  const minutes = await partyReminderMinutes(tx, partyIds);
+  const minutes = await partyReminderMinutes(tx, partyIds, firstZones);
   const reminded = partyIds.filter((id) => minutes.get(id) !== null);
   if (reminded.length === 0) return reminders;
   const groups = await tx
