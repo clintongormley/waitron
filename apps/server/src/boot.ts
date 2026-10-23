@@ -2320,6 +2320,7 @@ async function bootServer(
     setsToMigrate,
   );
   const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
+  const fiscalOutbox = enabledFiscal.outbox;
   mountBoxHealthApi(
     app,
     {
@@ -2334,11 +2335,11 @@ async function bootServer(
             log: pageNoticeLog,
           },
           stream: () => streamHost.status(),
-          ...(enabledFiscal.outbox === undefined
+          ...(fiscalOutbox === undefined
             ? {}
             : {
                 outbox: {
-                  read: enabledFiscal.outbox.read,
+                  read: (tx) => fiscalOutbox.read(tx),
                   awaitingCertificate: () => awaitingFiscalCert.current,
                 },
               }),
