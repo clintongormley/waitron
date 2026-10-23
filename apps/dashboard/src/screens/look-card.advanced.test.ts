@@ -430,6 +430,21 @@ const TWO_FIXES: ThemeChoices = {
 };
 
 describe("fixes and Undo in Advanced", () => {
+  it("a pick waiting for its frame, then Undo: the pick lands and Undo puts nothing back", async () => {
+    const { el } = await mountChoices(CREAM_SAGE);
+    await openAdvanced(el);
+    await press(el, "hand-fix-light-text-muted");
+    const input = picker(el, "light", "text-muted");
+    input.value = "#123456";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    (inAdvanced(el, "hand-undo-light-text-muted") as HTMLElement).click();
+    await settle(el);
+    expect(handCode(el, "light", "text-muted").value).toBe("#123456");
+    expect(advanced(el).draft.choices.handSet.light["text-muted"]).toBe("#123456");
+    expect(inAdvanced(el, "hand-fixed-light-text-muted")).toBeNull();
+    expect(advanced(el).fixed).toEqual({});
+  });
+
   it("a row's fix records where it came from, Undo puts it back, and Cancel sends nothing", async () => {
     const { el, saveTheme } = await mountChoices(CREAM_SAGE);
     await openAdvanced(el);

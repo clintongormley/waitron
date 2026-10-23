@@ -23,7 +23,6 @@ import {
   THEME_COLOURS,
   WAITRON_CHOICES,
   canFixAll,
-  colourToken,
   fixAll,
   normaliseChoices,
   type Background,
@@ -424,13 +423,13 @@ export class LookCard extends LitElement {
       },
     });
   }
-  /** Whether the change was made: none is while a save is under way. */
+  /** None is made while a save is under way. */
   #change(
     next: (draft: LookDraft) => LookDraft,
     { code = false, hand = false }: { code?: boolean; hand?: boolean } = {},
-  ): boolean {
+  ): void {
     const before = this.draft;
-    if (!before || this.submitting) return false;
+    if (!before || this.submitting) return;
     const after = next(before);
     this.draft = after;
     if (code) this.refusedCode = "";
@@ -444,10 +443,9 @@ export class LookCard extends LitElement {
     }
     this.actionError = "";
     this.#scope?.changed();
-    return true;
   }
   #shown(draft: LookDraft, mode: Mode, key: ThemeColour): string {
-    return draft.choices.handSet[mode][key] ?? this.#theme()[mode][colourToken(key)]!;
+    return draft.choices.handSet[mode][key]!;
   }
   #handNext(draft: LookDraft, action: HandAction): [LookDraft, HandFixes] {
     const fixes = this.handFixed;
@@ -483,15 +481,20 @@ export class LookCard extends LitElement {
     }
   }
   #hand(action: HandAction): void {
-    const draft = this.draft;
-    if (!draft) return;
-    const [next, fixes] = this.#handNext(draft, action);
-    if (this.#change(() => next, { hand: true })) this.handFixed = fixes;
+    this.#change(
+      (draft) => {
+        const [next, fixes] = this.#handNext(draft, action);
+        this.handFixed = fixes;
+        return next;
+      },
+      { hand: true },
+    );
   }
   /** Fix all, and Fix and save: each hand value it changes is recorded, keeping an earlier `from`. */
   #takeAllFixes(): void {
-    const draft = this.draft;
-    if (!draft) return;
+    this.#change((draft) => this.#allFixed(draft), { hand: true });
+  }
+  #allFixed(draft: LookDraft): LookDraft {
     const choices = fixAll(WAITRON_DEFAULTS, draft.choices);
     let fixes = this.handFixed;
     const handCodes = { light: { ...draft.handCodes.light }, dark: { ...draft.handCodes.dark } };
@@ -507,9 +510,8 @@ export class LookCard extends LitElement {
         delete handCodes[mode][key];
       }
     }
-    if (this.#change(() => ({ ...draft, choices, handCodes }), { hand: true })) {
-      this.handFixed = fixes;
-    }
+    this.handFixed = fixes;
+    return { ...draft, choices, handCodes };
   }
   /** The same object while its content holds, so the 44-value section is not redrawn for nothing. */
   #errorsFor(draft: LookDraft): HandErrors {
@@ -521,8 +523,8 @@ export class LookCard extends LitElement {
     if (!sameErrors(errors, this.#handErrors)) this.#handErrors = errors;
     return this.#handErrors;
   }
-  #advanced(): ThemeAdvanced | null {
-    return this.shadowRoot?.querySelector("dashboard-theme-advanced") ?? null;
+  #advanced(): ThemeAdvanced {
+    return this.renderRoot.querySelector<ThemeAdvanced>("dashboard-theme-advanced")!;
   }
   #setBrandFix(mode: Mode, taken: boolean): void {
     this.#change((d) => {
@@ -587,7 +589,7 @@ export class LookCard extends LitElement {
           variant="ghost"
           size="sm"
           ?disabled=${busy}
-          @click=${() => void this.#advanced()!.reveal("dark", "primary")}
+          @click=${() => void this.#advanced().reveal("dark", "primary")}
           >${t("appearance.pick_dark")}</wt-button
         >
       </p>`;
@@ -612,9 +614,14 @@ export class LookCard extends LitElement {
     return note === "" ? nothing : html`<p class="kept" data-test="kept-note">${note}</p>`;
   }
   #useWaitronLook(): void {
-    if (!this.#change(() => waitronLook(), { code: true, hand: true })) return;
-    this.handFixed = {};
-    this.showKeptNote = false;
+    this.#change(
+      () => {
+        this.handFixed = {};
+        this.showKeptNote = false;
+        return waitronLook();
+      },
+      { code: true, hand: true },
+    );
   }
   #fixAllLine(busy: boolean): TemplateResult | typeof nothing {
     const warnings = this.#derived!.warnings;
@@ -632,7 +639,7 @@ export class LookCard extends LitElement {
     </p>`;
   }
   async #save(target: Target): Promise<void> {
-    if (!this.submitting) this.#advanced()?.flush();
+    if (!this.submitting) this.#advanced().flush();
     const draft = this.draft;
     if (this.submitting || !draft || !this.#editing) return;
     if (target === "save" && saveActionState(this.#scope).unchanged) return;
