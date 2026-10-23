@@ -94,8 +94,8 @@ zones assigned to it.
 
 You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
 lets you choose whether to mark preparation ready by line or by whole ticket; you no longer choose
-a venue-wide firing mode there. Each prep station sets its own late flags, under **Late flags
-(minutes)** when you edit it in **Prep stations**.
+a venue-wide firing mode there. Each prep station sets its own late flags when you add it with
+**Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**.
 
 ## Request cooking from the till {#request-cooking}
 

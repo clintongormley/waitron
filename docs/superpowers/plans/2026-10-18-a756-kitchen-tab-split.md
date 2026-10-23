@@ -1350,13 +1350,13 @@ own row. The two tables that held the venue value and the overrides are dropped.
    values (`packages/venue-service/src/dashboard/prep-stations-screen.ts:158-160`, `:792-794`). One
    constant names them for code, `DEFAULT_STATION_THRESHOLDS` in `@waitron/shared`; the schema
    keeps its literals, and `apps/server/src/kitchen.test.ts`'s case "a station row given no
-   minutes takes column defaults equal to DEFAULT_STATION_THRESHOLDS" inserts a bare
-   `kitchen_stations` row and compares its three minutes with the constant (Task 20 fix round 1),
-   so a change to the constant, or to the stored column default through a regenerated migration,
-   fails that case. An edit of the schema's `.default` alone, with no migration regenerated, does
-   not reach the database that case reads; `scripts/migrations-match-schema.test.ts` catches it
-   instead, since it regenerates every set from its TypeScript schema and fails on any difference
-   from the committed snapshot (read, not run).
+   minutes takes the schema's defaults, equal to DEFAULT_STATION_THRESHOLDS" inserts a bare
+   `kitchen_stations` row and compares its three minutes with the constant (Task 20 fix round 1).
+   That case catches a change to the constant or to the schema's `.default` (drizzle's insert sends
+   the schema's default as a bound value for an omitted column, `drizzle-orm/sqlite-core/dialect.js:366-367`);
+   `scripts/migrations-match-schema.test.ts` catches a `.default` committed without its migration
+   (both measured in Task 28's review: `.default(5)` → `.default(6)` alone failed each); nothing
+   checks the stored column default on its own.
 
 3. **Validation: the three minutes are required on the station; a present value is a whole number
    1–2147483647; the order is checked against what the station already has.** Today

@@ -7,7 +7,7 @@ export interface StationThresholds {
   forgottenAfterMinutes: number;
 }
 
-// The kitchen_stations column defaults; a server test pins that the two agree.
+// The kitchen_stations schema's declared defaults; a server test pins that the two agree.
 export const DEFAULT_STATION_THRESHOLDS: Readonly<StationThresholds> = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,

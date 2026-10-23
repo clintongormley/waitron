@@ -362,7 +362,7 @@ describe("kitchen-station config", () => {
     ).toMatchObject(DEFAULT_STATION_THRESHOLDS);
   });
 
-  it("a station row given no minutes takes column defaults equal to DEFAULT_STATION_THRESHOLDS", async () => {
+  it("a station row given no minutes takes the schema's defaults, equal to DEFAULT_STATION_THRESHOLDS", async () => {
     const cfg = await setupVenue();
     const id = randomUUID();
     await db.insert(kitchenStations).values({ id, locationId: cfg.locationId, name: "Bare" });

@@ -77,7 +77,7 @@ Una cuenta cobrada puede tener comida pendiente de servir. El pase y su monitor 
 comida hasta que la marques como servida o termines el servicio de la mesa; la comida que una mesa
 cerrada pasa al mostrador sigue hasta que se entrega el pedido (más abajo). El pase no tiene una
 acción Hecho ni En camino aparte. Los platos listos conservan su estado Listo y los avisos de
-retraso mientras esperan a que los sirvas. Si las mesas se han
+demora mientras esperan a que los sirvas. Si las mesas se han
 unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
 que las reúne.
 
@@ -108,7 +108,8 @@ estaciones y zonas de servicio que tiene asignadas.
 Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
 pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa; ya no se
 elige allí un modo de marcha para todo el local. Cada estación de preparación fija sus propios
-avisos de demora, en **Avisos de demora (minutos)** al editarla en **Estaciones de preparación**.
+avisos de demora al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
+editarla en **Estaciones de preparación**.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 
