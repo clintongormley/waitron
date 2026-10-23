@@ -1,9 +1,15 @@
 import { eq, sql } from "drizzle-orm";
-import { nowIso, type Transaction } from "@waitron/db";
+import { customThemes, nowIso, type Transaction } from "@waitron/db";
 import { departmentReceipts } from "@waitron/venue-service";
 import { AppError, type ReceiptLogoRasters } from "@waitron/shared";
 import { validateFraming, type ImageEditInput } from "./framing.js";
-import { readImage, readImageBytes, validateImageMetadata, type ImageRecord } from "./images.js";
+import {
+  readImage,
+  readImageBytes,
+  themeLogoName,
+  validateImageMetadata,
+  type ImageRecord,
+} from "./images.js";
 import { mediaImageBlobs, mediaImageEdits, mediaImages } from "./schema/images.js";
 import { imageFilename } from "./stored-filename.js";
 import type { PreparedImage } from "./prepare.js";
@@ -62,7 +68,8 @@ export async function saveImage(
       throw new AppError("image.hash_conflict", { filename: prepared.filename });
     if (!blob) await tx.insert(mediaImageBlobs).values({ hash, bytes: prepared.bytes });
   }
-  // Match inside the write transaction: a logo may have been attached while pixels were prepared.
+  // Match receipts and themes inside the write transaction: a logo may have been attached while
+  // pixels were prepared.
   const logoMatch = sql`case when json_valid(${departmentReceipts.receipt}) then
     case when json_type(${departmentReceipts.receipt}) = 'object' and json_type(${departmentReceipts.receipt}, '$.logo') = 'text'
     then json_extract(${departmentReceipts.receipt}, '$.logo') else null end else null end = ${current.filename}`;
@@ -78,6 +85,17 @@ export async function saveImage(
         .update(departmentReceipts)
         .set({ logoRasters: rasters!, updatedAt: nowIso() })
         .where(logoMatch);
+    const themeMatch = sql`${themeLogoName("light")} = ${current.filename}`;
+    const themes = await tx.select({ id: customThemes.id }).from(customThemes).where(themeMatch);
+    if (themes.length && (!rasters?.["58mm"] || !rasters["80mm"]))
+      throw new Error("Receipt logo requires both printable pictures");
+    if (themes.length)
+      await tx
+        .update(customThemes)
+        .set({
+          theme: sql`json_set(${customThemes.theme}, '$.printedLogo', json(${JSON.stringify(rasters)}))`,
+        })
+        .where(themeMatch);
   }
   await tx
     .update(mediaImages)
