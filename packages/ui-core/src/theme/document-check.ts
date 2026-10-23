@@ -1,5 +1,5 @@
 import { MODES, type Mode } from "./defaults.js";
-import { BACKGROUNDS, normaliseChoices, type ThemeChoices } from "./theme.js";
+import { BACKGROUNDS, normaliseChoices, type ThemeChoices, type ThemeLogo } from "./theme.js";
 import { CORNER_CHOICES, THEME_COLOURS } from "./tokens.js";
 
 export const THEME_DOCUMENT_KEYS = [
@@ -111,8 +111,9 @@ function checkLogo(value: unknown): Refusal | null {
       : refuse("logo.light", "missing");
   }
   if (typeof value.light !== "string") return refuse("logo.light", "bad_value");
-  if (Object.hasOwn(value, "dark") && typeof value.dark !== "string")
+  if (Object.hasOwn(value, "dark") && typeof value.dark !== "string") {
     return refuse("logo.dark", "bad_value");
+  }
   return null;
 }
 
@@ -142,5 +143,15 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult {
     checkFixes(input) ??
     checkLogo(logo);
   if (refusal) return refusal;
-  return { ok: true, choices: normaliseChoices({ ...input, logo } as unknown as ThemeChoices) };
+  const own = logo as ThemeLogo | null;
+  const answered: ThemeLogo | null =
+    own === null
+      ? null
+      : Object.hasOwn(own, "dark")
+        ? { light: own.light, dark: own.dark }
+        : { light: own.light };
+  return {
+    ok: true,
+    choices: normaliseChoices({ ...input, logo: answered } as unknown as ThemeChoices),
+  };
 }

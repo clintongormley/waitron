@@ -44,8 +44,16 @@ describe("readThemeDocument", () => {
     }
   });
 
+  it("carries only a logo's own pictures, never an inherited dark one", () => {
+    const logo = Object.assign(Object.create({ dark: 7 }), { light: L });
+    const result = readThemeDocument({ ...WAITRON_CHOICES, logo });
+    expect(result).toEqual({ ok: true, choices: { ...WAITRON_CHOICES, logo: { light: L } } });
+    expect(result.ok && result.choices.logo?.dark).toBeUndefined();
+  });
+
   it("reads a document without a logo key as no logo", () => {
     const { logo: _, ...noLogo } = WAITRON_CHOICES;
+    void _;
     expect(readThemeDocument(noLogo)).toEqual({ ok: true, choices: WAITRON_CHOICES });
     expect(readThemeDocument({ ...WAITRON_CHOICES, logo: undefined })).toEqual({
       ok: true,
@@ -101,6 +109,7 @@ describe("readThemeDocument", () => {
     [{ ...WAITRON_CHOICES, logo: { dark: 7 } }, "logo.dark", "dark_without_light"],
     [{ ...WAITRON_CHOICES, logo: {} }, "logo.light", "missing"],
     [{ ...WAITRON_CHOICES, logo: Object.create({ light: L }) }, "logo.light", "missing"],
+    [{ ...WAITRON_CHOICES, logo: Object.create({ dark: D }) }, "logo.light", "missing"],
     [{ ...WAITRON_CHOICES, logo: { light: 7 } }, "logo.light", "bad_value"],
     [{ ...WAITRON_CHOICES, logo: { light: null } }, "logo.light", "bad_value"],
     [{ ...WAITRON_CHOICES, logo: { light: L, dark: null } }, "logo.dark", "bad_value"],
@@ -278,6 +287,7 @@ describe("readThemeDocument", () => {
     expect(readThemeDocument(sent).ok).toBe(true);
     expect(sent.brandColor).toBe("#F2D300");
     const { logo: _, ...noLogo } = WAITRON_CHOICES;
+    void _;
     const frozenWithoutLogo = deepFreeze({ ...noLogo });
     expect(readThemeDocument(frozenWithoutLogo)).toEqual({ ok: true, choices: WAITRON_CHOICES });
   });
