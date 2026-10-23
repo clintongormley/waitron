@@ -339,6 +339,76 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Current response disposition: 23 October 2026, D130/D132
+
+Use this response and the [focused plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#focused-d130d132-amendment-2026-10-23)
+for current path-scoped gates. Only the D130/D132 review sections in the supplied
+snapshots were read for this response. Their pins identify review sources;
+this response supplies no runtime qualification.
+
+| Pinned review source                                                                                                                                                                                                                                              | Full source-document SHA-256                                       | Exact source words, then intake consequence                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [D130 helper/routing response](https://github.com/waitron-io/waitron-cloud/blob/1ecaf2c5b43c8011e1aa2493a3d27f84b7b5a8e8/docs/waitron-integration-contract.md#a951-helper-and-routing-response-2026-10-23-d130), Cloud `1ecaf2c5b43c8011e1aa2493a3d27f84b7b5a8e8` | `45eac989f3af786b1ca6963f5fb921ad092c8bf71fb9c67b230b49988ed31183` | “Cloud accepts its engineering profile for T3 implementation with isolated fixtures.” Lane E matches that acceptance for the exact helper local profile below, with no live-adapter or host qualification. |
+| [D130 manifest disposition](https://github.com/waitron-io/waitron-cloud/blob/1ecaf2c5b43c8011e1aa2493a3d27f84b7b5a8e8/docs/waitron-integration-contract.md#a951-helper-and-routing-response-2026-10-23-d130)                                                      | Same D130 source digest                                            | “Accept the exact 83 ASCII bytes displayed in that proposal, with no final newline” Lane E matches the separate empty-manifest acceptance; no nonempty routes or customer products are accepted.           |
+| [D132 appliance response](https://github.com/waitron-io/waitron-cloud/blob/4e07a98a9dad1073289a76b086073afc36728191/docs/waitron-integration-contract.md#a951-appliance-response-2026-10-23-d132), Cloud `4e07a98a9dad1073289a76b086073afc36728191`               | `fd6bad29674a29bf8fec3e812c30acb2918ad8d4a9804411ef6227160aef434e` | “It did not accept the new appliance-to-helper mappings here.” The appliance and its integration mappings require D132’s returned amendments and a revised full-artifact disposition.                      |
+
+**Matching E helper acceptance:** `waitron-a951-helper-v1` /
+`proposal-2026-10-23.1`, [exact helper source at Waitron
+`fc54735435bc88b5fe7ba376c074fe8010c63401`](https://github.com/clintongormley/waitron/blob/fc54735435bc88b5fe7ba376c074fe8010c63401/docs/superpowers/specs/2026-10-23-a951-local-helper-v1-proposal.md),
+SHA-256 `da433f66a7dcb835e99eeb4a7e5c6f01f2bc9c69db369c44a5131247a4ab008f`.
+This accepts the original engineering profile solely for isolated T3 implementation
+with explicit injected policy. It accepts no appliance mapping, real G1/G2 proof,
+live adapter or actual host/custody performance. All numbers remain requirements
+from that exact helper profile, not measured Linux behavior.
+
+**Matching E empty-manifest acceptance:** exact original 83 bytes without final
+newline, revision `proposal-2026-10-23.1`, SHA-256
+`271fefd892b2c0f10ffab42f8e4a832a163b244733285f08d5a0ea1dfab1b012`.
+The [routing successor](../superpowers/specs/2026-10-23-a951-routing-v1-revision2.md)
+is artifact edition `proposal-2026-10-23.2`. It returns D130’s boot-bound,
+suspend-aware contexts/deadlines and literal read-boundary controls while retaining
+the original manifest bytes and revision. Its full publication SHA-256 is
+`974c4e98eb7d583d82ad1c573f9dcec01c63b2cc4f6630d38aeda22775d198d0`.
+**Lane G disposition remains pending; full routing and shared-parser code are not accepted.**
+
+The comparison pins Cloud `c0d0e800529ec6c1557fce9a4d68b9b43b7447dc` and
+Waitron foundation `72aed2e21705c9d02b6beda5ef248410ffc9b73a` identify source
+baselines, not implementations. D132 additionally compares Cloud
+`1dc34b2e460ffcbf110fd11c9768d68a8704c0e9` with the same Waitron foundation.
+Accepted appliance digest: **NONE**; accepted full-routing digest: **NONE**;
+accepted executable Waitron consumer: **NONE**; accepted executable Cloud
+consumer: **NONE**; real accepted consumer pair and qualified runtime pair: **NONE**.
+Record resulting real consumers, scope and accepted full-artifact digests in both
+repositories before connecting those implementations.
+
+| Affected path         | Current disposition                                                                                                                                                                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0                    | All five build cuts already approved. No repeat A951 owner build question.                                                                                                                                                                                                                                           |
+| G1/T3 isolated helper | Exact original local profile accepted by E/G. Follow the focused T3 additions in the plan; external proofs remain injected and synthetic. Actual host/listener custody is G7 unverified.                                                                                                                             |
+| G1/T1/T2/T5 appliance | Amendments required: actual approval/provisioning consumers; separately versioned helper custody/safety mapping for temporary closures versus durable stops, intact reboot and safety limits; complete signed-byte corpus; current helper/routing/A1018 references. No appliance acceptance or affected integration. |
+| G2                    | Actual A947 current-authority/freshness/withdrawal mapping remains open. Keep endpoint ID distinct from the actual authority target and reconcile latest A1018/D88.                                                                                                                                                  |
+| G3/G4/G5              | Staff-v1 client policy, independent public-upstream issuer/mTLS/mapping/transport, and moves/replacement remain gated for their paths. Staff v1 remains unchanged and test-only.                                                                                                                                     |
+| G6/T4                 | Exact empty manifest accepted separately. Routing revision 2 and its full digest require new Lane G acceptance before shared-parser code.                                                                                                                                                                            |
+| G6/T13, A980/D101     | Diagnostic/export schema and flow-scoped processing/access/destination/retention remain open, including staff metadata. No export permission follows from local receipts.                                                                                                                                            |
+| G7/live runtime       | No runtime/host/device qualification supplied. Real admission disabled, production customer manifest empty, `.local` independent. No provider/host/customer/fiscal action or publication/pause control.                                                                                                              |
+
+Latest A1018 source direction supplied for this response: canonical Cloud
+`08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec`, accepted source
+`d9252ac34f2b7e946e1154dd5af1a443c2c39ad4`. After takeover M2 alone handles
+all AEAT communication, including returned M1 fiscal records and outcomes, as
+required by [D132’s fourth return](https://github.com/waitron-io/waitron-cloud/blob/4e07a98a9dad1073289a76b086073afc36728191/docs/waitron-integration-contract.md#required-revisions-before-appliance-acceptance).
+The A1018 owner design question remains pending; an accepted source pin is not
+owner approval. No fiscal implementation or authority is supplied here.
+
+### Historical intake retained below, labelled on 23 October 2026
+
+The original intake and proposal notices below retain their publication state.
+Their blanket “no accepted helper” wording is explicitly superseded **only for
+D130’s exact isolated local-helper scope** and its separate empty-manifest
+acceptance. Their appliance, full-routing, live-adapter and runtime gates remain;
+neither the original body nor the original helper/appliance/routing proposals
+are silently rewritten.
+
 Before you implement the lasting connection, separate the owner's build approval
 from the protocol agreement with Cloud. The owner approved the complete
 [A951 plan](../superpowers/plans/2026-10-22-a951-connection.md) and all five cuts on

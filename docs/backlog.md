@@ -5195,11 +5195,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
   integration (2026-09-24; #638, #808).
 
-- **A951. The box's lasting tunnel and public-certificate client.** The complete plan and all five
-  build cuts are owner-approved. The [appliance](superpowers/specs/2026-10-23-a951-appliance-v1-proposal.md),
-  [local-helper](superpowers/specs/2026-10-23-a951-local-helper-v1-proposal.md) and
-  [routing](superpowers/specs/2026-10-23-a951-routing-v1-proposal.md) proposals await Lane G review.
-  Resolve their acceptance before affected adapters; runtime and provider qualification follow.
+- **A951. The box's lasting tunnel and public-certificate client.** Build approved; isolated helper profile accepted.
+  Follow the [plan amendment](superpowers/plans/2026-10-22-a951-connection.md#focused-d130d132-amendment-2026-10-23), obtain [routing revision 2](superpowers/specs/2026-10-23-a951-routing-v1-revision2.md) acceptance and finish the appliance amendments.
+  Live authority, upstream, privacy and runtime/provider gates remain open.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
@@ -5235,6 +5233,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **A backlog detail link still names the old five-handler heading.** The till entry’s
+  `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
+  no longer matches “Three till handlers still leave a failed list refresh unhandled”.
+  Retarget the link during the till backlog cleanup; keep the open handlers entry.
 
 For browser storage checks, inspect the operation's own entry and every write, comparing complete
 values rather than PIN substrings inside random IDs. See the
