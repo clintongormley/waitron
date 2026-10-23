@@ -25,7 +25,8 @@ space left, so orders, payments and other changes cannot be saved. A manager nee
 on the box, on the [Box status page](box-status.md#free-space).
 
 **Sales can't be recorded: the box's clock is wrong · Tell a manager** is red. The box's clock is
-set too far in the past to record a sale for the tax agency. A manager needs to fix the clock.
+set too far in the past to record a sale for the tax agency. Until it is fixed, the box also
+refuses payments and refunds. A manager needs to fix the clock.
 
 **Payments stopped: the box's clock reads earlier than its last sale · Tell a manager** is red. The
 box's clock reads more than a minute earlier than the last sale it recorded. Until it reads no more

@@ -29,8 +29,9 @@ encargado tiene que liberar espacio en el equipo, en la
 [página Estado del equipo](box-status.md#free-space).
 
 **No se pueden registrar ventas: la hora del equipo es incorrecta · Avisa al encargado** es rojo.
-La hora del equipo está tan atrasada que no se puede registrar una venta para Hacienda. El
-encargado tiene que corregir la hora.
+La hora del equipo está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
+se corrija, el equipo también rechaza los cobros y las devoluciones. El encargado tiene que
+corregir la hora.
 
 **No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado** es
 rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró. Hasta que

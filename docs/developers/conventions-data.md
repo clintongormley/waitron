@@ -2508,7 +2508,14 @@ seat's `FiscalBackend.assertRecordableAt` (`packages/fiscal/src/backend.ts`). Th
 the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose clock every
 `recordSale` call in `apps/server/src`, outside its tests and `src/testing/`, takes; before the
 reader for a new sale (`payIntegrated`); and on every bill payment, cash included
-(`beginBillPayment`).
+(`beginBillPayment`). `refuseWhileClockBehind` (`packages/fiscal-verifactu/src/clock-behind.ts`)
+checks this rule before the clock-behind one, so each check
+[the clock-behind section](#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves)
+lists refuses `clock.unusable` under such a clock, refunds and the dashboard's resolutions among
+them, and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
+any record dated before it (`chain.clock-behind.test.ts`). Run 2026-10-23 on a 2001 clock, on
+`provisionBillVenue`'s venue: a tender refund, a bill payment's refund and a bill card payment each
+answered `409 clock.unusable`, and neither refund reached the provider.
 
 **Weaker than the rule.**
 
