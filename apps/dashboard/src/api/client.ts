@@ -1746,11 +1746,12 @@ export interface BoxHealth {
   };
 }
 
-/** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
+/** LOCAL copy of the Retry now route's answer (`packages/fiscal-verifactu/src/routes.ts`). */
 export interface FiscalRetryView {
   waiting: number;
 }
 
+/** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
 export interface FreedSpaceView {
   freedBytes: number;
   deleted: number;
