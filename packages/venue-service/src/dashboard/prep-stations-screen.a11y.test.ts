@@ -469,7 +469,9 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
           overdueAfterMinutes: 10,
           forgottenAfterMinutes: 15,
           showsRestOfOrder: false,
-          printMovedSlips: null,
+          printMovedSlips: true,
+          ticketGrouping: "combined",
+          printHeldWork: false,
         }));
         const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
         const createStation = vi

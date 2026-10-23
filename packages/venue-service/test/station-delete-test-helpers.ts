@@ -49,7 +49,9 @@ export const stationView: PrepStationsView = {
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
       showsRestOfOrder: false,
-      printMovedSlips: null,
+      printMovedSlips: true,
+      ticketGrouping: "combined",
+      printHeldWork: false,
     },
   ],
   categories: [

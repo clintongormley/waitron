@@ -755,6 +755,8 @@ export class PrepStationsScreen extends LitElement {
           active: station.active,
           showsRestOfOrder: station.showsRestOfOrder,
           printMovedSlips: station.printMovedSlips,
+          ticketGrouping: station.ticketGrouping,
+          printHeldWork: station.printHeldWork,
           printerIds: this.#printersOf(station.id),
           warmAfterMinutes: station.warmAfterMinutes,
           overdueAfterMinutes: station.overdueAfterMinutes,
@@ -763,7 +765,6 @@ export class PrepStationsScreen extends LitElement {
         .printers=${this.view.printers}
         .stations=${this.#colourUsers()}
         .canManagePrinters=${canManagePrinters}
-        .venuePrintsMovedSlips=${this.view.routing.printMovedSlips}
         .refusal=${this.stationEditRefusal}
         @station-save=${(event: CustomEvent<StationEditorSave>) => {
           event.stopPropagation();

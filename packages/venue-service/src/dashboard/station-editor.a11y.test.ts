@@ -33,7 +33,9 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       colour: "orange",
       active: true,
       showsRestOfOrder: true,
-      printMovedSlips: state === "moved slips own choice" ? false : null,
+      printMovedSlips: state !== "moved slips own choice",
+      ticketGrouping: "combined",
+      printHeldWork: false,
       printerIds: ["epson"],
       warmAfterMinutes: 3,
       overdueAfterMinutes: 5,
@@ -49,7 +51,6 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       { id: "pizza", name: "Pizza oven", colour: "orange" },
     ];
     el.canManagePrinters = state !== "read-out";
-    el.venuePrintsMovedSlips = state !== "moved slips as the venue, venue off";
     el.open = true;
     await el.updateComplete;
     if (state === "refusals") {

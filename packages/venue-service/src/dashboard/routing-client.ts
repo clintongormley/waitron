@@ -1,4 +1,9 @@
-import type { DeleteImpact, StationColour, StationThresholds } from "@waitron/shared";
+import type {
+  DeleteImpact,
+  StationColour,
+  StationThresholds,
+  TicketGrouping,
+} from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { RouteTarget } from "../routing.js";
@@ -30,8 +35,9 @@ export interface PrepStation {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
   showsRestOfOrder: boolean;
-  /** Null follows the venue's choice. */
-  printMovedSlips: boolean | null;
+  printMovedSlips: boolean;
+  ticketGrouping: TicketGrouping;
+  printHeldWork: boolean;
   colour: StationColour;
 }
 export interface PrepStationsView {
@@ -117,7 +123,10 @@ export class PrepStationsApi {
     id: string,
     input: Partial<
       Pick<StationInput, "name" | "colour"> &
-        Pick<PrepStation, "showsRestOfOrder" | "printMovedSlips"> &
+        Pick<
+          PrepStation,
+          "showsRestOfOrder" | "printMovedSlips" | "ticketGrouping" | "printHeldWork"
+        > &
         StationThresholds & {
           /** Needs `printer.manage` as well, and an active station. */
           printerIds: readonly string[];

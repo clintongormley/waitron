@@ -38,7 +38,9 @@ const STATIONS: PrepStation[] = [
 ].map((station) => ({
   ...station,
   colour: "red",
-  printMovedSlips: null,
+  printMovedSlips: true,
+  ticketGrouping: "combined",
+  printHeldWork: false,
   showsRestOfOrder: false,
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,

@@ -17,7 +17,9 @@ class StationEditorLeaveApp extends LitElement {
           colour: "orange",
           active: true,
           showsRestOfOrder: false,
-          printMovedSlips: null,
+          printMovedSlips: true,
+          ticketGrouping: "combined",
+          printHeldWork: false,
           printerIds: ["epson"],
           warmAfterMinutes: 3,
           overdueAfterMinutes: 5,
@@ -245,7 +247,7 @@ it("a changed MOVED slips choice asks before closing, and choosing back the open
   const close = modal(el).requestClose("cancel");
   await choose("keep");
   expect(await close).toBe(false);
-  await pickMoved("venue");
+  await pickMoved("print");
   expect(unload()).toBe(false);
   expect(await modal(el).requestClose("cancel")).toBe(true);
 });
