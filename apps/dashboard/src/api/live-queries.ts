@@ -94,7 +94,7 @@ export const QUERY_DEPENDENCIES = {
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
   getCatalogueSettings: ["catalogue_settings"],
   getContentLanguages: ["content_languages"],
-  getVenueTheme: ["custom_themes"],
+  getVenueTheme: ["custom_themes", "media_images"],
   listThemes: ["custom_themes"],
   // The server works the rules out once at boot, so no table change moves them.
   getContentLanguageRules: [],
