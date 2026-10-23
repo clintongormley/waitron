@@ -12,6 +12,7 @@ import {
   withPassiveManagementRead,
   type PersonRoleValue,
 } from "@waitron/identity";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -19,6 +20,7 @@ import { collectBoxHealth, type BoxHealth, type BoxHealthReaders } from "./box-h
 import { mountBoxHealthApi } from "./box-health-api.js";
 import type { FreedSpace } from "./free-space-now.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
+import { systemClock } from "./till-backend.js";
 import "./errors.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -64,6 +66,12 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     db,
     readHealth: vi.fn(readHealth),
     freeSpace: vi.fn<(personId: string) => Promise<FreedSpace>>(async () => FREED),
+    clockRestart: {
+      backend: new FakeFiscalBackend(db),
+      witnesses: () => [],
+      clock: systemClock(),
+      nodeId: "node-1",
+    },
   };
   const app = new Hono();
   app.use("*", async (c, next) => {

@@ -200,7 +200,7 @@ it("refuses a restart two devices contradict, and writes nothing", async () => {
   expect(written()).toEqual(before);
 });
 
-it("refuses a restart 25 hours behind even with two agreeing devices", async () => {
+it("refuses a restart 25 hours behind even with two agreeing devices, and allows 24 hours", async () => {
   const stop = await stoppedBox(25 * HOUR);
   noteDevice(stop, 0);
   noteDevice(stop, 0);
@@ -211,6 +211,14 @@ it("refuses a restart 25 hours behind even with two agreeing devices", async () 
   expect(answer.status).toBe(409);
   expect(answer.json).toEqual({ code: "clock.restart_refused", params: { reason: "too_far" } });
   expect(written()).toEqual(before);
+
+  const day = await stoppedBox(24 * HOUR);
+  noteDevice(day, 0);
+  noteDevice(day, 0);
+  const control = await press(day.app, marta.cookie, { recordId: day.recordId });
+  expect(control.status).toBe(200);
+  expect(control.json).toMatchObject({ replayed: false });
+  expect(written()).toEqual({ restarts: before.restarts + 1, alerts: before.alerts + 1 });
 });
 
 it("refuses a person without system.manage, no session, a till's session and a bad body", async () => {
@@ -240,6 +248,15 @@ it("refuses a person without system.manage, no session, a till's session and a b
       params: { field: "recordId" },
     });
   }
+  const unparsed = await stop.app.request("/api/box/clock-restart", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: marta.cookie },
+    body: `{ recordId: ${stop.recordId}`,
+  });
+  expect(unparsed.status).toBe(400);
+  expect(await unparsed.json()).toEqual({
+    error: { code: "management.request_invalid", params: { field: "recordId" } },
+  });
   expect(written()).toEqual(before);
 
   const control = await press(stop.app, marta.cookie, body);

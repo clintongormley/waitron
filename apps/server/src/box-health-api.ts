@@ -18,8 +18,8 @@ export interface BoxHealthApiDeps {
   db: Database;
   readHealth: () => Promise<BoxHealth>;
   freeSpace: (personId: string) => Promise<FreedSpace>;
-  /** Without it, or with a seat that has no restart, there is nothing to restart and no route. */
-  clockRestart?: {
+  /** A seat with no restart has nothing to restart, and no route. */
+  clockRestart: {
     backend: FiscalBackend;
     witnesses: () => readonly ClockWitness[];
     clock: TrustedClock;
@@ -87,10 +87,10 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
     }),
   );
   const clockRestart = deps.clockRestart;
-  const restartAfterClockStop = clockRestart?.backend.restartAfterClockStop?.bind(
+  const restartAfterClockStop = clockRestart.backend.restartAfterClockStop?.bind(
     clockRestart.backend,
   );
-  if (clockRestart === undefined || restartAfterClockStop === undefined) return;
+  if (restartAfterClockStop === undefined) return;
   const restartRun = createErrorBoundary(STATUS, "box-clock-restart.failed");
   app.post("/api/box/clock-restart", (c) =>
     restartRun(c, log, async () => {
