@@ -1377,6 +1377,14 @@ describe("the venue's print-MOVED-slips setting", () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     await inTx(v, (tx) => writePrintMovedSlips(tx, on));
+    await inTx(v, (tx) =>
+      tx
+        .update(kitchenStations)
+        .set({ printMovedSlips: on })
+        .where(
+          and(eq(kitchenStations.locationId, v.cfg.locationId), eq(kitchenStations.name, "Grill")),
+        ),
+    );
     const mesa21 = await v.table("Mesa 21");
     const mesa22 = await v.table("Mesa 22");
     const { partyId, tabId } = await seat(v, mesa21);
@@ -1452,6 +1460,12 @@ describe("a prep station's own print-MOVED-slips choice", () => {
 
   async function stationPrints(v: PartyVenue, name: string, printMovedSlips: boolean | null) {
     const id = await stationIdOf(v, name);
+    if (printMovedSlips === null) {
+      await inTx(v, (tx) =>
+        tx.update(kitchenStations).set({ printMovedSlips }).where(eq(kitchenStations.id, id)),
+      );
+      return;
+    }
     await inTx(v, (tx) => updateStation(tx, v.cfg, id, { printMovedSlips }));
   }
 

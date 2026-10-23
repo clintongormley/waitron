@@ -9,7 +9,7 @@ import {
   kitchenStations,
   nextStationColour,
 } from "@waitron/db";
-import type { StationColour } from "@waitron/shared";
+import type { StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
@@ -33,9 +33,10 @@ export interface Station {
   isDefault: boolean;
   active: boolean;
   showsRestOfOrder: boolean;
-  /** Null follows the venue-wide MOVED slips choice. */
-  printMovedSlips: boolean | null;
+  printMovedSlips: boolean;
   colour: StationColour;
+  ticketGrouping: TicketGrouping;
+  printHeldWork: boolean;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -97,6 +98,7 @@ export async function createStation(
         locationId: cfg.locationId,
         name: input.name,
         isDefault: input.isDefault ?? false,
+        printMovedSlips: true,
         colour:
           input.colour === undefined ? await nextStationColour(tx, cfg.locationId) : input.colour,
         warmAfterMinutes:
@@ -129,6 +131,8 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
       printMovedSlips: kitchenStations.printMovedSlips,
       colour: kitchenStations.colour,
+      ticketGrouping: kitchenStations.ticketGrouping,
+      printHeldWork: kitchenStations.printHeldWork,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -136,7 +140,9 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
     .from(kitchenStations)
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(kitchenStations.name, kitchenStations.id);
-  return stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
+  return stations
+    .map((station) => ({ ...station, printMovedSlips: station.printMovedSlips ?? true }))
+    .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
 }
 
 /** The active stations, each with how it stands today. */
@@ -162,8 +168,10 @@ export async function updateStation(
   patch: {
     name?: string;
     showsRestOfOrder?: boolean;
-    printMovedSlips?: boolean | null;
+    printMovedSlips?: boolean;
     colour?: StationColour;
+    ticketGrouping?: TicketGrouping;
+    printHeldWork?: boolean;
     printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {

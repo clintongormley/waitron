@@ -14,7 +14,14 @@ import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, isAppError, isStationColour, type StationColour } from "@waitron/shared";
+import {
+  AppError,
+  isAppError,
+  isStationColour,
+  isTicketGrouping,
+  type StationColour,
+  type TicketGrouping,
+} from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -353,6 +360,13 @@ function parseStationColour(value: unknown): StationColour | undefined {
   if (value === undefined) return undefined;
   if (!isStationColour(value))
     throw new AppError("management.request_invalid", { field: "colour" });
+  return value;
+}
+
+function parseTicketGrouping(value: unknown): TicketGrouping | undefined {
+  if (value === undefined) return undefined;
+  if (!isTicketGrouping(value))
+    throw new AppError("management.request_invalid", { field: "ticketGrouping" });
   return value;
 }
 
@@ -1604,6 +1618,8 @@ export function mountManagementApi(
         showsRestOfOrder?: unknown;
         printMovedSlips?: unknown;
         colour?: unknown;
+        ticketGrouping?: unknown;
+        printHeldWork?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
@@ -1617,8 +1633,10 @@ export function mountManagementApi(
       const patch: {
         name?: string;
         showsRestOfOrder?: boolean;
-        printMovedSlips?: boolean | null;
+        printMovedSlips?: boolean;
         colour?: StationColour;
+        ticketGrouping?: TicketGrouping;
+        printHeldWork?: boolean;
         warmAfterMinutes?: number;
         overdueAfterMinutes?: number;
         forgottenAfterMinutes?: number;
@@ -1637,12 +1655,19 @@ export function mountManagementApi(
         patch.showsRestOfOrder = body.showsRestOfOrder;
       }
       if (body.printMovedSlips !== undefined) {
-        if (body.printMovedSlips !== null && typeof body.printMovedSlips !== "boolean")
+        if (typeof body.printMovedSlips !== "boolean")
           throw new AppError("management.request_invalid", { field: "printMovedSlips" });
         patch.printMovedSlips = body.printMovedSlips;
       }
+      if (body.printHeldWork !== undefined) {
+        if (typeof body.printHeldWork !== "boolean")
+          throw new AppError("management.request_invalid", { field: "printHeldWork" });
+        patch.printHeldWork = body.printHeldWork;
+      }
       const colour = parseStationColour(body.colour);
       if (colour !== undefined) patch.colour = colour;
+      const ticketGrouping = parseTicketGrouping(body.ticketGrouping);
+      if (ticketGrouping !== undefined) patch.ticketGrouping = ticketGrouping;
       Object.assign(patch, parseStationTimingPatch(body));
       const printerIds = parseStationPrinterIds(body.printerIds);
       if (printerIds !== undefined) patch.printerIds = printerIds;
