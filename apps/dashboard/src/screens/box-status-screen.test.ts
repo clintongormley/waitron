@@ -13,6 +13,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { goToLabel } from "../widgets/alert-format.js";
+import { formatIsoMinute } from "../date-utils.js";
 import { guideHref } from "../help-guide.js";
 import "./box-status-screen.js";
 import type { BoxStatusScreen } from "./box-status-screen.js";
@@ -557,5 +558,247 @@ describe("dashboard-box-status-screen's layout", () => {
     const line = box(el, "[data-test=row-disk] .line");
     const aside = box(el, "[data-test=row-disk] [data-test=read-only]");
     expect(aside.top - detail.bottom).toBe(detail.top - line.bottom);
+  });
+});
+
+describe("dashboard-box-status-screen's restart of payments", () => {
+  const STOP: NonNullable<BoxHealth["clockStop"]> = {
+    clockAt: "2026-10-22T18:10:00.000Z",
+    offsetMinutes: 120,
+    lastRecordAt: "2026-10-22T19:30:00.000Z",
+    lastRecordOffsetMinutes: 120,
+    recordId: "rec-42",
+    gapMs: 4_800_000,
+    restart: null,
+    offer: "offered",
+    proof: {
+      authority: {
+        kind: "authority",
+        id: "aeat",
+        boxAt: "2026-10-22T18:05:00.000Z",
+        witnessAt: "2026-10-22T18:05:01.000Z",
+        uncertaintyMs: 500,
+      },
+      devices: [
+        {
+          kind: "device",
+          id: "d1",
+          label: "Bar till",
+          boxAt: "2026-10-22T18:01:00.000Z",
+          witnessAt: "2026-10-22T18:01:00.000Z",
+          uncertaintyMs: 200,
+        },
+        {
+          kind: "device",
+          id: "d2",
+          label: null,
+          boxAt: "2026-10-22T18:08:00.000Z",
+          witnessAt: "2026-10-22T18:08:00.000Z",
+          uncertaintyMs: 200,
+        },
+      ],
+    },
+    contrary: { authority: null, devices: [] },
+  };
+  const BEHIND = {
+    key: "clock.behind_chain",
+    code: "clock.behind_chain",
+    severity: "error" as const,
+    params: {},
+    owner: "fiscal",
+  };
+
+  function stopped(
+    stop: Partial<NonNullable<BoxHealth["clockStop"]>> = {},
+    notices: BoxHealth["notices"] = [BEHIND],
+  ): BoxHealth {
+    return { ...health({ notices }), clockStop: { ...STOP, ...stop } };
+  }
+
+  const restartButton = (el: BoxStatusScreen) =>
+    q(el, "[data-test=row-clock] [data-test=restart]") as HTMLElement | null;
+  const dialog = (el: BoxStatusScreen) =>
+    q(el, "[data-test=restart-dialog]") as HTMLElement & {
+      open: boolean;
+    };
+  const confirm = (el: BoxStatusScreen) => q(el, "[data-test=restart-confirm]") as HTMLElement;
+  const footerMessage = (el: BoxStatusScreen) =>
+    dialog(el).shadowRoot!.querySelector(".footer [data-error]");
+
+  function closed(el: BoxStatusScreen): Promise<void> {
+    return new Promise((resolve) =>
+      dialog(el).addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+  }
+
+  async function open(el: BoxStatusScreen): Promise<void> {
+    await userEvent.click(restartButton(el)!);
+    await flush(el);
+  }
+
+  it("offers the restart only while the box offers it and the clock is usable", async () => {
+    for (const offer of ["no_proof", "contrary_proof", "too_far", "stepped_back"] as const) {
+      const { el } = await mount(stubApi({}, stopped({ offer })));
+      expect(restartButton(el)).toBeNull();
+      cleanupWidgets();
+    }
+    const unusable = await mount(
+      stubApi(
+        {},
+        stopped({}, [
+          BEHIND,
+          {
+            key: "clock.unusable",
+            code: "clock.unusable",
+            severity: "error",
+            params: {},
+            owner: "fiscal",
+          },
+        ]),
+      ),
+    );
+    expect(restartButton(unusable.el)).toBeNull();
+    cleanupWidgets();
+    const { el } = await mount(stubApi({}, stopped()));
+    expect(text(restartButton(el))).toBe(t("box_status.clock.restart.open"));
+    expect(text(restartButton(el))).toBe("Restart payments");
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("shows both times and the proof in the dialog", async () => {
+    const { el } = await mount(stubApi({}, stopped()));
+    await open(el);
+    expect(dialog(el).open).toBe(true);
+    expect(dialog(el).getAttribute("heading")).toBe("Restart payments?");
+    const rows = qa(el, "[data-test=restart-dialog] dl > div").map(text);
+    expect(rows).toEqual([
+      `${t("box_status.clock.restart.box_reads")} ${formatIsoMinute(STOP.clockAt)}`,
+      `${t("box_status.clock.restart.last_sale_reads")} ${formatIsoMinute(STOP.lastRecordAt)}`,
+    ]);
+    expect(qa(el, "[data-test=restart-proof]").map(text)).toEqual([
+      fill("box_status.clock.proof.authority", {
+        time: formatIsoMinute("2026-10-22T18:05:00.000Z"),
+      }),
+      fill("box_status.clock.proof.devices", {
+        count: "2",
+        time: formatIsoMinute("2026-10-22T18:08:00.000Z"),
+      }),
+    ]);
+    expect(text(q(el, "[data-test=restart-body]"))).toBe(
+      "If you restart, the next sales carry the box's clock, earlier than the last sale's. No recorded sale is changed. It is noted that you did it.",
+    );
+    expect(text(confirm(el))).toBe("Restart payments");
+    expect(confirm(el).getAttribute("variant")).toBe("primary");
+  });
+
+  it("words the dialog in Spanish from the words file", async () => {
+    setLocale("es");
+    const { el } = await mount(stubApi({}, stopped()));
+    await open(el);
+    expect(dialog(el).getAttribute("heading")).toBe(t("box_status.clock.restart.title"));
+    expect(text(q(el, "[data-test=restart-body]"))).toBe(t("box_status.clock.restart.body"));
+    expect(text(confirm(el))).toBe(t("box_status.clock.restart.confirm"));
+    expect(text(q(el, "[data-test=restart-cancel]"))).toBe(t("action.cancel"));
+  });
+
+  it("sends the page's record once, disabled and loading while sent, then closes and reads the box again", async () => {
+    const sent = deferred<void>();
+    const api = stubApi({ restartClockPayments: vi.fn().mockReturnValue(sent.promise) }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    const reads = vi.mocked(api.getBoxHealth).mock.calls.length;
+
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+    expect(confirm(el).hasAttribute("disabled")).toBe(true);
+    expect(confirm(el).hasAttribute("loading")).toBe(true);
+    confirm(el).click();
+    await el.updateComplete;
+    expect(api.restartClockPayments).toHaveBeenCalledTimes(1);
+    expect(api.restartClockPayments).toHaveBeenCalledWith("rec-42");
+
+    const close = closed(el);
+    sent.resolve();
+    await close;
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(api.getBoxHealth).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("shows a refusal's reason above the buttons, keeps the button enabled and reads the box again", async () => {
+    const api = stubApi(
+      {
+        restartClockPayments: vi.fn().mockRejectedValue({
+          code: "clock.restart_refused",
+          params: { reason: "record_changed" },
+        }),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    const reads = vi.mocked(api.getBoxHealth).mock.calls.length;
+
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(text(footerMessage(el))).toBe(t("box_status.clock.refused.record_changed"));
+    expect(text(footerMessage(el))).toBe("The last sale changed. Look at the page again.");
+    expect(dialog(el).open).toBe(true);
+    expect(confirm(el).hasAttribute("disabled")).toBe(false);
+    expect(api.getBoxHealth).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("words any other refusal by its code", async () => {
+    const api = stubApi(
+      {
+        restartClockPayments: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(text(footerMessage(el))).toBe(codeMessage("authorization.not_permitted"));
+  });
+
+  it("opens again without the last refusal", async () => {
+    const api = stubApi(
+      {
+        restartClockPayments: vi
+          .fn()
+          .mockRejectedValue({ code: "clock.restart_refused", params: { reason: "not_stopped" } }),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(text(footerMessage(el))).toBe(t("box_status.clock.refused.not_stopped"));
+    const close = closed(el);
+    await userEvent.click(q(el, "[data-test=restart-cancel]") as HTMLElement);
+    await close;
+    await open(el);
+    expect(footerMessage(el)).toBeNull();
+  });
+
+  it("closes on Cancel and on Escape without sending", async () => {
+    const api = stubApi({ restartClockPayments: vi.fn() }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    let close = closed(el);
+    await userEvent.click(q(el, "[data-test=restart-cancel]") as HTMLElement);
+    await close;
+    expect(dialog(el).open).toBe(false);
+
+    await open(el);
+    expect(dialog(el).open).toBe(true);
+    close = closed(el);
+    await userEvent.keyboard("{Escape}");
+    await close;
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(api.restartClockPayments).not.toHaveBeenCalled();
   });
 });

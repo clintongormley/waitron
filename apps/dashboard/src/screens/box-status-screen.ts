@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { formatBytes } from "@waitron/dashboard-kit";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { AlertView, BoxHealth, DashboardApi } from "../api/client.js";
@@ -13,10 +15,20 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
-import { boxStatusRows, type PartRow } from "./box-status-rows.js";
+import { boxStatusRows, clockStopProof, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
 const LEAST_TO_FREE = 500_000;
+
+/** The reasons a refused restart names that have their own sentence. */
+const RESTART_REFUSALS = new Set([
+  "no_proof",
+  "contrary_proof",
+  "too_far",
+  "stepped_back",
+  "record_changed",
+  "not_stopped",
+]);
 
 type ReadName = "getBoxHealth" | "listAlerts";
 
@@ -141,6 +153,28 @@ export class BoxStatusScreen extends LitElement {
         color: var(--wt-color-danger);
         margin: 0 0 var(--wt-space-4);
       }
+      .times {
+        margin: 0 0 var(--wt-space-3);
+        display: grid;
+        gap: var(--wt-space-1);
+      }
+      .times > div {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .times dt {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .times dd {
+        margin: 0;
+      }
+      .proof {
+        margin: 0 0 var(--wt-space-1);
+      }
+      .restart-body {
+        margin: var(--wt-space-3) 0 0;
+      }
     `,
   ];
 
@@ -157,6 +191,12 @@ export class BoxStatusScreen extends LitElement {
   @state() private freedBytes: number | null = null;
   /** After a press the figure on the button is stale until the box is read again. */
   @state() private awaitingFigure = false;
+  @state() private restartOpen = false;
+  /** The record the Clock row offered when the dialog opened; the request names it. */
+  @state() private restartRecord: string | null = null;
+  @state() private restarting = false;
+  /** The restart's refusal, shown above the dialog's buttons. */
+  @state() private restartError = "";
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
@@ -225,6 +265,78 @@ export class BoxStatusScreen extends LitElement {
     } finally {
       this.freeing = false;
     }
+  }
+
+  #openRestart(recordId: string): void {
+    this.restartRecord = recordId;
+    this.restartError = "";
+    this.restartOpen = true;
+  }
+
+  async #restart(): Promise<void> {
+    if (this.restarting || this.restartRecord === null) return;
+    this.restarting = true;
+    this.restartError = "";
+    try {
+      await this.api.restartClockPayments(this.restartRecord);
+      this.restartOpen = false;
+    } catch (error) {
+      this.restartError = restartRefusal(error);
+    } finally {
+      this.restarting = false;
+    }
+    // Refused or not, the row behind the dialog is read again so its reason matches the box.
+    this.api.liveData.refresh();
+  }
+
+  #renderRestartDialog(): TemplateResult | typeof nothing {
+    const stop = this.health?.clockStop ?? null;
+    if (stop === null) return nothing;
+    return html`<wt-dialog
+      data-test="restart-dialog"
+      .open=${this.restartOpen}
+      ?dismissible=${!this.restarting}
+      heading=${t("box_status.clock.restart.title")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.restartOpen = false;
+      }}
+    >
+      <dl class="times">
+        <div>
+          <dt>${t("box_status.clock.restart.box_reads")}</dt>
+          <dd>${formatIsoMinute(stop.clockAt)}</dd>
+        </div>
+        <div>
+          <dt>${t("box_status.clock.restart.last_sale_reads")}</dt>
+          <dd>${formatIsoMinute(stop.lastRecordAt)}</dd>
+        </div>
+      </dl>
+      ${clockStopProof(stop).map(
+        (line) => html`<p class="proof" data-test="restart-proof">${line}</p>`,
+      )}
+      <p class="restart-body" data-test="restart-body">${t("box_status.clock.restart.body")}</p>
+      <wt-form-actions slot="footer" .error=${this.restartError}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="restart-cancel"
+          ?disabled=${this.restarting}
+          @click=${() => {
+            this.restartOpen = false;
+          }}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-test="restart-confirm"
+          ?disabled=${this.restarting}
+          ?loading=${this.restarting}
+          @click=${() => void this.#restart()}
+          >${t("box_status.clock.restart.confirm")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
   }
 
   #goTo(event: MouseEvent, screen: string): void {
@@ -318,6 +430,16 @@ export class BoxStatusScreen extends LitElement {
       <div class="actions">
         ${this.#screensOf(row).map((screen) => this.#goToButton(screen))}
         ${disk ? this.#freeAction(health) : nothing}
+        ${
+          row.restartRecordId === null
+            ? nothing
+            : html`<wt-button
+                variant="primary"
+                data-test="restart"
+                @click=${() => this.#openRestart(row.restartRecordId!)}
+                >${t("box_status.clock.restart.open")}</wt-button
+              >`
+        }
       </div>
     </li>`;
   }
@@ -399,9 +521,19 @@ export class BoxStatusScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
-      ${this.#renderError()} ${this.#renderBody()}
+      ${this.#renderError()} ${this.#renderBody()} ${this.#renderRestartDialog()}
     `;
   }
+}
+
+function restartRefusal(error: unknown): string {
+  const code = codeOf(error);
+  const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
+  return code === "clock.restart_refused" &&
+    typeof reason === "string" &&
+    RESTART_REFUSALS.has(reason)
+    ? t(`box_status.clock.refused.${reason}` as StringKey)
+    : codeMessage(code);
 }
 
 declare global {

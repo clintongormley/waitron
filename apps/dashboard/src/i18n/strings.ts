@@ -3236,6 +3236,13 @@ export const en = {
     "Payments were already restarted, and the box's clock has gone back since. Get the clock checked.",
   "box_status.clock.refused.record_changed": "The last sale changed. Look at the page again.",
   "box_status.clock.refused.not_stopped": "Payments are not stopped.",
+  "box_status.clock.restart.open": "Restart payments",
+  "box_status.clock.restart.title": "Restart payments?",
+  "box_status.clock.restart.box_reads": "The box reads",
+  "box_status.clock.restart.last_sale_reads": "The last sale reads",
+  "box_status.clock.restart.body":
+    "If you restart, the next sales carry the box's clock, earlier than the last sale's. No recorded sale is changed. It is noted that you did it.",
+  "box_status.clock.restart.confirm": "Restart payments",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -6547,6 +6554,13 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.refused.record_changed":
     "La última venta ha cambiado. Vuelve a mirar la página.",
   "box_status.clock.refused.not_stopped": "Los cobros no están parados.",
+  "box_status.clock.restart.open": "Reanudar los cobros",
+  "box_status.clock.restart.title": "¿Reanudar los cobros?",
+  "box_status.clock.restart.box_reads": "El equipo marca",
+  "box_status.clock.restart.last_sale_reads": "La última venta marca",
+  "box_status.clock.restart.body":
+    "Si reanudas, las ventas siguientes llevarán la hora del equipo, anterior a la de la última venta. No se cambia ninguna venta registrada. Queda anotado que lo has hecho tú.",
+  "box_status.clock.restart.confirm": "Reanudar los cobros",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",

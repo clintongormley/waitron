@@ -289,7 +289,8 @@ function clockDetails(clock: BoxHealth["clock"]): string[] {
   return details;
 }
 
-function clockStopDetails(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
+/** The proof lines of a payment stop, as the Clock row and the restart dialog both show them. */
+export function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
   const details: string[] = [];
   const { authority, devices } = stop.proof;
   if (authority !== null)
@@ -305,6 +306,11 @@ function clockStopDetails(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
       }),
     );
   }
+  return details;
+}
+
+function clockStopDetails(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
+  const details = clockStopProof(stop);
   if (stop.offer === "restarted") {
     // The seat offers "restarted" only when a restart names the latest record.
     const restart = stop.restart!;
