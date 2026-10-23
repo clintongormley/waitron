@@ -524,8 +524,8 @@ The earlier malformed-JSON speculation is retired by the bounded-reader case in
 `{}`, `getPrintedReceipt` returns `{ receipt: {}, logo: null }`, and `getStoredLogoRasters`
 returns `null`. This checks those readers, not every sale path.
 
-A841's design adds the venue's logo as a second kind of logo use that only the app keeps from
-deletion (its section 8a).
+Since A841 slice 7, a theme's logo (`theme_logo` in `listImageUsages`) is a second logo use that
+only the app keeps from deletion; no trigger protects it either.
 
 ## A change is refused while an open order at the location holds a line
 

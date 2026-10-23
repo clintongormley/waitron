@@ -43,7 +43,8 @@ export type ImageUsage =
       number: number;
       activatesAt: string;
     }
-  | { kind: "department_receipt"; id: string; name: string; active: boolean };
+  | { kind: "department_receipt"; id: string; name: string; active: boolean }
+  | { kind: "theme_logo"; id: string; name: string };
 export interface ImageQuery {
   search: string;
   language: string;

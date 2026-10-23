@@ -43,7 +43,10 @@ declare module "@waitron/shared" {
     "device_profile.not_found": { field?: "approvedProfileIds" };
     "device_profile.name_taken": Record<string, never>;
     "device_profile.in_use": Record<string, never>;
-    "theme.invalid": { field: string; reason: ThemeRefusalReason | ThemeNameRefusal };
+    "theme.invalid": {
+      field: string;
+      reason: ThemeRefusalReason | ThemeNameRefusal | "image_not_found";
+    };
     "theme.name_taken": { field: "name" };
     "theme.not_found": Record<string, never>;
     "setup.request_invalid": { field: string };

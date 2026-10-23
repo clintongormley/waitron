@@ -1,12 +1,14 @@
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { describe, expect, it } from "vitest";
 import { validateThemeConfiguration } from "./theme-configuration.js";
+import type { ReceiptLogoRasters } from "./types.js";
 
 const LEMON: ThemeChoices = {
   brandColor: "#f2d300",
   brandFix: {},
   background: "neutral",
   corners: "standard",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 
@@ -25,9 +27,9 @@ const row = (name: string, choices: ThemeChoices, inUse: 1 | null): Row => ({
 
 const valid = (): Row[] => [row("Green", DARK_GREEN, 1), row("Lemon", LEMON, null)];
 
-function refusal(rows: Row[]): unknown {
+function refusal(rows: Row[], images: Row[] = []): unknown {
   try {
-    validateThemeConfiguration({ custom_themes: rows });
+    validateThemeConfiguration({ custom_themes: rows, media_images: images });
   } catch (error) {
     return error;
   }
@@ -84,6 +86,8 @@ describe("validateThemeConfiguration", () => {
   it.each<[string, unknown]>([
     ["a theme that is not a string", LEMON],
     ["a theme that is not JSON", "{broken"],
+    ["a theme that is a JSON array", "[]"],
+    ["a theme that is JSON null", "null"],
     ["a theme document this release refuses", '{"tokens":{}}'],
     ["a theme whose brand colour is not hex", JSON.stringify({ ...LEMON, brandColor: "yellow" })],
   ])("refuses %s as custom_themes.theme", (_label, theme) => {
@@ -111,5 +115,107 @@ describe("validateThemeConfiguration", () => {
     expect(
       refusal([row("Lemon", LEMON, 1), { ...row("Green", DARK_GREEN, 1), theme: "{broken" }]),
     ).toMatchObject({ params: { field: "custom_themes.theme" } });
+  });
+
+  describe("a theme's logo and its printed dots", () => {
+    const PRINTABLE: ReceiptLogoRasters = {
+      "58mm": { widthDots: 8, heightDots: 1, data: "/w==" },
+      "80mm": { widthDots: 8, heightDots: 1, data: "/w==" },
+    };
+    const L = `${"a".repeat(64)}.webp`;
+    const D = `${"c".repeat(64)}.webp`;
+    const images = [{ filename: L }, { filename: D }];
+    const { logo: _, ...noLogo } = LEMON;
+    void _;
+    const themed = (document: unknown): Row => ({
+      ...row("Lemon", LEMON, null),
+      theme: JSON.stringify(document),
+    });
+    const WITH_LOGO = { ...LEMON, logo: { light: L, dark: D }, printedLogo: PRINTABLE };
+
+    it("accepts a logo whose two pictures are carried, with printable dots", () => {
+      expect(refusal([themed(WITH_LOGO)], images)).toBeUndefined();
+    });
+
+    it("accepts a logo with only a light picture, carried in the copy", () => {
+      const lightOnly = { ...LEMON, logo: { light: L }, printedLogo: PRINTABLE };
+      expect(refusal([themed(lightOnly)], [{ filename: L }])).toBeUndefined();
+    });
+
+    it("accepts no logo with no media_images table at all", () => {
+      expect(() =>
+        validateThemeConfiguration({ custom_themes: [themed({ ...LEMON, logo: null })] }),
+      ).not.toThrow();
+    });
+
+    it("accepts a document with no logo key and no dots", () => {
+      expect(refusal([themed(noLogo)])).toBeUndefined();
+    });
+
+    it.each<[string, unknown, Row[]]>([
+      ["a light picture not carried", WITH_LOGO, [{ filename: D }]],
+      ["a dark picture not carried", WITH_LOGO, [{ filename: L }]],
+      ["a logo with no printed dots", { ...LEMON, logo: { light: L } }, images],
+      [
+        "printed dots that cannot be printed",
+        {
+          ...WITH_LOGO,
+          printedLogo: { ...PRINTABLE, "80mm": { ...PRINTABLE["80mm"], data: "x" } },
+        },
+        images,
+      ],
+      ["printed dots beside no logo", { ...LEMON, logo: null, printedLogo: PRINTABLE }, images],
+      [
+        "printed dots in a document with no logo key",
+        { ...noLogo, printedLogo: PRINTABLE },
+        images,
+      ],
+      [
+        "a logo key given again with a NUL after it",
+        { ...WITH_LOGO, "logo\u0000": { light: D } },
+        images,
+      ],
+    ])("refuses %s as custom_themes.theme", (_label, document, carried) => {
+      expect(refusal([themed(document)], carried)).toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "custom_themes.theme" },
+      });
+    });
+
+    // JSON.parse keeps a repeated key's last value and SQLite's json_extract its first.
+    const lightOnly = JSON.stringify({ ...LEMON, logo: { light: L }, printedLogo: PRINTABLE });
+    const escapedLogo = `"\\u006cogo"`;
+    it.each<[string, string]>([
+      ["a logo key given twice", lightOnly.replace('"logo":{', '"logo":null,"logo":{')],
+      ["a light key given twice", lightOnly.replace('"light":"a', `"light":"${D}","light":"a`)],
+      ["a key given twice deep in the dots", lightOnly.replace('"58mm":', '"58mm":null,"58mm":')],
+      [
+        "a logo key given twice, once escaped",
+        lightOnly.replace('"logo":{', `"logo":null,${escapedLogo}:{`),
+      ],
+      [
+        "a logo key given twice, once holding an escaped quote",
+        lightOnly.replace('"logo":{', '"logo":"a\\"b\\\\","logo":{'),
+      ],
+      [
+        "a logo key given twice in spaced-out text",
+        lightOnly.replace('"logo":{', '"logo" \n:\tnull, "logo"\r\n : {'),
+      ],
+    ])("refuses %s as custom_themes.theme", (_label, theme) => {
+      expect(JSON.parse(theme)).toEqual(JSON.parse(lightOnly));
+      expect(refusal([{ ...row("Lemon", LEMON, null), theme }], images)).toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "custom_themes.theme" },
+      });
+    });
+
+    it("accepts one key name used once in each of several objects", () => {
+      const theme = JSON.stringify(WITH_LOGO);
+      expect(theme.match(/"light":/g)).toHaveLength(2);
+      expect(theme.match(/"dark":/g)).toHaveLength(2);
+      expect(refusal([{ ...row("Lemon", LEMON, null), theme }], images)).toBeUndefined();
+      const spaced = JSON.stringify(WITH_LOGO, null, "\t");
+      expect(refusal([{ ...row("Lemon", LEMON, null), theme: spaced }], images)).toBeUndefined();
+    });
   });
 });

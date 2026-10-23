@@ -1533,8 +1533,9 @@ courses, card provider, card readers and the default reader, tips, the simplifie
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
 once a read sent after it has been applied. A draft line keeps the course it was given, name
 included, after a refresh deletes that course. `themeHash`, the hash `/api/theme` answers for
-the theme in use, is in the answer and moves `setupRevision` when the theme in use changes or is
-saved with new choices. `#applyVenueSetup` hands `themeHash` to `followVenueTheme`
+the theme in use, is in the answer and moves `setupRevision` when the theme in use changes, is
+saved with new choices, or one of its logo's images is reframed or replaced in the library.
+`#applyVenueSetup` hands `themeHash` to `followVenueTheme`
 (`packages/ui/src/venue-theme.ts`), which fetches `/api/theme` and replaces the venue's sheet when
 it differs from the one applied, and each poll asks again once, however many zones it reads, so
 a failed fetch is retried on the next poll; pinned by "A841 the till follows the theme in use" in
@@ -1573,8 +1574,9 @@ one across a poll, a profile switch, a change of zones and a server switch. The 
 checked only beside a profile switch. No test checks the refresh of the other values in the list
 above; they ride on the same assignment in `#applyVenueSetup`. On the server,
 `apps/server/src/till-api.setup-revision.test.ts` checks that the revision is the same on both
-reads, stays while nothing changes, and moves when a course is added or renamed and when bump mode
-changes.
+reads, stays while nothing changes, and moves when a course is added or renamed, when bump mode
+changes, when the theme in use is switched or saved with new choices, and when its logo's light
+image is reframed.
 
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.

@@ -3,6 +3,9 @@ import { readThemeDocument, THEME_DOCUMENT_KEYS } from "./document-check.js";
 import { BACKGROUNDS, WAITRON_CHOICES } from "./theme.js";
 import { CORNER_CHOICES } from "./tokens.js";
 
+const L = "a".repeat(64) + ".webp";
+const D = "b".repeat(64) + ".png";
+
 const withoutBrand: Record<string, unknown> = { ...WAITRON_CHOICES };
 delete withoutBrand.brandColor;
 
@@ -22,6 +25,7 @@ describe("readThemeDocument", () => {
       "background",
       "corners",
       "handSet",
+      "logo",
     ]);
     expect(BACKGROUNDS).toEqual(["neutral", "tinted"]);
     expect(CORNER_CHOICES).toEqual(["square", "standard", "round"]);
@@ -29,6 +33,32 @@ describe("readThemeDocument", () => {
 
   it("accepts Waitron's own choices", () => {
     expect(readThemeDocument(WAITRON_CHOICES)).toEqual({ ok: true, choices: WAITRON_CHOICES });
+  });
+
+  it("accepts no logo, a logo, and a logo with a version for dark screens", () => {
+    for (const logo of [null, { light: L }, { light: L, dark: D }, { light: "" }]) {
+      expect(readThemeDocument({ ...WAITRON_CHOICES, logo })).toEqual({
+        ok: true,
+        choices: { ...WAITRON_CHOICES, logo },
+      });
+    }
+  });
+
+  it("carries only a logo's own pictures, never an inherited dark one", () => {
+    const logo = Object.assign(Object.create({ dark: 7 }), { light: L });
+    const result = readThemeDocument({ ...WAITRON_CHOICES, logo });
+    expect(result).toEqual({ ok: true, choices: { ...WAITRON_CHOICES, logo: { light: L } } });
+    expect(result.ok && result.choices.logo?.dark).toBeUndefined();
+  });
+
+  it("reads a document without a logo key as no logo", () => {
+    const { logo: _, ...noLogo } = WAITRON_CHOICES;
+    void _;
+    expect(readThemeDocument(noLogo)).toEqual({ ok: true, choices: WAITRON_CHOICES });
+    expect(readThemeDocument({ ...WAITRON_CHOICES, logo: undefined })).toEqual({
+      ok: true,
+      choices: WAITRON_CHOICES,
+    });
   });
 
   it("accepts every background and corner choice", () => {
@@ -49,6 +79,7 @@ describe("readThemeDocument", () => {
       background: "tinted",
       corners: "round",
       handSet: { light: { bg: "#f8f1e1", text: "#101010" }, dark: { surface: "#202020" } },
+      logo: null,
     };
     expect(readThemeDocument(sent)).toEqual({ ok: true, choices: sent });
   });
@@ -69,7 +100,20 @@ describe("readThemeDocument", () => {
     [null, "theme", "not_object"],
     [[], "theme", "not_object"],
     ["theme", "theme", "not_object"],
-    [{ ...WAITRON_CHOICES, logo: { light: "a.webp" } }, "theme", "unknown_key"],
+    [{ ...WAITRON_CHOICES, logo: "a.webp" }, "logo", "bad_value"],
+    [{ ...WAITRON_CHOICES, logo: [] }, "logo", "bad_value"],
+    [{ ...WAITRON_CHOICES, logo: 7 }, "logo", "bad_value"],
+    [{ ...WAITRON_CHOICES, logo: { light: L, size: 1 } }, "logo", "unknown_key"],
+    [{ ...WAITRON_CHOICES, logo: { dark: D } }, "logo.dark", "dark_without_light"],
+    [{ ...WAITRON_CHOICES, logo: { dark: null } }, "logo.dark", "dark_without_light"],
+    [{ ...WAITRON_CHOICES, logo: { dark: 7 } }, "logo.dark", "dark_without_light"],
+    [{ ...WAITRON_CHOICES, logo: {} }, "logo.light", "missing"],
+    [{ ...WAITRON_CHOICES, logo: Object.create({ light: L }) }, "logo.light", "missing"],
+    [{ ...WAITRON_CHOICES, logo: Object.create({ dark: D }) }, "logo.light", "missing"],
+    [{ ...WAITRON_CHOICES, logo: { light: 7 } }, "logo.light", "bad_value"],
+    [{ ...WAITRON_CHOICES, logo: { light: null } }, "logo.light", "bad_value"],
+    [{ ...WAITRON_CHOICES, logo: { light: L, dark: null } }, "logo.dark", "bad_value"],
+    [{ ...WAITRON_CHOICES, logo: { light: L, dark: 7 } }, "logo.dark", "bad_value"],
     [{ ...WAITRON_CHOICES, textScale: 110 }, "theme", "unknown_key"],
     [{ ...WAITRON_CHOICES, text: {} }, "theme", "unknown_key"],
     [{ ...WAITRON_CHOICES, printedLogo: null }, "theme", "unknown_key"],
@@ -157,10 +201,20 @@ describe("readThemeDocument", () => {
   });
 
   it("answers the first refusal in its fixed order", () => {
+    expect(readThemeDocument({ ...WAITRON_CHOICES, brandFix: { light: true }, logo: 7 })).toEqual({
+      ok: false,
+      field: "brandFix.light",
+      reason: "fix_without_brand",
+    });
     expect(readThemeDocument({ ...WAITRON_CHOICES, logo: "a.webp", brandColor: "red" })).toEqual({
       ok: false,
-      field: "theme",
-      reason: "unknown_key",
+      field: "brandColor",
+      reason: "bad_value",
+    });
+    expect(readThemeDocument({ ...WAITRON_CHOICES, logo: { dark: D }, handSet: null })).toEqual({
+      ok: false,
+      field: "handSet",
+      reason: "bad_value",
     });
     expect(readThemeDocument({ ...WAITRON_CHOICES, brandColor: "red", corners: "pill" })).toEqual({
       ok: false,
@@ -228,8 +282,13 @@ describe("readThemeDocument", () => {
       brandColor: "#F2D300",
       brandFix: { light: true },
       handSet: { light: { bg: "#F8F1E1" }, dark: {} },
+      logo: { light: L, dark: D },
     });
     expect(readThemeDocument(sent).ok).toBe(true);
     expect(sent.brandColor).toBe("#F2D300");
+    const { logo: _, ...noLogo } = WAITRON_CHOICES;
+    void _;
+    const frozenWithoutLogo = deepFreeze({ ...noLogo });
+    expect(readThemeDocument(frozenWithoutLogo)).toEqual({ ok: true, choices: WAITRON_CHOICES });
   });
 });

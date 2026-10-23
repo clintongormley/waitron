@@ -81,6 +81,7 @@ export {
   getStoredLogoRasters,
   getVenueReceiptSettings,
   putVenueReceiptSettings,
+  printableLogoRasters,
   putReceipt,
 } from "./receipt-store.js";
 export { validateThemeConfiguration } from "./theme-configuration.js";
@@ -88,6 +89,7 @@ export {
   createCustomTheme,
   deleteCustomTheme,
   listCustomThemes,
+  prepareThemeSave,
   readThemeInUse,
   renameCustomTheme,
   saveCustomTheme,

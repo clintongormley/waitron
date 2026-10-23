@@ -5,7 +5,9 @@ import { authorizeManager } from "@waitron/identity";
 import { AppError, isUuid } from "@waitron/shared";
 import { readThemeDocument, type ThemeChoices } from "@waitron/ui-core/theme";
 import { asc, eq, sql } from "drizzle-orm";
+import { printableLogoRasters } from "./receipt-store.js";
 import { parseThemeChoices, parseThemeName } from "./theme-input.js";
+import type { ReceiptLogoRasters } from "./types.js";
 
 export interface StoredTheme {
   readonly id: string;
@@ -26,7 +28,14 @@ export interface ThemeInUse {
 }
 
 // The `json` column's own reader runs JSON.parse and throws on a row that is not JSON.
-const THEME_TEXT = sql<
+// json_remove rewrites the text, dropping a trailing NUL that JSON.parse refuses, so it runs only
+// on a row that holds dots.
+const THEME_TEXT = sql<string | null>`case
+  when not json_valid(${customThemes.theme}) then null
+  when json_type(${customThemes.theme}, '$.printedLogo') is null then ${customThemes.theme}
+  else json_remove(${customThemes.theme}, '$.printedLogo') end`;
+
+const STORED_TEXT = sql<
   string | null
 >`case when json_valid(${customThemes.theme}) then ${customThemes.theme} else null end`;
 
@@ -52,15 +61,31 @@ function authorize(tx: Transaction, managementSessionId: string) {
   return authorizeManager(tx, { managementSessionId, permission: "layout.configure" });
 }
 
-async function requireTheme(tx: Transaction, id: string): Promise<{ name: string }> {
+async function requireThemeRow<T>(id: string, read: () => Promise<T | undefined>): Promise<T> {
   if (isUuid(id)) {
+    const row = await read();
+    if (row !== undefined) return row;
+  }
+  throw new AppError("theme.not_found", {});
+}
+
+function requireTheme(tx: Transaction, id: string): Promise<{ name: string }> {
+  return requireThemeRow(id, async () => {
     const [row] = await tx
       .select({ name: customThemes.name })
       .from(customThemes)
       .where(eq(customThemes.id, id));
-    if (row !== undefined) return row;
+    return row;
+  });
+}
+
+/** The route always supplies dots with a logo, so the row never names a logo it cannot print. */
+function documentFor(choices: ThemeChoices, printedLogo: unknown): object {
+  if (choices.logo === null) return choices;
+  if (!printableLogoRasters(printedLogo)) {
+    throw new Error("a theme logo needs printable dots for both papers");
   }
-  throw new AppError("theme.not_found", {});
+  return { ...choices, printedLogo };
 }
 
 /** Clears before it sets: the unique index on `in_use` refuses a second row holding 1. */
@@ -103,17 +128,24 @@ export async function readThemeInUse(tx: Transaction): Promise<ThemeInUse | null
 
 export async function createCustomTheme(
   tx: Transaction,
-  input: { managementSessionId: string; name: string; theme: unknown; inUse?: boolean },
+  input: {
+    managementSessionId: string;
+    name: string;
+    theme: unknown;
+    inUse?: boolean;
+    printedLogo?: ReceiptLogoRasters;
+  },
 ): Promise<StoredTheme> {
   await authorize(tx, input.managementSessionId);
   const choices = parseThemeChoices(input.theme);
   const { name, key } = parseThemeName(input.name);
+  const theme = documentFor(choices, input.printedLogo);
   const updatedAt = nowIso();
   let id: string;
   try {
     const [row] = await tx
       .insert(customThemes)
-      .values({ name, nameKey: key, theme: choices, updatedAt })
+      .values({ name, nameKey: key, theme, updatedAt })
       .returning({ id: customThemes.id });
     id = row!.id;
   } catch (error) {
@@ -125,17 +157,64 @@ export async function createCustomTheme(
 
 export async function saveCustomTheme(
   tx: Transaction,
-  input: { managementSessionId: string; id: string; theme: unknown },
+  input: {
+    managementSessionId: string;
+    id: string;
+    theme: unknown;
+    printedLogo?: ReceiptLogoRasters;
+  },
 ): Promise<StoredTheme> {
   await authorize(tx, input.managementSessionId);
   const { name } = await requireTheme(tx, input.id);
   const choices = parseThemeChoices(input.theme);
+  const theme = documentFor(choices, input.printedLogo);
   const updatedAt = nowIso();
-  await tx
-    .update(customThemes)
-    .set({ theme: choices, updatedAt })
-    .where(eq(customThemes.id, input.id));
+  await tx.update(customThemes).set({ theme, updatedAt }).where(eq(customThemes.id, input.id));
   return { id: input.id, name, choices, updatedAt };
+}
+
+function storedPrintedLogo(text: string | null, light: string): ReceiptLogoRasters | null {
+  try {
+    const stored: unknown = JSON.parse(text!);
+    const { logo, printedLogo } = stored as {
+      logo?: { light?: unknown } | null;
+      printedLogo?: unknown;
+    };
+    return logo?.light === light && printableLogoRasters(printedLogo) ? printedLogo : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Runs the checks `createCustomTheme` (`id: null`) or `saveCustomTheme` makes before writing, except
+ * a taken name, and answers the stored dots that still fit the sent logo, so the caller draws them
+ * only when they do not.
+ */
+export async function prepareThemeSave(
+  tx: Transaction,
+  input: { managementSessionId: string; id: string | null; name?: string; theme: unknown },
+): Promise<{ choices: ThemeChoices; keptPrintedLogo: ReceiptLogoRasters | null }> {
+  await authorize(tx, input.managementSessionId);
+  const { id } = input;
+  const stored =
+    id === null
+      ? null
+      : await requireThemeRow(id, async () => {
+          const [row] = await tx
+            .select({ theme: STORED_TEXT })
+            .from(customThemes)
+            .where(eq(customThemes.id, id));
+          return row;
+        });
+  const choices = parseThemeChoices(input.theme);
+  if (stored === null) {
+    parseThemeName(input.name ?? "");
+    return { choices, keptPrintedLogo: null };
+  }
+  const keptPrintedLogo =
+    choices.logo === null ? null : storedPrintedLogo(stored.theme, choices.logo.light);
+  return { choices, keptPrintedLogo };
 }
 
 export async function renameCustomTheme(

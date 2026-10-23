@@ -10,5 +10,6 @@ export const QUERY_DEPENDENCIES = {
     "menu_scheduled_publications",
     "department_receipts",
     "departments",
+    "custom_themes",
   ],
 } as const;

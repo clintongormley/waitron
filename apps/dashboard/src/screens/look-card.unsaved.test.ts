@@ -30,6 +30,7 @@ const LUCIA: ThemeChoices = {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const derived = deriveTheme(LUCIA);

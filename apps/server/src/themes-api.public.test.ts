@@ -14,6 +14,7 @@ const LEMON: ThemeChoices = {
   brandFix: {},
   background: "neutral",
   corners: "standard",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 
@@ -43,7 +44,7 @@ describe("GET /api/theme", () => {
     const res = await app().request("/api/theme");
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual(venueThemeAnswer({ id: row!.id, choices: LEMON }));
+    expect(body).toEqual(venueThemeAnswer({ inUse: { id: row!.id, choices: LEMON }, logo: null }));
     expect(body).not.toEqual(WAITRON_THEME_ANSWER);
   });
 

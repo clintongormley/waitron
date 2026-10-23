@@ -48,7 +48,15 @@ describe("Waitron's look", () => {
       background: "neutral",
       corners: "standard",
       handSet: { light: {}, dark: {} },
+      logo: null,
     });
+  });
+
+  test("normalising keeps the logo as sent", () => {
+    const L = "a".repeat(64) + ".webp";
+    expect(
+      normaliseChoices({ ...WAITRON_CHOICES, brandColor: "#F2D300", logo: { light: L } }).logo,
+    ).toEqual({ light: L });
   });
 
   test("every token is Waitron's own value, with no tint", () => {

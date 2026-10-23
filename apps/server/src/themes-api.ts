@@ -1,15 +1,16 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import {
   createCustomTheme,
   deleteCustomTheme,
   listCustomThemes,
-  readThemeInUse,
+  prepareThemeSave,
   renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
+  type ReceiptLogoRasters,
   type StoredTheme,
 } from "@waitron/layouts";
 import {
@@ -23,7 +24,8 @@ import { AppError } from "@waitron/shared";
 import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/ui-core/theme";
 import type { Logger } from "./logger.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
-import { venueThemeAnswer } from "./venue-theme.js";
+import { printedLogoFor, recheckThemeLogo, snapshotThemeLogo } from "./theme-logo.js";
+import { readVenueThemeSource, venueThemeAnswer } from "./venue-theme.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -34,6 +36,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "theme.invalid": 400,
   "theme.name_taken": 409,
   "theme.not_found": 404,
+  "image.changed": 409,
 };
 
 const run = createErrorBoundary(STATUS, "themes.failed");
@@ -75,13 +78,40 @@ function requireTheme(body: Record<string, unknown>): Record<string, unknown> {
   return body.theme;
 }
 
+function namesLogo(theme: Record<string, unknown>): boolean {
+  return theme.logo !== null && theme.logo !== undefined;
+}
+
+async function saveWithLogo<T>(
+  db: Database,
+  prepare: (
+    tx: Transaction,
+  ) => Promise<{ choices: ThemeChoices; keptPrintedLogo: ReceiptLogoRasters | null }>,
+  write: (tx: Transaction, printedLogo: ReceiptLogoRasters) => Promise<T>,
+): Promise<T> {
+  const { logo, snapshot } = await withTransaction(db, async (tx) => {
+    const { choices, keptPrintedLogo } = await prepare(tx);
+    const { logo } = choices;
+    if (logo === null) throw new Error("A theme document naming a logo was read with none");
+    return { logo, snapshot: await snapshotThemeLogo(tx, logo, keptPrintedLogo) };
+  });
+  // Two transactions on purpose: sharp must not run holding the write lock, so the write checks the
+  // image's id and revision again.
+  const printedLogo = await printedLogoFor(snapshot);
+  return withTransaction(db, async (tx) => {
+    const stored = await write(tx, printedLogo);
+    await recheckThemeLogo(tx, logo, snapshot);
+    return stored;
+  });
+}
+
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
-  // Deliberately unauthenticated: the answer is the stylesheet and hash of the theme in use, and
-  // carries no secrets.
+  // Deliberately unauthenticated: the answer is the theme in use's stylesheet, its hash and its
+  // logo's public rendition addresses, and carries no secrets.
   app.get("/api/theme", (c) =>
     run(c, log, async () => {
-      const inUse = await withTransaction(deps.db, (tx) => readThemeInUse(tx));
-      return c.json(venueThemeAnswer(inUse), 200, { "Cache-Control": "no-store" });
+      const source = await withTransaction(deps.db, (tx) => readVenueThemeSource(tx));
+      return c.json(venueThemeAnswer(source), 200, { "Cache-Control": "no-store" });
     }),
   );
 
@@ -106,9 +136,16 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
         throw new AppError("management.request_invalid", { field: "inUse" });
       }
       const inUse = body.inUse === true;
-      const stored = await withTransaction(deps.db, (tx) =>
-        createCustomTheme(tx, { managementSessionId, name, theme, inUse }),
-      );
+      const stored = namesLogo(theme)
+        ? await saveWithLogo(
+            deps.db,
+            (tx) => prepareThemeSave(tx, { managementSessionId, id: null, name, theme }),
+            (tx, printedLogo) =>
+              createCustomTheme(tx, { managementSessionId, name, theme, inUse, printedLogo }),
+          )
+        : await withTransaction(deps.db, (tx) =>
+            createCustomTheme(tx, { managementSessionId, name, theme, inUse }),
+          );
       return c.json(themeAnswerOf(stored), 201);
     }),
   );
@@ -118,9 +155,16 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
       const managementSessionId = requireManagementSession(c);
       const theme = requireTheme(await readBody(c));
       const id = c.req.param("id");
-      const stored = await withTransaction(deps.db, (tx) =>
-        saveCustomTheme(tx, { managementSessionId, id, theme }),
-      );
+      const stored = namesLogo(theme)
+        ? await saveWithLogo(
+            deps.db,
+            (tx) => prepareThemeSave(tx, { managementSessionId, id, theme }),
+            (tx, printedLogo) =>
+              saveCustomTheme(tx, { managementSessionId, id, theme, printedLogo }),
+          )
+        : await withTransaction(deps.db, (tx) =>
+            saveCustomTheme(tx, { managementSessionId, id, theme }),
+          );
       return c.json(themeAnswerOf(stored), 200);
     }),
   );

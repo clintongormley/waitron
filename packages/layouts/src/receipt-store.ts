@@ -155,7 +155,7 @@ export async function getStoredLogoRasters(
   if (row?.logo !== logo || row.narrow === null || row.wide === null) return null;
   try {
     const pictures: unknown = { "58mm": JSON.parse(row.narrow), "80mm": JSON.parse(row.wide) };
-    return printable(pictures) ? pictures : null;
+    return printableLogoRasters(pictures) ? pictures : null;
   } catch {
     return null;
   }
@@ -173,7 +173,7 @@ export async function putReceipt(
   const config = validateReceiptConfig(input.receipt);
   let receipt: ReceiptConfig & { logoRasters?: ReceiptLogoRasters } = config;
   if (config.logo !== undefined) {
-    if (!printable(input.logoRasters)) {
+    if (!printableLogoRasters(input.logoRasters)) {
       throw new Error(`no printable logo raster was given for ${config.logo}`);
     }
     receipt = { ...config, logoRasters: input.logoRasters };
@@ -187,7 +187,7 @@ export async function putReceipt(
     });
 }
 
-function printable(rasters: unknown): rasters is ReceiptLogoRasters {
+export function printableLogoRasters(rasters: unknown): rasters is ReceiptLogoRasters {
   return (
     isPlainObject(rasters) &&
     PAPER_WIDTHS.every((paperWidth) => decodeLogoRaster(rasters[paperWidth], paperWidth) !== null)

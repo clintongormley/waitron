@@ -1198,6 +1198,10 @@ for (const type of ["location_business_day_settings", "location_day_cutover_chan
   });
 }
 
+it("re-reads the venue theme on a theme change or an image library edit", () => {
+  expect(QUERY_DEPENDENCIES.getVenueTheme).toEqual(["custom_themes", "media_images"]);
+});
+
 it("refreshes the theme list on a theme change, passively after the first read", async () => {
   expect(QUERY_DEPENDENCIES.listThemes).toEqual(["custom_themes"]);
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(

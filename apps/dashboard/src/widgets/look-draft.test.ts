@@ -24,6 +24,7 @@ const LUCIA: ThemeChoices = {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: { bg: "#f8f1e1" }, dark: {} },
 };
 
@@ -152,6 +153,7 @@ describe("the Look card's draft", () => {
     const b = openDraft({
       handSet: { dark: {}, light: { text: "#6A6A6A", bg: "#f8f1e1" } },
       corners: "round",
+      logo: null,
       background: "tinted",
       brandFix: { dark: true, light: true },
       brandColor: "#1e5b3a",

@@ -20,6 +20,7 @@ const LUCIA: ThemeChoices = {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const CREAM = setHand(openDraft(LUCIA), "light", "bg", "#f8f1e1");

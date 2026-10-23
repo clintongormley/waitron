@@ -62,6 +62,7 @@ const LUCIA: ThemeChoices = {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 };
 const CREAM: ThemeChoices = { ...LUCIA, handSet: { light: { bg: "#f8f1e1" }, dark: {} } };

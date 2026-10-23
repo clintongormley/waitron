@@ -2949,7 +2949,16 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   value each, set by hand with a picker or a code, put back one at a time or all at once, with
   warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
   its own button colour. Until slice 11 its heading and opening line leave out text, and until slice
-  12 it is one flat list. Next: 7 and 10, then 11 and 12.
+  12 it is one flat list. Slice 7 landed 2026-10-2x (#PR): a theme's document names a venue logo — a
+  library image and an optional one for dark screens — checked on save and on import; the image
+  library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
+  and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
+  image; every save that sets or changes its light image, and every library reframe or source
+  replacement of that image, draws its printed dots (`printedLogo`), which nothing prints until slice 9. No screen shows the logo until
+  slice 8; the image library lists the use as the theme's name, unlinked, until then. An optional
+  key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
+  for slices 10 and 11 `textScale` 100 and `text` `{}`), with no configuration format change.
+  Next: 8 and 10, then 9, 11, 12 and 14.
 
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
@@ -3240,6 +3249,21 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](backlog/printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
 
+- **A department's receipt logo save re-checks only the image's revision, not its id** — found in
+  A841 slice 7's review, read, not run. The theme logo save compares both, because an image deleted
+  and uploaded again under the same name during a save is a different image
+  (`apps/server/src/theme-logo.ts`, `recheckThemeLogo`); `apps/server/src/department-receipt-api.ts`
+  compares `revision` alone.
+
+- **A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split
+  its two readers** — believed from A841 slice 7's review, not run through a receipt.
+  `packages/media/src/images.ts` reads a department's logo with SQLite's `json_extract`, which takes
+  the first of two equal keys, while JavaScript takes the last, and reads a key spelled `logo` plus
+  a NUL character as `$.logo` (measured: SQLite 3.54.0, `{"logo\u0000":"fake","logo":"real"}` gives
+  `fake` there and `real` in JavaScript), and `validateReceiptFields` (`packages/venue-service/src/configuration-transfer.ts`) does
+  not look at the logo. A copied theme with a repeated key is refused
+  (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
+
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
 
@@ -3376,6 +3400,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#the-receipts-preview-redraws-the-whole-receipt-once-per-highlighted-part)
 
 - **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
+  A theme's logo (A841 slice 7) is a second image whose deletion only the app refuses; this entry
+  covers it too.
   [Detail](backlog/printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
 
 **Left open, for the owner, by C113 (#1014, one receipt language per location):**

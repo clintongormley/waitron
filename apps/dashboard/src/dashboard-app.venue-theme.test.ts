@@ -113,6 +113,15 @@ it("a change to the custom themes repaints without a reload", async () => {
   await vi.waitFor(() => expect(bg()).toBe("#fff3f3"));
 });
 
+it("a change to the image library repaints without a reload", async () => {
+  const api = stubApi();
+  await mount(api);
+  await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+  api.getVenueTheme.mockResolvedValue(SECOND_ANSWER);
+  api.liveData.invalidate([{ type: "media_images" }]);
+  await vi.waitFor(() => expect(bg()).toBe("#fff3f3"));
+});
+
 it("a change elsewhere reads nothing", async () => {
   const api = stubApi();
   const el = await mount(api);

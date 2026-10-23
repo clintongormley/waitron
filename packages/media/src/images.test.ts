@@ -68,7 +68,7 @@ describe("image library", () => {
       );
       const selects = vi.spyOn(tx, "select");
       expect((await readImage(tx, image.image.id)).usageCount).toBe(0);
-      expect(selects).toHaveBeenCalledTimes(6);
+      expect(selects).toHaveBeenCalledTimes(7);
       selects.mockRestore();
     });
   });

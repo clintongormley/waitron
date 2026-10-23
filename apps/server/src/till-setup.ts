@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
 import { locations, readTenant, type Transaction } from "@waitron/db";
-import { getDeviceProfile, readThemeInUse } from "@waitron/layouts";
+import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
 import { cardReaders, DEMO_READER_ID, resolveDeviceReaderId } from "@waitron/payments";
 import type { DeviceBinding } from "./device-session.js";
 import { listCourses } from "./kitchen.js";
 import type { TillApiDeps } from "./till-api.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
-import { venueThemeAnswer } from "./venue-theme.js";
+import { readVenueThemeSource, venueThemeAnswer } from "./venue-theme.js";
 
 /** The subset of `apps/till`'s `CardProvider` union this surface hands out. */
 type TillCardProvider = TillReaderProvider | "simulator" | "none";
@@ -26,8 +26,8 @@ export async function readTillSetup(
   device: DeviceBinding | null,
 ) {
   const setup = await readSetupFields(tx, deps, device);
-  const themeInUse = await readThemeInUse(tx);
-  return { setup, themeInUse };
+  const venueTheme = await readVenueThemeSource(tx);
+  return { setup, venueTheme };
 }
 
 export type TillSetupRead = Awaited<ReturnType<typeof readTillSetup>>;
@@ -124,7 +124,10 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
  * the read's transaction has ended.
  */
 export function completeTillSetup(read: TillSetupRead) {
-  return { ...read.setup, themeHash: venueThemeAnswer(read.themeInUse).hash };
+  return {
+    ...read.setup,
+    themeHash: venueThemeAnswer(read.venueTheme).hash,
+  };
 }
 
 export type TillSetup = ReturnType<typeof completeTillSetup>;

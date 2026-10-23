@@ -11,7 +11,7 @@ import {
   staffPresentationName,
   validateContentTranslations,
 } from "@waitron/catalogue";
-import { catalogues, products, type Transaction } from "@waitron/db";
+import { catalogues, customThemes, products, type Transaction } from "@waitron/db";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import {
   AppError,
@@ -45,9 +45,9 @@ export interface ImageRecord extends ImageMetadataInput {
   sourceFilename: string;
   originalFilename: string | null;
   /** How many products (variants among them), sections, include folders, live or queued menu
-   * versions and receipt logos reference this photo. `readImage` uses `listImageUsagesForFilename`
-   * and `listImages` uses `countUsages`; the counters must stay in step or the library shows a free
-   * photo that then refuses to delete. */
+   * versions, receipt logos and theme logos reference this photo. `readImage` uses
+   * `listImageUsagesForFilename` and `listImages` uses `countUsages`; the counters must stay in step
+   * or the library shows a free photo that then refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -98,13 +98,22 @@ export type ImageUsage =
       number: number;
       activatesAt: string;
     }
-  | { kind: "department_receipt"; id: string; name: string; active: boolean };
+  | { kind: "department_receipt"; id: string; name: string; active: boolean }
+  /** A theme naming the photo as its light or dark logo, or both: one use per theme. */
+  | { kind: "theme_logo"; id: string; name: string };
 function storedLogo(receipt: typeof departmentReceipts.receipt) {
   return sql<string | null>`case when json_valid(${receipt}) then
     case when json_type(${receipt}) = 'object' and json_type(${receipt}, '$.logo') = 'text'
     then json_extract(${receipt}, '$.logo') else null end else null end`;
 }
 const departmentLogo = storedLogo(departmentReceipts.receipt);
+/** The file name a theme's stored document gives its `side` logo, or NULL when it cannot be read. */
+export function themeLogoName(side: "light" | "dark") {
+  const path = `$.logo.${side}`;
+  return sql<string | null>`case when json_valid(${customThemes.theme}) then
+    case when json_type(${customThemes.theme}) = 'object' and json_type(${customThemes.theme}, ${path}) = 'text'
+    then json_extract(${customThemes.theme}, ${path}) end end`;
+}
 // The expression `section_members_folder_image_idx` indexes.
 const folderImage = sql<string | null>`${sectionMembers.folderOverrides} ->> '$.image'`;
 const includedRoots = alias(sections, "included_roots");
@@ -248,6 +257,11 @@ async function listImageUsagesForFilename(
     .innerJoin(departments, eq(departments.id, departmentReceipts.departmentId))
     .where(eq(departmentLogo, filename))
     .orderBy(departments.name, departments.id);
+  const themeRows = await tx
+    .select({ id: customThemes.id, name: customThemes.name })
+    .from(customThemes)
+    .where(or(eq(themeLogoName("light"), filename), eq(themeLogoName("dark"), filename)))
+    .orderBy(customThemes.nameKey, customThemes.id);
   const usage = ({
     parentId,
     parentName,
@@ -282,6 +296,7 @@ async function listImageUsagesForFilename(
           ]),
     ]),
     ...departmentRows.map((row): ImageUsage => ({ kind: "department_receipt", ...row })),
+    ...themeRows.map((row): ImageUsage => ({ kind: "theme_logo", ...row })),
   ];
 }
 
@@ -534,8 +549,9 @@ export async function listImages(
 }
 
 /**
- * How many products (variants among them), sections, include folders, live or queued menu versions
- * and receipt logos name each of `filenames`.
+ * How many products (variants among them), sections, include folders, live or queued menu versions,
+ * receipt logos and theme logos name each of `filenames`; a theme naming one photo as both its light
+ * and dark logo counts once.
  *
  * The reads count the sources `listImageUsages` lists, and a source added there is added here too
  * — or the library shows a free photo that then refuses to delete. They are separate statements on
@@ -597,6 +613,13 @@ async function countUsages(
     .innerJoin(departments, eq(departments.id, departmentReceipts.departmentId))
     .where(inArray(departmentLogo, wanted))) {
     tally(row.image);
+  }
+  for (const row of await tx
+    .select({ light: themeLogoName("light"), dark: themeLogoName("dark") })
+    .from(customThemes)
+    .where(or(inArray(themeLogoName("light"), wanted), inArray(themeLogoName("dark"), wanted)))) {
+    tally(row.light);
+    if (row.dark !== row.light) tally(row.dark);
   }
   return counts;
 }

@@ -8,6 +8,12 @@ export const BACKGROUNDS = ["neutral", "tinted"] as const;
 
 export type Background = (typeof BACKGROUNDS)[number];
 
+/** Image library file names. */
+export interface ThemeLogo {
+  readonly light: string;
+  readonly dark?: string;
+}
+
 export interface ThemeChoices {
   /** `null` is Waitron's own brand colour. */
   readonly brandColor: string | null;
@@ -15,6 +21,7 @@ export interface ThemeChoices {
   readonly background: Background;
   readonly corners: Corners;
   readonly handSet: Readonly<Record<Mode, Readonly<Partial<Record<ThemeColour, string>>>>>;
+  readonly logo: ThemeLogo | null;
 }
 
 export const WAITRON_CHOICES: ThemeChoices = {
@@ -23,6 +30,7 @@ export const WAITRON_CHOICES: ThemeChoices = {
   background: "neutral",
   corners: "standard",
   handSet: { light: {}, dark: {} },
+  logo: null,
 };
 
 export type WarningField = "brandColor" | `handSet.${Mode}.${ThemeColour}`;

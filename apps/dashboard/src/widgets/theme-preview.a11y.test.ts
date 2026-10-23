@@ -15,6 +15,7 @@ const drafts: Record<string, ThemeChoices> = {
     brandFix: { dark: true },
     background: "tinted",
     corners: "round",
+    logo: null,
     handSet: { light: {}, dark: {} },
   },
   lemon: { ...WAITRON_CHOICES, brandColor: "#f2d300" },

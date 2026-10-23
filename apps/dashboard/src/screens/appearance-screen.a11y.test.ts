@@ -27,6 +27,7 @@ const lucia = theme("t-lucia", "Bar Lucía", {
   brandFix: { dark: true },
   background: "tinted",
   corners: "round",
+  logo: null,
   handSet: { light: {}, dark: {} },
 });
 const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
