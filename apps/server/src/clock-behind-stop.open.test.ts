@@ -58,7 +58,7 @@ function latest(db: Database): { at: Date; offsetMinutes: number } | undefined {
   const [row] = db.all<{ at: string; offsetMinutes: number }>(sql`
     select fecha_hora_huso_gen_registro as at, offset_minutos as offsetMinutes
     from registros_facturacion
-    order by fecha_hora_huso_gen_registro desc
+    order by fecha_hora_huso_gen_registro desc, id desc
     limit 1
   `);
   return row === undefined ? undefined : { at: new Date(row.at), offsetMinutes: row.offsetMinutes };
