@@ -175,6 +175,17 @@ Open points:
 - From PR 4's look: a chosen "Off" looks unset. Off is the empty value, which `wt-combobox` treats
   as no choice without `show-empty-option` (`wt-combobox.ts:508`), so it is drawn as a placeholder,
   grey and italic (`wt-combobox.ts:159-162`, `:1047`). Unchanged from the Kitchen tab's control.
+- From #2020's review: saving one field in the department dialog can undo another manager's change
+  to a different field. Edit only the name while another dashboard turns the reminder Off, then
+  save, and the reminder is back at 10; Needs clearing behaves the same (both reproduced in
+  Chromium during #2020's finish). Once anything is edited the dialog keeps its whole draft
+  (since #1891, `ef59aa44c`), so the fix is the dialog keeping each untouched field in step with
+  incoming updates.
+- From #2020's review: a configuration import does not range-check a department's reminder
+  minutes, so a file could store 0, a negative number or 999; only the department save refuses
+  them. Main before #2020 did not check the old venue-wide value either (neither
+  `packages/db/src/configuration-transfer.ts` nor `apps/server/src/configuration-transfer.ts`
+  names the column at `b85119762`).
 
 ## A long word in a routing-grid row name still splits at 390 px
 
