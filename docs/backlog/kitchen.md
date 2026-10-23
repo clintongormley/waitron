@@ -143,6 +143,9 @@ were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owne
 What waits. Each part is planned when its blocker lands; the starting decisions are in the plan,
 `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` → "Parts that wait".
 
+2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
+under Open points is due.
+
 - **PR 5 — late flags on each station.** Waits for A773-1, which edits `working-order.ts`'s timing
   imports and many of the files that read or seed the timing tables.
 - **PR 6 — identical dishes, held courses and MOVED slips on each station.** Waits for A773-1, which
