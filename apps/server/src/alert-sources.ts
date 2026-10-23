@@ -2,20 +2,7 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts.
 
-import {
-  and,
-  count,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  min,
-  ne,
-  notExists,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, ne, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/catalogue";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -39,7 +26,6 @@ import {
   type CardProviderRuntimeDeps,
   cardReaders,
 } from "@waitron/payments";
-import { PRINTER_UNPAIRED } from "@waitron/printing";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -48,7 +34,7 @@ import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-
 import type { PageTestPages } from "./page-test-pages.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
-import { printJobInTrouble } from "./print-job-trouble.js";
+import { printersInTrouble } from "./print-job-trouble.js";
 import {
   passScreensDark,
   stationPrintersDown,
@@ -414,32 +400,13 @@ export function printingAlertSource(): AlertSource {
         });
       }
 
-      const rows = await tx
-        .select({
-          id: printers.id,
-          printer: printers.name,
-          n: count(),
-          oldest: min(printJobs.createdAt),
-        })
-        .from(printers)
-        .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
-        .where(
-          and(
-            eq(printers.active, true),
-            printJobInTrouble(now),
-            // Ended on purpose by an Unpair, not a fault to fix.
-            or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
-          ),
-        )
-        .groupBy(printers.id, printers.name);
-      for (const r of rows) {
-        // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.
+      for (const r of await printersInTrouble(tx, now)) {
         alerts.push({
           key: `printer.jobs_waiting:${r.id}`,
           code: "printer.jobs_waiting",
-          params: { printer: r.printer, count: Number(r.n) },
+          params: { printer: r.name, count: r.count },
           severity: "error",
-          since: new Date(r.oldest!).toISOString(),
+          since: new Date(r.oldest).toISOString(),
           screen: "printers",
         });
       }
