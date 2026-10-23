@@ -2207,7 +2207,6 @@ async function bootServer(
     send: createTextEmailSender(),
     isPrimary: () => holders.singletonRole.current === "primary",
     intervalMs: BOX_EMAIL_CHECK_MS,
-    now,
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());

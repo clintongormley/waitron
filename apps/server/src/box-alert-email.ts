@@ -93,7 +93,6 @@ export function startBoxEmailDuty(deps: {
   send: TextEmailSender;
   isPrimary: () => boolean;
   intervalMs: number;
-  now: () => Date;
   log: Logger;
   timer?: (ms: number, fn: () => void) => Timer;
 }): { stop: () => Promise<void> } {
@@ -113,17 +112,19 @@ export function startBoxEmailDuty(deps: {
     }
   }
 
-  function want(key: string, code: BoxEmailCode, wanted: string[], owner?: string): void {
-    if (!episodes.has(key)) {
-      episodes.set(key, {
+  function begin(key: string, code: BoxEmailCode, owner?: string): Episode {
+    let episode = episodes.get(key);
+    if (episode === undefined) {
+      episode = {
         code,
         ...(owner === undefined ? {} : { owner }),
         sentTo: new Set(),
         said: new Set(),
         logged: new Map(),
-      });
+      };
+      episodes.set(key, episode);
     }
-    wanted.push(key);
+    return episode;
   }
 
   function sayOnce(episode: Episode, event: string): void {
@@ -132,9 +133,16 @@ export function startBoxEmailDuty(deps: {
     deps.log("warn", event, { code: episode.code });
   }
 
-  async function deliver(episode: Episode, ctx: BoxEmailContext): Promise<void> {
+  async function deliver(
+    episode: Episode,
+    ctx: BoxEmailContext,
+    toldAlready?: ReadonlySet<string>,
+  ): Promise<void> {
     if (ctx.recipients.length === 0) return sayOnce(episode, "box_email.no_recipients");
-    const pending = ctx.recipients.filter((r) => !episode.sentTo.has(recipientKey(r)));
+    const pending = ctx.recipients.filter((r) => {
+      const key = recipientKey(r);
+      return !episode.sentTo.has(key) && !toldAlready?.has(key);
+    });
     if (pending.length === 0) return;
     if (ctx.delivery.mode === "unconfigured") return sayOnce(episode, "box_email.not_configured");
     for (const recipient of pending) {
@@ -166,41 +174,47 @@ export function startBoxEmailDuty(deps: {
   async function check(): Promise<void> {
     try {
       if (stopped || !deps.isPrimary()) return;
-      const wanted: string[] = [];
+      const due: { episode: Episode; toldAlready?: ReadonlySet<string> }[] = [];
       const full = deps.disk.since() !== null;
       const low = deps.space.current().lowSince !== null;
       if (!full && !low) {
         episodes.delete("storage.disk_full");
         episodes.delete("storage.space_low");
+      } else if (full) {
+        due.push({ episode: begin("storage.disk_full", "storage.disk_full") });
       } else {
-        if (full) want("storage.disk_full", "storage.disk_full", wanted);
-        // Once the stop has been emailed, a low disk around it is the same episode.
-        if (low && !full && !episodes.has("storage.disk_full")) {
-          want("storage.space_low", "storage.space_low", wanted);
-        }
+        // One disk episode: a manager the full-disk email reached is not sent the low-space one.
+        due.push({
+          episode: begin("storage.space_low", "storage.space_low"),
+          toldAlready: episodes.get("storage.disk_full")?.sentTo,
+        });
       }
       const notices = await read(deps.moduleNotices);
       if (stopped) return;
-      const moduleWanted = new Set<string>();
+      const moduleSeen = new Set<string>();
       for (const notice of notices.notices) {
         if (!isBoxEmailCode(notice.code)) continue;
         if ((STORAGE_EMAIL_CODES as readonly string[]).includes(notice.code)) continue;
         const key = `module:${notice.owner}:${notice.key}`;
-        want(key, notice.code, wanted, notice.owner);
-        moduleWanted.add(key);
+        begin(key, notice.code, notice.owner);
+        moduleSeen.add(key);
       }
       for (const [key, episode] of episodes) {
-        if (episode.owner === undefined || moduleWanted.has(key)) continue;
+        if (episode.owner === undefined) continue;
         // While an owner's check fails, its episodes neither start nor end.
-        if (!notices.unavailable.includes(episode.owner)) episodes.delete(key);
+        if (moduleSeen.has(key) || notices.unavailable.includes(episode.owner)) {
+          due.push({ episode });
+        } else {
+          episodes.delete(key);
+        }
       }
-      if (wanted.length === 0) return;
+      if (due.length === 0) return;
       // Read at every check while an episode lasts, so a manager added during it is found.
       const ctx = await read(deps.context);
       if (stopped) return;
-      for (const key of wanted) {
+      for (const { episode, toldAlready } of due) {
         if (stopped) return;
-        await deliver(episodes.get(key)!, ctx);
+        await deliver(episode, ctx, toldAlready);
       }
     } catch (error) {
       deps.log("warn", "box_email.check_failed", { errorCode: codeOf(error) });

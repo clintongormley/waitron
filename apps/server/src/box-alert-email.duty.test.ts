@@ -34,7 +34,6 @@ function duty() {
     lowSince: null as Date | null,
     recipients: [ANA, BEN] as readonly ManagerEmailRecipient[],
     delivery: { mode: "smtp", smtp: SMTP } as EmailDelivery,
-    now: at(0),
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
     primary: true,
   };
@@ -58,7 +57,6 @@ function duty() {
     send,
     isPrimary: () => state.primary,
     intervalMs: BOX_EMAIL_CHECK_MS,
-    now: () => state.now,
     log,
     timer: (ms, fn) => {
       const entry = { ms, fn, cancelled: false };
@@ -156,6 +154,58 @@ describe("startBoxEmailDuty", () => {
     expect(d.sent()).toEqual([
       expected("storage.disk_full", ANA),
       expected("storage.disk_full", BEN),
+    ]);
+  });
+
+  it("a full disk whose email never went sends the low-space email once the stop lifts", async () => {
+    const d = duty();
+    d.state.recipients = [ANA];
+    d.send.mockImplementation(async () => "unknown");
+    d.state.lowSince = at(1);
+    d.state.diskSince = at(1);
+    await d.tick();
+    await d.tick();
+    d.send.mockImplementation(async () => "sent");
+    d.state.diskSince = null;
+    await d.tick();
+    expect(d.sent()).toEqual([
+      expected("storage.disk_full", ANA),
+      expected("storage.disk_full", ANA),
+      expected("storage.space_low", ANA),
+    ]);
+    await d.tick();
+    expect(d.send).toHaveBeenCalledTimes(3);
+  });
+
+  it("a full disk found without email settings sends the low-space email once the stop lifts and settings appear", async () => {
+    const d = duty();
+    d.state.delivery = { mode: "unconfigured" };
+    d.state.lowSince = at(1);
+    d.state.diskSince = at(1);
+    await d.tick();
+    d.state.diskSince = null;
+    d.state.delivery = { mode: "smtp", smtp: SMTP };
+    await d.tick();
+    expect(d.sent()).toEqual([
+      expected("storage.space_low", ANA),
+      expected("storage.space_low", BEN),
+    ]);
+  });
+
+  it("a manager added after the stop lifts, while space stays low, gets the low-space email and the others nothing more", async () => {
+    const d = duty();
+    d.state.recipients = [ANA];
+    d.state.lowSince = at(1);
+    d.state.diskSince = at(1);
+    await d.tick();
+    d.state.diskSince = null;
+    await d.tick();
+    d.state.recipients = [ANA, BEN];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([
+      expected("storage.disk_full", ANA),
+      expected("storage.space_low", BEN),
     ]);
   });
 
@@ -312,6 +362,19 @@ describe("startBoxEmailDuty", () => {
     d.state.notices = { notices: [], unavailable: ["fiscal-verifactu"] };
     await d.tick();
     d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
+    await d.tick();
+    expect(d.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("tries a failed clock email again while its module's check fails", async () => {
+    const d = duty();
+    d.state.recipients = [ANA];
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
+    await d.tick();
+    d.state.notices = { notices: [], unavailable: ["fiscal-verifactu"] };
+    await d.tick();
+    expect(d.sent()).toEqual([expected("clock.unusable", ANA), expected("clock.unusable", ANA)]);
     await d.tick();
     expect(d.send).toHaveBeenCalledTimes(2);
   });
