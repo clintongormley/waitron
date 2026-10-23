@@ -108,7 +108,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         await el.updateComplete;
         expect(confirm.disabled).toBe(false);
         await expectNoA11yViolations(host);
-        for (const selector of ["[data-close]", "[data-confirm]"]) {
+        for (const selector of ["[data-close]", "[data-confirm]", "[data-collect]"]) {
           const button = root.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
           await button.updateComplete;
           const bounds = button.shadowRoot!.querySelector("button")!.getBoundingClientRect();
@@ -128,6 +128,16 @@ for (const locale of ["en-GB", "es-ES"]) {
         await el.updateComplete;
         await expectNoA11yViolations(host);
         el.busy = false;
+        el.collectPending = true;
+        el.confirmationLocked = true;
+        await el.updateComplete;
+        expect(confirm.disabled).toBe(true);
+        expect(
+          root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-collect]")!.disabled,
+        ).toBe(false);
+        await expectNoA11yViolations(host);
+        el.collectPending = false;
+        el.confirmationLocked = false;
         el.refusal = locale === "en-GB" ? "Try again" : "Vuelve a intentarlo";
         el.refunds = {};
         el.refundAtTill = true;

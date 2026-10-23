@@ -67,6 +67,15 @@ export class TillFinishTableDialog extends LitElement {
         accent-color: var(--wt-color-primary);
         flex: none;
       }
+      .finish-footer {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        flex: 1 1 auto;
+      }
+      .finish-footer wt-button[data-collect] {
+        width: 100%;
+      }
       .required,
       .error {
         color: var(--wt-color-danger);
@@ -81,6 +90,7 @@ export class TillFinishTableDialog extends LitElement {
   @property({ type: Boolean }) reasonsLoading = false;
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) confirmationLocked = false;
+  @property({ type: Boolean }) collectPending = false;
   @property() refusal = "";
   @property({ attribute: false }) refusalField: "reason" | "note" | null = null;
   @state() private refusalCleared = false;
@@ -88,6 +98,7 @@ export class TillFinishTableDialog extends LitElement {
   @state() private attempted = false;
   @state() private active = true;
   @state() private sending = false;
+  @state() private sentCollect = false;
   #key?: string;
   #baseline?: Draft;
   #scope?: DraftScope<Draft>;
@@ -108,6 +119,9 @@ export class TillFinishTableDialog extends LitElement {
   }
   #busy(): boolean {
     return this.busy || this.sending;
+  }
+  #collecting(): boolean {
+    return this.#busy() && (this.sending ? this.sentCollect : this.collectPending);
   }
   #currentKey(): string {
     return JSON.stringify([this.dishes, this.refunds]);
@@ -233,7 +247,7 @@ export class TillFinishTableDialog extends LitElement {
     );
   }
   async #confirm(): Promise<void> {
-    if (!this.isConnected || !this.active || this.#busy()) return;
+    if (!this.isConnected || !this.active || this.#busy() || this.collectPending) return;
     // A click may arrive after the observation changed and before Lit paints the new facts.
     if (this.#currentKey() !== this.#key) {
       this.requestUpdate();
@@ -246,6 +260,7 @@ export class TillFinishTableDialog extends LitElement {
       return;
     }
     this.sending = true;
+    this.sentCollect = false;
     this.dispatchEvent(
       new CustomEvent<FinishTableChoice>("finish-table-choice", {
         detail: {
@@ -266,6 +281,22 @@ export class TillFinishTableDialog extends LitElement {
         bubbles: true,
         composed: true,
       }),
+    );
+  }
+  #collectable(): boolean {
+    return this.dishes.some((dish) => dish.context.components.some((item) => item.id !== null));
+  }
+  #collect(): void {
+    if (!this.isConnected || !this.active || this.#busy()) return;
+    if (this.confirmationLocked && !this.collectPending) return;
+    if (this.#currentKey() !== this.#key) {
+      this.requestUpdate();
+      return;
+    }
+    this.sending = true;
+    this.sentCollect = true;
+    this.dispatchEvent(
+      new CustomEvent("finish-table-collect", { detail: {}, bubbles: true, composed: true }),
     );
   }
   #close(event: Event): void {
@@ -289,7 +320,9 @@ export class TillFinishTableDialog extends LitElement {
     const invalidNote = this.attempted && this.#noteInvalid();
     const invalidPreparation =
       this.attempted && this.draft.choices.some((choice) => choice.preparationStarted === null);
-    const disabled = this.#busy() || this.reasonsLoading || !this.#valid();
+    const disabled = this.#busy() || this.reasonsLoading || this.collectPending || !this.#valid();
+    const collecting = this.#collecting();
+    const cancelling = this.#busy() && !collecting;
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -407,36 +440,49 @@ export class TillFinishTableDialog extends LitElement {
             : nothing
         }
       </div>
-      <wt-form-actions
-        slot="footer"
-        .error=${[invalidReason || invalidNote || invalidPreparation || serverField !== null ? t("form.fix_fields") : "", serverField === null && !this.refusalCleared ? this.refusal : ""].filter(Boolean).join(" ")}
-      >
-        <wt-button
-          slot="cancel"
-          data-close
-          variant="secondary"
-          .disabled=${this.#busy()}
-          @click=${() => {
-            if (this.isConnected && this.active && !this.#busy())
-              void this.renderRoot.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
-          }}
-          >${t("action.back")}</wt-button
+      <div slot="footer" class="finish-footer">
+        <wt-form-actions
+          .error=${[invalidReason || invalidNote || invalidPreparation || serverField !== null ? t("form.fix_fields") : "", serverField === null && !this.refusalCleared ? this.refusal : ""].filter(Boolean).join(" ")}
         >
-        <wt-button
-          data-confirm
-          variant=${disabled && !this.#busy() ? "secondary" : "danger"}
-          .disabled=${disabled}
-          .loading=${this.#busy()}
-          @click=${() => void this.#confirm()}
-          >${
-            compareDecimal(decimal(total), decimal("0")) > 0
-              ? t("cancel_item.refund").replace("{amount}", () =>
-                  formatMoney(decimal(total), currentLocale()),
-                )
-              : t("table.cancel_line")
-          }</wt-button
-        >
-      </wt-form-actions>
+          <wt-button
+            slot="cancel"
+            data-close
+            variant="secondary"
+            .disabled=${this.#busy()}
+            @click=${() => {
+              if (this.isConnected && this.active && !this.#busy())
+                void this.renderRoot.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+            }}
+            >${t("action.back")}</wt-button
+          >
+          <wt-button
+            data-confirm
+            variant=${disabled && !cancelling ? "secondary" : "danger"}
+            .disabled=${disabled}
+            .loading=${cancelling}
+            @click=${() => void this.#confirm()}
+            >${
+              compareDecimal(decimal(total), decimal("0")) > 0
+                ? t("cancel_item.refund").replace("{amount}", () =>
+                    formatMoney(decimal(total), currentLocale()),
+                  )
+                : t("table.cancel_line")
+            }</wt-button
+          >
+        </wt-form-actions>
+        ${
+          this.#collectable()
+            ? html`<wt-button
+                data-collect
+                variant="secondary"
+                .disabled=${this.#busy() || (this.confirmationLocked && !this.collectPending)}
+                .loading=${collecting}
+                @click=${() => this.#collect()}
+                >${t("finish_table.collect")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
     </wt-dialog>`;
   }
 }

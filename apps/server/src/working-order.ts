@@ -12,6 +12,7 @@ import {
   assertPartyAllergyAnswered,
   normaliseAllergyPatch,
   prepareAllergyRelease,
+  survivingParty,
 } from "./party-allergy.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
@@ -2368,7 +2369,9 @@ async function releaseHeld(
   const pendingNoRoute = await heldNoRouteLines(tx, cfg, orderId, noRouteScope, routing);
   if (pending.length > 0 || pendingNoRoute.lines.length > 0) {
     const partyId = await partyOfOrder(tx, orderId);
-    if (partyId !== null) await assertPartyAllergyAnswered(tx, partyId);
+    // A settled bill keeps the party it was paid under; a merge combines that party's answer into
+    // the surviving party's.
+    if (partyId !== null) await assertPartyAllergyAnswered(tx, await survivingParty(tx, partyId));
   }
   const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
   const firedItems = await tx

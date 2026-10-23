@@ -2863,6 +2863,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         expectedEdits?: unknown;
         submissionId?: unknown;
         cancellations?: unknown;
+        collect?: unknown;
         approver?: { personId?: unknown; pin?: unknown };
       }>(c);
       const expectedPartyRevision = requireRevision(
@@ -2895,7 +2896,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             throw new AppError("device_profile.not_admitted", {});
           const current = { ...session, device };
           await catchUpFloor(tx);
-          await checkZones(tx, deps.cfg, current, [{ partyId }]);
+          await checkZones(tx, deps.cfg, current, [
+            { partyId },
+            ...(resolution.collect?.bills ?? []).map((bill) => ({ orderId: bill.billId })),
+          ]);
           const refund = refundHandoff
             ? await authorize(
                 tx,

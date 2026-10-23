@@ -154,7 +154,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/today/name                         | table                  | refuses POST /api/tables/:id/today/name              |
  * | POST /api/zones/:id/today/reset                         | path zone              | refuses POST /api/zones/:id/today/reset              |
  * | POST /api/zones/:id/today/update-layout                 | path zone              | refuses POST /api/zones/:id/today/update-layout      |
- * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
+ * | POST /api/parties/:id/finish | party; each bill a counter collection names | refuses POST /api/parties/:id/finish; finish-party-collect.test.ts: "refuses a collection naming a bill outside the profile's zones" |
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
  * | POST /api/parties/:id/service-steps/:stepId/done | party; step's table | refuses POST /api/parties/:id/service-steps/:stepId/done (party); service-step-done.test.ts: "refuses a step found on a table in a zone the profile may not serve" (table) |
  * | PUT  /api/parties/:id/name                              | party                  | refuses PUT /api/parties/:id/name                    |

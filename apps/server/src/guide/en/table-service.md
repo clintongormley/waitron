@@ -49,9 +49,9 @@ under **Refund a payment on a receipt**.
 
 ## Finish a paid table with food still to come {#finish-paid-table}
 
-When you choose **Finish table** and a paid bill still has dishes nobody has served, every one of
-them is cancelled before the table closes. A window headed, for example, **2 dishes not served**
-lists them.
+When you choose **Finish table** and a paid bill still has dishes nobody has served, a window
+headed, for example, **2 dishes not served** lists them, and you either cancel them all or, when one has a kitchen ticket, send the food to the
+counter.
 
 For a dish that has gone to the kitchen but is not marked started, answer **Has preparation
 started?**. For the others, the window shows the answer. Tick **Refund** beside each dish whose
@@ -65,6 +65,13 @@ you to refund it at a till from the receipt.
 
 Once the table is finished, a **Refund** window lists each receipt with ticked dishes. Choose one to
 open its refund, filled in. When there is only one receipt, its refund opens straight away.
+
+When the guests will wait and take their food from the counter, choose **They'll collect it at the
+counter** instead. It is offered when at least one of the dishes has a kitchen ticket. Nothing is
+cancelled or refunded. Dishes held back go to the kitchen now, each bill whose food still to come
+has a kitchen ticket becomes a paid order waiting at the counter, and the table finishes. The order
+waits under **Waiting orders** on the **Counter** screen, marked **Paid, not handed over**, and
+**Find a bill** lists it; choose **Hand over** when the guests collect it.
 
 ## Refund a payment on a receipt {#refund-receipt}
 

@@ -1,5 +1,12 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
+> **2026-10-22 A758-7 update:** §3.8 item 4 is built as Finish table's counter collection
+> ([plan](../plans/2026-10-22-a758-7-collect-at-counter.md)); the database's settled-order freeze
+> gained the one exception it needed. A758 is finished: its backlog entry and its detail in
+> `docs/backlog/till.md` are deleted, so the link below to that detail no longer resolves. What
+> each slice left open is its own backlog entry; A758-6's are A1020 and A1021; A758-7's are A1031–A1033, and it found A1029 and A1030.
+> Other departures as built: `docs/backlog.md` A1031.
+
 > **2026-10-22 A758-6 update:** §3.8 item 5 (Table finished) is not built — since A773-2 (#1944) a
 > finished party's food leaves the pass; see the plan's Decision 1. Other departures as built:
 > `docs/backlog/till.md` A1020.

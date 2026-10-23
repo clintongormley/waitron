@@ -1296,6 +1296,13 @@
       "when": 1792647454369,
       "tag": "0184_purchase_supplier_year",
       "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "6",
+      "when": 1792703551398,
+      "tag": "0185_settled_order_to_counter",
+      "breakpoints": true
     }
   ]
 }

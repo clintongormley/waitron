@@ -2,13 +2,20 @@ import { requireBodyUuid } from "@waitron/server-kit";
 import { invalid } from "./bill-allocation.js";
 import { submissionIdOf } from "./bill-payments-api.js";
 import { parseCancellationContext } from "./line-cancel-input.js";
-import type { FinishCancellation } from "./finish-party-service.js";
+import type { CounterCollection, FinishCancellation } from "./finish-party-service.js";
 import { requireRevision } from "./till-api.js";
 
 export function parseFinishCancellations(body: Record<string, unknown>): {
   submissionId?: string;
   cancellations?: FinishCancellation[];
+  collect?: CounterCollection;
 } {
+  if (body.collect !== undefined) {
+    if (body.cancellations !== undefined) throw invalid("collect");
+    if (body.approver !== undefined) throw invalid("approver");
+    if (body.submissionId === undefined) throw invalid("submissionId");
+    return { submissionId: submissionIdOf(body), collect: parseCollect(body.collect) };
+  }
   if (body.cancellations === undefined)
     return body.submissionId === undefined ? {} : { submissionId: submissionIdOf(body) };
   if (!Array.isArray(body.cancellations)) throw invalid("cancellations");
@@ -36,4 +43,20 @@ export function parseFinishCancellations(body: Record<string, unknown>): {
     };
   });
   return { submissionId: submissionIdOf(body), cancellations };
+}
+
+function parseCollect(raw: unknown): CounterCollection {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw invalid("collect");
+  const { bills } = raw as Record<string, unknown>;
+  if (!Array.isArray(bills) || bills.length === 0) throw invalid("collect");
+  const parsed = bills.map((bill: unknown) => {
+    if (bill === null || typeof bill !== "object" || Array.isArray(bill)) throw invalid("collect");
+    const value = bill as Record<string, unknown>;
+    return {
+      billId: requireBodyUuid(value.billId, "billId").toLowerCase(),
+      expectedBillRevision: requireRevision(value.expectedBillRevision, "expectedBillRevision"),
+    };
+  });
+  if (new Set(parsed.map((bill) => bill.billId)).size !== parsed.length) throw invalid("collect");
+  return { bills: parsed };
 }

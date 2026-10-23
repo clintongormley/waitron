@@ -1828,55 +1828,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   forms contract expects the refusal's own sentence there.
   [Open questions](superpowers/plans/2026-10-19-a757-7-service-step-settings.md#open-questions-each-with-the-default-this-plan-uses)
 
-- **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
-  answered all eight questions on 2026-10-17: two kinds of reason, Void and Comp (a 100% comp is
-  the give-away, printed "Descuento 100%"); per Comp reason, "Who can apply it" and "Who can approve
-  it" as multi-selects over today's roles, built now (editable roles, A7, has not landed); every
-  limit the venue's own, with an approver's PIN above it; the bill-wide limit a euro amount of comps
-  with its own approver list. Then the page "Voids and comps" under Service, with search, drag
-  handles and Delete. **Design revised 2026-10-19 for the owner's Q43 notes (settled and
-  buildable):** what Cancel item… does follows where the dish is — not sent or held, bill unpaid:
-  just removed, no reason; fired but not started: the till asks "Has preparation started?";
-  started: "Cancel, still charge" or "Cancel, don't charge", with a reason; paid: cancelled with a
-  reason, refunded or not. "Cancel, don't charge" on an unpaid bill, and any refund on a paid one,
-  need the refund permission, which replaces the Void reasons' own rules (comps keep theirs); no
-  "Ask for approval" button; the reason is a drop-down; nine starter reasons (with Not served and
-  Other). Finish table on a paid table cancels every dish not served, with a Refund tick each, or
-  sends the order to the counter to be collected (its own slice). A773-1 builds the till dialogs
-  (design §10); A758's slices follow it. **Revised again 2026-10-19 for the owner's four answers:**
-  the Spanish words (the question and the report column are «En preparación»); no confirmation
-  switch on a cash refund; a fired dish removed before preparation started is not listed; the refund
-  screen's Reason is the same drop-down. **The owner answered the last question (§11, D28): a cash
-  refund only on a device whose profile takes cash, as today.** No question is open.
-  **A758-1 built the rules** ([plan](superpowers/plans/2026-10-19-a758-reason-rules.md)): Void and Comp
-  reasons, Comp role lists, limits that ask for a PIN, the bill's comp limit in euros, nine starter
-  reasons (English only, owner 2026-10-19; their translation at setup is A918), and the till naming
-  whose PIN it needs. **A758-2 built the page** ([plan](superpowers/plans/2026-10-20-a758-2-voids-and-comps-page.md)):
-  Voids and comps under Service, with search, drag to reorder and a real Delete; A923–A926 are what
-  it left open. **A758-3 built the report** ([plan](superpowers/plans/2026-10-21-a758-3-voids-and-comps-report.md)): Voids
-  and Comps in the totals, each entry's words, who asked for and approved each reason, and a Reason
-  filter on the list; A952–A959 are what it left open. **A758-4 built the receipt words**
-  ([plan](superpowers/plans/2026-10-21-a758-4-full-comp-receipt.md)): a full comp — Free, or an
-  amount that took the whole list price — prints «Descuento 100%» in each language's own discount
-  word, and the «Invitación» receipt label is gone; a test shows the filed record is unchanged;
-  A911, A960 and A961 are what it left open. **A758-5 built the till's words**
-  ([plan](superpowers/plans/2026-10-22-a758-5-comp-window-words.md)): a counter order's dishes offer
-  one Comp… that opens the Comp window; "Comp the bill" offers Free beside % and €;
-  no till word says "Give away" or «Invitar»; A1007 is what it left open. **A758-6 built the
-  paid-table slice** ([plan](superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md)): Finish
-  table's reason starts on Not served; Void… opens the Cancel item window for a paid line's
-  unserved quantity; the refund opens filled in with the Void reasons drop-down and the dishes,
-  without asking the PIN again while it stays within the dishes' total with no tip (not for a card
-  keyed on a separate terminal); Give back a payment takes the same drop-down; no cash switch; the
-  report says Void, charged, whether preparation had started and what was refunded; a finished
-  table is checked against its bills' zones. A cancel now stores whether it kept its charge, so the report's "Void,
-  charged" («Cancelado, cobrado», design §3.6) reads right even for a dish already comped to
-  €0.00. A1020 and A1021 are what it left open. Left: "They'll collect it at the counter".
-  [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
-  [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
-  [mockups](backlog/mockups/a758-adjustment-reasons/),
-  [pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
-
 - **A923. The voids and comps list is a plain table (left open by A758-2).** It has no column
   chooser, Filters or remembered view, and its own CSS keeps the row menu on a phone's screen,
   because the shared reorder helper (`ReorderController`) cannot reach `wt-data-table`'s rows. The other way is to teach
@@ -1910,6 +1861,39 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   page and its route (`packages/adjustments/src/routes.ts`) take a name of any length, while a
   receipt's refund refuses a reason over 500 characters (`tender-refund-reservation.ts`), which the
   till marks `bill_refund.reason_long`.
+
+- **A1031. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
+  owner may want it different: held dishes fired on the way to the counter; each bill with food
+  still to come moved as its own counter order; the order keeping its table's zone, so a till or
+  pass limited to the counter's zone does not show it; a bill whose food to come has no kitchen
+  ticket staying with the table; the toast reusing "Moved to the counter"; and the settled-order
+  freeze now letting any paid table bill not yet handed over leave its party — only the server
+  limits that to Finish table — an exception `scripts/behavioural-triggers.test.ts` does not yet
+  hold. [Plan](superpowers/plans/2026-10-22-a758-7-collect-at-counter.md#owner-points-each-with-the-default-this-pr-builds)
+
+- **A1032. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
+  order a finished table sent to the counter is named on the pass and in Waiting orders by its
+  number and the table it was paid at ("#12 Mesa 4"), as Move this bill → The counter names one
+  today; only the MOVED slip and the station notice say "counter".
+
+- **A1033. A full invoice's later copies change their guests line when a bill moves to the
+  counter (left open by A758-7).** A full invoice reads its guests from the bill's party each time
+  it prints, and only while the party's family holds exactly one bill (`readReceiptGuests`,
+  `apps/server/src/receipt-guests.ts`): the moved bill's copies lose the line, and when one of two
+  paid bills moves, the copies of the bill left behind gain one. A simplified receipt keeps the
+  count stored at payment.
+
+- **A1030. Firing one held dish is refused on a merged-in party's paid bill (found by A758-7).**
+  `fireHeldLine` (`apps/server/src/order-groups.ts`) looks for the dish only among bills whose
+  `party_id` is the table's own party. A paid bill keeps the party it was paid under, so after
+  Combine tables a held dish on the absorbed party's paid bill answers `group.not_found`. Firing the
+  whole group, or collecting at the counter, fires it. It predates A758-7 (`c9ad7a634`).
+
+- **A1029. The till has no words of its own for `station.no_default` (found by A758-7).** No key
+  for it in `CODE_MESSAGES` (`apps/till/src/i18n/codes.ts`), so `codeMessage` falls back to the
+  generic "Something went wrong, try again", and a waiter whose station has no default printer is
+  told to retry a request that cannot succeed. It predates A758-7
+  (`git log -S'"station.no_default"' -- apps/till`).
 
 - **A924. Void and Comp lozenges are neutral, not red and green as picture 01 draws (left open by
   A758-2).** `wt-lozenge` takes only a hex colour and a screen may not write one, so the word

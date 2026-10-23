@@ -47,6 +47,7 @@ export const en = {
 
   "finish_table.unserved": "{n} dishes not served",
   "finish_table.preparation_known": "Preparation started: {answer}",
+  "finish_table.collect": "They'll collect it at the counter",
   "cancel_item.title": "Cancel item",
   "cancel_item.preparation": "Has preparation started?",
   "cancel_item.yes": "Yes",
@@ -1800,6 +1801,7 @@ export const es: Record<StringKey, string> = {
 
   "finish_table.unserved": "{n} platos sin servir",
   "finish_table.preparation_known": "En preparación: {answer}",
+  "finish_table.collect": "Lo recogerán en el mostrador",
   "cancel_item.title": "Cancelar plato",
   "cancel_item.preparation": "En preparación",
   "cancel_item.yes": "Sí",

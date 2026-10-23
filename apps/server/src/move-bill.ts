@@ -1,11 +1,12 @@
 import { joinedOutOfService, needsMoving, tableInService } from "@waitron/db";
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   diningTables,
   orderGroups,
   orderDraftRecalledLines,
   parties,
   partyTableLabels,
+  ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -14,7 +15,7 @@ import type { AllergyMoveRead, AllergyPatch } from "@waitron/module";
 import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
-import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
+import { enqueueMovedSlips, firedQuantity, readSentWork, type SentWork } from "./kitchen-print.js";
 import { moveBillDraftsToParty } from "./order-drafts.js";
 import {
   readPartyBillIds,
@@ -322,6 +323,59 @@ async function moveBillOnce(
   await printHoldTickets(tx, cfg, held);
   await enqueueMovedSlips(tx, cfg, before, result.billId);
   return result;
+}
+
+/**
+ * Move a paid bill not yet handed over from `from`, the party being finished, to the counter. The
+ * bill keeps its label, revision and zone: the database lets a settled bill's own row leave its
+ * party and change nothing else. Only the stations with something on it still to come are told.
+ */
+export async function moveSettledBillToCounter(
+  tx: Transaction,
+  cfg: OriginConfig,
+  billId: string,
+  from: { partyId: string },
+  expectedEdit: BillEditExpected,
+): Promise<void> {
+  const [bill] = await tx
+    .select({
+      status: workingOrders.status,
+      collectedAt: workingOrders.collectedAt,
+      partyId: workingOrders.partyId,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  if (bill?.status !== "settled" || bill.collectedAt !== null || bill.partyId === null)
+    throw new AppError("management.request_invalid", { field: "billId" });
+  const before = await workStillToCome(tx, await readSentWork(tx, billId));
+  await inheritKitchenNote(tx, cfg, from, { workingOrderId: billId }, "copy");
+  await leaveParty(tx, billId);
+  await tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, billId));
+  await relocateBillEditor(tx, billId, expectedEdit);
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
+  await enqueueMovedSlips(tx, cfg, before, billId);
+}
+
+/** `sent` narrowed to the items whose line has more fired than served; null when none is left. */
+async function workStillToCome(tx: Transaction, sent: SentWork | null): Promise<SentWork | null> {
+  if (sent === null) return null;
+  const rows = await tx
+    .select({ id: ticketItems.id })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(
+      and(
+        inArray(ticketItems.id, [...sent.ticketItemIds]),
+        gt(firedQuantity, workingOrderLines.servedQuantity),
+      ),
+    );
+  if (rows.length === 0) return null;
+  const live = new Set(rows.map((row) => row.id));
+  return {
+    places: sent.places,
+    ticketItemIds: live,
+    heldItemIds: new Set([...sent.heldItemIds].filter((id) => live.has(id))),
+  };
 }
 
 /**
