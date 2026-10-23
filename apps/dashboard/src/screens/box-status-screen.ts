@@ -13,7 +13,7 @@ import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
-import { goToLabel, wholeTimes } from "../widgets/alert-format.js";
+import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
 import { boxStatusRows, clockStopProof, type PartRow } from "./box-status-rows.js";
 
@@ -36,6 +36,7 @@ type ReadName = "getBoxHealth" | "listAlerts";
 export class BoxStatusScreen extends LitElement {
   static override styles = [
     baseStyles,
+    wholeTimesStyles,
     css`
       :host {
         display: block;
@@ -168,9 +169,6 @@ export class BoxStatusScreen extends LitElement {
       }
       .times dd {
         margin: 0;
-      }
-      .time {
-        white-space: nowrap;
       }
       .proof {
         margin: 0 0 var(--wt-space-1);
@@ -325,11 +323,11 @@ export class BoxStatusScreen extends LitElement {
       <dl class="times">
         <div>
           <dt>${t("box_status.clock.restart.box_reads")}</dt>
-          <dd class="time">${formatIsoMinute(stop.clockAt)}</dd>
+          <dd>${formatIsoMinute(stop.clockAt)}</dd>
         </div>
         <div>
           <dt>${t("box_status.clock.restart.last_sale_reads")}</dt>
-          <dd class="time">${formatIsoMinute(stop.lastRecordAt)}</dd>
+          <dd>${formatIsoMinute(stop.lastRecordAt)}</dd>
         </div>
       </dl>
       ${clockStopProof(stop).map(

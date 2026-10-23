@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, timesAcrossLines } from "./test-helpers.js";
 import type { AlertView } from "../api/client.js";
 import "./alerts-bell.js";
 import type { AlertsBell } from "./alerts-bell.js";
@@ -149,19 +149,11 @@ describe("dashboard-alerts-bell", () => {
       });
       el.open();
       await el.updateComplete;
-      for (const item of qa(el, "[data-test=alert-item]")) {
-        const walker = document.createTreeWalker(item.firstElementChild!, NodeFilter.SHOW_TEXT);
-        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-          for (const match of node.textContent!.matchAll(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g)) {
-            checked += 1;
-            const range = document.createRange();
-            range.setStart(node, match.index);
-            range.setEnd(node, match.index + match[0].length);
-            const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
-            if (tops.size > 1) broken.push(match[0]);
-          }
-        }
-      }
+      const found = timesAcrossLines(
+        qa(el, "[data-test=alert-item]").map((item) => item.firstElementChild!),
+      );
+      checked += found.checked;
+      broken.push(...found.broken);
       cleanupWidgets();
     }
     expect(checked).toBe(80);

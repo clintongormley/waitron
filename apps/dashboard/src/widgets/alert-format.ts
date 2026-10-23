@@ -1,4 +1,4 @@
-import { html, type TemplateResult } from "lit";
+import { css, html, type TemplateResult } from "lit";
 import { t as tKit } from "@waitron/dashboard-kit";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { AlertView, DashboardApi } from "../api/client.js";
@@ -8,13 +8,21 @@ const INCIDENT_PREFIX = "incident:";
 
 const WRITTEN_TIME = /(\d{4}-\d{2}-\d{2} \d{2}:\d{2})/;
 
-/** Wraps each time `formatIsoMinute` wrote in a `.time` span, which its screen styles not to wrap,
- * so a line never breaks inside a time. */
+/** Wraps each time `formatIsoMinute` wrote in a span that `wholeTimesStyles` keeps on one line. */
 export function wholeTimes(text: string): (string | TemplateResult)[] {
   return text
     .split(WRITTEN_TIME)
-    .map((part, i) => (i % 2 === 1 ? html`<span class="time">${part}</span>` : part));
+    .map((part, i) => (i % 2 === 1 ? html`<span class="time" part="time">${part}</span>` : part));
 }
+
+/** For the styles of any element that draws `wholeTimes`; the part reaches a span drawn inside a
+ * child's shadow root, such as a `wt-data-table` cell. */
+export const wholeTimesStyles = css`
+  .time,
+  *::part(time) {
+    white-space: nowrap;
+  }
+`;
 
 export function incidentIdOf(alert: Pick<AlertView, "key" | "kind">): string | null {
   return alert.kind === "event" && alert.key.startsWith(INCIDENT_PREFIX)

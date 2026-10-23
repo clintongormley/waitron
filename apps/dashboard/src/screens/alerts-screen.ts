@@ -20,6 +20,8 @@ import {
   screenTargetOf,
   severityLabel,
   sourceLabel,
+  wholeTimes,
+  wholeTimesStyles,
 } from "../widgets/alert-format.js";
 
 const VIEWS = ["open", "handled"] as const;
@@ -30,6 +32,7 @@ type View = (typeof VIEWS)[number];
 export class AlertsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    wholeTimesStyles,
     css`
       :host {
         display: block;
@@ -149,7 +152,7 @@ export class AlertsScreen extends LitElement {
   #alertCell(alert: AlertView): TemplateResult {
     const from = sourceLabel(alert);
     return html`<span part="alert-message"
-      >${alertMessage(alert.code, alert.params)}${
+      >${wholeTimes(alertMessage(alert.code, alert.params))}${
         hasAlertMessage(alert.code) ? nothing : html`<br />${alert.code}`
       }<br />${severityLabel(alert.severity)}${from === "" ? nothing : html` · ${from}`}</span
     >`;

@@ -11,7 +11,7 @@ import type {
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
 import { goToLabel } from "../widgets/alert-format.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { guideHref } from "../help-guide.js";
@@ -948,17 +948,35 @@ describe("dashboard-box-status-screen's restart of payments", () => {
   it("never breaks a written time across two lines, on the Clock row or in the dialog", async () => {
     const { innerWidth, innerHeight } = window;
     onTestFinished(() => page.viewport(innerWidth, innerHeight));
+    // With no notice the row's line is its first alert, and the second is drawn beneath it.
     const { el } = await mount(
       stubApi(
         {},
-        stopped({
-          offer: "restarted",
-          restart: {
-            personName: "Ana García",
-            restartedAt: "2026-10-22T18:12:00.000Z",
-            clockAt: STOP.clockAt,
+        stopped(
+          {
+            offer: "restarted",
+            restart: {
+              personName: "Ana García",
+              restartedAt: "2026-10-22T18:12:00.000Z",
+              clockAt: STOP.clockAt,
+            },
           },
-        }),
+          [],
+        ),
+        [
+          alert("clock.behind_chain_restarted", "box", {
+            kind: "event",
+            params: {
+              person: "Ana García",
+              clockAt: STOP.clockAt,
+              lastRecordAt: STOP.lastRecordAt,
+              proof: "devices",
+            },
+          }),
+          alert("clock.disagrees", "box", {
+            params: { count: 3, deviceAt: STOP.lastRecordAt, boxAt: STOP.clockAt },
+          }),
+        ],
       ),
     );
     const offered = await mount(stubApi({}, stopped()));
@@ -972,22 +990,12 @@ describe("dashboard-box-status-screen's restart of payments", () => {
         ...qa(el, "[data-test=row-clock] .words p"),
         ...qa(offered.el, "[data-test=restart-proof], [data-test=restart-dialog] dd"),
       ];
-      for (const line of lines) {
-        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-          for (const match of node.textContent!.matchAll(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g)) {
-            checked += 1;
-            const range = document.createRange();
-            range.setStart(node, match.index);
-            range.setEnd(node, match.index + match[0].length);
-            const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
-            if (tops.size > 1) broken.push(`${width}px: ${match[0]}`);
-          }
-        }
-      }
+      const found = timesAcrossLines(lines);
+      checked += found.checked;
+      broken.push(...found.broken.map((time) => `${width}px: ${time}`));
     }
-    // Each width checks the row's proof and restart times and the dialog's four.
-    expect(checked).toBeGreaterThanOrEqual(121 * 6);
+    // Each width checks the row's line, alert, proof and restart times, and the dialog's four.
+    expect(checked).toBeGreaterThanOrEqual(121 * 10);
     expect(broken).toEqual([]);
   });
 

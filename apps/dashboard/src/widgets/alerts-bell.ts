@@ -17,6 +17,7 @@ import {
   screenTargetOf,
   severityLabel,
   wholeTimes,
+  wholeTimesStyles,
 } from "./alert-format.js";
 
 export const PANEL_LIMIT = 5;
@@ -36,6 +37,7 @@ export class AlertsBell extends LitElement {
 
   static override styles = [
     baseStyles,
+    wholeTimesStyles,
     css`
       :host {
         display: inline-flex;
@@ -51,9 +53,6 @@ export class AlertsBell extends LitElement {
         wt-row-actions::part(popup) {
           width: calc(100vw - 2 * var(--wt-space-2));
         }
-      }
-      .time {
-        white-space: nowrap;
       }
       h2 {
         margin: 0;
