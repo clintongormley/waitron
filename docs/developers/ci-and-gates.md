@@ -11,6 +11,26 @@ the pre-push hook), the CI job layout and scheduling, the pnpm filter traps, and
 machine-resource rules, plus a migration-upgrade group: its coverage, how its stall report works, and
 why it keeps its database in memory.
 
+## The image's release metadata comes from its source
+
+Before building either image, CI writes the pinned commit's full SHA and committer time with
+`git show -s --format='%H:%ct' "$GITHUB_SHA"` into `build/source-metadata`. The Dockerfile passes
+that input to the release generator with networking disabled for that step. A missing input, a
+different SHA or an invalid time fails the build. Development builds still write a null stamp.
+
+For a branch install, `waitron.sh` takes the SHA and committer date from its existing commit API
+request and passes `WAITRON_SOURCE_METADATA` to both builds. It uses `jq` to read that response,
+installing it through the bounded apt wrapper when absent; on a host without apt, install `jq`
+yourself. This build argument takes precedence over the metadata file. The release stamp's field
+shape stays the same, including the digest of the generator used to produce it. No runtime clock
+or install time supplies the release floor.
+
+The Git-less shell cases in `scripts/image-hour-release.test.mjs` execute the Dockerfile's release
+command with every Git call refused. They also execute both CI preparation steps against a fixture
+whose author and committer times differ. Image smoke exercises the real Docker build; the shell
+cases do not establish Docker's network isolation. The original network stall's cause remains
+unverified; the image no longer invokes the generator's optional source-fetch mode.
+
 ## The optional whole-workspace check
 
 Run focused behavior tests during implementation. Use this broader local command when investigating
@@ -3059,9 +3079,27 @@ labels and compares revision, creation time and ref against that build's inputs.
 may have been pulled since those containers started. Branch installs resolve one commit for both
 builds through the commit API, without requiring git on the box.
 
+**2026-10-23, A1036:** branch installs now request JSON and read the SHA and committer date together.
+The SHA-only media type and dated probe below describe the earlier path. The current input feeds
+the [release-metadata build step](#the-images-release-metadata-comes-from-its-source).
+
 | Source | Source wording | Use |
 | --- | --- | --- |
 | [GitHub, Get a commit](https://docs.github.com/en/rest/commits/commits#get-a-commit), checked 2026-10-11 | “Returns the commit's SHA-1 hash.” (`application/vnd.github.sha`) | Resolve a branch, tag or abbreviated commit before building. |
+| [GitHub, Get a commit](https://docs.github.com/en/rest/commits/commits#get-a-commit), checked 2026-10-23 | “Setting to `application/vnd.github+json` is recommended.” Its response example includes `"committer"` and `"date": "2011-04-14T16:00:49Z"` inside `commit`. | Read `.sha` and `.commit.committer.date` from one response. The installer accepts the shown UTC spelling; an unparseable date stops the install before either image build. |
+
+Probe on 2026-10-23:
+
+```bash
+gh api -H 'Accept: application/vnd.github+json' \
+  repos/clintongormley/waitron/commits/b15d22d2aa1aad760a18b89eee2ca9017d48d5f2 \
+  --jq '[.sha, (.commit.committer.date | fromdateiso8601 | tostring)] | join(":")'
+```
+
+This printed `b15d22d2aa1aad760a18b89eee2ca9017d48d5f2:1792771595`, matching
+`git show -s --format='%H:%ct' b15d22d2aa1aad760a18b89eee2ca9017d48d5f2`. The response's
+committer date was `2026-10-23T16:06:35Z`. This compares one pinned revision; the parser refuses
+date spellings it cannot convert.
 
 Probe on 2026-10-11: `curl -fsSL -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/clintongormley/waitron/commits/main`
 printed `fb6a474b830ceb51ce96babd133a6a635e5f725d`. The shell regressions cover resolution failure,

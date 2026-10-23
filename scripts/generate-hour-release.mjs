@@ -17,6 +17,7 @@ const environment = () =>
 export function generateHourRelease({
   cwd = ROOT,
   source,
+  sourceMetadata,
   fetchSource = false,
   run = execFileSync,
 } = {}) {
@@ -34,7 +35,7 @@ export function generateHourRelease({
       ...options,
     }).trim();
   try {
-    if (fetchSource) {
+    if (fetchSource && sourceMetadata === undefined) {
       for (let attempt = 1; attempt <= 2; attempt++) {
         if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
         scratch = mkdtempSync(join(tmpdir(), "waitron-release-source-"));
@@ -65,8 +66,17 @@ export function generateHourRelease({
         }
       }
     }
-    const resolved = git(["rev-parse", "--verify", "--end-of-options", `${source}^{commit}`]);
-    const seconds = git(["show", "-s", "--format=%ct", resolved]);
+    let resolved = source;
+    let seconds;
+    if (sourceMetadata === undefined) {
+      resolved = git(["rev-parse", "--verify", "--end-of-options", `${source}^{commit}`]);
+      seconds = git(["show", "-s", "--format=%ct", resolved]);
+    } else {
+      const metadata =
+        typeof sourceMetadata === "string" && /^([a-f0-9]{40}):(\d+)$/.exec(sourceMetadata);
+      if (!metadata || metadata[1] !== source) throw new Error("Invalid source commit metadata");
+      seconds = metadata[2];
+    }
     if (resolved !== source || !SHA.test(resolved) || !/^\d+$/.test(seconds))
       throw new Error("Invalid source commit metadata");
     const instantMs = Number(seconds) * 1000;
@@ -116,14 +126,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
     const args = process.argv.slice(2);
     if (
       args[0] !== "--source" ||
-      (args.length !== 2 && !(args.length === 3 && args[2] === "--fetch-source"))
+      (args.length !== 2 &&
+        !(args.length === 3 && args[2] === "--fetch-source") &&
+        !(args.length === 4 && args[2] === "--source-metadata"))
     )
       throw new Error(
-        "Usage: generate-hour-release.mjs --source <full-commit-sha> [--fetch-source]",
+        "Usage: generate-hour-release.mjs --source <full-commit-sha> [--fetch-source | --source-metadata <sha:seconds>]",
       );
     console.log(
       JSON.stringify(
-        generateHourRelease({ source: args[1], fetchSource: args[2] === "--fetch-source" }),
+        generateHourRelease({
+          source: args[1],
+          fetchSource: args[2] === "--fetch-source",
+          sourceMetadata: args[2] === "--source-metadata" ? args[3] : undefined,
+        }),
       ),
     );
   } catch (error) {

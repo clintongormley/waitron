@@ -215,7 +215,7 @@ out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) 
 case "$url" in
   https://api.github.com/repos/clintongormley/waitron/commits/*)
     [ "\${WT_REF_FAIL}" = 1 ] && exit 22
-    printf '%s\\n' "\${WT_REF_SHA:-0123456789abcdef0123456789abcdef01234567}"; exit 0 ;;
+    printf '{"sha":"%s","commit":{"committer":{"date":"%s"}}}\\n' "\${WT_REF_SHA:-0123456789abcdef0123456789abcdef01234567}" "\${WT_REF_TIME-2026-10-15T11:00:00Z}"; exit 0 ;;
   */deploy/waitron.sh)
     [ "\${WT_SELF_FETCH_FAIL}" = "1" ] && exit 22
     cp "\${WT_SELF_SCRIPT}" "$out"; exit 0 ;;
@@ -641,6 +641,54 @@ describe("waitron.sh image provenance", () => {
       expect(builds[1]).toContain("--target print-agent");
       expect(calls.filter((line) => line.includes("api.github.com"))).toHaveLength(1);
       if (ref.includes("#")) expect(calls.join("\n")).toContain("commits/feature%23one");
+    },
+  );
+
+  it("passes the resolved commit time into both pinned builds", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install", "my-branch"], { WT_REF_SHA: app });
+    expect(r.status, r.stderr).toBe(0);
+    const builds = readFileSync(sb.log, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("docker build "));
+    expect(builds).toHaveLength(2);
+    for (const line of builds)
+      expect(line).toContain(`--build-arg WAITRON_SOURCE_METADATA=${app}:1792062000`);
+  });
+
+  it.each([false, true])("installs a missing metadata reader, with apt failure = %s", (fails) => {
+    const sb = sandbox();
+    const startup = join(sb.root, "hide-jq.sh");
+    writeFileSync(
+      startup,
+      'command() { if [ "$1" = -v ] && [ "$2" = jq ]; then return 1; fi; builtin command "$@"; }\n',
+    );
+    const r = run(sb, ["install", "my-branch"], {
+      BASH_ENV: startup,
+      WT_APT_FAIL: fails ? "3" : "0",
+    });
+    const calls = readFileSync(sb.log, "utf8");
+    if (fails) {
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("apt-get update failed or stalled");
+      expect(calls).not.toContain("docker build");
+      expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
+    } else {
+      expect(r.status, r.stderr).toBe(0);
+      expect(calls).toContain("install -y --no-install-recommends jq");
+      expect(calls).toContain("docker build");
+    }
+  });
+
+  it.each(["invalid", "", "2026-10-15T11:00:00+02:00"])(
+    "refuses unusable source commit time %s before building or pinning an image",
+    (time) => {
+      const sb = sandbox();
+      const r = run(sb, ["install", "my-branch"], { WT_REF_TIME: time });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("could not resolve");
+      expect(readFileSync(sb.log, "utf8")).not.toContain("docker build");
+      expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
     },
   );
 

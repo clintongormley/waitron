@@ -5251,11 +5251,6 @@ For browser storage checks, inspect the operation's own entry and every write, c
 values rather than PIN substrings inside random IDs. See the
 [testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
 
-- **The original release-source network stall is undiagnosed.** Main run
-  [39868989648](https://github.com/clintongormley/waitron/actions/runs/39868989648/job/120139166601)
-  timed out after 20 seconds. A1024 (#2001) adds bounded retries; if it recurs, retain the attempt logs
-  and identify whether connection, negotiation or download stalled.
-
 - **Tests that read a built command's error output fail under Claude Code.** The command's stderr
   begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-launch.test.ts` and
   seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8

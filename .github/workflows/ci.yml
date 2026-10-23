@@ -2908,7 +2908,11 @@ jobs:
       # emulated stage would fail at its first `RUN`.
       - name: Record image build time
         id: provenance
-        run: echo "created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          echo "created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          mkdir -p build
+          git show -s --format='%H:%ct' "$GITHUB_SHA" > build/source-metadata
 
       - name: Publish to GHCR
         uses: docker/build-push-action@v7

@@ -24,11 +24,14 @@ ENV HUSKY=0
 WORKDIR /src
 COPY . .
 ARG WAITRON_BUILD_ID
-RUN mkdir -p build \
+ARG WAITRON_SOURCE_METADATA
+RUN --network=none mkdir -p build \
   && if [ "$WAITRON_BUILD_ID" = development ]; then \
     printf '%s\n' null > build/hour-release.json; \
   else \
-    node scripts/generate-hour-release.mjs --source "$WAITRON_BUILD_ID" --fetch-source > build/hour-release.json; \
+    source_metadata="$WAITRON_SOURCE_METADATA"; \
+    if [ -z "$source_metadata" ]; then source_metadata="$(cat build/source-metadata)" || exit 1; fi; \
+    node scripts/generate-hour-release.mjs --source "$WAITRON_BUILD_ID" --source-metadata "$source_metadata" > build/hour-release.json; \
   fi
 RUN set -eux; \
   bounded() { for attempt in 1 2 3; do timeout -k 10 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
