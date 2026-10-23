@@ -608,6 +608,21 @@ pnpm build:image              # docker build -f deploy/Dockerfile -t waitron:dev
 pnpm build:image:print-agent  # docker build -f deploy/Dockerfile --target print-agent -t waitron-print-agent:dev .
 ```
 
+These development builds carry no release floor. To build a pinned image, pass the source commit
+and its committer time together; the image build does not fetch them:
+
+```bash
+commit_sha=$(git rev-parse HEAD)
+commit_metadata=$(git show -s --format='%H:%ct' "$commit_sha")
+docker build -f deploy/Dockerfile -t waitron:pinned \
+  --build-arg "WAITRON_BUILD_ID=$commit_sha" \
+  --build-arg "WAITRON_SOURCE_METADATA=$commit_metadata" .
+```
+
+CI prepares the same metadata in its build context. `waitron.sh install <ref>` supplies it for
+both image targets and needs `jq` to read the commit response; it installs `jq` through apt when
+absent. On a host without apt, install `jq` before using a branch or commit ref.
+
 Then point the compose at both in `.env`: `WAITRON_IMAGE=waitron:dev` and
 `WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev`. The print agent is an on-by-default service, so
 without the second one a local `docker compose up` still pulls the published

@@ -341,24 +341,34 @@ select_image() {
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
       || die "could not pull the box's images: check the network and that the image registries (GHCR, Docker Hub) are reachable, or whether an image is published for this machine's architecture ($(uname -m))"
   else
-    local safe tag agent_tag sha created url
+    local safe tag agent_tag sha created url metadata source_metadata
+    if ! command -v jq >/dev/null 2>&1; then
+      command -v apt-get >/dev/null 2>&1 || die "need jq to read source commit metadata — install it and re-run"
+      apt_get update
+      apt_get install -y --no-install-recommends jq
+    fi
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"
     tag="waitron:${safe}"; agent_tag="waitron-print-agent:${safe}"
     url="https://api.github.com/repos/clintongormley/waitron/commits/${ref//%/%25}"
     url="${url//#/%23}"
     if command -v curl >/dev/null 2>&1; then
-      sha="$(curl -fsSL --connect-timeout 15 --max-time 60 -H 'Accept: application/vnd.github.sha' "$url")" \
+      metadata="$(curl -fsSL --connect-timeout 15 --max-time 60 -H 'Accept: application/vnd.github+json' "$url")" \
         || die "could not resolve $ref to a commit — check the network and the ref"
     else
-      sha="$(wget -qO- --timeout=60 --tries=1 --header='Accept: application/vnd.github.sha' "$url")" \
+      metadata="$(wget -qO- --timeout=60 --tries=1 --header='Accept: application/vnd.github+json' "$url")" \
         || die "could not resolve $ref to a commit — check the network and the ref"
     fi
-    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "could not resolve $ref to a commit — GitHub returned no full SHA"
+    source_metadata="$(printf '%s' "$metadata" | jq -er '[.sha, (.commit.committer.date | fromdateiso8601 | tostring)] | join(":")')" \
+      || die "could not resolve $ref to source commit metadata"
+    [[ "$source_metadata" =~ ^[0-9a-f]{40}:[0-9]+$ ]] || die "could not resolve $ref to a commit — GitHub returned no full SHA and commit time"
+    sha="${source_metadata%%:*}"
     created="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     docker build -t "$tag" -f deploy/Dockerfile --build-arg "WAITRON_BUILD_ID=$sha" \
+      --build-arg "WAITRON_SOURCE_METADATA=$source_metadata" \
       --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
       "https://github.com/clintongormley/waitron.git#${sha}"
     docker build -t "$agent_tag" -f deploy/Dockerfile --target print-agent --build-arg "WAITRON_BUILD_ID=$sha" \
+      --build-arg "WAITRON_SOURCE_METADATA=$source_metadata" \
       --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
       "https://github.com/clintongormley/waitron.git#${sha}"
     env_set WAITRON_IMAGE "$tag"

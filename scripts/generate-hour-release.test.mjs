@@ -66,6 +66,38 @@ function stopOwnedProcess(pid) {
 }
 
 describe("release metadata is a build product of a pinned source commit", () => {
+  it("uses matching commit metadata from the source checkout without Git in the build", () => {
+    const { hashes } = fixture();
+    const stamp = generateHourRelease({
+      cwd: temporaryDirectory(),
+      source: hashes[0],
+      sourceMetadata: `${hashes[0]}:1791972000`,
+    });
+    expect(stamp).toMatchObject({
+      sourceCommit: hashes[0],
+      committedAt: "2026-10-14T10:00:00.000Z",
+      instantMs: 1791972000000,
+      generator: "scripts/generate-hour-release.mjs:v1",
+    });
+  });
+
+  it.each([
+    "",
+    null,
+    "a".repeat(40) + ":1791972000",
+    "HEAD:1791972000",
+    "source:NaN",
+    "source:-1",
+    "source:1.5",
+    "source:1791972000:extra",
+    "source:9000000000000000",
+    "source:8640000000001",
+  ])("refuses malformed or mismatched supplied commit metadata %s", (metadata) => {
+    const { cwd, hashes } = fixture();
+    const sourceMetadata = metadata?.replace("source", hashes[0]) ?? metadata;
+    expect(() => generateHourRelease({ cwd, source: hashes[0], sourceMetadata })).toThrow();
+  });
+
   it("resolves each exact revision's full SHA and committer time", () => {
     const { cwd, hashes } = fixture();
     const first = generateHourRelease({ cwd, source: hashes[0] });

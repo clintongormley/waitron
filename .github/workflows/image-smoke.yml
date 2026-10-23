@@ -123,7 +123,11 @@ jobs:
       # once stalled 46 min. Receipt: docs/developers/ci-and-gates.md.
       - name: Record image build time
         id: provenance
-        run: echo "created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          echo "created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          mkdir -p build
+          git show -s --format='%H:%ct' "$GITHUB_SHA" > build/source-metadata
 
       - name: Build the image
         uses: docker/build-push-action@v7

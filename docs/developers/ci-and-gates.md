@@ -11,6 +11,26 @@ the pre-push hook), the CI job layout and scheduling, the pnpm filter traps, and
 machine-resource rules, plus a migration-upgrade group: its coverage, how its stall report works, and
 why it keeps its database in memory.
 
+## The image's release metadata comes from its source
+
+Before building either image, CI writes the pinned commit's full SHA and committer time with
+`git show -s --format='%H:%ct' "$GITHUB_SHA"` into `build/source-metadata`. The Dockerfile passes
+that input to the release generator with networking disabled for that step. A missing input, a
+different SHA or an invalid time fails the build. Development builds still write a null stamp.
+
+For a branch install, `waitron.sh` takes the SHA and committer date from its existing commit API
+request and passes `WAITRON_SOURCE_METADATA` to both builds. It uses `jq` to read that response,
+installing it through the bounded apt wrapper when absent; on a host without apt, install `jq`
+yourself. This build argument takes precedence over the metadata file. The release stamp's field
+shape stays the same, including the digest of the generator used to produce it. No runtime clock
+or install time supplies the release floor.
+
+The Git-less shell cases in `scripts/image-hour-release.test.mjs` execute the Dockerfile's release
+command with every Git call refused. They also execute both CI preparation steps against a fixture
+whose author and committer times differ. Image smoke exercises the real Docker build; the shell
+cases do not establish Docker's network isolation. The original network stall's cause remains
+unverified; the image no longer invokes the generator's optional source-fetch mode.
+
 ## The optional whole-workspace check
 
 Run focused behavior tests during implementation. Use this broader local command when investigating
