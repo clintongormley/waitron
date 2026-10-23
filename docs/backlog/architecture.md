@@ -583,11 +583,16 @@ until A977).
   `apps/*/scripts` until this work and the test-fixture cleanup land.
 - **A976 — remaining test-venue defaults.** The shared script-suite fixture
   (`apps/server/scripts/testing/venue.ts`) now uses English location, operation, street and
-  administrator text (#2004). The other server helpers still need English defaults, including
-  `apps/server/scripts/demo-seed/testing/provision-venue.ts` and the bill, party, adjustment,
-  split-extras, boot, stream and clock fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts).
-  Screen tests take translated expectations from their strings file. Keep accent tests, AEAT names
-  and official text. Later cleanup goes package by package from A977's list. Low priority.
+  administrator text (#2004). The demo-test provisioner
+  (`apps/server/scripts/demo-seed/testing/provision-venue.ts`) has English location, street and
+  administrator labels. Its Spanish operation description remains open because
+  `seed-sales.golden.test.ts` compares it with the filed rows in
+  `spanish-practice-sales.golden.json`; a decision on that protected check is needed before
+  translating the description. The bill, party, adjustment, split-extras, boot, stream and clock
+  fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
+  still need English defaults. Screen tests take translated expectations from their strings file.
+  Keep accent tests, AEAT names and official text. Later cleanup goes package by package from
+  A977's list. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the

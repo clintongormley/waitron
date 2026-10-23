@@ -12,10 +12,10 @@ type NifFormat = "fixed_k" | "calculated";
 const COUNTRIES = {
   ES: {
     legalName: "Casa Delgado SL",
-    locationName: "Sala principal",
+    locationName: "Main room",
     fiscalTerritory: "ES-common",
     operationDescription: "Venta en establecimiento",
-    addressLine1: "Calle Mayor 1",
+    addressLine1: "1 Market Street",
     postalCode: "28013",
     city: "Madrid",
     province: "Madrid",
@@ -87,7 +87,7 @@ export function createDemoVenueProvisioner(
           seriesCode: "A",
           rectificativeSeriesCode: "R",
           admin: {
-            displayName: "Administradora",
+            displayName: "Administrator",
             pinHash: hashPin(options.adminPin ?? "1234"),
             passwordHash: hashPassword("dashPass123"),
             email: options.adminEmail ?? "owner@example.test",

@@ -6237,8 +6237,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   English tests. Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.** The shared script-suite fixture now
-  uses English location, operation, street and administrator text (#2004). The other helpers and
-  screen expectations remain; later cleanup goes package by package from A977's list. Low priority.
+  uses English location, operation, street and administrator text (#2004). The demo-test
+  provisioner's location, street and administrator labels are English; its filed operation text
+  needs a separate decision on the fiscal golden check. Other helpers and screen expectations
+  remain; later cleanup goes package by package from A977's list. Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two
