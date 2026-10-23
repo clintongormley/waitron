@@ -88,6 +88,7 @@ describe("VENUE_SERVICE", () => {
       "readProfileServiceScopes",
       "readProfileZones",
       "readReleaseReminderMinutes",
+      "readReleaseReminderMinutesByZone",
       "readRetainedDepartmentReceipt",
       "readSaleReceiptHeader",
       "readServiceDay",

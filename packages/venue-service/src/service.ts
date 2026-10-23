@@ -97,6 +97,7 @@ import {
   recordKitchenNotices,
 } from "./kitchen-notices.js";
 import { readTablesNeedingClearing } from "./table-clearing.js";
+import { readReleaseReminderMinutesByZone } from "./release-reminders.js";
 import {
   assertProfileZone,
   readProfileServiceAccess,
@@ -243,4 +244,5 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readPrintHeldWork,
   readPrintMovedSlips,
   readReleaseReminderMinutes,
+  readReleaseReminderMinutesByZone,
 };

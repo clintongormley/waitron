@@ -643,6 +643,74 @@ describe("whole service settings saves", () => {
     }
   });
 
+  async function reminderMinutes(fx: Awaited<ReturnType<typeof settingsFixture>>) {
+    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(model.status).toBe(200);
+    return (
+      (await model.json()) as { releaseReminderMinutesByDepartment: Record<string, number | null> }
+    ).releaseReminderMinutesByDepartment;
+  }
+
+  it("saves a department's reminder and lists it in the model", async () => {
+    const fx = await settingsFixture();
+    for (const releaseReminderMinutes of [15, null, 120]) {
+      const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        releaseReminderMinutes,
+      });
+      expect(saved.status).toBe(204);
+      expect((await reminderMinutes(fx))[fx.departmentId]).toBe(releaseReminderMinutes);
+    }
+  });
+
+  it("leaves the reminder as it was when the save does not name it", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      releaseReminderMinutes: 15,
+    });
+    const saved = await send(
+      fx.app,
+      "PUT",
+      fx.departmentPath,
+      fx.managerCookie,
+      departmentSettings,
+    );
+    expect(saved.status).toBe(204);
+    expect((await reminderMinutes(fx))[fx.departmentId]).toBe(15);
+  });
+
+  it("refuses a reminder outside whole minutes 1 to 120 or null, naming it, and writes nothing", async () => {
+    const fx = await settingsFixture();
+    for (const releaseReminderMinutes of [0, -5, 121, 2.5, "10", true, [10]]) {
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        releaseReminderMinutes,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "releaseReminderMinutes" } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    }
+  });
+
+  it("changes only the department it saves", async () => {
+    const fx = await settingsFixture();
+    const other = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Terrace", orderStart: "table" }),
+    );
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      releaseReminderMinutes: 5,
+    });
+    expect(saved.status).toBe(204);
+    const minutes = await reminderMinutes(fx);
+    expect(minutes[fx.departmentId]).toBe(5);
+    expect(minutes[other.id]).toBe(10);
+  });
+
   async function seedCourse(fx: { locationId: LocationId }, name: string, active = true) {
     const [row] = await db
       .insert(kitchenCourses)

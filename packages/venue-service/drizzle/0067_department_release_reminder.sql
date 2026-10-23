@@ -1,0 +1,1 @@
+ALTER TABLE `departments` ADD `release_reminder_minutes` integer DEFAULT 10;

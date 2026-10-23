@@ -1448,6 +1448,16 @@ export interface VenueServiceContribution {
   readPrintMovedSlips(tx: Transaction): Promise<boolean>;
   /** Minutes after the work ahead is served that a held group is due to be released; null is off. */
   readReleaseReminderMinutes(tx: Transaction): Promise<number | null>;
+  /**
+   * Each of these zones' department's minutes after the work ahead is served that a held group
+   * falls due; null where that department has reminders off. A zone with no department is absent.
+   * An inactive department still answers: deleting one deactivates its zones, so a party seated
+   * there takes no new order and keeps its department's last minutes.
+   */
+  readReleaseReminderMinutesByZone(
+    tx: Transaction,
+    zoneIds: readonly string[],
+  ): Promise<ReadonlyMap<string, number | null>>;
 }
 
 export type NonDbSource =

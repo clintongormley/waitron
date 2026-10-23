@@ -91,6 +91,7 @@ import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete
 import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
 import { onlyKeys } from "./request-keys.js";
 import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
+import { listDepartmentReminderMinutes } from "./release-reminders.js";
 import { listServiceSteps, listStepCourses, type ServiceStepInput } from "./service-steps.js";
 import { SERVICE_STEP_STARTS, type ServiceStepStart } from "./schema/service-steps.js";
 
@@ -765,6 +766,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           printHeldWork: await readPrintHeldWork(tx),
           printMovedSlips: await readPrintMovedSlips(tx),
           releaseReminderMinutes: await readReleaseReminderMinutes(tx),
+          releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx, ctx.cfg),
           needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
           serviceSteps: await listServiceSteps(tx, ctx.cfg),
           courses: await listStepCourses(tx, ctx.cfg),
@@ -867,6 +869,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "collectionNumber",
           "transfers",
           "needsClearing",
+          "releaseReminderMinutes",
           "serviceSteps",
         ]);
         if (body.needsClearing !== undefined && typeof body.needsClearing !== "boolean")
@@ -893,6 +896,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? {}
             : { transfers: requireTransferSettings(body.transfers) }),
           ...(body.needsClearing === undefined ? {} : { needsClearing: body.needsClearing }),
+          ...(body.releaseReminderMinutes === undefined
+            ? {}
+            : {
+                releaseReminderMinutes: requireReleaseReminderMinutes(body.releaseReminderMinutes),
+              }),
           ...(body.serviceSteps === undefined
             ? {}
             : { serviceSteps: requireServiceSteps(body.serviceSteps) }),
