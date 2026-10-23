@@ -19,7 +19,6 @@ import {
   BUILT_IN_THEME_NAME,
   CORNER_CHOICES,
   MODES,
-  THEME_COLOURS,
   WAITRON_CHOICES,
   canFixAll,
   fixAll,
@@ -61,9 +60,9 @@ import {
   brandFixedText,
   brandWarningText,
   fixAllText,
+  handNames,
   saveDialogLine,
   savedWarningLine,
-  themeColourName,
 } from "../widgets/theme-words.js";
 
 const PRIMARY = "--wt-color-primary";
@@ -93,14 +92,7 @@ function brandRow(view: ThemeView | undefined, choices: ThemeChoices): TemplateR
 }
 
 function handRow(choices: ThemeChoices): string {
-  const names = MODES.flatMap((mode: Mode) =>
-    THEME_COLOURS.filter((key) => choices.handSet[mode][key] !== undefined).map((key) =>
-      fill("appearance.hand_item", {
-        name: themeColourName(key),
-        mode: t(`appearance.mode.${mode}`),
-      }),
-    ),
-  );
+  const names = handNames(choices);
   return names.length === 0 ? t("appearance.none") : names.join(", ");
 }
 

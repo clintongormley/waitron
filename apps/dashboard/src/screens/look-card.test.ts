@@ -783,7 +783,7 @@ describe("saving a draft that is hard to read", () => {
     await userEvent.click(button(opened.el, "save"));
     await expect.poll(() => dialogOf(opened.el).open).toBe(true);
     expect(dialogLines(opened.el)).toEqual([
-      "Sunken areas (light) is hard to read.",
+      "Sunken areas (light): Text hard to read on it.",
       "Text (light): no shade can be read while Sunken areas is set by hand to #555555.",
     ]);
     expect(dialogButton(opened.el, "fix-and-save")!.variant).toBe("primary");
