@@ -40,12 +40,10 @@ import {
   readKitchenTicketGrouping,
   readPrintHeldWork,
   readPrintMovedSlips,
-  readReleaseReminderMinutes,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
   writePrintMovedSlips,
-  writeReleaseReminderMinutes,
 } from "./kitchen-notices.js";
 import {
   readOpeningHoursModel,
@@ -91,6 +89,7 @@ import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete
 import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
 import { onlyKeys } from "./request-keys.js";
 import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
+import { listDepartmentReminderMinutes } from "./release-reminders.js";
 import { listServiceSteps, listStepCourses, type ServiceStepInput } from "./service-steps.js";
 import { SERVICE_STEP_STARTS, type ServiceStepStart } from "./schema/service-steps.js";
 
@@ -764,7 +763,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
           printHeldWork: await readPrintHeldWork(tx),
           printMovedSlips: await readPrintMovedSlips(tx),
-          releaseReminderMinutes: await readReleaseReminderMinutes(tx),
+          releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx, ctx.cfg),
           needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
           serviceSteps: await listServiceSteps(tx, ctx.cfg),
           courses: await listStepCourses(tx, ctx.cfg),
@@ -783,7 +782,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
             printHeldWork: await readPrintHeldWork(tx),
             printMovedSlips: await readPrintMovedSlips(tx),
-            releaseReminderMinutes: await readReleaseReminderMinutes(tx),
           };
         });
         return c.json(settings);
@@ -844,16 +842,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.put("/management-api/venue-service/settings/release-reminder-minutes", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const minutes = requireReleaseReminderMinutes(body.releaseReminderMinutes);
-        await gated(sessionId, (tx) => writeReleaseReminderMinutes(tx, minutes));
-        return c.body(null, 204);
-      }),
-    );
-
     app.put("/management-api/venue-service/departments/:departmentId/settings", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -867,6 +855,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "collectionNumber",
           "transfers",
           "needsClearing",
+          "releaseReminderMinutes",
           "serviceSteps",
         ]);
         if (body.needsClearing !== undefined && typeof body.needsClearing !== "boolean")
@@ -893,6 +882,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? {}
             : { transfers: requireTransferSettings(body.transfers) }),
           ...(body.needsClearing === undefined ? {} : { needsClearing: body.needsClearing }),
+          ...(body.releaseReminderMinutes === undefined
+            ? {}
+            : {
+                releaseReminderMinutes: requireReleaseReminderMinutes(body.releaseReminderMinutes),
+              }),
           ...(body.serviceSteps === undefined
             ? {}
             : { serviceSteps: requireServiceSteps(body.serviceSteps) }),

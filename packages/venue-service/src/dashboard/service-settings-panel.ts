@@ -8,13 +8,7 @@ import type { KitchenTicketGrouping, VenueServiceApi, VenueServiceSettingsView }
 import { t } from "./strings.js";
 
 const GROUPINGS: KitchenTicketGrouping[] = ["combined", "separate"];
-const REMINDER_MINUTES = [5, 10, 15, 20, 30];
-type Field =
-  | "editSentLines"
-  | "kitchenTicketGrouping"
-  | "printHeldWork"
-  | "printMovedSlips"
-  | "releaseReminderMinutes";
+type Field = "editSentLines" | "kitchenTicketGrouping" | "printHeldWork" | "printMovedSlips";
 
 @customElement("dashboard-venue-service-settings")
 export class ServiceSettingsPanel extends LitElement {
@@ -169,51 +163,8 @@ export class ServiceSettingsPanel extends LitElement {
           }),
       )}
       <p class="hint" data-test="print-moved-slips-hint">${t("venue.print_moved_slips_hint")}</p>
-      ${this.#fieldError("printMovedSlips")} ${this.#releaseReminder(model)}
+      ${this.#fieldError("printMovedSlips")}
     </section>`;
-  }
-
-  /** Blank is off. A stored value the list does not offer, which setup can bring in, is offered
-   * too so the dropdown never shows another. */
-  #releaseReminder(model: VenueServiceSettingsView) {
-    const stored = model.releaseReminderMinutes;
-    const choices =
-      stored === null || REMINDER_MINUTES.includes(stored)
-        ? REMINDER_MINUTES
-        : [...REMINDER_MINUTES, stored].sort((a, b) => a - b);
-    const shown = stored === null ? "" : String(stored);
-    return html`<wt-combobox
-      class="setting"
-      name="releaseReminderMinutes"
-      label=${t("venue.release_reminder")}
-      hint=${t("venue.release_reminder_hint")}
-      search="auto"
-      placeholder=${t("venue.release_reminder.off")}
-      searchPlaceholder=${t("venue.combobox_search")}
-      noResultsLabel=${t("venue.combobox_no_results")}
-      .options=${[
-        { value: "", label: t("venue.release_reminder.off") },
-        ...choices.map((minutes) => ({
-          value: String(minutes),
-          label: t("venue.release_reminder.minutes").replace("{n}", String(minutes)),
-        })),
-      ]}
-      .value=${live(shown)}
-      ?disabled=${this.busy || this.readOnly}
-      error=${this.fieldErrors.releaseReminderMinutes ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        if (this.readOnly) return;
-        const value = event.detail.value;
-        if (value === shown) return;
-        const releaseReminderMinutes = value === "" ? null : Number(value);
-        void this.#save(
-          "releaseReminderMinutes",
-          () => this.api.saveReleaseReminderMinutes(releaseReminderMinutes),
-          { releaseReminderMinutes },
-        );
-      }}
-    ></wt-combobox>`;
   }
 
   #kitchenTicketGrouping(model: VenueServiceSettingsView) {

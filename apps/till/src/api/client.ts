@@ -2064,7 +2064,10 @@ export interface TableParty {
   tableIds: string[];
   /** Nonempty saved outboxes in the bill list’s order; `ownerName` is "" for an unknown person. */
   unsentDrafts: UnsentDraft[];
-  /** Null when the venue has reminders off, no group is held, or the party is not open. */
+  /**
+   * Null when the party's department has reminders off, no group is held, or the party is not
+   * open.
+   */
   reminder: ReleaseReminder | null;
 }
 

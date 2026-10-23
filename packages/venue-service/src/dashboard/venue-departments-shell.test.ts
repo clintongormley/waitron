@@ -31,7 +31,7 @@ function model(count = 2): VenueServiceView {
     kitchenTicketGrouping: "combined",
     printHeldWork: false,
     printMovedSlips: true,
-    releaseReminderMinutes: null,
+    releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
     serviceSteps: [],
     courses: [],

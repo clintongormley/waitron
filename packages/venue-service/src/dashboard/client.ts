@@ -48,6 +48,7 @@ export interface DepartmentSettingsInput extends Pick<
   name: string;
   tradingName: string;
   needsClearing: boolean;
+  releaseReminderMinutes: number | null;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   serviceSteps?: ServiceStepInput[];
 }
@@ -103,9 +104,9 @@ export interface VenueServiceModel {
   kitchenTicketGrouping: KitchenTicketGrouping;
   printHeldWork: boolean;
   printMovedSlips: boolean;
-  /** Minutes after the work fired before it is served that staff are reminded to fire the next
-   * held group; null when reminders are off. */
-  releaseReminderMinutes: number | null;
+  /** By active department id: minutes after the work fired before it is served that staff are
+   * reminded to fire the next held group; null when that department's reminder is off. */
+  releaseReminderMinutesByDepartment: Record<string, number | null>;
   /** The active departments whose tables stay "Needs clearing" after the party leaves. */
   needsClearingDepartmentIds: string[];
   serviceSteps: ServiceStep[];
@@ -116,11 +117,7 @@ export interface VenueServiceSettings {
 }
 export type VenueServiceSettingsView = Pick<
   VenueServiceModel,
-  | "settings"
-  | "kitchenTicketGrouping"
-  | "printHeldWork"
-  | "printMovedSlips"
-  | "releaseReminderMinutes"
+  "settings" | "kitchenTicketGrouping" | "printHeldWork" | "printMovedSlips"
 >;
 export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
@@ -302,7 +299,6 @@ export class VenueServiceApi {
       kitchenTicketGrouping: model.kitchenTicketGrouping,
       printHeldWork: model.printHeldWork,
       printMovedSlips: model.printMovedSlips,
-      releaseReminderMinutes: model.releaseReminderMinutes,
     };
   }
 
@@ -422,12 +418,6 @@ export class VenueServiceApi {
   savePrintMovedSlips(printMovedSlips: boolean): Promise<void> {
     return this.request("/management-api/venue-service/settings/print-moved-slips", "PUT", {
       printMovedSlips,
-    });
-  }
-
-  saveReleaseReminderMinutes(releaseReminderMinutes: number | null): Promise<void> {
-    return this.request("/management-api/venue-service/settings/release-reminder-minutes", "PUT", {
-      releaseReminderMinutes,
     });
   }
 }

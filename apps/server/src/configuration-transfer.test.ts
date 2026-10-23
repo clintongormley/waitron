@@ -2778,6 +2778,45 @@ it("carries a department's Needs clearing switch to the importing venue", async 
   expect(imported).toEqual({ needsClearing: true });
 });
 
+it("carries a department's reminder minutes to the importing venue", async () => {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(
+      tx,
+      { locationId: brandLocationId(source.locationId) },
+      { name: "Reminded terrace" },
+    );
+    await tx
+      .update(departments)
+      .set({ releaseReminderMinutes: 25 })
+      .where(eq(departments.id, department.id));
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-19T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const [imported] = await withTransaction(targetSuite.db, (tx) =>
+    tx
+      .select({ minutes: departments.releaseReminderMinutes })
+      .from(departments)
+      .where(eq(departments.name, "Reminded terrace")),
+  );
+  expect(imported).toEqual({ minutes: 25 });
+});
+
 it("leaves out a print agent's node, so the importing venue does not show it as on this box", async () => {
   const configFor = (venue: {
     nodeId: string;

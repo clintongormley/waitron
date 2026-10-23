@@ -10,11 +10,8 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  listStationNotices,
-  setRoutingCell,
-  writeReleaseReminderMinutes,
-} from "@waitron/venue-service";
+import { listStationNotices, setRoutingCell } from "@waitron/venue-service";
+import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { createCourse, createStation } from "./kitchen.js";
 import {
   correctJoin,
@@ -215,7 +212,7 @@ describe("charged cancellation read projections", () => {
     async (cancelled) => {
       const order = await fixture(cancelled, "hold");
       const next = await inTx(venue, async (tx) => {
-        await writeReleaseReminderMinutes(tx, 10);
+        await setReleaseReminderInEveryDepartment(tx, 10);
         return placeGroups(tx, venue.cfg, order.partyId, {
           operatorId: venue.staffId,
           billId: order.billId,
@@ -245,7 +242,7 @@ describe("charged cancellation read projections", () => {
   it("snoozes only the next active group after a fully cancelled held group", async () => {
     const order = await fixture(3, "hold");
     const next = await inTx(venue, async (tx) => {
-      await writeReleaseReminderMinutes(tx, 10);
+      await setReleaseReminderInEveryDepartment(tx, 10);
       return placeGroups(tx, venue.cfg, order.partyId, {
         operatorId: venue.staffId,
         billId: order.billId,
@@ -297,7 +294,7 @@ describe("charged cancellation read projections", () => {
   it("keeps a held group actionable when another dish in it is cancelled", async () => {
     const order = await fixture(3, "hold");
     await inTx(venue, async (tx) => {
-      await writeReleaseReminderMinutes(tx, 10);
+      await setReleaseReminderInEveryDepartment(tx, 10);
       await placeGroups(tx, venue.cfg, order.partyId, {
         operatorId: venue.staffId,
         billId: order.billId,
@@ -319,7 +316,7 @@ describe("charged cancellation read projections", () => {
 
   it("has no release reminder or snooze action when only cancelled held charges remain", async () => {
     const order = await fixture(3, "hold");
-    await inTx(venue, (tx) => writeReleaseReminderMinutes(tx, 10));
+    await inTx(venue, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
     const current = await inTx(venue, (tx) => readCurrentOrders(tx, order.partyId));
     expect(current.reminder).toBeNull();
     expect(

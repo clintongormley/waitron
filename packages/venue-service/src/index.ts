@@ -5,6 +5,7 @@ export * from "./operations.js";
 export * from "./service-delete.js";
 export * from "./keep-open.js";
 export * from "./table-clearing.js";
+export * from "./release-reminders.js";
 export type { MenuUse } from "./errors.js";
 export {
   readOpeningHoursModel,

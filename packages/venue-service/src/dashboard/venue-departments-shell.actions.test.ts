@@ -34,7 +34,7 @@ function view(): VenueServiceView {
     kitchenTicketGrouping: "combined",
     printHeldWork: false,
     printMovedSlips: true,
-    releaseReminderMinutes: null,
+    releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
     serviceSteps: [],
     courses: [],
@@ -510,6 +510,7 @@ it.each(["success", "failure"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
         },
       ],
     ]);

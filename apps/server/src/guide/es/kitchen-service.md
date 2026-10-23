@@ -122,6 +122,10 @@ Confirma las instrucciones de alergia en la ventana de alergias de la mesa antes
 preparación. En una estación o en el pase, lee la copia que acompaña a cada plato. Las pantallas de cocina
 no abren el editor de alergias de la mesa. En la estación, confirma las correcciones.
 
+Un grupo en espera vence unos minutos después de que se hayan servido los platos marchados antes
+que él. Cada departamento fija esos minutos, o desactiva el aviso, en **Cursos y cocina**, en su
+pestaña **Servicio** del panel.
+
 ## Eliminar una estación de preparación {#delete-prep-station}
 
 Elige **Eliminar** en el menú de la estación. La ventana muestra **Comprobando qué cambia…**

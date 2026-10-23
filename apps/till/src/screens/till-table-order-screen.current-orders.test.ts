@@ -694,7 +694,7 @@ describe("the release reminder in Sent", () => {
     expect(sq(el, "[data-reminder-snooze]")).toBeNull();
   });
 
-  it("shows no reminder when the venue has them off", async () => {
+  it("shows no reminder when the party has none", async () => {
     const { el } = await mountSent({ currentOrders: current({ reminder: null }) });
     expect(sq(el, "[data-group-reminder]")).toBeNull();
   });

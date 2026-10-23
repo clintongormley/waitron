@@ -1568,7 +1568,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).**
-  Open points from #1852 and #1854 are in the detail.
+  Open points from #1852, #1854 and PR 4 are in the detail.
   [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17).**

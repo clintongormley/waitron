@@ -470,6 +470,13 @@
       "when": 1792640324340,
       "tag": "0066_service_step_completions",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1792754752053,
+      "tag": "0067_department_release_reminder",
+      "breakpoints": true
     }
   ]
 }

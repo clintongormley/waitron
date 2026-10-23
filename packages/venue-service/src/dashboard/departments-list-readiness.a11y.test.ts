@@ -117,7 +117,7 @@ const model: VenueServiceView = {
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
   printMovedSlips: true,
-  releaseReminderMinutes: null,
+  releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
   serviceSteps: [],
   courses: [],

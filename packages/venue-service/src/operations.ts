@@ -230,6 +230,7 @@ export async function updateDepartment(
     tradingName?: string;
     orderStart?: OrderStart;
     needsClearing?: boolean;
+    releaseReminderMinutes?: number | null;
   },
 ): Promise<void> {
   await assertDepartment(tx, cfg, departmentId);
@@ -237,7 +238,8 @@ export async function updateDepartment(
   if (
     input.name !== undefined ||
     input.tradingName !== undefined ||
-    input.needsClearing !== undefined
+    input.needsClearing !== undefined ||
+    input.releaseReminderMinutes !== undefined
   )
     await tx
       .update(departments)
@@ -245,6 +247,9 @@ export async function updateDepartment(
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
         ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
+        ...(input.releaseReminderMinutes === undefined
+          ? {}
+          : { releaseReminderMinutes: input.releaseReminderMinutes }),
       })
       .where(eq(departments.id, departmentId));
   if (input.orderStart === undefined) return;
@@ -757,6 +762,7 @@ export interface DepartmentEditInput extends Pick<
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   needsClearing?: boolean;
+  releaseReminderMinutes?: number | null;
   serviceSteps?: readonly ServiceStepInput[];
 }
 
@@ -770,6 +776,9 @@ export async function saveDepartmentEditSettings(
     name: input.name,
     tradingName: input.tradingName,
     ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
+    ...(input.releaseReminderMinutes === undefined
+      ? {}
+      : { releaseReminderMinutes: input.releaseReminderMinutes }),
   });
   const settings = {
     orderStart: input.orderStart,

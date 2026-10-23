@@ -119,7 +119,7 @@ const model: VenueServiceView = {
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
   printMovedSlips: true,
-  releaseReminderMinutes: null,
+  releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
   serviceSteps: [],
   courses: [],
@@ -484,6 +484,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -544,6 +545,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -617,6 +619,7 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
         paidWhen: "prepay",
         collectionNumber: "none",
         needsClearing: false,
+        releaseReminderMinutes: null,
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ]);
@@ -703,6 +706,7 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
         },
       ],
@@ -807,6 +811,38 @@ it("toggling Needs clearing dirties the form, toggling it back cleans it, and le
   await choice("keep");
   expect(await leaving).toBe(false);
   expect(control.checked).toBe(true);
+  expect(el.hasUnsavedChanges).toBe(true);
+});
+it("choosing a reminder dirties the form, choosing the stored one again cleans it, and leaving asks only while dirty", async () => {
+  const el = await mount();
+  await selectDepartmentTab(el, "service");
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=releaseReminderMinutes]",
+  )!;
+  expect(control).not.toBeNull();
+  const choose = async (value: string) => {
+    await chooseOption(control, value);
+    await el.updateComplete;
+  };
+  const saveButton = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  expect(control.value).toBe("");
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(unload()).toBe(false);
+  await choose("15");
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(saveButton().disabled).toBe(false);
+  expect(unload()).toBe(true);
+  await choose("");
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(saveButton().disabled).toBe(true);
+  expect(unload()).toBe(false);
+  expect(await el.requestLeave("navigation")).toBe(true);
+  await choose("30");
+  const leaving = el.requestLeave("navigation");
+  await choice("keep");
+  expect(await leaving).toBe(false);
+  expect(control.value).toBe("30");
   expect(el.hasUnsavedChanges).toBe(true);
 });
 it("adding, renaming, moving or deleting a step dirties the form, undoing it cleans it, and leaving asks only while dirty", async () => {

@@ -140,20 +140,16 @@ See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-de
 [Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
 were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
 
-What waits. Each part is planned when its blocker lands; the starting decisions are in the plan,
+What is left. The starting decisions are in the plan,
 `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` → "Parts that wait".
 
-- **PR 4 — the reminder to send the next course, per department**, in a "Courses and the kitchen"
-  section of the department's Service tab. Waits for A773-1, which rewrites both of its readers in
-  `apps/server/src/order-groups.ts`.
-- **PR 5 — late flags on each station.** Waits for A773-1, which edits `working-order.ts`'s timing
-  imports and many of the files that read or seed the timing tables.
-- **PR 6 — identical dishes, held courses and MOVED slips on each station.** Waits for A773-1, which
-  rewrites `planKitchenTickets`, `printMovedSlips` and `printHoldTickets`.
-- **PR 7 — done on the screen on each station.** Waits for A773-1, which edits the till files the
-  mode travels through (`till-app.ts`, `till-station-screen.ts`, `station-queue.ts`).
-- **PR 8 — changes after sending, three values, on each station.** Waits for A773-1, whose Recall
-  reads `edit_sent_lines` in the meantime.
+2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
+under Open points is due.
+
+- **PR 5 — late flags on each station.**
+- **PR 6 — identical dishes, held courses and MOVED slips on each station.**
+- **PR 7 — done on the screen on each station.**
+- **PR 8 — changes after sending, three values, on each station.**
 - **The Kitchen tab goes** in whichever change removes its last control: after PRs 4–8 only fire
   control is left, which A773-2 removes with `locations.fire_control`.
 
@@ -168,6 +164,17 @@ Open points:
   a course list. On the Courses page the row dividers stop short of the card's sides (mock-up 02
   runs them to the edge; needs `course-list.ts` styles), and an error under the list would sit on
   the card's bottom border (read from the code, not seen).
+- From PR 4: offer “At once” (0 minutes) in each department's reminder, as A773 §3.4 decided
+  (owner, 2026-10-17); the list offers Off and 5–30 minutes and the save refuses 0
+  (`requireReleaseReminderMinutes`, `packages/venue-service/src/routes.ts`).
+- From PR 4's look: the reminder's hint is never on screen. `wt-combobox` hides its hint paragraph
+  (`.hint`, `packages/ui-core/src/field-styles.ts:153-155`) and draws the placeholder before the
+  hint (`packages/ui/src/components/wt-combobox.ts:1102`), and the field's placeholder is "Off".
+  Unchanged from the Kitchen tab's control, which the owner kept as a hint on 2026-10-17
+  (dashboard.md → Decisions); reopen only if that changes.
+- From PR 4's look: a chosen "Off" looks unset. Off is the empty value, which `wt-combobox` treats
+  as no choice without `show-empty-option` (`wt-combobox.ts:508`), so it is drawn as a placeholder,
+  grey and italic (`wt-combobox.ts:159-162`, `:1047`). Unchanged from the Kitchen tab's control.
 
 ## A long word in a routing-grid row name still splits at 390 px
 

@@ -8040,7 +8040,7 @@ export interface TableParty {
   unsentDrafts: UnsentDraft[];
   /**
    * The held group waiting to be released and when it is due; null with no held group, with
-   * reminders off, or once the party is no longer open.
+   * its department's reminders off, or once the party is no longer open.
    */
   reminder: ReleaseReminder | null;
 }
@@ -8442,17 +8442,22 @@ async function readSeatedParties(
       mainBillId: parties.mainBillId,
       billRequestedAt: parties.billRequestedAt,
       openedAt: parties.openedAt,
+      zoneId: diningTables.zoneId,
     })
     .from(partyTables)
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
     .where(and(isNull(partyTables.leftAt), eq(diningTables.locationId, locationId)))
     .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
-  const partyIds = [...new Set(members.map((member) => member.partyId))];
+  const firstZones = new Map<string, string>();
+  for (const member of members) {
+    if (!firstZones.has(member.partyId)) firstZones.set(member.partyId, member.zoneId);
+  }
+  const partyIds = [...firstZones.keys()];
   const labels = await partyTableLabels(tx, partyIds);
   const bills = await readBillsOfParties(tx, partyIds);
   const unsentDrafts = await readUnsentDrafts(tx, partyIds, bills);
-  const reminders = await readReleaseReminders(tx, partyIds);
+  const reminders = await readReleaseReminders(tx, partyIds, firstZones);
   const notes = await VENUE_SERVICE.readKitchenNotes(
     tx,
     partyIds.map((partyId) => ({ partyId })),

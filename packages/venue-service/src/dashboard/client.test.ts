@@ -184,7 +184,6 @@ describe("VenueServiceApi", () => {
       kitchenTicketGrouping: "combined",
       printHeldWork: false,
       printMovedSlips: true,
-      releaseReminderMinutes: 10,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
@@ -203,7 +202,7 @@ describe("VenueServiceApi", () => {
       kitchenTicketGrouping: "separate",
       printHeldWork: true,
       printMovedSlips: false,
-      releaseReminderMinutes: null,
+      releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: ["d1"],
       serviceSteps: [],
       courses: [],
@@ -215,7 +214,6 @@ describe("VenueServiceApi", () => {
       kitchenTicketGrouping: "separate",
       printHeldWork: true,
       printMovedSlips: false,
-      releaseReminderMinutes: null,
     });
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service", "GET"],
@@ -301,31 +299,6 @@ describe("VenueServiceApi", () => {
         "/management-api/venue-service/settings/print-moved-slips",
         "PUT",
         { printMovedSlips: false },
-      ],
-    ]);
-  });
-
-  it("stores the release reminder's minutes, or none for off", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.saveReleaseReminderMinutes(15);
-    await api.saveReleaseReminderMinutes(null);
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([
-      [
-        "/management-api/venue-service/settings/release-reminder-minutes",
-        "PUT",
-        { releaseReminderMinutes: 15 },
-      ],
-      [
-        "/management-api/venue-service/settings/release-reminder-minutes",
-        "PUT",
-        { releaseReminderMinutes: null },
       ],
     ]);
   });
@@ -423,6 +396,7 @@ describe("combined settings requests", () => {
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
       needsClearing: false,
+      releaseReminderMinutes: null,
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
     });
     expect(
@@ -442,6 +416,7 @@ describe("combined settings requests", () => {
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
           needsClearing: false,
+          releaseReminderMinutes: null,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
         },
       ],
@@ -462,6 +437,7 @@ describe("combined settings requests", () => {
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
       needsClearing: false,
+      releaseReminderMinutes: null,
       serviceSteps,
     });
     const [[, init]] = fetchImpl.mock.calls as unknown as [string, RequestInit][];

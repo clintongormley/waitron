@@ -19,7 +19,6 @@ const model: VenueServiceSettingsView = {
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
   printMovedSlips: true,
-  releaseReminderMinutes: 10,
 };
 
 async function mount(api: VenueServiceApi, readOnly = false): Promise<ServiceSettingsPanel> {
@@ -55,7 +54,6 @@ it("refuses synthetic changes from a read-only viewer even when a control emits 
   const api = {
     loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
     saveSettings: vi.fn(),
-    saveReleaseReminderMinutes: vi.fn(),
     saveKitchenTicketGrouping: vi.fn(),
   } as unknown as VenueServiceApi;
   const kitchen = await mount(api, true);
@@ -64,13 +62,11 @@ it("refuses synthetic changes from a read-only viewer even when a control emits 
     control.dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
   };
   change(kitchen.shadowRoot!, 'wt-switch[name="editSentLines"]', { checked: false });
-  change(kitchen.shadowRoot!, 'wt-combobox[name="releaseReminderMinutes"]', { value: "15" });
   change(kitchen.shadowRoot!, 'wt-combobox[name="kitchenTicketGrouping"]', {
     value: "separate",
   });
   await settle(kitchen);
   expect(api.saveSettings).not.toHaveBeenCalled();
-  expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
   expect(api.saveKitchenTicketGrouping).not.toHaveBeenCalled();
 });
 
@@ -497,8 +493,8 @@ describe("the setting that prints MOVED slips", () => {
   }
 
   // Fails if the switch stops reading the stored value, leaves the kitchen changes section, sits
-  // anywhere but between the held-groups switch and the reminder, or loses its label or hint.
-  it("shows the stored value after the held-groups switch and before the reminder", async () => {
+  // anywhere but last, after the held-groups switch, or loses its label or hint.
+  it("shows the stored value last, after the held-groups switch", async () => {
     const on = await mount({
       loadSettings: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
@@ -515,7 +511,7 @@ describe("the setting that prints MOVED slips", () => {
       (control) => control.getAttribute("name"),
     );
     expect(names.indexOf("printMovedSlips")).toBe(names.indexOf("printHeldWork") + 1);
-    expect(names.indexOf("releaseReminderMinutes")).toBe(names.indexOf("printMovedSlips") + 1);
+    expect(names.at(-1)).toBe("printMovedSlips");
     const off = await mount({
       loadSettings: vi.fn().mockResolvedValue(stored(false)),
     } as unknown as VenueServiceApi);
@@ -614,177 +610,25 @@ describe("the setting that prints MOVED slips", () => {
   });
 });
 
-describe("the setting for the reminder to fire the next group", () => {
-  function reminderSelect(el: ServiceSettingsPanel) {
-    const select = el.shadowRoot!.querySelector<SettingBox>(
-      'wt-combobox[name="releaseReminderMinutes"]',
-    )!;
-    expect(select).not.toBeNull();
-    return select;
-  }
-  function beside(el: ServiceSettingsPanel) {
-    return reminderSelect(el).error || undefined;
-  }
-  function stored(releaseReminderMinutes: number | null): VenueServiceSettingsView {
-    return { ...structuredClone(model), releaseReminderMinutes };
-  }
-  async function choose(el: ServiceSettingsPanel, value: string) {
-    await chooseOption(reminderSelect(el), value);
-    await settle(el);
-  }
-
-  // Fails if the select stops reading the stored value, leaves the kitchen changes section, or
-  // loses its label, choices or hint.
-  it("shows the stored value on the Changes after sending tab, ten minutes by default", async () => {
-    const ten = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    const select = reminderSelect(ten);
-    expect(select.closest('[data-test="kitchen-changes"]')).not.toBeNull();
-    expect(select.label).toContain("Reminder to fire the next group");
-    expect(select.options.map((option) => [option.value, option.label])).toEqual([
-      ["", "Off"],
-      ["5", "5 minutes"],
-      ["10", "10 minutes"],
-      ["15", "15 minutes"],
-      ["20", "20 minutes"],
-      ["30", "30 minutes"],
-    ]);
-    expect(select.value).toBe("10");
-    expect(select.hint).toContain("marked served");
-    const off = await mount({
-      loadSettings: vi.fn().mockResolvedValue(stored(null)),
-    } as unknown as VenueServiceApi);
-    expect(reminderSelect(off).value).toBe("");
-  });
-
-  // Fails if a stored value outside the list reads as another choice.
-  it("keeps a stored value the list does not offer", async () => {
-    const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue(stored(45)),
-    } as unknown as VenueServiceApi);
-    const select = reminderSelect(el);
-    expect(select.value).toBe("45");
-    expect(select.shadowRoot!.querySelector(".trigger")!.textContent!.trim()).toBe("45 minutes");
-  });
-
-  // Fails if the select sends the old value, a string rather than a number, or stays usable mid-save.
-  it("saves the chosen minutes straight away, or none for Off, and is disabled until the save finishes", async () => {
-    let finish!: () => void;
-    const api = {
-      loadSettings: vi
-        .fn()
-        .mockResolvedValueOnce(model)
-        .mockResolvedValueOnce(stored(20))
-        .mockResolvedValue(stored(null)),
-      saveReleaseReminderMinutes: vi
-        .fn()
-        .mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)))
-        .mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await choose(el, "20");
-    expect(api.saveReleaseReminderMinutes).toHaveBeenCalledWith(20);
-    expect(reminderSelect(el).disabled).toBe(true);
-    // A synthetic event can reach a disabled select; it must not start a second write.
-    await choose(el, "5");
-    expect(api.saveReleaseReminderMinutes).toHaveBeenCalledTimes(1);
-    finish();
-    await settle(el);
-    expect(reminderSelect(el).value).toBe("20");
-    expect(reminderSelect(el).disabled).toBe(false);
-    await choose(el, "");
-    expect(api.saveReleaseReminderMinutes).toHaveBeenLastCalledWith(null);
-    expect(api.loadSettings).toHaveBeenCalledTimes(3);
-    expect(reminderSelect(el).value).toBe("");
-    expect(pageAlert(el)).toBe("");
-  });
-
-  // Fails if a refused save leaves the select showing the value that was never stored, or says
-  // nothing.
-  it("says a refused save failed, beside the select and at the top of the panel, and shows the stored value again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      saveReleaseReminderMinutes: vi.fn().mockRejectedValue(new Error("refused")),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await choose(el, "5");
-    expect(api.saveReleaseReminderMinutes).toHaveBeenCalledWith(5);
-    expect(pageAlert(el)).toContain("could not be saved");
-    expect(beside(el)).toContain("could not be saved");
-    expect(reminderSelect(el).value).toBe("10");
-    expect(
-      reminderSelect(el).shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid"),
-    ).toBe("true");
-  });
-
-  // Fails if choosing the reminder already stored saves it again.
-  it("saves nothing when the reminder already shown is chosen again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    expect(await clickChosenRow(reminderSelect(el))).toBe(1);
-    await settle(el);
-    expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
-    expect(api.loadSettings).toHaveBeenCalledTimes(1);
-  });
-
-  // Fails if Off already stored is saved again: a blank choice must still compare equal to none.
-  it("saves nothing when Off is chosen again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(stored(null)),
-      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    expect(await clickChosenRow(reminderSelect(el))).toBe(1);
-    await settle(el);
-    expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
-  });
-
-  it("keeps the reminder's change inside the panel", async () => {
-    const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-      saveReleaseReminderMinutes: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi);
-    expect(await changesHeardOutside(() => choose(el, "5"))).toBe(0);
-  });
-
-  // Fails if the Spanish catalogue loses the label or a choice.
-  it("reads in Spanish", async () => {
-    setLocale("es");
-    const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    const select = reminderSelect(el);
-    expect(select.label).toContain("Aviso para marchar el siguiente grupo");
-    expect(select.options.map((option) => option.label)).toEqual([
-      "Deshabilitado",
-      "5 minutos",
-      "10 minutos",
-      "15 minutos",
-      "20 minutos",
-      "30 minutos",
-    ]);
-  });
-});
-
 describe("the kitchen panel's fields", () => {
-  // Fails if a setting's dropdown loses its search rule, its hint, or Off as the text it shows.
-  it("gives the two kitchen settings' dropdowns their hints", async () => {
+  // Fails if the grouping dropdown loses its search rule or its hint.
+  it("gives the grouping dropdown its hint", async () => {
     const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue({ ...model, releaseReminderMinutes: null }),
+      loadSettings: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     const grouping = dropdown(el.shadowRoot!, "kitchenTicketGrouping");
     expect([grouping.search, grouping.hint]).toEqual([
       "auto",
       "Applies to new kitchen tickets and to reprints.",
     ]);
-    const reminder = dropdown(el.shadowRoot!, "releaseReminderMinutes");
-    expect([reminder.search, reminder.placeholder, reminder.value]).toEqual(["auto", "Off", ""]);
-    expect(reminder.hint).toContain("marked served");
-    expect(reminder.shadowRoot!.querySelector(".trigger")!.textContent!.trim()).toBe("Off");
+  });
+
+  it("the Kitchen tab draws no reminder", async () => {
+    const el = await mount({
+      loadSettings: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(el.shadowRoot!.querySelector('[data-test="kitchen-changes"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('wt-combobox[name="releaseReminderMinutes"]')).toBeNull();
   });
 });
 

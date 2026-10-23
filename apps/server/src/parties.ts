@@ -224,6 +224,26 @@ export async function partyStateAndZone(
   return row;
 }
 
+/**
+ * Each party's earliest active table's zone, chosen as {@link partyStateAndZone} chooses it; a
+ * party at no active table is absent.
+ */
+export async function partyFirstZones(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string>> {
+  const zones = new Map<string, string>();
+  if (partyIds.length === 0) return zones;
+  const rows = await tx
+    .select({ partyId: partyTables.partyId, zoneId: diningTables.zoneId })
+    .from(partyTables)
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
+  for (const row of rows) if (!zones.has(row.partyId)) zones.set(row.partyId, row.zoneId);
+  return zones;
+}
+
 /** Name the party, or with an empty name clear it; a party command guarded by its revision. */
 export async function setPartyName(
   tx: Transaction,

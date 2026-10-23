@@ -108,6 +108,10 @@ Confirm allergy instructions in the table's allergy window before requesting coo
 station or the pass, read the copy already attached to each dish. The kitchen screens do not open
 the table's allergy editor. At the station, acknowledge any corrections.
 
+A held group falls due a set number of minutes after the dishes fired before it have been
+served. Each department sets those minutes, or turns the reminder off, under **Courses and the
+kitchen** on its **Service** tab in the dashboard.
+
 ## Delete a prep station {#delete-prep-station}
 
 Choose **Delete** from the station's row menu. The window shows **Checking what changes…**

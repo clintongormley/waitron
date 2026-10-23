@@ -59,6 +59,7 @@ interface ReceiptEditor {
 type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
   serviceSteps: ServiceStepDraft[];
 };
+const REMINDER_MINUTES = [5, 10, 15, 20, 30];
 type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
@@ -67,6 +68,7 @@ const fieldTab: Record<Field, DepartmentTab> = {
   paidWhen: "service",
   collectionNumber: "service",
   needsClearing: "service",
+  releaseReminderMinutes: "service",
   serviceSteps: "service",
   transfers: "transfers",
   receivingProfileId: "transfers",
@@ -91,6 +93,7 @@ const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
   a.needsClearing === b.needsClearing &&
+  a.releaseReminderMinutes === b.releaseReminderMinutes &&
   stepsEqual(a.serviceSteps, b.serviceSteps) &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
   (a.transfers?.destinationDepartmentIds.length ?? 0) ===
@@ -282,6 +285,9 @@ export class DepartmentSettings extends LitElement {
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
+      // One model read lists the departments and keys every active one here, so the fallback only
+      // types the lookup.
+      releaseReminderMinutes: this.model!.releaseReminderMinutesByDepartment[row.id] ?? null,
       serviceSteps: this.modelSteps(row.id),
     };
     if (this.opened !== row.id) {
@@ -486,6 +492,42 @@ export class DepartmentSettings extends LitElement {
     this.scope?.changed();
     if (saveActionState(this.scope).unchanged) this.failure = "";
   }
+  /** The latest saved value and the draft value are offered even when the list lacks them, so the
+   * dropdown never shows a value it does not list. */
+  private releaseReminder(
+    saved: number | null,
+    minutes: number | null,
+    error: string | undefined,
+    disabled: boolean,
+  ) {
+    const choices = [
+      ...new Set([...REMINDER_MINUTES, ...[saved, minutes].filter((m) => m !== null)]),
+    ].sort((a, b) => a - b);
+    return html`<wt-combobox
+      name="releaseReminderMinutes"
+      label=${t("venue.release_reminder")}
+      hint=${t("venue.release_reminder_hint")}
+      search="auto"
+      placeholder=${t("venue.release_reminder.off")}
+      searchPlaceholder=${t("venue.combobox_search")}
+      noResultsLabel=${t("venue.combobox_no_results")}
+      .options=${[
+        { value: "", label: t("venue.release_reminder.off") },
+        ...choices.map((choice) => ({
+          value: String(choice),
+          label: t("venue.release_reminder.minutes").replace("{n}", String(choice)),
+        })),
+      ]}
+      .value=${minutes === null ? "" : String(minutes)}
+      error=${error ?? ""}
+      ?disabled=${disabled}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+        e.stopPropagation();
+        const value = e.detail.value;
+        this.changed("releaseReminderMinutes", value === "" ? null : Number(value));
+      }}
+    ></wt-combobox>`;
+  }
   private stepsChanged(steps: ServiceStepDraft[]) {
     const before = new Map(this.draft!.serviceSteps.map((step) => [step.key, step]));
     const kept: ServiceStepErrors = {};
@@ -580,6 +622,7 @@ export class DepartmentSettings extends LitElement {
       "paidWhen",
       "collectionNumber",
       "needsClearing",
+      "releaseReminderMinutes",
       ...(this.draft?.transfers
         ? (["receivingProfileId", "destinationDepartmentIds"] as const)
         : []),
@@ -839,6 +882,10 @@ export class DepartmentSettings extends LitElement {
                   </p>`
                 : nothing
             }
+          </section>
+          <section aria-label=${t("venue.courses_and_kitchen")}>
+            <h3>${t("venue.courses_and_kitchen")}</h3>
+            ${this.releaseReminder(this.model!.releaseReminderMinutesByDepartment[row.id] ?? null, draft.releaseReminderMinutes, errors.releaseReminderMinutes, disabled)}
           </section>
           <section aria-label=${t("venue.table_states")}>
             <h3>${t("venue.table_states")}</h3>
