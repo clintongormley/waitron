@@ -14,7 +14,7 @@ const COUNTRIES = {
     legalName: "Casa Delgado SL",
     locationName: "Main room",
     fiscalTerritory: "ES-common",
-    operationDescription: "Venta en establecimiento",
+    operationDescription: "Sale on premises",
     addressLine1: "1 Market Street",
     postalCode: "28013",
     city: "Madrid",

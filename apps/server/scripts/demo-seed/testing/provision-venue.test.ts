@@ -10,6 +10,17 @@ const suite = useVenueDb({
 });
 
 describe("the demo scripts' test venue", () => {
+  it("stores an English operation description for the Spanish practice venue", async () => {
+    await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 82_000_000,
+      invoiceLocale: "es-ES",
+    })();
+
+    expect(suite.db.all(sql`select operation_description from locations`)).toEqual([
+      { operation_description: "Sale on premises" },
+    ]);
+  });
+
   it.each([
     {
       country: "ES" as const,
