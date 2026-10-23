@@ -1,6 +1,4 @@
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-// One provisioned venue for the suites that run the one-shot operator scripts. Provisioned through
-// `planVenue` + `applyVenue`, so the fiscal ids were minted the way a real box mints them.
 import { openVenueDatabase } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
@@ -8,7 +6,6 @@ import { ALL_MODULES } from "../../src/modules.js";
 
 export interface TestVenue {
   nodeId: string;
-  /** The ORDINARY sale series. `planVenue` emits the standard series first. */
   seriesId: string;
   rectificativeSeriesId: string;
   locationId: string;
@@ -27,11 +24,11 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
           taxId,
           legalName: "Waitron Scripts SL",
           location: {
-            name: "Sala principal",
+            name: "Main room",
             fiscalTerritory: "ES-common",
             invoiceLocales: ["es-ES"],
-            operationDescription: "Venta en establecimiento",
-            addressLine1: "Calle Mayor 1",
+            operationDescription: "Retail sale",
+            addressLine1: "1 Market Street",
             addressLine2: null,
             postalCode: "28013",
             city: "Madrid",
@@ -42,7 +39,7 @@ export async function provisionTestVenue(venueDir: string, taxId: string): Promi
           seriesCode: "A",
           rectificativeSeriesCode: "R",
           admin: {
-            displayName: "Administradora",
+            displayName: "Administrator",
             pinHash: hashPin("5555"),
             passwordHash: hashPassword("scripts-fixture-password"),
             email: "admin@scripts.test",
