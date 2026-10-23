@@ -261,6 +261,10 @@ function theme(id: string, name: string, choices: ThemeChoices): ThemeView {
 }
 
 describe("leaving with Advanced", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("a value set by its picker asks, and Discard returns to the saved rows without a write", async () => {
     const { app, card, saveTheme } = await mount();
     await openAdvanced(card);
@@ -325,6 +329,30 @@ describe("leaving with Advanced", () => {
     expect(await request).toBe("kept");
     expect(advanced(card).draft.choices.handSet).toEqual({ light: {}, dark: {} });
     expect(saveTheme).not.toHaveBeenCalled();
+  });
+
+  it("Cancel just after a pick still waiting for its frame asks, and Keep keeps the pick", async () => {
+    const { app, card } = await mount();
+    await openAdvanced(card);
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const picker = inAdvanced(
+      card,
+      'input[type=color][name="handSetPicker.light.bg"]',
+    ) as HTMLInputElement;
+    picker.value = "#f8f1e1";
+    picker.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await userEvent.click(q(card, "[data-test=cancel]")!);
+    await card.updateComplete;
+    for (const frame of frames.splice(0)) frame(performance.now());
+    vi.restoreAllMocks();
+    await choose(app, "keep");
+    expect(editing(card)).toBe(true);
+    expect(advanced(card).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
   });
 
   it("Pick a different colour for dark screens alone asks nothing", async () => {

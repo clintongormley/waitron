@@ -8,7 +8,7 @@ type Dialog = HTMLElementTagNameMap["dashboard-hard-to-read-dialog"];
 
 const LINES = [
   "Brand colour: buttons are hard to see on light screens.",
-  "Sunken areas (light) is hard to read.",
+  "Sunken areas (light): Text hard to read on it.",
 ];
 
 const inner = (el: Dialog) => el.shadowRoot!.querySelector("wt-dialog")!;

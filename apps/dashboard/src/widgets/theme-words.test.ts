@@ -352,6 +352,46 @@ describe("theme words", () => {
     ]);
   });
 
+  it("words the warnings for the colours the guide's Advanced examples use", () => {
+    const grey: ThemeChoices = {
+      ...WAITRON_CHOICES,
+      handSet: { light: { text: "#9a9a9a" }, dark: {} },
+    };
+    const text = warningOn(grey, "handSet.light.text");
+    expect(text.fix).toBe("#585858");
+    expect(text.against.slice(0, 2)).toEqual(["bg", "surface"]);
+    expect(handWarningLines(text, grey)[0]).toMatch(
+      /^Light screens: hard to read on Page, Cards, /,
+    );
+    expect(handFixLabel(text.fix!)).toBe("Use #585858");
+    expect(handFixedText("light", "#9a9a9a")).toBe("Light screens: fixed from #9a9a9a");
+
+    const blocked: ThemeChoices = {
+      ...WAITRON_CHOICES,
+      handSet: { light: { bg: "#777777", text: "#888888" }, dark: {} },
+    };
+    const page = warningOn(blocked, "handSet.light.bg");
+    expect(page.fix).toBeNull();
+    expect(page.blockedBy).toEqual(["text"]);
+    expect(handWarningLines(page, blocked).join(" ")).toMatch(
+      / while Text is set by hand to #888888\.$/,
+    );
+
+    setLocale("es-ES");
+    const first = es["appearance.colour.bg"];
+    const second = es["appearance.colour.surface"];
+    const opening = esFill("appearance.hand_on", {
+      screens: ES_SCREENS,
+      names: `${first}, ${second}, `,
+    }).slice(0, -1);
+    expect(handWarningLines(text, grey)[0]!.startsWith(opening)).toBe(true);
+    const blocker = esFill("appearance.blocker", {
+      name: es["appearance.colour.text"],
+      colour: "#888888",
+    });
+    expect(handWarningLines(page, blocked).join(" ").endsWith(`${blocker}.`)).toBe(true);
+  });
+
   it("says a no-fix warning drawn both ways in one sentence", () => {
     const lifted = warningOn(BOTH_WAYS, "handSet.light.surface-lifted");
     expect(lifted.fix).toBeNull();

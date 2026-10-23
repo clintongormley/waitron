@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   WAITRON_CHOICES,
@@ -50,6 +50,7 @@ const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
 const christmas = theme("t-xmas", "Christmas", CHRISTMAS);
 const LIST: ThemeList = { themes: [lucia, christmas], inUse: lucia.id };
 
+beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -437,6 +438,7 @@ describe("fixes and Undo in Advanced", () => {
     const input = picker(el, "light", "text-muted");
     input.value = "#123456";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    // Playwright's click lets the waiting frame run first, which sends the pick and removes this Undo button before the click.
     (inAdvanced(el, "hand-undo-light-text-muted") as HTMLElement).click();
     await settle(el);
     expect(handCode(el, "light", "text-muted").value).toBe("#123456");
@@ -858,4 +860,115 @@ describe("the dark version's own button colour", () => {
       release();
     });
   }
+});
+
+describe("a card action taken while a picked colour waits for its frame", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Holds every animation frame back until the returned call runs them. */
+  function holdFrames(): () => void {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    return () => {
+      for (const frame of frames.splice(0)) frame(performance.now());
+    };
+  }
+
+  async function pickThen(
+    el: Card,
+    [mode, key, colour]: [string, string, string],
+    action: () => Promise<void>,
+  ) {
+    if (!disclosure(el).open) await openAdvanced(el);
+    const release = holdFrames();
+    const input = picker(el, mode, key);
+    input.value = colour;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await action();
+    await settle(el);
+    release();
+    await settle(el);
+  }
+
+  async function chooseSegment(el: Card, name: string, label: string) {
+    const control = q(
+      el,
+      `wt-segmented-control[name=${name}]`,
+    ) as HTMLElementTagNameMap["wt-segmented-control"];
+    await userEvent.click(
+      [...control.shadowRoot!.querySelectorAll("button")].find(
+        (b) => b.textContent?.trim() === label,
+      )!,
+    );
+  }
+
+  it("Use Waitron's look clears a Page colour picked just before it", async () => {
+    const { el } = await mountChoices(CREAM);
+    await pickThen(el, ["light", "bg", "#123456"], () =>
+      userEvent.click(button(el, "use-waitron")),
+    );
+    expect(advanced(el).draft.choices.handSet).toEqual({ light: {}, dark: {} });
+    expect(button(el, "use-waitron").disabled).toBe(true);
+  });
+
+  it("Use the brand colour takes back a dark Main buttons colour picked just before it", async () => {
+    const { el } = await mountEditing();
+    await typeHand(el, "dark", "primary", "#5fa77a");
+    await pickThen(el, ["dark", "primary", "#5a9c74"], () =>
+      userEvent.click(button(el, "use-brand")),
+    );
+    expect(advanced(el).draft.choices.handSet.dark.primary).toBeUndefined();
+    expect(q(el, "[data-test=dark-own]")).toBeNull();
+  });
+
+  it("Fix all fixes a Text colour picked just before it", async () => {
+    const { el } = await mountChoices(TWO_FIXES);
+    await pickThen(el, ["light", "text", "#ffffff"], () => userEvent.click(button(el, "fix-all")));
+    const picked: ThemeChoices = {
+      ...TWO_FIXES,
+      handSet: { light: { ...TWO_FIXES.handSet.light, text: "#ffffff" }, dark: {} },
+    };
+    expect(advanced(el).draft.choices).toEqual(fixAll(WAITRON_DEFAULTS, picked));
+    expect(advanced(el).derived.warnings).toEqual([]);
+    expect(words(inAdvanced(el, "hand-fixed-light-text"))).toBe(
+      "Light screens: fixed from #ffffff",
+    );
+  });
+
+  it("a brand swatch chosen after a Page pick keeps the Page colour and says so", async () => {
+    const { el } = await mountEditing();
+    await pickThen(el, ["light", "bg", "#f8f1e1"], () =>
+      userEvent.click(q(el, 'button.swatch[data-color="#b12525"]')!),
+    );
+    expect(advanced(el).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
+    expect(advanced(el).draft.choices.brandColor).toBe("#b12525");
+    expect(words(q(el, "[data-test=kept-note]"))).toBe(keptNote(advanced(el).draft.choices));
+  });
+
+  it("a brand code typed after a Page pick keeps the Page colour and says so", async () => {
+    const { el } = await mountEditing();
+    await pickThen(el, ["light", "bg", "#f8f1e1"], async () => {
+      const inner = q(el, "wt-input[name=brandColor]")!.shadowRoot!.querySelector("input")!;
+      await page.elementLocator(inner).fill("#b12525");
+    });
+    expect(advanced(el).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
+    expect(advanced(el).draft.choices.brandColor).toBe("#b12525");
+    expect(words(q(el, "[data-test=kept-note]"))).toBe(keptNote(advanced(el).draft.choices));
+  });
+
+  it("a background chosen after a Page pick keeps the Page colour and says so", async () => {
+    const { el } = await mountEditing();
+    await pickThen(el, ["light", "bg", "#f8f1e1"], () =>
+      chooseSegment(el, "background", t("appearance.background.neutral")),
+    );
+    expect(advanced(el).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
+    expect(advanced(el).draft.choices.background).toBe("neutral");
+    expect(words(q(el, "[data-test=kept-note]"))).toBe(keptNote(advanced(el).draft.choices));
+  });
 });

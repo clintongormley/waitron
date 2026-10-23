@@ -419,6 +419,7 @@ export class LookCard extends LitElement {
   }
   #requestCancel(): void {
     if (this.submitting) return;
+    this.#advanced().flush();
     const scope = this.#scope;
     if (!scope || !this.#leave) {
       this.#cancel();
@@ -432,13 +433,17 @@ export class LookCard extends LitElement {
       },
     });
   }
-  /** None is made while a save is under way. */
+  /**
+   * None is made while a save is under way. A pick still waiting for its frame goes first, so the
+   * change lands on it (D17); that pick comes back through here with nothing left waiting.
+   */
   #change(
     next: (draft: LookDraft) => LookDraft,
     { code = false, hand = false }: { code?: boolean; hand?: boolean } = {},
   ): void {
+    if (!this.draft || this.submitting) return;
+    this.#advanced().flush();
     const before = this.draft;
-    if (!before || this.submitting) return;
     const after = next(before);
     this.draft = after;
     if (code) this.refusedCode = "";

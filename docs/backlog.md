@@ -2990,6 +2990,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   colour: Page, light screens"; "Brand colour" on Main buttons with Waitron's; and the light form
   of the saved row's "set by hand".
 
+- **A colour picked in Advanced within one animation frame of leaving the editor is lost, and
+  nothing asks (A841 slice 6's review, 2026-10-23).** A picker drag sends at most one change per
+  frame (`dashboard-theme-advanced`'s `flush`); the Look card's own buttons, Save and Cancel send a
+  waiting colour first, but the leave question reads the draft (`current: () => this.draft!` in
+  `look-card.ts`) without sending it. A reviewer's probe, with frames held back, saw navigation go
+  ahead and no unload warning; Edit on another theme reads the draft the same way (read, not
+  tried). Sending the colour inside that read re-enters the draft scope while it reads, so the fix
+  is likelier a hook the leave coordinator calls before it compares.
+
 - **The Look card's Fix all button breaks onto two lines ("Fix / all") on a phone (A841 slice 5).**
   It sits in the `.warning` line (`apps/dashboard/src/widgets/fix-line-styles.ts`), where nothing
   stops it shrinking beside the sentence (read, not tried); picture 15 keeps it on one line.
