@@ -37,8 +37,8 @@ Cuando no pasa nada, cada fila dice:
 
 - **Ventas**: **Se registran con normalidad**, y cuándo fue la última venta.
 - **Hacienda**: **Se envían con normalidad**, y cuándo guardó el equipo por última vez una
-  aceptación de Hacienda (la hora del propio equipo cuando la guardó). Un equipo que no envía
-  registros a Hacienda lo dice.
+  aceptación de Hacienda (según el reloj del equipo). Un equipo que no envía registros a Hacienda
+  lo dice.
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.

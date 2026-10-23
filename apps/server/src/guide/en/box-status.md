@@ -35,8 +35,7 @@ When nothing is wrong, each row says:
 
 - **Sales**: **Recorded normally**, and when the last sale was made.
 - **Tax agency**: **Sent normally**, and when the box last saved an acceptance from the tax agency
-  (the box's own time when it saved it). A box that does not send records to the tax agency says
-  so instead.
+  (by the box's own clock). A box that does not send records to the tax agency says so instead.
 - **Bucket copy**: **Up to date**, and when the last upload was confirmed. It says **Not set up**
   when no copy is set up, and how many minutes behind the copy is when it falls behind.
 - **Printers**: **No problems reported**, and the names of the printers set up.
