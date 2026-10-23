@@ -6230,9 +6230,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the review screen now keeps such an unknown code visible.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A975. Remaining demo scripts and receipt picture tool to English** (the `*-demo.ts` scripts
-  and `receipt-look.ts`). Retire the fake-backend demos after moving their useful checks into
-  English tests. Low priority; needed before A977 can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **A975. Remaining demo scripts to English** (the `*-demo.ts` scripts). Retire the fake-backend
+  demos after moving their useful checks into English tests. Low priority; needed before A977
+  can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.** The shared script-suite fixture now
   uses English location, operation, street and administrator text (#2004). The other helpers and

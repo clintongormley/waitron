@@ -1,4 +1,3 @@
-// Writes PNG pictures of real receipts for a person to look at, never run by CI.
 // Run: pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts <out-dir>
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,18 +56,17 @@ async function ticketPng(bytes: Uint8Array, file: string): Promise<void> {
     .toFile(join(out, file));
 }
 
-const line = (quantity: string, name: string, gross: string, unit = "ud") => ({
+const line = (quantity: string, name: string, gross: string, unit = "item") => ({
   descriptions: { "es-ES": name },
   unitName: { es: unit },
   quantity,
   gross,
 });
 
-// The sale in docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png: seven lines, one rate, cash.
 const MOCKUP: ReceiptDocumentInput = {
   result: {
     locale: "es-ES",
-    orderLabel: "Mesa 12",
+    orderLabel: "Table 12",
     orderNumber: 112,
     invoiceNumber: "T-2026/000112",
     issuedAt: "2026-10-13T14:53:00.000Z",
@@ -76,33 +74,48 @@ const MOCKUP: ReceiptDocumentInput = {
     vatBreakdown: [{ rate: "10.00", base: "370.00", tax: "37.00" }],
     lines: [
       line("1", "Bloody Mary", "15.00"),
-      line("4", "Agua, pan y aceite", "24.00"),
-      line("4", "Menú degustación", "320.00"),
-      line("4", "Copa de tinto", "28.00"),
-      line("1", "Copa de blanco", "8.00"),
-      line("1", "Café doble", "4.00"),
-      line("1", "Orujo blanco", "8.00"),
+      line("4", "Water, bread and olive oil", "24.00"),
+      line("4", "Tasting menu", "320.00"),
+      line("4", "Glass of red wine", "28.00"),
+      line("1", "Glass of white wine", "8.00"),
+      line("1", "Double coffee", "4.00"),
+      line("1", "Grape spirit", "8.00"),
     ],
     tender: { method: "cash", change: "13.00" },
     qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=T-2026%2F000112&fecha=13-10-2026&importe=407.00",
-    qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
+    qrText: FULL_INVOICE_DOCUMENT_FIXTURE.result.qrText,
   },
-  issuer: { venueName: "SANTET DELI CO S.L.", nif: "B00000000" },
-  receiptHeader: { tradingName: "Santet Deli Co", printTradingName: true },
-  receipt: { footerMessage: "¡Gracias por su visita!" },
-  venueAddress: ["Avinguda d'Icària 215, Bajos", "08005 Barcelona"],
+  issuer: { venueName: "Sample Deli Ltd", nif: "B00000000" },
+  receiptHeader: { tradingName: "Sample Deli", printTradingName: true },
+  receipt: { footerMessage: "Thank you for visiting!" },
+  venueAddress: ["215 Sample Avenue, Ground floor", "08005 Barcelona"],
   invoiceLocale: "es-ES",
 };
 
-// A filed full invoice reads its rates in two-decimal form, so the sample does too.
 const FULL = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+FULL.result.orderLabel = "Table 6";
+FULL.result.issuer!.venueName = "Sample Deli Ltd";
+FULL.result.issuer!.domicile =
+  "27 Original Registered Street, Market Square building, second floor, Madrid 28001";
+FULL.result.recipient!.legalName = "Customer with a particularly long registered company name Ltd";
+FULL.result.recipient!.address =
+  "123 Original Customer Avenue, Station building, third floor, Madrid 28002";
+FULL.result.lines[0]!.descriptions = { "es-ES": "Set menu with a particularly long name" };
+FULL.result.lines[1]!.descriptions = { "es-ES": "Mineral water" };
+FULL.receipt = {
+  ...FULL.receipt,
+  headerSubtitle: "Thank you for visiting",
+  footerMessage: "See you soon",
+};
+FULL.receiptHeader = { ...FULL.receiptHeader, tradingName: "Sample Deli" };
+
 FULL.result.lines[0]!.net!.rate = "21.00";
 FULL.result.lines[1]!.net!.rate = "10.00";
 FULL.result.vatBreakdown = [
   { rate: "21.00", base: "9.00", tax: "1.89" },
   { rate: "10.00", base: "8.00", tax: "0.80" },
 ];
-for (const filed of FULL.result.lines) filed.unitName = { es: "ud" };
+for (const filed of FULL.result.lines) filed.unitName = { es: "item" };
 
 type SaleLine = ReceiptDocumentInput["result"]["lines"][number];
 const filed = (
@@ -111,7 +124,7 @@ const filed = (
   gross: string,
   net: { unitPrice: string; base: string; tax: string; rate: string; priceQuantity?: string },
   extra: Partial<SaleLine> = {},
-  unit = "ud",
+  unit = "item",
 ): SaleLine => ({
   ...line(quantity, name, gross, unit),
   net: { priceQuantity: "1.000", ...net },
@@ -123,10 +136,9 @@ const BLOODY_MARY = filed("1", "Bloody Mary", "15.00", {
   tax: "1.36",
   rate: "10.00",
 });
-// The target layout's water: four at 6,00 €, 10% off.
-const AGUA_DISCOUNTED = filed(
+const WATER_DISCOUNTED = filed(
   "4",
-  "Agua, pan y aceite",
+  "Water, bread and olive oil",
   "21.60",
   { unitPrice: "4.91", base: "19.64", tax: "1.96", rate: "10.00" },
   {
@@ -135,21 +147,21 @@ const AGUA_DISCOUNTED = filed(
     adjustments: [{ kind: "discount", percentBp: 1000, amount: "2.40" }],
   },
 );
-const AGUA = filed("4", "Agua, pan y aceite", "24.00", {
+const WATER = filed("4", "Water, bread and olive oil", "24.00", {
   unitPrice: "5.45",
   base: "21.82",
   tax: "2.18",
   rate: "10.00",
 });
-const JAMON = filed(
+const HAM = filed(
   "0.35",
-  "Jamón ibérico",
+  "Iberian ham",
   "42.00",
   { unitPrice: "109.09", base: "38.18", tax: "3.82", rate: "10.00" },
   {},
   "kg",
 );
-const VENUE_DOMICILE = "Avinguda d'Icària 215, Bajos, 08005 Barcelona";
+const VENUE_DOMICILE = "215 Sample Avenue, Ground floor, 08005 Barcelona";
 
 function fullInvoice(
   lines: SaleLine[],
@@ -169,15 +181,15 @@ function fullInvoice(
       invoiceNumber: "F-2026/000031",
       issuedOffsetMinutes: 120,
       issuer: {
-        venueName: "SANTET DELI CO S.L.",
+        venueName: "Sample Deli Ltd",
         nif: "B00000000",
         domicile: options.domicile ?? VENUE_DOMICILE,
       },
       recipient: {
-        legalName: "Distribuciones Gastronómicas del Mediterráneo S.L.",
+        legalName: "Sample Food Distribution Ltd",
         taxId: "B12345678",
         countryCode: "ES",
-        address: "Carrer de la Diputació 245, 08007 Barcelona",
+        address: "245 Customer Street, 08007 Barcelona",
       },
       lines,
       vatBreakdown,
@@ -188,22 +200,21 @@ function fullInvoice(
   };
 }
 
-const TARGET_LINES = [BLOODY_MARY, AGUA_DISCOUNTED];
+const TARGET_LINES = [BLOODY_MARY, WATER_DISCOUNTED];
 const TARGET_VAT = [{ rate: "10.00", base: "33.28", tax: "3.32" }];
 const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
   "full-addresses-match": fullInvoice(TARGET_LINES, TARGET_VAT, "36.60", "3.40"),
   "full-addresses-differ": fullInvoice(TARGET_LINES, TARGET_VAT, "36.60", "3.40", {
-    domicile: "Carrer de Balmes 100, 08008 Barcelona",
+    domicile: "100 Registered Street, 08008 Barcelona",
   }),
   "full-domicile-with-province": fullInvoice(TARGET_LINES, TARGET_VAT, "36.60", "3.40", {
     domicile: `${VENUE_DOMICILE} (Barcelona)`,
   }),
-  // 10% off the whole bill, over a 21% wine and 10% bread.
   "full-two-rates-bill-discount": fullInvoice(
     [
       filed(
         "1",
-        "Rioja crianza",
+        "Aged red wine",
         "27.00",
         {
           unitPrice: "22.31",
@@ -215,7 +226,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
       ),
       filed(
         "1",
-        "Pan de pueblo",
+        "Country bread",
         "2.25",
         {
           unitPrice: "2.05",
@@ -234,12 +245,11 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "0.75",
     { billAdjustments: [{ kind: "discount", percentBp: 1000, amount: "3.25" }] },
   ),
-  // The owner's menu del día: 10,00 € at 10%, less 10%.
-  "full-menu-del-dia": fullInvoice(
+  "full-set-menu": fullInvoice(
     [
       filed(
         "1",
-        "Menú del día",
+        "Set menu",
         "9.00",
         {
           unitPrice: "8.18",
@@ -258,13 +268,12 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "9.00",
     "1.00",
   ),
-  // A comped weighed line with no stored unit price.
   "full-comped-weighed": fullInvoice(
     [
       BLOODY_MARY,
       filed(
         "0.350",
-        "Jamón ibérico",
+        "Iberian ham",
         "0.00",
         { unitPrice: "0.00", base: "0.00", tax: "0.00", rate: "10.00" },
         { listGross: "8.40", adjustments: [{ kind: "comp", amount: "8.40" }] },
@@ -275,10 +284,9 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "15.00",
     "5.00",
   ),
-  // An extra priced per 0.05 kg portion, picked twice: «2 · Queso extra · 1,24 · 2,48».
   "full-extra-per-portion": fullInvoice(
     [
-      filed("1", "Hamburguesa", "12.10", {
+      filed("1", "Burger", "12.10", {
         unitPrice: "10.00",
         base: "10.00",
         tax: "2.10",
@@ -286,7 +294,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
       }),
       filed(
         "0.100",
-        "Queso extra",
+        "Extra cheese",
         "3.00",
         { unitPrice: "1.24", priceQuantity: "0.050", base: "2.48", tax: "0.52", rate: "21.00" },
         { parentLineNo: 1 },
@@ -298,18 +306,17 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "4.90",
   ),
   "full-weighed-and-counted": fullInvoice(
-    [BLOODY_MARY, JAMON, AGUA],
+    [BLOODY_MARY, HAM, WATER],
     [{ rate: "10.00", base: "73.64", tax: "7.36" }],
     "81.00",
     "19.00",
   ),
-  // J1: 0.123 kg of jamón at 24,00 €/kg, 10% off its own, beside a counted dish.
   "full-weighed-own-discount": fullInvoice(
     [
       BLOODY_MARY,
       filed(
         "0.123",
-        "Jamón ibérico",
+        "Iberian ham",
         "2.65",
         { unitPrice: "19.62", base: "2.41", tax: "0.24", rate: "10.00" },
         {
@@ -324,13 +331,12 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "17.65",
     "2.35",
   ),
-  // J2: the same jamón comped.
   "full-weighed-comped": fullInvoice(
     [
       BLOODY_MARY,
       filed(
         "0.123",
-        "Jamón ibérico",
+        "Iberian ham",
         "0.00",
         { unitPrice: "0.00", base: "0.00", tax: "0.00", rate: "10.00" },
         {
@@ -345,12 +351,11 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "15.00",
     "5.00",
   ),
-  // S1: the burger's own 10%, then 10% off the whole bill; the croquetas are one dish split in two.
   "full-own-and-bill-discount": fullInvoice(
     [
       filed(
         "1",
-        "Hamburguesa",
+        "Burger",
         "9.72",
         { unitPrice: "8.03", base: "8.03", tax: "1.69", rate: "21.00" },
         {
@@ -361,14 +366,14 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
       ),
       filed(
         "2",
-        "Croquetas",
+        "Croquettes",
         "6.00",
         { unitPrice: "2.48", base: "4.96", tax: "1.04", rate: "21.00" },
         { listGross: "6.66", listUnitPriceGross: "3.33", dishFamily: 1 },
       ),
       filed(
         "0.123",
-        "Jamón ibérico",
+        "Iberian ham",
         "2.66",
         { unitPrice: "19.67", base: "2.42", tax: "0.24", rate: "10.00" },
         { listGross: "2.95", listUnitPriceGross: "24.00" },
@@ -383,14 +388,14 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
       ),
       filed(
         "1",
-        "Aceitunas",
+        "Olives",
         "1.36",
         { unitPrice: "1.12", base: "1.12", tax: "0.24", rate: "21.00" },
         { listGross: "1.50", listUnitPriceGross: "1.50", parentLineNo: 4 },
       ),
       filed(
         "1",
-        "Croquetas",
+        "Croquettes",
         "2.99",
         { unitPrice: "2.47", base: "2.47", tax: "0.52", rate: "21.00" },
         { listGross: "3.33", listUnitPriceGross: "3.33", dishFamily: 1 },
@@ -404,12 +409,11 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "9.18",
     { billAdjustments: [{ kind: "discount", percentBp: 1000, amount: "3.42" }] },
   ),
-  // S9: the Rioja comped, then 10% off the whole bill.
   "full-comp-and-bill-discount": fullInvoice(
     [
       filed(
         "1",
-        "Rioja crianza",
+        "Aged red wine",
         "0.00",
         { unitPrice: "0.00", base: "0.00", tax: "0.00", rate: "21.00" },
         {
@@ -420,7 +424,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
       ),
       filed(
         "1",
-        "Pan de pueblo",
+        "Country bread",
         "2.25",
         { unitPrice: "2.05", base: "2.05", tax: "0.20", rate: "10.00" },
         { listGross: "2.50", listUnitPriceGross: "2.50" },
@@ -449,8 +453,8 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
       ],
       lines: [
         line("1", "Bloody Mary", "15.00"),
-        line("0.35", "Jamón ibérico", "42.00", "kg"),
-        line("2", "Refresco para llevar", "26.10"),
+        line("0.35", "Iberian ham", "42.00", "kg"),
+        line("2", "Takeaway soft drink", "26.10"),
       ],
       tender: { method: "cash", change: "6.90" },
     },
@@ -461,13 +465,11 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
       ...MOCKUP.result,
       total: "12345.67",
       vatBreakdown: [{ rate: "10.00", base: "11223.34", tax: "1122.33" }],
-      lines: [line("1", "Banquete de boda", "12345.67")],
+      lines: [line("1", "Wedding banquet", "12345.67")],
       tender: { method: "cash", change: "0.00" },
     },
   },
   "full-invoice": { ...FULL, surface: "thermal" },
-  // A Free Burger and a whole-price amount on the Bottle print as 100%; the Bread's amount took
-  // only what its 50% left, so it prints plain.
   "simplified-full-comps": {
     ...MOCKUP,
     result: {
@@ -476,17 +478,17 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
       vatBreakdown: [{ rate: "10.00", base: "0.00", tax: "0.00" }],
       lines: [
         {
-          ...line("1", "Hamburguesa", "0.00"),
+          ...line("1", "Burger", "0.00"),
           listGross: "12.00",
           adjustments: [{ kind: "comp", amount: "12.00" }],
         },
         {
-          ...line("1", "Rioja crianza", "0.00"),
+          ...line("1", "Aged red wine", "0.00"),
           listGross: "30.00",
           adjustments: [{ kind: "comp", amount: "30.00" }],
         },
         {
-          ...line("1", "Pan de pueblo", "0.00"),
+          ...line("1", "Country bread", "0.00"),
           listGross: "2.50",
           adjustments: [
             { kind: "discount", percentBp: 5000, amount: "1.25" },
@@ -531,7 +533,7 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
     ...MOCKUP,
     result: {
       ...MOCKUP.result,
-      lines: [BLOODY_MARY, JAMON, AGUA],
+      lines: [BLOODY_MARY, HAM, WATER],
       vatBreakdown: [{ rate: "10.00", base: "73.64", tax: "7.36" }],
       total: "81.00",
       tender: { method: "cash", change: "19.00" },
