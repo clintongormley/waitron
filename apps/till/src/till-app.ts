@@ -567,6 +567,7 @@ const TABLE_REFUSALS = new Set([
   "bill.refund_in_progress",
   "working_order.not_open",
   "storage.disk_full",
+  "clock.behind_chain",
 ]);
 
 /** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
@@ -839,6 +840,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "department.operation_description_required",
   "sale.department_missing",
   "storage.disk_full",
+  "clock.behind_chain",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -912,7 +914,8 @@ function discardError(error: unknown): CounterError {
   return code === "fiscal.fingerprint_mismatch" ||
     code === "order.payment_in_flight" ||
     code === "bill.refund_in_progress" ||
-    code === "storage.disk_full"
+    code === "storage.disk_full" ||
+    code === "clock.behind_chain"
     ? { code }
     : "held.stale";
 }

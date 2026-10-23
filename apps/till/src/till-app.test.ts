@@ -7259,6 +7259,27 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "park-order refused for a clock behind the last sale says it can't be recorded (%s)",
+    async (locale) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+        parkOrder: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+      });
+      const c = await toCounter(el);
+      expect(currentLocale()).toBe(locale);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "park-order", { label: "Table 4" });
+      await flush(el);
+
+      const shown = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
+      expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+      expect(shown).not.toBe(codeMessage("server.internal", locale));
+    },
+  );
+
   it("a failed parkOrder keeps the counter and the basket, showing a non-fatal error", async () => {
     const { el } = await mountApp({
       parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
@@ -8006,6 +8027,26 @@ describe("till-app", () => {
 
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
   });
+
+  it.each(["en-GB", "es-ES"])(
+    "discard-order refused for a clock behind the last sale says it can't be recorded (%s)",
+    async (locale) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+        abandonWorkingOrder: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+        listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+      });
+      const c = await toCounter(el);
+      expect(currentLocale()).toBe(locale);
+
+      emit(c, "discard-order", { id: "wo-1" });
+      await flush(el);
+
+      const shown = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
+      expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+      expect(shown).not.toBe(codeMessage("server.internal", locale));
+    },
+  );
 
   it("discard-order: refused for an order still holding money, says to give it back, and refreshes", async () => {
     const { el } = await mountApp({
@@ -11675,6 +11716,28 @@ describe("till-app", () => {
       expect(currentApi.placeOrder).toHaveBeenCalledOnce();
       expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
     });
+
+    it.each(["en-GB", "es-ES"])(
+      "place-order refused for a clock behind the last sale says it can't be recorded (%s)",
+      async (locale) => {
+        const { el } = await mountApp({
+          zonePolicy: { serviceMode: "ticket_then_pay" },
+          getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", locale }),
+          placeOrder: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+        });
+        const c = await toCounter(el);
+        expect(currentLocale()).toBe(locale);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+
+        emit(c, "place-order");
+        await flush(el);
+
+        const shown = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
+        expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+        expect(shown).not.toBe(codeMessage("server.internal", locale));
+      },
+    );
 
     it("place: a PERMANENT fiscal refusal surfaces place.refused, which says nothing about money", async () => {
       const { el } = await mountApp({
