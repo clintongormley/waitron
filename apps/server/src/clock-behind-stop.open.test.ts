@@ -85,7 +85,7 @@ describe("while the latest record is a day after the box's clock", () => {
   let settledId = "";
 
   // Every case reads NOW, the latest record's time, and builds each clock from it. Only the setup
-  // and the bill for checking record, the second at NOW, so NOW never moves ahead of the real clock.
+  // and the invoice of case 3 record, the second at NOW, so NOW never moves ahead of the real clock.
   useVenueDb({
     resetPerTest: false,
     migrations: MIGRATIONS,
@@ -102,9 +102,32 @@ describe("while the latest record is a day after the box's clock", () => {
   const nowMs = () => latest(venue.db)!.at.getTime();
   const records = () => count(venue.db, "registros_facturacion");
 
+  /** A cash sale on the case's clock is refused and writes nothing, so the stop is in force. */
+  async function expectSaleStopped(ms: number): Promise<void> {
+    const record = latest(venue.db)!;
+    const before = records();
+    const id = randomUUID();
+
+    const refused = await cashSale(open, venue.appAt(clockAt(ms)), id);
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual({
+      code: "clock.behind_chain",
+      params: {
+        clockAt: new Date(ms).toISOString(),
+        offsetMinutes: 60,
+        lastRecordAt: record.at.toISOString(),
+        lastRecordOffsetMinutes: record.offsetMinutes,
+      },
+    });
+    expect(count(venue.db, "working_orders", sql`id = ${id}`)).toBe(0);
+    expect(records()).toBe(before);
+  }
+
   it("seats a table, saves a draft and sends it to the kitchen on a bill with no payments", async () => {
     const behind = nowMs() - DAY;
     const app = venue.appAt(clockAt(behind));
+    await expectSaleStopped(behind);
     const before = records();
     const { id: tableId } = await inTx(venue, (tx) =>
       createTable(tx, venue.cfg, {
@@ -155,6 +178,7 @@ describe("while the latest record is a day after the box's clock", () => {
 
   it("clocks a person in and out at the box's clock", async () => {
     const behind = nowMs() - DAY;
+    await expectSaleStopped(behind);
     const clock = (path: "in" | "out", ms: number, expectedEntryId: string | null) =>
       send(
         venue.appWith({ clock: clockAt(ms), workforceEnabled: true }),
@@ -180,7 +204,7 @@ describe("while the latest record is a day after the box's clock", () => {
     ]);
   });
 
-  it("prints a bill for checking and reprints a receipt", async () => {
+  it("prints the original of an unpaid invoice filed before the stop, and reprints a receipt", async () => {
     const issuedAt = clockAt(nowMs());
     const billId = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: issuedAt };
@@ -194,11 +218,12 @@ describe("while the latest record is a day after the box's clock", () => {
     await placeOrder(deps, venue.cfg, billId, venue.operatorId);
     const behind = nowMs() - DAY;
     const app = venue.appAt(clockAt(behind));
+    await expectSaleStopped(behind);
     const before = records();
     const jobs = count(venue.db, "print_jobs");
 
-    const checking = await send(app, venue.cookie, "POST", `/api/sales/${billId}/receipt`, {});
-    expect(checking.status).toBe(200);
+    const original = await send(app, venue.cookie, "POST", `/api/sales/${billId}/receipt`, {});
+    expect(original.status).toBe(200);
     expect(count(venue.db, "print_jobs")).toBe(jobs + 1);
 
     const reprinted = await send(app, venue.cookie, "POST", `/api/sales/${settledId}/reprint`, {});
