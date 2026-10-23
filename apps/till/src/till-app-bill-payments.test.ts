@@ -1984,6 +1984,31 @@ describe("till-app: a bill payment's refusals and retries", () => {
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full"));
   });
 
+  it("a cash contribution refused for a clock behind the last sale shows both times", async () => {
+    setLocale("en-GB");
+    const takeBillPayment = vi.fn().mockRejectedValue({
+      code: "clock.behind_chain",
+      clockAt: "2025-03-14T08:12:00.000Z",
+      offsetMinutes: 60,
+      lastRecordAt: "2026-10-18T21:40:00.000Z",
+      lastRecordOffsetMinutes: 120,
+      status: 409,
+    });
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(
+      t("sale.clock_behind_chain")
+        .replace("{clockAt}", "14/03/2025 09:12")
+        .replace("{lastRecordAt}", "18/10/2026 23:40"),
+    );
+  });
+
   it("says the operator may not take payments when the server refuses them the payment permission", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue({
       code: "authorization.not_permitted",

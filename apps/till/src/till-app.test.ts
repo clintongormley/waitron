@@ -10282,6 +10282,58 @@ describe("till-app", () => {
       });
       expect(text).toContain(codeMessage("clock.unusable"));
     });
+
+    const clockBehind = {
+      code: "clock.behind_chain",
+      clockAt: "2025-03-14T08:12:00.000Z",
+      offsetMinutes: 60,
+      lastRecordAt: "2026-10-18T21:40:00.000Z",
+      lastRecordOffsetMinutes: 120,
+      status: 409,
+    };
+    const clockBehindSentence = () =>
+      t("sale.clock_behind_chain")
+        .replace("{clockAt}", "14/03/2025 09:12")
+        .replace("{lastRecordAt}", "18/10/2026 23:40");
+
+    it("a cash sale refused for a clock behind the last sale shows both times, each in its own offset", async () => {
+      expect(currentLocale()).toBe("es-ES");
+      const text = await payCash(clockBehind);
+      expect(text).toContain(clockBehindSentence());
+      expect(text).not.toContain(codeMessage("clock.behind_chain"));
+    });
+
+    it("a reader card pay refused for a clock behind the last sale shows both times", async () => {
+      const text = await payReader(clockBehind);
+      expect(text).toContain(clockBehindSentence());
+    });
+
+    it.each([
+      [{ lastRecordAt: undefined }],
+      [{ lastRecordAt: "not a time" }],
+      [{ lastRecordOffsetMinutes: Number.NaN }],
+      [{ clockAt: "not a time" }],
+      [{ offsetMinutes: "60" }],
+    ])(
+      "a clock behind the last sale without a usable reading (%o) shows the code table's sentence",
+      async (broken) => {
+        const text = await payCash({ ...clockBehind, ...broken });
+        expect(text).toContain(codeMessage("clock.behind_chain"));
+        expect(text).not.toContain(t("sale.clock_behind_chain").slice(0, 20));
+      },
+    );
+
+    it("a card charged as the clock stop begins says not to charge again, and to press Pay once fixed", async () => {
+      const text = await payReader({
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "clock_behind_chain",
+        status: 507,
+      });
+      expect(text).toContain(t("sale.charged_clock_behind"));
+      expect(text).not.toContain(t("sale.charged_disk_full"));
+      expect(text).not.toContain(codeMessage("sale.charged_not_recorded"));
+    });
   });
 
   it("still says to retry when the refusal is an ordinary one", async () => {
@@ -12055,6 +12107,27 @@ describe("till-app", () => {
             { method: "cash", amount: "30.00" },
           ),
         ).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
+      });
+
+      it("a payment refused for a clock behind the last sale shows both times", async () => {
+        expect(currentLocale()).toBe("es-ES");
+        expect(
+          await findBillRefused(
+            {
+              code: "clock.behind_chain",
+              clockAt: "2025-03-14T08:12:00.000Z",
+              offsetMinutes: 60,
+              lastRecordAt: "2026-10-18T21:40:00.000Z",
+              lastRecordOffsetMinutes: 120,
+              status: 409,
+            },
+            { method: "cash", amount: "30.00" },
+          ),
+        ).toBe(
+          t("sale.clock_behind_chain")
+            .replace("{clockAt}", "14/03/2025 09:12")
+            .replace("{lastRecordAt}", "18/10/2026 23:40"),
+        );
       });
     });
     it("A773 Find a bill ignores a collection answer from a replaced API", async () => {

@@ -1358,6 +1358,10 @@ export const en = {
     "Card charged, but the sale is not recorded: the box is out of space. Do not charge again; tell a manager.",
   "sale.clock_unusable":
     "Sale not recorded: the box's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
+  "sale.clock_behind_chain":
+    "Sale not recorded: the box's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open; tell a manager. If you already charged on another card machine, don't charge again: record it once this is fixed.",
+  "sale.charged_clock_behind":
+    "Card charged, but the sale is not recorded: the box's clock reads earlier than its last sale. Don't charge again. Once it is fixed, press Pay: it is recorded without charging again.",
   "take_payment.not_permitted": "You do not have permission to take payments",
   "reprint.error": "Could not reprint the receipt, try again",
   "reprint_language.title": "Reprint receipt",
@@ -3068,6 +3072,10 @@ export const es: Record<StringKey, string> = {
     "Cobrado con tarjeta, pero la venta no se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar; avisa al encargado.",
   "sale.clock_unusable":
     "Venta no registrada: la hora del equipo es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  "sale.clock_behind_chain":
+    "Venta no registrada: la hora del equipo ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto; avisa al encargado. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
+  "sale.charged_clock_behind":
+    "Cobrado con tarjeta, pero la venta no se ha registrado: la hora del equipo es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, pulsa Cobrar: se registra sin cobrar otra vez.",
   "take_payment.not_permitted": "No tienes permiso para cobrar",
   "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
   "reprint_language.title": "Reimprimir recibo",

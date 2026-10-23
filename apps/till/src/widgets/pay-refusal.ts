@@ -1,7 +1,14 @@
 import { formatMoney } from "@waitron/shared";
 import type { BillUnsent } from "../api/client.js";
 import { billUnsentText } from "../state/bill-unsent.js";
-import { clockReadingOf, clockUnusableText, currentLocale, t } from "../i18n/t.js";
+import {
+  clockBehindOf,
+  clockBehindText,
+  clockReadingOf,
+  clockUnusableText,
+  currentLocale,
+  t,
+} from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { isTakePaymentRefusal } from "../state/bill-payment.js";
 
@@ -27,6 +34,9 @@ export interface PayRefusal {
   /** A `clock.unusable`'s reading of the box's clock. */
   clockAt?: string;
   offsetMinutes?: number;
+  /** A `clock.behind_chain`'s latest record. */
+  lastRecordAt?: string;
+  lastRecordOffsetMinutes?: number;
   /** A `sale.charged_not_recorded`'s cause. */
   reason?: string;
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
@@ -40,8 +50,8 @@ function chargeableText(amount: string): string {
 /** What a pay sheet says of a refusal: one of the app's own, the most a card can be charged when
  * the venue takes no tips, the till's own sentence for a device not set up for the card reader, for
  * a person who may not take payments, for a full disk, for a card charged but not recorded on a full
- * disk, or for a clock it cannot trust with the date it reads, or the server's code in its own
- * words. */
+ * disk or a clock behind the last sale, for a clock it cannot trust with the date it reads, or for
+ * a clock behind the last sale with both times, or the server's code in its own words. */
 export function refusalText(refusal: PayRefusal): string {
   if (refusal.text !== undefined) return refusal.text;
   if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);
@@ -74,8 +84,14 @@ export function refusalText(refusal: PayRefusal): string {
     const reading = clockReadingOf(refusal);
     if (reading !== undefined) return clockUnusableText(reading.clockAt, reading.offsetMinutes);
   }
+  if (refusal.code === "clock.behind_chain") {
+    const behind = clockBehindOf(refusal);
+    if (behind !== undefined) return clockBehindText(behind);
+  }
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "disk_full")
     return t("sale.charged_disk_full");
+  if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_behind_chain")
+    return t("sale.charged_clock_behind");
   if (refusal.code === "device.forbidden_action" && refusal.action === "pay")
     return t("card_reader.not_set_up");
   if (refusal.code === "bill.tip_not_allowed" && refusal.chargeable !== undefined)
