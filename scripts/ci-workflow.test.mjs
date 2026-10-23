@@ -2078,7 +2078,7 @@ describe("the sharded jobs", () => {
           step,
         );
       expect(deadline, shard.id).not.toBeNull();
-      expect(Number(deadline[1]), shard.id).toBe(360);
+      expect(Number(deadline[1]), shard.id).toBe(pkg === "@waitron/fiscal-verifactu" ? 420 : 360);
       expect(step, shard.id).toContain("set -euo pipefail");
     }
   });

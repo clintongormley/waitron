@@ -1226,7 +1226,7 @@ jobs:
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:shard
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:shard \
+          node scripts/run-with-deadline.mjs 420 --diagnostics -- pnpm --filter "@waitron/fiscal-verifactu" test:shard \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"

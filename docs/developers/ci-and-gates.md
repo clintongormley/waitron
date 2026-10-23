@@ -611,9 +611,9 @@ A1041's baseline was main run
 The 29 browser files accounted for 92.790 file-seconds and the slowest Node file for 61.449.
 File-seconds include overlapping execution and do not sum to wall time.
 Main run [40022785909](https://github.com/clintongormley/waitron/actions/runs/40022785909/job/120651571663)
-reached the former 420-second command deadline. The split retains the four-worker outer
-cap, sequential browser files and project ordering. Its command deadline is 360 seconds,
-matching the other browser shards; the four-minute target concerns the whole job.
+reached the 420-second command deadline. The split retains the four-worker outer
+cap, sequential browser files, project ordering and 420-second command deadline.
+The four-minute target concerns the whole job.
 
 The workflow guards in `scripts/ci-workflow.test.mjs` read workflow and manifest text;
 they do not establish runtime or coverage completeness. Use the shard and merge results
