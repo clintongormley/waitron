@@ -587,11 +587,11 @@ until A977).
   (`apps/server/scripts/testing/venue.ts`) now uses English location, operation, street and
   administrator text (#2004). The demo-test provisioner
   (`apps/server/scripts/demo-seed/testing/provision-venue.ts`) has English location, street and
-  administrator labels. Its Spanish operation description remains open because
-  `seed-sales.golden.test.ts` compares it with the filed rows in
-  `spanish-practice-sales.golden.json`. The owner allowed it on 2026-10-23: translate the
-  description and update only the description fields in that golden file, after measuring the
-  row diff; a diff touching any other field goes back to the owner. The bill, party, adjustment, split-extras, boot, stream and clock
+  administrator and operation labels. Under the owner's 2026-10-23 approval, its practice-sales
+  golden now uses the English operation description. A disposable capture compared every field
+  in the five recorded tables: only the 31 `descripcion_operacion` values differed; all other
+  fields and row counts matched. The golden test itself is unchanged. The bill, party, adjustment,
+  split-extras, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults. Screen tests take translated expectations from their strings file.
   Keep accent tests, AEAT names and official text. Later cleanup goes package by package from
