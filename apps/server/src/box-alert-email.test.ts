@@ -13,11 +13,21 @@ const CASES = CODES.flatMap((code) => LANGUAGES.map((language) => [code, languag
 
 describe("boxEmailMessage", () => {
   it.each(CASES)("words %s in %s with the venue's name", (code, language) => {
-    const message = boxEmailMessage(code, language, "Corner Bistro");
+    const message = boxEmailMessage(code, language, "Corner Bistro", {
+      clockAt: "2025-03-14T08:12:00.000Z",
+      offsetMinutes: 60,
+      lastRecordAt: "2026-10-18T21:40:00.000Z",
+      lastRecordOffsetMinutes: 120,
+    });
     const words = BOX_EMAIL_WORDS[code][language];
+    const filled = (template: string) =>
+      template
+        .replaceAll("{venue}", "Corner Bistro")
+        .replaceAll("{clockAt}", "14/03/2025 09:12")
+        .replaceAll("{lastRecordAt}", "18/10/2026 23:40");
     expect(message).toEqual({
-      subject: words.subject.replaceAll("{venue}", "Corner Bistro"),
-      text: words.text.replaceAll("{venue}", "Corner Bistro"),
+      subject: filled(words.subject),
+      text: filled(words.text),
     });
     expect(message.subject).not.toContain("{");
     expect(message.text).not.toContain("{");
@@ -42,7 +52,7 @@ describe("boxEmailMessage", () => {
   it("tells the storage codes from the rest", () => {
     expect(isBoxEmailCode("clock.unusable")).toBe(true);
     expect(isBoxEmailCode("fiscal.records_unsent")).toBe(false);
-    expect(isBoxEmailCode("clock.behind_chain")).toBe(false);
+    expect(isBoxEmailCode("clock.behind_chain")).toBe(true);
     expect(STORAGE_EMAIL_CODES).toEqual(["storage.space_low", "storage.disk_full"]);
   });
 });

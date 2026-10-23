@@ -393,7 +393,7 @@ describe("startBoxEmailDuty", () => {
   it("emails no module notice without email words", async () => {
     const d = duty();
     d.state.notices = {
-      notices: [notice("fiscal.records_unsent"), notice("clock.behind_chain")],
+      notices: [notice("fiscal.records_unsent"), notice("printer.jobs_waiting")],
       unavailable: [],
     };
     await d.tick();
