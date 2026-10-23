@@ -29,5 +29,6 @@ export async function setStationPrinting(
       );
     return;
   }
-  await update;
+  const updated = await update.returning({ id: kitchenStations.id });
+  if (updated.length === 0) throw new Error("setStationPrinting: the database has no station yet");
 }

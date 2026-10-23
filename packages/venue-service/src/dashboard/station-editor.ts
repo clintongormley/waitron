@@ -22,6 +22,7 @@ import { codeOf } from "@waitron/dashboard-kit";
 import {
   isStationColour,
   isTicketGrouping,
+  TICKET_GROUPINGS,
   type StationColour,
   type StationThresholds,
   type TicketGrouping,
@@ -210,10 +211,7 @@ function movedOptions() {
 }
 
 function groupingOptions() {
-  return [
-    { value: "combined", label: t("prep.ticket_grouping.combined") },
-    { value: "separate", label: t("prep.ticket_grouping.separate") },
-  ];
+  return TICKET_GROUPINGS.map((value) => ({ value, label: t(`prep.ticket_grouping.${value}`) }));
 }
 
 function timingDraft(station: StationThresholds) {
