@@ -281,9 +281,10 @@ export interface FiscalBackend {
     witnesses: readonly ClockWitness[],
   ): Promise<ClockStopState | null>;
 
-  /** A manager's restart of payments for the stop `recordId` names. A press on a record a restart
-   * already names and still covers answers that restart, `replayed: true`; otherwise throws this
-   * regime's refusal unless `clockStopState` would offer it, or the reading is unusable. */
+  /** A manager's restart of payments for the stop `recordId` names. A reading the regime cannot
+   * use is refused first. Otherwise a press on a record a restart already names and still covers
+   * answers that restart, `replayed: true`; any other press throws this regime's refusal unless
+   * `clockStopState` would offer it. */
   restartAfterClockStop?(
     tx: Transaction,
     input: ClockRestartRequest,
