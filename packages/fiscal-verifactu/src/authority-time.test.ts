@@ -66,7 +66,7 @@ describe("reading the tax authority's time from an injected request", () => {
   it("an environment with no configured host answers null without asking anything", async () => {
     let asked = 0;
     expect(
-      await readAuthorityTime("https://attacker.invalid" as "production", {
+      await readAuthorityTime("staging" as "production", {
         request: async () => {
           asked++;
           return new Response(null, { headers: { Date: DATE } });
@@ -188,8 +188,9 @@ describe("reading the tax authority's time from an injected request", () => {
     ["the steady clock ran backwards", { wall: [NOW, NOW], monotonic: [1000, 900] }],
     ["the round trip outlasted the deadline", { wall: [NOW, NOW + 6000], monotonic: [0, 6000] }],
     ["the wall clock jumped", { wall: [NOW, NOW + 3000], monotonic: [1000, 1200] }],
-    ["the wall clock is unreadable", { wall: [NaN, NaN], monotonic: [1000, 1200] }],
-    ["the steady clock is unreadable", { wall: [NOW, NOW], monotonic: [1000, Infinity] }],
+    ["the first wall reading is unreadable", { wall: [NaN, NOW], monotonic: [1000, 1200] }],
+    ["the last wall reading is unreadable", { wall: [NOW, NaN], monotonic: [1000, 1200] }],
+    ["the steady clock is unreadable", { wall: [NOW, NOW], monotonic: [1000, NaN] }],
   ])("answers null when %s", async (_label, readings) => {
     const wall = [...readings.wall];
     const monotonic = [...readings.monotonic];
