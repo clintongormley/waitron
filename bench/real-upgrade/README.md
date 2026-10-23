@@ -105,6 +105,121 @@ The contracts accept parsed objects and reject unknown keys, versions, duplicate
 fixture IDs, duplicate inventory paths, invalid hashes and nonpositive resource
 limits. The future raw JSON ingestion boundary must reject duplicate JSON keys
 before they become an object. These parsers do not read JSON bytes or archives.
-They do not validate facts or coverage: cut 2 owns `parseFacts` together with its
-exact typed fields, schema and issued-invoice coverage model. No placeholder facts
-parser accepts unvalidated data here.
+Use the comparison interfaces below for facts and coverage. No raw JSON-byte or
+archive reader is installed by these first two cuts.
+
+## Compare original records before making another sale
+
+Cut 2 adds pure comparison functions. You supply independently frozen expected
+facts and a later extraction; the functions neither open a database nor update
+expectations. The tests use invented records, including a 350-thousandth quantity,
+770-cent cheese line and 1,353-cent invoice. They establish comparator behaviour,
+not a qualifying historical capture or upgrade.
+
+Run the accepting examples and deliberate differences:
+
+```sh
+pnpm exec vitest run scripts/a799/compare.test.mjs scripts/a799/schema.test.mjs
+```
+
+`parseFacts(value)` and `validateCoverage(facts)` live in `scripts/a799/facts.mjs`.
+The parser checks the complete version-1 object shape, typed values and unique
+row, journal, schema, file and relationship identities. Coverage is a separate
+check: it requires nonempty referenced sales, fiscal, people, menu and event sets,
+plus an issued F1 whose number and original recipient name/address match its
+recorded row. Fiscal coverage must refer to a table declared fiscal. These are
+declarations, not proof that the old product actually wrote those records. The
+later reviewed historical reader must establish extraction completeness and the
+meaning of each scenario reference.
+
+`encodeTyped(storageType, rawBytes)` preserves SQLite's storage classes. Pass an
+integer as an exact decimal string within the signed 64-bit range, text/BLOB as
+`Uint8Array`, REAL as eight big-endian IEEE-754 bytes, and null as `null`. Text and
+BLOB become canonical base64; REAL keeps its hexadecimal bits, including negative
+zero. Non-finite REAL values and ambiguous integer spellings are refused. No
+money, quantity, decimal-text or timestamp conversion happens in the comparator.
+
+The facts object has these required fields:
+
+- `version: 1`, `fixtureId`, `rows: {table, key: Typed[], fields}[]` and `schema`.
+  Field values use the typed representation above. Keys preserve their original
+  types and values; object property order does not change their identity.
+- `journals`, using cut 1's per-set captured journal contract, and
+  `files: {path, sha256, bytes, mode}[]`. Paths are relative, without aliases.
+- `relationships: {id, fromTable, fromKey, fromColumns, toTable, toKey,
+toColumns}[]`. A nullable relationship uses `toKey: null`. Tuple column order
+  remains significant. Both missing and unexpected identities are compared.
+- `coverage`, with reference arrays named `sales`, `fiscal`, `people`, `menus`,
+  `events` and `issuedF1`. An F1 reference additionally names `typeField`,
+  `numberField`, `nameField`, `addressField` and their original typed `number`,
+  `name` and `address`. `optional: {module, state, tables}` distinguishes
+  `disabled-retained` from `never-enabled`; the latter supplies no retained-data
+  coverage. A retained table must be declared disabled and have recorded rows.
+- `identity`, with typed `node`, `keyHash`, `sif`, `installation`, `series`,
+  `nextNumber`, `fiscalHead` and `workforceHead`. Use a fingerprint for a key,
+  never its private bytes.
+- `operationalRules: {table, key, field, before, after, cause,
+approvalReceipt}[]`, identifying each permitted read/session effect exactly.
+  The original field must match `before`. Fiscal and disabled tables cannot use
+  these rules; neighbouring fields remain exact.
+- `newSale`, with independently specified typed `quantity`, `unitPrice`,
+  `total`, `tender` and `change`. Comparing this declaration performs no sale.
+
+`compareFacts(expected, actual, mappings = [], context?)` validates expected
+coverage and returns `{ok, diffs, comparedByKind}`. Every difference names its
+subject, original key, field, expected/actual values and cause. Row order is
+irrelevant; column order, journal row order and relationship tuple order remain
+significant. Coverage arrays remain exact declarations. Counts describe the
+comparison work, never replace a field assertion.
+
+## Keep protection definitions exact
+
+`parseSchema` and `compareSchema` are exported from `scripts/a799/schema.mjs`.
+Every object carries `kind`, `name`, `table`, `module`, `protection` and `rawSql`.
+Protection is `ordinary`, `fiscal`, `disabled` or separately accounted `engine`.
+Each kind additionally requires:
+
+- A table: `columns: {name, type, notNull, defaultSql, primaryKey}[]`,
+  `keys: {name, kind, columns}[]`, `checks: string[]` and
+  `foreignKeys: {columns, target, targetColumns, onUpdate, onDelete, match,
+deferred}[]`. Key kind is `primary` or `unique`; `primaryKey` is the column's
+  nonnegative ordinal, and a missing default is `null`.
+- An index: `unique`, `expressions: string[]` and `predicate: string|null`.
+- A trigger: `target` and full `body`; a view: full `body`.
+
+SQL comparisons tokenize whitespace outside quotes while keeping quoted content,
+comments, numbers and operator boundaries exact. Raw SQL stays in each input;
+SQL differences report token arrays. This is a lexical comparison, not a SQL
+validity check or proof that structured declarations describe the raw SQL. Later
+stopped inspection must supply both from the actual schema.
+
+## Review each intentional difference
+
+Nonempty mappings require an explicit fourth argument to both comparison
+functions. `validateMappings(mappings, context)` is exported from
+`scripts/a799/compare.mjs`. The context is
+`{sourceEpoch, sourceSha, candidateSha, migrations: {hash, module}[],
+disabledModules: string[]}`. It names the reviewed applicable migration/module
+pairs; the pure validator cannot authenticate a receipt or inspect packaged SQL.
+
+Each mapping requires `id`, `sourceEpoch`, `sourceSha`, `candidateSha`,
+`migrationHash`, `module`, `object: {subject, key}`, `field`, `before`, `after`,
+`exactTransform`, `reason` and `approvalReceipt`. It must match the context exactly.
+Only these transformations are supported:
+
+- `add-null-field`: subject `rows`, key is an existing ordinary table, field is
+  absent on every old row, `before: null`, `after: {kind: "null"}`.
+- `rename-object`: subject `rows`, field `table`, with the old/new table names as
+  `before`/`after`. Original row keys and values stay exact. Relationship endpoints
+  and scenario references follow the rename. A colliding table is refused.
+- `replace-exact`: subject `schema`, key `kind:name`, field `object`, with complete
+  old and new schema objects as `before`/`after`. The original definition must
+  match exactly. A table rename or added column also needs its independent schema
+  mapping; a row mapping does not generate expected SQL.
+
+Mappings cannot transform fiscal or disabled tables, apply numeric/time tolerance,
+exclude wildcard sets or excuse an absent target. Descriptor IDs and targets must
+be unique. Supporting modules keep schema parsing, mapping admission and keyed
+comparison shared between the two public comparison functions. Future execution
+still needs independently reviewed read specifications, actual images and sealed
+facts, containment, issued-F1 history and the remaining five cuts.
