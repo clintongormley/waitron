@@ -14,7 +14,6 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin, persons, startManagementSession, type PersonRoleValue } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
 import {
@@ -39,6 +38,7 @@ import { createStaffNoticeLog } from "./staff-notices.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { systemClock } from "./till-backend.js";
+import { writeRefusingDb } from "./testing/write-refusing-db.js";
 import "./errors.js";
 
 const MINUTE = 60_000;
@@ -552,28 +552,6 @@ it("shows no proof, then the two tills that proved the clock, then who restarted
   });
 });
 
-/** A full disk that refuses any write turn which changed a row; a turn that only reads commits. */
-function writeRefusingDb(): Database {
-  const changes = () => venue.db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
-  return new Proxy(venue.db, {
-    get(target, prop) {
-      if (prop === "withWriteLock") {
-        return <T>(body: () => Promise<T>) =>
-          target.withWriteLock(async () => {
-            const before = changes();
-            const value = await body();
-            if (changes() !== before) throw new AppError("storage.disk_full", {});
-            return value;
-          });
-      }
-      const value = Reflect.get(target, prop, target) as unknown;
-      return typeof value === "function"
-        ? (value as (...args: unknown[]) => unknown).bind(target)
-        : value;
-    },
-  });
-}
-
 it("reads the clock stop on a full disk with a change waiting, and leaves the change waiting", async () => {
   const stop = await stoppedBox(10 * MINUTE);
   for (const cookie of [venue.cookie, venue.cookie2])
@@ -584,7 +562,7 @@ it("reads the clock stop on a full disk with a change waiting, and leaves the ch
   const waiting = () =>
     venue.db.all<{ id: string }>(sql`select id from change_log where id = 'clock-stop-1'`).length;
   try {
-    const db = writeRefusingDb();
+    const db = writeRefusingDb(venue.db);
     await expect(withTransaction(db, async () => {})).rejects.toMatchObject({
       code: "storage.disk_full",
     });
@@ -600,4 +578,55 @@ it("reads the clock stop on a full disk with a change waiting, and leaves the ch
   } finally {
     venue.db.run(sql`delete from change_log where id = 'clock-stop-1'`);
   }
+});
+
+it("collects the clock witnesses before it takes the box's reading", async () => {
+  const steps: string[] = [];
+  const base = systemClock();
+  const read = clockStopReader({
+    backend: { clockStopState: async () => null },
+    witnesses: () => {
+      steps.push("witnesses");
+      return [];
+    },
+    clock: {
+      now: () => {
+        steps.push("reading");
+        return base.now();
+      },
+    },
+  });
+
+  expect(await read(venue.db)).toBeNull();
+  expect(steps).toEqual(["witnesses", "reading"]);
+});
+
+it("shows a restart whose person has no row with no name", async () => {
+  const state = {
+    clockAt: "2026-10-22T09:00:00.000Z",
+    offsetMinutes: 60,
+    lastRecordAt: "2026-10-22T09:10:00.000Z",
+    lastRecordOffsetMinutes: 60,
+    recordId: "record-1",
+    gapMs: 10 * MINUTE,
+    restart: {
+      personId: randomUUID(),
+      restartedAt: "2026-10-22T09:00:00.000Z",
+      clockAt: "2026-10-22T09:00:00.000Z",
+    },
+    offer: "restarted" as const,
+    proof: { authority: null, devices: [] },
+    contrary: { authority: null, devices: [] },
+  };
+  const read = clockStopReader({
+    backend: { clockStopState: async () => state },
+    witnesses: () => [],
+    clock: systemClock(),
+  });
+
+  expect((await read(venue.db))?.restart).toEqual({
+    personName: null,
+    restartedAt: "2026-10-22T09:00:00.000Z",
+    clockAt: "2026-10-22T09:00:00.000Z",
+  });
 });

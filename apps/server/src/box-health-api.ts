@@ -1,16 +1,15 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { ClockWitness, FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { authorizeManager, persons } from "@waitron/identity";
+import { authorizeManager } from "@waitron/identity";
 import {
   createErrorBoundary,
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, diskFullIn } from "@waitron/shared";
-import type { BoxHealth } from "./box-health.js";
+import { displayNameOf, type BoxHealth } from "./box-health.js";
 import type { FreedSpace } from "./free-space-now.js";
 import type { Logger } from "./logger.js";
 
@@ -61,12 +60,10 @@ function requestedRecordId(body: unknown): string {
   return recordId;
 }
 
-async function displayNameOf(tx: Transaction, personId: string): Promise<string> {
-  const [row] = await tx
-    .select({ displayName: persons.displayName })
-    .from(persons)
-    .where(eq(persons.id, personId));
-  return row!.displayName;
+async function requiredNameOf(tx: Transaction, personId: string): Promise<string> {
+  const name = await displayNameOf(tx, personId);
+  if (name === null) throw new Error(`no person ${personId}`);
+  return name;
 }
 
 /** `GET /api/box/health`, `POST /api/box/free-space` and `POST /api/box/clock-restart`, all
@@ -101,7 +98,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
           managementSessionId: sessionId,
           permission: "system.manage",
         });
-        const personName = await displayNameOf(tx, authorizedBy);
+        const personName = await requiredNameOf(tx, authorizedBy);
         // Before the reading: a witness noted after it would be left out as taken after it.
         const witnesses = clockRestart.witnesses();
         const { instant, offsetMinutes } = clockRestart.clock.now();
@@ -118,7 +115,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
             personName:
               restart.personId === authorizedBy
                 ? personName
-                : await displayNameOf(tx, restart.personId),
+                : await requiredNameOf(tx, restart.personId),
             restartedAt: restart.restartedAt,
             clockAt: restart.clockAt,
             lastRecordAt: restart.lastRecordAt,

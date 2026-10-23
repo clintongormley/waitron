@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
-import { devices, printers, sales, type Database } from "@waitron/db";
+import { devices, printers, sales, type Database, type Transaction } from "@waitron/db";
 import type { ClockStopState, ClockWitness, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
@@ -77,6 +77,15 @@ export interface BoxHealthReaders {
   clockStop?: (db: Database) => Promise<ClockStopView | null>;
 }
 
+/** The person's display name; null when no person row has the id. */
+export async function displayNameOf(tx: Transaction, personId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ displayName: persons.displayName })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  return row?.displayName ?? null;
+}
+
 /** Reads the seat's clock stop at the box's reading, with device labels and the restart's person
  * named. A seat with no `clockStopState` has none. */
 export function clockStopReader(deps: {
@@ -105,11 +114,7 @@ export function clockStopReader(deps: {
     let restart: ClockStopView["restart"] = null;
     if (state.restart !== null) {
       const { personId, restartedAt, clockAt } = state.restart;
-      const [person] = await db
-        .select({ displayName: persons.displayName })
-        .from(persons)
-        .where(eq(persons.id, personId));
-      restart = { personName: person?.displayName ?? null, restartedAt, clockAt };
+      restart = { personName: await displayNameOf(db, personId), restartedAt, clockAt };
     }
     return {
       ...state,
