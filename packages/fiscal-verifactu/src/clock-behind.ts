@@ -20,10 +20,9 @@ export interface LatestRecord {
   offsetMinutes: number;
 }
 
-/** The latest record in any chain, ties broken by the larger id. Every caller that needs "the
- * latest record" reads it here, so a restart names the same record the stop compares against. */
-export async function latestRecord(tx: Transaction): Promise<LatestRecord | undefined> {
-  const [latest] = await tx
+/** The query {@link latestRecord} runs. */
+export function latestRecordQuery(tx: Transaction) {
+  return tx
     .select({
       id: registrosFacturacion.id,
       at: registrosFacturacion.fechaHoraHusoGenRegistro,
@@ -32,6 +31,12 @@ export async function latestRecord(tx: Transaction): Promise<LatestRecord | unde
     .from(registrosFacturacion)
     .orderBy(desc(registrosFacturacion.fechaHoraHusoGenRegistro), desc(registrosFacturacion.id))
     .limit(1);
+}
+
+/** The latest record in any chain, ties broken by the larger id. Every caller that needs "the
+ * latest record" reads it here, so a restart names the same record the stop compares against. */
+export async function latestRecord(tx: Transaction): Promise<LatestRecord | undefined> {
+  const [latest] = await latestRecordQuery(tx);
   return latest;
 }
 

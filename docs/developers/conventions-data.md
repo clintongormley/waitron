@@ -3531,11 +3531,18 @@ module stops: `NoneBackend` (`packages/fiscal-none/src/backend.ts`) and `FakeFis
 (`packages/fiscal/src/testing/fake-backend.ts`) answer `null` and return.
 
 **The index.** `registros_generado_idx` on `fecha_hora_huso_gen_registro`
-(`packages/fiscal-verifactu/src/schema/registros.ts`) serves the read;
-`packages/fiscal-verifactu/src/clock-stop-restarts.test.ts`, "reads the latest record time through
-the index", pins the query plan `SCAN registros_facturacion USING INDEX registros_generado_idx`.
-Measured for the plan (E5, 2026-10-22, macOS, Node v26.11.1, SQLite 3.54.0): with the index
-dropped, the same query read the whole table and sorted it in a temporary tree.
+(`packages/fiscal-verifactu/src/schema/registros.ts`) serves the read. `latestRecord` runs the
+query `latestRecordQuery` (`packages/fiscal-verifactu/src/clock-behind.ts`) builds — ordered by
+the time, then by `id`, both descending, with the limit sent as a bound value — and
+`packages/fiscal-verifactu/src/clock-stop-restarts.test.ts`, "reads the latest record through the
+time index, sorting only the ties by id", explains that same query and pins its two plan lines,
+`SCAN registros_facturacion USING INDEX registros_generado_idx` and
+`USE TEMP B-TREE FOR LAST TERM OF ORDER BY`: the index gives the time order, and only rows that
+share a time are sorted by `id`. The plan holds only while the limit is a bound value. Measured
+2026-10-23 (macOS, Node v26.11.1, SQLite 3.54.0, the test's empty database): the same query with
+`limit 1` written into its text, and the query with the index dropped, each planned
+`SCAN registros_facturacion` and `USE TEMP B-TREE FOR ORDER BY` — the whole table read and
+sorted. The test also checks that the emitted text ends `limit ?`.
 
 **The append refuses on its own.** `attemptAppend` (`packages/fiscal-verifactu/src/chain.ts`)
 calls `refuseWhileClockBehind` with the record's own time as its first statement, so a sale, a
