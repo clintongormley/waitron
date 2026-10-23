@@ -124,6 +124,50 @@ describe("dashboard-alerts-bell", () => {
     expect(q(el, "[data-test=alerts-see-all]")).not.toBeNull();
   });
 
+  it("never breaks a written time across two lines", async () => {
+    setLocale("en-GB");
+    const restarted = (n: number): AlertView => ({
+      key: `incident:r${n}`,
+      kind: "event",
+      code: "clock.behind_chain_restarted",
+      params: {
+        person: "x".repeat(n),
+        clockAt: "2026-10-19T09:14:00.000Z",
+        lastRecordAt: "2026-10-19T23:40:00.000Z",
+        proof: "devices",
+      },
+      severity: "warning",
+      since: "2026-10-19T09:16:00.000Z",
+      area: "box",
+    });
+    const broken: string[] = [];
+    let checked = 0;
+    // The bell lists five at a time; forty names slide the times along the whole line.
+    for (let first = 1; first <= 40; first += 5) {
+      const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+        alerts: Array.from({ length: 5 }, (_, n) => restarted(first + n)),
+      });
+      el.open();
+      await el.updateComplete;
+      for (const item of qa(el, "[data-test=alert-item]")) {
+        const walker = document.createTreeWalker(item.firstElementChild!, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+          for (const match of node.textContent!.matchAll(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g)) {
+            checked += 1;
+            const range = document.createRange();
+            range.setStart(node, match.index);
+            range.setEnd(node, match.index + match[0].length);
+            const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+            if (tops.size > 1) broken.push(match[0]);
+          }
+        }
+      }
+      cleanupWidgets();
+    }
+    expect(checked).toBe(80);
+    expect(broken).toEqual([]);
+  });
+
   it("shows an empty message when nothing is open", async () => {
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts: [] });
     expect(q(el, "[data-test=alerts-empty]")).not.toBeNull();

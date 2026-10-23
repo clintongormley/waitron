@@ -16,6 +16,7 @@ import {
   incidentIdOf,
   screenTargetOf,
   severityLabel,
+  wholeTimes,
 } from "./alert-format.js";
 
 export const PANEL_LIMIT = 5;
@@ -50,6 +51,9 @@ export class AlertsBell extends LitElement {
         wt-row-actions::part(popup) {
           width: calc(100vw - 2 * var(--wt-space-2));
         }
+      }
+      .time {
+        white-space: nowrap;
       }
       h2 {
         margin: 0;
@@ -137,7 +141,7 @@ export class AlertsBell extends LitElement {
     const screen = screenTargetOf(alert, this.canOpen);
     const when = formatAlertTime(alert.since);
     return html`<li data-severity=${alert.severity} data-test="alert-item">
-      <span>${alertMessage(alert.code, alert.params)}</span>
+      <span>${wholeTimes(alertMessage(alert.code, alert.params))}</span>
       ${hasAlertMessage(alert.code) ? nothing : html`<span class="meta">${alert.code}</span>`}
       <span class="meta"
         >${severityLabel(alert.severity)} ·

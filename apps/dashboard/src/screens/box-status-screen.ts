@@ -13,7 +13,7 @@ import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
-import { goToLabel } from "../widgets/alert-format.js";
+import { goToLabel, wholeTimes } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
 import { boxStatusRows, clockStopProof, type PartRow } from "./box-status-rows.js";
 
@@ -544,15 +544,6 @@ export class BoxStatusScreen extends LitElement {
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderRestartDialog()}
     `;
   }
-}
-
-const WRITTEN_TIME = /(\d{4}-\d{2}-\d{2} \d{2}:\d{2})/;
-
-/** Wraps each time `formatIsoMinute` wrote so a line never breaks inside it. */
-function wholeTimes(text: string): (string | TemplateResult)[] {
-  return text
-    .split(WRITTEN_TIME)
-    .map((part, i) => (i % 2 === 1 ? html`<span class="time">${part}</span>` : part));
 }
 
 function restartRefusal(error: unknown): string {
