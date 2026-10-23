@@ -35,7 +35,6 @@ afterEach(() => {
 let nifCounter = 0;
 const nextNif = () => nifWithControlLetter(72_000_000 + ++nifCounter);
 
-/** Autumn's Saturday runs Dinner (Cena) 20:00–02:00; Winter's Saturday runs Late bar (Copas). */
 async function seasonVenue() {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(SUNDAY_00_15);
@@ -44,8 +43,9 @@ async function seasonVenue() {
     dayCutover: "06:00",
     seed: async (tx, cfg) => {
       const restaurant = await createBareDepartment(tx, cfg, "Restaurant", SUNDAY_00_15);
-      const sala = (await createServiceZone(tx, cfg, { name: "Sala", departmentId: restaurant }))
-        .id;
+      const diningRoomId = (
+        await createServiceZone(tx, cfg, { name: "Sala", departmentId: restaurant })
+      ).id;
       const dish = async (menuName: string, name: string) => {
         const menuId = (await createCatalogue(tx, { name: menuName })).id;
         const product = await createProduct(tx, {
@@ -59,12 +59,12 @@ async function seasonVenue() {
         const itemId = (await addProductToMenu(tx, { menuId, productId: product.id })).id;
         return { menuId, itemId, versionId: await publishWorkingMenu(tx, menuId) };
       };
-      const cena = await dish("Cena", "Solomillo");
-      const copas = await dish("Copas", "Gin tonic");
+      const dinnerMenu = await dish("Cena", "Solomillo");
+      const lateBarMenu = await dish("Copas", "Gin tonic");
       const period = async (name: string, menuId: string) =>
         (await saveMenuPeriod(tx, cfg, restaurant, { name, menuId, staffMenuIds: [] })).id;
-      const dinner = await period("Dinner", cena.menuId);
-      const lateBar = await period("Late bar", copas.menuId);
+      const dinner = await period("Dinner", dinnerMenu.menuId);
+      const lateBar = await period("Late bar", lateBarMenu.menuId);
       const seasonId = async (name: string) =>
         (
           await tx
@@ -85,11 +85,11 @@ async function seasonVenue() {
       });
       return {
         departmentId: restaurant,
-        startingZoneId: sala,
+        startingZoneId: diningRoomId,
         restaurant,
-        sala,
-        cena,
-        copas,
+        diningRoomId,
+        dinnerMenu,
+        lateBarMenu,
       };
     },
   });
@@ -100,7 +100,7 @@ const park = async (v: Venue, dish: { itemId: string; versionId: string }) => {
   const id = randomUUID();
   const answer = await sendAsTill(v, "POST", "/api/working-orders", {
     id,
-    zoneId: v.sala,
+    zoneId: v.diningRoomId,
     lines: [{ menuItemId: dish.itemId, quantity: "1", menuVersionId: dish.versionId }],
   });
   return { ...answer, id };
@@ -112,20 +112,20 @@ const stored = (id: string) =>
 describe("the till sells the business day's season", () => {
   it("accepts a dish from Autumn's Dinner at 00:15 on Sunday 1 December 2030", async () => {
     const v = await seasonVenue();
-    const parked = await park(v, v.cena);
+    const parked = await park(v, v.dinnerMenu);
     expect(parked.status).toBe(200);
     expect(await stored(parked.id)).toEqual([{ id: parked.id }]);
   });
 
   it("refuses a dish only Winter's Late bar offers, and writes no order", async () => {
     const v = await seasonVenue();
-    const parked = await park(v, v.copas);
+    const parked = await park(v, v.lateBarMenu);
     expect(parked).toMatchObject({
       status: 400,
       body: {
         error: {
           code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.copas.menuId },
+          params: { departmentId: v.restaurant, menuId: v.lateBarMenu.menuId },
         },
       },
     });
@@ -134,10 +134,10 @@ describe("the till sells the business day's season", () => {
 
   it("names Dinner in the menu state", async () => {
     const v = await seasonVenue();
-    const answer = await sendAsTill(v, "GET", `/api/menu-state?zoneId=${v.sala}`);
+    const answer = await sendAsTill(v, "GET", `/api/menu-state?zoneId=${v.diningRoomId}`);
     expect(answer.status).toBe(200);
     expect(answer.body).toMatchObject({
-      defaultMenuId: v.cena.menuId,
+      defaultMenuId: v.dinnerMenu.menuId,
       service: { open: true, periodName: "Dinner" },
     });
   });

@@ -5656,9 +5656,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   pack already names its demo; the data set itself (`apps/server/scripts/demo-seed/data-sets/`)
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A974. Remaining comments and identifiers in general code to English.**
-  Fixture-backed menu keys stay with A976's fixture translation. The other naming sites and
-  owner-held core-comment PR are listed in the
+- **A974. Finish the remaining English names in general code.**
+  The printing-problem, main-bill and seasonal-menu suites now use English helper identifiers.
+  Their fixture text still belongs to A976. Other naming sites and the owner-held core-comment
+  PR remain in the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
