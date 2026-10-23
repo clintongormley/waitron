@@ -2172,8 +2172,9 @@ set in the station editor. A new station starts with today's venue defaults: one
 groups not printed in advance, MOVED slips printed. A station whose MOVED slips choice was "Venue
 setting" now simply prints them. Held-work paper becomes exact per station: a station gets a HOLD
 ticket only when it prints held groups in advance, and every later piece of paper about that held
-work (a HOLD correction, the HOLD part of a MOVED slip or a reprint, the FIRE banner) goes only to
-the stations that had the HOLD ticket. The Kitchen tab's venue-service panel keeps only "Changes
+work (a HOLD correction, the HOLD part of a MOVED slip or a reprint, the FIRE banner) prints only at
+the stations that had the HOLD ticket, whatever their choice is later; a station that did not prints
+its part at the fire. Kitchen-screen notices do not change. The Kitchen tab's venue-service panel keeps only "Changes
 after sending" (PR 8 moves it). The three `service_settings` columns are dropped.
 
 **Files it touches.**
@@ -2292,7 +2293,9 @@ after sending" (PR 8 moves it). The three `service_settings` columns are dropped
 
 4. **The station's answer.** `Station` (`apps/server/src/kitchen.ts:29-43`) gains
    `ticketGrouping: TicketGrouping` and `printHeldWork: boolean`, and `printMovedSlips` becomes
-   `boolean`, a stored null answered as `true`, so a null reads as Print. Its readers:
+   `boolean`, a stored null answered as `true`, so a null reads as Print. The null is mapped in
+   two places, each reading the column for itself: `listStations` (`kitchen.ts:124-141`, Task 30)
+   and the printing path's `readStations` (`kitchen-print.ts:350-366`, Task 33). Its readers:
    `GET /management-api/stations` (venue-service's dashboard, `routing-client.ts:24-38`) and
    `listStationsToday` (`kitchen.ts:143-156`), which reaches the till through `till-api.ts` and
    `device-api.ts` — no till code reads `printMovedSlips` (`git grep -n printMovedSlips -- apps/till`
@@ -2302,50 +2305,69 @@ after sending" (PR 8 moves it). The three `service_settings` columns are dropped
    query's `service_settings` dependency (`packages/venue-service/src/dashboard/live-queries.ts:154`),
    which the same commit added for it (`git blame` of both lines: `e8f935e57`).
 
-5. **Held-work paper is per station, recorded when the HOLD ticket is queued.** Today one stamp
-   on the group says "the kitchen has a HOLD ticket for this group" (`order_groups.hold_printed_at`,
-   set by `printHoldTickets` when any printer took a job, `apps/server/src/order-groups.ts:2001-2041`),
-   and every later decision reads the stamp, deliberately not the setting: "The marker, not the
-   setting: a group whose HOLD ticket was queued is fired by a FIRE slip" (`order-groups.ts:815`),
-   and the Kitchen tab's hint promises "A group already printed marked HOLD is still fired marked
-   FIRE after this is turned off" (`venue.print_held_work_hint`, `strings.ts:530-531`). With the
-   choice per station, a group can be on paper at Kitchen and not at Bar, so the stamp alone would
-   send Bar HOLD corrections, a FIRE banner and the HOLD part of MOVED slips and reprints for paper
-   it never had; reading Bar's *current* choice instead would break the marker rule for a station
-   switched off after printing. So the marker becomes per station: `order_group_hold_stations`
-   holds `(group, station)` for each station a HOLD job carried (`KitchenJob.stationIds`,
-   `kitchen-print.ts:693-698`), written by `printHoldTickets` and by a held move's HOLD at a new
-   station (`station-move.ts:381-385`); `hold_printed_at` keeps being set as today, so its readers
-   that only ask "any paper at all" stay. The rules:
+5. **Held-work paper is per station, recorded when the HOLD ticket is queued; screen notices are
+   not touched.** Today one stamp on the group says "the kitchen has a HOLD ticket for this group"
+   (`order_groups.hold_printed_at`, set by `printHoldTickets` when any printer took a job,
+   `apps/server/src/order-groups.ts:2001-2041`), and every later decision reads the stamp,
+   deliberately not the setting: "The marker, not the setting: a group whose HOLD ticket was
+   queued is fired by a FIRE slip" (`order-groups.ts:815`), and the Kitchen tab's hint promises "A
+   group held before this is turned on prints when it is fired, as before. A group already printed
+   marked HOLD is still fired marked FIRE after this is turned off" (`venue.print_held_work_hint`,
+   `strings.ts:530-531`). With the choice per station, a group can be on paper at Kitchen and not
+   at Bar, so the stamp alone would print Bar HOLD corrections, a FIRE banner and the HOLD part of
+   MOVED slips and reprints for paper it never had; reading Bar's *current* choice instead would
+   break the marker rule for a station switched off after printing. So the marker becomes per
+   station: `order_group_hold_stations` holds `(group, station)` for each station a HOLD job
+   carried (`KitchenJob.stationIds`, `kitchen-print.ts:693-698`), and only `printHoldTickets` writes
+   it. `hold_printed_at` keeps being set as today.
+   **The stamp keeps choosing which items the kitchen is told about; the table only decides what
+   prints.** The same functions record kitchen-screen notices and print slips from one item list:
+   `enqueueHoldCorrections` (`kitchen-print.ts:933-951`), `enqueueStationMoved` (its reroute notice
+   for every item, `:905-926`), the order-note correction (`:794-846`, its query `:822-826` feeding
+   both), and the MOVED path, whose `readSentItems` (`:1170-1196`, from `readOnHoldTickets`
+   `:1199-1222`) picks the `moved` notices. A station with a screen and no printer is never in the
+   table (no HOLD job carries it), so filtering those item lists would drop notices it gets today.
+   Every item selection stays on the stamp; the filter sits where paper is made. The rules:
    - **HOLD ticket:** `printHoldTickets` plans only the held items at stations whose
      `print_held_work` is on now; no such station, no ticket and no stamp — today's behaviour with
-     the venue switch off.
-   - **FIRE banner:** a fire ticket's route prints `*** FIRE ***` when one of its stations is in
-     the group's marker; otherwise it is an ordinary ticket. A printer shared by a marked and an
-     unmarked station got the HOLD ticket, so its joint ticket is marked FIRE.
-   - **Corrections that take work off paper** (HOLD CHANGED removed, HOLD CANCELLED, the held
-     EXTRA CANCELLED, a held move's HOLD CANCELLED at the old station): only stations in the marker.
-   - **Corrections that add work** (HOLD CHANGED added: a dish joining a printed held group, a held
-     move's `given`, added extras): stations in the marker, plus a station that prints held work now,
-     which is then added to the marker — today's `+N` for every station when the venue switch is on.
-   - **Readers of "on paper"** — the held part of MOVED slips and reprints (`readOnHoldTickets`,
-     `kitchen-print.ts:1199-1222`), the order-note correction's held branch (`:822-826`) and the
-     sent order number (`stampSentOrderNumber`, `working-order.ts:3809-3838`) — join the marker on
-     the line's group and the item's station.
-   - **Unchanged:** screen notices (recorded whether or not paper exists, `enqueueHoldCorrections`,
-     `kitchen-print.ts:933-951`); the allergy path, which already keys on the frozen copy each HOLD
-     recipient received (`kitchen-allergy.ts:357-359`, "Copy presence identifies the exact HOLD
-     recipient"), and copies are made only for stations a HOLD job reached (`planKitchenTickets`,
-     `kitchen-print.ts:541-549`); and `line-cancel.ts:210`, whose branch is for a group with no
-     paper at all (`hold_printed_at` null) — read, not run; Task 35c's run of `line-cancel.test.ts`
-     covers it.
+     the venue switch off. It is the table's only writer.
+   - **A recorded station gets every later piece of paper about the group, whatever its current
+     choice** (the marker rule): HOLD CHANGED added and removed, HOLD CANCELLED, the held EXTRA
+     CANCELLED, the HOLD part of a MOVED slip and of a reprint, a held dish moved in from another
+     station (its HOLD ticket "from X", `station-move.ts:373-385`), and the FIRE banner.
+   - **A station not recorded gets none of that paper; its part of the group prints at the fire,
+     as an ordinary ticket** — whether it was off when the group was held, has been switched on
+     since, or has a dish join or move in later. This is the per-station form of the hint's "A group
+     held before this is turned on prints when it is fired", and of `correctJoin`, which prints
+     nothing for a group with no HOLD ticket (`order-groups.ts:2122-2123`). It also means a station
+     never holds partial HOLD paper (a "+1" for a dish whose first one it never had on paper), and
+     whether a station gets paper never depends on another station's.
+   - **FIRE banner:** a fire ticket's route prints `*** FIRE ***` when one of its stations is
+     recorded for the group; otherwise it is an ordinary ticket. A printer shared by a recorded and
+     an unrecorded station got the HOLD ticket, so its joint ticket is marked FIRE.
+   - **Where the filter sits:** `CorrectionItem` gains `holdGroupId?: string`, set only on held work
+     corrected against a group's HOLD ticket; `printCorrectionSlips` (`kitchen-print.ts:1064`)
+     prints such an item only at a station recorded for that group, after the notices are recorded
+     and before its HOLD CHANGED allergy freeze (`:1075-1083`). The MOVED slip's HOLD part
+     (`printMovedSlips`, `:1444-1500`) and a reprint's HOLD part (`readReprintParts`, `:1606-1643`)
+     keep a held item only when its line's group and its station are recorded. A held move's HOLD
+     ticket at the destination (`station-move.ts:381-385`) prints only when the destination is
+     recorded for the group.
+   - **Unchanged:** every notice; the sent order number (`stampSentOrderNumber`,
+     `working-order.ts:3809-3838`, "only those the kitchen has seen", which screens see too);
+     `line-cancel.ts:210`, whose own branch runs only for a group with no paper at all and does not
+     set `holdGroupId` (read, not run; Task 35c runs `line-cancel.test.ts`); and the allergy path,
+     which keys on the frozen copy each HOLD recipient received (`kitchen-allergy.ts:357-359`,
+     "Copy presence identifies the exact HOLD recipient"), copies being made only for stations a HOLD
+     job, or a printed HOLD CHANGED added, reached (`kitchen-print.ts:541-549`, `:1075-1083`).
    Every reader of the group stamp is assigned: `git grep -n -E 'holdPrintedAt|hold_printed_at|printedHeldGroups' -- apps/server/src ':!*.test.ts'`
-   on `157f152c5` lists `draft-recall.ts:267` (Task 35c), `kitchen-allergy.ts:309`, `:359`
-   (unchanged), `kitchen-print.ts:825`, `:1217` (Task 35a), `line-cancel.ts:210` (unchanged),
-   `order-groups.ts:529`, `:812-816` (Task 34), `:1054`, `:2122` (Task 35b, filtered in
-   `correctHoldTickets`), `:2037` (the writer, Task 34), `:2044-2060` (`printedHeldGroups` itself,
-   unchanged: it still answers a group's paper number), `station-move.ts:115`, `:300` (Task 35c),
-   `working-order.ts:2969`, `:6030`, `:6143` (Task 35b), `:3053` (Task 35c), `:3833` (Task 35a).
+   on `157f152c5` lists `draft-recall.ts:267` (Task 35c sets `holdGroupId`), `kitchen-allergy.ts:309`,
+   `:359` (unchanged), `kitchen-print.ts:825` (Task 35a sets `holdGroupId` on its held rows),
+   `:1217` (`readOnHoldTickets`, unchanged; Task 35a filters its two printing consumers),
+   `line-cancel.ts:210` (unchanged), `order-groups.ts:529`, `:812-816` (Task 34), `:1054`, `:2122`
+   (Task 35b, through `HeldChange.groupId`), `:2037` (the writer, Task 34), `:2044-2060`
+   (`printedHeldGroups` itself, unchanged), `station-move.ts:115`, `:300` (Task 35c),
+   `working-order.ts:2969`, `:6030`, `:6143` (Task 35b), `:3053` (Task 35c), `:3833` (unchanged).
 
 6. **Configuration copies: the new columns travel, the format stays 7.** `kitchen_stations` is
    exported whole (no `omit`, `packages/db/src/configuration-transfer.ts:24-29`), so both new
@@ -2393,14 +2415,19 @@ after sending" (PR 8 moves it). The three `service_settings` columns are dropped
      `Tests 1 passed (1)`.
    - `packages/venue-service/src/schema/service.test.ts:191-194` pins `service_settings`' checks;
      the grouping CHECK leaves it.
-   - `scripts/schema-constraints.test.ts`' foreign-key list (`:91-92` holds
-     `device_made_here_stations`' pair) gains the new table's two keys, so the guard writes through
+   - `scripts/schema-constraints.test.ts`' foreign-key list, kept in table-name order, gains the
+     new table's two keys after `order_group_events`' rows and before `order_groups`' (`:216-220`), so the guard writes through
      them (CLAUDE.md §3: "a green migrate is no evidence a new key is sound"). The guard passed
      without them in the probe, so this adds coverage rather than fixing a failure.
+   - `station-delete.test.ts:152-175` and `management-api.station-disable.test.ts:123-130` are
+     whole-list pins of the tables a station delete or disable may touch; each gains
+     `order_group_hold_stations`. Closing a station moves its dishes through `moveDishesToStation`
+     (`station-closing.ts:77-87`), the held-move path of Decision 5. Under Decision 5 only
+     `printHoldTickets` writes the table, so the new entry is expected to read the same before and
+     after — it is there to catch a write a later change adds (a new table in a whole-list pin, every
+     existing value unchanged).
    - Not changed: `apps/server/src/testing/clear-provision-fixture.ts` clears untraded fixtures and
-     lists no `order_groups`; `station-delete.test.ts:152-175` and
-     `management-api.station-disable.test.ts:123-130` snapshot what a station delete or disable may
-     touch, and a deleted station keeps its row, so its marker rows are untouched.
+     lists no `order_groups`.
    - Pins of the station answer (`kitchen.test.ts:212-256`, `:285`; `management-api.test.ts:1040-1060`
      types) gain `ticketGrouping` and `printHeldWork` with every existing value unchanged except
      `printMovedSlips: null` → `true` (Decision 4's spec sentence: "MOVED slips … Each station's own,
@@ -2420,8 +2447,12 @@ after sending" (PR 8 moves it). The three `service_settings` columns are dropped
    slip when sent dishes move table":
    - "Identical dishes on a kitchen ticket": a `wt-combobox` (`name="ticketGrouping"`,
      `search="never"`) offering "One line: 3 x Burger" and "A line each: 1 x Burger, three times" —
-     today's Kitchen-tab label and choices (`strings.ts:520-522`, ES `:1416-1418`), moved to
-     `prep.ticket_grouping*` keys;
+     today's Kitchen-tab label, choices and hint "Applies to new kitchen tickets and to reprints."
+     (`strings.ts:520-523`, ES `:1416-1420`), moved to `prep.ticket_grouping*` keys. The hint is kept
+     as the combobox's `hint`, which `wt-combobox` hides visually and keeps for assistive technology
+     (`.hint` is `visuallyHiddenStyles`, `packages/ui-core/src/field-styles.ts:153-155`; the input's
+     `describedBy` names it, `packages/ui/src/components/wt-combobox.ts:1100`), as on the
+     Kitchen tab today;
    - "Print held groups in advance": a `wt-switch` (`name="printHeldWork"`), today's label
      (`:529`, ES `:1426`), with one note beneath as the rest-of-order switch has (`station-editor.ts:594-604`):
      EN "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.", ES
@@ -2472,8 +2503,12 @@ after sending" (PR 8 moves it). The three `service_settings` columns are dropped
 2. **A station that never had the HOLD ticket** (Bar off, Kitchen on, one group with dishes at
    both): Bar gets no HOLD ticket, no HOLD correction, no HOLD part on a MOVED slip or reprint, and an
    unmarked ticket when the group fires; Kitchen gets all of them (Tasks 34, 35a–c).
-3. **A dish joining a printed held group at a station not in its marker that prints held work now**:
-   `+N` prints there and the station joins the marker, so the fire is marked FIRE there too (Task 35b).
+3. **A station switched on after a group was held** (Bar off at the hold, a Bar dish held; Bar
+   switched on; a second Bar dish joins or is moved in): nothing prints at Bar until the fire, where
+   both dishes print on one ordinary ticket; Bar is never recorded, so no "+1" or "-1" for paper it
+   never had (Tasks 35b, 35c).
+6. **A station with a kitchen screen and no printer** in a printed held group: every notice it
+   gets today — HOLD CHANGED and CANCELLED, reroute, order note, moved — it still gets (Tasks 35a–c).
 4. **Identical dishes on one ticket for two stations sharing a printer**, Grill `separate`, Cold
    `combined`: each station's part of the joint ticket is laid out by its own choice (Task 33).
 5. **PATCH `printMovedSlips: null`** from any client: 400 naming the field, nothing written; a
@@ -2494,7 +2529,8 @@ after sending" (PR 8 moves it). The three `service_settings` columns are dropped
   and regenerate (as PR 5's Task 26)
 - Modify (Decision 7): `apps/server/src/canvas-retirement-upgrade.test.ts` (`:394`, `:500-516`),
   `apps/server/src/station-order-migration.test.ts` (`:14`, `:27`, `:109-112`, before `:229`),
-  `scripts/schema-constraints.test.ts` (after `:92`)
+  `scripts/schema-constraints.test.ts` (after `:218`), `apps/server/src/station-delete.test.ts`
+  (`:152-175`), `apps/server/src/management-api.station-disable.test.ts` (`:123-130`)
 - Test: `packages/db/src/schema/kitchen-stations.test.ts`
 
 **Interfaces — produces:**
@@ -2534,14 +2570,18 @@ after sending" (PR 8 moves it). The three `service_settings` columns are dropped
   (expected: one step more than on `main` and one table more holding rows; Decision 1 measured
   the two migrations together, +2 steps and +1 table); `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`;
   `pnpm --filter @waitron/db exec vitest run src/schema src/classification.test.ts`;
-  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts`;
+  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts src/station-delete.test.ts src/management-api.station-disable.test.ts`;
   `pnpm --filter @waitron/composition exec vitest run` — PASS, each `Tests` count read.
 - [ ] **Step 6:** typecheck `@waitron/shared`, `@waitron/db`, `@waitron/server`; prettier; commit
-  `git commit -s -m "Each station can store its own ticket grouping and held printing; the hold paper table (A756 PR 6)"`,
-  then update the ledger.
+  `git commit -s -m "Each station can store its own ticket grouping and held printing; the hold paper table (A756 PR 6)"`
+  with a body giving the reason the new table is in the core set (CLAUDE.md §3, "No new table enters
+  the core migration set without a stated reason in the commit"): both its keys point at core tables
+  (`order_groups`, `kitchen_stations`, both in `packages/db/src/schema`), and the server's printing
+  code that writes and reads it is not a module's; then update the ledger.
 
-**Assertions changed:** none. `station-order-migration.test.ts` and `canvas-retirement-upgrade.test.ts`
-change setup only (Decision 7).
+**Assertions changed:** the two whole-list pins of `station-delete.test.ts` and
+`management-api.station-disable.test.ts` gain a table, every existing value unchanged (Decision 7).
+`station-order-migration.test.ts` and `canvas-retirement-upgrade.test.ts` change setup only.
 
 ### Task 30: a station's save writes its own printing choices
 
@@ -2552,8 +2592,8 @@ change setup only (Decision 7).
 - Test: `apps/server/src/kitchen.test.ts`, `apps/server/src/management-api.test.ts`
 
 **Interfaces — produces:** `Station` with `ticketGrouping: TicketGrouping`, `printHeldWork: boolean`,
-`printMovedSlips: boolean` (`listStations` reads the column and maps `null` to `true`, in one
-place); `updateStation`'s patch takes
+`printMovedSlips: boolean` (`listStations` reads the column and maps `null` to `true`; Task 33
+does the same in `kitchen-print.ts`' `readStations`, Decision 4); `updateStation`'s patch takes
 `ticketGrouping?: TicketGrouping; printHeldWork?: boolean; printMovedSlips?: boolean`;
 `createStation` inserts `printMovedSlips: true`.
 
@@ -2598,10 +2638,15 @@ whole-shape pins with existing values unchanged: named in the ledger.
 ### Task 31: configuration copies check an imported ticket grouping
 
 **Files:** `packages/db/src/configuration-transfer.ts:4-9`; Test:
-`apps/server/src/configuration-transfer.test.ts`.
+`packages/db/src/configuration-transfer.test.ts` (so db's own coverage and mutation runs see the
+check) and `apps/server/src/configuration-transfer.test.ts`.
 
-- [ ] **Step 1: Write the failing tests** in `configuration-transfer.test.ts`, beside the colour
-  cases (`"transfers a station's colour"`, `:2283`):
+- [ ] **Step 1: Write the failing tests.** In `packages/db/src/configuration-transfer.test.ts`,
+  beside the colour cases (`:41-66`): `"refuses a station ticket grouping a save would refuse"`
+  (`"bogus"`, `"Combined"`, `null`, `1` each throw `setup.request_invalid`
+  `{ field: "kitchen_stations.ticket_grouping" }`), `"accepts an absent station ticket grouping"`
+  and `"accepts each station ticket grouping"` (over `TICKET_GROUPINGS`). In
+  `apps/server/src/configuration-transfer.test.ts`, beside `"transfers a station's colour"` (`:2283`):
   - `"transfers each station's ticket grouping and held printing"` — Grill `separate` / `true`,
     Cold `combined` / `false`; the exported rows carry `ticket_grouping` and `print_held_work`, and
     the imported stations read the same.
@@ -2609,10 +2654,11 @@ whole-shape pins with existing values unchanged: named in the ledger.
     bundle row with `ticket_grouping: "bogus"` → `setup.request_invalid`
     `{ field: "kitchen_stations.ticket_grouping" }`, and the target has no station named as in the
     bundle (as the colour refusal case checks).
-- [ ] **Step 2: Run and watch the refusal case fail** (the first may already pass: the table is
-  exported whole). `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts -t "grouping|held printing"`.
+- [ ] **Step 2: Run and watch the refusal cases fail** (the transfer case may already pass: the
+  table is exported whole). `pnpm --filter @waitron/db exec vitest run src/configuration-transfer.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts -t "grouping|held printing"`.
 - [ ] **Step 3: Implement** the check in `validateCoreConfiguration`.
-- [ ] **Step 4: Run** `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/configuration-import.test.ts`,
+- [ ] **Step 4: Run** Step 2's db command, `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/configuration-import.test.ts`,
   `pnpm --filter @waitron/provisioning exec vitest run`, `pnpm exec vitest run scripts/id-columns-are-references.test.ts`
   — PASS. `git grep -n 'version: 7' -- packages/provisioning/src/configuration-transfer.ts` still
   prints `:137` (no format change, Decision 6).
@@ -2686,7 +2732,8 @@ and keeps passing because the helper still writes the venue value; Task 38 chang
 - [ ] **Step 2: Run and watch the new cases fail.**
   `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts src/move-merge.test.ts -t "grouping|MOVED"`.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts src/move-merge.test.ts src/kitchen-print.shared-printers.test.ts src/party-move-bill.test.ts src/party-table-actions.test.ts src/order-groups.test.ts`
+- [ ] **Step 4: Run** (free memory first) every file of Task 32 (`git grep -l setStationPrinting -- 'apps/server/src/*.test.ts' | xargs pnpm --filter @waitron/server exec vitest run`, which lists the 23 files Decision 8 counts), and
+  `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/party-table-actions.test.ts`
   — PASS; `git grep -n -E 'readKitchenTicketGrouping|readPrintMovedSlips' -- apps/server/src`
   prints nothing.
 - [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
@@ -2735,8 +2782,8 @@ the venue now follows "null prints"; the describe at `:1372` renamed with its ch
   `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts -t "HOLD|FIRE|held"`.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** (free memory first)
-  `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts src/kitchen-print.test.ts src/kitchen-print.shared-printers.test.ts src/kitchen-print.allergy.test.ts src/kitchen-allergy.capture.test.ts src/kitchen-allergy.lifecycle.test.ts src/kitchen-allergy.notices.test.ts src/made-here.routes.test.ts src/working-order.test.ts src/party-arriving-dishes.test.ts src/print-problems.test.ts src/split-off-extras.release.test.ts src/split-off-extras.groups.test.ts`
-  — PASS (every one sets every station on through Task 32's helper, so their checks hold);
+Every file of Task 32 (`git grep -l setStationPrinting -- 'apps/server/src/*.test.ts' | xargs pnpm --filter @waitron/server exec vitest run`, which lists the 23 files Decision 8 counts)
+  — PASS (every one sets its stations through Task 32's helper, so their checks hold);
   `git grep -n -E 'readPrintHeldWork|mark\?: "FIRE"' -- apps/server/src ':!*.test.ts'` prints nothing.
 - [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
   `git commit -s -m "A HOLD ticket prints at the stations that print held work, and the fire marks only theirs (A756 PR 6)"`,
@@ -2745,106 +2792,118 @@ the venue now follows "null prints"; the describe at `:1372` renamed with its ch
 **Assertions changed:** none; the cases are new (A773 §6, "Held-ticket printing in advance stays a
 station setting").
 
-### Task 35a: the kitchen's held paper is read per station
+### Task 35a: held paper prints only at the stations recorded for it
+
+The filter of Decision 5, in the three places paper is made; no item selection changes, so every
+notice stays as it is.
 
 **Files:**
-- Modify: `apps/server/src/kitchen-print.ts` — `readOnHoldTickets` (`:1199-1222`) and the order-note
-  correction's held branch (`:822-826`): replace `isNotNull(orderGroups.holdPrintedAt)` with an
-  `exists` on `order_group_hold_stations` for the line's group and the item's station.
-- Modify: `apps/server/src/working-order.ts` — `stampSentOrderNumber` (`:3809-3838`), its `exists`
-  (`:3826-3834`) likewise, and its doc comment's "in a held group whose HOLD ticket printed" →
-  "on a HOLD ticket its station received".
-- Test: `apps/server/src/move-merge.test.ts` (the HOLD describe `:1023`),
-  `apps/server/src/kitchen-print.test.ts`, `apps/server/src/order-kitchen-note.corrections.test.ts`,
-  `apps/server/src/sent-order-number.test.ts`
+- Modify: `apps/server/src/kitchen-print.ts` — `CorrectionItem` (`:772-783`) gains
+  `holdGroupId?: string`; `printCorrectionSlips` (`:1064`) reads the table for the items' hold
+  groups and drops, from the slips only, an item whose station is not recorded for its
+  `holdGroupId`, before the allergy freeze (`:1075-1083`); the order-note correction's query
+  (`:801-830`) selects the line's group id and sets `holdGroupId` on its held rows (`firedAt` null);
+  `readMovedSlipPrinting`/`printMovedSlips` (`:1414-1500`) keep a held item on the slip only when
+  its line's group and its station are recorded; `readReprintParts` (`:1606-1643`) keeps a held
+  item in the reprint's HOLD part only on the same condition. A station left with nothing to print
+  gets no slip. `readOnHoldTickets` and `readSentItems` are not changed.
+- Test: `apps/server/src/kitchen-print.test.ts`, `apps/server/src/move-merge.test.ts` (the HOLD
+  describe `:1023`), `apps/server/src/order-kitchen-note.corrections.test.ts`
 
-- [ ] **Step 1: Write the failing tests** (Kitchen on, Bar off; one held group with a dish at each):
-  - `move-merge.test.ts`: `"a MOVED slip lists under HOLD only the held dishes of a station that
-    had the HOLD ticket"` — Move guests: Kitchen's slip lists its dish under HOLD; Bar's slip lists
-    no HOLD part (Bar has no fired work, so Bar prints no slip; its moved notice is still recorded).
-  - `kitchen-print.test.ts`: `"a reprint prints the HOLD part only for a station that had the HOLD
-    ticket"`.
+- [ ] **Step 1: Write the failing tests.** Kitchen prints held work; Bar does not; Screen is a
+  station with a kitchen screen and no printer; one held group with a dish at each, its HOLD ticket
+  queued (Kitchen recorded):
+  - `move-merge.test.ts`: `"a MOVED slip lists under HOLD only the held dishes of a station
+    recorded for the group"` — Move guests: Kitchen's slip lists its dish under HOLD; Bar prints
+    nothing; the `moved` notices of all three stations are recorded, as today.
+  - `kitchen-print.test.ts`: `"a reprint prints the HOLD part only for a station recorded for the
+    group"`.
   - `order-kitchen-note.corrections.test.ts`: `"a changed order note corrects held paper only at a
-    station that had the HOLD ticket"` — a slip at Kitchen; none at Bar; both notices recorded.
-  - `sent-order-number.test.ts`: `"a held dish keeps no sent order number at a station that never
-    had the HOLD ticket"`.
-- [ ] **Step 2: Run and watch them fail.**
-  `pnpm --filter @waitron/server exec vitest run src/move-merge.test.ts src/kitchen-print.test.ts src/order-kitchen-note.corrections.test.ts src/sent-order-number.test.ts -t "HOLD|held"`.
+    station recorded for the group, and every station's screen is told"` — a slip at Kitchen, none
+    at Bar; notices at Kitchen, Bar and Screen.
+  - In each file, the screen-only check: Screen's notices are those it gets on `157f152c5` (the
+    case asserts them explicitly, so deleting the filter's placement upstream would fail it).
+- [ ] **Step 2: Run and watch the printing checks fail** (the notice checks pass before and after).
+  `pnpm --filter @waitron/server exec vitest run src/move-merge.test.ts src/kitchen-print.test.ts src/order-kitchen-note.corrections.test.ts -t "recorded|HOLD|held"`.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the four files without `-t`, plus `src/party-move-bill.test.ts
-  src/party-table-actions.test.ts src/finish-party-collect.test.ts src/kitchen-print.shared-printers.test.ts`
+- [ ] **Step 4: Run** the three files without `-t`, plus every file of Task 32
+  (`git grep -l setStationPrinting -- 'apps/server/src/*.test.ts' | xargs pnpm --filter @waitron/server exec vitest run`,
+  free memory first) and `src/party-move-bill.test.ts src/party-table-actions.test.ts src/finish-party-collect.test.ts src/sent-order-number.test.ts`
   — PASS.
 - [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
-  `git commit -s -m "MOVED slips, reprints, note corrections and sent numbers read each station's held paper (A756 PR 6)"`,
+  `git commit -s -m "HOLD paper on corrections, MOVED slips and reprints goes only to stations recorded for it (A756 PR 6)"`,
   then update the ledger.
 
 **Assertions changed:** none; the cases are new.
 
-### Task 35b: HOLD corrections go to the stations whose paper they correct
+### Task 35b: HOLD corrections built from a group change name their group
 
 **Files:**
 - Modify: `apps/server/src/order-groups.ts` — `HeldChange` (`:2063-2071`) gains `groupId: string`
-  (the group whose HOLD ticket is corrected); `correctHoldTickets` (`:2073-2100`) reads
-  `heldPaperStations` for the changes' groups and keeps, for HOLD CHANGED removed and HOLD
-  CANCELLED, only a change whose station is in its group's set, and for HOLD CHANGED added, a change
-  whose station is in the set or prints held work now — calling `recordHeldPaper` for the latter
-  before printing. The type change makes the compiler list every `HeldChange` it builds:
-  `order-groups.ts:529-548` (source), `:1098-1133` (`taken` from `line.groupId`, `given` to
-  `targetId`), `:2116-2135` (`correctJoin`), `working-order.ts:2969-2989`, `:6030-6062`
-  (`givenExtras`) and `:6138-6175` (the held edits, printed at `:5815-5816` and `:6059`).
+  (the group whose HOLD ticket is corrected); `correctHoldTickets` (`:2073-2100`) passes it on as
+  each item's `holdGroupId`. Item selection does not change: the type change makes the compiler list
+  every `HeldChange` built — `order-groups.ts:529-548` (source), `:1098-1133` (`taken` from
+  `line.groupId`, `given` to `targetId`), `:2116-2135` (`correctJoin`, still returning early for a
+  group with no stamp), `working-order.ts:2969-2989`, `:6030-6062` (`givenExtras`) and
+  `:6138-6175` (the held edits, printed at `:5815-5816` and `:6059`).
 - Test: `apps/server/src/order-groups.test.ts`, `apps/server/src/split-off-extras.edit.test.ts`
 
-- [ ] **Step 1: Write the failing tests** (Kitchen on, Bar off unless said):
-  - `order-groups.test.ts`: `"removing a held dish corrects the HOLD ticket only at a station that
-    had it"`; `"moving a held dish between printed groups takes it off and adds it only where the
-    groups' HOLD tickets went"`; `"a dish joining a printed held group prints +N at a station that
-    prints held work now and adds that station to the group's HOLD paper"` — Bar switched on after
-    the hold, a Bar dish joins: `+N` at Bar, Bar recorded, and the group's fire marks Bar FIRE;
-    `"a dish joining a printed held group at a station that prints no held work prints nothing
-    until the fire"`.
-  - `split-off-extras.edit.test.ts`: `"an extra added to a held dish prints +N only where its
-    station has or now takes HOLD paper"`.
-- [ ] **Step 2: Run and watch them fail.**
-  `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts src/split-off-extras.edit.test.ts -t "HOLD|held|joining|extra"`.
+- [ ] **Step 1: Write the failing tests** (Kitchen on, Bar off, Screen with no printer; one printed
+  held group with a dish at each, unless said):
+  - `order-groups.test.ts`: `"removing a held dish corrects the HOLD ticket only at a station
+    recorded for the group, and tells every station's screen"`; `"moving a held dish between
+    printed groups takes it off and adds it only at stations recorded for each group"`;
+    `"a station switched off after its HOLD ticket printed still gets +N for a joining dish"`;
+    `"a station switched on after the group was held gets nothing for a joining dish, and its whole
+    part prints unmarked at the fire"` — Bar switched on, a second Bar dish joins: no slip at Bar, Bar
+    not recorded, and the fire prints Bar's two dishes on one ordinary ticket; Screen's notices for
+    the join are recorded in every case.
+  - `split-off-extras.edit.test.ts`: `"an extra added to a held dish prints +N only at a station
+    recorded for the group"`.
+- [ ] **Step 2: Run and watch the printing checks fail.**
+  `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts src/split-off-extras.edit.test.ts -t "recorded|switched|joining|extra"`.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts src/split-off-extras.edit.test.ts src/split-off-extras.groups.test.ts src/split-off-extras.cancel.test.ts src/split-off-extras.release.test.ts src/working-order.test.ts src/adjustments-apply.test.ts src/adjustments-api.test.ts src/line-service-removal.test.ts src/till-api.groups.test.ts`
-  — PASS.
+- [ ] **Step 4: Run** the two files without `-t`, every file of Task 32 (as in Task 35a), and
+  `src/till-api.groups.test.ts src/working-order.test.ts` — PASS.
 - [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
-  `git commit -s -m "HOLD corrections go to the stations whose paper they correct (A756 PR 6)"`,
+  `git commit -s -m "HOLD corrections from group changes print only where the group's HOLD ticket went (A756 PR 6)"`,
   then update the ledger.
 
 **Assertions changed:** none; the cases are new.
 
-### Task 35c: recall, a cancelled extra and a station move correct only the station's own HOLD paper
+### Task 35c: recall, a cancelled extra and a station move print only on a station's own HOLD paper
 
 **Files:**
-- Modify: `apps/server/src/draft-recall.ts:267-282` (HOLD CANCELLED only for items whose station
-  is in the group's set), `apps/server/src/working-order.ts:3045-3056` (a held cancelled extra
-  prints only when its station is in the set), `apps/server/src/station-move.ts` — `:110-140` and
-  `:295-325` (the held corrections at the old station only when it is in the set) and `:373-385`
-  (a held dish moved to a station that prints held work now prints its HOLD ticket there and that
-  station is recorded through `enqueueKitchenTickets`' answer; otherwise nothing prints until the
-  fire)
+- Modify: `apps/server/src/draft-recall.ts:267-282` (its HOLD CANCELLED items carry
+  `holdGroupId: line.groupId`; the condition on the stamp stays), `apps/server/src/working-order.ts:3045-3056`
+  (the held cancelled extra carries `holdGroupId: extra.dishGroupId`), `apps/server/src/station-move.ts`
+  — `:110-140` and `:295-325` (held corrections at the old station carry `holdGroupId: row.groupId`;
+  `enqueueStationMoved` records the reroute notice for every item as today) and `:373-385` (the
+  moved held dish's HOLD ticket "from X" prints only when the destination is recorded for the group;
+  a destination not recorded prints the dish at the fire)
 - Test: `apps/server/src/draft-recall.test.ts`, `apps/server/src/adjustments-extra-cancel.test.ts`,
   `apps/server/src/station-move.test.ts`
 
-- [ ] **Step 1: Write the failing tests** (Kitchen on, Bar off; one printed held group):
-  `draft-recall.test.ts`: `"recalling a held dish cancels it on paper only at a station that had the
-  HOLD ticket"`; `adjustments-extra-cancel.test.ts`: `"cancelling a held dish's extra prints only at
-  a station that had the HOLD ticket"`; `station-move.test.ts`: `"moving a held dish from Kitchen to
-  Bar cancels it at Kitchen and prints nothing at Bar until the fire"` and `"… from Bar to Kitchen
-  prints nothing at Bar and a HOLD ticket at Kitchen, which then fires marked FIRE"`.
-- [ ] **Step 2: Run and watch them fail.**
-  `pnpm --filter @waitron/server exec vitest run src/draft-recall.test.ts src/adjustments-extra-cancel.test.ts src/station-move.test.ts -t "HOLD|held"`.
+- [ ] **Step 1: Write the failing tests** (Kitchen on, Bar off, Screen with no printer; one printed
+  held group): `draft-recall.test.ts`: `"recalling a held dish cancels it on paper only at a station
+  recorded for the group, and every screen is told"`; `adjustments-extra-cancel.test.ts`:
+  `"cancelling a held dish's extra prints only at a station recorded for the group"`;
+  `station-move.test.ts`: `"moving a held dish from Kitchen to Bar cancels it on Kitchen's paper,
+  prints nothing at Bar until the fire, and records the reroute notice"`, `"moving a held dish from
+  Bar to Kitchen prints nothing at Bar and a HOLD ticket from Bar at Kitchen, which then fires marked
+  FIRE"`, `"a held dish moved to a recorded station since switched off still prints its HOLD ticket
+  there"`, and `"a held dish moved off the screen-only station keeps its reroute notice"`.
+- [ ] **Step 2: Run and watch the printing checks fail.**
+  `pnpm --filter @waitron/server exec vitest run src/draft-recall.test.ts src/adjustments-extra-cancel.test.ts src/station-move.test.ts -t "recorded|held"`.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the three files without `-t`, plus `src/line-cancel.test.ts
-  src/draft-recall-legacy.test.ts src/till-reroute-e2e.test.ts src/management-api.station-disable.test.ts src/station-delete.test.ts`
+- [ ] **Step 4: Run** the three files without `-t`, every file of Task 32 (as in Task 35a), and
+  `src/line-cancel.test.ts src/draft-recall-legacy.test.ts src/till-reroute-e2e.test.ts src/management-api.station-disable.test.ts src/station-delete.test.ts src/bill-editing.station-move.test.ts`
   — PASS. Then the receipt of Decision 5:
-  `git grep -n -E 'holdPrintedAt|hold_printed_at' -- apps/server/src ':!*.test.ts'` prints only
-  `kitchen-allergy.ts` (`:309`, `:359`), `line-cancel.ts:210`, `order-groups.ts` (`printHoldTickets`'
-  stamp, `printedHeldGroups`) — each left by Decision 5's "Unchanged" list.
+  `git grep -n 'holdGroupId' -- apps/server/src ':!*.test.ts'` names `kitchen-print.ts`,
+  `order-groups.ts`, `draft-recall.ts`, `working-order.ts` and `station-move.ts`, and not
+  `line-cancel.ts`.
 - [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
-  `git commit -s -m "Recall, a cancelled extra and a station move correct only a station's own HOLD paper (A756 PR 6)"`,
+  `git commit -s -m "Recall, a cancelled extra and a station move print only on a station's own HOLD paper (A756 PR 6)"`,
   then update the ledger.
 
 **Assertions changed:** none; the cases are new.
@@ -2860,8 +2919,8 @@ station setting").
 - Modify: `routing-client.ts` (`PrepStation` `:24-38`; `updateStation` `:116-127`),
   `prep-stations-screen.ts` (`:756-757` pass the three; `:766` goes), `strings.ts`
   (`prep.moved_slips_venue_*` EN `:304-305`, ES `:1195-1196` deleted; `prep.ticket_grouping`,
-  `prep.ticket_grouping.combined`, `prep.ticket_grouping.separate`, `prep.print_held_work`,
-  `prep.print_held_work_hint` added EN and ES, Decision 9's words)
+  `prep.ticket_grouping.combined`, `prep.ticket_grouping.separate`, `prep.ticket_grouping_hint`,
+  `prep.print_held_work`, `prep.print_held_work_hint` added EN and ES, Decision 9's words)
 - Test: `station-editor.test.ts`, `station-editor.a11y.test.ts`, `prep-stations-screen.test.ts`
 - Modify (fixtures, setup): every station fixture — `git grep -l -E 'printMovedSlips: (null|true|false)' -- packages/venue-service/src/dashboard packages/venue-service/test`
   minus the operations-model fixtures Task 37 handles (those that also name `kitchenTicketGrouping`):
@@ -3125,7 +3184,9 @@ Open points; the A725 entry `:384-386`), `docs/backlog.md:1571`,
     MOVED slips printed, a station left as "Venue setting" now prints MOVED slips, the venue values
     are dropped, not copied, a group held before the upgrade is treated as having no HOLD paper,
     and no venue reset is needed (Decisions 1 and 2);
-  - **held paper per station** (Decision 5) and the new table;
+  - **held paper per station** (Decision 5) and the new table: a recorded station keeps getting its
+    HOLD paper whatever its later choice, an unrecorded one prints its part at the fire, and
+    notices are unchanged;
   - **no configuration format change** and why (Decision 6);
   - **the departures from A773's picture 10** (Decision 9).
 - [ ] **Step 7: Commit** `git commit -s -m "Guides and backlog: each station sets its own ticket grouping, held printing and MOVED slips (A756 PR 6)"`,
@@ -3214,3 +3275,16 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
   reader moves, writing both values, so each commit stays green; Task 37 stops the dashboard
   calling the venue routes before Task 38 removes them. Tasks 34 and 35b are the largest; their
   implementers follow the handover rule if they run long.
+- PR 6 fresh-context review (2026-10-23), folded in after checking each finding against the code:
+  Decision 5 now keeps the group stamp for every notice and filters only printing (a screen-only
+  station would have lost notices, `kitchen-print.ts:905-926`, `:933-951`, `:1170-1196`), and Tasks
+  35a–35c are rewritten around `CorrectionItem.holdGroupId` with a screen-only case each; a station
+  not recorded for a group now gets no HOLD paper for it at all, so it never holds partial paper
+  (the review proposed a full HOLD ticket for such a station once it is switched on; the plan
+  instead follows the existing rule "A group held before this is turned on prints when it is
+  fired", `strings.ts:530-531`, and `correctJoin`'s early return, `order-groups.ts:2122-2123`, so
+  the table has one writer); a recorded station gets a held move's HOLD ticket whatever its current
+  choice; Tasks 33–35c run all 23 files of Task 32; Task 31 tests the import check in db; the two
+  station-delete pins gain the table; Task 29's commit states why the table is core; the
+  schema-constraints placement, the two places that map null to Print, and the kept grouping hint
+  are named.
