@@ -358,7 +358,7 @@ Nothing about the layout is a setting except what the owner made one in Q42.
 | Device (on the live screen) | which columns are collapsed (tap a heading) | new, remembered on the device |
 | Device (on the device, ☰ → Settings) | **Zones on this device** on a handheld | new on a handheld, following "any device does everything"; a till has it today |
 | Device (on the device) | card reader and printer; Merged/Stacked on a several-station kitchen screen; List/Map per zone | today, List/Map now remembered |
-| Venue (dashboard, Venue settings → Kitchen → **Late flags**, `apps/dashboard/src/screens/venue-settings-screen.ts:11`, `kitchen-screen.ts:22-28`; each station may override, `packages/venue-service/src/dashboard/station-editor.ts:54-59`) | **Ready warning after (min)**: 3 by default, a fourth field after "Warm after", "Overdue after" and "Forgotten after" | new (Q51 (c)) |
+| Venue (dashboard, Venue settings → Kitchen → **Late flags**, `apps/dashboard/src/screens/venue-settings-screen.ts:11`, `kitchen-screen.ts:22-28`; each station may override, `packages/venue-service/src/dashboard/station-editor.ts:54-59`; 2026-10-23, A756 PR 5: that panel and the overrides are gone, each station's three minutes are its own, set in the station editor and Add station) | **Ready warning after (min)**: 3 by default, a fourth field after "Warm after", "Overdue after" and "Forgotten after" | new (Q51 (c)) |
 | Venue (dashboard, floor-plan editor) | each table's **short name** | new (§3.7) |
 
 **How the profile's and the device's "Other stations' dishes" combine** (recommended, Q51 (d)): the
@@ -406,7 +406,7 @@ named.
 | Waiting for the pass | K (in Held); T (Sent box, "1 waiting for the pass") | fired by the waiter, not yet released by the pass (A773's Requested) | A773 §3.3 and A773-2's plan (line 229) write "at the pass", which also reads as "ready, standing at the pass" — Q51 (f) |
 | To fire | P column | requested groups this pass must fire | A757's "Time to fire" (T) is the waiter's own Fire; the same action by a different person, kept |
 | Waiting | K column; T table state | K: released to the station, not started; T: a fired dish older than the first limit | **also** the till bar's **Waiting** tab (`:310`, «En espera» `:2039`): counter orders sent and not paid, or paid and not handed over (`apps/till/src/api/client.ts:1283-1285`), from A738's owner-approved counter design (`docs/backlog/till.md:2267`) — kept, Q51 (f) |
-| Warm (dashboard) | Late flags "Warm after (min)" «Tibio a partir de (min)» (`apps/dashboard/src/i18n/strings.ts:1266`, `:4317`); station editor "Warm" «En demora» and "Warm after (min)" «Aviso a partir de (min)» (`packages/venue-service/src/dashboard/strings.ts:225`, `:252`, `:1136`, `:1164`) | the limit after which T says Waiting | two English words for one meaning, and three Spanish ones; Overdue likewise: «Atrasado a partir de» (`apps/dashboard/src/i18n/strings.ts:4318`), «Retrasado» and «Atraso a partir de» (venue-service `:1137`, `:1165`), «Con retraso» on T (`:2729`) — Q51 (f) |
+| Warm (dashboard) | Late flags "Warm after (min)" «Tibio a partir de (min)» (`apps/dashboard/src/i18n/strings.ts:1266`, `:4317`; 2026-10-23, A756 PR 5: deleted with the panel); station editor "Warm" «En demora» and "Warm after (min)" «Aviso a partir de (min)» (`packages/venue-service/src/dashboard/strings.ts:225`, `:252`, `:1136`, `:1164`) | the limit after which T says Waiting | two English words for one meaning, and three Spanish ones; Overdue likewise: «Atrasado a partir de» (`apps/dashboard/src/i18n/strings.ts:4318`), «Retrasado» and «Atraso a partir de» (venue-service `:1137`, `:1165`), «Con retraso» on T (`:2729`) — Q51 (f) |
 | Preparing | K column; T row status (`:1075`) | the cook has started | the station editor says "Being made" (venue-service `:223`). Spanish: «Preparando» on K (`:2374`), «En preparación» on T (`:2771`), the word the owner chose for "preparation started" on 2026-10-19 (A758 design, D23, `docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md:76`, `:864-871`) — kept, Q51 (f) |
 | In progress | P column | released and not yet all ready (waiting or preparing) | **the till's payment state** "In progress" «En curso» for a payment still going through (`:1557`, `:3248`; the schema allows that state for either method, `packages/db/src/schema/bill-payments.ts:22-23`), built in #956; A796's decided design uses «En curso» for it (`docs/superpowers/specs/2026-10-19-a796-handheld-payments-design.md:511`); I found no owner decision naming the word — Q51 (f) |
 | Ready | K, P column; T table state, rows, Ready bar | cooked, waiting to go out (on P: every station's part) | above phone width the floor's summary is titled "Ready to serve" «Listo para servir» (`:1007`, `:2705`) — Q51 (f) |
@@ -617,7 +617,7 @@ settle may be built without waiting").
    a till route). Independent.
 5. **The Ready bar and remembered List/Map.** LIGHT. Independent; it shows short names once slice 1
    has landed.
-6. **Ready warning time, data.** Migration; the Late flags and station editor field; each station's
+6. **Ready warning time, data.** Migration; the Late flags and station editor field (2026-10-23, A756 PR 5: the Late flags panel is gone; the station editor and Add station hold each station's minutes); each station's
    entry in the ready signal gains its oldest ready time and its warning minutes. FULL. Waits for
    Q51 (c), which decides where the value lives.
 7. **The Ready bar's warning.** Amber, slow pulse, longest-waiting table first, reduced motion. LIGHT.
@@ -693,7 +693,7 @@ the pass, and Overview first when it is shown (§3.5).
   a back-arrow button for the last table opened, which does not say why it is there.
 - **(c) The Ready bar's warning time** (picture 01). Recommended: **3 minutes by default, set in the
   dashboard's Venue settings → Kitchen → Late flags as a fourth field after "Warm after", "Overdue
-  after" and "Forgotten after", and each station may set its own, as it can those three**, because
+  after" and "Forgotten after", and each station may set its own, as it can those three** (2026-10-23, A756 PR 5: Venue settings → Kitchen → Late flags no longer exists and there are no per-station overrides; each station's three minutes are its own, set in the station editor and Add station), because
   how long food may sit depends on the food: hot grill plates go cold before a salad wilts. Example:
   Santet keeps 3 min but sets Cold to 6; T5's salad, ready for 4 minutes, leaves the bar calm, while
   T5's secreto, ready for 4, turns it amber. Alternative: one value per department, in the
