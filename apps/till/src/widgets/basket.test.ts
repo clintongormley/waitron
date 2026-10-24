@@ -2,7 +2,7 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { type WtTextarea, setContentLanguages } from "@waitron/ui";
+import { type WtTextarea, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
@@ -1157,6 +1157,48 @@ it("shows a retrieved line's frozen options answers in the STAFF wording", async
   expect(
     [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
   ).toEqual(["Punto personal: Poco personal"]);
+});
+
+describe("till-basket: a line name's language", () => {
+  const original = currentContentLanguages();
+  afterEach(() => setContentLanguages(original));
+
+  it("a bill line's own name carries the content language; its markers do not", async () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    const store = new WorkingOrderStore();
+    store.loadFrom("held", [
+      {
+        workingOrderLineId: "stored-gone",
+        product: { ...cafe, id: "gone", name: "Cortado" },
+        quantity: "1",
+        notOffered: true,
+      },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const name = el.shadowRoot!.querySelector(".line > .name")!;
+    const own = name.querySelector<HTMLElement>(".product-name")!;
+    expect(own.getAttribute("lang")).toBe("es");
+    expect(getComputedStyle(own).hyphens).toBe("auto");
+    expect(own.textContent).toBe("Cortado");
+    expect(own.textContent).not.toContain(t("basket.not_offered"));
+    expect(name.textContent).toContain(t("basket.not_offered"));
+  });
+
+  it("an English venue's names wrap as before", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    await page.viewport(390, 844);
+    const store = new WorkingOrderStore();
+    store.addProduct(
+      { ...cafe, id: "long", name: "A dish with a very long unbrokennameandmoretext" },
+      "15",
+    );
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(el.shadowRoot!.querySelector(".product-name")!.getAttribute("lang")).toBe("en");
+    const edge = el.getBoundingClientRect();
+    const remove = el.shadowRoot!.querySelector<HTMLElement>(".remove")!.getBoundingClientRect();
+    expect(remove.left).toBeGreaterThanOrEqual(edge.left);
+    expect(remove.right).toBeLessThanOrEqual(edge.right);
+  });
 });
 
 describe("till-basket: a subset of the order's lines", () => {

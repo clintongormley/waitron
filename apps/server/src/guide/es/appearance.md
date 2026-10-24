@@ -99,6 +99,11 @@ redondeado al píxel. El 100 % es el tamaño de Waitron, y el 130 %, el mayor. L
 cambian, ni tampoco el tamaño mínimo de un botón, incluidos los botones de producto de una caja, así
 que un nombre largo que ya no cabe ocupa otra línea.
 
+En una caja de un local cuyo idioma de contenido predeterminado es el español, un nombre de producto
+largo en un botón de producto o en una línea de la cuenta se corta por una sílaba, con un guion. Los
+nombres en un idioma que el navegador no divide con guiones, entre ellos el inglés, pueden cortarse
+en mitad de una palabra a partir del 115 %.
+
 Un tamaño de texto guardado llega a los paneles y las cajas igual que los colores de un tema guardado
 (consulta [Guarda un tema](appearance.md#save)). Una pantalla de cocina en la que nadie inicia sesión
 lo toma la próxima vez que se inicia.

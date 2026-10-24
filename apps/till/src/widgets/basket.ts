@@ -3,7 +3,12 @@ import "./order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "./order-kitchen-note.js";
 import type { ModifierConfirmDetail, StagedRemoval } from "./modifier-picker.js";
 import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
-import { ContentLanguageController, formatDecimalInput, Gestures } from "@waitron/ui";
+import {
+  ContentLanguageController,
+  currentContentLanguages,
+  formatDecimalInput,
+  Gestures,
+} from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -142,6 +147,10 @@ export class TillBasket extends LitElement {
         flex: 1;
         min-width: min(100%, calc(var(--wt-tap-min) * 3));
         overflow-wrap: anywhere;
+      }
+
+      .product-name {
+        hyphens: auto;
       }
 
       /* The name, or what is slotted in its place, on a row of its own above the line's controls,
@@ -869,7 +878,10 @@ export class TillBasket extends LitElement {
                   }}
                 >
                   <span class="name" part="name"
-                    ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot
+                    ><slot name=${`lead-${index}`}
+                      ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}
+                        >${this.#lineName(line)}</span
+                      ></slot
                     >${this.#nutrition(line)}${
                       line.notOffered ? notOfferedMarker() : nothing
                     }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${

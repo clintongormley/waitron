@@ -1551,6 +1551,16 @@ screen (`till-lock-screen`) name the logo, as its alt text, by the start read's 
 address, not through `ServerRouter`; moved to another server, it would keep the theme it has, or
 take the old server's while that one still answers, so failover work must route it.
 
+The `lang` on a till's product button names and bill line names is the venue's default content
+language, which is not part of the start read: the till reads the content languages at start and
+again 60 s after each read answers (`#refreshContentLanguages`, `apps/till/src/till-app.ts`), and the
+menu browser and the basket redraw on a change (`ContentLanguageController`), so the `lang` follows
+within about a minute. Names are hyphenated by that language's rules (`hyphens: auto`); Chromium does
+not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
+long word overflowing a narrow box, where `es`, `de` and `fr` broke it with a hyphen). A table
+order's draft arrangement slots its own name into the basket's `lead-<n>`
+(`apps/till/src/screens/till-table-order-screen.ts`), and that name carries no `lang`.
+
 Some of those values change only when the server restarts, and the revision covers them, so an open
 till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`
 (`loadTillConfig`, `apps/server/src/till-config.ts`), the simplified-invoice limit from the fiscal
