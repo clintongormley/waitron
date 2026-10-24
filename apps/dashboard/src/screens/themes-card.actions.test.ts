@@ -446,6 +446,49 @@ describe("dashboard-themes-card actions", () => {
     expect(useTheme).toHaveBeenCalledTimes(2);
   });
 
+  it("the switch dialog says the text changes size between themes of different sizes", async () => {
+    const large = theme("t-large", "Large", { ...LUCIA, textScale: 120 });
+    const larger = theme("t-larger", "Larger too", { ...LUCIA, textScale: 120 });
+    const largest = theme("t-largest", "Largest", { ...LUCIA, textScale: 130 });
+    const unread: ThemeView = {
+      ...lucia,
+      id: "t-unread",
+      name: "Unread",
+      choices: null,
+      light: null,
+      dark: null,
+      warnings: [],
+    };
+    const themes = [lucia, large, larger, largest, unread];
+    const noteFor = async (el: Card, key: string) => {
+      await choose(el, key, "use");
+      const dialog = await switchDialog(el);
+      const note = dialog.querySelector("[data-test=switch-text-size]")?.textContent ?? null;
+      const closed = dialogClosed(dialog);
+      await userEvent.click(switchButton(dialog, "back"));
+      await closed;
+      return note;
+    };
+    const sentence = "Text on the tills changes size too.";
+
+    const fromLarge = (await mount({ themes, inUse: "t-large" })).el;
+    expect(await noteFor(fromLarge, "t-lucia")).toBe(sentence);
+    expect(await noteFor(fromLarge, "t-larger")).toBeNull();
+    expect(await noteFor(fromLarge, "t-unread")).toBe(sentence);
+    expect(await noteFor(fromLarge, "waitron")).toBe(sentence);
+    cleanupWidgets();
+
+    const fromWaitron = (await mount({ themes, inUse: null })).el;
+    expect(await noteFor(fromWaitron, "t-lucia")).toBeNull();
+    expect(await noteFor(fromWaitron, "t-largest")).toBe(sentence);
+    expect(await noteFor(fromWaitron, "t-unread")).toBeNull();
+    cleanupWidgets();
+
+    const fromUnread = (await mount({ themes, inUse: "t-unread" })).el;
+    expect(await noteFor(fromUnread, "t-lucia")).toBeNull();
+    expect(await noteFor(fromUnread, "t-large")).toBe(sentence);
+  });
+
   it("a switch to a theme deleted elsewhere says so", async () => {
     const { el, changes, useTheme, getVenueTheme } = await mount(four);
     useTheme.mockRejectedValueOnce({ code: "theme.not_found" });

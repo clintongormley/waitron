@@ -8,6 +8,7 @@ import {
   THEME_RULES,
   type ThemeChoices,
   type ThemeColour,
+  type TextScale,
   type ThemeWarning,
   colourKey,
   groupAgainst,
@@ -235,6 +236,11 @@ export function savedWarningLine(warning: ThemeWarning): string {
 
 export function textScaleLabel(n: number): string {
   return new Intl.NumberFormat(currentLocale(), { style: "percent" }).format(n / 100);
+}
+
+export function textScaleRow(textScale: TextScale): string {
+  const size = textScaleLabel(textScale);
+  return textScale === 100 ? fill("appearance.text_size_standard", { size }) : size;
 }
 
 export function textScaleSpoken(n: number): string {

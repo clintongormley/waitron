@@ -106,7 +106,7 @@ describe("the read-only Look card", () => {
     expect(q(reader, "[data-test=edit]")).toBeNull();
   });
 
-  it("labels the rows in order: theme, logo, brand, background, corners, colours set by hand", async () => {
+  it("labels the rows in order: theme, logo, brand, background, corners, text size, colours set by hand", async () => {
     setLocale("en-GB");
     const el = await mount(inUse(lucia));
     const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((dt) => text(dt));
@@ -116,8 +116,26 @@ describe("the read-only Look card", () => {
       "Brand colour",
       "Background",
       "Corners",
+      "Text size",
       "Colours set by hand",
     ]);
+  });
+
+  it("the Text size row reads 100% (standard), or the step", async () => {
+    // Read raw: `row` folds the no-break space Spanish puts before "%".
+    const size = (el: Card) => q(el, "[data-test=saved-text-size]")?.textContent;
+    setLocale("en-GB");
+    expect(size(await mount(inUse(lucia)))).toBe("100% (standard)");
+    cleanupWidgets();
+    const larger = theme("t-large", "Large", { ...LUCIA, textScale: 120 });
+    expect(size(await mount(inUse(larger)))).toBe("120%");
+    cleanupWidgets();
+    setLocale("es-ES");
+    expect(size(await mount(inUse(lucia)))).toBe(
+      es["appearance.text_size_standard"].replace("{size}", "100\u00a0%"),
+    );
+    cleanupWidgets();
+    expect(size(await mount(inUse(larger)))).toBe("120\u00a0%");
   });
 
   it("shows Bar Lucía in use, its brand row naming the dark screens' shade with two chips", async () => {

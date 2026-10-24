@@ -85,6 +85,7 @@ import {
   saveDialogLine,
   savedWarningLine,
   textScaleLabel,
+  textScaleRow,
   textScaleSpoken,
   textSizesLine,
 } from "../widgets/theme-words.js";
@@ -1093,6 +1094,11 @@ export class LookCard extends LitElement {
             label: t("appearance.corners"),
             value: t(`appearance.corners.${choices.corners}`),
             dataTest: "saved-corners",
+          },
+          {
+            label: t("appearance.text_size"),
+            value: textScaleRow(choices.textScale),
+            dataTest: "saved-text-size",
           },
           {
             label: t("appearance.colours_by_hand"),

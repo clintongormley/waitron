@@ -63,6 +63,7 @@ interface Switching {
   id: string | null;
   name: string;
   lines: string[];
+  textSizeNote: boolean;
 }
 
 function coloursOf(view: ThemeView | null): [string, string, string] {
@@ -94,6 +95,9 @@ function rowsOf(list: ThemeList): Row[] {
     })),
   ];
 }
+
+const textScaleOf = (view: ThemeView | null | undefined) => view?.choices?.textScale ?? 100;
+const inUseView = (list: ThemeList) => list.themes.find((view) => view.id === list.inUse);
 
 function warningLinesOf(row: Row): string[] {
   const choices = row.view?.choices ?? null;
@@ -374,6 +378,7 @@ export class ThemesCard extends LitElement {
       id: row.view?.id ?? null,
       name: row.name,
       lines: warningLinesOf(row),
+      textSizeNote: textScaleOf(row.view) !== textScaleOf(inUseView(this.list!)),
     };
   }
 
@@ -415,6 +420,7 @@ export class ThemesCard extends LitElement {
         .open=${switching !== null}
         .name=${switching?.name ?? ""}
         .lines=${switching?.lines ?? []}
+        .textSizeNote=${switching?.textSizeNote ?? false}
         .busy=${this.submitting}
         .error=${this.switchError}
         .opener=${this.#opener}
