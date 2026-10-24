@@ -1810,9 +1810,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   can open there. Fix: say the zone has no tables.
 
 - **A1082. At 390 px the counter till's top bar is cut off.** Seen, 2026-10-24 (A789 slice 2's
-  look, `11-counter-sale-390-light.png` in `~/waitron-campaign-c/a789-2-shots/`): the zone tab
-  reads "Counter: Do" and the tabs before it are out of sight, while the page itself does not
-  scroll sideways; a handheld's top bar fits at the same width. Slice 2 did not change the top bar,
+  look, `11-counter-sale-390-light.png` in `~/waitron-campaign-c/a789-2-shots/`): the first tab,
+  Counter with its zone, reads "Counter: Do", and the buttons after it (Floor, Parked, Waiting)
+  are out of sight; the bar scrolls inside itself, while the page itself does not scroll sideways.
+  A handheld's top bar fits at the same width. Slice 2 did not change the top bar,
   so I believe it predates it.
 
 - **A1057. A handheld whose profile allows no zones shows a blank Floor.** Seen, 2026-10-24 (A797

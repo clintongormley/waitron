@@ -4586,8 +4586,8 @@ the same dialog asks whether waiting dishes move there or stay to finish; starte
 A manager PIN step keeps the draft after a refused PIN. Delete on Prep stations uses the shared
 deletion dialog and refuses unfinished dishes. Reopening moves no dishes back.
 The counter and table order screens show the
-period's end as status text. A zone that closes later today has Keep {zone} open later, whose
-dialog offers server-provided times and allows ending an existing extension. Both destination and endpoint dialogs
+period's end as status text. A zone with a closed time today that has not yet ended, whether it
+closes later or is closed now, has Keep {zone} open later, whose dialog offers server-provided times and allows ending an existing extension. Both destination and endpoint dialogs
 use the shared draft scope and save-action state, with reconnect cases in their
 `*.unsaved.test.ts` suites under `apps/till/src/widgets/`.
 Routes shows the routing grid (`packages/venue-service/src/dashboard/routing-grid.ts`): a column

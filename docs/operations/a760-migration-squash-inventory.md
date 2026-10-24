@@ -320,7 +320,7 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 | `device_kitchen_screen_zones`            | `device_kitchen_screen_zones`                | `packages/venue-service/src/classification.ts:27` |
 | `device_kitchen_screen_removals`         | `device_kitchen_screen_removals`             | `packages/venue-service/src/classification.ts:28` |
 | `station_day_states`                     | `station_day_states`                         | `packages/venue-service/src/classification.ts:29` |
-| `period_extensions` (dropped 2026-10-24, A789 slice 2) | `period_extensions`                          | `packages/venue-service/src/classification.ts:30` |
+| `period_extensions` (dropped 2026-10-24, A789 slice 2) | `period_extensions`                          | `packages/venue-service/src/classification.ts` (its `classify("period_extensions", …)` entry removed by A789 slice 2) |
 | `routing_cells`                          | `routing_cells`                              | `packages/venue-service/src/classification.ts:31` |
 | `routing_cell_periods`                   | `routing_cell_periods`                       | `packages/venue-service/src/classification.ts:32` |
 | `order_service_contexts`                 | `order_service_contexts`                     | `packages/venue-service/src/classification.ts:33` |
