@@ -2887,7 +2887,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   landed 2026-10-24 (#2035): the Look card's Logo field (a main image and an optional
   one for dark screens, picked from the image library), the preview's banner strip, the saved card's
   Logo row, Use Waitron's look removing the logo, and the image library naming the use "Logo of
-  theme {name}" with a link to the Appearance page. Slice 8b landed 2026-10-2x (#PR): the venue's
+  theme {name}" with a link to the Appearance page. Slice 8b landed 2026-10-24 (#2042): the venue's
   logo replaces Waitron's in the dashboard banner, a handheld's bar and the till and handheld
   sign-in, each image following the screen's Theme setting and dark screens with one image drawing
   it on a white plate (`--wt-color-logo-plate`); "Powered by Waitron" under both sign-in forms while
