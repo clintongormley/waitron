@@ -3844,10 +3844,16 @@ rather than an empty list, and never throws (ruling R4b-1-1). `recordMisdated`
 (`clock-stop-incidents.ts`) records one `clock.records_misdated` for each closing that lists any
 record or cannot tell. A list's alert names the earliest listed record's sale; a "cannot tell" alert
 names no sale. `recordIncident` drops an alert whose source, device, code and sale match one still
-open, so **a second "cannot tell" folds into the open one**, whatever sales the two checks opened
-on, because the open one's earlier start already asks for every sale since then to be checked
-("stays one open alert, naming no sale, when a second closing cannot tell" and "folds a second
-closing that cannot tell into the open one when a sale came between them",
+open, so **at most one "cannot tell" is open**, whatever sales the checks opened on. It asks for
+every sale since its start to be checked, so it keeps the earliest start: a "cannot tell" whose
+check opened before the open one's start has the open one marked handled by the system and is
+recorded in its place, which the managers' email duty emails as a new alert (it keeps one
+episode per alert id: "emails each alert of one code on its own, once",
+`apps/server/src/box-alert-email.duty.test.ts`); one whose check opened at or after that start
+folds into the open one, unchanged ("stays one open alert, naming no sale, when a second closing cannot tell", "folds a
+second closing that cannot tell into the open one when a sale came between them", "replaces the
+open one with a second closing that cannot tell whose check opened earlier" and "keeps the open
+one when a second closing that cannot tell opened at the same reading",
 `clock-stop-incidents.test.ts`). A list never folds into a "cannot tell": it has a sale and the
 "cannot tell" has none ("lists a later closing's wrongly dated sales beside an open alert that
 cannot tell, whatever sale each names", `apps/server/src/clock-confirm.route.test.ts`). A list

@@ -1,7 +1,7 @@
 import "./errors.js";
-import { and, asc, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { recordIncident, recordIncidentOnce } from "@waitron/core";
+import { markIncidentHandled, recordIncident, recordIncidentOnce } from "@waitron/core";
 import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin } from "@waitron/shared";
@@ -41,8 +41,9 @@ export async function recordRestarted(
 /** Records `clock.records_misdated` for the closing just written as `confirmationId`, when
  * `misdatedRecords` finds any record or cannot tell; a closing that finds none records nothing.
  * A list's alert names its earliest listed record's sale. One that cannot tell names no sale, so it
- * folds into any open one that cannot tell, whose earlier start already covers it, and never into a
- * list's alert, which would hide that list. */
+ * never folds into a list's alert, which would hide that list, and at most one is open. That one
+ * asks for every sale since its start to be checked, so a closing whose check opened earlier has
+ * it marked handled by the system and records its own; any other folds into it. */
 export async function recordMisdated(
   tx: Transaction,
   input: {
@@ -85,6 +86,7 @@ export async function recordMisdated(
       partial,
       unconfirmed: true,
     };
+    await replaceLaterStart(tx, input.check.openedAt, reading.instant);
   }
   await recordIncident(tx, {
     origin: jobOrigin("dashboard"),
@@ -93,6 +95,28 @@ export async function recordMisdated(
     severity: "error",
     detectedAt: reading.instant,
   });
+}
+
+/** Marks the open "cannot tell" alert handled by the system at `at` when it starts later than
+ * `start`, rather than changing its params: handling is the one change an incident takes
+ * (`packages/db/src/schema/incidents.ts`). */
+async function replaceLaterStart(tx: Transaction, start: Date, at: Date): Promise<void> {
+  const origin = jobOrigin("dashboard");
+  const [open] = await tx
+    .select({ id: incidents.id, params: incidents.params })
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.source, origin.source),
+        isNull(incidents.deviceId),
+        eq(incidents.code, "clock.records_misdated"),
+        isNull(incidents.saleId),
+        isNull(incidents.acknowledgedAt),
+      ),
+    );
+  if (open === undefined) return;
+  if (Date.parse(String(open.params["from"])) <= start.getTime()) return;
+  await markIncidentHandled(tx, { id: open.id, personId: null, handledAt: at });
 }
 
 function parsed(text: string): unknown {

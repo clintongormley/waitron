@@ -378,6 +378,77 @@ describe("the wrongly dated sales' alert", () => {
       [null, expect.objectContaining({ confirmationId: first.id, from: iso(R) })],
     ]);
   });
+
+  it.each([
+    ["no sale", false],
+    ["a sale", true],
+  ])(
+    "replaces the open one with a second closing that cannot tell whose check opened earlier, with %s between them",
+    async (_name, saleBetween) => {
+      await sale(T);
+      await openCheckAt(R);
+      const first = (await closesByItself(T + M, [authority(T + 30 * S, 2 * H)])).confirmation!;
+      if (saleBetween) await sale(T + 2 * M);
+      // The clock steps back further than the first stop's start.
+      await openCheckAt(R - H);
+      const second = (await closesByItself(T + 3 * M, [authority(T + 150 * S, 2 * H)]))
+        .confirmation!;
+      expect([first.source, second.source]).toEqual(["elapsed", "elapsed"]);
+      const rows = suite.db
+        .all<{
+          saleId: string | null;
+          params: string;
+          detectedAt: string;
+          acknowledgedAt: string | null;
+          acknowledgedBy: string | null;
+        }>(
+          sql`select sale_id as saleId, params, detected_at as detectedAt,
+                     acknowledged_at as acknowledgedAt, acknowledged_by as acknowledgedBy
+              from incidents where code = ${MISDATED} order by detected_at, id`,
+        )
+        .map((row) => ({ ...row, params: JSON.parse(row.params) as unknown }));
+      expect(rows).toEqual([
+        {
+          saleId: null,
+          params: expect.objectContaining({ confirmationId: first.id, from: iso(R) }),
+          detectedAt: iso(T + M),
+          acknowledgedAt: iso(T + 3 * M),
+          acknowledgedBy: null,
+        },
+        {
+          saleId: null,
+          params: {
+            confirmationId: second.id,
+            count: 0,
+            from: iso(R - H),
+            fromOffsetMinutes: 60,
+            partial: true,
+            unconfirmed: true,
+          },
+          detectedAt: iso(T + 3 * M),
+          acknowledgedAt: null,
+          acknowledgedBy: null,
+        },
+      ]);
+    },
+  );
+
+  it("keeps the open one when a second closing that cannot tell opened at the same reading", async () => {
+    await sale(T);
+    await openCheckAt(R);
+    const first = (await closesByItself(T + M, [authority(T + 30 * S, 2 * H)])).confirmation!;
+    await openCheckAt(R);
+    await closesByItself(T + 2 * M, [authority(T + 90 * S, 2 * H)]);
+    expect(incidents(MISDATED).map((row) => row.params)).toEqual([
+      expect.objectContaining({ confirmationId: first.id, from: iso(R) }),
+    ]);
+    expect(
+      suite.db.all<{ n: number }>(
+        sql`select count(*) as n from incidents
+            where code = ${MISDATED} and acknowledged_at is not null`,
+      )[0]!.n,
+    ).toBe(0);
+  });
 });
 
 describe("a closing that cannot tell, across a summer-time change", () => {

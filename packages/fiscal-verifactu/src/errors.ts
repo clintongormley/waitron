@@ -400,7 +400,8 @@ declare module "@waitron/shared" {
      * clock check that finds wrongly dated records, or cannot tell which they are (`unconfirmed`).
      * With a list, `count` records from `from` to `to`, the earliest and latest generation times
      * (ISO 8601), each with its record's offset. When it cannot tell, `count` is 0, `from` is when
-     * the check opened, with the box's offset at the closing, and there is no `to`. `partial` is
+     * the check opened, with the offset the box read then (the closing's when the check stored
+     * none), and there is no `to`. `partial` is
      * the closing's: the stop's start was not known, so the list may be short.
      */
     "clock.records_misdated": {
