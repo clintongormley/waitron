@@ -47,6 +47,7 @@ import {
 } from "./recovery-state.js";
 import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
+import { closeListener } from "./close-listener.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
@@ -653,7 +654,11 @@ function bootThisProcess(): Promise<void> {
     readRecoveryState,
     writeRecoveryState,
     startServer,
-    serveRecovery,
+    serveRecovery: async (app, options) => {
+      const listener = await serveRecovery(app, options);
+      installShutdownHandlers({ close: () => closeListener(listener) });
+      return listener;
+    },
     installShutdownHandlers,
     // `unref` so the timer alone never holds the process open: the listener the server bound is
     // what keeps it alive, and a process that dies before the threshold has not stayed up.

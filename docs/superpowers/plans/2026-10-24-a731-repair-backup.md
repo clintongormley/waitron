@@ -199,6 +199,23 @@ entry checks pass 206 cases and the protected fiscal files pass 20 unchanged cas
 request-drain/alternate-action races, supervised signal handling, Task 4 and whole-branch
 qualification remain open. Do not finish or land this partial feature.
 
+**Task 3 request handoff and process shutdown checkpoint, 24 October:** four real child-process
+cases first exited directly on SIGTERM or SIGINT. The supervised recovery listener now uses the
+existing shutdown handler and listener-close helper. The same four cases pass with private proof
+copies removed, including saved recovery level. A fifth process case reauthenticates an interrupted
+committed target and checks cleanup after its recovery-requested restart. These checks cover an
+already authenticated copy; they do not establish cleanup during an unfinished source download.
+
+Two controlled uploads cover ordinary configuration work and first-setup offerings. Backup proof
+waits for those requests, closes its pool after their bodies finish and fences later ordinary
+actions. In an installed disposable checkout, removing that request drain makes the offerings case
+observe an early pool close. Removing signal-handler wiring fails the four signal cases. The seven
+cases pass before and after restoring those omissions. Three API races queue a second open, second
+commit or ordinary start-again behind placement; the first commit selects its original target and
+the queued action refuses. The focused boundary run passes 95 cases, the existing entry run passes
+132 cases and the protected fiscal files pass 20 unchanged cases. Task 4 and whole-branch
+qualification remain open; this is not a finish-branch checkpoint.
+
 ## Task 4: Guided page, documentation twins and final qualification
 
 **Interfaces — produce:** `FirstSetupBackupSession` in the new browser session file owns `open(request): Promise<BackupRepairSession>`, `prepare(proposal): Promise<unknown>`, `commit(input): Promise<void>`, `dispose(): Promise<void>`. It consumes new `SetupApi.openFirstSetupBackup`, `prepareFirstSetupBackup`, `commitFirstSetupBackup`, `closeFirstSetupBackup` methods matching Task 3. Its generation/disconnect handling discards late replies; it stores no secrets/grant in local/session storage. Add client Cloud adapter methods for the repair prefix rather than sending ordinary Cloud POSTs.

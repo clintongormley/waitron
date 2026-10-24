@@ -670,3 +670,111 @@ it("uses checked Cloud approval and node proof through the repair adapters", asy
   expect(await f.workspace.read()).toEqual([]);
   expect(JSON.stringify(f.log.mock.calls)).not.toContain(f.restore.recoveryKey);
 });
+
+it.each(["open", "commit", "start-again"] as const)(
+  "a queued %s cannot replace an in-flight recovery commit",
+  async (action) => {
+    const f = await fixture(true);
+    if (action === "start-again") {
+      const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
+      const { mountFirstSetupResolutionApi } = await import("./setup-first-fiscal-api.js");
+      const actions = createFirstSetupResolutionActions({ ...f.roots, host: f.host });
+      mountFirstSetupResolutionApi(f.app, f.host, f.log, {
+        startAgain: actions.startAgainFirstSetup,
+      });
+    }
+    const opened = await f.app.request(
+      `https://localhost${prefix}/open`,
+      { method: "POST", body: f.upload() },
+      tls(),
+    );
+    expect(opened.status).toBe(200);
+    const session = await opened.json();
+    const selected = (await recoverySelectPastWaits(
+      clock,
+      { prepare: (proposal, client) => f.service.prepare(session.sessionId, proposal, client) },
+      { onBox: false },
+    )) as { status: string; input: unknown };
+    expect(selected.status).toBe("selected");
+    const before = (await f.workspace.read()).at(-1)!;
+    const original = await readFile(join(f.roots.stateDir, "first-setup.json"));
+    let reached!: () => void;
+    const started = new Promise<void>((done) => {
+      reached = done;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const append = f.workspace.append;
+    const appendSpy = vi.spyOn(f.workspace, "append").mockImplementation(async (record) => {
+      if (record.phase === "placement-started") {
+        reached();
+        await gate;
+      }
+      return append(record);
+    });
+    let committed: Response | Promise<Response> | undefined;
+    let raced: Response | Promise<Response> | undefined;
+    let exclusionSpy: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      committed = f.post("commit", { sessionId: session.sessionId, input: selected.input });
+      await started;
+      let entered!: () => void;
+      const queued = new Promise<void>((done) => {
+        entered = done;
+      });
+      const exclusion = f.host.resolution.withVenueExclusion;
+      exclusionSpy = vi.spyOn(f.host.resolution, "withVenueExclusion").mockImplementation((run) => {
+        entered();
+        return exclusion(run);
+      });
+      if (action === "open")
+        raced = f.app.request(
+          `https://localhost${prefix}/open`,
+          { method: "POST", body: f.upload() },
+          tls(),
+        );
+      else if (action === "commit")
+        raced = f.post("commit", { sessionId: session.sessionId, input: selected.input });
+      else {
+        raced = f.app.request(
+          "https://localhost/setup-api/first-setup/resolution/start-again",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(f.payload.observation),
+          },
+          tls(),
+        );
+      }
+      await queued;
+      release();
+      const first = await committed!;
+      expect(first.status, await first.clone().text()).toBe(200);
+      expect(await first.json()).toEqual({ restarting: true });
+      const loser = await raced!;
+      expect(loser.status).toBe(action === "commit" ? 403 : action === "open" ? 409 : 503);
+      expect(await loser.json()).toMatchObject({
+        error: {
+          code:
+            action === "commit"
+              ? "setup.owner_required"
+              : action === "open"
+                ? "setup.attempt_conflict"
+                : "setup.not_ready",
+        },
+      });
+      const after = (await f.workspace.read()).at(-1)!;
+      expect(after.phase).toBe("selected");
+      expect(after.target).toEqual(before.target);
+      expect(after.binding).toEqual(before.binding);
+      expect(await readFile(join(f.roots.stateDir, "first-setup.json"))).toEqual(original);
+    } finally {
+      release();
+      await Promise.allSettled([committed, raced]);
+      appendSpy.mockRestore();
+      exclusionSpy?.mockRestore();
+    }
+  },
+);

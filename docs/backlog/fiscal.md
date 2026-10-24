@@ -1514,6 +1514,8 @@ A setup that already replaced its original workspace now keeps the recovery reco
 folders and restores into a separate target. An invalid Cloud origin leaves public repair status available; Cloud
 validates that setting when used. Closing a repair listener waits for private-copy disposal and
 invalidates its grant. These paths have focused tests, including real TLS listeners in all three
-entry modes; they do not establish supervised signal handling or the remaining request races.
-Complete listener/source/race qualification, the dedicated page and whole-branch review remain open. The plan is
+entry modes. Real supervised-process checks cover disposal of an authenticated copy on SIGTERM
+and SIGINT, both before and after recovery escalation, and a restart after exact target resume.
+Controlled uploads check that backup proof waits for admitted setup work and later ordinary
+actions refuse. The dedicated page, complete integration and whole-branch review remain open. The plan is
 `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.
