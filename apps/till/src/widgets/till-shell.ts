@@ -454,8 +454,9 @@ export class TillShell extends LitElement {
     this.#run += 1;
   }
 
-  /** With More closed and above phone width: 0, everything on the bar; 1, the name hidden; n, the
-   * name hidden and the first n − 1 present items of `LEAVE_ORDER` in More. */
+  /** With More closed and above phone width: 0, everything on the bar; 1, the brand mark (the venue's
+   * logo, or the word) hidden; n, the brand mark hidden and the first n − 1 present items of
+   * `LEAVE_ORDER` in More. */
   @state() private steps = 0;
   /** A handheld at phone width whose bar does not fit with the language chooser: it moves to the
    * end of More. It stays there while More is open, even once the screen widens past phone width;

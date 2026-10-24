@@ -116,9 +116,9 @@ El logotipo del tema en uso se ve en estos lugares:
 
 - **La franja superior del panel**, antes de la razón social de la empresa, tanto con la sesión
   iniciada como en la página de inicio de sesión.
-- **La barra superior de un terminal de camarero**, donde estaba la palabra «Waitron». Es lo
-  primero que la barra deja fuera cuando le falta sitio, y una pantalla estrecha, como la de un
-  teléfono, lo deja fuera del todo, como hacía con la palabra.
+- **La barra superior de un terminal de camarero**, en lugar de la palabra «Waitron». Es
+  lo primero que la barra deja fuera cuando le falta sitio, y una pantalla estrecha, como la de un
+  teléfono, lo deja fuera del todo.
 - **La pantalla de inicio de sesión de una caja registradora o de un terminal de camarero**, encima
   del nombre del dispositivo y de la lista de nombres.
 - **«Con la tecnología de Waitron»**, una línea bajo el formulario de inicio de sesión del panel y
@@ -132,7 +132,7 @@ oscura, cuando el tema no tiene versión para pantallas oscuras, muestra el logo
 una placa blanca.
 
 Las pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan un
-cambio de colores, como describe **Guarda un tema** más abajo.
+cambio de colores, como describe «Guarda un tema», más abajo.
 
 Cuando una pantalla no puede cargar la imagen, la franja superior del panel muestra el logotipo de
 Waitron, la barra de un terminal de camarero muestra la palabra «Waitron» y la pantalla de inicio de

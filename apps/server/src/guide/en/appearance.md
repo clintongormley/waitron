@@ -107,9 +107,8 @@ The logo of the theme in use shows in these places:
 
 - **The dashboard's banner**, before the business's legal name, both when you are signed in and on
   the sign-in page.
-- **A handheld's top bar**, where the word "Waitron" was. It is the first thing the bar leaves out
-  when it is short of room, and a narrow screen, such as a phone's, leaves it out altogether, as it
-  did the word.
+- **A handheld's top bar**, in place of the word "Waitron". It is the first thing the bar leaves
+  out when it is short of room, and a narrow screen, such as a phone's, leaves it out altogether.
 - **The sign-in screen of a cash register or handheld**, above the device's name and the list of
   names.
 - **"Powered by Waitron"**, a line under the dashboard's sign-in form and at the foot of a cash
@@ -120,7 +119,7 @@ A cash register's top bar shows no logo yet.
 Each screen shows the light or the dark image by its own **Theme** setting. A dark screen, when the
 theme has no version for dark screens, shows the main logo on a white plate.
 
-Screens follow a new or removed logo when they follow a change of colours, as **Save a theme**
+Screens follow a new or removed logo when they follow a change of colours, as "Save a theme"
 below describes.
 
 When a screen cannot load the picture, the dashboard's banner shows Waitron's logo, a handheld's bar

@@ -2891,7 +2891,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   logo replaces Waitron's in the dashboard banner, a handheld's bar and the till and handheld
   sign-in, each image following the screen's Theme setting and dark screens with one image drawing
   it on a white plate (`--wt-color-logo-plate`); "Powered by Waitron" under both sign-in forms while
-  a logo is set; the logo's place stays empty before the first answer, and a picture that cannot be
+  a logo is set; with no stored copy, the logo's place stays empty until the first answer or its 5-second limit, and a picture that cannot be
   loaded falls back to Waitron's mark (the banner's lockup, the bar's word, nothing on the till
   sign-in) and is tried again every minute. An optional
   key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
@@ -2910,8 +2910,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   have the poll return the setup revision without asking about a zone, or accept it and correct the
   design. The user guide's Appearance page already says what is true. The switch dialog's sentence "every signed-in
   till within 15 seconds" (A841 slice 13, the design's approved words) is untrue for this till too
-  until this is decided. The venue logo follows the same path, so such a till keeps an old logo too,
-  and its sign-in screen shows it after the next logout (A841 slice 8b).
+  until this is decided. The venue logo follows the same path, so such a till keeps an old logo too
+  (A841 slice 8b).
 
 - **The colour field's custom colour box shows no focus ring while a custom colour is chosen.** The
   rule `.custom input[type="color"].on { outline: var(--wt-selected-ring) }`

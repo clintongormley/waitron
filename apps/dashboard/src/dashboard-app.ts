@@ -656,7 +656,7 @@ export class DashboardApp extends LitElement {
       }
 
       .powered-by {
-        margin-top: var(--wt-space-4);
+        margin-block-start: var(--wt-space-4);
       }
 
       .venue-row {
