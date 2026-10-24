@@ -133,10 +133,15 @@ Left for later, on purpose:
      renderers, passed through `serverParts` from `mountMeApi`. It decides the export's period,
      audience and language, which `RecordExportInput` requires (`record-export-types.ts:4-10`):
      the location and the date come from the subject, and the person's language can be read in its
-     own `prepare`. S2b changes the mount call and adds a part; it does not change
+     own `prepare`. The subject's `locationId` can be null (decision 8) while the export needs a
+     location, so S2b also decides what a null location does (for example, leaves the working-time
+     files out). S2b changes the mount call and adds a part; it does not change
      `sendPersonalData` or the gatherer.
    - **S2c** adds a second route in the same file that calls `sendPersonalData` with its own
-     `authorize` step (decision 7), and the actions part. The core tables that part reads (sales,
+     `authorize` step (decision 7), wrapped in the same exported error handler,
+     `withPersonalDataErrors`, and adds `authorization.not_permitted: 403` to that handler's one
+     map (the own route never throws it; without the entry the code would fall to the boundary's
+     default 400, `packages/server-kit/src/error-boundary.ts:42`). It also adds the actions part. The core tables that part reads (sales,
      drawer openings) belong to `@waitron/db`, which does not depend on `@waitron/module` (its
      `package.json` lists no such dependency), so core's part is either a plain object of the right
      shape exported by `@waitron/db`, as `CORE_CONFIGURATION_TRANSFER` is
@@ -215,7 +220,11 @@ Left for later, on purpose:
      `attendance-export-api.ts:138-143`; its content type is set at `:134-137`).
    - Errors through a `createErrorBoundary` map of its own (log tag `personal_data.failed`, which
      is a log line's name, not an error code): `management_session.required` and
-     `management_session.expired` 401, `person.suspended` 403, `module.config_invalid` 500. No new
+     `management_session.expired` 401, `person.suspended` 403, `module.config_invalid` 500. The
+     file exports it as `withPersonalDataErrors(c, log, fn)`, the `(c, log, fn)` function
+     `createErrorBoundary` returns (`packages/server-kit/src/error-boundary.ts`), because
+     `sendPersonalData` takes no logger and so does not catch on its own: the own route, S2c's
+     route and the test route below all wrap their call in it. No new
      error code is added, so no registry, `scripts/errors-reachable.test.ts` or
      `scripts/alert-codes.test.ts` change is due.
    - **One send function, with the caller's authorisation run in both transactions.**
@@ -230,7 +239,8 @@ Left for later, on purpose:
      `personal_data.export` plus the target's row, so the re-check after building repeats the
      permission check too, not just "is the session alive". An ended or suspended session, or a
      lost permission, refuses in the second transaction and no bytes are sent.
-     `sendPersonalData` is exported from its file so its test can count the `authorize` calls.
+     `sendPersonalData` and `withPersonalDataErrors` are exported from the file so its test can
+     count the `authorize` calls through a route of its own, and so S2c can reuse both.
 
 8. **The file name: display name, made safe, plus the venue's date.**
    - The name is the person's display name (`persons.display_name`, never empty:
@@ -283,8 +293,8 @@ Left for later, on purpose:
 
     **Order of every list**, so the output is the same on every run (row ids are random UUIDs,
     `packages/db/src/schema/columns.ts:178`, so they may only break ties the fixture never
-    creates): `passkeys`, `deviceSessions`, `dashboardSessions` and `accountEmails` by their first
-    time column, then row id; `unfinishedSetups` by kind in the fixed order two-factor, passkey,
+    creates): `passkeys` by `created_at`, `deviceSessions` by `opened_at`, `dashboardSessions` by
+    `created_at` and `accountEmails` by `created_at`, each then by row id; `unfinishedSetups` by kind in the fixed order two-factor, passkey,
     google-link, then by `startedAt` (by `expiresAt` for google-link, whose `startedAt` is always
     null), then row id; `deviceProfileExceptions` (no time column) by the profile's name, then the
     profile's id. The test fixture gives every row a distinct, explicit timestamp.
@@ -326,7 +336,7 @@ Left for later, on purpose:
     | `management_account_actions` (invitation, password-reset and email-change emails) | `accountEmails[]`: `purpose`; `target_email` as `newEmail`; `created_at`; `expires_at`; `used_at`; `code_expires_at`; `code_attempts` | `id`, `person_id`; `token_hash`, `code_hash` (secrets) |
     | `totp_enrollments` (a two-factor setup not yet finished) | `unfinishedSetups[]` `{ kind: "two-factor" }`: `created_at` as `startedAt`; `expires_at` | `id`, `person_id`; `encrypted_secret` |
     | `webauthn_challenges` (a passkey setup not yet finished; rows with no person are sign-in attempts and are not about anyone) | `unfinishedSetups[]` `{ kind: "passkey", expiresAt: null }`: `created_at` as `startedAt` | `id`, `person_id`; `challenge` (never, per the slice brief) |
-    | `google_oidc_states` (a Google link not yet finished; rows with no person are sign-ins) | `unfinishedSetups[]` `{ kind: "google-link", startedAt: null }`: `expires_at`; `mode` (only `link` rows have a person) | `id`, `person_id`; `state_hash`, `nonce`, `verifier` (secrets) |
+    | `google_oidc_states` (a Google link not yet finished; rows with no person are sign-ins) | `unfinishedSetups[]` `{ kind: "google-link", startedAt: null }`: `expires_at` | `id`, `person_id`; `mode` (used to pick the rows: only `link` rows carry a person, `packages/identity/src/google-oidc.ts:71`, `:86`; shown as the fixed `kind`); `state_hash`, `nonce`, `verifier` (secrets) |
     | `device_profile_admission_persons` (a device profile that lets the person in, or keeps them out, whatever their role) | `profile.json` `deviceProfileExceptions[]`: `device_profile_id` as `deviceProfile` (the profile's name, joined from `device_profiles`); `admitted` | `person_id` |
 
     `device_profile_admission_roles` names a role, not a person, so it is not read. Tables of other
@@ -477,9 +487,10 @@ Files: `packages/identity/src/personal-data.coverage.test.ts` (new),
 beside `:201`), `packages/composition/src/composition.test.ts`.
 
 1. Tests first:
-   - **Tables.** List every table exported by `packages/identity/src/schema/index.ts` that has a
-     `person_id` column (through drizzle's `getTableConfig`), plus `persons`; it must equal the
-     ten tables of decision 10.
+   - **Tables.** From the exports of `packages/identity/src/schema/index.ts`, keep only drizzle
+     tables (`is(value, SQLiteTable)`: the index also exports the `personStatus` and `personRole`
+     enums), then list those with a `person_id` column (through drizzle's `getTableConfig`), plus
+     `persons`; it must equal the ten tables of decision 10.
    - **Columns.** For each of those ten tables, the full column set from `getTableConfig` must
      equal the test's "in" list plus its "out" list for that table, copied from decision 10's two
      tables, with no column in both. A new column then fails the test until someone classifies it;
@@ -555,6 +566,11 @@ export function sendPersonalData(
   deps: PersonalDataExportDeps,
   authorize: PersonalDataAuthorize,
 ): Promise<Response>;
+export function withPersonalDataErrors(
+  c: Context,
+  log: Logger,
+  fn: () => Promise<Response>,
+): Promise<Response>;
 export function mountPersonalDataExportApi(app: Hono, deps: PersonalDataExportDeps, log: Logger): void;
 ```
 
@@ -575,7 +591,8 @@ The file imports `./errors.js` (it throws `management.request_invalid`). Decisio
      session → 401 `management_session.required`; a session idle past `IDLE_TIMEOUT_MS` (set
      `last_seen_at` back by SQL) → 401 `management_session.expired`; a person suspended by SQL with
      a live session → 403 `person.suspended`.
-   - **`authorize` runs twice.** Mount a test route that calls `sendPersonalData` with a spy
+   - **`authorize` runs twice.** Mount a test route whose handler is
+     `withPersonalDataErrors(c, log, () => sendPersonalData(c, deps, spy))`, with a spy
      `authorize`: it is called exactly twice, once before the parts' `prepare` and once after their
      build functions (record the order). When the spy returns a different person id the second
      time, the answer is 500 `server.internal` and no ZIP.
