@@ -476,6 +476,17 @@ describe("a start that first setup moved to a workspace", () => {
     expect(existsSync(workspaceLog)).toBe(true);
   });
 
+  it("deletes the workspace's staging leftovers when there is room", async () => {
+    const { roots, dump, staged } = await movedToWorkspace();
+    const d = deps({}, () => 5000);
+    await runEntry(d);
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(d.startServer).mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
+    expect(existsSync(dump)).toBe(false);
+    expect(existsSync(staged)).toBe(false);
+  });
+
   it("serves the full-disk page when the workspace's clean-up leaves it below the floor", async () => {
     const { dump, staged, workspaceLog } = await movedToWorkspace();
     const { logDir, late } = await logWrittenDuringResolution();

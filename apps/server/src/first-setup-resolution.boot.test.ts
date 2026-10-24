@@ -1,5 +1,5 @@
 import { mkdtemp, mkdir, realpath, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Hono } from "hono";
@@ -643,12 +643,14 @@ it("a start that failed on a full disk deletes backup staging while it holds the
   const f = await replacement();
   try {
     const staged = join(f.binding.stateDir, "backup-staging", dumpFileName(new Date()));
-    await mkdir(join(f.binding.stateDir, "backup-staging"), { recursive: true });
-    await writeFile(staged, "copy");
     const error = diskFull();
-    await expect(
-      entry.runEntry(selectedEntryDeps(f, { startServer: () => Promise.reject(error) })),
-    ).rejects.toBe(error);
+    // Written by the failing start itself: the start's own clean-up of the workspace runs earlier.
+    const startServer = async () => {
+      await mkdir(dirname(staged), { recursive: true });
+      await writeFile(staged, "copy");
+      throw error;
+    };
+    await expect(entry.runEntry(selectedEntryDeps(f, { startServer }))).rejects.toBe(error);
     await expect(stat(staged)).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     await f.dispose();
