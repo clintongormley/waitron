@@ -4,6 +4,7 @@ import type {
   TicketAllergyCopy,
 } from "./party-allergy.js";
 import type { ModuleTimeRecordExport } from "./record-export.js";
+import type { ModulePersonalData } from "./personal-data.js";
 import semver from "semver";
 import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
@@ -1577,6 +1578,7 @@ export interface WaitronModule {
   readonly fiscal?: FiscalContribution;
   readonly routes?: ModuleRoutes;
   readonly timeRecordExport?: ModuleTimeRecordExport;
+  readonly personalData?: ModulePersonalData;
   readonly describeShifts?: (
     tx: Transaction,
     shiftIds: readonly string[],

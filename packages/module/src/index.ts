@@ -129,6 +129,17 @@ export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
 export { selectTimeRecordExport } from "./record-export.js";
 export type { ModuleTimeRecordExport } from "./record-export.js";
+export {
+  personalDataParts,
+  preparePersonalData,
+  validatePersonalDataParts,
+} from "./personal-data.js";
+export type {
+  ModulePersonalData,
+  PersonalDataFile,
+  PersonalDataPart,
+  PersonalDataSubject,
+} from "./personal-data.js";
 import "./errors.js";
 
 export type { BusinessDayClockConflict } from "./module.js";
