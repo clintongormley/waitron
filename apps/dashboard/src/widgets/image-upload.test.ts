@@ -880,6 +880,34 @@ describe("image-upload as a venue logo", () => {
     },
   );
 
+  it.each(["light", "dark"] as const)(
+    "on a %s dashboard, invalid edges the plate in the danger colour, and valid does not",
+    async (theme) => {
+      const { el } = await venueLogo(
+        { image: mediaTestReference("own.png"), invalid: true },
+        theme,
+      );
+      const probe = document.createElement("span");
+      probe.style.color = "var(--wt-color-danger)";
+      el.shadowRoot!.append(probe);
+      const danger = getComputedStyle(probe).color;
+      probe.remove();
+      const edges = () => {
+        const style = getComputedStyle(plate(el)!);
+        return [
+          style.borderTopColor,
+          style.borderRightColor,
+          style.borderBottomColor,
+          style.borderLeftColor,
+        ];
+      };
+      expect(edges()).toEqual([danger, danger, danger, danger]);
+      el.invalid = false;
+      await el.updateComplete;
+      expect(edges()).not.toContain(danger);
+    },
+  );
+
   it("a name the library no longer resolves draws an empty plate, and Replace still opens the picker", async () => {
     const gone = mediaTestReference("gone.png");
     vi.mocked(fetch).mockImplementation(

@@ -178,6 +178,9 @@ export class ImageUpload extends LitElement {
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-logo-plate);
       }
+      .plate[data-invalid] {
+        border-color: var(--wt-color-danger);
+      }
       .stack {
         display: flex;
         flex: none;
@@ -360,7 +363,7 @@ export class ImageUpload extends LitElement {
         >
       </button>`;
     return html`<div class="row">
-      <div class="plate">
+      <div class="plate" ?data-invalid=${this.invalid}>
         <img src=${liveMediaImage(this.image, "display")} alt="" />
       </div>
       <div class="stack">

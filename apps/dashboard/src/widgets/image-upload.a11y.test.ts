@@ -166,6 +166,7 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
 
   it.each([
     ["with a logo", { image: "abc.png" }],
+    ["with a logo, marked invalid", { image: "abc.png", invalid: true }],
     ["without a logo", {}],
   ] as const)("renders accessibly as a venue logo %s", async (_, props) => {
     // The names below are English, so the visible text must be too.
