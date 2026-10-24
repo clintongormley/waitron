@@ -4132,6 +4132,19 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   remain open. Cloud forwarding and automatic crash/freeze reporting remain separate follow-ups.
   [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 
+- **A1047. Send a problem report to Waitron Cloud (owner, 2026-10-24).** The follow-up A982
+  leaves open. Cloud's approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) (section 11) has its triage agent
+  sort reports by urgency. A report's errors, version and installation details go at once; the
+  typed description goes only when someone with the venue's admin permission sends it (owner:
+  "make it an admin decision to send", keeping A980's O9). A box that cannot reach Cloud keeps
+  the report and sends it later, and the sender sees which.
+
+- **A1048. Opt-in automatic error reports to Waitron Cloud (owner, 2026-10-24: "Should be opt
+  in").** Setup asks plainly, unticked; settings can change it. A report holds only the error's
+  code and source, the version, counts and masked log lines (A980 O9), is signed with the box's
+  Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
+  by version to catch a bad release (design section 10).
+
 - **The Alerts table makes long station warnings hard to read on a phone.** — left open by the
   product folders work. Give the alert text more room at phone width while keeping its handling
   action reachable.
@@ -4569,6 +4582,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   ancient buggy versions." Builds on the automatic upgrades entry below and on the off-box copy
   that the setup tour offers but never requires.
   [Detail](backlog/box.md#a1016-keep-every-box-current-and-backed-up)
+
+- **A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).** Cloud's
+  approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) (section 10) holds a version when a new error spreads
+  after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent in Waitron),
+  so the updater must read the hold before offering or applying the version, and offer the fix
+  once released. Belongs with A1016.
+
+- **A1050. A "can this venue trade?" check for a hosted server (2026-10-24).** Cloud's outside
+  monitor calls it every minute (design section 5). It must exercise the server, not only its
+  front door, and must not write fiscal records. Defined jointly with Waitron Cloud.
 
 - **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
