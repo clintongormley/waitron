@@ -9,7 +9,7 @@ describe("archiveFileName", () => {
     ["Marta López", "marta-lopez"],
     ["José Ñúñez", "jose-nunez"],
     ["Núria Col·lell", "nuria-col-lell"],
-    ["Straße", "strasse"],
+    ["Hans Weiß", "hans-weiss"],
     ["Søren Ærø", "soren-aero"],
     ["Łukasz Đorđević", "lukasz-dordevic"],
     ["İlknur Işık", "ilknur-isik"],
