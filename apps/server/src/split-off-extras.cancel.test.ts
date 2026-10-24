@@ -6,7 +6,8 @@ import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@wai
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
+import { listStationNotices } from "@waitron/venue-service";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
@@ -153,7 +154,7 @@ describe("cancelling and recalling split-off extras", () => {
   it("cancels both queued HOLD tickets when the held burger is cancelled", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
         operatorId: OPERATOR,
         groups: [{ lines: [dish(venue, "burger")], release: "hold" }],

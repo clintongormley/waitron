@@ -34,14 +34,8 @@ import {
   listStationNotices,
   listStationsNotices,
   readEditSentLines,
-  readKitchenTicketGrouping,
-  readPrintHeldWork,
-  readPrintMovedSlips,
   recordKitchenNotices,
   writeEditSentLines,
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  writePrintMovedSlips,
   type KitchenNoticeItem,
 } from "./kitchen-notices.js";
 
@@ -1494,125 +1488,10 @@ describe("the edit-sent-lines setting", () => {
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
     await inTx((tx) => writeEditSentLines(tx, true));
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);
-    expect(await db.select().from(serviceSettings)).toEqual([
-      {
-        id: 1,
-        editSentLines: true,
-        kitchenTicketGrouping: "combined",
-        printHeldWork: false,
-        printMovedSlips: true,
-      },
-    ]);
+    expect(await db.select().from(serviceSettings)).toEqual([{ id: 1, editSentLines: true }]);
     // Raw SQL, so the stored value is read without the column's boolean mapping.
     await db.execute(sql`update service_settings set edit_sent_lines = 0`);
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-  });
-});
-
-describe("the kitchen ticket grouping setting", () => {
-  it("reads combined when the venue has no settings row", async () => {
-    expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("combined");
-  });
-
-  it("reads what was written, creating the row when it is missing, and leaves the other settings alone", async () => {
-    await inTx((tx) => writeEditSentLines(tx, false));
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
-    expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("separate");
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "combined"));
-    expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("combined");
-    await db.execute(sql`update service_settings set kitchen_ticket_grouping = 'separate'`);
-    expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("separate");
-  });
-
-  it("creates the row with the other settings at their defaults when only this one is written", async () => {
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
-    expect(await db.select().from(serviceSettings)).toEqual([
-      {
-        id: 1,
-        editSentLines: true,
-        kitchenTicketGrouping: "separate",
-        printHeldWork: false,
-        printMovedSlips: true,
-      },
-    ]);
-  });
-
-  it("refuses a stored value outside the two choices", async () => {
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
-    await expect(
-      (async () =>
-        db.execute(sql`update service_settings set kitchen_ticket_grouping = 'bogus'`))(),
-    ).rejects.toThrow(/CHECK constraint failed: service_settings_kitchen_ticket_grouping_ck/);
-    expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("separate");
-  });
-});
-
-describe("the print-held-work setting", () => {
-  it("reads OFF when the venue has no settings row", async () => {
-    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
-  });
-
-  it("reads what was written, creating the row when it is missing, and leaves the other settings alone", async () => {
-    await inTx((tx) => writeEditSentLines(tx, false));
-    await inTx((tx) => writePrintHeldWork(tx, true));
-    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(true);
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-    expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("combined");
-    await inTx((tx) => writePrintHeldWork(tx, false));
-    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
-    // Raw SQL, so the stored value is read without the column's boolean mapping.
-    await db.execute(sql`update service_settings set print_held_work = 1`);
-    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(true);
-  });
-
-  it("creates the row with the other settings at their defaults when only this one is written", async () => {
-    await inTx((tx) => writePrintHeldWork(tx, true));
-    expect(await db.select().from(serviceSettings)).toEqual([
-      {
-        id: 1,
-        editSentLines: true,
-        kitchenTicketGrouping: "combined",
-        printHeldWork: true,
-        printMovedSlips: true,
-      },
-    ]);
-  });
-});
-
-describe("the print-moved-slips setting", () => {
-  it("reads ON when the venue has no settings row", async () => {
-    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(true);
-  });
-
-  it("reads ON from a row another setting created", async () => {
-    await inTx((tx) => writePrintHeldWork(tx, true));
-    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(true);
-  });
-
-  it("reads what was written, creating the row when it is missing, and leaves the other settings alone", async () => {
-    await inTx((tx) => writePrintMovedSlips(tx, false));
-    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(false);
-    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);
-    await inTx((tx) => writePrintMovedSlips(tx, true));
-    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(true);
-    // Raw SQL, so the stored value is read without the column's boolean mapping.
-    await db.execute(sql`update service_settings set print_moved_slips = 0`);
-    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(false);
-  });
-
-  it("creates the row with the other settings at their defaults when only this one is written", async () => {
-    await inTx((tx) => writePrintMovedSlips(tx, false));
-    expect(await db.select().from(serviceSettings)).toEqual([
-      {
-        id: 1,
-        editSentLines: true,
-        kitchenTicketGrouping: "combined",
-        printHeldWork: false,
-        printMovedSlips: false,
-      },
-    ]);
   });
 });
 

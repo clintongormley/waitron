@@ -60,6 +60,16 @@ conserva la copia de alergias enviada con ese ticket y recibe correcciones mient
 sin servir. Una estación que no ha recibido un ticket anticipado toma su primera copia cuando se
 envía el plato a preparar.
 
+Una estación con **Imprimir por adelantado los grupos en espera** activado al poner un grupo en
+espera recibe su ticket anticipado de espera; otra estación con el ajuste activado puede empezar a
+recibir más tarde lo que se imprime en espera del grupo: un ticket anticipado de espera cuando se le
+mueve un plato en espera, o una comanda HOLD CHANGED cuando se añade al grupo un plato en espera en
+ella. Una estación que tiene lo impreso en espera del grupo sigue recibiéndolo, junto con sus
+correcciones y la comanda marcada FIRE, aunque se desactive su ajuste. Cualquier otra estación
+imprime su parte sin marca cuando se envía el grupo a preparar, salvo si comparte impresora con una
+estación que tiene lo impreso en espera del grupo: la comanda marcada FIRE de esa impresora lleva
+las dos.
+
 Enviar a preparar el trabajo en espera en la misma estación no duplica una corrección de alergia
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
 ese borrador crea una copia nueva con las instrucciones que confirmas para ese envío.
@@ -101,15 +111,16 @@ Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o
 una mesa pagada se cierra con **Lo recogerán en el mostrador**, sus platos por llegar pasan a ser
 un pedido así: cada estación con un plato por llegar en él recibe el aviso de que el pedido pasó al
 mostrador, e imprime un ticket **MOVIDO** si su ajuste **Imprimir un aviso al cambiar de mesa los
-platos enviados** es **Imprimir**, o sigue el ajuste del local **Imprimir avisos MOVIDO**; los
-platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
+platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
 estaciones y zonas de servicio que tiene asignadas.
 
 Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
 pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa; ya no se
 elige allí un modo de marcha para todo el local. Cada estación de preparación fija sus propios
 avisos de demora al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
-editarla en **Estaciones de preparación**.
+editarla en **Estaciones de preparación**. Cada estación de preparación fija también cómo se
+imprimen los platos iguales en sus comandas y si imprime por adelantado los grupos en espera, en
+**Platos iguales en una comanda de cocina** e **Imprimir por adelantado los grupos en espera**.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 

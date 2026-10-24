@@ -16,18 +16,26 @@ import {
   workingOrders,
   parties,
   printJobs,
+  products,
   serviceCommands,
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { kitchenNotices, serviceSettings, workingLineContexts } from "@waitron/venue-service";
+import {
+  clearRoutingCell,
+  kitchenNotices,
+  serviceSettings,
+  workingLineContexts,
+} from "@waitron/venue-service";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
-import { createCourse } from "./kitchen.js";
-import { readReleaseReminders } from "./order-groups.js";
+import { createCourse, createStation } from "./kitchen.js";
+import { routeProductTo } from "./testing/zone-offers.js";
+import { setStationPrinting } from "./testing/station-printing.js";
+import { readReleaseReminders, recordHeldPaper } from "./order-groups.js";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -763,6 +771,14 @@ describe("party Recall to draft", () => {
         .update(orderGroups)
         .set({ holdPrintedAt: new Date().toISOString(), displayNumber: 7 })
         .where(eq(orderGroups.id, p.groupId));
+      await inTx(venue, async (tx) => {
+        const held = await tx
+          .selectDistinct({ stationId: ticketItems.stationId })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.groupId, p.groupId));
+        await recordHeldPaper(tx, p.groupId, new Set(held.map((row) => row.stationId)));
+      });
       if (collision) {
         const other = await setup("hold");
         await venue.db.insert(orderGroups).values({
@@ -1158,5 +1174,113 @@ describe("party Recall to draft", () => {
         .from(ticketItems)
         .where(inArray(ticketItems.workingOrderLineId, [p.line.id])),
     ).toEqual([]);
+  });
+  it("recalling a held dish cancels it on paper only at a station recorded for the group, and every screen is told", async () => {
+    const kitchenPrinter = `Kitchen-${randomUUID()}`;
+    const barPrinterName = `Bar-${randomUUID()}`;
+    const { barId, screenId, printerIds, routed } = await inTx(venue, async (tx) => {
+      const barId = (await createStation(tx, venue.cfg, { name: `Bar-${randomUUID()}` })).id;
+      const screenId = (await createStation(tx, venue.cfg, { name: `Screen-${randomUUID()}` })).id;
+      const printerIds: string[] = [];
+      const routed: string[] = [];
+      for (const [name, station] of [
+        [kitchenPrinter, stationId],
+        [barPrinterName, barId],
+      ] as const) {
+        const printer = await createPrinter(
+          tx,
+          { locationId: venue.cfg.locationId },
+          { name, transport: "cloud_poll", pollId: randomUUID() },
+        );
+        await attachPrinterToStation(tx, {
+          locationId: venue.cfg.locationId,
+          stationId: station,
+          printerId: printer.id,
+        });
+        printerIds.push(printer.id);
+      }
+      for (const [name, station] of [
+        ["Paella", barId],
+        ["Pulpo", screenId],
+      ] as const) {
+        const [product] = await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(eq(products.name, name));
+        await routeProductTo(tx, venue.cfg, product!.id, station);
+        routed.push(product!.id);
+      }
+      await setStationPrinting(tx, { printHeldWork: true }, [stationId, screenId]);
+      await setStationPrinting(tx, { printHeldWork: false }, [barId]);
+      return { barId, screenId, printerIds, routed };
+    });
+    const [kitchenPrinterId, barPrinterId] = printerIds as [string, string];
+    const paperAt = async (printerId: string) =>
+      (await venue.db.select().from(printJobs).where(eq(printJobs.printerId, printerId))).map(
+        (job) => printedLines(job.payload).filter((line) => line.trim() !== ""),
+      );
+    try {
+      const tableLabel = `R-${randomUUID().slice(0, 8)}`;
+      const { id: tableId } = await inTx(venue, (tx) =>
+        createTable(tx, venue.cfg, { label: tableLabel, zoneId: venue.zoneId }),
+      );
+      const seated = await call("POST", `/api/tables/${tableId}/seat`, {});
+      const { partyId, tabId } = seated.json as unknown as { partyId: string; tabId: string };
+      const answer = await call("POST", `/api/parties/${partyId}/groups`, {
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        ...(await command(partyId)),
+        groups: [
+          {
+            release: "hold",
+            lines: ["Tarta", "Paella", "Pulpo"].map((name) => ({
+              menuItemId: venue.offerFor(name),
+              quantity: "1",
+            })),
+          },
+        ],
+      });
+      expect(answer.status).toBe(200);
+      const kitchenBefore = (await paperAt(kitchenPrinterId)).length;
+      expect(kitchenBefore).toBe(1);
+      expect(await paperAt(barPrinterId)).toEqual([]);
+      const lines = await venue.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(asc(workingOrderLines.lineNo));
+
+      for (const line of lines) expect((await recall(partyId, line.id)).status).toBe(200);
+
+      const cancelled = (await paperAt(kitchenPrinterId)).slice(kitchenBefore);
+      expect(cancelled).toHaveLength(1);
+      expect(cancelled[0]![0]).toBe("*** HOLD CANCELLED ***");
+      expect(cancelled[0]!.at(-1)).toBe("1.000 x TARTA");
+      expect(await paperAt(barPrinterId)).toEqual([]);
+      const told = async (station: string) =>
+        (
+          await venue.db
+            .select({ kind: kitchenNotices.kind, lineName: kitchenNotices.lineName })
+            .from(kitchenNotices)
+            .where(
+              and(eq(kitchenNotices.workingOrderId, tabId), eq(kitchenNotices.stationId, station)),
+            )
+        ).map((notice) => ({ ...notice }));
+      expect(await told(stationId)).toEqual([{ kind: "void", lineName: "TARTA" }]);
+      expect(await told(barId)).toEqual([{ kind: "void", lineName: "PAELLA" }]);
+      expect(await told(screenId)).toEqual([{ kind: "void", lineName: "PULPO" }]);
+    } finally {
+      await inTx(venue, async (tx) => {
+        for (const productId of routed)
+          await clearRoutingCell(tx, venue.cfg, {
+            row: { kind: "product", productId },
+            zoneId: null,
+          });
+        await setStationPrinting(tx, { printHeldWork: false }, [stationId]);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(inArray(kitchenStations.id, [barId, screenId]));
+      });
+    }
   });
 });

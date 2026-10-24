@@ -1152,6 +1152,13 @@ describe("the service settings and kitchen notices tables refuse what their rule
     ]);
   });
 
+  it("the venue keeps no ticket grouping, held printing or MOVED slips of its own", async () => {
+    expect((await columnsOf("service_settings")).map((column) => column.name)).toEqual([
+      "id",
+      "edit_sent_lines",
+    ]);
+  });
+
   it("refuses a notice kind outside the vocabulary, a zero quantity, a missing station and a table on a notice that is not a move", async () => {
     await seedTenant(db);
     const [location] = await db

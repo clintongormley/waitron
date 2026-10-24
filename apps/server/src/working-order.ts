@@ -226,6 +226,7 @@ import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
   correctJoin,
+  recordJoiningStations,
   onShownBill,
   printedHeldGroups,
   printHoldTickets,
@@ -2334,7 +2335,7 @@ export async function fireOrderLines(
   cfg: OriginConfig,
   orderId: string,
   lineIds: readonly string[],
-  mark?: "FIRE",
+  fire?: { heldPaper: ReadonlySet<string> },
   routing?: RoutingOnce,
 ): Promise<void> {
   await releaseHeld(
@@ -2343,7 +2344,7 @@ export async function fireOrderLines(
     orderId,
     onDishesOrTheirExtras(tx, lineIds),
     { courseIds: [], lineIds },
-    mark,
+    fire,
     routing,
   );
 }
@@ -2354,7 +2355,7 @@ async function releaseHeld(
   orderId: string,
   ticketScope: SQL,
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
-  mark?: "FIRE",
+  fire?: { heldPaper: ReadonlySet<string> },
   routing = routingOnce(tx, cfg, new Date()),
 ): Promise<number> {
   const firedNow = routing.at.toISOString();
@@ -2391,7 +2392,7 @@ async function releaseHeld(
     noRoute,
     firedNow,
     await isOpenOrder(tx, orderId),
-    mark,
+    fire,
     routing,
     rerouted,
   );
@@ -2407,7 +2408,7 @@ async function finishRelease(
   noRoute: { zoneId: string | null; lines: { id: string; courseId: string | null }[] },
   at: string,
   refuseSoldOut: boolean,
-  mark?: "FIRE",
+  fire?: { heldPaper: ReadonlySet<string> },
   routing = routingOnce(tx, cfg, new Date(at)),
   rerouted: Rerouted = new Map(),
 ): Promise<void> {
@@ -2437,7 +2438,7 @@ async function finishRelease(
     ...fired,
     ...extras.filter((item) => item.firedAt !== null),
   ]);
-  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { mark });
+  await enqueueKitchenTickets(tx, cfg, orderId, ordinary, { fire });
   const byOldStation = new Map<string, { from: string; items: FiredItem[] }>();
   for (const item of fired) {
     const old = rerouted.get(item.workingOrderLineId);
@@ -2975,6 +2976,7 @@ export async function removeFromLine(
           workingOrderLineId: item.workingOrderLineId,
           stationId: item.stationId,
           quantity: removedQuantity(item),
+          groupId: target.groupId!,
           group,
         }));
       if (target.ticketItemId !== null && target.firedAt === null) {
@@ -2983,6 +2985,7 @@ export async function removeFromLine(
           workingOrderLineId: target.id,
           stationId: target.stationId!,
           quantity: removed ?? target.firedQuantity,
+          groupId: target.groupId,
           group,
         });
       }
@@ -3028,7 +3031,7 @@ export async function removeFromLine(
 
 /**
  * Once an extra is off its dish, tell a kitchen that has the dish which extra to take off: a fired
- * dish, or a held one whose group's HOLD ticket was queued. A dish never sent, held with no HOLD
+ * dish, or a held one at a station that has its group's HOLD paper. A dish never sent, held with no HOLD
  * ticket queued, or going to no station tells it nothing.
  */
 async function tellKitchenOfCancelledExtra(
@@ -3052,7 +3055,13 @@ async function tellKitchenOfCancelledExtra(
   if (extra.dishGroupId === null) return;
   const group = (await printedHeldGroups(tx, [extra.dishGroupId])).get(extra.dishGroupId);
   if (group === undefined) return;
-  await enqueueExtraCancelled(tx, cfg, tabId, { ...correction, group }, extra.label);
+  await enqueueExtraCancelled(
+    tx,
+    cfg,
+    tabId,
+    { ...correction, group, holdGroupId: extra.dishGroupId },
+    extra.label,
+  );
 }
 
 /**
@@ -3803,7 +3812,7 @@ export async function moveOrderLines(
 /**
  * Give the ticket items of these lines, as they leave order number `fromNumber`, that number as the
  * one they were sent under — only those the kitchen has seen (fired, or in a held group whose HOLD
- * ticket printed), never one made here, and never over a number they already carry. A held item
+ * ticket printed at any station), never one made here, and never over a number they already carry. A held item
  * whose HOLD ticket never printed first prints on the order it is on when it fires.
  */
 async function stampSentOrderNumber(
@@ -5411,11 +5420,11 @@ async function assertProductsSellable(
  *
  * On a party: an added extra takes its dish's group and credit; a fired line's raised quantity
  * goes in a new fired group, and a new dish in a new group fired or held as `newWork` says, both at
- * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket where the
- * venue prints held work in advance; the units added to a comped or discounted line the kitchen has
- * not fired go on a new line, priced now, in that line's group and kitchen state (ruling R12), a
- * held one correcting its group's HOLD ticket where one was queued; a held group the edit empties
- * is removed; the party's revision moves on.
+ * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket at the
+ * stations that print held work in advance; the units added to a comped or discounted line the
+ * kitchen has not fired go on a new line, priced now, in that line's group and kitchen state (ruling
+ * R12), a held one printing `+N` at the stations that have its group's HOLD paper; a held group the
+ * edit empties is removed; the party's revision moves on.
  */
 async function applyLineEdits(
   tx: Transaction,
@@ -6039,22 +6048,22 @@ async function applyLineEdits(
           (row) => row.id === item.workingOrderLineId && row.parentLineId === parent.id,
         ),
     )?.parent;
-    const group =
-      parent?.groupId === null || parent === undefined
-        ? undefined
-        : printedAdded.get(parent.groupId);
-    return item.firedAt === null && group !== undefined
+    const groupId = parent?.groupId ?? null;
+    const group = groupId === null ? undefined : printedAdded.get(groupId);
+    return item.firedAt === null && groupId !== null && group !== undefined
       ? [
           {
             workingOrderId: orderId,
             workingOrderLineId: item.workingOrderLineId,
             stationId: item.stationId,
             quantity: item.quantity,
+            groupId,
             group,
           },
         ]
       : [];
   });
+  await recordJoiningStations(tx, givenExtras);
   // After the extras a line gains are written: a slip reads the line as it now stands.
   await correctHoldTickets(tx, cfg, [...held.given, ...givenExtras], {
     kind: "HOLD CHANGED",
@@ -6076,7 +6085,7 @@ async function applyLineEdits(
       );
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
-  // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
+  // As a raise of the line itself would: `+N` at the stations that have its group's HOLD paper.
   for (const { groupId, lineId } of joinedHeld) await correctJoin(tx, cfg, groupId, [lineId]);
   await refreshKitchenAllergyClashes(
     tx,
@@ -6159,6 +6168,7 @@ async function planHeldCorrections(
         workingOrderLineId: part.id,
         stationId: part.ticket.stationId,
         quantity,
+        groupId: parent.groupId!,
         group,
       },
     ];

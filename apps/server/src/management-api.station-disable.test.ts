@@ -146,6 +146,7 @@ async function snapshot() {
       "kitchen_print_jobs",
       "kitchen_print_job_lines",
       "kitchen_notices",
+      "order_group_hold_stations",
     ]) {
       result[name] = (
         await tx.execute(sql`select * from ${sql.identifier(name)} order by rowid`)

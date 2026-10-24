@@ -262,6 +262,8 @@ These additions also change incoming closure for original rows: `parties` receiv
 
 **2026-10-23:** `kitchen_timing_defaults` and `kitchen_station_timing` were dropped (A756 PR 5, core migration 0186); this removes `kitchen_timing_defaults(location_id)` from `locations`' incoming closure and `kitchen_station_timing(station_id)` from `kitchen_stations`'.
 
+**2026-10-23:** A756 PR 6 added core table `order_group_hold_stations` (core migration 0187), which adds `order_group_hold_stations(group_id)` [no action] to `order_groups`' incoming closure and `order_group_hold_stations(station_id)` [no action] to `kitchen_stations`'; not yet given a retention row.
+
 ## Local application tables
 
 | Module      | Table                | appendOnly | Policy and retirement event                                                                                                                                        | Retained purpose/privacy                                                                                                                                                      | Concrete dependencies, source-reading-only                                                                                               | Source sites                                                                                              |

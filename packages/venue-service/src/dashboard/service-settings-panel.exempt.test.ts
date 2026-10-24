@@ -1,16 +1,13 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { LeaveController, applyTokens, type WtCombobox } from "@waitron/ui";
+import { LeaveController, applyTokens, type WtSwitch } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { VenueServiceApi, VenueServiceSettingsView } from "./client.js";
 import "./service-settings-panel.js";
 
 const initial: VenueServiceSettingsView = {
   settings: { editSentLines: true },
-  kitchenTicketGrouping: "combined",
-  printHeldWork: false,
-  printMovedSlips: true,
 };
 
 class ImmediateSettingsApp extends LitElement {
@@ -59,10 +56,6 @@ async function mount() {
   app.api = {
     loadSettings: async () => structuredClone(stored),
     saveSettings: async (settings) => write({ settings }, { settings }),
-    saveKitchenTicketGrouping: async (kitchenTicketGrouping) =>
-      write({ kitchenTicketGrouping }, { kitchenTicketGrouping }),
-    savePrintHeldWork: async (printHeldWork) => write({ printHeldWork }, { printHeldWork }),
-    savePrintMovedSlips: async (printMovedSlips) => write({ printMovedSlips }, { printMovedSlips }),
   } as VenueServiceApi;
   applyTokens(app);
   document.body.append(app);
@@ -101,24 +94,6 @@ const choices = [
     original: true,
     body: { settings: { editSentLines: false } },
   },
-  {
-    name: "kitchenTicketGrouping",
-    value: "separate",
-    original: "combined",
-    body: { kitchenTicketGrouping: "separate" },
-  },
-  {
-    name: "printHeldWork",
-    value: true,
-    original: false,
-    body: { printHeldWork: true },
-  },
-  {
-    name: "printMovedSlips",
-    value: false,
-    original: true,
-    body: { printMovedSlips: false },
-  },
 ] as const;
 
 async function change(
@@ -126,17 +101,10 @@ async function change(
   choice: (typeof choices)[number],
 ) {
   const control = panel.shadowRoot!.querySelector<HTMLElement>(`[name=${choice.name}]`)!;
-  await (control as WtCombobox).updateComplete;
-  if (typeof choice.value === "boolean") {
-    const input = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.focus();
-    await userEvent.keyboard(" ");
-  } else {
-    const box = control as WtCombobox;
-    await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-    const index = box.options.findIndex((option) => option.value === choice.value);
-    await userEvent.click(box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[index]!);
-  }
+  await (control as WtSwitch).updateComplete;
+  const input = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.focus();
+  await userEvent.keyboard(" ");
   await panel.updateComplete;
 }
 
@@ -150,7 +118,7 @@ for (const choice of choices) {
       await leaveWithoutWarning();
       if (outcome === "stored") pending.resolve();
       else pending.reject(new Error("refused"));
-      const control = panel.shadowRoot!.querySelector<WtCombobox>(`[name=${choice.name}]`)!;
+      const control = panel.shadowRoot!.querySelector<WtSwitch>(`[name=${choice.name}]`)!;
       await expect.poll(() => control.disabled).toBe(false);
       if (outcome === "refused") {
         expect(
@@ -159,13 +127,7 @@ for (const choice of choices) {
       }
       await control.updateComplete;
       const expected = outcome === "stored" ? choice.value : choice.original;
-      if (typeof expected === "boolean") {
-        expect(control.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(
-          expected,
-        );
-      } else {
-        expect(control.value).toBe(expected);
-      }
+      expect(control.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(expected);
       await leaveWithoutWarning();
       expect(writes).toEqual([choice.body]);
     });
@@ -202,7 +164,7 @@ it("an immediate setting write cannot clear a different owner's pending draft de
   await expect.poll(() => warning.open).toBe(true);
   pending.resolve();
   await expect
-    .poll(() => panel.shadowRoot!.querySelector<WtCombobox>("[name=editSentLines]")!.disabled)
+    .poll(() => panel.shadowRoot!.querySelector<WtSwitch>("[name=editSentLines]")!.disabled)
     .toBe(false);
   expect(warning.open).toBe(true);
   expect(input.value).toBe("edited");

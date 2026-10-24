@@ -400,7 +400,11 @@ export async function cancelItem(
             bill!.id,
             corrections
               .filter((item) => !item.fired)
-              .map((item) => ({ ...item, group: group.displayNumber })),
+              .map((item) => ({
+                ...item,
+                group: group.displayNumber,
+                ...(group.holdPrintedAt === null ? {} : { holdGroupId: group.id }),
+              })),
             { kind: "HOLD CANCELLED" },
           );
         for (const { row, remaining } of family) {

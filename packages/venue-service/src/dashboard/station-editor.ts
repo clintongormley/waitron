@@ -19,7 +19,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { codeOf } from "@waitron/dashboard-kit";
-import { isStationColour, type StationColour, type StationThresholds } from "@waitron/shared";
+import {
+  isStationColour,
+  isTicketGrouping,
+  TICKET_GROUPINGS,
+  type StationColour,
+  type StationThresholds,
+  type TicketGrouping,
+} from "@waitron/shared";
 import { stationColourChoices, type StationColourUser } from "./station-colour-choices.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -30,8 +37,9 @@ export type StationEditorStation = {
   colour: StationColour;
   active: boolean;
   showsRestOfOrder: boolean;
-  /** Null follows the venue's choice. */
-  printMovedSlips: boolean | null;
+  printMovedSlips: boolean;
+  ticketGrouping: TicketGrouping;
+  printHeldWork: boolean;
   printerIds: readonly string[];
 } & StationThresholds;
 export interface StationEditorPrinter {
@@ -45,7 +53,9 @@ export type StationEditorSave = {
   colour?: StationColour;
   printerIds?: string[];
   showsRestOfOrder?: boolean;
-  printMovedSlips?: boolean | null;
+  printMovedSlips?: boolean;
+  ticketGrouping?: TicketGrouping;
+  printHeldWork?: boolean;
 } & Partial<StationThresholds>;
 
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
@@ -64,7 +74,9 @@ type Draft = {
   colour: StationColour;
   printerIds: string[];
   showsRestOfOrder: boolean;
-  printMovedSlips: boolean | null;
+  printMovedSlips: boolean;
+  ticketGrouping: TicketGrouping;
+  printHeldWork: boolean;
 } & { [K in TimingField]: string };
 export type StationRefusal = { code: string; params?: Record<string, unknown> };
 type Refusal = StationRefusal;
@@ -96,6 +108,8 @@ const equal = (a: Draft, b: Draft) =>
   a.colour === b.colour &&
   a.showsRestOfOrder === b.showsRestOfOrder &&
   a.printMovedSlips === b.printMovedSlips &&
+  a.ticketGrouping === b.ticketGrouping &&
+  a.printHeldWork === b.printHeldWork &&
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
@@ -187,20 +201,17 @@ function refusalText(refusal: Refusal): string {
   }
 }
 
-const movedChoice = (value: boolean | null) =>
-  value === null ? "venue" : value ? "print" : "dont-print";
-const movedValue = (choice: string) =>
-  choice === "print" ? true : choice === "dont-print" ? false : null;
+const movedChoice = (value: boolean) => (value ? "print" : "dont-print");
 
-function movedOptions(venuePrints: boolean) {
+function movedOptions() {
   return [
-    {
-      value: "venue",
-      label: t(venuePrints ? "prep.moved_slips_venue_print" : "prep.moved_slips_venue_dont_print"),
-    },
     { value: "print", label: t("prep.moved_slips_print") },
     { value: "dont-print", label: t("prep.moved_slips_dont_print") },
   ];
+}
+
+function groupingOptions() {
+  return TICKET_GROUPINGS.map((value) => ({ value, label: t(`prep.ticket_grouping.${value}`) }));
 }
 
 function timingDraft(station: StationThresholds) {
@@ -271,15 +282,15 @@ export class StationEditor extends LitElement {
   /** Whether the person holds `printer.manage`; without it the printers are a read-out. */
   @property({ type: Boolean }) canManagePrinters = false;
   @property({ attribute: false }) refusal?: Refusal;
-  /** The venue's MOVED slips choice, which a station left as the venue follows. */
-  @property({ attribute: false }) venuePrintsMovedSlips = true;
 
   @state() private draft: Draft = {
     name: "",
     colour: "red",
     printerIds: [],
     showsRestOfOrder: false,
-    printMovedSlips: null,
+    printMovedSlips: true,
+    ticketGrouping: "combined",
+    printHeldWork: false,
     warmAfterMinutes: "",
     overdueAfterMinutes: "",
     forgottenAfterMinutes: "",
@@ -334,6 +345,8 @@ export class StationEditor extends LitElement {
         printerIds: [...station.printerIds],
         showsRestOfOrder: station.showsRestOfOrder,
         printMovedSlips: station.printMovedSlips,
+        ticketGrouping: station.ticketGrouping,
+        printHeldWork: station.printHeldWork,
         ...timingDraft(station),
       };
       this.baseline = copy(this.draft);
@@ -403,7 +416,10 @@ export class StationEditor extends LitElement {
     };
   }
 
-  private changed(draft: Draft, field: Field | "rest" | "printMovedSlips") {
+  private changed(
+    draft: Draft,
+    field: Field | "rest" | "printMovedSlips" | "ticketGrouping" | "printHeldWork",
+  ) {
     this.draft = draft;
     this.printerDropped = false;
     if (stationRefusalField(this.refusal) === field) this.refusal = undefined;
@@ -425,6 +441,10 @@ export class StationEditor extends LitElement {
       ...(draft.printMovedSlips !== base.printMovedSlips
         ? { printMovedSlips: draft.printMovedSlips }
         : {}),
+      ...(draft.ticketGrouping !== base.ticketGrouping
+        ? { ticketGrouping: draft.ticketGrouping }
+        : {}),
+      ...(draft.printHeldWork !== base.printHeldWork ? { printHeldWork: draft.printHeldWork } : {}),
       ...Object.fromEntries(
         TIMING_FIELDS.filter((field) => timingText(draft[field]) !== timingText(base[field])).map(
           (field) => [field, Number(draft[field].trim())],
@@ -610,17 +630,45 @@ export class StationEditor extends LitElement {
               hide-label
               search="never"
               .value=${movedChoice(this.draft.printMovedSlips)}
-              .options=${movedOptions(this.venuePrintsMovedSlips)}
+              .options=${movedOptions()}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
                 if (current())
                   this.changed(
-                    { ...this.draft, printMovedSlips: movedValue(event.detail.value) },
+                    { ...this.draft, printMovedSlips: event.detail.value === "print" },
                     "printMovedSlips",
                   );
               }}
             ></wt-combobox>
           </fieldset>
+          <wt-combobox
+            name="ticketGrouping"
+            label=${t("prep.ticket_grouping")}
+            hint=${t("prep.ticket_grouping_hint")}
+            search="never"
+            .value=${this.draft.ticketGrouping}
+            .options=${groupingOptions()}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (current() && isTicketGrouping(value))
+                this.changed({ ...this.draft, ticketGrouping: value }, "ticketGrouping");
+            }}
+          ></wt-combobox>
+          <wt-switch
+            name="printHeldWork"
+            label=${t("prep.print_held_work")}
+            .checked=${this.draft.printHeldWork}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              if (current())
+                this.changed(
+                  { ...this.draft, printHeldWork: event.detail.checked },
+                  "printHeldWork",
+                );
+            }}
+          ></wt-switch>
+          <p class="note" data-test="held-work-hint">${t("prep.print_held_work_hint")}</p>
         </div>
         <wt-form-actions
           slot="footer"

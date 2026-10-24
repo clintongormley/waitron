@@ -22,7 +22,6 @@ export const stationView: PrepStationsView = {
       },
     ],
     canMakeDefault: true,
-    printMovedSlips: true,
     defaultStationId: "bar",
     stations: [{ id: "bar", name: "Bar", active: true, colour: "blue" }],
     stationTimes: [
@@ -49,7 +48,9 @@ export const stationView: PrepStationsView = {
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
       showsRestOfOrder: false,
-      printMovedSlips: null,
+      printMovedSlips: true,
+      ticketGrouping: "combined",
+      printHeldWork: false,
     },
   ],
   categories: [

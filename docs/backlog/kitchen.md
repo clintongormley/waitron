@@ -43,8 +43,6 @@ does not exist.
     (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
     a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line
     by line, because nothing records a unit's kind (a unit field would need a migration).
-  - The kitchen-ticket grouping setting sits on Venue settings' **Kitchen** tab,
-    and so does "Print held groups in advance", which is not about sent work at all.
   - Every pass press moves the party's revision, so a waiter's open Tab drawer meets
     `party.out_of_date` after it and reads again.
   - Setting up a venue from an imported configuration deletes every kitchen station, and the
@@ -62,9 +60,10 @@ does not exist.
     like every correction slip: none is recorded in `kitchen_print_jobs`.
   - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
     another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
-  - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
-    correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
-    never printed that group's HOLD ticket.
+  - A group's HOLD paper is recorded per station, not per printer
+    (`order_group_hold_stations`), so a correction to a station whose printer changed after its
+    HOLD ticket prints on the new printer, which never had that ticket (`printCorrectionSlips`
+    reads the station's current printers; read, not run).
 
 ## KDS corrections deferred from #191
 
@@ -146,7 +145,6 @@ What is left. The starting decisions are in the plan,
 2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
 under Open points is due. PR 5 (late flags on each station) landed on 2026-10-23 (#2023).
 
-- **PR 6 — identical dishes, held courses and MOVED slips on each station.**
 - **PR 7 — done on the screen on each station.**
 - **PR 8 — changes after sending, three values, on each station.**
 - **The Kitchen tab goes** in whichever change removes its last control: after PRs 4–8 only fire
@@ -203,6 +201,22 @@ Open points:
   (`prep.warm`, `prep.overdue`, `prep.forgotten`), all in
   `packages/venue-service/src/dashboard/strings.ts`. English uses warm, overdue and forgotten
   throughout. PR 5 added no strings.
+- From PR 6: A773's picture 10 draws Held courses as a dropdown, "Print when sent"; PR 6 uses the
+  switch "Print held groups in advance" the Kitchen tab had. Ask the owner whether picture 10's
+  wording replaces it.
+- From PR 6: picture 10 lists Identical dishes and Held courses above MOVED slips; PR 6 puts them
+  after it, the editor's built order.
+- From PR 6: Add station sets none of a station's printing choices; a new station starts at one
+  line, no held printing, MOVED slips printed.
+- From PR 6: the station editor's ticket-grouping hint ("Applies to new kitchen tickets and to
+  reprints.") is never seen. `wt-combobox` always draws its hint visually hidden
+  (`packages/ui-core/src/field-styles.ts:153-155`) for screen readers (`packages/ui/src/components/wt-combobox.ts:1100`), and
+  shows it in the box only while nothing is chosen and there is no placeholder
+  (`wt-combobox.ts:1102`); a station always has a grouping — as the old Kitchen tab's dropdown
+  did. Ask the owner whether it should be a visible note.
+- From PR 6: a printer shared by a recorded and an unrecorded station prints one FIRE-marked
+  ticket carrying both stations' dishes (`apps/server/src/kitchen-print.ts:662-666`); ask the
+  owner whether FIRE should mark only the recorded station's part.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
@@ -384,6 +398,7 @@ change; check that against the code when PR 8 is picked up.
 - The Edit switch reads "Also list the order's dishes from other stations", with "On this station's
   tickets and kitchen screen" beneath it. "Print a slip when sent dishes move table" offers
   "Venue setting: Print" or "Venue setting: Don't print", "Print", and "Don't print". Spanish matches.
+  **2026-10-23 (A756 PR 6):** the choice is the station's own: Print or Don't print.
 - Configuration bundles use version 4. Older exports must be exported again from a compatible
   source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
   export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6. **2026-10-23:** A756 PR 5 moved it to version 7.
@@ -502,6 +517,7 @@ change; check that against the code when PR 8 is picked up.
   (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and
   a station's own MOVED slips choice decide paper only. Plan:
   [2026-10-14-a650-moved-slips-design.md](../superpowers/plans/2026-10-14-a650-moved-slips-design.md) §6.
+  **2026-10-23 (A756 PR 6):** the venue switch is gone; the station's own choice decides paper alone.
 
 - **Each is decided by the unit's identity.** **Kept as it is, by the owner's choice
   (2026-09-28):** the till's ticket view (`apps/till/src/screens/till-ticket-view.ts`) still shows

@@ -1,4 +1,4 @@
-import { STATION_COLOURS } from "@waitron/shared";
+import { STATION_COLOURS, TICKET_GROUPINGS } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import {
   CORE_CONFIGURATION_TRANSFER,
@@ -61,6 +61,32 @@ describe("validateCoreConfiguration", () => {
     expect(() =>
       validateCoreConfiguration({
         kitchen_stations: STATION_COLOURS.map((colour) => ({ colour })),
+      }),
+    ).not.toThrow();
+  });
+
+  it.each(["bogus", "Combined", null, 1])(
+    "refuses a station ticket grouping a save would refuse %j",
+    (ticket_grouping) => {
+      expect(() =>
+        validateCoreConfiguration({ kitchen_stations: [{ ticket_grouping }] }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "kitchen_stations.ticket_grouping" },
+        }),
+      );
+    },
+  );
+
+  it("accepts an absent station ticket grouping", () => {
+    expect(() => validateCoreConfiguration({ kitchen_stations: [{}] })).not.toThrow();
+  });
+
+  it("accepts each station ticket grouping", () => {
+    expect(() =>
+      validateCoreConfiguration({
+        kitchen_stations: TICKET_GROUPINGS.map((ticket_grouping) => ({ ticket_grouping })),
       }),
     ).not.toThrow();
   });

@@ -44,7 +44,6 @@ const view: PrepStationsView = {
       },
     ],
     canMakeDefault: true,
-    printMovedSlips: true,
     defaultStationId: "bar",
     stations: [{ id: "bar", name: "Bar", active: true, colour: "blue" }],
     stationTimes: [
@@ -72,7 +71,9 @@ const view: PrepStationsView = {
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
       showsRestOfOrder: false,
-      printMovedSlips: null,
+      printMovedSlips: true,
+      ticketGrouping: "combined",
+      printHeldWork: false,
     },
   ],
   categories: [
@@ -883,13 +884,19 @@ it("edits Show the rest of the order in the station editor and saves only that f
   expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { showsRestOfOrder: true });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
 });
-it("hands the station's and the venue's MOVED slips choices to the editor and saves the station's", async () => {
+it("hands the station's printing choices to the editor and saves the station's", async () => {
   setLocale("en");
   const a = api({
     load: vi.fn().mockResolvedValue({
       ...view,
-      routing: { ...view.routing, printMovedSlips: false },
-      stations: [{ ...view.stations[0]!, printMovedSlips: true }],
+      stations: [
+        {
+          ...view.stations[0]!,
+          printMovedSlips: false,
+          ticketGrouping: "separate",
+          printHeldWork: true,
+        },
+      ],
     }),
   });
   const el = await mount(a);
@@ -903,55 +910,22 @@ it("hands the station's and the venue's MOVED slips choices to the editor and sa
   const moved = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     "wt-combobox[name=printMovedSlips]",
   )!;
-  expect(moved.value).toBe("print");
-  expect(moved.options[0]!.label).toBe("Venue setting: Don't print");
-  moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "venue" } }));
+  expect(moved.value).toBe("dont-print");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=ticketGrouping]",
+    )!.value,
+  ).toBe("separate");
+  expect(
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "wt-switch[name=printHeldWork]",
+    )!.checked,
+  ).toBe(true);
+  moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "print" } }));
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
   await settle(el);
-  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printMovedSlips: null });
-});
-async function openMovedSlipsEditorThatSeesVenueStopPrinting() {
-  setLocale("en");
-  const liveData = new LiveData();
-  const load = vi
-    .fn()
-    .mockResolvedValueOnce(view)
-    .mockResolvedValue({ ...view, routing: { ...view.routing, printMovedSlips: false } });
-  const el = await mount(api({ liveData, load }));
-  q(el, '[data-test="edit-bar"]')!.click();
-  await settle(el);
-  const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
-  await editor.updateComplete;
-  const moved = () =>
-    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      "wt-combobox[name=printMovedSlips]",
-    )!;
-  const save = () =>
-    editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!;
-  return { el, editor, moved, save, liveData };
-}
-it("follows the venue's MOVED slips switch in an open editor's first option", async () => {
-  const { el, editor, moved, liveData } = await openMovedSlipsEditorThatSeesVenueStopPrinting();
-  expect(moved().value).toBe("venue");
-  expect(moved().options[0]!.label).toBe("Venue setting: Print");
-  liveData.invalidate([{ type: "service_settings" }]);
-  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("Venue setting: Don't print"));
-  expect(el.shadowRoot!.querySelector("prep-station-editor")).toBe(editor);
-  expect(moved().value).toBe("venue");
-});
-it("keeps a MOVED slips choice made in an open editor when the venue's switch changes", async () => {
-  const { el, editor, moved, save, liveData } =
-    await openMovedSlipsEditorThatSeesVenueStopPrinting();
-  moved().dispatchEvent(new CustomEvent("wt-change", { detail: { value: "print" } }));
-  await editor.updateComplete;
-  expect(save().hasAttribute("disabled")).toBe(false);
-  liveData.invalidate([{ type: "service_settings" }]);
-  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("Venue setting: Don't print"));
-  await editor.updateComplete;
-  expect(el.shadowRoot!.querySelector("prep-station-editor")).toBe(editor);
-  expect(moved().value).toBe("print");
-  expect(save().hasAttribute("disabled")).toBe(false);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printMovedSlips: true });
 });
 function fallbackView(): PrepStationsView {
   return {

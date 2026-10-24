@@ -391,7 +391,11 @@ it("refuses the populated predecessor for reset and retains every row after roll
   // before they would apply again.
   await applyMigrations(
     venue,
-    predecessor(root, ["_floor_plan_sets", "_floor_reset_tables_taken_off"]),
+    predecessor(root, [
+      "_floor_plan_sets",
+      "_floor_reset_tables_taken_off",
+      "_station_printing_choices",
+    ]),
   );
   let before: Record<string, unknown[]>;
   const opened = await openVenueDatabase(venue);
@@ -513,6 +517,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       ticket_item_allergies: [],
       custom_themes: [],
       adjustment_refunds: [],
+      order_group_hold_stations: [],
     };
     delete retained.canvases;
     delete retained.table_service_statuses;

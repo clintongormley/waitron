@@ -1,10 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, flag, table } from "@waitron/db";
-
-export const KITCHEN_TICKET_GROUPINGS = ["combined", "separate"] as const;
-export type KitchenTicketGrouping = (typeof KITCHEN_TICKET_GROUPINGS)[number];
-const kitchenTicketGrouping = enumType(KITCHEN_TICKET_GROUPINGS);
+import { count, flag, table } from "@waitron/db";
 
 /** The venue's service settings: at most one row, `id` pinned to 1. */
 export const serviceSettings = table(
@@ -14,15 +10,6 @@ export const serviceSettings = table(
     // "Allow changes to items already sent to the kitchen". Off is for a paper-only kitchen, which
     // never reports that it has started an item.
     editSentLines: flag("edit_sent_lines").notNull().default(true),
-    // How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one.
-    kitchenTicketGrouping: kitchenTicketGrouping("kitchen_ticket_grouping")
-      .notNull()
-      .default("combined"),
-    printHeldWork: flag("print_held_work").notNull().default(false),
-    printMovedSlips: flag("print_moved_slips").notNull().default(true),
   },
-  (t) => [
-    check("service_settings_singleton_ck", sql`${t.id} = 1`),
-    check("service_settings_kitchen_ticket_grouping_ck", enumCheck(t.kitchenTicketGrouping)),
-  ],
+  (t) => [check("service_settings_singleton_ck", sql`${t.id} = 1`)],
 );

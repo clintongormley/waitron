@@ -210,6 +210,7 @@ export {
   isStationColour,
   type StationColour,
 } from "./station-colours.js";
+export { TICKET_GROUPINGS, isTicketGrouping, type TicketGrouping } from "./ticket-grouping.js";
 
 export type {
   RecordExportValue,

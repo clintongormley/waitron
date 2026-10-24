@@ -17,7 +17,9 @@ class StationEditorLeaveApp extends LitElement {
           colour: "orange",
           active: true,
           showsRestOfOrder: false,
-          printMovedSlips: null,
+          printMovedSlips: true,
+          ticketGrouping: "combined",
+          printHeldWork: false,
           printerIds: ["epson"],
           warmAfterMinutes: 3,
           overdueAfterMinutes: 5,
@@ -245,7 +247,43 @@ it("a changed MOVED slips choice asks before closing, and choosing back the open
   const close = modal(el).requestClose("cancel");
   await choose("keep");
   expect(await close).toBe(false);
-  await pickMoved("venue");
+  await pickMoved("print");
+  expect(unload()).toBe(false);
+  expect(await modal(el).requestClose("cancel")).toBe(true);
+});
+
+it("a changed ticket grouping asks before closing, and choosing back the opened one does not", async () => {
+  const el = await mount();
+  const pickGrouping = async (value: string) => {
+    el.shadowRoot!.querySelector("wt-combobox[name=ticketGrouping]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+    await el.updateComplete;
+  };
+  await pickGrouping("separate");
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await pickGrouping("combined");
+  expect(unload()).toBe(false);
+  expect(await modal(el).requestClose("cancel")).toBe(true);
+});
+
+it("a changed held printing choice asks before closing, and choosing back the opened one does not", async () => {
+  const el = await mount();
+  const setHeld = async (checked: boolean) => {
+    el.shadowRoot!.querySelector("wt-switch[name=printHeldWork]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked } }),
+    );
+    await el.updateComplete;
+  };
+  await setHeld(true);
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await setHeld(false);
   expect(unload()).toBe(false);
   expect(await modal(el).requestClose("cancel")).toBe(true);
 });

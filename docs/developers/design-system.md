@@ -2893,7 +2893,7 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor and the routing cell editor.
-Rest-of-order, MOVED slips and a station's three late-flag minutes are edited in the station editor. Routing
+Rest-of-order, MOVED slips, identical dishes, held printing and a station's three late-flag minutes are edited in the station editor. Routing
 Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
@@ -4617,9 +4617,9 @@ moves nothing, saves at once. A cell with a saved choice of its own, other than 
 Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the three
 late-flag fields in one row under "Late flags (minutes)", "Also list the order's dishes from other
-stations" with "On this station's tickets and kitchen screen", and "Print a slip when sent dishes
-move table". The slip choices are "Venue setting: Print" (or "Venue setting: Don't print"), "Print"
-and "Don't print"; choosing the venue setting again sends null.
+stations" with "On this station's tickets and kitchen screen", "Print a slip when sent dishes
+move table", then "Identical dishes on a kitchen ticket" and "Print held groups in advance" with its
+note. The slip choices are "Print" and "Don't print".
 Save sends only what changed, in one request. Each minutes field is required and opens on the
 station's own value; a blank one is marked like any other invalid value. Save first checks that
 each minutes field is a whole number from 1 to 2147483647 and that warm < overdue < forgotten; it

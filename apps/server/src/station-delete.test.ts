@@ -173,6 +173,7 @@ async function snapshot(v: PartyVenue) {
       "kitchen_print_job_lines",
       "kitchen_notices",
       "ticket_item_moves",
+      "order_group_hold_stations",
     ]) {
       const { rows } = await tx.execute(sql.raw(`select * from "${name}" order by rowid`));
       result[name] = rows;

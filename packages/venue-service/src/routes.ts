@@ -35,16 +35,7 @@ import {
   setZoneSalePolicyOverride,
   updateDepartment,
 } from "./operations.js";
-import {
-  readEditSentLines,
-  readKitchenTicketGrouping,
-  readPrintHeldWork,
-  readPrintMovedSlips,
-  writeEditSentLines,
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  writePrintMovedSlips,
-} from "./kitchen-notices.js";
+import { readEditSentLines, writeEditSentLines } from "./kitchen-notices.js";
 import {
   readOpeningHoursModel,
   replaceMenuWeek,
@@ -59,7 +50,6 @@ import {
   type LocalDate,
 } from "./hours-types.js";
 import type { ClosedWeekDay, MenuWeekDay } from "./menu-timetable-types.js";
-import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
   clearRoutingCell,
@@ -700,7 +690,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           await gatedAs(sessionId, async (tx, role) => ({
             ...(await routingModel(tx, ctx.cfg, new Date())),
             canMakeDefault: roleHasPermission(role, "venue.configure"),
-            printMovedSlips: await readPrintMovedSlips(tx),
           })),
         );
       }),
@@ -760,9 +749,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               : []),
           ],
           settings: { editSentLines: await readEditSentLines(tx) },
-          kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
-          printHeldWork: await readPrintHeldWork(tx),
-          printMovedSlips: await readPrintMovedSlips(tx),
           releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx, ctx.cfg),
           needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
           serviceSteps: await listServiceSteps(tx, ctx.cfg),
@@ -777,12 +763,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const settings = await withTransaction(ctx.db, async (tx) => {
           await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
-          return {
-            settings: { editSentLines: await readEditSentLines(tx) },
-            kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
-            printHeldWork: await readPrintHeldWork(tx),
-            printMovedSlips: await readPrintMovedSlips(tx),
-          };
+          return { settings: { editSentLines: await readEditSentLines(tx) } };
         });
         return c.json(settings);
       }),
@@ -797,47 +778,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "editSentLines" });
         }
         await gated(sessionId, (tx) => writeEditSentLines(tx, editSentLines));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/settings/kitchen-ticket-grouping", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const grouping = body.kitchenTicketGrouping;
-        if (!KITCHEN_TICKET_GROUPINGS.includes(grouping as KitchenTicketGrouping)) {
-          throw new AppError("management.request_invalid", { field: "kitchenTicketGrouping" });
-        }
-        await gated(sessionId, (tx) =>
-          writeKitchenTicketGrouping(tx, grouping as KitchenTicketGrouping),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/settings/print-held-work", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const printHeldWork = body.printHeldWork;
-        if (typeof printHeldWork !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "printHeldWork" });
-        }
-        await gated(sessionId, (tx) => writePrintHeldWork(tx, printHeldWork));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/settings/print-moved-slips", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const printMovedSlips = body.printMovedSlips;
-        if (typeof printMovedSlips !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "printMovedSlips" });
-        }
-        await gated(sessionId, (tx) => writePrintMovedSlips(tx, printMovedSlips));
         return c.body(null, 204);
       }),
     );

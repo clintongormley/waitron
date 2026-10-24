@@ -119,6 +119,7 @@ export {
   orderGroupState,
   orderGroups,
 } from "./schema/order-groups.js";
+export { orderGroupHoldStations } from "./schema/order-group-hold-stations.js";
 export {
   orderDraftEventKind,
   orderDraftEvents,

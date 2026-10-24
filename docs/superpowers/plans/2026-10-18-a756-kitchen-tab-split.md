@@ -2153,6 +2153,1070 @@ not change (setup only: raw inserts for its predecessor).
 
 ---
 
+## PR 6 — Identical dishes, held courses and MOVED slips on each station
+
+Planned 2026-10-23, after PR 5 landed (#2023). Branch `feat/a756-6-station-printing-choices`,
+worktree `/Users/clintongormley/workspace/worktrees/waitron-feat-a756-6-station-printing-choices`,
+cut from `main` at `157f152c5`. Ledger for PR 6: `~/waitron-campaign-c/item-a756-ledger.md`, the
+one PRs 4 and 5 used; every task ends by updating it (done, changed test checks, next step).
+**Review path: FULL** — two migrations (one rebuilds `service_settings`), a new core table that
+decides which kitchen printers get held-work paper, a change to what the station routes answer
+(read by venue-service's dashboard and the till), and the removal of a module seat
+(`packages/module/src/module.ts`, a cross-package contract). Implementers are dispatched as
+`subagent_type: "implementer"`.
+
+**Goal.** How identical dishes print on a ticket ("One line: 3 x Burger" or "A line each"),
+whether held groups print in advance on a ticket marked HOLD, and whether MOVED slips print stop
+being venue-wide settings on the Kitchen tab and become each prep station's own three choices,
+set in the station editor. A new station starts with today's venue defaults: one line, held
+groups not printed in advance, MOVED slips printed. A station whose MOVED slips choice was "Venue
+setting" now simply prints them. Held-work paper becomes exact per station: a station gets a HOLD
+ticket only when it prints held groups in advance, and every later piece of paper about that held
+work (a HOLD correction, the HOLD part of a MOVED slip or a reprint, the FIRE banner) prints only at
+the stations that had the HOLD ticket, whatever their choice is later; a station that did not prints
+its part at the fire. Kitchen-screen notices do not change. The Kitchen tab's venue-service panel keeps only "Changes
+after sending" (PR 8 moves it). The three `service_settings` columns are dropped.
+
+**Files it touches.**
+- shared: `packages/shared/src/ticket-grouping.ts` (new) and its test, `src/index.ts`.
+- db: `src/schema/kitchen-stations.ts`, `src/schema/order-group-hold-stations.ts` (new),
+  `src/schema/index.ts`, `src/classification.ts`, `src/configuration-transfer.ts`, a generated
+  core migration in `drizzle/`, `src/schema/kitchen-stations.test.ts`,
+  `src/schema/order-group-hold-stations.test.ts` (new).
+- server: `src/kitchen.ts`, `src/management-api.ts`, `src/kitchen-print.ts`, `src/kitchen-ticket.ts`,
+  `src/order-groups.ts`, `src/working-order.ts`, `src/station-move.ts`, `src/draft-recall.ts`,
+  `src/testing/station-printing.ts` (new), and the tests named in Tasks 29–39.
+- venue-service: `src/schema/settings.ts`, `src/kitchen-notices.ts`, `src/routes.ts`,
+  `src/routing-types.ts`, `src/service.ts`, a generated migration in `drizzle/`, and the dashboard's
+  `station-editor.ts`, `prep-stations-screen.ts`, `routing-client.ts`, `service-settings-panel.ts`,
+  `client.ts`, `live-queries.ts`, `strings.ts`, with their tests and fixtures.
+- module: `packages/module/src/module.ts` (three seat reads go).
+- dashboard app: `src/testing/department-receipt-app-fixture.ts`, `src/dashboard-app.test.ts` (fixtures).
+- docs: the guides `apps/server/src/guide/{en,es}/kitchen-service.md`,
+  `docs/developers/design-system.md`, `docs/backlog.md`, `docs/backlog/kitchen.md`, the A664
+  audit and retention inventory, and the A760 inventory (one dated pointer each).
+
+### PR 6 decisions (each with its receipt)
+
+1. **Storage: two columns added to `kitchen_stations`, one new core table, three
+   `service_settings` columns dropped; two migrations, no venue reset.**
+   `kitchen_stations` gains `ticket_grouping` (`label`, `.$type<TicketGrouping>()`, NOT NULL,
+   default `'combined'`) and `print_held_work` (`flag`, NOT NULL, default false), as `0152` and
+   `0154` added `colour` and `print_moved_slips`. `print_moved_slips` stays nullable
+   (`packages/db/src/schema/kitchen-stations.ts:26`): making it NOT NULL would rebuild
+   `kitchen_stations`, which 40 migration lines reference (PR 5's Decision 1 count). A new core
+   table `order_group_hold_stations (group_id → order_groups, station_id → kitchen_stations,
+   primary key both)` records which stations a held group's HOLD ticket was queued for (Decision 5).
+   `service_settings` (venue-service's set) loses `kitchen_ticket_grouping`, `print_held_work` and
+   `print_moved_slips` (`packages/venue-service/src/schema/settings.ts:18-22`) and the CHECK
+   `service_settings_kitchen_ticket_grouping_ck` (`:26`).
+   **Measured 2026-10-23** in a scratch copy of this worktree (`cp -c -R` to a temporary
+   directory, its `.git` pointer removed; deleted afterwards), with those schema changes and the
+   new table's `classify(...)` line:
+   - `pnpm db:generate --name station_printing_choices` in `packages/db` wrote
+     `drizzle/0187_station_printing_choices.sql` holding exactly a `CREATE TABLE
+     order_group_hold_stations` (two `FOREIGN KEY … ON DELETE no action`, `PRIMARY KEY(group_id,
+     station_id)`), ``ALTER TABLE `kitchen_stations` ADD `ticket_grouping` text DEFAULT 'combined' NOT NULL``
+     and ``ALTER TABLE `kitchen_stations` ADD `print_held_work` integer DEFAULT false NOT NULL`` —
+     no `__new_` table, so `kitchen_stations` is not rebuilt.
+   - `pnpm db:generate --name retire_venue_printing_choices` in `packages/venue-service` wrote
+     `drizzle/0068_retire_venue_printing_choices.sql`: a rebuild (`__new_service_settings` with
+     `id`, `edit_sent_lines` and the singleton CHECK; `INSERT … SELECT "id", "edit_sent_lines"`;
+     `DROP TABLE`; `RENAME`). It is a drop only, so the drizzle-kit trap of a rebuild that also adds
+     a column (CLAUDE.md §3) does not apply: the `SELECT` names only columns the old table has.
+     `service_settings` was rebuilt the same way once before, by shipped
+     `packages/venue-service/drizzle/0006_kitchen_ticket_grouping_check.sql`. Nothing points at it:
+     ``git grep -n -i 'references `service_settings`' -- 'packages/*/drizzle/*.sql'`` printed nothing
+     (exit 1), and no migration trigger names it
+     (`git grep -n -i trigger -- 'packages/*/drizzle/*.sql' | grep -i service_settings`, exit 1).
+     Its change-feed triggers go with the old table and boot puts them back; the venue-service
+     upgrade test below shows that.
+   - `pnpm exec vitest run scripts/migration-upgrade.test.ts` passed (`Tests 4 passed (4)`) and
+     reported `345 steps` and `230 tables hold rows after the last step`; the same run on the
+     unchanged copy reported `343 steps` and `229 tables` — the control that the walk applied both
+     new steps and filled the new table.
+   - `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts scripts/module-graph-honesty.test.ts`
+     printed `Test Files 8 passed (8)`, `Tests 521 passed (521)`; with the new table's
+     `classify(...)` line removed, `classification-complete.test.ts` failed with `core: created
+     table "order_group_hold_stations" is not classified` (the control that the guards saw it).
+     `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad` printed `Tests 2 passed (2)`.
+   - `pnpm exec vitest run scripts/apply-migrations-callers.test.ts scripts/append-only-migration-sets.test.ts scripts/id-columns-are-references.test.ts scripts/no-tenant-column.test.ts scripts/column-vocabulary.test.ts`
+     `Tests 80 passed (80)`; `pnpm --filter @waitron/composition exec vitest run` `Tests 125 passed (125)`;
+     the other upgrade suites — server `draft-line-place-upgrade`, `printer-pickup-upgrade`,
+     `recovery-backup-preview.older`, `backup-verification-compatibility` (`Tests 109 passed`),
+     db `drawer-refund-upgrade`, `kitchen-timing-upgrade` (`2 passed`), venue-service
+     `department-receipts.upgrade`, `order-kitchen-notes.upgrade`, `party-allergy.upgrade`,
+     `migrations` (`50 passed`), migrations `order-group-events-rebuild`, `apply-*`, `manifest`,
+     `journal-hashes` (`25 passed`), root `menu-sections-upgrade`, `fiscal-allocation-migration`,
+     `fiscal-certificate-migration` (`7 passed`), workforce `record-migration`,
+     `attendance-response-migration` (`18 passed`) — all passed unchanged.
+   - Five cases in four files failed, each for a reason Task 29 or Task 39 fixes (Decision 7):
+     `canvas-retirement-upgrade.test.ts` (two cases), `station-order-migration.test.ts`,
+     `packages/venue-service/src/kitchen-allergy.upgrade.test.ts`, and
+     `packages/venue-service/src/schema/service.test.ts` "declares service_settings's keys, checks
+     and indexes" (it pins the dropped CHECK). With Decision 7's edits the first three files passed
+     (the fourth's pin is Task 39's one-line change, not re-run in the probe).
+   **No venue reset**: the walk passed with rows in every table, and no shipped migration file is
+   edited. Both numbers were free on `157f152c5`; a parked branch with core migrations
+   (`feat/a739-payment-window`, Decision 11) may take 0187 first, and then Task 29 regenerates.
+
+2. **What each existing station gets: the column defaults, not the venue's values.** Every
+   station reads `ticket_grouping = 'combined'` and `print_held_work = false` after the ADD, and a
+   station whose `print_moved_slips` is null (today "Venue setting") prints MOVED slips. The
+   venue's three values are dropped, not copied (CLAUDE.md §3, "No backwards-compatibility or
+   data-migration code until Waitron is in production"; PR 4's Decision 1 and PR 5's Decision 2 did
+   the same). These are today's venue defaults (`settings.ts:18-22`: `combined`, `false`, `true`;
+   the seat's fallbacks `kitchen-notices.ts:338`, `:354`, `:370` agree), so a venue that never
+   changed the Kitchen tab sees no difference. A773 §7.1 asks only that "A new station starts with
+   sensible defaults"; picture 10 draws one station (Bar) with "Print when sent" and "One line",
+   which is that station's state in the story, not a default. **A new station starts at the same
+   three values**: `createStation` writes `printMovedSlips: true` explicitly (the station routes
+   always write a boolean) and leaves the other two to their column defaults; provisioning's first
+   station (`packages/provisioning/src/venue-apply.ts:304`) and a configuration import that omits
+   the column leave `print_moved_slips` null, which reads as Print. A group held before the upgrade
+   and still held has `hold_printed_at` set but no `order_group_hold_stations` rows, so it is
+   treated as having no HOLD paper (its fire prints an ordinary ticket). Pre-live, not carried over.
+
+3. **Validation at the station routes.** PATCH `/management-api/stations/:id` accepts
+   `ticketGrouping` (`"combined"` or `"separate"`, checked with `isTicketGrouping` from
+   `@waitron/shared` as `colour` is with `isStationColour`, `apps/server/src/management-api.ts:352-357`),
+   `printHeldWork` (a boolean) and `printMovedSlips` (a boolean). Anything else — `null` for
+   `printMovedSlips` included — is refused `management.request_invalid { field }`, today's code
+   for a bad station field (`:1639-1643` for `printMovedSlips`; the editor already puts a refusal
+   that names a field under it, `stationRefusalField`, `station-editor.ts:150-170`). No CHECK on
+   `ticket_grouping`: a CHECK would rebuild `kitchen_stations` (as for `colour`, whose column comment
+   says so, `kitchen-stations.ts:27`); the routes and the import refuse an unknown value, and the
+   column comment says so. POST `/management-api/stations` is unchanged (it accepts none of the
+   station's printing choices today, `:1533-1542`, and the Add dialog sets none); `createStation`
+   writes the defaults of Decision 2. A refused PATCH writes nothing, as today (`updateStation`
+   validates before its one `update`, `apps/server/src/kitchen.ts:158-205`).
+
+4. **The station's answer.** `Station` (`apps/server/src/kitchen.ts:29-43`) gains
+   `ticketGrouping: TicketGrouping` and `printHeldWork: boolean`, and `printMovedSlips` becomes
+   `boolean`, a stored null answered as `true`, so a null reads as Print. The null is mapped in
+   two places, each reading the column for itself: `listStations` (`kitchen.ts:124-141`, Task 30)
+   and the printing path's `readStations` (`kitchen-print.ts:350-366`, Task 33). Its readers:
+   `GET /management-api/stations` (venue-service's dashboard, `routing-client.ts:24-38`) and
+   `listStationsToday` (`kitchen.ts:143-156`), which reaches the till through `till-api.ts` and
+   `device-api.ts` — no till code reads `printMovedSlips` (`git grep -n printMovedSlips -- apps/till`
+   prints nothing), so the till only carries three more keys. The routing view's venue value
+   (`RoutingView.printMovedSlips`, `packages/venue-service/src/routing-types.ts:108-112`, written at
+   `routes.ts:703`, read only by `prep-stations-screen.ts:766`) goes, with the `routing` live
+   query's `service_settings` dependency (`packages/venue-service/src/dashboard/live-queries.ts:154`),
+   which the same commit added for it (`git blame` of both lines: `e8f935e57`).
+
+5. **Held-work paper is per station, recorded when the HOLD ticket is queued; screen notices are
+   not touched.** Today one stamp on the group says "the kitchen has a HOLD ticket for this group"
+   (`order_groups.hold_printed_at`, set by `printHoldTickets` when any printer took a job,
+   `apps/server/src/order-groups.ts:2001-2041`), and every later decision reads the stamp,
+   deliberately not the setting: "The marker, not the setting: a group whose HOLD ticket was
+   queued is fired by a FIRE slip" (`order-groups.ts:815`), and the Kitchen tab's hint promises "A
+   group held before this is turned on prints when it is fired, as before. A group already printed
+   marked HOLD is still fired marked FIRE after this is turned off" (`venue.print_held_work_hint`,
+   `strings.ts:530-531`). With the choice per station, a group can be on paper at Kitchen and not
+   at Bar, so the stamp alone would print Bar HOLD corrections, a FIRE banner and the HOLD part of
+   MOVED slips and reprints for paper it never had; reading Bar's *current* choice instead would
+   break the marker rule for a station switched off after printing. So the marker becomes per
+   station: `order_group_hold_stations` holds `(group, station)` for each station a HOLD job
+   carried (`KitchenJob.stationIds`, `kitchen-print.ts:693-698`). Its writers: `printHoldTickets`,
+   and the held move (`station-move.ts`) and held join (Task 35b) under the rule below, all through
+   `recordHeldPaper`. `hold_printed_at` keeps being set as today.
+   **The stamp keeps choosing which items the kitchen is told about; the table only decides what
+   prints.** The same functions record kitchen-screen notices and print slips from one item list:
+   `enqueueHoldCorrections` (`kitchen-print.ts:933-951`), `enqueueStationMoved` (its reroute notice
+   for every item, `:905-926`), the order-note correction (`:794-846`, its query `:822-826` feeding
+   both), and the MOVED path, whose `readSentItems` (`:1170-1196`, from `readOnHoldTickets`
+   `:1199-1222`) picks the `moved` notices. A station with a screen and no printer is never in the
+   table (no HOLD job carries it), so filtering those item lists would drop notices it gets today.
+   Every item selection stays on the stamp; the filter sits where paper is made. The rules:
+   - **HOLD ticket:** `printHoldTickets` plans only the held items at stations whose
+     `print_held_work` is on now; no such station, no ticket and no stamp — today's behaviour with
+     the venue switch off.
+   - **A recorded station gets every later piece of paper about the group, whatever its current
+     choice** (the marker rule): HOLD CHANGED added and removed, HOLD CANCELLED, the held EXTRA
+     CANCELLED, the HOLD part of a MOVED slip and of a reprint, a held dish moved in from another
+     station (its HOLD ticket "from X", `station-move.ts:373-385`), and the FIRE banner.
+   - **A station not recorded gets none of that paper; its part of the group prints at the fire,
+     as an ordinary ticket** — whether it was off when the group was held or has been switched on
+     since — except a dish moving or joining in under the rule below. This is the per-station form of the hint's "A group
+     held before this is turned on prints when it is fired", and of `correctJoin`, which prints
+     nothing for a group with no HOLD ticket (`order-groups.ts:2122-2123`). It also means a station
+     never holds partial HOLD paper (a "+1" for a dish whose first one it never had on paper), and
+     whether a station gets paper never depends on another station's.
+   - **FIRE banner:** a fire ticket's route prints `*** FIRE ***` when one of its stations is
+     recorded for the group; otherwise it is an ordinary ticket. A printer shared by a recorded and
+     an unrecorded station got the HOLD ticket, so its joint ticket is marked FIRE.
+   - **Where the filter sits:** `CorrectionItem` gains `holdGroupId?: string`, set only on held work
+     corrected against a group's HOLD ticket; `printCorrectionSlips` (`kitchen-print.ts:1064`)
+     prints such an item only at a station recorded for that group, after the notices are recorded
+     and before its HOLD CHANGED allergy freeze (`:1075-1083`). The MOVED slip's HOLD part
+     (`printMovedSlips`, `:1444-1500`) and a reprint's HOLD part (`readReprintParts`, `:1606-1643`)
+     keep a held item only when its line's group and its station are recorded.
+   - **A held dish moving or joining in (ruling of 2026-10-23,
+     `.superpowers/sdd/2026-10-18-a756-kitchen-tab-split/ruling-34-fresh-station.md`):** when a held
+     dish of a group with HOLD paper (stamp set, at least one recorded station) moves to, or joins
+     at, a station not recorded for the group, that station gets today's paper (the move's HOLD
+     ticket "from X"; the join's HOLD CHANGED added) and is recorded, but only when (a) its own
+     `print_held_work` is on now and (b) it holds no other unfired, uncancelled ticket item of the
+     group besides the arriving ones. Otherwise it gets nothing until the fire. With every station
+     on this is today's venue switch "on"; (b) keeps paper complete.
+   - **Unchanged:** every notice; the sent order number (`stampSentOrderNumber`,
+     `working-order.ts:3809-3838`, "only those the kitchen has seen", which screens see too);
+     `line-cancel.ts:210`, whose own branch runs only for a group with no paper at all and does not
+     set `holdGroupId` (read, not run; Task 35c runs `line-cancel.test.ts`); and the allergy path,
+     which keys on the frozen copy each HOLD recipient received (`kitchen-allergy.ts:357-359`,
+     "Copy presence identifies the exact HOLD recipient"), copies being made only for stations a HOLD
+     job, or a printed HOLD CHANGED added, reached (`kitchen-print.ts:541-549`, `:1075-1083`).
+   Every reader of the group stamp is assigned: `git grep -n -E 'holdPrintedAt|hold_printed_at|printedHeldGroups' -- apps/server/src ':!*.test.ts'`
+   on `157f152c5` lists `draft-recall.ts:267` (Task 35c sets `holdGroupId`), `kitchen-allergy.ts:309`,
+   `:359` (unchanged), `kitchen-print.ts:825` (Task 35a sets `holdGroupId` on its held rows),
+   `:1217` (`readOnHoldTickets`, unchanged; Task 35a filters its two printing consumers),
+   `line-cancel.ts:210` (unchanged), `order-groups.ts:529`, `:812-816` (Task 34), `:1054`, `:2122`
+   (Task 35b, through `HeldChange.groupId`), `:2037` (the writer, Task 34), `:2044-2060`
+   (`printedHeldGroups` itself, unchanged), `station-move.ts:115`, `:300` (Task 35c),
+   `working-order.ts:2969`, `:6030`, `:6143` (Task 35b), `:3053` (Task 35c), `:3833` (unchanged).
+
+6. **Configuration copies: the new columns travel, the format stays 7.** `kitchen_stations` is
+   exported whole (no `omit`, `packages/db/src/configuration-transfer.ts:24-29`), so both new
+   columns travel with no transfer code; `order_group_hold_stations` is service state and is not
+   declared. The import refuses a `ticket_grouping` outside the two values before any row is
+   written, `setup.request_invalid { field: "kitchen_stations.ticket_grouping" }`, beside the
+   colour check (`validateCoreConfiguration`, `:4-9`, which `validateConfigurationBundle` runs
+   before `importConfigurationTables` writes, `packages/provisioning/src/configuration-transfer.ts:590-624`).
+   The two flags follow the other station flags (`is_default`, `shows_rest_of_order`,
+   `print_moved_slips`), which the import does not check today (read, not run). **No format bump:**
+   the bump rule covers retired *tables*, whose key an older file always carries
+   (`docs/developers/conventions-data.md:1605-1628`); this PR drops columns, as PR 4 did with
+   `service_settings.release_reminder_minutes` and left the format at 6 (`git show 3180a350a -- packages/provisioning/src/configuration-transfer.ts`
+   prints nothing: PR 4 did not touch the format). A file
+   exported before PR 6 carries the older core and venue-service module versions and is refused
+   `setup.request_invalid { field: "module:<name>" }` before any table is read
+   (`packages/provisioning/src/configuration-transfer.ts:598-602`; the venue-service case is
+   `apps/server/src/configuration-import.test.ts:892`) — read, not run for PR 6's numbers. The
+   format-1 fixture `configuration-v1-before-printing-retirement.json:398-405` still names the venue
+   columns and is left as it is (a format-1 file is refused before any table is read; A757 slice 1's
+   Decision 9).
+
+7. **Hand-kept lists and pins.**
+   - `apps/server/src/canvas-retirement-upgrade.test.ts`: its `retained` list of tables newer than
+     the predecessor gains `order_group_hold_stations: []` (`:500-516`, as `adjustment_refunds: []`),
+     and the populated case's `predecessor(root, [...])` call (`:394`) gains
+     `"_station_printing_choices"` beside `"_floor_plan_sets"` and `"_floor_reset_tables_taken_off"`:
+     the fill calls today's `createStation` and `applyVenue`, whose drizzle inserts name every
+     column (failed in the probe with `table kitchen_stations has no column named ticket_grouping`,
+     from `kitchen.ts:94` and `venue-apply.ts:304`). Both edits measured: `Tests 5 passed (5)`.
+   - `apps/server/src/station-order-migration.test.ts` migrates only up to `0167_retire_station_order`
+     and fills the predecessor "in the predecessor's own columns" (its comment, `:90-91`), but calls
+     `seedKitchenStation` (`:109`) and `createStation` (`:111-112`), which now name the new columns.
+     They become raw inserts in the predecessor's columns (`id, location_id, name, is_default|colour,
+     created_at`); and before the last check, `listStations` (`:229`, which now reads the new
+     columns), the test applies the core set up to `_station_printing_choices` only
+     (`setsAsOf("printing", (when) => when <= retirement.when || when === printing.when)`). Its
+     snapshot check (`:221-226`) runs before that step and is unchanged. Measured: `Tests 1 passed (1)`.
+     Migrating to every current migration instead failed in a workforce rebuild
+     (`DROP TABLE staff_roles`, `FOREIGN KEY constraint failed`), so the narrower step is the one used.
+   - `packages/venue-service/src/kitchen-allergy.upgrade.test.ts`: `laterColumnDrops`' entry for
+     `waitron_change_service_settings_update` (`:247-250`) becomes the four columns in their
+     original order, `' or new."kitchen_ticket_grouping" is not old."kitchen_ticket_grouping" or new."print_held_work" is not old."print_held_work" or new."release_reminder_minutes" is not old."release_reminder_minutes" or new."print_moved_slips" is not old."print_moved_slips"'`
+     (order from `0005`, `0007`, `0010`, `0052`; the order I first tried failed). Measured:
+     `Tests 1 passed (1)`.
+   - `packages/venue-service/src/schema/service.test.ts:191-194` pins `service_settings`' checks;
+     the grouping CHECK leaves it.
+   - `scripts/schema-constraints.test.ts`' foreign-key list, kept in table-name order, gains the
+     new table's two keys after `order_group_events`' rows and before `order_groups`' (`:216-220`), so the guard writes through
+     them (CLAUDE.md §3: "a green migrate is no evidence a new key is sound"). The guard passed
+     without them in the probe, so this adds coverage rather than fixing a failure.
+   - `station-delete.test.ts:152-175` and `management-api.station-disable.test.ts:123-130` are
+     whole-list pins of the tables a station delete or disable may touch; each gains
+     `order_group_hold_stations`. Closing a station moves its dishes through `moveDishesToStation`
+     (`station-closing.ts:77-87`), the held-move path of Decision 5. The table's writers are
+     `printHoldTickets` and the held move and join under Decision 5's ruling; the pinned delete and
+     disable cases record nothing, so the new entry is expected to read the same before and after
+     (re-run in Task 34: unchanged) — it is there to catch a write a later change adds (a new table in a whole-list pin, every
+     existing value unchanged).
+   - Not changed: `apps/server/src/testing/clear-provision-fixture.ts` clears untraded fixtures and
+     lists no `order_groups`.
+   - Pins of the station answer (`kitchen.test.ts:212-256`, `:285`; `management-api.test.ts:1040-1060`
+     types) gain `ticketGrouping` and `printHeldWork` with every existing value unchanged except
+     `printMovedSlips: null` → `true` (Decision 4's spec sentence: "MOVED slips … Each station's own,
+     no venue fallback", this plan's table).
+
+8. **Test venues set the station, not the venue.** 23 server test files call the venue seat's
+   writers: all 23 turn held printing on or off (`writePrintHeldWork`), 3 of them also set the venue
+   grouping and 1 the venue MOVED slips (`git grep -l -E 'writePrintHeldWork\(|writeKitchenTicketGrouping\(|writePrintMovedSlips\(' -- 'apps/server/src/*.test.ts' | wc -l`
+   printed 23 on `157f152c5`, and the same for `writePrintHeldWork\(` alone). The venue value applied to every station, so the equivalent setup writes every
+   station's column. Task 32 adds `apps/server/src/testing/station-printing.ts` and moves every call
+   to it **while the venue value still governs**, writing both, so the suite is green before and
+   after each reader moves (the Task 25a pattern); Task 38 drops the venue half. A case that makes a
+   station after the call sets that station too (a venue value covered later stations; a column
+   does not) — a setup change, which the implementer finds by the case failing.
+
+9. **The UI.** The station editor keeps A725's layout (owner, 2026-10-15) and adds, after "Print a
+   slip when sent dishes move table":
+   - "Identical dishes on a kitchen ticket": a `wt-combobox` (`name="ticketGrouping"`,
+     `search="never"`) offering "One line: 3 x Burger" and "A line each: 1 x Burger, three times" —
+     today's Kitchen-tab label, choices and hint "Applies to new kitchen tickets and to reprints."
+     (`strings.ts:520-523`, ES `:1416-1420`), moved to `prep.ticket_grouping*` keys. The hint is kept
+     as the combobox's `hint`, which `wt-combobox` hides visually and keeps for assistive technology
+     (`.hint` is `visuallyHiddenStyles`, `packages/ui-core/src/field-styles.ts:153-155`; the input's
+     `describedBy` names it, `packages/ui/src/components/wt-combobox.ts:1100`), as on the
+     Kitchen tab today;
+   - "Print held groups in advance": a `wt-switch` (`name="printHeldWork"`), today's label
+     (`:529`, ES `:1426`), with one note beneath as the rest-of-order switch has (`station-editor.ts:594-604`):
+     EN "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.", ES
+     "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo."
+     — the one new product text, shortened from today's hint, whose sentences about switching the
+     venue value on and off no longer fit a station;
+   - MOVED slips offers "Print" and "Don't print" only; "Venue setting: Print"/"Don't print" and the
+     `venuePrintsMovedSlips` property go (`prep.moved_slips_venue_*`, EN `:304-305`, ES `:1195-1196`,
+     deleted).
+   Save sends only what changed, as today (`sendable`, `station-editor.ts:413-435`), and keeps the
+   A331 rule it already follows (`draftScopeFor` `:345`, `saveActionState` `:445`, `:506`). Field
+   primitives only. The fields go after MOVED slips so the existing check that MOVED slips comes
+   "right after the rest-of-order switch" (`station-editor.test.ts:545-559`) stays true.
+   **Add station** gains no field: it sets none of the station's printing choices today, and a new
+   station starts at the defaults (Decision 2). **The Kitchen tab** keeps both panels: the core
+   one (Done on the screen, Fire control) and venue-service's, now holding only "Changes after
+   sending" (`service-settings-panel.ts:131-144`); the tab goes in whichever change removes its last
+   control (PR 8 for this panel, PR 7 and A773-2 for the core one).
+   **Departures from A773's picture 10, for the PR description:** the picture draws "Held courses ·
+   Print when sent" as a dropdown; this PR uses the switch and wording the Kitchen tab already
+   has, which are built, translated and seen by the owner, rather than new text. The picture lists
+   Identical dishes and Held courses above MOVED slips; this PR puts them after it, keeping the
+   built order the editor's tests pin. Both are the most conservative reading; Task 41 records them
+   as open points.
+
+10. **Error codes.** None added or removed: every refusal is `management.request_invalid` or
+    `setup.request_invalid` with a `field`, both registered. The seat reads `readKitchenTicketGrouping`,
+    `readPrintHeldWork` and `readPrintMovedSlips` (`packages/module/src/module.ts:1370-1371`,
+    `:1445-1448`; `packages/venue-service/src/service.ts:93-95`, `:242-244`) and the three PUT
+    routes (`routes.ts:804-843`) go; their only callers are `kitchen-print.ts:561`, `:1426`,
+    `:1434`, `order-groups.ts:2012` and the Kitchen-tab panel (`git grep -n 'readPrintHeldWork\|readPrintMovedSlips\|readKitchenTicketGrouping' -- apps/server/src ':!*.test.ts'`
+    prints exactly those four lines on `157f152c5`).
+
+11. **Overlaps.** `feat/a696-startup-zone-validation` (parked) touches `module.ts` around
+    `assertPeriodEndOffsets`, `management-api.ts:222`, `working-order.ts` (`:347`, `:6423-6537`) and
+    `order-groups.test.ts` (`:3399`, `:3450`) — none of the hunks this plan edits; whichever lands
+    second rebases. `feat/a739-payment-window` (parked) adds core migrations numbered `0184`–`0186`
+    and two `classify(...)` blocks in `packages/db/src/classification.ts`; if it lands first, Task 29
+    regenerates on its tip (Global Constraints). No other worktree's branch touches a file in
+    Decision 7 or Tasks 29–39 (`git diff --name-only $(git merge-base main <branch>) <branch>` over
+    each branch of `git worktree list`, 2026-10-23).
+
+### PR 6 review focus
+
+1. **A station switched off after its HOLD ticket printed** (Kitchen prints held work, a group is
+   held, Kitchen is then switched off): removing a held dish still prints HOLD CHANGED at Kitchen,
+   and firing prints Kitchen's ticket marked FIRE (Tasks 34, 35b).
+2. **A station that never had the HOLD ticket** (Bar off, Kitchen on, one group with dishes at
+   both): Bar gets no HOLD ticket, no HOLD correction, no HOLD part on a MOVED slip or reprint, and an
+   unmarked ticket when the group fires; Kitchen gets all of them (Tasks 34, 35a–c).
+3. **A station switched on after a group was held** (Bar off at the hold, a Bar dish held; Bar
+   switched on; a second Bar dish joins or is moved in): nothing prints at Bar until the fire, where
+   both dishes print on one ordinary ticket; Bar is never recorded, so no "+1" or "-1" for paper it
+   never had (Tasks 35b, 35c).
+6. **A station with a kitchen screen and no printer** in a printed held group: every notice it
+   gets today — HOLD CHANGED and CANCELLED, reroute, order note, moved — it still gets (Tasks 35a–c).
+4. **Identical dishes on one ticket for two stations sharing a printer**, Grill `separate`, Cold
+   `combined`: each station's part of the joint ticket is laid out by its own choice (Task 33).
+5. **PATCH `printMovedSlips: null`** from any client: 400 naming the field, nothing written; a
+   station stored null reads `printMovedSlips: true` in the answer and prints MOVED slips (Tasks 30, 33).
+
+### Task 29: storage — two station columns, the hold-paper table, one core migration
+
+**Files:**
+- Create: `packages/shared/src/ticket-grouping.ts`, `src/ticket-grouping.test.ts`; modify
+  `packages/shared/src/index.ts` (beside `isStationColour`, `:210`)
+- Modify: `packages/db/src/schema/kitchen-stations.ts` (`:25-26` and after), `src/schema/index.ts`,
+  `src/classification.ts` (after `order_groups`, `:185-189`)
+- Create: `packages/db/src/schema/order-group-hold-stations.ts` (modelled on
+  `device-made-here-stations.ts`), `src/schema/order-group-hold-stations.test.ts`
+- Create (generated): `packages/db/drizzle/NNNN_station_printing_choices.sql`, its snapshot and
+  journal entry, by `pnpm --filter @waitron/db db:generate --name station_printing_choices` —
+  never numbered or edited by hand; on a number collision reset `packages/db/drizzle` to `main`
+  and regenerate (as PR 5's Task 26)
+- Modify (Decision 7): `apps/server/src/canvas-retirement-upgrade.test.ts` (`:394`, `:500-516`),
+  `apps/server/src/station-order-migration.test.ts` (`:14`, `:27`, `:109-112`, before `:229`),
+  `scripts/schema-constraints.test.ts` (after `:218`), `apps/server/src/station-delete.test.ts`
+  (`:152-175`), `apps/server/src/management-api.station-disable.test.ts` (`:123-130`)
+- Test: `packages/db/src/schema/kitchen-stations.test.ts`
+
+**Interfaces — produces:**
+- `export const TICKET_GROUPINGS = ["combined", "separate"] as const;`
+  `export type TicketGrouping = (typeof TICKET_GROUPINGS)[number];`
+  `export function isTicketGrouping(value: unknown): value is TicketGrouping` (`@waitron/shared`).
+- `kitchenStations.ticketGrouping` (`label("ticket_grouping").$type<TicketGrouping>().notNull().default("combined")`,
+  with the comment "The station routes and the import refuse a value outside `isTicketGrouping`; a
+  CHECK would rebuild this table.") and `kitchenStations.printHeldWork`
+  (`flag("print_held_work").notNull().default(false)`). The `printMovedSlips` comment
+  (`kitchen-stations.ts:25`) becomes "Null prints MOVED slips; the station routes write a boolean."
+- `orderGroupHoldStations` (`group_id`, `station_id`, primary key `order_group_hold_stations_pk`,
+  keys `order_group_hold_stations_group_fk`, `order_group_hold_stations_station_fk`), with the doc
+  comment "The stations a held group's HOLD ticket was queued for; held-work paper goes only to
+  them (A756 PR 6)." Classified `state`: "the stations a held group's HOLD ticket was queued for;
+  copied to a standby, never drained back".
+
+- [ ] **Step 1: Write the failing tests.**
+  - `ticket-grouping.test.ts`: `TICKET_GROUPINGS` `toEqual(["combined", "separate"])`;
+    `isTicketGrouping` true for each, false for `"Combined"`, `""`, `null`, `1` (shared is
+    mutation-tested).
+  - `kitchen-stations.test.ts`: `"a station row given no printing choices groups identical dishes,
+    prints no held work in advance and leaves MOVED slips null"` — a bare insert reads
+    `combined` / `false` / `null`.
+  - `order-group-hold-stations.test.ts`: a row naming a real group and station is stored; a second
+    identical row is refused as a unique violation; a row naming an unknown station is refused as
+    a foreign-key error (`isRefusal(error, FOREIGN_KEY_VIOLATION)`, as `order-groups.test.ts:178`
+    asserts; model the file on `device-made-here-stations.test.ts`).
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/shared exec vitest run src/ticket-grouping.test.ts` and
+  `pnpm --filter @waitron/db exec vitest run src/schema/kitchen-stations.test.ts src/schema/order-group-hold-stations.test.ts`.
+- [ ] **Step 3: Implement and generate.** Read the SQL: exactly Decision 1's `CREATE TABLE` and two
+  `ALTER TABLE … ADD` lines; a `__new_` table is a stop.
+- [ ] **Step 4: The hand-kept lists** of Decision 7 (canvas, station-order, schema-constraints).
+- [ ] **Step 5: Run** (free memory first) Step 2's commands; the guards
+  `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts scripts/journal-monotonic.test.ts scripts/module-graph-honesty.test.ts`
+  (expected: one step more than on `main` and one table more holding rows; Decision 1 measured
+  the two migrations together, +2 steps and +1 table); `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`;
+  `pnpm --filter @waitron/db exec vitest run src/schema src/classification.test.ts`;
+  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts src/station-delete.test.ts src/management-api.station-disable.test.ts`;
+  `pnpm --filter @waitron/composition exec vitest run` — PASS, each `Tests` count read.
+- [ ] **Step 6:** typecheck `@waitron/shared`, `@waitron/db`, `@waitron/server`; prettier; commit
+  `git commit -s -m "Each station can store its own ticket grouping and held printing; the hold paper table (A756 PR 6)"`
+  with a body giving the reason the new table is in the core set (CLAUDE.md §3, "No new table enters
+  the core migration set without a stated reason in the commit"): both its keys point at core tables
+  (`order_groups`, `kitchen_stations`, both in `packages/db/src/schema`), and the server's printing
+  code that writes and reads it is not a module's; then update the ledger.
+
+**Assertions changed:** the two whole-list pins of `station-delete.test.ts` and
+`management-api.station-disable.test.ts` gain a table, every existing value unchanged (Decision 7).
+`station-order-migration.test.ts` and `canvas-retirement-upgrade.test.ts` change setup only.
+
+### Task 30: a station's save writes its own printing choices
+
+**Files:**
+- Modify: `apps/server/src/kitchen.ts` (`Station` `:29-43`, `createStation` `:79-122`,
+  `listStations` `:124-141`, `updateStation` `:158-205`), `apps/server/src/management-api.ts`
+  (PATCH `:1596-1655`; a `parseTicketGrouping` beside `parseStationColour` `:352-357`)
+- Test: `apps/server/src/kitchen.test.ts`, `apps/server/src/management-api.test.ts`
+
+**Interfaces — produces:** `Station` with `ticketGrouping: TicketGrouping`, `printHeldWork: boolean`,
+`printMovedSlips: boolean` (`listStations` reads the column and maps `null` to `true`; Task 33
+does the same in `kitchen-print.ts`' `readStations`, Decision 4); `updateStation`'s patch takes
+`ticketGrouping?: TicketGrouping; printHeldWork?: boolean; printMovedSlips?: boolean`;
+`createStation` inserts `printMovedSlips: true`.
+
+- [ ] **Step 1: Write the failing tests.**
+  - `kitchen.test.ts`: `"a new station groups identical dishes, prints no held work in advance and
+    prints MOVED slips"` — `createStation({ name })`; the row reads `combined` / `false` / `true` and
+    `listStations` answers the same; `"a station stored with no MOVED slips choice answers that it
+    prints them"` — set the column to null by SQL; `listStations` answers `printMovedSlips: true`;
+    `"updateStation writes a station's three printing choices and leaves the others"`.
+  - `management-api.test.ts`:
+    - `"lists a new station following the venue for MOVED slips"` (`:1706`) → `"lists a new
+      station printing MOVED slips, grouping identical dishes, printing no held work in advance"`.
+    - `"PATCH saves a station's MOVED slips choice as print, don't print or as the venue"`
+      (`:1713`) → `"… as print or don't print"`: the loop over `[true, false, null]` becomes
+      `[true, false]`.
+    - `"PATCH refuses a MOVED slips choice that is not true, false or null"` (`:1728`) →
+      `"… that is not true or false"`: `null` joins `"yes"` and `1` as refused, and the row is
+      unchanged after each.
+    - New: `"PATCH saves a station's ticket grouping and refuses any other value"` — `"separate"`
+      saved; `"Separate"`, `null`, `1` each 400 `management.request_invalid { field: "ticketGrouping" }`,
+      the row still `separate`; `"PATCH saves a station's held printing and refuses a non-boolean"`.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/server exec vitest run src/kitchen.test.ts src/management-api.test.ts -t "station|MOVED|grouping|held|PATCH"`.
+- [ ] **Step 3: Implement.** Update the whole-shape pins of Decision 7 (two new keys;
+  `printMovedSlips: null` → `true` at `kitchen.test.ts:230`, `:240`, `:250`, `:285`, and the
+  response types at `management-api.test.ts:1046`, `:1056` → `boolean`).
+- [ ] **Step 4: Run** Step 2's command without `-t`, plus
+  `pnpm --filter @waitron/server exec vitest run src/device-api.test.ts src/till-api.test.ts src/station-queue-rest.test.ts src/configuration-transfer.test.ts`
+  — PASS (the till answers carry the keys; any further whole-shape pin found gains the two keys
+  only, every existing value unchanged — record each). Configuration transfer's
+  `"transfers each station's MOVED slips choice, print, don't print or as the venue"` (`:2245`)
+  still passes: it reads the column, which keeps null.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "A station's save writes its own ticket grouping, held printing and MOVED slips choice (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed** (A773 §7.1, "Every station setting is set on the station itself"; this
+plan's table, "MOVED slips … no venue fallback"): `management-api.test.ts` `:1706`, `:1713`, `:1728`;
+the station answer's `printMovedSlips` null → `true` in `kitchen.test.ts`. Keys added to
+whole-shape pins with existing values unchanged: named in the ledger.
+
+### Task 31: configuration copies check an imported ticket grouping
+
+**Files:** `packages/db/src/configuration-transfer.ts:4-9`; Test:
+`packages/db/src/configuration-transfer.test.ts` (so db's own coverage and mutation runs see the
+check) and `apps/server/src/configuration-transfer.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** In `packages/db/src/configuration-transfer.test.ts`,
+  beside the colour cases (`:41-66`): `"refuses a station ticket grouping a save would refuse"`
+  (`"bogus"`, `"Combined"`, `null`, `1` each throw `setup.request_invalid`
+  `{ field: "kitchen_stations.ticket_grouping" }`), `"accepts an absent station ticket grouping"`
+  and `"accepts each station ticket grouping"` (over `TICKET_GROUPINGS`). In
+  `apps/server/src/configuration-transfer.test.ts`, beside `"transfers a station's colour"` (`:2283`):
+  - `"transfers each station's ticket grouping and held printing"` — Grill `separate` / `true`,
+    Cold `combined` / `false`; the exported rows carry `ticket_grouping` and `print_held_work`, and
+    the imported stations read the same.
+  - `"refuses an imported ticket grouping outside the two values before writing anything"` — a
+    bundle row with `ticket_grouping: "bogus"` → `setup.request_invalid`
+    `{ field: "kitchen_stations.ticket_grouping" }`, and the target has no station named as in the
+    bundle (as the colour refusal case checks).
+- [ ] **Step 2: Run and watch the refusal cases fail** (the transfer case may already pass: the
+  table is exported whole). `pnpm --filter @waitron/db exec vitest run src/configuration-transfer.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts -t "grouping|held printing"`.
+- [ ] **Step 3: Implement** the check in `validateCoreConfiguration`.
+- [ ] **Step 4: Run** Step 2's db command, `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/configuration-import.test.ts`,
+  `pnpm --filter @waitron/provisioning exec vitest run`, `pnpm exec vitest run scripts/id-columns-are-references.test.ts`
+  — PASS. `git grep -n 'version: 7' -- packages/provisioning/src/configuration-transfer.ts` still
+  prints `:137` (no format change, Decision 6).
+- [ ] **Step 5:** typecheck `@waitron/db`, `@waitron/server`; prettier; commit
+  `git commit -s -m "A configuration import refuses an unknown station ticket grouping (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed:** none.
+
+### Task 32: test venues set their stations' printing choices through one helper
+
+Setup only: Decision 8. Mechanical; no check changes.
+
+**Files:**
+- Create: `apps/server/src/testing/station-printing.ts`:
+  `setStationPrinting(tx: Transaction, choices: { printHeldWork?: boolean; ticketGrouping?: TicketGrouping; printMovedSlips?: boolean }, stationIds?: readonly string[]): Promise<void>`
+  — writes each given choice to every `kitchen_stations` row (or only `stationIds`) **and**, while
+  the venue value exists, to the venue through `writePrintHeldWork` / `writeKitchenTicketGrouping`
+  / `writePrintMovedSlips` (only when `stationIds` is absent). One comment line: "Writes the venue's
+  value too until A756 PR 6 Task 38."
+- Modify: every server test calling those three seat writers —
+  `git grep -l -E 'writePrintHeldWork\(|writeKitchenTicketGrouping\(|writePrintMovedSlips\(' -- 'apps/server/src/*.test.ts'`
+  lists 23 files on `157f152c5` (Decision 8): each call `writeX(tx, v)` becomes
+  `setStationPrinting(tx, { x: v })`, and each `afterEach` reset likewise. Not here:
+  `move-merge.test.ts`'s describes at `:1372` and `:1442`, whose subject is the venue/station
+  MOVED-slips relation (Task 33), and `kitchen-print.test.ts:1203`'s `it.each` on the venue
+  grouping (Task 33).
+
+- [ ] **Step 1:** Write the helper and make the edits. Where a case creates a station after the
+  helper call, call the helper again after it (or pass the new station's id) — setup.
+- [ ] **Step 2: Run** (free memory first) every touched file in one
+  `pnpm --filter @waitron/server exec vitest run <files>` — PASS, each file's count read; then
+  `git grep -n -E 'writePrintHeldWork\(|writeKitchenTicketGrouping\(|writePrintMovedSlips\(' -- 'apps/server/src/*.test.ts'`
+  prints only the Task 33 cases named above.
+- [ ] **Step 3:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "Test venues set their stations' printing choices through one helper (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed:** none. (`split-off-extras.release.test.ts:120` reads `readPrintHeldWork`
+and keeps passing because the helper still writes the venue value; Task 38 changes it.)
+
+### Task 33: tickets and MOVED slips read each station's own grouping and MOVED slips choice
+
+**Files:**
+- Modify: `apps/server/src/kitchen-print.ts` — `readStations` (`:350-366`: add `ticketGrouping`,
+  `printHeldWork`, and `printMovedSlips` read as a boolean, null as true); `planKitchenTickets`
+  (drop `:561`; `arrangeTicketItems(…, station.ticketGrouping)` at `:588-594`);
+  `MovedSlipPrinting` (`:1403-1408`, drop `grouping`); `readMovedSlipPrinting` (`:1414-1436`: keep
+  stations whose own choice prints, no venue read); `printMovedSlips` (`:1474`: the station's own
+  grouping). `apps/server/src/kitchen-ticket.ts:85` aliases `TicketGrouping` from `@waitron/shared`.
+- Test: `apps/server/src/kitchen-print.test.ts`, `apps/server/src/move-merge.test.ts`
+
+- [ ] **Step 1: Write the failing tests.**
+  - `kitchen-print.test.ts`: `"each station's part of a shared printer's ticket follows its own
+    ticket grouping"` — Grill `separate` and Cold `combined` share one printer; a fire of 3 Burger
+    at Grill and 2 Salad at Cold prints Grill's three entries of 1 and Cold's one `2 x Salad`.
+    The `it.each` at `:1203` (venue grouping) sets the grouping on the dish's station instead
+    (setup) and its rows and checks stay.
+  - `move-merge.test.ts`: `describe("the venue's print-MOVED-slips setting")` (`:1372`) becomes
+    `describe("a station's print-MOVED-slips choice")`: its three cases keep their checks, the
+    choice set on the station (`setStationPrinting(tx, { printMovedSlips: on })`).
+    `describe("a prep station's own print-MOVED-slips choice")` (`:1442`): `"venue on, Grill off,
+    Postres following…"` (`:1490`) → `"Grill off and Postres never chosen: Move guests prints at
+    Postres only and records notices at both"` (Postres's column left null, so it prints);
+    `"venue off, Grill on: Move guests prints at the Grill only"` (`:1503`) → `"Grill on and
+    Postres off: …"` (Postres set false); `stationPrints` (`:1453`) takes a boolean; the venue
+    writes at `:1443`, `:1467`, `:1514` go. The grouping describe (`:1178`) sets the grouping on
+    the stations (setup).
+  - New in `move-merge.test.ts`: `"a station whose MOVED slips choice was never set prints MOVED
+    slips"` — set the column null by SQL; Move guests prints its slip.
+- [ ] **Step 2: Run and watch the new cases fail.**
+  `pnpm --filter @waitron/server exec vitest run src/kitchen-print.test.ts src/move-merge.test.ts -t "grouping|MOVED"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** (free memory first) every file of Task 32 (`git grep -l setStationPrinting -- 'apps/server/src/*.test.ts' | xargs pnpm --filter @waitron/server exec vitest run`, which lists the 23 files Decision 8 counts), and
+  `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/party-table-actions.test.ts`
+  — PASS; `git grep -n -E 'readKitchenTicketGrouping|readPrintMovedSlips' -- apps/server/src`
+  prints nothing.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "Kitchen tickets and MOVED slips follow each station's own choices (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed** (A773 §7.1; this plan's table, MOVED slips "no venue fallback"): the two
+renamed `move-merge.test.ts` cases at `:1490` and `:1503`, whose expectation for a station left as
+the venue now follows "null prints"; the describe at `:1372` renamed with its checks kept.
+
+### Task 34: a HOLD ticket goes to the stations that print held work, and the fire marks only theirs
+
+**Files:**
+- Modify: `apps/server/src/order-groups.ts` — `printHoldTickets` (`:2001-2041`): read the held
+  items joined to `kitchen_stations` with `print_held_work` on, no venue read (`:2012`); record
+  each station a job carried in `order_group_hold_stations`; stamp `hold_printed_at` as today.
+  Add `heldPaperStations(tx, groupIds): Promise<Map<string, ReadonlySet<string>>>` and
+  `recordHeldPaper(tx, groupId, stationIds)` (insert, `onConflictDoNothing({ target: [groupId, stationId] })`
+  — the table has one unique key, so the target is named per CLAUDE.md §3). Fire paths: the group
+  fire (`:811-817`) and Fire now on one held dish (`:529-560`) pass the group's marker set instead of
+  `"FIRE"`.
+- Modify: `apps/server/src/kitchen-print.ts` — `enqueueKitchenTickets` (`:726-740`) answers
+  `ReadonlySet<string>`, the stations its jobs carried (only `order-groups.ts:2032` used the
+  boolean); `planKitchenTickets` takes `fire?: { heldPaper: ReadonlySet<string> }` in place of
+  `mark: "FIRE"` and prints `*** FIRE ***` on a route only when one of its stations is in
+  `heldPaper` (the `head` object `:629-639` gets its `mark` per route).
+- Modify: `apps/server/src/working-order.ts` — the `mark?: "FIRE"` parameter of `fireOrderLines`
+  (`:2332-2338`) and the functions it passes it through (`:2357`, `:2410`, `:2440`) becomes
+  `fire?: { heldPaper: ReadonlySet<string> }`.
+- Modify: `apps/server/src/station-move.ts` — the held move's destination paper (Decision 5's
+  ruling): a recorded destination prints as today; an unrecorded one that prints held work now and
+  holds none of the group's other held work gets the HOLD ticket "from X" and is recorded
+  (`recordHeldPaper`); any other prints nothing until the fire. Old-station corrections stay for 35c.
+- Modify: `packages/db/src/index.ts` — export `orderGroupHoldStations`.
+- Test: `apps/server/src/order-groups.test.ts` (`describe("advance HOLD tickets (Task 6)")`, `:4288`),
+  `apps/server/src/station-move.test.ts`
+
+- [ ] **Step 1: Write the failing tests** — in `station-move.test.ts`, each checking the
+  `order_group_hold_stations` rows: `"a held dish moved to a station that prints held work and has
+  none of the group's held work gets a HOLD ticket from X and is fired marked FIRE"`, `"a held dish
+  moved to a station that does not print held work prints nothing there until an unmarked fire
+  ticket"`, `"a held dish moved to a station already holding unprinted held work of the group prints
+  nothing there until the fire"`. In the HOLD describe, with Kitchen (prints held work) and
+  Bar (does not), each with its own printer:
+  - `"a held group's HOLD ticket prints only at the stations that print held work, and records
+    them"` — a held group with a dish at each: one HOLD job, at Kitchen's printer, listing only
+    Kitchen's dish; `order_group_hold_stations` = `{(group, Kitchen)}`; `hold_printed_at` set.
+  - `"with no station printing held work, nothing prints and nothing is recorded"` — no job, no
+    row, `hold_printed_at` null.
+  - `"firing marks FIRE only on the paper of a station that had the HOLD ticket"` — Kitchen's fire
+    ticket starts `*** FIRE ***`, Bar's does not.
+  - `"a station switched off after its HOLD ticket printed is still fired marked FIRE"` and
+    `"a station switched on after the group was held is fired with an ordinary ticket"`.
+  - `"Fire now on one held dish marks FIRE only at a station that had the HOLD ticket"`
+    (the `:5316` describe's path).
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts -t "HOLD|FIRE|held"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** (free memory first)
+Every file of Task 32 (`git grep -l setStationPrinting -- 'apps/server/src/*.test.ts' | xargs pnpm --filter @waitron/server exec vitest run`, which lists the 23 files Decision 8 counts)
+  — PASS (every one sets its stations through Task 32's helper, so their checks hold), plus
+  `src/station-move.test.ts src/management-api.station-disable.test.ts src/station-delete.test.ts`;
+  `git grep -n -E 'readPrintHeldWork|mark\?: "FIRE"' -- apps/server/src ':!*.test.ts'` prints nothing.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "A HOLD ticket prints at the stations that print held work, and the fire marks only theirs (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed:** none; the cases are new (A773 §6, "Held-ticket printing in advance stays a
+station setting").
+
+### Task 35a: held paper prints only at the stations recorded for it
+
+The filter of Decision 5, in the three places paper is made; no item selection changes, so every
+notice stays as it is.
+
+**Files:**
+- Modify: `apps/server/src/kitchen-print.ts` — `CorrectionItem` (`:772-783`) gains
+  `holdGroupId?: string`; `printCorrectionSlips` (`:1064`) reads the table for the items' hold
+  groups and drops, from the slips only, an item whose station is not recorded for its
+  `holdGroupId`, before the allergy freeze (`:1075-1083`); the order-note correction's query
+  (`:801-830`) selects the line's group id and sets `holdGroupId` on its held rows (`firedAt` null);
+  `readMovedSlipPrinting`/`printMovedSlips` (`:1414-1500`) keep a held item on the slip only when
+  its line's group and its station are recorded; `readReprintParts` (`:1606-1643`) keeps a held
+  item in the reprint's HOLD part only on the same condition. A station left with nothing to print
+  gets no slip. `readOnHoldTickets` and `readSentItems` are not changed.
+- Test: `apps/server/src/kitchen-print.test.ts`, `apps/server/src/move-merge.test.ts` (the HOLD
+  describe `:1023`), `apps/server/src/order-kitchen-note.corrections.test.ts`
+
+- [ ] **Step 1: Write the failing tests.** Kitchen prints held work; Bar does not; Screen is a
+  station with a kitchen screen and no printer; one held group with a dish at each, its HOLD ticket
+  queued (Kitchen recorded):
+  - `move-merge.test.ts`: `"a MOVED slip lists under HOLD only the held dishes of a station
+    recorded for the group"` — Move guests: Kitchen's slip lists its dish under HOLD; Bar prints
+    nothing; the `moved` notices of all three stations are recorded, as today.
+  - `kitchen-print.test.ts`: `"a reprint prints the HOLD part only for a station recorded for the
+    group"`.
+  - `order-kitchen-note.corrections.test.ts`: `"a changed order note corrects held paper only at a
+    station recorded for the group, and every station's screen is told"` — a slip at Kitchen, none
+    at Bar; notices at Kitchen, Bar and Screen.
+  - In each file, the screen-only check: Screen's notices are those it gets on `157f152c5` (the
+    case asserts them explicitly, so deleting the filter's placement upstream would fail it).
+- [ ] **Step 2: Run and watch the printing checks fail** (the notice checks pass before and after).
+  `pnpm --filter @waitron/server exec vitest run src/move-merge.test.ts src/kitchen-print.test.ts src/order-kitchen-note.corrections.test.ts -t "recorded|HOLD|held"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the three files without `-t`, plus every file of Task 32
+  (`git grep -l setStationPrinting -- 'apps/server/src/*.test.ts' | xargs pnpm --filter @waitron/server exec vitest run`,
+  free memory first) and `src/party-move-bill.test.ts src/party-table-actions.test.ts src/finish-party-collect.test.ts src/sent-order-number.test.ts`
+  — PASS.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "HOLD paper on corrections, MOVED slips and reprints goes only to stations recorded for it (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed:** none; the cases are new.
+
+### Task 35b: HOLD corrections built from a group change name their group
+
+**Files:**
+- Modify: `apps/server/src/order-groups.ts` — `HeldChange` (`:2063-2071`) gains `groupId: string`
+  (the group whose HOLD ticket is corrected); `correctHoldTickets` (`:2073-2100`) passes it on as
+  each item's `holdGroupId`. Item selection does not change: the type change makes the compiler list
+  every `HeldChange` built — `order-groups.ts:529-548` (source), `:1098-1133` (`taken` from
+  `line.groupId`, `given` to `targetId`), `:2116-2135` (`correctJoin`, still returning early for a
+  group with no stamp), `working-order.ts:2969-2989`, `:6030-6062` (`givenExtras`) and
+  `:6138-6175` (the held edits, printed at `:5815-5816` and `:6059`).
+- The join half of Decision 5's ruling lands here: a join at a station not recorded, which prints
+  held work now and holds none of the group's held work, gets today's HOLD CHANGED added and is
+  recorded (`recordHeldPaper`).
+- Test: `apps/server/src/order-groups.test.ts`, `apps/server/src/split-off-extras.edit.test.ts`
+
+- [ ] **Step 1: Write the failing tests** (Kitchen on, Bar off, Screen with no printer; one printed
+  held group with a dish at each, unless said):
+  - `order-groups.test.ts`: `"removing a held dish corrects the HOLD ticket only at a station
+    recorded for the group, and tells every station's screen"`; `"moving a held dish between
+    printed groups takes it off and adds it only at stations recorded for each group"`;
+    `"a station switched off after its HOLD ticket printed still gets +N for a joining dish"`;
+    `"a station switched on after the group was held gets nothing for a joining dish, and its whole
+    part prints unmarked at the fire"` — Bar switched on, a second Bar dish joins: no slip at Bar, Bar
+    not recorded, and the fire prints Bar's two dishes on one ordinary ticket; Screen's notices for
+    the join are recorded in every case.
+  - `split-off-extras.edit.test.ts`: `"an extra added to a held dish prints +N only at a station
+    recorded for the group"`.
+- [ ] **Step 2: Run and watch the printing checks fail.**
+  `pnpm --filter @waitron/server exec vitest run src/order-groups.test.ts src/split-off-extras.edit.test.ts -t "recorded|switched|joining|extra"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the two files without `-t`, every file of Task 32 (as in Task 35a), and
+  `src/till-api.groups.test.ts src/working-order.test.ts` — PASS.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "HOLD corrections from group changes print only where the group's HOLD ticket went (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed:** none; the cases are new.
+
+### Task 35c: recall, a cancelled extra and a station move print only on a station's own HOLD paper
+
+**Files:**
+- Modify: `apps/server/src/draft-recall.ts:267-282` (its HOLD CANCELLED items carry
+  `holdGroupId: line.groupId`; the condition on the stamp stays), `apps/server/src/working-order.ts:3045-3056`
+  (the held cancelled extra carries `holdGroupId: extra.dishGroupId`), `apps/server/src/station-move.ts`
+  — `:110-140` and `:295-325` (held corrections at the old station carry `holdGroupId: row.groupId`;
+  `enqueueStationMoved` records the reroute notice for every item as today); the destination's
+  paper landed in Task 34 (Decision 5's ruling)
+- Test: `apps/server/src/draft-recall.test.ts`, `apps/server/src/adjustments-extra-cancel.test.ts`,
+  `apps/server/src/station-move.test.ts`
+
+- [ ] **Step 1: Write the failing tests** (Kitchen on, Bar off, Screen with no printer; one printed
+  held group): `draft-recall.test.ts`: `"recalling a held dish cancels it on paper only at a station
+  recorded for the group, and every screen is told"`; `adjustments-extra-cancel.test.ts`:
+  `"cancelling a held dish's extra prints only at a station recorded for the group"`;
+  `station-move.test.ts`: `"moving a held dish from Kitchen to Bar, which does not print held
+  work, cancels it on Kitchen's paper, prints nothing at Bar until the fire, and records the reroute
+  notice"`, `"moving a held dish from Bar to Kitchen, recorded for the group, prints nothing at Bar
+  and a HOLD ticket from Bar at Kitchen, which then fires marked FIRE"`, `"a held dish moved to a recorded station since switched off still prints its HOLD ticket
+  there"`, and `"a held dish moved off the screen-only station keeps its reroute notice"`.
+- [ ] **Step 2: Run and watch the printing checks fail.**
+  `pnpm --filter @waitron/server exec vitest run src/draft-recall.test.ts src/adjustments-extra-cancel.test.ts src/station-move.test.ts -t "recorded|held"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the three files without `-t`, every file of Task 32 (as in Task 35a), and
+  `src/line-cancel.test.ts src/draft-recall-legacy.test.ts src/till-reroute-e2e.test.ts src/management-api.station-disable.test.ts src/station-delete.test.ts src/bill-editing.station-move.test.ts`
+  — PASS. Then the receipt of Decision 5:
+  `git grep -n 'holdGroupId' -- apps/server/src ':!*.test.ts'` names `kitchen-print.ts`,
+  `order-groups.ts`, `draft-recall.ts`, `working-order.ts` and `station-move.ts`, and not
+  `line-cancel.ts`.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "Recall, a cancelled extra and a station move print only on a station's own HOLD paper (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed:** none; the cases are new.
+
+### Task 36: the station editor sets a station's three printing choices
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/station-editor.ts` (`StationEditorStation`
+  `:27-36`, `StationEditorSave` `:42-49`, `Draft` `:61-67`, `equal` `:94-100`, `movedChoice`/
+  `movedValue`/`movedOptions` `:190-204`, `venuePrintsMovedSlips` `:274-275`, the draft `:277-286`
+  and `:329-337`, `changed` `:406`, `sendable` `:413-435`, the render after the MOVED fieldset
+  `:605-623`)
+- Modify: `routing-client.ts` (`PrepStation` `:24-38`; `updateStation` `:116-127`),
+  `prep-stations-screen.ts` (`:756-757` pass the three; `:766` goes), `strings.ts`
+  (`prep.moved_slips_venue_*` EN `:304-305`, ES `:1195-1196` deleted; `prep.ticket_grouping`,
+  `prep.ticket_grouping.combined`, `prep.ticket_grouping.separate`, `prep.ticket_grouping_hint`,
+  `prep.print_held_work`, `prep.print_held_work_hint` added EN and ES, Decision 9's words)
+- Test: `station-editor.test.ts`, `station-editor.a11y.test.ts`, `prep-stations-screen.test.ts`
+- Modify (fixtures, setup): every station fixture — `git grep -l -E 'printMovedSlips: (null|true|false)' -- packages/venue-service/src/dashboard packages/venue-service/test`
+  minus the operations-model fixtures Task 37 handles (those that also name `kitchenTicketGrouping`):
+  `calendar-station-month.test.ts:41`, `prep-stations-screen*.test.ts`, `routing-grid*.test.ts`,
+  `station-editor*.test.ts`, `test/station-delete-test-helpers.ts:25`, `:52`. A station fixture's
+  `printMovedSlips: null` becomes `true` and gains `ticketGrouping: "combined", printHeldWork: false`;
+  a `RoutingView` fixture loses its `printMovedSlips` key (`routing-grid.test.ts:78`,
+  `prep-stations-screen.test.ts:47`, `station-delete-test-helpers.ts:25`).
+
+**Interfaces — produces:** `StationEditorStation.printMovedSlips: boolean`, plus
+`ticketGrouping: TicketGrouping` and `printHeldWork: boolean`; `StationEditorSave` gains
+`ticketGrouping?` and `printHeldWork?`, `printMovedSlips?: boolean`.
+
+- [ ] **Step 1: Write the failing tests** in `station-editor.test.ts`:
+  - `"offers Print a slip when sent dishes move table as the venue…"` (`:545`) → `"offers Print a
+    slip when sent dishes move table as Print or Don't print, right after the rest-of-order
+    switch"`: options `[["print","Print"],["dont-print","Don't print"]]`; the position check (`:555`)
+    unchanged; the `venuePrintsMovedSlips: false` half (`:557-558`) goes.
+  - `"sends null when a station's own choice goes back to as the venue"` (`:580`): deleted.
+  - `"reads Print a slip when sent dishes move table in Spanish"` (`:588`): options
+    `["Imprimir", "No imprimir"]`; the venue-label check (`:598`) goes.
+  - New: `"opens on the station's ticket grouping and held printing, after MOVED slips"` — a
+    `wt-combobox[name=ticketGrouping]` labelled "Identical dishes on a kitchen ticket" with the two
+    choices, value from the station; a `wt-switch[name=printHeldWork]` labelled "Print held groups
+    in advance", checked from the station, with its note; both after the MOVED combobox.
+  - New: `"sends only a changed ticket grouping or held printing, and nothing for a choice put
+    back"`; `"reads the ticket grouping and held printing in Spanish"`.
+  - `station-editor.a11y.test.ts`: its fixture gains the two values, so its axe cases run over
+    the new combobox and switch in both themes.
+  - `prep-stations-screen.test.ts`: `"hands the station's and the venue's MOVED slips choices to the
+    editor and saves the station's"` (`:886`) → `"hands the station's printing choices to the editor
+    and saves the station's"` — the editor opens on `printMovedSlips: true`, `ticketGrouping`,
+    `printHeldWork`; choosing Don't print sends `{ printMovedSlips: false }` (was `null` at `:912`);
+    the `routing.printMovedSlips` half (`:891`, `:920-928`) goes. `"follows the venue's MOVED slips
+    switch in an open editor's first option"` (`:934`) and `"keeps a MOVED slips choice made in an
+    open editor when the venue's switch changes"` (`:943`): deleted.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/station-editor.test.ts src/dashboard/prep-stations-screen.test.ts`
+- [ ] **Step 3: Implement**; sweep the fixtures.
+- [ ] **Step 4: Run** (free memory first) `pnpm --filter @waitron/venue-service exec vitest run src/dashboard`
+  — PASS; `git grep -n -E 'venuePrintsMovedSlips|moved_slips_venue|"venue"' -- packages/venue-service/src/dashboard/station-editor.ts packages/venue-service/src/dashboard/prep-stations-screen.ts`
+  prints nothing.
+- [ ] **Step 5:** `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts`;
+  typecheck `@waitron/venue-service`; prettier; commit
+  `git commit -s -m "The station editor sets a station's ticket grouping, held printing and MOVED slips (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed** (A773 §7.1; this plan's table, MOVED slips "no venue fallback"; the
+"wording question is moot" note above, which said PR 6 deletes "Venue setting: Print"):
+`station-editor.test.ts` `:545`, `:580` (deleted), `:588`; `prep-stations-screen.test.ts` `:886`,
+`:934` and `:943` (deleted). Fixtures are setup.
+
+### Task 37: the Kitchen tab drops the three venue printing settings
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/service-settings-panel.ts` (`:7`, `:10-11`,
+  `:131-197`: keep the section, its heading and Changes after sending), `client.ts`
+  (`VenueServiceModel` `:104-106`, `VenueServiceSettingsView` `:118-121`, `KitchenTicketGrouping`
+  `:122`, `loadSettings` `:296-302`, the three `save*` methods `:406-422`), `strings.ts`
+  (`venue.kitchen_ticket_grouping*`, `venue.print_held_work*`, `venue.print_moved_slips*`, EN
+  `:520-523`, `:529-534`, ES `:1416-1420`, `:1426-1431`; and `venue.combobox_search` /
+  `venue.combobox_no_results` only if `git grep` finds no other user), `live-queries.ts` (the
+  `routing` list loses `service_settings`, `:154`, Decision 4)
+- Test: `service-settings-panel.test.ts`, `service-settings-panel.a11y.test.ts`,
+  `service-settings-panel.exempt.test.ts`, `client.test.ts`, `live-queries.test.ts`
+- Modify (fixtures, setup): each operations-model fixture naming the three keys —
+  `git grep -l kitchenTicketGrouping -- packages/venue-service apps/dashboard` minus the files above
+  (`department-dialogs*.test.ts`, `department-settings*.test.ts`, `departments-list*.test.ts`,
+  `department-edit-dialog-transfers.a11y.test.ts`, `index.test.ts`, `venue-departments-shell*.test.ts`,
+  `venue-navigation.test.ts`, `venue-operations-loader.test.ts`, `src/testing/department-zones-fixture.ts:112`,
+  `test/service-delete-test-helpers.ts:38`, `apps/dashboard/src/testing/department-receipt-app-fixture.ts:64-66`,
+  `apps/dashboard/src/dashboard-app.test.ts` `:1763`, `:4489`, `:4567`, `:8064`, `:8184`): the
+  three keys go.
+
+- [ ] **Step 1: Change the tests first.**
+  - `service-settings-panel.test.ts`: every case whose subject is one of the three (the grouping
+    combobox, the held-work switch and hint, the MOVED switch and hint; `grep -n -E 'kitchenTicketGrouping|printHeldWork|printMovedSlips|print-held-work|print-moved-slips'`
+    lists them) is deleted; add `"the Kitchen tab's venue-service panel offers only Changes after
+    sending"` — one `wt-switch`, named `editSentLines`, no `wt-combobox`, no
+    `[data-test=print-held-work-hint]` or `[data-test=print-moved-slips-hint]`.
+  - `service-settings-panel.a11y.test.ts` and `.exempt.test.ts`: the cases or rows for the three go;
+    the Changes after sending ones stay.
+  - `client.test.ts`: the three save-method cases go; `loadSettings`' expected value loses the keys.
+  - `live-queries.test.ts`: the `routing` list's expected value loses `service_settings`.
+- [ ] **Step 2: Run and watch the new case fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/service-settings-panel.test.ts`
+- [ ] **Step 3: Implement**; sweep the fixtures.
+- [ ] **Step 4: Run** `pnpm --filter @waitron/venue-service exec vitest run src/dashboard` and
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.settings-panels.test.ts src/screens`
+  (browser runs; free memory first) — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts`;
+  `git grep -n -E 'kitchenTicketGrouping|savePrintHeldWork|savePrintMovedSlips|venue\.print_(held_work|moved_slips)|venue\.kitchen_ticket_grouping' -- apps packages ':!**/drizzle/**'`
+  prints only venue-service's server code and its tests (Task 38).
+- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
+  `git commit -s -m "The Kitchen tab no longer sets ticket grouping, held printing or MOVED slips (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed** (A756 "Changed by A773": "There is no 'Every station' card: every station
+setting is set on each station"): the panel's cases for the three settings; `client.test.ts`'s
+three save cases and `loadSettings` value; the `routing` dependency list.
+
+### Task 38: venue-service stops storing and serving the venue's printing settings
+
+**Files:**
+- Modify: `packages/venue-service/src/kitchen-notices.ts` (delete `:333-381`'s six functions and
+  the `KitchenTicketGrouping` import, `:19`), `routes.ts` (imports `:40-46`, `:62`; `:703`;
+  `:763-765`; `:782-784`; the three PUT routes `:804-843`), `routing-types.ts:108-112`,
+  `service.ts` (`:93-95`, `:242-244`), `packages/module/src/module.ts` (`:1370-1371`, `:1445-1448`)
+- Modify: `apps/server/src/testing/station-printing.ts` (the venue half and its comment go)
+- Test: `packages/venue-service/src/kitchen-notices.test.ts` (describes `:1512`, `:1551`, `:1583`
+  deleted), `routes.test.ts` (describes `:2524`, `:2594`, `:2665` deleted; `"the venue's service
+  settings"` `:2451` expects a body without the three keys; the routing view's expected body
+  loses `printMovedSlips`), `service.test.ts` (the seat's member list),
+  `apps/server/src/split-off-extras.release.test.ts:120`
+
+- [ ] **Step 1: Change the tests first:** the deletions above; `routes.test.ts`: add
+  `"no longer serves the venue's printing settings"` — the three PUT routes answer 404 for a
+  manager with `venue.configure`; `split-off-extras.release.test.ts:120`'s
+  `expect(await readPrintHeldWork(tx)).toBe(true)` becomes a read of the stations' `print_held_work`
+  (all true).
+- [ ] **Step 2: Run and watch the new case fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/routes.test.ts -t "printing settings"`
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** `pnpm --filter @waitron/venue-service exec vitest run src/kitchen-notices.test.ts src/routes.test.ts src/service.test.ts`,
+  `pnpm --filter @waitron/module exec vitest run`, and every file Task 32 touched in one
+  `pnpm --filter @waitron/server exec vitest run <files>` — PASS. Then
+  `pnpm exec vitest run scripts/module-seams.test.ts scripts/errors-reachable.test.ts`;
+  `git grep -n -E 'readPrintHeldWork|readPrintMovedSlips|readKitchenTicketGrouping|writePrintHeldWork|writePrintMovedSlips|writeKitchenTicketGrouping|print-held-work|print-moved-slips|kitchen-ticket-grouping' -- apps packages`
+  prints nothing.
+- [ ] **Step 5:** typecheck `@waitron/module`, `@waitron/venue-service`, `@waitron/server`;
+  prettier; commit `git commit -s -m "venue-service stops serving the venue's printing settings (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed** (A773 §7.1): the three describes of each test file deleted; the settings
+GET body and the routing view's body lose keys; `split-off-extras.release.test.ts:120` reads the
+stations (the setting moved, the value it checks is the same).
+
+### Task 39: drop the three venue columns; one venue-service migration
+
+**Files:**
+- Modify: `packages/venue-service/src/schema/settings.ts` (`:5-7`, `:17-22`, `:26`; the comment
+  `:17` goes with its column)
+- Create (generated): `packages/venue-service/drizzle/NNNN_retire_venue_printing_choices.sql`,
+  snapshot and journal, by `pnpm --filter @waitron/venue-service db:generate --name retire_venue_printing_choices`
+- Test: `packages/venue-service/src/schema/service.test.ts:191-194`,
+  `packages/venue-service/src/kitchen-allergy.upgrade.test.ts:247-250` (Decision 7),
+  `packages/venue-service/src/migrations.test.ts`
+
+- [ ] **Step 1: Write the failing test** in `migrations.test.ts`: `"the venue keeps no ticket
+  grouping, held printing or MOVED slips of its own"` — `pragma table_info(service_settings)`
+  names only `id` and `edit_sent_lines`.
+- [ ] **Step 2: Run and watch it fail.** `pnpm --filter @waitron/venue-service exec vitest run src/migrations.test.ts`
+- [ ] **Step 3: Edit and generate.** Read the SQL: Decision 1's rebuild, whose `INSERT … SELECT`
+  names only `id` and `edit_sent_lines`; anything else is a stop. Re-run before generating: the
+  `REFERENCES` and trigger searches of Decision 1 print nothing. Update the two pins of Decision 7.
+- [ ] **Step 4: Run** Step 2's command — PASS; then
+  `pnpm --filter @waitron/venue-service exec vitest run src/schema src/kitchen-allergy.upgrade.test.ts src/department-receipts.upgrade.test.ts src/order-kitchen-notes.upgrade.test.ts src/party-allergy.upgrade.test.ts src/classification.test.ts`;
+  the guards of Task 29's Step 5 (the walk now reports Decision 1's `345 steps` and `230 tables`
+  if `main` has not moved, else two steps and one table more than `main`);
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`;
+  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/configuration-transfer.test.ts src/configuration-import.test.ts`;
+  `pnpm --filter @waitron/composition exec vitest run` — PASS.
+- [ ] **Step 5:** typecheck `@waitron/venue-service`; prettier; commit
+  `git commit -s -m "Drop the venue's ticket grouping, held printing and MOVED slips; one migration (A756 PR 6)"`,
+  then update the ledger.
+
+**Assertions changed** (the columns are dropped): `service.test.ts`' check list loses
+`service_settings_kitchen_ticket_grouping_ck`; the upgrade test's `laterColumnDrops` entry (a
+hand-kept list, Decision 7).
+
+### Task 40: a look at the station editor and the Kitchen tab in real Chromium
+
+**Files:** throwaway tests in `packages/venue-service/src/dashboard/` (deleted, never committed);
+pictures and notes outside the worktree, in `/Users/clintongormley/waitron-campaign-c/a756-6-shots/`
+and `/Users/clintongormley/waitron-campaign-c/a756-6-look-report.md`, as PR 5's Task 27 did.
+
+- [ ] **Step 1:** Mount `prep-stations-screen` with the `api()` fixture of
+  `prep-stations-screen.test.ts` (its `bar` station with `ticketGrouping: "separate"`,
+  `printHeldWork: true`, `printMovedSlips: false`). For EN and ES (`setLocale("es")`), light and
+  dark, at `page.viewport(1280, 900)` and `page.viewport(390, 900)`: Edit on `bar` as opened (Save
+  quiet), scrolled so the three printing fields show; the ticket grouping list opened; Add station
+  as opened. Then mount `dashboard-venue-service-settings` (`subject="kitchen"` as
+  `packages/venue-service/src/dashboard/index.ts` renders it) at both widths, light and dark, EN
+  and ES: only Changes after sending. Read and record `window.innerWidth` inside each test.
+- [ ] **Step 2:** Look at every picture: the new combobox and switch line up with the fields
+  above them at both widths, their labels whole in both languages, the switch's note under it as
+  the rest-of-order note sits; the ticket grouping list's longest choice ("A line each: 1 x Burger,
+  three times", "Una por plato: 1 x Hamburguesa, tres veces") fits at 390; no sideways scroll
+  (`document.documentElement.scrollWidth` equals the viewport width); the Kitchen panel shows no gap
+  where the three settings were; dark is readable. A defect found is fixed with a failing test
+  first, in the component's own test file, and committed.
+- [ ] **Step 3:** Delete the throwaway tests; `git status` shows them gone. Update the ledger with
+  the look report's path and any defect found.
+
+### Task 41: guides, design notes, audits and the backlog
+
+**Files:** `apps/server/src/guide/en/kitchen-service.md` (`:52-58`, `:88-97`),
+`apps/server/src/guide/es/kitchen-service.md` (the `{#held-work}` section, `:101-111`),
+`docs/developers/design-system.md` (`:2896`, `:4617-4622`), `docs/backlog/kitchen.md` (`:149`,
+Open points; the A725 entry `:384-386`), `docs/backlog.md:1571`,
+`docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md` (`:69`, `:170`),
+`docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md` (after `:263`),
+`docs/operations/a760-migration-squash-inventory.md` (after `:382`)
+
+- [ ] **Step 1: The guides.** EN `:88-92`: "…prints a **MOVED** slip when its **Print a slip when
+  sent dishes move table** setting is **Print**; the food stays…" (the "or follows the venue's
+  **Print MOVED slips**" clause goes). ES `:101-105` likewise ("…si su ajuste **Imprimir un aviso
+  al cambiar de mesa los platos enviados** es **Imprimir**; los platos siguen…"). The paragraph at
+  EN `:94-97` gains: "Each prep station also sets how identical dishes print on its tickets and
+  whether it prints held groups in advance, under **Identical dishes on a kitchen ticket** and
+  **Print held groups in advance**." ES `:107-111`: "Cada estación de preparación fija también cómo
+  se imprimen los platos iguales en sus comandas y si imprime por adelantado los grupos en espera,
+  en **Platos iguales en una comanda de cocina** e **Imprimir por adelantado los grupos en espera**."
+  The `{#held-work}` sections (EN `:52`, ES its twin) gain one sentence: EN "Only a station set to
+  **Print held groups in advance** receives a HOLD ticket, and only that station receives the
+  corrections to it and the ticket marked FIRE." ES "Solo una estación con **Imprimir por adelantado
+  los grupos en espera** recibe una comanda HOLD, y solo esa estación recibe sus correcciones y la
+  comanda marcada FIRE." (The labels are Task 36's strings.) Run
+  `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`.
+- [ ] **Step 2: design-system.md.** `:2896` "Rest-of-order, MOVED slips and a station's three
+  late-flag minutes" → "Rest-of-order, MOVED slips, identical dishes, held printing and a station's
+  three late-flag minutes". `:4617-4622`: after "Print a slip when sent dishes move table" add
+  ", then "Identical dishes on a kitchen ticket" and "Print held groups in advance" with its
+  note"; "The slip choices are "Venue setting: Print" (or "Venue setting: Don't print"),
+  "Print" and "Don't print"; choosing the venue setting again sends null." → "The slip choices
+  are "Print" and "Don't print"." `git grep -n -i -E 'kitchen ticket grouping|print held|MOVED
+  slips' docs/developers/design-system.md` for any Kitchen-tab description of the three; each hit
+  is updated.
+- [ ] **Step 3: Audits and inventories, dated pointers only.** Personal-data audit `:69`
+  (`kitchen_stations`): append "**2026-10-23 (A756 PR 6):** `ticket_grouping` and
+  `print_held_work` added." `:170` (`service_settings`): `kitchen_ticket_grouping`,
+  `print_held_work` and `print_moved_slips` each gain "(dropped 2026-10-23, A756 PR 6)", as
+  `release_reminder_minutes` reads. Retention inventory, after `:263`: "**2026-10-23:** A756 PR 6
+  added core table `order_group_hold_stations` (core migration NNNN), which adds
+  `order_group_hold_stations(group_id)` to `order_groups`' incoming closure and
+  `order_group_hold_stations(station_id)` to `kitchen_stations`'; not yet given a retention row."
+  A760 inventory, after `:382`: "**2026-10-23 (A756 PR 6):** core NNNN adds
+  `order_group_hold_stations` and two `kitchen_stations` columns; venue-service NNNN drops three
+  `service_settings` columns by a rebuild. A squash writes the end state." (NNNN are Tasks 29 and
+  39's generated numbers.)
+- [ ] **Step 4: The backlog.** In `docs/backlog/kitchen.md`'s A756 detail delete the PR 6 bullet
+  (`:149`; PRs 7–8 and the Kitchen tab's removal stay). The A725 entry's "offers "Venue setting:
+  Print" or "Venue setting: Don't print", "Print", and "Don't print"" (`:384-386`) is kept and
+  gains "**2026-10-23 (A756 PR 6):** the choice is the station's own: Print or Don't print." Add open
+  points: "From PR 6: A773's picture 10 draws Held courses as a dropdown, "Print when sent"; PR 6
+  uses the switch "Print held groups in advance" the Kitchen tab had. Ask the owner whether
+  picture 10's wording replaces it." "From PR 6: picture 10 lists Identical dishes and Held courses
+  above MOVED slips; PR 6 puts them after it, the editor's built order." "From PR 6: Add station
+  sets none of a station's printing choices; a new station starts at one line, no held printing,
+  MOVED slips printed." In `docs/backlog.md`'s A756 entry say "PRs 1–5 landed (#1852, #1854,
+  #1858, #2020, #2023); PR 6 is in review; PRs 7–8 are buildable. Open points are in the detail."
+- [ ] **Step 5: Missed claims.**
+  `git grep -n -i -E 'venue setting: (print|don.t print)|Print MOVED slips|print held groups in advance|identical dishes|kitchen_ticket_grouping|print_held_work|readPrintHeldWork|ajuste del local: |avisos MOVIDO' -- docs/backlog.md docs/backlog docs/developers apps/server/src/guide README.md 'packages/*/README.md'`
+  — each hit is rewritten here, is a dated pointer of Step 3 or 4, or is history in a dated plan or
+  spec (left alone). `pnpm exec prettier --file-info <file>` on each changed doc (`docs/` is ignored
+  whole), and `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
+- [ ] **Step 6: The PR description and the ledger** both name:
+  - **every changed test check**, from each task's "Assertions changed", and the setup moves of
+    Tasks 29 and 32;
+  - **the default and reset decision**: every station starts at one line, no held printing and
+    MOVED slips printed, a station left as "Venue setting" now prints MOVED slips, the venue values
+    are dropped, not copied, a group held before the upgrade is treated as having no HOLD paper,
+    and no venue reset is needed (Decisions 1 and 2);
+  - **held paper per station** (Decision 5) and the new table: a recorded station keeps getting its
+    HOLD paper whatever its later choice, an unrecorded one prints its part at the fire, and
+    notices are unchanged;
+  - **no configuration format change** and why (Decision 6);
+  - **the departures from A773's picture 10** (Decision 9).
+- [ ] **Step 7: Commit** `git commit -s -m "Guides and backlog: each station sets its own ticket grouping, held printing and MOVED slips (A756 PR 6)"`,
+  update the ledger to `Status: done` for PR 6's build, then `/finish-branch` with this plan's path
+  as its note.
+
+---
+
 ## Parts that wait
 
 Each is planned when its blocker lands; these notes are the starting decisions, not tasks.
@@ -2164,17 +3228,7 @@ below against `main` when each is planned.
 
 **PR 5 — Late flags on each station:** planned 2026-10-23, after PR 4 landed — see [PR 5](#pr-5--late-flags-on-each-station) above.
 
-**PR 6 — Identical dishes, held courses and MOVED slips on each station. Waits for A773-1:**
-`kitchen-print.ts:531` is inside `@@ -529,13 planKitchenTickets`; A773-1 rewrites `printMovedSlips`
-(`@@ -1385`, `@@ -1393`) and `printHoldTickets` (`@@ -1463`); the seats live in
-`packages/module/src/module.ts` and `packages/venue-service/src/service.ts`, both A773-1-edited.
-Shape: ADD to `kitchen_stations` `ticket_grouping` (label, default `combined`, refused outside the
-two values at the route as `colour` is — a CHECK would rebuild the table) and `print_held_work`
-(flag, NOT NULL default false), each an ALTER TABLE ADD as `0152`/`0154` were; keep
-`print_moved_slips` nullable (making it NOT NULL rebuilds `kitchen_stations`) and read null as
-Print; the station routes always write a boolean. Drop the three `service_settings` columns; the
-grouping column's CHECK makes drizzle rebuild `service_settings` — harmless, nothing references it,
-but read the SQL. Station editor fields per A773 picture 10; the "Venue setting" choice goes.
+**PR 6 — Identical dishes, held courses and MOVED slips on each station:** planned 2026-10-23, after PR 5 landed — see [PR 6](#pr-6--identical-dishes-held-courses-and-moved-slips-on-each-station) above.
 
 **PR 7 — Done on the screen on each station. Waits for A773-1:** the mode travels
 `till-setup.ts:28,87` → `till-app.ts:8073` → `till-station-screen.ts:910` → `station-queue.ts:659`,
@@ -2224,3 +3278,35 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
   seven cases, not five; three more changed checks are named; Task 24 is split; Task 21's check reads
   `incoming`; Tasks 22 and 23's grep predictions match their commands; Decision 4 names the till
   answers; the PR 5 ledger is named.
+- PR 6 (2026-10-23): every file:line in its section was re-read on `157f152c5`. Both generated
+  migrations' SQL, the upgrade walk (with a control run on the unchanged tree), the root schema
+  guards with a classification control, `inmutabilidad`, composition, and every upgrade-style suite
+  were run in a scratch copy, not reasoned about; the fixes to the four upgrade checks that failed
+  (Decision 7) were run there too. The held-paper design (Decision 5) came from reading every
+  reader of `hold_printed_at` (`git grep` listed in Decision 5) and the marker rule stated at
+  `order-groups.ts:815`; it is read, not run, and Tasks 34–35c each start with failing cases for
+  it. Every file that names one of the three settings
+  (`git grep -l -E 'kitchenTicketGrouping|printHeldWork|printMovedSlips|kitchen_ticket_grouping|print_held_work|print_moved_slips' -- apps packages ':!**/drizzle/**'`,
+  61 files on `157f152c5`) is assigned to a task, or left with a stated reason (the format-1 JSON
+  fixture; `configuration-transfer.test.ts:2245`, which reads the kept nullable column). Tasks 29–41
+  (35 split three ways) each stay one package or one layer: storage (29), the station routes (30),
+  the import check (31), the mechanical test-setup sweep (32), ticket and MOVED-slip readers (33),
+  HOLD writing and FIRE (34), held-paper readers (35a), corrections built as `HeldChange` (35b),
+  the three direct correction paths (35c), the editor (36), the Kitchen panel (37), venue-service's
+  server side (38) and the column drop (39). Task 32 moves every test to the station before any
+  reader moves, writing both values, so each commit stays green; Task 37 stops the dashboard
+  calling the venue routes before Task 38 removes them. Tasks 34 and 35b are the largest; their
+  implementers follow the handover rule if they run long.
+- PR 6 fresh-context review (2026-10-23), folded in after checking each finding against the code:
+  Decision 5 now keeps the group stamp for every notice and filters only printing (a screen-only
+  station would have lost notices, `kitchen-print.ts:905-926`, `:933-951`, `:1170-1196`), and Tasks
+  35a–35c are rewritten around `CorrectionItem.holdGroupId` with a screen-only case each; a station
+  not recorded for a group now gets no HOLD paper for it at all, so it never holds partial paper
+  (the review proposed a full HOLD ticket for such a station once it is switched on; the plan
+  instead follows the existing rule "A group held before this is turned on prints when it is
+  fired", `strings.ts:530-531`, and `correctJoin`'s early return, `order-groups.ts:2122-2123`, so
+  the table has one writer); a recorded station gets a held move's HOLD ticket whatever its current
+  choice; Tasks 33–35c run all 23 files of Task 32; Task 31 tests the import check in db; the two
+  station-delete pins gain the table; Task 29's commit states why the table is core; the
+  schema-constraints placement, the two places that map null to Print, and the kept grouping hint
+  are named.

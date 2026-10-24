@@ -93,7 +93,7 @@ import {
 } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { setRoutingCell, writePrintHeldWork, type RouteTarget } from "@waitron/venue-service";
+import { setRoutingCell, type RouteTarget } from "@waitron/venue-service";
 import {
   WEEK_DISPLAY_ORDER,
   departments,
@@ -106,6 +106,7 @@ import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -6476,7 +6477,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         LOCALE,
       );
       await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       const tableId = await makeTable(tx, cfg);
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId });
       const offers = await tableOffers(tx, cfg);

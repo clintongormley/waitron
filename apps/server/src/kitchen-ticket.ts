@@ -8,6 +8,7 @@
  */
 import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import { partyTablesName, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import type { TicketGrouping } from "@waitron/shared";
 import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 
@@ -82,7 +83,7 @@ export type KitchenTicket = {
 );
 
 /** `combined` prints identical entries as one `N x`, `separate` prints one entry per unit. */
-export type KitchenTicketGrouping = "combined" | "separate";
+export type KitchenTicketGrouping = TicketGrouping;
 
 /** Entries with equal keys print identically, quantity aside: the note is compared as it prints. */
 function entryKey(item: KitchenTicketItem): string {

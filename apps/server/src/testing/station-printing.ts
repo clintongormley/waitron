@@ -1,0 +1,34 @@
+import { kitchenStations, type Transaction } from "@waitron/db";
+import type { TicketGrouping } from "@waitron/shared";
+import { inArray } from "drizzle-orm";
+
+export interface StationPrintingChoices {
+  printHeldWork?: boolean;
+  ticketGrouping?: TicketGrouping;
+  printMovedSlips?: boolean;
+}
+
+export async function setStationPrinting(
+  tx: Transaction,
+  choices: StationPrintingChoices,
+  stationIds?: readonly string[],
+): Promise<void> {
+  const set: StationPrintingChoices = {};
+  if (choices.printHeldWork !== undefined) set.printHeldWork = choices.printHeldWork;
+  if (choices.ticketGrouping !== undefined) set.ticketGrouping = choices.ticketGrouping;
+  if (choices.printMovedSlips !== undefined) set.printMovedSlips = choices.printMovedSlips;
+  if (Object.keys(set).length === 0) return;
+  const update = tx.update(kitchenStations).set(set);
+  if (stationIds !== undefined) {
+    const updated = await update
+      .where(inArray(kitchenStations.id, [...stationIds]))
+      .returning({ id: kitchenStations.id });
+    if (updated.length !== stationIds.length)
+      throw new Error(
+        `setStationPrinting: ${stationIds.length - updated.length} id(s) match no station`,
+      );
+    return;
+  }
+  const updated = await update.returning({ id: kitchenStations.id });
+  if (updated.length === 0) throw new Error("setStationPrinting: the database has no station yet");
+}

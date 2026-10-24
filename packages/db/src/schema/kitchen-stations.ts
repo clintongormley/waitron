@@ -1,4 +1,4 @@
-import type { StationColour } from "@waitron/shared";
+import type { StationColour, TicketGrouping } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
@@ -22,10 +22,13 @@ export const kitchenStations = table(
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
     showsRestOfOrder: flag("shows_rest_of_order").notNull().default(false),
-    // Null follows the venue-wide MOVED slips choice.
+    // Null prints MOVED slips; the station routes write a boolean.
     printMovedSlips: flag("print_moved_slips"),
     // The station routes and the import refuse a value outside `isStationColour`; a CHECK would rebuild this table.
     colour: label("colour").$type<StationColour>().notNull().default("red"),
+    // The station routes and the import refuse a value outside `isTicketGrouping`; a CHECK would rebuild this table.
+    ticketGrouping: label("ticket_grouping").$type<TicketGrouping>().notNull().default("combined"),
+    printHeldWork: flag("print_held_work").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

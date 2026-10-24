@@ -1043,8 +1043,10 @@ describe("/management-api/stations (KDS-1 config)", () => {
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
-      printMovedSlips: boolean | null;
+      printMovedSlips: boolean;
       colour: string;
+      ticketGrouping: string;
+      printHeldWork: boolean;
     }[]
   > {
     return (await (await req("/stations", { method: "GET" }, managerCookie)).json()) as {
@@ -1053,8 +1055,10 @@ describe("/management-api/stations (KDS-1 config)", () => {
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
-      printMovedSlips: boolean | null;
+      printMovedSlips: boolean;
       colour: string;
+      ticketGrouping: string;
+      printHeldWork: boolean;
     }[];
   }
 
@@ -1703,16 +1707,18 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("lists a new station following the venue for MOVED slips", async () => {
+  it("lists a new station printing MOVED slips, grouping identical dishes, printing no held work in advance", async () => {
     const id = await createStation(unique("Moved default"));
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
-      printMovedSlips: null,
+      printMovedSlips: true,
+      ticketGrouping: "combined",
+      printHeldWork: false,
     });
   });
 
-  it("PATCH saves a station's MOVED slips choice as print, don't print or as the venue", async () => {
+  it("PATCH saves a station's MOVED slips choice as print or don't print", async () => {
     const id = await createStation(unique("Moved choice"));
-    for (const printMovedSlips of [true, false, null]) {
+    for (const printMovedSlips of [false, true]) {
       const response = await req(
         `/stations/${id}`,
         { method: "PATCH", body: JSON.stringify({ printMovedSlips }) },
@@ -1725,40 +1731,92 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }
   });
 
-  it("PATCH refuses a MOVED slips choice that is not true, false or null", async () => {
+  it("PATCH refuses a MOVED slips choice that is not true or false", async () => {
     const id = await createStation(unique("Moved invalid"));
     await req(
       `/stations/${id}`,
       { method: "PATCH", body: JSON.stringify({ printMovedSlips: false }) },
       managerCookie,
     );
-    const response = await req(
+    for (const printMovedSlips of ["yes", 1, null]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ printMovedSlips }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "printMovedSlips" },
+        },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        printMovedSlips: false,
+      });
+    }
+  });
+
+  it("PATCH saves a station's ticket grouping and refuses any other value", async () => {
+    const id = await createStation(unique("Grouping"));
+    const saved = await req(
       `/stations/${id}`,
-      { method: "PATCH", body: JSON.stringify({ printMovedSlips: "yes" }) },
+      { method: "PATCH", body: JSON.stringify({ ticketGrouping: "separate" }) },
       managerCookie,
     );
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: {
-        code: "management.request_invalid",
-        params: { field: "printMovedSlips" },
-      },
-    });
-    const numeric = await req(
-      `/stations/${id}`,
-      { method: "PATCH", body: JSON.stringify({ printMovedSlips: 1 }) },
-      managerCookie,
-    );
-    expect(numeric.status).toBe(400);
-    expect(await numeric.json()).toMatchObject({
-      error: {
-        code: "management.request_invalid",
-        params: { field: "printMovedSlips" },
-      },
-    });
+    expect(saved.status).toBe(204);
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
-      printMovedSlips: false,
+      ticketGrouping: "separate",
     });
+    for (const ticketGrouping of ["Separate", null, 1]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ ticketGrouping }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "ticketGrouping" },
+        },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        ticketGrouping: "separate",
+      });
+    }
+  });
+
+  it("PATCH saves a station's held printing and refuses a non-boolean", async () => {
+    const id = await createStation(unique("Held printing"));
+    for (const printHeldWork of [true, false, true]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ printHeldWork }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(204);
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        printHeldWork,
+      });
+    }
+    for (const printHeldWork of ["yes", null, 1]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ printHeldWork }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "printHeldWork" },
+        },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        printHeldWork: true,
+      });
+    }
   });
 
   it("PATCH body screens: array → body; non-string name; non-boolean active — the station is left as it was", async () => {

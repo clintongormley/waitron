@@ -4,11 +4,10 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles } from "@waitron/ui";
-import type { KitchenTicketGrouping, VenueServiceApi, VenueServiceSettingsView } from "./client.js";
+import type { VenueServiceApi, VenueServiceSettingsView } from "./client.js";
 import { t } from "./strings.js";
 
-const GROUPINGS: KitchenTicketGrouping[] = ["combined", "separate"];
-type Field = "editSentLines" | "kitchenTicketGrouping" | "printHeldWork" | "printMovedSlips";
+type Field = "editSentLines";
 
 @customElement("dashboard-venue-service-settings")
 export class ServiceSettingsPanel extends LitElement {
@@ -141,61 +140,8 @@ export class ServiceSettingsPanel extends LitElement {
           }),
       )}
       <p class="hint" data-test="edit-sent-lines-hint">${t("venue.edit_sent_lines_hint")}</p>
-      ${this.#fieldError("editSentLines")} ${this.#kitchenTicketGrouping(model)}
-      ${this.#switch(
-        "printHeldWork",
-        t("venue.print_held_work"),
-        model.printHeldWork,
-        (printHeldWork) =>
-          void this.#save("printHeldWork", () => this.api.savePrintHeldWork(printHeldWork), {
-            printHeldWork,
-          }),
-      )}
-      <p class="hint" data-test="print-held-work-hint">${t("venue.print_held_work_hint")}</p>
-      ${this.#fieldError("printHeldWork")}
-      ${this.#switch(
-        "printMovedSlips",
-        t("venue.print_moved_slips"),
-        model.printMovedSlips,
-        (printMovedSlips) =>
-          void this.#save("printMovedSlips", () => this.api.savePrintMovedSlips(printMovedSlips), {
-            printMovedSlips,
-          }),
-      )}
-      <p class="hint" data-test="print-moved-slips-hint">${t("venue.print_moved_slips_hint")}</p>
-      ${this.#fieldError("printMovedSlips")}
+      ${this.#fieldError("editSentLines")}
     </section>`;
-  }
-
-  #kitchenTicketGrouping(model: VenueServiceSettingsView) {
-    const stored = model.kitchenTicketGrouping;
-    return html`<wt-combobox
-      class="setting"
-      name="kitchenTicketGrouping"
-      label=${t("venue.kitchen_ticket_grouping")}
-      hint=${t("venue.kitchen_ticket_grouping_hint")}
-      search="auto"
-      searchPlaceholder=${t("venue.combobox_search")}
-      noResultsLabel=${t("venue.combobox_no_results")}
-      .options=${GROUPINGS.map((choice) => ({
-        value: choice,
-        label: t(`venue.kitchen_ticket_grouping.${choice}`),
-      }))}
-      .value=${live(stored)}
-      ?disabled=${this.busy || this.readOnly}
-      error=${this.fieldErrors.kitchenTicketGrouping ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        if (this.readOnly) return;
-        if (event.detail.value === stored) return;
-        const kitchenTicketGrouping = event.detail.value as KitchenTicketGrouping;
-        void this.#save(
-          "kitchenTicketGrouping",
-          () => this.api.saveKitchenTicketGrouping(kitchenTicketGrouping),
-          { kitchenTicketGrouping },
-        );
-      }}
-    ></wt-combobox>`;
   }
 
   override render() {

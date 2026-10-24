@@ -55,6 +55,14 @@ A held dish can reach a station on an advance HOLD ticket. That station keeps th
 sent with that ticket and receives corrections while its work remains unserved. A station that
 has received no advance ticket takes its first copy when the dish is fired.
 
+A station set to **Print held groups in advance** when a group is held receives its HOLD ticket;
+another station set so may start getting the group's HOLD paper later: a HOLD ticket when a held
+dish is moved to it, or a HOLD CHANGED slip when a held dish is added to the group there. A station
+that has the group's HOLD paper keeps getting it, its corrections and the ticket marked FIRE, even
+if its switch is turned off. Any other station prints its part unmarked when the group is fired,
+unless it shares a printer with a station that has the group's HOLD paper: that printer's ticket
+marked FIRE carries both.
+
 Firing held work at the same station does not duplicate an existing allergy correction. Recalling
 a dish into a draft ends its old kitchen work. Sending that draft again creates a new kitchen copy
 from the instructions you confirm for that send.
@@ -87,15 +95,16 @@ quantity no longer counts as food to serve, even when its charge stays on the bi
 A counter order stays visible after payment until you collect or close it. When a paid table
 finishes with **They'll collect it at the counter**, its food still to come becomes such an order:
 each station with a dish still to come on it is told it moved to the counter, and prints a **MOVED**
-slip when its **Print a slip when sent dishes move table** setting is **Print**, or follows the
-venue's **Print MOVED slips**; the food stays
+slip when its **Print a slip when sent dishes move table** setting is **Print**; the food stays
 on the pass until the order is handed over. Each pass still shows only the stations and service
 zones assigned to it.
 
 You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
 lets you choose whether to mark preparation ready by line or by whole ticket; you no longer choose
 a venue-wide firing mode there. Each prep station sets its own late flags when you add it with
-**Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**.
+**Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. Each
+prep station also sets how identical dishes print on its tickets and whether it prints held groups
+in advance, under **Identical dishes on a kitchen ticket** and **Print held groups in advance**.
 
 ## Request cooking from the till {#request-cooking}
 

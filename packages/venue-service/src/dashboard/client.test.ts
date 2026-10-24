@@ -181,9 +181,6 @@ describe("VenueServiceApi", () => {
   it("loads a supervisor's settings from the settings-only route", async () => {
     const settings = {
       settings: { editSentLines: true },
-      kitchenTicketGrouping: "combined",
-      printHeldWork: false,
-      printMovedSlips: true,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
@@ -199,9 +196,6 @@ describe("VenueServiceApi", () => {
       zones: [],
       readiness: [],
       settings: { editSentLines: false },
-      kitchenTicketGrouping: "separate",
-      printHeldWork: true,
-      printMovedSlips: false,
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: ["d1"],
       serviceSteps: [],
@@ -211,9 +205,6 @@ describe("VenueServiceApi", () => {
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
     expect(await api.loadSettings()).toEqual({
       settings: { editSentLines: false },
-      kitchenTicketGrouping: "separate",
-      printHeldWork: true,
-      printMovedSlips: false,
     });
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service", "GET"],
@@ -248,59 +239,6 @@ describe("VenueServiceApi", () => {
         JSON.parse(init.body as string),
       ]),
     ).toEqual([["/management-api/venue-service/settings", "PUT", { editSentLines: false }]]);
-  });
-
-  it("stores how identical dishes print on a kitchen ticket", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.saveKitchenTicketGrouping("separate");
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([
-      [
-        "/management-api/venue-service/settings/kitchen-ticket-grouping",
-        "PUT",
-        { kitchenTicketGrouping: "separate" },
-      ],
-    ]);
-  });
-
-  it("stores whether held groups print in advance", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.savePrintHeldWork(true);
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([
-      ["/management-api/venue-service/settings/print-held-work", "PUT", { printHeldWork: true }],
-    ]);
-  });
-
-  it("stores whether MOVED slips print", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.savePrintMovedSlips(false);
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([
-      [
-        "/management-api/venue-service/settings/print-moved-slips",
-        "PUT",
-        { printMovedSlips: false },
-      ],
-    ]);
   });
 
   it("loads the service model and its authoring choices", async () => {

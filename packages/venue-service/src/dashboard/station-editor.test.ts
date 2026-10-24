@@ -22,7 +22,9 @@ const GRILL: StationEditorStation = {
   colour: "orange",
   active: true,
   showsRestOfOrder: false,
-  printMovedSlips: null,
+  printMovedSlips: true,
+  ticketGrouping: "combined",
+  printHeldWork: false,
   printerIds: ["epson"],
   warmAfterMinutes: 5,
   overdueAfterMinutes: 12,
@@ -37,12 +39,11 @@ const STATIONS = [
 
 async function mount(
   station: StationEditorStation = GRILL,
-  { canManagePrinters = true, locale = "en" as "en" | "es", venuePrintsMovedSlips = true } = {},
+  { canManagePrinters = true, locale = "en" as "en" | "es" } = {},
 ) {
   setLocale(locale);
   const el = (await mountHtml("<prep-station-editor></prep-station-editor>")) as StationEditor;
   el.station = station;
-  el.venuePrintsMovedSlips = venuePrintsMovedSlips;
   el.printers = [
     { id: "epson", name: "Epson" },
     { id: "star", name: "Star" },
@@ -66,6 +67,10 @@ const restSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=showsRestOfOrder]")!;
 const movedField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=printMovedSlips]")!;
+const groupingField = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=ticketGrouping]")!;
+const heldSwitch = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=printHeldWork]")!;
 const saveButton = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
 const timingField = (el: StationEditor, name: string) =>
@@ -542,20 +547,86 @@ it("puts a colour refusal under Colour", async () => {
   expect(formMessage(el)).toBe("");
 });
 
-it("offers Print a slip when sent dishes move table as the venue, naming the venue's choice, right after the rest-of-order switch", async () => {
+it("offers Print a slip when sent dishes move table as Print or Don't print, right after the rest-of-order switch", async () => {
   const on = await mount();
   expect(movedField(on).label).toBe("Print a slip when sent dishes move table");
-  expect(movedField(on).value).toBe("venue");
+  expect(movedField(on).value).toBe("print");
   expect(movedField(on).options.map(({ value, label }) => [value, label])).toEqual([
-    ["venue", "Venue setting: Print"],
     ["print", "Print"],
     ["dont-print", "Don't print"],
   ]);
   const fields = [...on.shadowRoot!.querySelectorAll("wt-switch, wt-combobox")];
   expect(fields.indexOf(movedField(on))).toBe(fields.indexOf(restSwitch(on)) + 1);
+});
+
+it("opens on the station's ticket grouping and held printing, after MOVED slips", async () => {
+  const el = await mount({ ...GRILL, ticketGrouping: "separate", printHeldWork: true });
+  expect(groupingField(el).label).toBe("Identical dishes on a kitchen ticket");
+  expect(groupingField(el).value).toBe("separate");
+  expect(groupingField(el).options.map(({ value, label }) => [value, label])).toEqual([
+    ["combined", "One line: 3 x Burger"],
+    ["separate", "A line each: 1 x Burger, three times"],
+  ]);
+  expect(groupingField(el).hint).toBe("Applies to new kitchen tickets and to reprints.");
+  expect(heldSwitch(el).label).toBe("Print held groups in advance");
+  expect(heldSwitch(el).checked).toBe(true);
+  expect($(el, "[data-test=held-work-hint]")!.textContent).toBe(
+    "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.",
+  );
+  const fields = [...el.shadowRoot!.querySelectorAll("wt-switch, wt-combobox")];
+  expect(fields.indexOf(groupingField(el))).toBe(fields.indexOf(movedField(el)) + 1);
+  expect(fields.indexOf(heldSwitch(el))).toBe(fields.indexOf(groupingField(el)) + 1);
   cleanup();
-  const off = await mount(GRILL, { venuePrintsMovedSlips: false });
-  expect(movedField(off).options[0]!.label).toBe("Venue setting: Don't print");
+  const plain = await mount();
+  expect(groupingField(plain).value).toBe("combined");
+  expect(heldSwitch(plain).checked).toBe(false);
+});
+
+it("sends only a changed ticket grouping or held printing, and nothing for a choice put back", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  const pickGrouping = async (value: string) => {
+    groupingField(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    await el.updateComplete;
+  };
+  const flipHeld = async (checked: boolean) => {
+    heldSwitch(el).dispatchEvent(new CustomEvent("wt-change", { detail: { checked } }));
+    await el.updateComplete;
+  };
+  await pickGrouping("separate");
+  expect(saveButton(el).disabled).toBe(false);
+  await pickGrouping("combined");
+  expect(saveButton(el).disabled).toBe(true);
+  await flipHeld(true);
+  expect(saveButton(el).disabled).toBe(false);
+  await flipHeld(false);
+  expect(saveButton(el).disabled).toBe(true);
+  await pickGrouping("separate");
+  await save(el);
+  expect(seen).toEqual([{ ticketGrouping: "separate" }]);
+  cleanup();
+  const held = await mount();
+  const heldSeen = saves(held);
+  heldSwitch(held).dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+  await held.updateComplete;
+  await save(held);
+  expect(heldSeen).toEqual([{ printHeldWork: true }]);
+});
+
+it("reads the ticket grouping and held printing in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es" });
+  expect(groupingField(el).label).toBe("Platos iguales en una comanda de cocina");
+  expect(groupingField(el).options.map(({ label }) => label)).toEqual([
+    "Una línea: 3 x Hamburguesa",
+    "Una por plato: 1 x Hamburguesa, tres veces",
+  ]);
+  expect(groupingField(el).hint).toBe(
+    "Se aplica a las comandas de cocina nuevas y a las reimpresiones.",
+  );
+  expect(heldSwitch(el).label).toBe("Imprimir por adelantado los grupos en espera");
+  expect($(el, "[data-test=held-work-hint]")!.textContent).toBe(
+    "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",
+  );
 });
 
 it("opens on the station's own Print a slip when sent dishes move table choice", async () => {
@@ -565,37 +636,22 @@ it("opens on the station's own Print a slip when sent dishes move table choice",
 });
 
 it("enables Save on Don't print and sends it, and disables Save again on the stored choice", async () => {
-  const el = await mount(GRILL, { venuePrintsMovedSlips: true });
+  const el = await mount(GRILL);
   const seen = saves(el);
   expect(saveButton(el).disabled).toBe(true);
   await pickMoved(el, "dont-print");
   expect(saveButton(el).disabled).toBe(false);
-  await pickMoved(el, "venue");
+  await pickMoved(el, "print");
   expect(saveButton(el).disabled).toBe(true);
   await pickMoved(el, "dont-print");
   await save(el);
   expect(seen).toEqual([{ printMovedSlips: false }]);
 });
 
-it("sends null when a station's own choice goes back to as the venue", async () => {
-  const el = await mount({ ...GRILL, printMovedSlips: true });
-  const seen = saves(el);
-  await pickMoved(el, "venue");
-  await save(el);
-  expect(seen).toEqual([{ printMovedSlips: null }]);
-});
-
 it("reads Print a slip when sent dishes move table in Spanish", async () => {
-  const el = await mount(GRILL, { locale: "es", venuePrintsMovedSlips: false });
+  const el = await mount(GRILL, { locale: "es" });
   expect(movedField(el).label).toBe("Imprimir un aviso al cambiar de mesa los platos enviados");
-  expect(movedField(el).options.map(({ label }) => label)).toEqual([
-    "Ajuste del local: No imprimir",
-    "Imprimir",
-    "No imprimir",
-  ]);
-  cleanup();
-  const on = await mount(GRILL, { locale: "es" });
-  expect(movedField(on).options[0]!.label).toBe("Ajuste del local: Imprimir");
+  expect(movedField(el).options.map(({ label }) => label)).toEqual(["Imprimir", "No imprimir"]);
 });
 
 it("A725 editor uses the station popup and saves the chosen colour", async () => {
@@ -711,11 +767,7 @@ it.each([390, 1280])("A725 groups late minutes on one row at %ipx", async (width
       "On this station's tickets and kitchen screen",
     );
     expect(movedField(el).label).toBe("Print a slip when sent dishes move table");
-    expect(movedField(el).options.map(({ label }) => label)).toEqual([
-      "Venue setting: Print",
-      "Print",
-      "Don't print",
-    ]);
+    expect(movedField(el).options.map(({ label }) => label)).toEqual(["Print", "Don't print"]);
   } finally {
     await page.viewport(previous[0]!, previous[1]!);
   }

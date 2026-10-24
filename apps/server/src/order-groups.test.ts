@@ -21,6 +21,7 @@ import {
   kitchenStations,
   locations,
   orderGroupEvents,
+  orderGroupHoldStations,
   orderGroups,
   printJobs,
   printers,
@@ -70,12 +71,7 @@ import {
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./parties.js";
-import {
-  listStationNotices,
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  writeEditSentLines,
-} from "@waitron/venue-service";
+import { listStationNotices, writeEditSentLines } from "@waitron/venue-service";
 import {
   bumpGroupReady,
   fireGroup,
@@ -96,6 +92,7 @@ import { splitBill, mergeBills, transferItems } from "./testing/bill-action-fixt
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -473,7 +470,7 @@ async function specExample(v: Venue): Promise<SpecExample> {
 describe("permanent group numbers on kitchen work", () => {
   it("qualifies duplicate numbers from a closed origin using its recorded tables", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const into = await seated(v);
     const from = await seated(v);
     await db
@@ -580,7 +577,7 @@ describe("permanent group numbers on kitchen work", () => {
 
   it("keeps original numbers on HOLD corrections after reordering", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
     const before = (await printed(v)).length;
@@ -599,7 +596,7 @@ describe("permanent group numbers on kitchen work", () => {
 
   it("reprints permanent numbers in the changed firing order", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
     const before = (await printed(v)).length;
@@ -615,7 +612,7 @@ describe("permanent group numbers on kitchen work", () => {
 
   it("keeps the original group number on order-note change slips", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
     const before = (await printed(v)).length;
@@ -694,7 +691,7 @@ describe("per-group submission destinations", () => {
 
   it("keeps each printed HOLD correction confined to its joined destination", async () => {
     const v = await setupVenue();
-    await inTx((tx) => writePrintHeldWork(tx, true));
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }));
     const s = await specExample(v);
     const prior = (await printed(v)).length;
     await submit(v, s.partyId, [
@@ -4167,7 +4164,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     await submit(v, first.partyId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
     expect(steaksOn((await printed(v)).at(-1)!)).toEqual([three("3\\.000")]);
 
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    await inTx((tx) => setStationPrinting(tx, { ticketGrouping: "separate" }));
     const second = await seated(v);
     await submit(v, second.partyId, [{ release: "fire", lines: [line(v, "steak", "3")] }]);
     expect(steaksOn((await printed(v)).at(-1)!)).toEqual([
@@ -4251,7 +4248,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     expect(ofDish(combined, "K-STEAK")).toEqual([expect.stringMatching(/^2\.000 .*x K-STEAK$/)]);
     expect(ofDish(combined, "K-HAM")).toEqual(["0.375 kg x K-HAM"]);
 
-    await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
+    await inTx((tx) => setStationPrinting(tx, { ticketGrouping: "separate" }));
     const second = await seated(v);
     await submit(v, second.partyId, [
       { release: "fire", lines: [hake("350"), line(v, "steak", "2")] },
@@ -4286,7 +4283,8 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
 });
 
 describe("advance HOLD tickets (Task 6)", () => {
-  const printHeldWork = (on: boolean) => inTx((tx) => writePrintHeldWork(tx, on));
+  const printHeldWork = (on: boolean) =>
+    inTx((tx) => setStationPrinting(tx, { printHeldWork: on }));
 
   /** What every ticket and slip for the party's tab prints under its mark. */
   const head = (v: Venue, s: Seated) => billHead(v, s, s.tabId);
@@ -5005,7 +5003,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       ]);
     });
 
-    it("is the marker, not the setting: a group whose HOLD ticket was queued still fires with a FIRE slip once the setting is off", async () => {
+    it("is the record, not the setting: a group whose HOLD ticket was queued still fires with a FIRE slip once the setting is off", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);
@@ -5019,6 +5017,403 @@ describe("advance HOLD tickets (Task 6)", () => {
         "*** HOLD CANCELLED ***",
         "*** FIRE ***",
       ]);
+    });
+  });
+
+  describe("each station's own held printing", () => {
+    /**
+     * Kitchen (the venue's station, cooking the Steak) prints held work and Bar (its own printer,
+     * making the Fish) does not, as `kitchenOn`/`barOn` say; every other station is off.
+     */
+    async function twoStations({ kitchenOn, barOn }: { kitchenOn: boolean; barOn: boolean }) {
+      const v = await setupVenue();
+      const barId = await seedKitchenStation(db, {
+        locationId: v.cfg.locationId,
+        name: "Bar",
+        isDefault: false,
+      });
+      const barPrinter = await inTx(async (tx) => {
+        await setRoutingCell(
+          tx,
+          v.cfg,
+          { row: { kind: "product", productId: v.productId.fish }, zoneId: null },
+          { kind: "station", stationId: barId },
+        );
+        const printer = await createPrinter(
+          tx,
+          { locationId: v.cfg.locationId },
+          { name: "Barra", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        );
+        await attachPrinterToStation(tx, {
+          locationId: v.cfg.locationId,
+          stationId: barId,
+          printerId: printer.id,
+        });
+        await setStationPrinting(tx, { printHeldWork: true });
+        await setStationPrinting(tx, { printHeldWork: kitchenOn }, [v.stationId]);
+        await setStationPrinting(tx, { printHeldWork: barOn }, [barId]);
+        return printer.id;
+      });
+      const s = await seated(v);
+      const [group] = (
+        await submit(v, s.partyId, [
+          { release: "hold", lines: [line(v, "steak"), line(v, "fish")] },
+        ])
+      ).groups;
+      return { v, s, barId, barPrinter, group: group!.id };
+    }
+
+    async function paperAt(printerId: string): Promise<string[][]> {
+      const jobs = await db
+        .select({ payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, printerId))
+        .orderBy(sql`rowid`);
+      return jobs.map((job) => ticketLines(printedLines(job.payload).join("\n")));
+    }
+
+    async function recorded(groupId: string) {
+      return db
+        .select({
+          groupId: orderGroupHoldStations.groupId,
+          stationId: orderGroupHoldStations.stationId,
+        })
+        .from(orderGroupHoldStations)
+        .where(eq(orderGroupHoldStations.groupId, groupId));
+    }
+
+    const setHeld = (on: boolean, stationId: string) =>
+      inTx((tx) => setStationPrinting(tx, { printHeldWork: on }, [stationId]));
+
+    it("a held group's HOLD ticket prints only at the stations that print held work, and records them", async () => {
+      const { v, s, barPrinter, group } = await twoStations({ kitchenOn: true, barOn: false });
+
+      expect(await printedSince(v, 0)).toEqual([
+        ["*** HOLD ***", ...(await head(v, s)), "GROUP 1", `1.000 x ${DISHES.steak.kitchen}`],
+      ]);
+      expect(await paperAt(barPrinter)).toEqual([]);
+      expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
+      expect((await groupRow(group)).holdPrintedAt).not.toBeNull();
+    });
+
+    it("with no station printing held work, nothing prints and nothing is recorded", async () => {
+      const { v, barPrinter, group } = await twoStations({ kitchenOn: false, barOn: false });
+
+      expect(await printed(v)).toEqual([]);
+      expect(await paperAt(barPrinter)).toEqual([]);
+      expect(await recorded(group)).toEqual([]);
+      expect((await groupRow(group)).holdPrintedAt).toBeNull();
+    });
+
+    it("firing marks FIRE only on the paper of a station that had the HOLD ticket", async () => {
+      const { v, s, barPrinter, group } = await twoStations({ kitchenOn: true, barOn: false });
+
+      await fire(v, s.partyId, group);
+
+      const kitchen = await printedSince(v, 1);
+      expect(kitchen).toHaveLength(1);
+      expect(kitchen[0]![0]).toBe("*** FIRE ***");
+      expect(kitchen[0]).toContain(`1.000 x ${DISHES.steak.kitchen}`);
+      const bar = await paperAt(barPrinter);
+      expect(bar).toHaveLength(1);
+      expect(bar[0]![0]).toBe("Bar");
+      expect(bar[0]).toContain(`1.000 x ${DISHES.fish.kitchen}`);
+      expect(bar[0]!.join("\n")).not.toContain("***");
+    });
+
+    it("a station switched off after its HOLD ticket printed is still fired marked FIRE", async () => {
+      const { v, s, group } = await twoStations({ kitchenOn: true, barOn: false });
+      await setHeld(false, v.stationId);
+
+      await fire(v, s.partyId, group);
+
+      expect((await printedSince(v, 1)).map((job) => job[0])).toEqual(["*** FIRE ***"]);
+    });
+
+    it("a station switched on after the group was held is fired with an ordinary ticket", async () => {
+      const { v, s, barId, barPrinter, group } = await twoStations({
+        kitchenOn: true,
+        barOn: false,
+      });
+      await setHeld(true, barId);
+
+      await fire(v, s.partyId, group);
+
+      const bar = await paperAt(barPrinter);
+      expect(bar).toHaveLength(1);
+      expect(bar[0]![0]).toBe("Bar");
+      expect(bar[0]!.join("\n")).not.toContain("***");
+      expect((await printedSince(v, 1)).map((job) => job[0])).toEqual(["*** FIRE ***"]);
+    });
+
+    it("Fire now on one held dish marks FIRE only at a station that had the HOLD ticket", async () => {
+      const { v, s, barPrinter, group } = await twoStations({ kitchenOn: true, barOn: false });
+      const steak = await lineOf(s, group, "steak", v);
+      const fish = await lineOf(s, group, "fish", v);
+
+      await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)));
+      const kitchenFire = (await printedSince(v, 1)).filter((job) => job[0] === "*** FIRE ***");
+      expect(kitchenFire).toHaveLength(1);
+      expect(kitchenFire[0]).toContain(`1.000 x ${DISHES.steak.kitchen}`);
+
+      const barBefore = (await paperAt(barPrinter)).length;
+      await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, fish.id, await args(s.partyId)));
+      const bar = (await paperAt(barPrinter)).slice(barBefore);
+      expect(bar.map((job) => job[0])).not.toContain("*** FIRE ***");
+      const fishTicket = bar.filter((job) => job.includes(`1.000 x ${DISHES.fish.kitchen}`));
+      expect(fishTicket).toHaveLength(1);
+      expect(fishTicket[0]![0]).toBe("Bar");
+    });
+
+    describe("HOLD corrections from group changes", () => {
+      /**
+       * Kitchen (Steak, the venue's printer) prints held work, Bar (Fish, its own printer) does
+       * not, and Screen (Flan, no printer) does; one held group of `dishes` is submitted.
+       */
+      async function threeStations(dishes: Dish[] = ["steak", "fish", "flan"]) {
+        const v = await setupVenue();
+        const barId = await seedKitchenStation(db, {
+          locationId: v.cfg.locationId,
+          name: "Bar",
+          isDefault: false,
+        });
+        const screenId = await seedKitchenStation(db, {
+          locationId: v.cfg.locationId,
+          name: "Screen",
+          isDefault: false,
+        });
+        const barPrinter = await inTx(async (tx) => {
+          for (const [dish, stationId] of [
+            ["fish", barId],
+            ["flan", screenId],
+          ] as const)
+            await setRoutingCell(
+              tx,
+              v.cfg,
+              { row: { kind: "product", productId: v.productId[dish] }, zoneId: null },
+              { kind: "station", stationId },
+            );
+          const printer = await createPrinter(
+            tx,
+            { locationId: v.cfg.locationId },
+            { name: "Barra", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+          );
+          await attachPrinterToStation(tx, {
+            locationId: v.cfg.locationId,
+            stationId: barId,
+            printerId: printer.id,
+          });
+          await setStationPrinting(tx, { printHeldWork: true });
+          await setStationPrinting(tx, { printHeldWork: false }, [barId]);
+          return printer.id;
+        });
+        const s = await seated(v);
+        const [group] = (
+          await submit(v, s.partyId, [
+            { release: "hold", lines: dishes.map((dish) => line(v, dish)) },
+          ])
+        ).groups;
+        return { v, s, barId, screenId, barPrinter, group: group!.id };
+      }
+
+      const noticeKinds = (v: Venue, stationId: string) =>
+        inTx(async (tx) =>
+          (await listStationNotices(tx, v.cfg, stationId)).map((notice) => ({
+            kind: notice.kind,
+            direction: notice.direction,
+          })),
+        );
+
+      const join = (v: Venue, s: Seated, group: string, dishes: Dish[]) =>
+        submit(v, s.partyId, [{ release: "hold", lines: dishes.map((dish) => line(v, dish)) }], {
+          joinGroupId: group,
+        });
+
+      it("removing a held dish corrects the HOLD ticket only at a station recorded for the group, and tells every station's screen", async () => {
+        const { v, s, barId, screenId, barPrinter, group } = await threeStations();
+        for (const dish of ["steak", "fish", "flan"] as const) {
+          const removed = await lineOf(s, group, dish, v);
+          await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, removed.lineNo, undefined, MIA));
+        }
+
+        expect(await printedSince(v, 1)).toEqual([
+          [
+            "*** HOLD CANCELLED ***",
+            ...(await head(v, s)),
+            "GROUP 1",
+            `1.000 x ${DISHES.steak.kitchen}`,
+          ],
+        ]);
+        expect(await paperAt(barPrinter)).toEqual([]);
+        expect(await noticeKinds(v, barId)).toEqual([{ kind: "void", direction: null }]);
+        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "void", direction: null }]);
+      });
+
+      it("moving a held dish between printed groups takes it off and adds it only at stations recorded for each group", async () => {
+        const { v, s, barId, screenId, barPrinter, group } = await threeStations();
+        const [second] = (
+          await submit(v, s.partyId, [
+            { release: "hold", lines: [line(v, "steak"), line(v, "fish"), line(v, "flan")] },
+          ])
+        ).groups;
+        const moving = await Promise.all(
+          (["steak", "fish", "flan"] as const).map((dish) => lineOf(s, group, dish, v)),
+        );
+
+        await move(
+          v,
+          s.partyId,
+          moving.map((row) => ({ lineId: row.id, quantity: "1" })),
+          { groupId: second!.id },
+        );
+
+        const header = await head(v, s);
+        expect(await printedSince(v, 2)).toEqual([
+          ["*** HOLD CHANGED ***", ...header, "GROUP 1", `-1.000 x ${DISHES.steak.kitchen}`],
+          ["*** HOLD CHANGED ***", ...header, "GROUP 2", `+1.000 x ${DISHES.steak.kitchen}`],
+        ]);
+        expect(await paperAt(barPrinter)).toEqual([]);
+        const removedThenAdded = [
+          { kind: "changed", direction: "removed" },
+          { kind: "changed", direction: "added" },
+        ];
+        expect(await noticeKinds(v, barId)).toEqual(removedThenAdded);
+        expect(await noticeKinds(v, screenId)).toEqual(removedThenAdded);
+        expect(await recorded(second!.id)).toEqual([
+          { groupId: second!.id, stationId: v.stationId },
+        ]);
+      });
+
+      it("a station with no printer is not recorded for a dish joining there", async () => {
+        const { v, s, screenId, group } = await threeStations(["steak", "fish"]);
+
+        await join(v, s, group, ["flan"]);
+
+        expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
+        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "changed", direction: "added" }]);
+      });
+
+      it("firing one held dish takes it off the HOLD ticket only at a station recorded for the group", async () => {
+        const { v, s, barPrinter, group } = await threeStations();
+        const steak = await lineOf(s, group, "steak", v);
+        const fish = await lineOf(s, group, "fish", v);
+
+        await inTx(async (tx) =>
+          fireHeldLine(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)),
+        );
+        await inTx(async (tx) =>
+          fireHeldLine(tx, v.cfg, s.partyId, fish.id, await args(s.partyId)),
+        );
+
+        expect((await printedSince(v, 1))[0]).toEqual([
+          "*** HOLD CHANGED ***",
+          ...(await head(v, s)),
+          "GROUP 1",
+          `-1.000 x ${DISHES.steak.kitchen}`,
+        ]);
+        const bar = await paperAt(barPrinter);
+        expect(bar).toHaveLength(1);
+        expect(bar[0]!.join("\n")).not.toContain("***");
+      });
+
+      it("a held edit's quantity change corrects the HOLD ticket only at a station recorded for the group", async () => {
+        const { v, s, barId, barPrinter, group } = await threeStations();
+        const steak = await lineOf(s, group, "steak", v);
+        const fish = await lineOf(s, group, "fish", v);
+
+        await changeLine(v, s.tabId, fish.lineNo, { quantity: "2" }, MIA);
+        await changeLine(v, s.tabId, steak.lineNo, { quantity: "2" }, MIA);
+
+        expect(await printedSince(v, 1)).toEqual([
+          [
+            "*** HOLD CHANGED ***",
+            ...(await head(v, s)),
+            "GROUP 1",
+            `+1.000 x ${DISHES.steak.kitchen}`,
+          ],
+        ]);
+        expect(await paperAt(barPrinter)).toEqual([]);
+        expect(await noticeKinds(v, barId)).toEqual([{ kind: "changed", direction: "added" }]);
+      });
+
+      it("a held dish moved into a printed group holding none of a station's held work gets HOLD CHANGED there, and records it", async () => {
+        const { v, s, barId, barPrinter, group } = await threeStations();
+        const [second] = (
+          await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak")] }])
+        ).groups;
+        await setHeld(true, barId);
+        const fish = await lineOf(s, group, "fish", v);
+
+        await move(v, s.partyId, [{ lineId: fish.id, quantity: "1" }], { groupId: second!.id });
+
+        const bar = await paperAt(barPrinter);
+        expect(bar).toHaveLength(1);
+        expect(bar[0]![0]).toBe("*** HOLD CHANGED ***");
+        expect(bar[0]).toContain("GROUP 2");
+        expect(bar[0]).toContain(`+1.000 x ${DISHES.fish.kitchen}`);
+        expect((await recorded(second!.id)).map((row) => row.stationId).sort()).toEqual(
+          [v.stationId, barId].sort(),
+        );
+        expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
+      });
+
+      it("a station switched off after its HOLD ticket printed still gets +N for a joining dish", async () => {
+        const { v, s, screenId, barPrinter, group } = await threeStations();
+        await setHeld(false, v.stationId);
+
+        await join(v, s, group, ["steak", "fish", "flan"]);
+
+        expect(await printedSince(v, 1)).toEqual([
+          [
+            "*** HOLD CHANGED ***",
+            ...(await head(v, s)),
+            "GROUP 1",
+            `+1.000 x ${DISHES.steak.kitchen}`,
+          ],
+        ]);
+        expect(await paperAt(barPrinter)).toEqual([]);
+        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "changed", direction: "added" }]);
+      });
+
+      it("a station switched on after the group was held gets nothing for a joining dish, and its whole part prints unmarked at the fire", async () => {
+        const { v, s, barId, screenId, barPrinter, group } = await threeStations();
+        await setHeld(true, barId);
+
+        await join(v, s, group, ["fish", "flan"]);
+
+        expect(await paperAt(barPrinter)).toEqual([]);
+        expect(await recorded(group)).toEqual([{ groupId: group, stationId: v.stationId }]);
+        expect(await noticeKinds(v, screenId)).toEqual([{ kind: "changed", direction: "added" }]);
+
+        await fire(v, s.partyId, group);
+
+        const bar = await paperAt(barPrinter);
+        expect(bar).toHaveLength(1);
+        expect(bar[0]![0]).toBe("Bar");
+        expect(bar[0]!.join("\n")).not.toContain("***");
+        expect(bar[0]!.filter((row) => row.endsWith(` x ${DISHES.fish.kitchen}`))).toEqual([
+          `2.000 x ${DISHES.fish.kitchen}`,
+        ]);
+      });
+
+      it("a station switched on after the group was held, holding none of its held work, gets HOLD CHANGED for a joining dish and is recorded", async () => {
+        const { v, s, barId, barPrinter, group } = await threeStations(["steak", "flan"]);
+        await setHeld(true, barId);
+
+        await join(v, s, group, ["fish"]);
+
+        const bar = await paperAt(barPrinter);
+        expect(bar).toHaveLength(1);
+        expect(bar[0]![0]).toBe("*** HOLD CHANGED ***");
+        expect(bar[0]).toContain(`+1.000 x ${DISHES.fish.kitchen}`);
+        expect((await recorded(group)).map((row) => row.stationId).sort()).toEqual(
+          [v.stationId, barId].sort(),
+        );
+
+        await fire(v, s.partyId, group);
+
+        expect((await paperAt(barPrinter)).slice(1).map((job) => job[0])).toEqual(["*** FIRE ***"]);
+      });
     });
   });
 
@@ -5322,7 +5717,7 @@ describe("Fire now on one held dish", () => {
       isDefault: false,
     });
     await inTx(async (tx) => {
-      await writePrintHeldWork(tx, printHeld);
+      await setStationPrinting(tx, { printHeldWork: printHeld });
       await setRoutingCell(
         tx,
         v.cfg,

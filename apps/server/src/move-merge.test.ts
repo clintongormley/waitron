@@ -35,14 +35,9 @@ import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { listStationQueues, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import {
-  kitchenNotices,
-  setRoutingCell,
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  writePrintMovedSlips,
-} from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -552,6 +547,21 @@ async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[])
   });
 }
 
+/** The id of the active station named `name` at the venue's location. */
+async function activeStationId(tx: Transaction, v: PartyVenue, name: string): Promise<string> {
+  const [row] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(
+        eq(kitchenStations.locationId, v.cfg.locationId),
+        eq(kitchenStations.name, name),
+        eq(kitchenStations.active, true),
+      ),
+    );
+  return row!.id;
+}
+
 describe("a MOVED slip per order per station", () => {
   it("prints one slip for each order at each station, listing that order's dishes there", async () => {
     const v = await setupPartyVenue(db);
@@ -1021,13 +1031,17 @@ async function burgerAndHeldPaella(v: PartyVenue, partyId: string, billId: strin
 }
 
 describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ruling 5)", () => {
-  const printHeldWork = (v: PartyVenue, on: boolean) => inTx(v, (tx) => writePrintHeldWork(tx, on));
-  afterEach(() => withTransaction(db, (tx) => writePrintHeldWork(tx, false)));
+  const printHeldWork = (v: PartyVenue, on: boolean) =>
+    inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: on }));
+  afterEach(() => withTransaction(db, (tx) => setStationPrinting(tx, { printHeldWork: false })));
 
   it("a party with a fired Burger and a held group 2 Paella on a HOLD ticket moving Mesa 111 to 112 prints one Grill slip listing both, the Paella under HOLD and GROUP 2", async () => {
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const mesa112 = await v.table("Mesa 112");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 111"));
     await burgerAndHeldPaella(v, partyId, tabId);
@@ -1053,10 +1067,73 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     ]);
   });
 
+  it("a MOVED slip lists under HOLD only the held dishes of a station recorded for the group", async () => {
+    const v = await setupPartyVenue(db);
+    const kitchen = await stationWithPrinter(v, "Kitchen", ["Burger"]);
+    const bar = await stationWithPrinter(v, "Bar", ["Paella"]);
+    const screenId = await inTx(v, async (tx) => {
+      const station = await createStation(tx, v.cfg, { name: "Screen" });
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
+        { kind: "station", stationId: station.id },
+      );
+      await setStationPrinting(tx, { printHeldWork: true }, [
+        await activeStationId(tx, v, "Kitchen"),
+      ]);
+      return station.id;
+    });
+    const mesa122 = await v.table("Mesa 122");
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 121"));
+    const line = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [line("Burger"), line("Paella"), line("Flan")], release: "hold" }],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const numbers = await numbersOf([tabId]);
+    const before = {
+      kitchen: (await printedBy(kitchen)).length,
+      bar: (await printedBy(bar)).length,
+    };
+    expect(before).toEqual({ kitchen: 1, bar: 0 });
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa122, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    expect(await slipsSince(kitchen, before.kitchen)).toEqual([
+      movedSlip("Kitchen", `Pedido ${numbers.get(tabId)}`, "Mesa 121", "Mesa 122", [
+        "HOLD",
+        "GROUP 1",
+        "1.000 x BURG",
+      ]),
+    ]);
+    expect(await slipsSince(bar, before.bar)).toEqual([]);
+    expect(byDish(await noticesOf([tabId]))).toEqual([
+      ["BURG", tabId, "Mesa 122"],
+      ["FLAN", tabId, "Mesa 122"],
+      ["PAELLA", tabId, "Mesa 122"],
+    ]);
+    expect(
+      await db
+        .select({ kind: kitchenNotices.kind, lineName: kitchenNotices.lineName })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.stationId, screenId)),
+    ).toEqual([{ kind: "moved", lineName: "FLAN" }]);
+  });
+
   it("lists each held group on a HOLD ticket under its own GROUP line, its dishes in line order", async () => {
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const mesa119 = await v.table("Mesa 119");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 118"));
     const line = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
@@ -1114,6 +1191,9 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const { partyId, tabId } = await seat(v, await v.table("Mesa 115"));
     await burgerAndHeldPaella(v, partyId, tabId);
     const before = (await printedBy(grill)).length;
@@ -1150,6 +1230,9 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const v = await setupPartyVenue(db);
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+    );
     const { partyId, tabId } = await seat(v, await v.table("Mesa 117"));
     await burgerAndHeldPaella(v, partyId, tabId);
     const second = await split(v, partyId, tabId, [1]);
@@ -1178,19 +1261,22 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
 describe("a MOVED slip lays out each line by the ticket grouping and never adds two lines together (§4)", () => {
   afterEach(() =>
     withTransaction(db, async (tx) => {
-      await writeKitchenTicketGrouping(tx, "combined");
-      await writePrintHeldWork(tx, false);
+      await setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: false });
     }),
   );
   const dishLines = (lines: readonly string[]) => lines.filter((text) => / x [A-Z]+$/.test(text));
 
   it("with separate quantities, a fired 3 Burger and a held 2 Paella print one entry of 1 each, as their tickets did", async () => {
     const v = await setupPartyVenue(db);
-    await inTx(v, async (tx) => {
-      await writeKitchenTicketGrouping(tx, "separate");
-      await writePrintHeldWork(tx, true);
-    });
+    await inTx(v, (tx) =>
+      setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }),
+    );
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await inTx(v, async (tx) =>
+      setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }, [
+        await activeStationId(tx, v, "Grill"),
+      ]),
+    );
     const mesa122 = await v.table("Mesa 122");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 121"));
     const tickets = (await printedBy(grill)).length;
@@ -1369,14 +1455,23 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
   });
 });
 
-describe("the venue's print-MOVED-slips setting", () => {
-  afterEach(() => withTransaction(db, (tx) => writePrintMovedSlips(tx, true)));
-
-  /** A party at Mesa 21 with a fired Burger at the Grill; Move guests takes it to Mesa 22. */
-  async function moveGuestsWithBurger(on: boolean) {
+describe("a station's print-MOVED-slips choice", () => {
+  /**
+   * A party at Mesa 21 with a fired Burger at the Grill; Move guests takes it to Mesa 22. `null`
+   * leaves the Grill's choice never set.
+   */
+  async function moveGuestsWithBurger(on: boolean | null) {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
-    await inTx(v, (tx) => writePrintMovedSlips(tx, on));
+    await inTx(v, async (tx) => {
+      const id = await activeStationId(tx, v, "Grill");
+      if (on === null)
+        await tx
+          .update(kitchenStations)
+          .set({ printMovedSlips: null })
+          .where(eq(kitchenStations.id, id));
+      else await setStationPrinting(tx, { printMovedSlips: on }, [id]);
+    });
     const mesa21 = await v.table("Mesa 21");
     const mesa22 = await v.table("Mesa 22");
     const { partyId, tabId } = await seat(v, mesa21);
@@ -1411,6 +1506,14 @@ describe("the venue's print-MOVED-slips setting", () => {
     ]);
   });
 
+  it("a station whose MOVED slips choice was never set prints MOVED slips", async () => {
+    const { slips } = await moveGuestsWithBurger(null);
+
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).toContain("*** MOVIDO ***");
+    expect(slips[0]).toContain("De: Mesa 21\nA:  Mesa 22\n");
+  });
+
   it("off, a VOID still prints its correction slip", async () => {
     const { v, grill, tabId } = await moveGuestsWithBurger(false);
     const printed = (await printedBy(grill)).length;
@@ -1440,8 +1543,6 @@ describe("the venue's print-MOVED-slips setting", () => {
 });
 
 describe("a prep station's own print-MOVED-slips choice", () => {
-  afterEach(() => withTransaction(db, (tx) => writePrintMovedSlips(tx, true)));
-
   async function stationIdOf(v: PartyVenue, name: string): Promise<string> {
     const [station] = await db
       .select({ id: kitchenStations.id })
@@ -1450,23 +1551,26 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     return station!.id;
   }
 
-  async function stationPrints(v: PartyVenue, name: string, printMovedSlips: boolean | null) {
+  async function stationPrints(v: PartyVenue, name: string, printMovedSlips: boolean) {
     const id = await stationIdOf(v, name);
     await inTx(v, (tx) => updateStation(tx, v.cfg, id, { printMovedSlips }));
   }
 
-  /** Burger at the Grill and Flan at Postres, both fired at Mesa 31; Move guests takes them to Mesa 32. */
-  async function moveGuestsWithBurgerAndFlan(
-    venue: boolean,
-    grill: boolean | null,
-    postres: boolean | null,
-  ) {
+  /**
+   * Burger at the Grill and Flan at Postres, both fired at Mesa 31; Move guests takes them to Mesa
+   * 32. A `null` for Postres leaves its choice never set.
+   */
+  async function moveGuestsWithBurgerAndFlan(grill: boolean, postres: boolean | null) {
     const v = await setupPartyVenue(db);
     const grillPrinter = await stationWithPrinter(v, "Grill", ["Burger"]);
     const postresPrinter = await stationWithPrinter(v, "Postres", ["Flan"]);
-    await inTx(v, (tx) => writePrintMovedSlips(tx, venue));
     await stationPrints(v, "Grill", grill);
-    await stationPrints(v, "Postres", postres);
+    if (postres === null) {
+      const id = await stationIdOf(v, "Postres");
+      await inTx(v, (tx) =>
+        tx.update(kitchenStations).set({ printMovedSlips: null }).where(eq(kitchenStations.id, id)),
+      );
+    } else await stationPrints(v, "Postres", postres);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 31"));
     await orderForParty(v, partyId, ["Burger", "Flan"], tabId);
     const printed = {
@@ -1487,8 +1591,8 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     };
   }
 
-  it("venue on, Grill off, Postres following: Move guests prints at Postres only and records notices at both", async () => {
-    const { tabId, grill, postres } = await moveGuestsWithBurgerAndFlan(true, false, null);
+  it("Grill off and Postres never chosen: Move guests prints at Postres only and records notices at both", async () => {
+    const { tabId, grill, postres } = await moveGuestsWithBurgerAndFlan(false, null);
 
     expect(grill).toEqual([]);
     expect(postres).toHaveLength(1);
@@ -1500,8 +1604,8 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     ]);
   });
 
-  it("venue off, Grill on: Move guests prints at the Grill only", async () => {
-    const { grill, postres } = await moveGuestsWithBurgerAndFlan(false, true, null);
+  it("Grill on and Postres off: Move guests prints at the Grill only", async () => {
+    const { grill, postres } = await moveGuestsWithBurgerAndFlan(true, false);
 
     expect(grill).toHaveLength(1);
     expect(grill[0]).toContain("*** MOVIDO ***");
@@ -1511,7 +1615,6 @@ describe("a prep station's own print-MOVED-slips choice", () => {
 
   it("after Merge bills with every station off, no slip prints and the station queue still shows the merged bill's number", async () => {
     const v = await setupPartyVenue(db);
-    await inTx(v, (tx) => writePrintMovedSlips(tx, true));
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await stationPrints(v, "Grill", false);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 33"));

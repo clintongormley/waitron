@@ -14,7 +14,7 @@ import {
 import { adjustments } from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { listStationNotices, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
+import { listStationNotices, setRoutingCell } from "@waitron/venue-service";
 import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { createStation } from "./kitchen.js";
@@ -28,6 +28,7 @@ import {
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const AT = "2026-10-17T10:00:00.000Z";
 let venue: AdjustmentVenue;
@@ -230,7 +231,7 @@ describe("off-bill cancellation beside charged service cancellation", () => {
   it.each(["fire", "hold"] as const)(
     "removes all remaining %s kitchen work without deleting the cancelled charge or inventing serving",
     async (release) => {
-      await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
       const order = await fixture(3, 2, 1, release);
       const before = await snapshot(order);
       const args = await ask(order, "1");

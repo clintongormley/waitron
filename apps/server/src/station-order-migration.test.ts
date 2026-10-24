@@ -11,7 +11,7 @@ import {
   withTransaction,
   type Database,
 } from "@waitron/db";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import {
@@ -24,7 +24,7 @@ import { createPrinter } from "@waitron/printing";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { shifts } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
-import { createStation, listStations } from "./kitchen.js";
+import { listStations } from "./kitchen.js";
 import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -37,6 +37,10 @@ const retirement = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({
   tag.endsWith("_retire_station_order"),
 );
 if (retirement === undefined) throw new Error("the station-order retirement is missing");
+const printing = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+  tag.endsWith("_station_printing_choices"),
+);
+if (printing === undefined) throw new Error("the station printing choices migration is missing");
 
 // Every set cut at the same moment, so no set references a table a later core migration made.
 function setsAsOf(name: string, keep: (when: number) => boolean): VenueMigrationOptions[] {
@@ -106,10 +110,14 @@ async function populate(db: Database) {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const stationId = await seedKitchenStation(db, { locationId, name: "Zulu" });
+  const stationId = "retained-station";
+  await db.execute(
+    sql`insert into kitchen_stations (id, location_id, name, is_default, created_at) values (${stationId}, ${locationId}, 'Zulu', 1, '2026-10-17T09:00:00.000Z')`,
+  );
   await withTransaction(db, async (tx) => {
-    await createStation(tx, cfg, { name: "Bar" });
-    await createStation(tx, cfg, { name: "Alpha" });
+    await tx.execute(
+      sql`insert into kitchen_stations (id, location_id, name, colour, created_at) values ('retained-bar', ${locationId}, 'Bar', 'orange', '2026-10-17T09:00:00.000Z'), ('retained-alpha', ${locationId}, 'Alpha', 'amber', '2026-10-17T09:00:00.000Z')`,
+    );
     await tx.execute(
       sql`insert into kitchen_station_timing (station_id, warm_after_minutes) values (${stationId}, 3)`,
     );
@@ -226,5 +234,9 @@ it("A725 drops only station order with populated cascading and restrictive child
   });
   expect(db.all(sql`pragma foreign_key_check`)).toEqual([]);
   expect(db.all(sql`pragma integrity_check`)).toEqual([{ integrity_check: "ok" }]);
+  await applyMigrations(
+    dirname(file!.file),
+    setsAsOf("printing", (when) => when <= retirement.when || when === printing.when),
+  );
   expect((await listStations(db, cfg)).map(({ name }) => name)).toEqual(["Alpha", "Bar", "Zulu"]);
 });

@@ -3,11 +3,16 @@ import { sendLines, setLineCourse } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  kitchenStations,
+  printJobs,
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readPrintHeldWork, writePrintHeldWork } from "@waitron/venue-service";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
@@ -17,6 +22,7 @@ import { fireGroup, readCurrentOrders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -116,8 +122,12 @@ describe("releasing split-off extras", () => {
     async (product) => {
       const venue = await setupSplitExtrasVenue();
       await withTransaction(db, async (tx) => {
-        await writePrintHeldWork(tx, true);
-        expect(await readPrintHeldWork(tx)).toBe(true);
+        await setStationPrinting(tx, { printHeldWork: true });
+        const stations = await tx
+          .select({ printHeldWork: kitchenStations.printHeldWork })
+          .from(kitchenStations);
+        expect(stations.length).toBeGreaterThan(0);
+        expect(stations.every((station) => station.printHeldWork)).toBe(true);
         const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
           operatorId: OPERATOR,
           groups: [{ lines: [pick(venue, product)], release: "hold" }],

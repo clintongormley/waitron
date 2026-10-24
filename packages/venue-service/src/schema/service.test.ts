@@ -191,7 +191,7 @@ const EXPECTED: Record<
   service_settings: {
     table: serviceSettings,
     foreignKeys: [],
-    checks: ["service_settings_singleton_ck", "service_settings_kitchen_ticket_grouping_ck"],
+    checks: ["service_settings_singleton_ck"],
     indexes: [],
     uniqueConstraints: [],
     primaryKeys: [],

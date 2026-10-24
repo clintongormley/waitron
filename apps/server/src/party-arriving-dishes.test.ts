@@ -18,7 +18,6 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { createCourse } from "./kitchen.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
@@ -50,6 +49,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import "./errors.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 const MOVER = "cccccccc-0000-4000-8000-000000000002";
 const FIRER = "cccccccc-0000-4000-8000-000000000003";
@@ -909,7 +909,8 @@ describe("an arriving held group's advance HOLD ticket", () => {
     }));
   }
 
-  const printHeldWork = (on: boolean) => inTx(v, (tx) => writePrintHeldWork(tx, on));
+  const printHeldWork = (on: boolean) =>
+    inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: on }));
 
   async function heldGroupOf(partyId: string) {
     const [group] = await inTx(v, (tx) =>

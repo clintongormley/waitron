@@ -43,7 +43,7 @@ import {
   type ExpoOrder,
 } from "./working-order.js";
 import { partyFamily, readFamilyBills, setPartyGuests } from "./parties.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup, recordHeldPaper } from "./order-groups.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { createZone } from "./testing/service-zone.js";
 import { combineParties } from "./testing/table-action-fixture.js";
@@ -297,6 +297,16 @@ describe("finishing a table by sending the food still to come to the counter", (
       .update(orderGroups)
       .set({ holdPrintedAt: new Date().toISOString() })
       .where(eq(orderGroups.partyId, t.partyId));
+    await inTx(venue, async (tx) => {
+      const held = await tx
+        .selectDistinct({ groupId: orderGroups.id, stationId: ticketItems.stationId })
+        .from(orderGroups)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.groupId, orderGroups.id))
+        .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(eq(orderGroups.partyId, t.partyId));
+      for (const { groupId, stationId } of held)
+        await recordHeldPaper(tx, groupId, new Set([stationId!]));
+    });
     const body = await collect(t.partyId, await bodyFor(t));
     const lastJob = lastJobRow();
 

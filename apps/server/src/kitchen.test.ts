@@ -227,8 +227,10 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
-        printMovedSlips: null,
+        printMovedSlips: true,
         colour: "orange",
+        ticketGrouping: "combined",
+        printHeldWork: false,
         ...defaultThresholds,
       },
       {
@@ -237,8 +239,10 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
-        printMovedSlips: null,
+        printMovedSlips: true,
         colour: "amber",
+        ticketGrouping: "combined",
+        printHeldWork: false,
         ...defaultThresholds,
       },
       {
@@ -247,11 +251,77 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
-        printMovedSlips: null,
+        printMovedSlips: true,
         colour: "red",
+        ticketGrouping: "combined",
+        printHeldWork: false,
         ...defaultThresholds,
       },
     ]);
+  });
+
+  it("a new station groups identical dishes, prints no held work in advance and prints MOVED slips", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    const [row] = await db
+      .select({
+        ticketGrouping: kitchenStations.ticketGrouping,
+        printHeldWork: kitchenStations.printHeldWork,
+        printMovedSlips: kitchenStations.printMovedSlips,
+      })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id));
+    expect(row).toEqual({
+      ticketGrouping: "combined",
+      printHeldWork: false,
+      printMovedSlips: true,
+    });
+    expect(
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
+    ).toMatchObject({ ticketGrouping: "combined", printHeldWork: false, printMovedSlips: true });
+  });
+
+  it("a station stored with no MOVED slips choice answers that it prints them", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    await db.execute(sql`update kitchen_stations set print_moved_slips = null where id = ${id}`);
+    const [row] = await db
+      .select({ printMovedSlips: kitchenStations.printMovedSlips })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id));
+    expect(row!.printMovedSlips).toBeNull();
+    expect(
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
+    ).toMatchObject({ printMovedSlips: true });
+  });
+
+  it("updateStation writes a station's three printing choices and leaves the others", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    const { id: other } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
+    const before = await asApp(cfg, (tx) => listStations(tx, cfg));
+    await asApp(cfg, (tx) =>
+      updateStation(tx, cfg, id, {
+        ticketGrouping: "separate",
+        printHeldWork: true,
+        printMovedSlips: false,
+      }),
+    );
+    const after = await asApp(cfg, (tx) => listStations(tx, cfg));
+    expect(after.find((s) => s.id === id)).toEqual({
+      ...before.find((s) => s.id === id),
+      ticketGrouping: "separate",
+      printHeldWork: true,
+      printMovedSlips: false,
+    });
+    expect(after.find((s) => s.id === other)).toEqual(before.find((s) => s.id === other));
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { printHeldWork: false }));
+    expect((await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id)).toEqual({
+      ...before.find((s) => s.id === id),
+      ticketGrouping: "separate",
+      printHeldWork: false,
+      printMovedSlips: false,
+    });
   });
 
   it("createStation with isDefault adopts the station as THE default, clearing any prior (single default kept)", async () => {
@@ -282,8 +352,10 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
-        printMovedSlips: null,
+        printMovedSlips: true,
         colour: "red",
+        ticketGrouping: "combined",
+        printHeldWork: false,
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,

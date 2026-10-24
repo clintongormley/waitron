@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { VenueServiceApi, VenueServiceSettingsView } from "./client.js";
 import type { ServiceSettingsPanel } from "./service-settings-panel.js";
 import "./service-settings-panel.js";
@@ -16,9 +14,6 @@ afterEach(() => {
 
 const model: VenueServiceSettingsView = {
   settings: { editSentLines: true },
-  kitchenTicketGrouping: "combined",
-  printHeldWork: false,
-  printMovedSlips: true,
 };
 
 async function mount(api: VenueServiceApi, readOnly = false): Promise<ServiceSettingsPanel> {
@@ -43,7 +38,7 @@ it("shows the settings panel to a read-only viewer with every control disabled",
   expect(api.loadSettingsReadOnly).toHaveBeenCalledTimes(1);
   expect(kitchen.shadowRoot!.querySelector('[data-test="kitchen-changes"]')).not.toBeNull();
   for (const control of kitchen.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
-    "wt-switch, wt-combobox",
+    "wt-switch",
   )) {
     expect(control.disabled).toBe(true);
   }
@@ -54,7 +49,6 @@ it("refuses synthetic changes from a read-only viewer even when a control emits 
   const api = {
     loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
     saveSettings: vi.fn(),
-    saveKitchenTicketGrouping: vi.fn(),
   } as unknown as VenueServiceApi;
   const kitchen = await mount(api, true);
   const change = (root: ShadowRoot, selector: string, detail: object) => {
@@ -62,12 +56,8 @@ it("refuses synthetic changes from a read-only viewer even when a control emits 
     control.dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
   };
   change(kitchen.shadowRoot!, 'wt-switch[name="editSentLines"]', { checked: false });
-  change(kitchen.shadowRoot!, 'wt-combobox[name="kitchenTicketGrouping"]', {
-    value: "separate",
-  });
   await settle(kitchen);
   expect(api.saveSettings).not.toHaveBeenCalled();
-  expect(api.saveKitchenTicketGrouping).not.toHaveBeenCalled();
 });
 
 async function settle(el: ServiceSettingsPanel) {
@@ -76,49 +66,8 @@ async function settle(el: ServiceSettingsPanel) {
   await el.updateComplete;
 }
 
-type SettingBox = HTMLElement & {
-  value: string;
-  disabled: boolean;
-  label: string;
-  hint: string;
-  error: string;
-  options: { value: string; label: string }[];
-};
-
-async function clickChosenRow(box: HTMLElement): Promise<number> {
-  const sent = vi.fn();
-  box.addEventListener("wt-change", sent);
-  await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-  const row = box.shadowRoot!.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
-  expect(row).not.toBeNull();
-  await userEvent.click(row!);
-  box.removeEventListener("wt-change", sent);
-  return sent.mock.calls.length;
-}
-
-async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
-  const heard = vi.fn();
-  document.addEventListener("wt-change", heard);
-  try {
-    await act();
-  } finally {
-    document.removeEventListener("wt-change", heard);
-  }
-  return heard.mock.calls.length;
-}
-
 function pageAlert(el: ServiceSettingsPanel) {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')!.textContent!.trim();
-}
-
-type Dropdown = SettingBox & {
-  search: string;
-  placeholder: string;
-};
-function dropdown(root: ParentNode, name: string) {
-  const box = root.querySelector<Dropdown>(`wt-combobox[name="${name}"]`)!;
-  expect(box, name).not.toBeNull();
-  return box;
 }
 
 describe("the setting that allows changes to items already sent to the kitchen", () => {
@@ -251,376 +200,19 @@ describe("the setting that allows changes to items already sent to the kitchen",
   });
 });
 
-describe("the setting for how identical dishes print on a kitchen ticket", () => {
-  function groupingSelect(el: ServiceSettingsPanel) {
-    const select = el.shadowRoot!.querySelector<SettingBox>(
-      'wt-combobox[name="kitchenTicketGrouping"]',
-    )!;
-    expect(select).not.toBeNull();
-    return select;
-  }
-  function beside(el: ServiceSettingsPanel) {
-    return groupingSelect(el).error || undefined;
-  }
-  function stored(kitchenTicketGrouping: "combined" | "separate"): VenueServiceSettingsView {
-    return { ...structuredClone(model), kitchenTicketGrouping };
-  }
-  async function choose(el: ServiceSettingsPanel, value: string) {
-    await chooseOption(groupingSelect(el), value);
-    await settle(el);
-  }
-
-  // Fails if the select stops reading the stored value, or loses its label, choices or hint.
-  it("shows the stored value on the kitchen panel, combined by default", async () => {
-    const combined = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    const select = groupingSelect(combined);
-    expect(select.closest('[data-test="kitchen-changes"]')).not.toBeNull();
-    expect(select.label).toContain("Identical dishes on a kitchen ticket");
-    expect(select.options.map((option) => [option.value, option.label])).toEqual([
-      ["combined", "One line: 3 x Burger"],
-      ["separate", "A line each: 1 x Burger, three times"],
-    ]);
-    expect(select.value).toBe("combined");
-    expect(select.hint).toContain("reprints");
-    const separate = await mount({
-      loadSettings: vi.fn().mockResolvedValue(stored("separate")),
-    } as unknown as VenueServiceApi);
-    expect(groupingSelect(separate).value).toBe("separate");
-  });
-
-  // Fails if the select sends the old value rather than the new one, or stays usable mid-save.
-  it("saves the chosen value straight away and is disabled until the save finishes", async () => {
-    let finish!: () => void;
-    const api = {
-      loadSettings: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(stored("separate")),
-      saveKitchenTicketGrouping: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await choose(el, "separate");
-    expect(api.saveKitchenTicketGrouping).toHaveBeenCalledWith("separate");
-    expect(groupingSelect(el).disabled).toBe(true);
-    // A synthetic event can reach a disabled select; it must not start a second write.
-    await choose(el, "combined");
-    expect(api.saveKitchenTicketGrouping).toHaveBeenCalledTimes(1);
-    finish();
-    await settle(el);
-    expect(api.loadSettings).toHaveBeenCalledTimes(2);
-    expect(groupingSelect(el).value).toBe("separate");
-    expect(groupingSelect(el).disabled).toBe(false);
-    expect(pageAlert(el)).toBe("");
-  });
-
-  // Fails if a refused save leaves the select showing the value that was never stored, or says
-  // nothing.
-  it("says a refused save failed, beside the select and at the top of the panel, and shows the stored value again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      saveKitchenTicketGrouping: vi.fn().mockRejectedValue(new Error("refused")),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await choose(el, "separate");
-    expect(api.saveKitchenTicketGrouping).toHaveBeenCalledWith("separate");
-    expect(pageAlert(el)).toContain("could not be saved");
-    expect(beside(el)).toContain("could not be saved");
-    expect(groupingSelect(el).value).toBe("combined");
-    expect(
-      groupingSelect(el).shadowRoot!.querySelector(".trigger")!.getAttribute("aria-invalid"),
-    ).toBe("true");
-  });
-
-  // Fails if choosing the grouping already stored saves it again.
-  it("saves nothing when the grouping already shown is chosen again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      saveKitchenTicketGrouping: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    expect(await clickChosenRow(groupingSelect(el))).toBe(1);
-    await settle(el);
-    expect(api.saveKitchenTicketGrouping).not.toHaveBeenCalled();
-    expect(api.loadSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the grouping's change inside the panel", async () => {
-    const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-      saveKitchenTicketGrouping: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi);
-    expect(await changesHeardOutside(() => choose(el, "separate"))).toBe(0);
-  });
-
-  // Fails if the Spanish catalogue loses the label or a choice.
-  it("reads in Spanish", async () => {
-    setLocale("es");
-    const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    const select = groupingSelect(el);
-    expect(select.label).toContain("Platos iguales en una comanda de cocina");
-    expect(select.options.map((option) => option.label)).toEqual([
-      "Una línea: 3 x Hamburguesa",
-      "Una por plato: 1 x Hamburguesa, tres veces",
-    ]);
-  });
-});
-
-describe("the setting that prints held groups in advance", () => {
-  function printSwitch(el: ServiceSettingsPanel) {
-    const host = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      'wt-switch[name="printHeldWork"]',
-    )!;
-    expect(host).not.toBeNull();
-    return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
-  }
-  function beside(el: ServiceSettingsPanel) {
-    return el.shadowRoot!.querySelector('[data-field-error="printHeldWork"]')?.textContent?.trim();
-  }
-  function stored(printHeldWork: boolean): VenueServiceSettingsView {
-    return { ...structuredClone(model), printHeldWork };
-  }
-
-  // Fails if the switch stops reading the stored value, leaves the kitchen changes section, or
-  // loses its label or hint.
-  it("shows the stored value on the Changes after sending tab, off by default", async () => {
-    const off = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    const { host, input } = printSwitch(off);
-    expect(host.closest('[data-test="kitchen-changes"]')).not.toBeNull();
-    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe(
-      "Print held groups in advance",
-    );
-    expect(input.checked).toBe(false);
-    expect(
-      off.shadowRoot!.querySelector('[data-test="print-held-work-hint"]')!.textContent,
-    ).toContain("marked HOLD");
-    const on = await mount({
-      loadSettings: vi.fn().mockResolvedValue(stored(true)),
-    } as unknown as VenueServiceApi);
-    expect(printSwitch(on).input.checked).toBe(true);
-  });
-
-  // Fails if the switch sends the old value rather than the new one, sends it through another
-  // setting's save, or stays usable mid-save.
-  it("saves the chosen value straight away and is disabled until the save finishes", async () => {
-    let finish!: () => void;
-    const api = {
-      loadSettings: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(stored(true)),
-      savePrintHeldWork: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-      saveSettings: vi.fn(),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    printSwitch(el).input.click();
-    await settle(el);
-    expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
-    expect(api.saveSettings).not.toHaveBeenCalled();
-    expect(printSwitch(el).host.disabled).toBe(true);
-    expect(printSwitch(el).input.disabled).toBe(true);
-    finish();
-    await settle(el);
-    expect(api.loadSettings).toHaveBeenCalledTimes(2);
-    expect(printSwitch(el).input.checked).toBe(true);
-    expect(printSwitch(el).input.disabled).toBe(false);
-    expect(pageAlert(el)).toBe("");
-  });
-
-  // Fails if the in-flight guard goes: two changes arriving before the switch is disabled would
-  // both be sent.
-  it("sends one save for two changes that arrive before the switch is disabled", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      savePrintHeldWork: vi.fn(() => new Promise<void>(() => {})),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    const { host } = printSwitch(el);
-    for (const checked of [true, false])
-      host.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
-      );
-    await settle(el);
-    expect(api.savePrintHeldWork).toHaveBeenCalledTimes(1);
-    expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
-  });
-
-  // Fails if a refused save leaves the switch showing the value that was never stored, or says
-  // nothing.
-  it("says a refused save failed, beside the switch and at the top of the panel, and shows the stored value again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      savePrintHeldWork: vi.fn().mockRejectedValue(new Error("offline")),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    printSwitch(el).input.click();
-    await settle(el);
-    expect(api.savePrintHeldWork).toHaveBeenCalledWith(true);
-    expect(pageAlert(el)).toContain("could not be saved");
-    expect(beside(el)).toContain("could not be saved");
-    expect(printSwitch(el).input.checked).toBe(false);
-  });
-
-  // Fails if the Spanish catalogue loses the label or the hint.
-  it("reads in Spanish", async () => {
-    setLocale("es");
-    const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    expect(printSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
-      "Imprimir por adelantado los grupos en espera",
-    );
-    expect(
-      el.shadowRoot!.querySelector('[data-test="print-held-work-hint"]')!.textContent,
-    ).toContain("marcada HOLD");
-  });
-});
-
-describe("the setting that prints MOVED slips", () => {
-  function movedSwitch(el: ServiceSettingsPanel) {
-    const host = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      'wt-switch[name="printMovedSlips"]',
-    )!;
-    expect(host).not.toBeNull();
-    return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
-  }
-  function beside(el: ServiceSettingsPanel) {
-    return el
-      .shadowRoot!.querySelector('[data-field-error="printMovedSlips"]')
-      ?.textContent?.trim();
-  }
-  function stored(printMovedSlips: boolean): VenueServiceSettingsView {
-    return { ...structuredClone(model), printMovedSlips };
-  }
-
-  // Fails if the switch stops reading the stored value, leaves the kitchen changes section, sits
-  // anywhere but last, after the held-groups switch, or loses its label or hint.
-  it("shows the stored value last, after the held-groups switch", async () => {
-    const on = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    const { host, input } = movedSwitch(on);
-    expect(host.closest('[data-test="kitchen-changes"]')).not.toBeNull();
-    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe("Print MOVED slips");
-    expect(input.checked).toBe(true);
-    expect(
-      on.shadowRoot!.querySelector('[data-test="print-moved-slips-hint"]')!.textContent!.trim(),
-    ).toBe(
-      "When food the kitchen already has moves to another table or another order, each of its prep stations' printers prints a MOVED slip saying from where to where. A prep station can be set to differ.",
-    );
-    const names = [...on.shadowRoot!.querySelectorAll('[data-test="kitchen-changes"] [name]')].map(
-      (control) => control.getAttribute("name"),
-    );
-    expect(names.indexOf("printMovedSlips")).toBe(names.indexOf("printHeldWork") + 1);
-    expect(names.at(-1)).toBe("printMovedSlips");
-    const off = await mount({
-      loadSettings: vi.fn().mockResolvedValue(stored(false)),
-    } as unknown as VenueServiceApi);
-    expect(movedSwitch(off).input.checked).toBe(false);
-  });
-
-  // Fails if the switch sends the old value, sends it through another setting's save, or stays
-  // usable mid-save.
-  it("saves the chosen value straight away and is disabled until the save finishes", async () => {
-    let finish!: () => void;
-    const api = {
-      loadSettings: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(stored(false)),
-      savePrintMovedSlips: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-      savePrintHeldWork: vi.fn(),
-      saveSettings: vi.fn(),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    movedSwitch(el).input.click();
-    await settle(el);
-    expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
-    expect(api.savePrintHeldWork).not.toHaveBeenCalled();
-    expect(api.saveSettings).not.toHaveBeenCalled();
-    expect(movedSwitch(el).input.disabled).toBe(true);
-    finish();
-    await settle(el);
-    expect(api.loadSettings).toHaveBeenCalledTimes(2);
-    expect(movedSwitch(el).input.checked).toBe(false);
-    expect(movedSwitch(el).input.disabled).toBe(false);
-    expect(pageAlert(el)).toBe("");
-  });
-
-  // Fails if the in-flight guard goes: two changes arriving before the switch is disabled would
-  // both be sent.
-  it("sends one save for two changes that arrive before the switch is disabled", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      savePrintMovedSlips: vi.fn(() => new Promise<void>(() => {})),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    const { host } = movedSwitch(el);
-    for (const checked of [false, true])
-      host.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
-      );
-    await settle(el);
-    expect(api.savePrintMovedSlips).toHaveBeenCalledTimes(1);
-    expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
-  });
-
-  // Fails if a refused save leaves the switch showing the value that was never stored, or says
-  // nothing.
-  it("says a refused save failed, beside the switch and at the top of the panel, and shows the stored value again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      savePrintMovedSlips: vi.fn().mockRejectedValue(new Error("offline")),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    movedSwitch(el).input.click();
-    await settle(el);
-    expect(api.savePrintMovedSlips).toHaveBeenCalledWith(false);
-    expect(pageAlert(el)).toContain("could not be saved");
-    expect(beside(el)).toContain("could not be saved");
-    expect(movedSwitch(el).input.checked).toBe(true);
-  });
-
-  // Fails if a read-only viewer can flip the switch.
-  it("is disabled for a read-only viewer and saves nothing", async () => {
-    const api = {
-      loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
-      savePrintMovedSlips: vi.fn(),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api, true);
-    const { host } = movedSwitch(el);
-    expect(host.disabled).toBe(true);
-    host.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
-    );
-    await settle(el);
-    expect(api.savePrintMovedSlips).not.toHaveBeenCalled();
-  });
-
-  // Fails if the Spanish catalogue loses the label or the hint.
-  it("reads in Spanish", async () => {
-    setLocale("es");
-    const el = await mount({
-      loadSettings: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    expect(movedSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
-      "Imprimir avisos MOVIDO",
-    );
-    expect(
-      el.shadowRoot!.querySelector('[data-test="print-moved-slips-hint"]')!.textContent!.trim(),
-    ).toBe(
-      "Cuando comida que ya tiene la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso MOVIDO que dice de dónde a dónde. Cada estación puede configurarse aparte.",
-    );
-  });
-});
-
 describe("the kitchen panel's fields", () => {
-  // Fails if the grouping dropdown loses its search rule or its hint.
-  it("gives the grouping dropdown its hint", async () => {
+  // Fails if a printing choice that is now each station's own comes back to the Kitchen tab.
+  it("the Kitchen tab's venue-service panel offers only Changes after sending", async () => {
     const el = await mount({
       loadSettings: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    const grouping = dropdown(el.shadowRoot!, "kitchenTicketGrouping");
-    expect([grouping.search, grouping.hint]).toEqual([
-      "auto",
-      "Applies to new kitchen tickets and to reprints.",
+    const root = el.shadowRoot!;
+    expect([...root.querySelectorAll("wt-switch")].map((s) => s.getAttribute("name"))).toEqual([
+      "editSentLines",
     ]);
+    expect(root.querySelector("wt-combobox")).toBeNull();
+    expect(root.querySelector('[data-test="print-held-work-hint"]')).toBeNull();
+    expect(root.querySelector('[data-test="print-moved-slips-hint"]')).toBeNull();
   });
 
   it("the Kitchen tab draws no reminder", async () => {

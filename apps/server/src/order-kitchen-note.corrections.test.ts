@@ -14,12 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { KitchenNoteScope, KitchenNoteSnapshot } from "@waitron/module";
 import { createPrinter } from "@waitron/printing";
-import {
-  kitchenNotices,
-  listStationNotices,
-  writeKitchenNote,
-  writePrintHeldWork,
-} from "@waitron/venue-service";
+import { kitchenNotices, listStationNotices, writeKitchenNote } from "@waitron/venue-service";
 import { locationId } from "@waitron/shared";
 import {
   enqueueCorrectionSlips,
@@ -28,6 +23,9 @@ import {
 } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
+import { setStationPrinting } from "./testing/station-printing.js";
+import { createStation } from "./kitchen.js";
+import { routeProductTo } from "./testing/zone-offers.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
@@ -244,7 +242,7 @@ describe("saved kitchen note corrections", () => {
     const p = await seat(v, await v.table("Held"));
     if (kind === "removed") {
       await printer();
-      await inTx(v, (tx) => writePrintHeldWork(tx, true));
+      await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     }
     await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, p.partyId, {
@@ -261,7 +259,7 @@ describe("saved kitchen note corrections", () => {
 
   it("corrects still-held groups only after their HOLD ticket has been queued", async () => {
     await printer();
-    await inTx(v, (tx) => writePrintHeldWork(tx, true));
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const p = await seat(v, await v.table("Held"));
     await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, p.partyId, {
@@ -280,6 +278,72 @@ describe("saved kitchen note corrections", () => {
     });
     const jobs = await v.db.select().from(printJobs);
     expect(printedLines(jobs.at(-1)!.payload)).toContain("GROUP 1");
+  });
+
+  it("a changed order note corrects held paper only at a station recorded for the group, and every station's screen is told", async () => {
+    const stations = await inTx(v, async (tx) => {
+      const station = async (name: string, dish: string, withPrinter: boolean) => {
+        const { id } = await createStation(tx, v.cfg, { name });
+        await routeProductTo(tx, v.cfg, v.productId(dish), id);
+        if (!withPrinter) return { id, printerId: null };
+        const p = await createPrinter(
+          tx,
+          { locationId: v.cfg.locationId },
+          { name, transport: "cloud_poll", pollId: randomUUID() },
+        );
+        await attachPrinterToStation(tx, {
+          locationId: v.cfg.locationId,
+          stationId: id,
+          printerId: p.id,
+        });
+        return { id, printerId: p.id };
+      };
+      const kitchen = await station("Kitchen", "Burger", true);
+      const bar = await station("Bar", "Paella", true);
+      const screen = await station("Screen", "Flan", false);
+      await setStationPrinting(tx, { printHeldWork: true }, [kitchen.id]);
+      return { kitchen, bar, screen };
+    });
+    const p = await seat(v, await v.table("Held"));
+    const dish = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, p.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ release: "hold", lines: [dish("Burger"), dish("Paella"), dish("Flan")] }],
+      }),
+    );
+    const jobsAt = async (printerId: string) =>
+      (await v.db.select().from(printJobs).where(eq(printJobs.printerId, printerId))).map((job) =>
+        printedLines(job.payload),
+      );
+    expect(await jobsAt(stations.kitchen.printerId!)).toHaveLength(1);
+
+    await set({ partyId: p.partyId }, "Bring together");
+
+    const kitchenSlips = (await jobsAt(stations.kitchen.printerId!)).slice(1);
+    expect(kitchenSlips).toHaveLength(1);
+    expect(kitchenSlips[0]).toContain("GROUP 1");
+    expect(kitchenSlips[0]).toContain("Para cocina: Bring together");
+    expect(await jobsAt(stations.bar.printerId!)).toEqual([]);
+    const noticeAt = async (id: string) =>
+      v.db
+        .select({
+          kind: kitchenNotices.kind,
+          lineName: kitchenNotices.lineName,
+          orderNoteChange: kitchenNotices.orderNoteChange,
+        })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.stationId, id));
+    const change = { before: null, after: "Bring together" };
+    expect(await noticeAt(stations.kitchen.id)).toEqual([
+      { kind: "changed", lineName: "BURG", orderNoteChange: change },
+    ]);
+    expect(await noticeAt(stations.bar.id)).toEqual([
+      { kind: "changed", lineName: "PAELLA", orderNoteChange: change },
+    ]);
+    expect(await noticeAt(stations.screen.id)).toEqual([
+      { kind: "changed", lineName: "FLAN", orderNoteChange: change },
+    ]);
   });
 
   it("rolls back note and owner revision when recording a kitchen correction fails", async () => {

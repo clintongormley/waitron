@@ -2454,10 +2454,7 @@ describe("the venue's service settings", () => {
     const fx = await fixture();
     const read = await send(fx.app, "GET", SETTINGS, fx.supervisorCookie);
     expect(read.status).toBe(200);
-    expect(await read.json()).toMatchObject({
-      settings: { editSentLines: true },
-      kitchenTicketGrouping: "combined",
-    });
+    expect(await read.json()).toEqual({ settings: { editSentLines: true } });
     expect(
       (await send(fx.app, "GET", "/management-api/venue-service", fx.supervisorCookie)).status,
     ).toBe(403);
@@ -2521,233 +2518,36 @@ describe("the venue's service settings", () => {
   });
 });
 
-describe("the kitchen ticket grouping setting", () => {
-  const GROUPING = "/management-api/venue-service/settings/kitchen-ticket-grouping";
-  async function stored(fx: Fixture): Promise<unknown> {
-    return (
-      (await (
-        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-      ).json()) as { kitchenTicketGrouping: unknown }
-    ).kitchenTicketGrouping;
-  }
-
-  it("reads combined until a manager chooses separate, and back", async () => {
+describe("the venue's printing settings", () => {
+  it("no longer serves the venue's printing settings", async () => {
     const fx = await fixture();
-    expect(await stored(fx)).toBe("combined");
-    expect(
-      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "separate" }))
-        .status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe("separate");
-    expect(
-      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "combined" }))
-        .status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe("combined");
-  });
-
-  it("refuses anything but the two choices, naming the field, and keeps the stored one", async () => {
-    const fx = await fixture();
-    expect(
-      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "separate" }))
-        .status,
-    ).toBe(204);
-    for (const body of [
-      {},
-      { kitchenTicketGrouping: "bogus" },
-      { kitchenTicketGrouping: "Combined" },
-      { kitchenTicketGrouping: null },
-      { kitchenTicketGrouping: ["combined"] },
-    ]) {
-      const rejected = await send(fx.app, "PUT", GROUPING, fx.managerCookie, body);
-      expect(rejected.status).toBe(400);
-      expect(await rejected.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "kitchenTicketGrouping" } },
-      });
+    for (const [path, body] of [
+      ["kitchen-ticket-grouping", { kitchenTicketGrouping: "separate" }],
+      ["print-held-work", { printHeldWork: true }],
+      ["print-moved-slips", { printMovedSlips: false }],
+    ] as const) {
+      expect(
+        (
+          await send(
+            fx.app,
+            "PUT",
+            `/management-api/venue-service/settings/${path}`,
+            fx.managerCookie,
+            body,
+          )
+        ).status,
+      ).toBe(404);
     }
-    expect(await stored(fx)).toBe("separate");
-  });
-
-  it("lets only a signed-in manager change it", async () => {
-    const fx = await fixture();
-    const body = { kitchenTicketGrouping: "separate" };
-    expect((await send(fx.app, "PUT", GROUPING, undefined, body)).status).toBe(401);
-    const refused = await send(fx.app, "PUT", GROUPING, fx.staffCookie, body);
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect(await stored(fx)).toBe("combined");
-  });
-
-  it("leaves the edit-sent-lines setting's shape alone", async () => {
-    const fx = await fixture();
-    expect(
-      (await send(fx.app, "PUT", GROUPING, fx.managerCookie, { kitchenTicketGrouping: "separate" }))
-        .status,
-    ).toBe(204);
-    const body = (await (
+    const model = await (
       await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as { settings: unknown };
-    expect(body.settings).toEqual({ editSentLines: true });
-  });
-});
-
-describe("the print-held-work setting", () => {
-  const PRINT_HELD_WORK = "/management-api/venue-service/settings/print-held-work";
-  async function stored(fx: Fixture): Promise<unknown> {
-    return (
-      (await (
-        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-      ).json()) as { printHeldWork: unknown }
-    ).printHeldWork;
-  }
-
-  it("reads off until a manager turns it on, and back", async () => {
-    const fx = await fixture();
-    expect(await stored(fx)).toBe(false);
-    expect(
-      (await send(fx.app, "PUT", PRINT_HELD_WORK, fx.managerCookie, { printHeldWork: true }))
-        .status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe(true);
-    expect(
-      (await send(fx.app, "PUT", PRINT_HELD_WORK, fx.managerCookie, { printHeldWork: false }))
-        .status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe(false);
-  });
-
-  it("refuses anything but true or false, naming the field, and keeps the stored value", async () => {
-    const fx = await fixture();
-    expect(
-      (await send(fx.app, "PUT", PRINT_HELD_WORK, fx.managerCookie, { printHeldWork: true }))
-        .status,
-    ).toBe(204);
-    for (const body of [
-      {},
-      { printHeldWork: "false" },
-      { printHeldWork: 0 },
-      { printHeldWork: null },
-      { printHeldWork: [false] },
-    ]) {
-      const rejected = await send(fx.app, "PUT", PRINT_HELD_WORK, fx.managerCookie, body);
-      expect(rejected.status).toBe(400);
-      expect(await rejected.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "printHeldWork" } },
-      });
+    ).json();
+    const routing = await (
+      await send(fx.app, "GET", "/management-api/venue-service/routing", fx.managerCookie)
+    ).json();
+    for (const key of ["kitchenTicketGrouping", "printHeldWork", "printMovedSlips"]) {
+      expect(model).not.toHaveProperty(key);
     }
-    expect(await stored(fx)).toBe(true);
-  });
-
-  it("lets only a signed-in manager change it", async () => {
-    const fx = await fixture();
-    const body = { printHeldWork: true };
-    expect((await send(fx.app, "PUT", PRINT_HELD_WORK, undefined, body)).status).toBe(401);
-    const refused = await send(fx.app, "PUT", PRINT_HELD_WORK, fx.staffCookie, body);
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect(await stored(fx)).toBe(false);
-  });
-
-  it("leaves the other settings as they were", async () => {
-    const fx = await fixture();
-    expect(
-      (await send(fx.app, "PUT", PRINT_HELD_WORK, fx.managerCookie, { printHeldWork: true }))
-        .status,
-    ).toBe(204);
-    const body = (await (
-      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as { settings: unknown; kitchenTicketGrouping: unknown };
-    expect(body.settings).toEqual({ editSentLines: true });
-    expect(body.kitchenTicketGrouping).toBe("combined");
-  });
-});
-
-describe("the print-moved-slips setting", () => {
-  const PRINT_MOVED_SLIPS = "/management-api/venue-service/settings/print-moved-slips";
-  async function stored(fx: Fixture, path = "/management-api/venue-service"): Promise<unknown> {
-    return (
-      (await (await send(fx.app, "GET", path, fx.managerCookie)).json()) as {
-        printMovedSlips: unknown;
-      }
-    ).printMovedSlips;
-  }
-
-  it("reads on until a manager turns it off, and back, in both settings views", async () => {
-    const fx = await fixture();
-    expect(await stored(fx)).toBe(true);
-    expect(await stored(fx, "/management-api/venue-service/settings")).toBe(true);
-    expect(
-      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
-        .status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe(false);
-    expect(await stored(fx, "/management-api/venue-service/settings")).toBe(false);
-    expect(
-      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: true }))
-        .status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe(true);
-  });
-
-  it("the routing view carries the venue's value, so the Edit station window can name it", async () => {
-    const fx = await fixture();
-    const routing = "/management-api/venue-service/routing";
-    expect(await stored(fx, routing)).toBe(true);
-    expect(
-      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
-        .status,
-    ).toBe(204);
-    expect(await stored(fx, routing)).toBe(false);
-  });
-
-  it("refuses anything but true or false, naming the field, and keeps the stored value", async () => {
-    const fx = await fixture();
-    expect(
-      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
-        .status,
-    ).toBe(204);
-    for (const body of [
-      {},
-      { printMovedSlips: "true" },
-      { printMovedSlips: 1 },
-      { printMovedSlips: null },
-      { printMovedSlips: [true] },
-    ]) {
-      const rejected = await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, body);
-      expect(rejected.status).toBe(400);
-      expect(await rejected.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "printMovedSlips" } },
-      });
-    }
-    expect(await stored(fx)).toBe(false);
-  });
-
-  it("lets only a signed-in manager change it", async () => {
-    const fx = await fixture();
-    const body = { printMovedSlips: false };
-    expect((await send(fx.app, "PUT", PRINT_MOVED_SLIPS, undefined, body)).status).toBe(401);
-    const refused = await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.staffCookie, body);
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect(await stored(fx)).toBe(true);
-  });
-
-  it("leaves the other settings as they were", async () => {
-    const fx = await fixture();
-    expect(
-      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
-        .status,
-    ).toBe(204);
-    const body = (await (
-      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as {
-      settings: unknown;
-      kitchenTicketGrouping: unknown;
-      printHeldWork: unknown;
-    };
-    expect(body.settings).toEqual({ editSentLines: true });
-    expect(body.kitchenTicketGrouping).toBe("combined");
-    expect(body.printHeldWork).toBe(false);
+    expect(routing).not.toHaveProperty("printMovedSlips");
   });
 });
 

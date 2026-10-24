@@ -43,12 +43,8 @@ import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { createOpenOrder, fireOrderLines, fireLines } from "./working-order.js";
-import {
-  listStationNotices,
-  writeKitchenTicketGrouping,
-  writePrintHeldWork,
-  setStationToday,
-} from "@waitron/venue-service";
+import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/venue-service";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -77,6 +73,7 @@ import {
   pay,
   revisionOf,
   seat,
+  seatWithNoAllergies,
   setupPartyVenue,
   split,
   tableAt,
@@ -1234,8 +1231,12 @@ describe("a dish sold by the piece prints no unit", () => {
     async ({ grouping, dish, name, sold, printed }) => {
       const { cfg, catalogueId } = await setupVenue();
       const jobs = await asApp(cfg, async (tx) => {
-        await writeKitchenTicketGrouping(tx, grouping);
         const dishes = await sellInEveryUnit(tx, cfg, catalogueId);
+        const [cocina] = await tx
+          .select({ id: kitchenStations.id })
+          .from(kitchenStations)
+          .where(eq(kitchenStations.name, "Cocina"));
+        await setStationPrinting(tx, { ticketGrouping: grouping }, [cocina!.id]);
         await fireNewOrder(
           tx,
           cfg,
@@ -1250,6 +1251,33 @@ describe("a dish sold by the piece prints no unit", () => {
       );
     },
   );
+
+  it("each station's part of a shared printer's ticket follows its own ticket grouping", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const jobs = await asApp(cfg, async (tx) => {
+      const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
+      const cold = await createStation(tx, cfg, { name: "Cold" });
+      await setStationPrinting(tx, { ticketGrouping: "separate" }, [grill.id]);
+      await setStationPrinting(tx, { ticketGrouping: "combined" }, [cold.id]);
+      await makeSharedPrinter(tx, cfg, "Pase", [grill.id, cold.id]);
+      const burger = await makeProduct(tx, cfg, catalogueId, "Burger", { stationId: grill.id });
+      const salad = await makeProduct(tx, cfg, catalogueId, "Salad", { stationId: cold.id });
+      await fireNewOrder(tx, cfg, [
+        { productId: burger, quantity: "3" },
+        { productId: salad, quantity: "2" },
+      ]);
+      return printJobsFor(tx);
+    });
+
+    expect(jobs).toHaveLength(1);
+    const lines = printedLines(jobs[0]!.payload);
+    expect(lines.filter((text) => text.endsWith(" x Burger"))).toEqual([
+      at(1000, "x Burger"),
+      at(1000, "x Burger"),
+      at(1000, "x Burger"),
+    ]);
+    expect(lines.filter((text) => text.endsWith(" x Salad"))).toEqual([at(2000, "x Salad")]);
+  });
 });
 
 describe("dish extras on kitchen tickets", () => {
@@ -1550,7 +1578,7 @@ describe("dish extras on kitchen tickets", () => {
   it("prints held chips once at Fryer and only as a reference at Grill", async () => {
     const { cfg, products, lists, printers, party, tables } = await setupSplitExtrasVenue();
     const jobs = await asApp(cfg, async (tx) => {
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       await placeGroups(tx, cfg, party.partyId, {
         operatorId: OPERATOR,
         groups: [
@@ -1901,6 +1929,53 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     expect(reprint).toContain(`${thousandthsToDecimal(2000)} x Chuleton`);
   });
 
+  it("a reprint prints the HOLD part only for a station recorded for the group", async () => {
+    const v = await setupPartyVenue(db);
+    const { kitchen, bar, screen } = await inTx(v, async (tx) => {
+      const station = async (name: string, dish: string, withPrinter: boolean) => {
+        const { id } = await createStation(tx, v.cfg, { name });
+        await routeProductTo(tx, v.cfg, v.productId(dish), id);
+        const printerId = withPrinter ? await makeSharedPrinter(tx, v.cfg, name, [id]) : null;
+        return { id, printerId };
+      };
+      const kitchen = await station("Kitchen", "Burger", true);
+      const bar = await station("Bar", "Paella", true);
+      const screen = await station("Screen", "Flan", false);
+      await setStationPrinting(tx, { printHeldWork: true }, [kitchen.id]);
+      return { kitchen, bar, screen };
+    });
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Mesa 131"));
+    const dish = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [dish("Burger"), dish("Paella"), dish("Flan")], release: "hold" }],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const jobsAt = async (printerId: string) =>
+      (await asApp(v.cfg, (tx) => printJobsFor(tx)))
+        .filter((job) => job.printerId === printerId)
+        .map((job) => printedLines(job.payload));
+    expect(await jobsAt(kitchen.printerId!)).toHaveLength(1);
+    expect(await jobsAt(bar.printerId!)).toEqual([]);
+
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, tabId));
+
+    const reprinted = (await jobsAt(kitchen.printerId!)).slice(1);
+    expect(reprinted).toHaveLength(1);
+    expect(reprinted[0]![0]).toBe("*** REPRINT ***");
+    expect(reprinted[0]![1]).toBe("*** HOLD ***");
+    expect(reprinted[0]).toContain("1.000 x BURG");
+    expect(await jobsAt(bar.printerId!)).toEqual([]);
+    expect(
+      await db
+        .select({ kind: kitchenNotices.kind })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.stationId, screen.id)),
+    ).toEqual([]);
+  });
+
   it("enqueues nothing (and does NOT throw) for an order with no fired items", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const jobs = await asApp(cfg, async (tx) => {
@@ -2249,7 +2324,7 @@ describe("a station printer that was deleted", () => {
           printerId: q,
         });
       await deletePrinter(tx, printCfg(cfg), venuePrinters.grill);
-      await writePrintHeldWork(tx, true);
+      await setStationPrinting(tx, { printHeldWork: true });
       const known = new Set((await printJobsFor(tx)).map((job) => job.id));
       await placeGroups(tx, cfg, party.partyId, {
         operatorId: OPERATOR,

@@ -1367,8 +1367,6 @@ export interface VenueServiceContribution {
     tx: Transaction,
     tableIds: readonly string[],
   ): Promise<ReadonlySet<string>>;
-  /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
-  readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   readPartyAllergy(tx: Transaction, partyId: string): Promise<PartyAllergySnapshot>;
   copyTicketAllergy(
     tx: Transaction,
@@ -1442,10 +1440,6 @@ export interface VenueServiceContribution {
     expectedRevision: number,
     note: string | null,
   ): Promise<KitchenNote>;
-  /** Whether held groups print in advance, marked HOLD. */
-  readPrintHeldWork(tx: Transaction): Promise<boolean>;
-  /** The venue's MOVED slips choice, which a prep station left as the venue follows. */
-  readPrintMovedSlips(tx: Transaction): Promise<boolean>;
   /**
    * Each of these zones' department's minutes after the work ahead is served that a held group
    * falls due; null where that department has reminders off. A zone with no department is absent.

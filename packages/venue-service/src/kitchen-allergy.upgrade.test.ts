@@ -246,7 +246,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
     ],
     [
       "waitron_change_service_settings_update",
-      ' or new."release_reminder_minutes" is not old."release_reminder_minutes"',
+      ' or new."kitchen_ticket_grouping" is not old."kitchen_ticket_grouping" or new."print_held_work" is not old."print_held_work" or new."release_reminder_minutes" is not old."release_reminder_minutes" or new."print_moved_slips" is not old."print_moved_slips"',
     ],
   ]);
   const laterColumnAdds = new Map([

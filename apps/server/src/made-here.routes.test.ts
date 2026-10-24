@@ -11,6 +11,7 @@ import {
   deviceMadeHereStations,
   floorZones,
   kitchenStations,
+  orderGroupHoldStations,
   orderGroups,
   parties,
   printJobs,
@@ -28,7 +29,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { createExtraList, writeProductModifiers } from "@waitron/catalogue";
-import { writePrintHeldWork } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -46,6 +46,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { fireLines } from "./working-order.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 
 let venue: BillVenue;
 let barPrinterId: string;
@@ -319,7 +320,7 @@ describe("made-here route wiring", () => {
   });
   it("serves a made-here drink in a held group while its Grill dish waits for fire", async () => {
     const party = await seatedWith(venue);
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const barBefore = await inTx(venue, (tx) =>
       tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
     );
@@ -442,7 +443,7 @@ describe("made-here route wiring", () => {
   });
   it("keeps a drink-only held group off HOLD paper and shows it ready", async () => {
     const party = await seatedWith(venue);
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const jobsBefore = await inTx(venue, (tx) =>
       tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
     );
@@ -1053,7 +1054,7 @@ describe("made-here route wiring", () => {
   });
   it("joining a printed held group makes a drink here without a HOLD CHANGED slip or notice", async () => {
     const party = await seatedWith(venue);
-    await inTx(venue, (tx) => writePrintHeldWork(tx, true));
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const held = await send(
       venue.app,
       venue.cookie,
@@ -1139,6 +1140,50 @@ describe("made-here route wiring", () => {
     expect(notices.slice(beforeNotices.length)).toEqual([
       { station_id: grillStationId, kind: "changed" },
     ]);
+  });
+  it("a drink made here joining a printed held group does not record its station for the group's HOLD paper", async () => {
+    const party = await seatedWith(venue);
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
+    const held = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party.revision,
+        groups: [
+          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "hold" },
+        ],
+      },
+    );
+    expect(held.status).toBe(200);
+    const [group] = await inTx(venue, (tx) =>
+      tx.select().from(orderGroups).where(eq(orderGroups.partyId, party.partyId)),
+    );
+    const joined = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        joinGroupId: group!.id,
+        groups: [
+          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "hold" },
+        ],
+      },
+    );
+    expect(joined.status).toBe(200);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ stationId: orderGroupHoldStations.stationId })
+          .from(orderGroupHoldStations)
+          .where(eq(orderGroupHoldStations.groupId, group!.id)),
+      ),
+    ).toEqual([{ stationId: grillStationId }]);
   });
   it("/api/sales carries the device to a pay-first send", async () => {
     const id = randomUUID();
