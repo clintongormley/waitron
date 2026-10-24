@@ -18806,6 +18806,7 @@ export class TillApp extends LitElement {
                             });
                           }}
                           .operatorName=${this.operatorName}
+                          .legalName=${this.issuer?.venueName ?? ""}
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
                           .clockState=${this.clockSnapshot.state}
                           .clockBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true || this.attendanceSnapshot?.uncertainCommandId != null}
@@ -18874,6 +18875,7 @@ export class TillApp extends LitElement {
                         html`<till-lock-screen
                           .api=${this.api}
                           .deviceName=${this.deviceName}
+                          .legalName=${this.issuer?.venueName ?? ""}
                           .deviceId=${this.deviceId}
                           .devMode=${this.devTab}
                           .serverStatuses=${this.router?.statuses() ?? []}

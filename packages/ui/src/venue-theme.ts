@@ -1,4 +1,9 @@
-import { isVenueThemeAnswer, type VenueThemeAnswer } from "@waitron/ui-core/theme";
+import type { ReactiveController, ReactiveControllerHost } from "lit";
+import {
+  isVenueThemeAnswer,
+  type VenueLogoAddresses,
+  type VenueThemeAnswer,
+} from "@waitron/ui-core/theme";
 
 export const VENUE_THEME_STORAGE_KEY = "waitron-venue-theme";
 export const VENUE_THEME_TIME_LIMIT_MS = 5_000;
@@ -14,6 +19,11 @@ export interface VenueThemeReading {
   readonly sentAt: number;
 }
 
+export type VenueLogoState =
+  | { readonly kind: "waiting" }
+  | { readonly kind: "none" }
+  | { readonly kind: "logo"; readonly logo: VenueLogoAddresses; readonly failed: boolean };
+
 let sheet: CSSStyleSheet | null = null;
 let appliedHash: string | null = null;
 let inFlight: AbortController | null = null;
@@ -24,6 +34,94 @@ let wantedHash: string | null = null;
 let clock = 0;
 let appliedAt = 0;
 let startupReading: Promise<VenueThemeReading | null> | null = null;
+
+const WAITING: VenueLogoState = { kind: "waiting" };
+const NONE: VenueLogoState = { kind: "none" };
+let logoState: VenueLogoState = NONE;
+const failedLogos = new Set<string>();
+const logoListeners = new Set<() => void>();
+
+function logoKey(logo: VenueLogoAddresses): string {
+  return JSON.stringify([logo.light, logo.dark]);
+}
+
+function stateKey(state: VenueLogoState): string {
+  return state.kind === "logo" ? JSON.stringify([logoKey(state.logo), state.failed]) : state.kind;
+}
+
+function setLogoState(next: VenueLogoState): void {
+  if (stateKey(logoState) === stateKey(next)) return;
+  logoState = next;
+  for (const listener of logoListeners) listener();
+}
+
+function settleLogo(logo: VenueLogoAddresses | null): void {
+  setLogoState(
+    logo === null ? NONE : { kind: "logo", logo, failed: failedLogos.has(logoKey(logo)) },
+  );
+}
+
+/** The start's own request ending with nothing applied ends its wait; a dropped one does not. */
+function endWait(controller: AbortController): void {
+  if (inFlight === controller && logoState.kind === "waiting") setLogoState(NONE);
+}
+
+export function currentVenueLogo(): VenueLogoState {
+  return logoState;
+}
+
+export function subscribeVenueLogo(listener: () => void): () => void {
+  logoListeners.add(listener);
+  return () => {
+    logoListeners.delete(listener);
+  };
+}
+
+function reportVenueLogo(logo: VenueLogoAddresses, failed: boolean): void {
+  const key = logoKey(logo);
+  if (failed) failedLogos.add(key);
+  else failedLogos.delete(key);
+  if (logoState.kind === "logo") settleLogo(logoState.logo);
+}
+
+export function reportVenueLogoFailure(logo: VenueLogoAddresses): void {
+  reportVenueLogo(logo, true);
+}
+
+export function reportVenueLogoLoaded(logo: VenueLogoAddresses): void {
+  reportVenueLogo(logo, false);
+}
+
+export class VenueLogoController implements ReactiveController {
+  readonly #host: ReactiveControllerHost;
+  readonly #onChange: ((state: VenueLogoState) => void) | undefined;
+  #unsubscribe?: () => void;
+
+  constructor(host: ReactiveControllerHost, onChange?: (state: VenueLogoState) => void) {
+    this.#host = host;
+    this.#onChange = onChange;
+    host.addController(this);
+  }
+
+  get state(): VenueLogoState {
+    return logoState;
+  }
+
+  hostConnected(): void {
+    this.#unsubscribe?.();
+    this.#unsubscribe = subscribeVenueLogo(() => {
+      this.#host.requestUpdate();
+      this.#onChange?.(logoState);
+    });
+    // A host out of the page while the logo changed has not redrawn since.
+    this.#host.requestUpdate();
+  }
+
+  hostDisconnected(): void {
+    this.#unsubscribe?.();
+    this.#unsubscribe = undefined;
+  }
+}
 
 function readStored(): VenueThemeAnswer | null {
   try {
@@ -48,10 +146,10 @@ async function fetchAnswer(): Promise<VenueThemeReading | null> {
   const controller = new AbortController();
   inFlight = controller;
   const sentAt = ++clock;
-  const timer = setTimeout(
-    () => controller.abort(),
-    fetchOptions.timeLimitMs ?? VENUE_THEME_TIME_LIMIT_MS,
-  );
+  const timer = setTimeout(() => {
+    controller.abort();
+    endWait(controller);
+  }, fetchOptions.timeLimitMs ?? VENUE_THEME_TIME_LIMIT_MS);
   try {
     const response = await (fetchOptions.fetchImpl ?? fetch)("/api/theme", {
       cache: "no-store",
@@ -67,6 +165,7 @@ async function fetchAnswer(): Promise<VenueThemeReading | null> {
     return null;
   } finally {
     clearTimeout(timer);
+    endWait(controller);
     if (inFlight === controller) settle();
   }
 }
@@ -84,6 +183,9 @@ export function startVenueTheme(root: HTMLElement, options: VenueThemeOptions = 
   const stored = readStored();
   sheet.replaceSync(stored?.css ?? "");
   appliedHash = stored?.hash ?? null;
+  failedLogos.clear();
+  if (stored === null) setLogoState(WAITING);
+  else settleLogo(stored.logo);
   fetchOptions = options;
   wantedHash = null;
   inFlight?.abort();
@@ -115,6 +217,7 @@ export function followVenueTheme(hash: string): void {
 export function applyVenueTheme(answer: unknown, sentAt: number = clock): void {
   if (sheet === null || !isVenueThemeAnswer(answer) || appliedAt > sentAt) return;
   appliedAt = ++clock;
+  settleLogo(answer.logo);
   if (answer.hash === appliedHash) return;
   sheet.replaceSync(answer.css);
   appliedHash = answer.hash;

@@ -108,8 +108,37 @@ pantallas oscuras o el logotipo principal sobre su placa clara. Sin logotipo, la
 logotipo propio de Waitron.
 
 **Guardar** y **Cancelar** tratan el logotipo igual que las demás elecciones. El logotipo se guarda
-con el tema. Mostrarlo en la franja superior del panel, en las cajas y en las pantallas de inicio de sesión
-llegará en una actualización posterior.
+con el tema.
+
+## Dónde se ve tu logotipo {#logo-screens}
+
+El logotipo del tema en uso se ve en estos lugares:
+
+- **La franja superior del panel**, antes de la razón social de la empresa, tanto con la sesión
+  iniciada como en la página de inicio de sesión.
+- **La barra superior de un terminal de camarero**, en lugar de la palabra «Waitron». Es
+  lo primero que la barra deja fuera cuando le falta sitio, y una pantalla estrecha, como la de un
+  teléfono, lo deja fuera del todo.
+- **La pantalla de inicio de sesión de una caja registradora o de un terminal de camarero**, encima
+  del nombre del dispositivo y de la lista de nombres.
+- **«Con la tecnología de Waitron»**, una línea bajo el formulario de inicio de sesión del panel y
+  al pie de la pantalla de inicio de sesión de una caja registradora o de un terminal de camarero,
+  que se ve mientras hay un logotipo.
+
+La barra superior de una caja registradora todavía no muestra ningún logotipo.
+
+Cada pantalla muestra la imagen clara o la oscura según su propio ajuste de **Tema**. Una pantalla
+oscura, cuando el tema no tiene versión para pantallas oscuras, muestra el logotipo principal sobre
+una placa blanca.
+
+Las pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan un
+cambio de colores, como describe «Guarda un tema», más abajo.
+
+Cuando una pantalla no puede cargar la imagen, la franja superior del panel muestra el logotipo de
+Waitron, la barra de un terminal de camarero muestra la palabra «Waitron» y la pantalla de inicio de
+sesión de una caja registradora o de un terminal de camarero no muestra ningún logotipo, sin dejar
+un hueco donde iría. No se ve la línea «Con la tecnología de». La pantalla vuelve a intentar cargar
+la imagen cada minuto y la muestra en cuanto carga.
 
 ## Fija colores a mano {#advanced}
 

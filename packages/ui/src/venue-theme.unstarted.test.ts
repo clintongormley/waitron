@@ -1,5 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { VENUE_THEME_STORAGE_KEY, applyVenueTheme, followVenueTheme } from "./venue-theme.js";
+import {
+  VENUE_THEME_STORAGE_KEY,
+  applyVenueTheme,
+  currentVenueLogo,
+  followVenueTheme,
+} from "./venue-theme.js";
 import { FIXTURE_ANSWER as GREEN } from "../test/venue-theme-fixture.js";
 
 afterEach(() => {
@@ -12,6 +17,10 @@ it("before start nothing is adopted or applied", () => {
   applyVenueTheme(GREEN);
   expect([...document.adoptedStyleSheets]).toEqual(before);
   expect(localStorage.getItem(VENUE_THEME_STORAGE_KEY)).toBeNull();
+});
+
+it("before start there is no venue logo", () => {
+  expect(currentVenueLogo()).toEqual({ kind: "none" });
 });
 
 it("following before start sends nothing", () => {

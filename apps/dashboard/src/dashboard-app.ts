@@ -16,6 +16,9 @@ import {
   themeLabelsPerLocale,
   trackIconTooltip,
   UrlStateController,
+  VenueLogoController,
+  reportVenueLogoFailure,
+  reportVenueLogoLoaded,
   setHelpMode,
   type ThemeChoice,
   type WtInput,
@@ -34,6 +37,8 @@ import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
+import "@waitron/ui/src/components/wt-powered-by.js";
+import "@waitron/ui/src/components/wt-venue-logo.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
@@ -645,6 +650,15 @@ export class DashboardApp extends LitElement {
         height: auto;
       }
 
+      .venue-logo {
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+
+      .powered-by {
+        margin-block-start: var(--wt-space-4);
+      }
+
       .venue-row {
         display: contents;
       }
@@ -994,6 +1008,7 @@ export class DashboardApp extends LitElement {
    * before it, so that answer must not repaint over the person's choice. */
   #sessionLocaleChoice = 0;
   readonly #theme = new ThemeChoiceController(this, { applies: true });
+  readonly #venueLogo = new VenueLogoController(this);
 
   readonly #themeLabelsFor = themeLabelsPerLocale(() => ({
     theme: t("theme.label"),
@@ -1571,6 +1586,7 @@ export class DashboardApp extends LitElement {
               .noticeCode=${this.sessionNoticeCode}
               @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
             ></dashboard-login-screen>
+            ${this.#poweredBy()}
           </div>
         </div>
       `;
@@ -1714,6 +1730,39 @@ export class DashboardApp extends LitElement {
     ></wt-demo-bar>`;
   }
 
+  #poweredBy(): TemplateResult | typeof nothing {
+    const state = this.#venueLogo.state;
+    return state.kind === "logo" && !state.failed
+      ? html`<wt-powered-by class="powered-by" label=${t("login.powered_by")}></wt-powered-by>`
+      : nothing;
+  }
+
+  #brandMark(): TemplateResult {
+    const state = this.#venueLogo.state;
+    if (state.kind === "waiting") {
+      return html`<wt-venue-logo class="venue-logo" size="banner"></wt-venue-logo>`;
+    }
+    if (state.kind === "none") return this.#lockup();
+    const { logo } = state;
+    return html`<wt-venue-logo
+      class="venue-logo"
+      size="banner"
+      light=${logo.light}
+      dark=${logo.dark ?? nothing}
+      alt=""
+      @wt-logo-error=${() => reportVenueLogoFailure(logo)}
+      @wt-logo-load=${() => reportVenueLogoLoaded(logo)}
+      >${this.#lockup("fallback")}</wt-venue-logo
+    >`;
+  }
+
+  #lockup(slot?: string): TemplateResult {
+    return html`<picture class="brand-logo-picture" slot=${slot ?? nothing}>
+      <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOCKUP_DARK_URL} />
+      <img class="brand-logo" src=${WAITRON_LOCKUP_URL} alt="Waitron" />
+    </picture>`;
+  }
+
   #banner(authenticated: boolean, hasNav: boolean): TemplateResult {
     return html`<header class="brand-banner" data-test="brand-banner">
       <div class="brand-identity">
@@ -1730,10 +1779,7 @@ export class DashboardApp extends LitElement {
               ></wt-button>`
             : nothing
         }
-        <picture class="brand-logo-picture">
-          <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOCKUP_DARK_URL} />
-          <img class="brand-logo" src=${WAITRON_LOCKUP_URL} alt="Waitron" />
-        </picture>
+        ${this.#brandMark()}
         <span class="venue-row"
           ><span class="venue">
             <span class="venue-name" data-test="venue-name">${this.venueName}</span>

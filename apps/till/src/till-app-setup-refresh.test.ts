@@ -1,6 +1,7 @@
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import {
   cleanupWidgets,
   draftServer,
@@ -28,6 +29,7 @@ import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { applyTokens, startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { FIXTURE_ANSWER, FIXTURE_LIGHT_BG, bg } from "@waitron/ui/test/venue-theme-fixture.js";
+import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -812,6 +814,37 @@ describe("A841 the till follows the theme in use", () => {
     await poll(el);
     await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
     expect(themeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("a moved theme hash brings a new logo into a handheld's bar without a reload", async () => {
+    const handheld = till("tablet-landscape");
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 844);
+    try {
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValueOnce({ ...handheld, themeHash: "h1", setupRevision: "s1" })
+          .mockResolvedValue({ ...handheld, themeHash: "h2", setupRevision: "s2" }),
+      });
+      await flush(el);
+      await signIn(el);
+      const bar = () => shell(el).shadowRoot!.querySelector(".head")!;
+      await vi.waitFor(() => expect(bar().querySelector(":scope > .brand")).not.toBeNull());
+      expect(bar().querySelector("wt-venue-logo")).toBeNull();
+      const light = png(120, 40);
+      themeAnswer = { ...FIXTURE_ANSWER, hash: "h2", logo: { light, dark: null } };
+      api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+      await poll(el);
+      await vi.waitFor(() =>
+        expect(bar().querySelector("wt-venue-logo")?.getAttribute("light")).toBe(light),
+      );
+      expect(bar().querySelector("wt-venue-logo")!.getAttribute("alt")).toBe("Bar Pepe");
+      expect(bar().querySelector(":scope > .brand")).toBeNull();
+      expect(themeFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
   });
 
   it("a setup change that keeps the theme fetches nothing", async () => {

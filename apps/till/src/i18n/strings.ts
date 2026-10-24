@@ -482,6 +482,7 @@ export const en = {
   "login.error": "Could not log in, try again",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
   "login.throttled": "Try again in {n}s",
+  "login.powered_by": "Powered by",
   // Supervisor-override dialog
   "override.title": "Approve with PIN",
   "override.pick_supervisor": "Choose who approves",
@@ -2237,6 +2238,7 @@ export const es: Record<StringKey, string> = {
   "login.load_failed": "No se pudo cargar el personal, inténtalo de nuevo",
   "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
   "login.throttled": "Inténtalo de nuevo en {n}s",
+  "login.powered_by": "Con la tecnología de",
   "override.title": "Autorización de un responsable",
   "override.pick_supervisor": "Elige a un responsable",
   "override.enter_pin": "Introduce el PIN del responsable",
