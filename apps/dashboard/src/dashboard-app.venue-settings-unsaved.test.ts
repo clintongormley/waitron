@@ -67,7 +67,6 @@ async function venueServiceReads(path: string) {
   const model = venueServiceModel();
   const answers: Record<string, unknown> = {
     "/management-api/venue-service": model,
-    "/management-api/venue-service/settings": { settings: model.settings },
   };
   return Response.json(answers[path] ?? []);
 }

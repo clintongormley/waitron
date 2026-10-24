@@ -19,22 +19,8 @@ afterEach(() => {
 });
 
 describe("VENUE_SERVICE_DASHBOARD", () => {
-  it("adds a kitchen panel for venue service managers", () => {
-    expect(
-      VENUE_SERVICE_DASHBOARD.settingsPanels!.map(({ id, tab, order, requiresPermission }) => ({
-        id,
-        tab,
-        order,
-        requiresPermission,
-      })),
-    ).toEqual([
-      {
-        id: "venue-service-kitchen",
-        tab: "kitchen",
-        order: 10,
-        requiresPermission: "venue_service.manage",
-      },
-    ]);
+  it("adds no Venue settings panel", () => {
+    expect(VENUE_SERVICE_DASHBOARD.settingsPanels ?? []).toEqual([]);
   });
 
   it("places Departments and zones first in the Venue operations group", () => {

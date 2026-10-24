@@ -8,7 +8,6 @@ import "./prep-stations-screen.js";
 import { VenueServiceApi } from "./client.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import "./venue-operations-screen.js";
-import "./service-settings-panel.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
 import "./floor-plans-screen.js";
@@ -133,25 +132,6 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
               .readOnly=${readOnly}
               .calendar=${calendar}
             ></dashboard-opening-hours-screen>`,
-        };
-      },
-    },
-  ],
-  settingsPanels: [
-    {
-      id: "venue-service-kitchen",
-      tab: "kitchen",
-      order: 10,
-      requiresPermission: "venue_service.manage",
-      readPermission: "venue.view",
-      create(ctx) {
-        const api = new VenueServiceApi(ctx.request, ctx.liveData);
-        return {
-          render: (readOnly = false) =>
-            html`<dashboard-venue-service-settings
-              .api=${api}
-              .readOnly=${readOnly}
-            ></dashboard-venue-service-settings>`,
         };
       },
     },
