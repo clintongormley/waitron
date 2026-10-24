@@ -15,6 +15,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
+import "@waitron/ui/src/components/wt-venue-logo.js";
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import {
   BACKGROUNDS,
   BUILT_IN_THEME_NAME,
@@ -115,6 +117,17 @@ function brandRow(view: ThemeView | undefined, choices: ThemeChoices): TemplateR
       : [html` · ${t(`appearance.saved_fix_${mode}`)} ${chip(shade)}${shade}`];
   });
   return html`${brand}${versions}`;
+}
+
+function logoRow(logo: ThemeLogo | null): TemplateResult | string {
+  if (logo === null) return t("appearance.none");
+  return html`<wt-venue-logo
+      size="banner"
+      alt=""
+      light=${liveMediaImage(logo.light, "display")}
+      dark=${logo.dark ? liveMediaImage(logo.dark, "display") : nothing}
+    ></wt-venue-logo>
+    ${t(logo.dark ? "appearance.logo_dark_own" : "appearance.logo_dark_plate")}`;
 }
 
 const HAND_FIELDS: ReadonlySet<unknown> = new Set(
@@ -237,6 +250,7 @@ export class LookCard extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) list: ThemeList | undefined;
   @property({ attribute: false }) canEdit = false;
+  @property({ attribute: false }) legalName = "";
   @state() private draft?: LookDraft;
   @state() private submitted = false;
   @state() private refusedCode = "";
@@ -885,7 +899,12 @@ export class LookCard extends LitElement {
               }}
             ></wt-segmented-control>
           </div>
-          <dashboard-theme-preview .theme=${this.#derived!} .name=${name}></dashboard-theme-preview>
+          <dashboard-theme-preview
+            .theme=${this.#derived!}
+            .name=${name}
+            .logo=${draft.choices.logo}
+            .legalName=${this.legalName}
+          ></dashboard-theme-preview>
         </div>
         ${keyed(
           this.#session,
@@ -996,6 +1015,11 @@ export class LookCard extends LitElement {
             label: t("appearance.theme_in_use"),
             value: view?.name ?? BUILT_IN_THEME_NAME,
             dataTest: "saved-theme",
+          },
+          {
+            label: t("appearance.logo"),
+            value: logoRow(choices.logo),
+            dataTest: "saved-logo",
           },
           {
             label: t("appearance.brand"),

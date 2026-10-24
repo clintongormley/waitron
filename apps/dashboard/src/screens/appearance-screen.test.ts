@@ -79,6 +79,20 @@ it("heads the page and hands the card the list and the editing right", async () 
   expect(card(el)!.api).toBe(api);
 });
 
+it("hands the Look card the tenant's legal name, and a new one", async () => {
+  const { api } = stubApi([json(listOf(GREEN))]);
+  const { el } = await mountWidget<Screen>("dashboard-appearance-screen", {
+    api,
+    canEdit: true,
+    legalName: "BAR LUCÍA S.L.",
+  });
+  await flush(el);
+  await expect.poll(() => card(el)?.legalName).toBe("BAR LUCÍA S.L.");
+  el.legalName = "RESTAURANTE LUCÍA S.L.";
+  await flush(el);
+  expect(card(el)!.legalName).toBe("RESTAURANTE LUCÍA S.L.");
+});
+
 it("sends its first read as activity and a live re-read passively", async () => {
   setLocale("en-GB");
   const { api, fetchImpl, active } = stubApi([json(listOf(GREEN)), json(listOf(BLUE))]);

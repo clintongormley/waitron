@@ -290,3 +290,18 @@ it.each(cases)("Look card: $state, $locale / $mode", async ({ mode, locale, stat
   const dialog = q(el, "dashboard-hard-to-read-dialog");
   await expectNoA11yViolations(state.startsWith("the Hard to read dialog") ? dialog! : host);
 });
+
+it.each(
+  ["light", "dark"].flatMap((mode) =>
+    ["en-GB", "es-ES"].map((locale) => ({ mode: mode as "light" | "dark", locale })),
+  ),
+)("the saved Look card with a logo, $locale / $mode", async ({ mode, locale }) => {
+  setLocale(locale);
+  const { el, host } = await mountWidget<Card>(
+    "dashboard-look-card",
+    { api: {} as DashboardApi, list: inUse(withLogo), canEdit: true },
+    mode,
+  );
+  await expect.poll(() => q(el, "[data-test=saved-logo] wt-venue-logo")).toBeTruthy();
+  await expectNoA11yViolations(host);
+});

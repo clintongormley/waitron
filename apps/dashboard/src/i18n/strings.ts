@@ -3029,6 +3029,8 @@ export const en = {
   "appearance.logo_dark_remove_name": "Remove the logo for dark screens",
   "appearance.logo_not_found": "That image is no longer in the image library. Pick another.",
   "appearance.logo_dark_without_light": "Add the main logo before a version for dark screens.",
+  "appearance.logo_dark_own": "Dark screens: own version",
+  "appearance.logo_dark_plate": "Dark screens: on a light plate",
   "appearance.theme_in_use": "Theme in use",
   "appearance.brand": "Brand colour",
   "appearance.brand_waitron": "Waitron's",
@@ -6334,6 +6336,8 @@ export const es: Record<StringKey, string> = {
   "appearance.logo_not_found": "Esa imagen ya no está en la biblioteca de imágenes. Elige otra.",
   "appearance.logo_dark_without_light":
     "Añade el logotipo principal antes de una versión para pantallas oscuras.",
+  "appearance.logo_dark_own": "Pantallas oscuras: versión propia",
+  "appearance.logo_dark_plate": "Pantallas oscuras: sobre una placa clara",
   "appearance.theme_in_use": "Tema en uso",
   "appearance.brand": "Color de marca",
   "appearance.brand_waitron": "De Waitron",

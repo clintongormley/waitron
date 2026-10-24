@@ -59,6 +59,7 @@ export class AppearanceScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) canEdit = false;
+  @property({ attribute: false }) legalName = "";
   @state() private list?: ThemeList;
   @state() private readError = "";
   @state() private editingId: string | null = null;
@@ -133,6 +134,7 @@ export class AppearanceScreen extends LitElement {
                 .api=${this.api}
                 .list=${this.list}
                 .canEdit=${this.canEdit}
+                .legalName=${this.legalName}
                 @themes-changed=${(event: CustomEvent<ThemesChanged>) => this.#changed(event.detail)}
                 @look-editing=${(event: CustomEvent<{ id: string | null }>) => {
                   this.editingId = event.detail.id;

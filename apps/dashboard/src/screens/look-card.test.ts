@@ -16,7 +16,7 @@ import {
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { es } from "../i18n/strings.js";
+import { en, es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -105,12 +105,13 @@ describe("the read-only Look card", () => {
     expect(q(reader, "[data-test=edit]")).toBeNull();
   });
 
-  it("labels the rows in order: theme, brand, background, corners, colours set by hand", async () => {
+  it("labels the rows in order: theme, logo, brand, background, corners, colours set by hand", async () => {
     setLocale("en-GB");
     const el = await mount(inUse(lucia));
     const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((dt) => text(dt));
     expect(labels).toEqual([
       "Theme in use",
+      "Logo",
       "Brand colour",
       "Background",
       "Corners",
@@ -244,6 +245,71 @@ describe("the read-only Look card", () => {
         item(page, es["appearance.mode.dark"]),
       ].join(", "),
     );
+  });
+});
+
+describe("the saved card's Logo row", () => {
+  useMediaPresentations();
+  const L = mediaTestReference("lucia.png");
+  const D = mediaTestReference("lucia-dark.png");
+  const display = (reference: string) =>
+    `/media/renditions/v1/${reference}/display/7500-2500-200.webp`;
+  const withLogo = (logo: ThemeChoices["logo"]) =>
+    inUse(theme("t-lucia", "Bar Lucía", { ...LUCIA, logo }));
+  const logoOf = (el: Card) =>
+    q(el, "[data-test=saved-logo] wt-venue-logo") as HTMLElementTagNameMap["wt-venue-logo"] | null;
+  const label = (el: Card) => text(q(el, "[data-test=saved-logo]")?.previousElementSibling);
+
+  it.each(["en-GB", "es-ES"] as const)("lists Logo second: None (%s)", async (locale) => {
+    setLocale(locale);
+    const el = await mount(inUse(lucia));
+    expect(text(el.shadowRoot!.querySelectorAll("dt")[1])).toBe(t("appearance.logo"));
+    expect(label(el)).toBe(t("appearance.logo"));
+    expect(row(el, "logo")).toBe(t("appearance.none"));
+    expect(logoOf(el)).toBeNull();
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "lists Logo second: the image, and 'Dark screens: on a light plate' (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount(withLogo({ light: L }));
+      expect(label(el)).toBe(t("appearance.logo"));
+      expect(row(el, "logo")).toBe((locale === "es-ES" ? es : en)["appearance.logo_dark_plate"]);
+      const logo = logoOf(el)!;
+      expect(logo.size).toBe("banner");
+      expect(logo.alt).toBe("");
+      await expect.poll(() => logo.getAttribute("light")).toBe(display(L));
+      expect(logo.hasAttribute("dark")).toBe(false);
+    },
+  );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "lists Logo second: the image, and 'Dark screens: own version' (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount(withLogo({ light: L, dark: D }));
+      expect(row(el, "logo")).toBe((locale === "es-ES" ? es : en)["appearance.logo_dark_own"]);
+      const logo = logoOf(el)!;
+      await expect.poll(() => logo.getAttribute("light")).toBe(display(L));
+      await expect.poll(() => logo.getAttribute("dark")).toBe(display(D));
+    },
+  );
+
+  it("a saved logo the library no longer resolves still reads its Dark screens line", async () => {
+    setLocale("en-GB");
+    const asked = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response(JSON.stringify({ images: {} })));
+    const el = await mount(withLogo({ light: L }));
+    await expect.poll(() => asked.mock.calls.length).toBeGreaterThan(0);
+    await Promise.all(asked.mock.results.map((result) => result.value));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const logo = logoOf(el)!;
+    await logo.updateComplete;
+    expect(logo.hasAttribute("light")).toBe(false);
+    expect(logo.shadowRoot!.querySelector("img")).toBeNull();
+    expect(row(el, "logo")).toBe(t("appearance.logo_dark_plate"));
   });
 });
 
@@ -549,6 +615,26 @@ describe("the logo in the editor", () => {
     await userEvent.click(q(el, "[data-test=edit]")!);
     await el.updateComplete;
   }
+
+  it("the editor's preview shows the draft's logo and the legal name", async () => {
+    setLocale("en-GB");
+    const rig = editRig(inUse(lucia));
+    const { el } = await mountWidget<Card>("dashboard-look-card", {
+      api: rig.api,
+      list: inUse(lucia),
+      canEdit: true,
+      legalName: "BAR LUCÍA S.L.",
+    });
+    await userEvent.click(q(el, "[data-test=edit]")!);
+    await el.updateComplete;
+    expect(preview(el).logo).toBeNull();
+    expect(preview(el).legalName).toBe("BAR LUCÍA S.L.");
+    await pick(el, "light", L);
+    expect(preview(el).logo).toEqual({ light: L });
+    expect(preview(el).logo).toBe(field(el).logo);
+    await pick(el, "dark", D);
+    expect(preview(el).logo).toEqual({ light: L, dark: D });
+  });
 
   it("the Logo field comes first in the editor", async () => {
     setLocale("en-GB");

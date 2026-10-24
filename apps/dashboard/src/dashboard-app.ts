@@ -2539,6 +2539,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-appearance-screen
           .api=${this.api}
           .canEdit=${this.#sessionPermissions.includes("layout.configure")}
+          .legalName=${this.venueName}
         ></dashboard-appearance-screen>`;
       case "content-languages":
         return html`<dashboard-content-languages-screen

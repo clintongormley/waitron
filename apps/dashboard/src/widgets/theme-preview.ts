@@ -1,7 +1,16 @@
-import { LitElement, css, html, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { applyTokens, baseStyles } from "@waitron/ui";
-import { MODES, themeSheet, type DerivedTheme, type Mode } from "@waitron/ui-core/theme";
+import "@waitron/ui/src/components/wt-venue-logo.js";
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
+import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
+import {
+  MODES,
+  themeSheet,
+  type DerivedTheme,
+  type Mode,
+  type ThemeLogo,
+} from "@waitron/ui-core/theme";
 import { t } from "../i18n/t.js";
 
 /**
@@ -59,6 +68,26 @@ export class ThemePreview extends LitElement {
         color: var(--wt-color-text);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
+      }
+      .strip {
+        display: flex;
+        flex: 1 1 100%;
+        align-items: center;
+        gap: var(--wt-space-3);
+        min-width: 0;
+        padding-block-end: var(--wt-space-3);
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+      .lockup {
+        display: block;
+        height: var(--wt-space-6);
+        max-width: 100%;
+        min-width: 0;
+      }
+      .legal-name {
+        min-width: 0;
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
       }
       .nav {
         display: flex;
@@ -174,6 +203,8 @@ export class ThemePreview extends LitElement {
 
   @property({ attribute: false }) theme!: Pick<DerivedTheme, "light" | "dark">;
   @property({ attribute: false }) name = "";
+  @property({ attribute: false }) logo: ThemeLogo | null = null;
+  @property({ attribute: false }) legalName = "";
 
   readonly #draft = new CSSStyleSheet();
 
@@ -189,10 +220,26 @@ export class ThemePreview extends LitElement {
     root.adoptedStyleSheets = [...root.adoptedStyleSheets, this.#draft];
   }
 
+  #logo(mode: Mode) {
+    const logo = this.logo;
+    if (logo === null) {
+      const src = mode === "dark" ? WAITRON_LOCKUP_DARK_URL : WAITRON_LOCKUP_URL;
+      return html`<img class="lockup" src=${src} alt="" />`;
+    }
+    return html`<wt-venue-logo
+      size="bar"
+      light=${liveMediaImage(logo.light, "display")}
+      dark=${logo.dark ? liveMediaImage(logo.dark, "display") : nothing}
+    ></wt-venue-logo>`;
+  }
+
   #panel(mode: Mode) {
     return html`<figure data-mode=${mode}>
       <h4>${t(`appearance.preview_${mode}`)}</h4>
       <div class="panel" data-theme=${mode} aria-hidden="true">
+        <div class="strip">
+          ${this.#logo(mode)}<span class="legal-name">${this.legalName}</span>
+        </div>
         <div class="nav">
           <span class="nav-item selected">${t("nav.appearance")}</span>
           <span class="nav-item">${t("nav.devices")}</span>
