@@ -752,16 +752,19 @@ export class LookCard extends LitElement {
       const code = codeOf(error);
       const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
       this.submitting = false;
-      if (code === "theme.invalid" && (field === "logo.light" || field === "logo.dark")) {
-        const reason = (error as { params?: { reason?: unknown } }).params?.reason;
-        this.refusedLogo = {
-          field,
-          message: t(
-            reason === "dark_without_light"
-              ? "appearance.logo_dark_without_light"
-              : "appearance.logo_not_found",
-          ),
-        };
+      const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
+      const logoMessage =
+        reason === "image_not_found"
+          ? "appearance.logo_not_found"
+          : reason === "dark_without_light"
+            ? "appearance.logo_dark_without_light"
+            : null;
+      if (
+        code === "theme.invalid" &&
+        (field === "logo.light" || field === "logo.dark") &&
+        logoMessage
+      ) {
+        this.refusedLogo = { field, message: t(logoMessage) };
         await this.#focusInvalid();
       } else if (code === "theme.invalid" && field === "brandColor") {
         this.refusedCode = t("appearance.bad_code");

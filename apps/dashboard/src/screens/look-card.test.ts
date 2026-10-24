@@ -851,6 +851,28 @@ describe("the logo in the editor", () => {
     expect(saveTheme).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ["logo.light", "bad_value"],
+    ["logo.light", "missing"],
+    ["logo.dark", "bad_value"],
+  ] as const)(
+    "a %s refusal for %s is the code's message at the bottom, with no field marked",
+    async (name, reason) => {
+      setLocale("en-GB");
+      const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L, dark: D })));
+      await chooseSegment(el, "corners", "Square");
+      saveTheme.mockRejectedValueOnce({ code: "theme.invalid", params: { field: name, reason } });
+      await userEvent.click(button(el, "save"));
+      await expect.poll(() => bottom(el)).toBe(codeMessage("theme.invalid"));
+      await field(el).updateComplete;
+      expect(field(el).errors).toEqual({});
+      expect(errorTexts(el)).toEqual([]);
+      expect(upload(el, "light").invalid).toBe(false);
+      expect(upload(el, "dark").invalid).toBe(false);
+      expect(button(el, "save").disabled).toBe(false);
+    },
+  );
+
   it("a refused save clears an earlier logo refusal before showing its own", async () => {
     setLocale("en-GB");
     const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L })));

@@ -4061,8 +4061,12 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   at least 200 pixels tall, looks best." Once there is a main image, a second picker under "For
   dark screens (optional)" offers "+ Add a version for dark screens", with the hint "Without one,
   dark screens show your logo on a light plate." until one is picked. Remove on the main image
-  clears both. A `theme.invalid` naming `logo.light` or `logo.dark` shows under that picker, marks
-  it invalid and puts the form's one message at the bottom (D9); inside the name dialog, the code's own message shows at the dialog's bottom instead; a logo change clears it.
+  clears both. With no image the dashed button is 256px wide inside its padding where there is room,
+  and narrower in a narrower column, its words wrapping. A `theme.invalid` naming `logo.light` or
+  `logo.dark` with `reason` `image_not_found` or `dark_without_light` shows under that picker, marks
+  it invalid (with an image, its plate's edge turns `--wt-color-danger`) and puts the form's one
+  message at the bottom (D9); any other logo refusal is the code's own message at the bottom, with
+  no field marked; inside the name dialog, the code's own message shows at the dialog's bottom instead; a logo change clears it.
 - **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
   before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
   it is disabled only while a request is being sent, or after a save attempt while the brand colour's
