@@ -150,9 +150,10 @@ export async function readPrintedThemeLogo(
     .select({ theme: THEME_TEXT, picture: storedPicture(paperWidth) })
     .from(customThemes)
     .where(eq(customThemes.inUse, 1));
-  const logo = row === undefined ? null : choicesOf(row.theme)?.logo;
+  if (row === undefined) return null;
+  const logo = choicesOf(row.theme)?.logo;
   if (logo === null || logo === undefined) return null;
-  return { name: logo.light, picture: readLogoRaster(row!.picture, paperWidth) };
+  return { name: logo.light, picture: readLogoRaster(row.picture, paperWidth) };
 }
 
 export async function createCustomTheme(

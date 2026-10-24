@@ -39,7 +39,7 @@ const TRIM = sql<string>`json_object(
   'printAddress', case when json_type(${DOCUMENT}, '$.printAddress') in ('true', 'false') then json_extract(${DOCUMENT}, '$.printAddress') else null end
 )`;
 
-/** The most bytes a stored picture for this paper can take as JSON text. */
+/** The longest stored picture, in bytes of JSON text, a read accepts for this paper. */
 export function storedPictureMaxBytes(paper: PaperWidth): number {
   return Math.ceil((Math.ceil(safeWidthDots(paper) / 8) * LOGO_MAX_HEIGHT_DOTS) / 3) * 4 + 128;
 }

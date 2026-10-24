@@ -8,7 +8,7 @@ import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCustomTheme,
   deleteCustomTheme,
@@ -788,6 +788,19 @@ describe("the theme in use's printed logo", () => {
       name: L,
       picture: { widthDots: 16, heightDots: 1, bits: new Uint8Array([0xf0, 0x0f]) },
     });
+  });
+
+  it("answers no picture without parsing stored dots too large for the paper", async () => {
+    const printedLogo = { ...DOTS, "80mm": { ...DOTS["80mm"], data: "A".repeat(200_000) } };
+    await insertRaw(JSON.stringify({ ...WITH_LOGO, printedLogo }), 1);
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      expect(await read("80mm")).toEqual({ name: L, picture: null });
+      const lengths = parse.mock.calls.map(([text]) => String(text).length);
+      expect(lengths.filter((length) => length >= 65_536)).toEqual([]);
+    } finally {
+      parse.mockRestore();
+    }
   });
 
   it("answers the name and no picture for a paper whose dots cannot print", async () => {
