@@ -552,18 +552,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Loose ends left by A496 (moving to a new tax ID).**
-  - How long, and in what form, an old taxpayer's database must be kept. Not checked;
-    `deploy/README.md` → _Moving to a new tax ID_ says so.
-  - The new-tax-ID procedure cannot tell the operator when the old box has sent its last sales to
-    AEAT. Step 3 of `deploy/README.md` → _Moving to a new tax ID_ keeps the box on so it can; the
-    only signal it names is the delay alert (`fiscal.submission_delayed`), raised after four hours.
-  - A change of country cannot import a configuration. Setup refuses an export whose country
-    differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across
-    countries needs its own design.
-  - The dashboard shows the configuration export card where the export route is not served, so its
-    download fails there: on a demo box, and on a box whose settings name no onboarding intent, such
-    as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
-    intent is preparation or live (`apps/server/src/boot.ts`).
+  [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
 
 - **Owner decision: should a setup request stop re-checking every old "start again" archive in
   full?** Each request reads and checks every archived file of every retirement, and the retired
@@ -580,18 +569,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
   wizard).**
-  - The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
-    (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows
-    one sentence for all three, as the command line does.
-  - The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
-    confirmed attempt downloads it again; the HTTP request stays open for the whole download.
-  - Walked in the browser test harness against a stubbed server, not yet on a running box. Walk it
-    on the box after 2 November: back up a test venue to a real bucket, wipe it, and restore it
-    through setup.
-  - After an archive restore or a Cloud restore the final screen does not show the device steps the
-    bucket rebuild's shows (`rebuilt` is set only on the bucket path,
-    `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
-    machine's addresses after an archive restore too.
+  [Detail](backlog/setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)
 
 - **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
   user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
