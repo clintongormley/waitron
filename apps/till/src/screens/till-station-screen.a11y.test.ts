@@ -45,6 +45,7 @@ const groups: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "settled", // collectable — surfaces the rail card's collect button for the a11y sweep
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,
@@ -86,6 +87,7 @@ const groups: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:05:00.000Z",
     status: "placed",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,

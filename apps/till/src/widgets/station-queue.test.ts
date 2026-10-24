@@ -25,6 +25,7 @@ const groupA: StationQueueGroup = {
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "placed",
   thresholds: DEFAULT_THRESHOLDS,
+  bumpMode: "line",
   items: [
     {
       allergy: null,
@@ -57,6 +58,7 @@ const groupB: StationQueueGroup = {
   queuedAt: "2026-08-17T10:05:00.000Z",
   status: "settled",
   thresholds: DEFAULT_THRESHOLDS,
+  bumpMode: "line",
   items: [
     {
       allergy: null,
@@ -427,6 +429,7 @@ describe("till-station-queue", () => {
       queuedAt: "2026-08-17T10:00:00.000Z",
       status: "settled",
       thresholds: DEFAULT_THRESHOLDS,
+      bumpMode: "line",
       items: [
         {
           allergy: null,
@@ -457,6 +460,7 @@ describe("till-station-queue", () => {
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
       thresholds: DEFAULT_THRESHOLDS,
+      bumpMode: "line",
       status: "placed",
       items: [
         {
@@ -558,6 +562,7 @@ describe("till-station-queue", () => {
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
       thresholds: DEFAULT_THRESHOLDS,
+      bumpMode: "line",
       status: "placed",
       items: [
         {
@@ -641,6 +646,7 @@ describe("till-station-queue", () => {
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
       thresholds: DEFAULT_THRESHOLDS,
+      bumpMode: "line",
       status: "placed",
       items: [
         {
@@ -664,6 +670,7 @@ describe("till-station-queue", () => {
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
       thresholds: DEFAULT_THRESHOLDS,
+      bumpMode: "line",
       status: "placed",
       items: [
         {
@@ -756,6 +763,7 @@ describe("till-station-queue", () => {
       label: null,
       queuedAt: "2026-08-17T10:00:00.000Z",
       thresholds: DEFAULT_THRESHOLDS,
+      bumpMode: "line",
       status: "placed",
       items: [
         {
@@ -1175,6 +1183,7 @@ const coursedOrder: StationQueueGroup = {
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "placed",
   thresholds: DEFAULT_THRESHOLDS,
+  bumpMode: "line",
   items: [
     {
       allergy: null,
@@ -1830,6 +1839,7 @@ const partyOrder: StationQueueGroup = {
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "open",
   thresholds: DEFAULT_THRESHOLDS,
+  bumpMode: "line",
   party: { id: "v-4", revision: 12 },
   items: [
     {
@@ -2283,6 +2293,7 @@ describe("till-station-queue — moving a dish to another station", () => {
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,
@@ -2440,6 +2451,7 @@ describe("till-station-queue — where Move sits", () => {
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [dish("ti-a", "Ensalada mixta"), dish("ti-b", "Pan")],
   };
   const box = (el: TillStationQueue, selector: string) =>

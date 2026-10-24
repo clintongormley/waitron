@@ -41,6 +41,7 @@ export function allergyQueue(): StationQueueGroup {
     status: "placed",
     queuedAt: allergyTime,
     thresholds: allergyThresholds,
+    bumpMode: "line",
     items: [
       {
         id: "ticked",

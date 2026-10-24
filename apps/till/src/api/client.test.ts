@@ -3341,6 +3341,7 @@ describe("TillApi", () => {
                 overdueAfterMinutes: 10,
                 forgottenAfterMinutes: 15,
               },
+              bumpMode: "line",
               items: [
                 {
                   allergy: null,

@@ -42,6 +42,7 @@ const stationGroup: StationQueueGroup = {
   queuedAt: "2026-10-20T10:00:00Z",
   status: "placed",
   thresholds,
+  bumpMode: "line",
   party,
   items: [{ ...stationItem, group }],
 };

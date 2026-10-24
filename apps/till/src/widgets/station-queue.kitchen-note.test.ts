@@ -14,6 +14,7 @@ const group = {
   queuedAt: new Date().toISOString(),
   kitchenNote: "Train at 14:30 <keep together>",
   thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+  bumpMode: "line",
   items: [
     {
       allergy: null,

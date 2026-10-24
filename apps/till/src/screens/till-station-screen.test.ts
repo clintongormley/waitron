@@ -59,6 +59,7 @@ const cocinaQueue: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "settled", // a Mode-P pickup — collectable from the rail lens (the handover test below)
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,
@@ -83,6 +84,7 @@ const barraQueue: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:05:00.000Z",
     status: "placed",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,
@@ -1017,6 +1019,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         queuedAt: "2026-08-17T10:00:00.000Z",
         status: "placed",
         thresholds: DEFAULT_THRESHOLDS,
+        bumpMode: "line",
         items: [
           {
             allergy: null,
@@ -1165,6 +1168,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
         queuedAt: "2026-08-17T10:00:00.000Z",
         status: "placed",
         thresholds: DEFAULT_THRESHOLDS,
+        bumpMode: "line",
         items: [
           {
             allergy: null,
@@ -1284,6 +1288,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
       queuedAt: firedAt,
       status: "placed",
       thresholds: DEFAULT_THRESHOLDS,
+      bumpMode: "line",
       items: [
         {
           allergy: null,

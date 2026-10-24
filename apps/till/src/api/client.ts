@@ -34,7 +34,7 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import type { ContentLanguages, JoinSide } from "@waitron/shared";
+import type { BumpMode, ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
   AttendanceCommand,
@@ -1664,6 +1664,8 @@ export interface StationQueueGroup {
    *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
    *  (`classifyBand`, `@waitron/shared`). */
   thresholds: StationThresholds;
+  /** This order's own station's choice; a merged queue mixes stations. */
+  bumpMode: BumpMode;
 }
 
 /**
