@@ -145,8 +145,8 @@ There are three ways out:
   payments again.
 
 A box cannot tell by itself whether its own clock is right, so during a stop it looks for another
-clock that agrees with it. Any one of these confirms the clock, and payments then restart by
-themselves, without anyone pressing a button:
+clock that agrees with it. Any one of these confirms the clock, and payments then restart. The first
+two need nobody to press anything:
 
 - **The tax agency's time.** During a stop, a box that sends records to the tax agency asks it for
   its time about once a minute. An answer within a minute of the box's clock confirms it. The
@@ -161,13 +161,14 @@ counts, and only for five minutes. A time taken before a change to the box's clo
 either. There is no limit on how far behind the last sale the box's clock may be.
 
 While the box waits, the **Clock** row says **Waiting for proof that the clock is right: the tax
-agency's time, or two tills or handhelds.** Once the proof is in, it says **Proof found: payments
-restart within a few seconds.**, and the box takes payments again within about 15 seconds.
+agency's time (when the box sends it records), or two tills or handhelds.** Once the proof is in, it
+says **Proof found: payments restart within a few seconds.**, and the box takes payments again
+within about 15 seconds.
 
 Sometimes the other clocks say the opposite: two or more tills or handhelds agree with each other
 that the box's clock is more than a minute off, or the tax agency's time disagrees with it during
-the stop. The row then says **Other clocks say the box's clock is wrong.**, and nothing restarts
-payments, not even an administrator. The tax agency's answer counts first: when it agrees with the
+the stop. The row then says **Other clocks say the box's clock is wrong.**, and nothing can confirm
+the clock, not even an administrator. The tax agency's answer counts first: when it agrees with the
 box, disagreeing devices do not hold payments back. The box keeps the tax agency's disagreement
 only in its memory, so it forgets it if the box itself restarts during the stop; while the tax
 agency still disagrees, it comes back with the next answer.
@@ -213,12 +214,12 @@ was dated wrongly, there is no list and no alert.
 The stop can also end by itself, because the clock was set right or reached the time of the last
 sale. The box still needs a confirmation to know which sales were dated wrongly, so until it gets
 one the **Clock** row stays amber and says **The payment stop that began at 2026-10-23 21:10 has
-ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute;
-two tills or handhelds, or an administrator's own device, can confirm it too.** Payments carry on
-meanwhile. A box that sends records to the tax agency keeps asking it for its time about once a
-minute, and administrators see **Check with this device's time** under the row. Once the tax
-agency, two tills or handhelds, or an administrator's device confirm the clock, the box lists the
-sales dated wrongly as above.
+ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when
+it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.**
+Payments carry on meanwhile. A box that sends records to the tax agency keeps asking it for its time
+about once a minute, and administrators see **Check with this device's time** under the row. Once
+the tax agency, two tills or handhelds, or an administrator's device confirm the clock, the box
+lists the sales dated wrongly as above.
 
 If instead the tax agency or two tills or handhelds say the box's clock is wrong, or payments stop
 for the clock again after more sales were recorded, the box cannot tell which sales were dated
@@ -270,8 +271,8 @@ The box emails everyone who can manage the system and has an email address when:
 - its disk has about 2 GB free or less;
 - its disk is full, so nothing can be saved;
 - its clock is set before 28 October 2024, so no sale can be recorded;
-- its clock reads earlier than its last sale, so payments have stopped.
-- its clock was confirmed during such a stop, so payments restarted by themselves;
+- its clock reads earlier than its last sale, so payments have stopped;
+- its clock was confirmed during such a stop, so payments restarted;
 - it found sales dated wrongly after such a stop, or found that it cannot tell which ones were.
 
 Each person gets one email per problem, in their own language, or the venue's if they have not

@@ -781,7 +781,7 @@ describe("the Clock row while payments are stopped for the clock", () => {
     expect(clock.details).toEqual([
       compared(),
       t("box_status.clock.behind_chain_fix"),
-      "Waiting for proof that the clock is right: the tax agency's time, or two tills or handhelds.",
+      "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), or two tills or handhelds.",
     ]);
   });
 
@@ -826,7 +826,7 @@ describe("the Clock row while payments are stopped for the clock", () => {
     expect(clock.state).toBe("attention");
     expect(clock.details).toEqual([
       compared(),
-      `The payment stop that began at ${formatIsoMinute(STOP_BEGAN)} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute; two tills or handhelds, or an administrator's own device, can confirm it too.`,
+      `The payment stop that began at ${formatIsoMinute(STOP_BEGAN)} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.`,
     ]);
   });
 

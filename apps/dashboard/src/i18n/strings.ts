@@ -3269,12 +3269,12 @@ export const en = {
   "box_status.clock.proof.authority": "Tax agency: matches (checked {time})",
   "box_status.clock.proof.devices": "Devices: {count} read {time}",
   "box_status.clock.stop.none":
-    "Waiting for proof that the clock is right: the tax agency's time, or two tills or handhelds.",
+    "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), or two tills or handhelds.",
   "box_status.clock.stop.contrary": "Other clocks say the box's clock is wrong.",
   "box_status.clock.stop.ready": "Proof found: payments restart within a few seconds.",
   "box_status.clock.stop.confirmed": "Payments restarted at {time}, confirmed by {who}.",
   "box_status.clock.check_waiting":
-    "The payment stop that began at {time} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute; two tills or handhelds, or an administrator's own device, can confirm it too.",
+    "The payment stop that began at {time} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.",
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.behind_chain_fix":
@@ -6636,12 +6636,12 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.proof.authority": "Hacienda: coincide (comprobado {time})",
   "box_status.clock.proof.devices": "Dispositivos: {count} marcan {time}",
   "box_status.clock.stop.none":
-    "Esperando una prueba de que la hora es correcta: la de Hacienda, o la de dos cajas o terminales.",
+    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.",
   "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del equipo está mal.",
   "box_status.clock.stop.ready": "Hay prueba: los cobros se reanudan en unos segundos.",
   "box_status.clock.stop.confirmed": "Cobros reanudados a las {time}, confirmado por {who}.",
   "box_status.clock.check_waiting":
-    "La parada de cobros que empezó a las {time} ha terminado, pero nada ha confirmado aún la hora del equipo. El equipo pregunta a Hacienda cada minuto; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
+    "La parada de cobros que empezó a las {time} ha terminado, pero nada ha confirmado aún la hora del equipo. El equipo pregunta a Hacienda cada minuto si le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":

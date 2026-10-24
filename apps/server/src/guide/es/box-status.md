@@ -155,7 +155,7 @@ Hay tres salidas:
 
 Un equipo no puede saber por sí solo si su reloj está bien, así que durante una parada busca otro
 reloj que coincida con el suyo. Cualquiera de estos confirma la hora, y entonces los cobros se
-reanudan solos, sin que nadie pulse ningún botón:
+reanudan. Las dos primeras no necesitan que nadie pulse nada:
 
 - **La hora de Hacienda.** Durante una parada, un equipo que envía registros a Hacienda le pide su
   hora más o menos una vez por minuto. Una respuesta a menos de un minuto del reloj del equipo la
@@ -171,13 +171,14 @@ reloj del equipo. No hay límite de cuánto puede ir el reloj del equipo por det
 venta.
 
 Mientras el equipo espera, la fila **Reloj** dice **Esperando una prueba de que la hora es correcta:
-la de Hacienda, o la de dos cajas o terminales.** Cuando llega la prueba, dice **Hay prueba: los
-cobros se reanudan en unos segundos.**, y el equipo vuelve a cobrar en unos 15 segundos.
+la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.** Cuando llega la
+prueba, dice **Hay prueba: los cobros se reanudan en unos segundos.**, y el equipo vuelve a cobrar
+en unos 15 segundos.
 
 A veces los otros relojes dicen lo contrario: dos o más cajas o terminales coinciden entre sí en que
 el reloj del equipo va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
 la parada. Entonces la fila dice **Otros relojes dicen que la hora del equipo está mal.**, y nada
-reanuda los cobros, ni siquiera un administrador. La respuesta de Hacienda cuenta primero: cuando
+puede confirmar la hora, ni siquiera un administrador. La respuesta de Hacienda cuenta primero: cuando
 coincide con el equipo, los dispositivos que no coinciden no paran los cobros. El equipo solo guarda
 el desacuerdo de Hacienda en su memoria, así que lo olvida si el propio equipo se reinicia durante
 la parada; mientras Hacienda siga sin coincidir, vuelve con la siguiente respuesta.
@@ -227,12 +228,12 @@ La parada también puede terminar sola, porque se puso bien la hora o el reloj l
 última venta. El equipo sigue necesitando una confirmación para saber qué ventas tienen la fecha
 mal, así que hasta que la tiene, la fila **Reloj** sigue en ámbar y dice **La parada de cobros que
 empezó a las 2026-10-23 21:10 ha terminado, pero nada ha confirmado aún la hora del equipo. El
-equipo pregunta a Hacienda cada minuto; también pueden confirmarla dos cajas o terminales, o el
-dispositivo de un administrador.** Mientras tanto se sigue cobrando. Un equipo que envía registros a
-Hacienda le sigue pidiendo su hora más o menos una vez por minuto, y los administradores ven
-**Comprobar con la hora de este dispositivo** bajo la fila. En cuanto Hacienda, dos cajas o
-terminales, o el dispositivo de un administrador confirman la hora, el equipo muestra las ventas con
-fecha incorrecta como se explica arriba.
+equipo pregunta a Hacienda cada minuto si le envía registros; también pueden confirmarla dos cajas o
+terminales, o el dispositivo de un administrador.** Mientras tanto se sigue cobrando. Un equipo que
+envía registros a Hacienda le sigue pidiendo su hora más o menos una vez por minuto, y los
+administradores ven **Comprobar con la hora de este dispositivo** bajo la fila. En cuanto Hacienda,
+dos cajas o terminales, o el dispositivo de un administrador confirman la hora, el equipo muestra
+las ventas con fecha incorrecta como se explica arriba.
 
 Si en cambio Hacienda o dos cajas o terminales dicen que la hora del equipo está mal, o los cobros se
 vuelven a parar por la hora después de registrarse más ventas, el equipo no puede saber qué ventas
@@ -290,8 +291,8 @@ correo cuando:
 - su disco está lleno, así que no se puede guardar nada;
 - su reloj marca una fecha anterior al 28 de octubre de 2024, así que no se puede registrar ninguna
   venta;
-- su reloj marca una hora anterior a la de su última venta, así que se han parado los cobros.
-- se confirmó su hora durante una de esas paradas, y los cobros se reanudaron solos;
+- su reloj marca una hora anterior a la de su última venta, así que se han parado los cobros;
+- se confirmó su hora durante una de esas paradas, y los cobros se reanudaron;
 - encontró ventas con fecha incorrecta tras una de esas paradas, o vio que no puede saber cuáles son.
 
 Cada persona recibe un correo por problema, en su propio idioma, o en el del local si no ha elegido
