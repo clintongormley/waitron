@@ -1,23 +1,48 @@
 import { desc, eq, max } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { BootReading } from "@waitron/fiscal";
+import { agreeingDeviceGroup, judgeClockWitnesses } from "@waitron/fiscal";
+import type {
+  BootReading,
+  ClockAdminReading,
+  ClockConfirmation,
+  ClockConfirmationSource,
+  ClockWitness,
+} from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
-import { chainHeads, clockBehindChain, latestRecord, storedHeads } from "./clock-behind.js";
+import {
+  CLOCK_BEHIND_MARGIN_MS,
+  chainHeads,
+  clockBehindChain,
+  latestRecord,
+  storedHeads,
+  type LatestRecord,
+} from "./clock-behind.js";
 import { isBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 export interface OpenCheck {
   id: string;
+  openedAt: Date;
   reason: (typeof clockChecks.$inferSelect)["reason"];
   detail: unknown;
+}
+
+interface Reading {
+  instant: Date;
+  offsetMinutes: number;
 }
 
 /** The open check: the one with the largest `seq`, while no confirmation names it. At most one
  * check is open, because a check opens only while none is. */
 export async function openCheck(tx: Transaction): Promise<OpenCheck | null> {
   const [last] = await tx
-    .select({ id: clockChecks.id, reason: clockChecks.reason, detail: clockChecks.detail })
+    .select({
+      id: clockChecks.id,
+      openedAt: clockChecks.openedAt,
+      reason: clockChecks.reason,
+      detail: clockChecks.detail,
+    })
     .from(clockChecks)
     .orderBy(desc(clockChecks.seq))
     .limit(1);
@@ -61,6 +86,118 @@ export function correctedStart(
   };
 }
 
+/** Witnesses taken during the stop: the box's own clock already read more than a minute behind
+ * the latest record when the witness was taken. An unreadable `boxAt` compares false and is left
+ * out, here and in `takenAfterStopEnded`. */
+export function takenDuringStop(
+  witnesses: readonly ClockWitness[],
+  latest: LatestRecord,
+): ClockWitness[] {
+  const stopBeganBeforeMs = latest.at.getTime() - CLOCK_BEHIND_MARGIN_MS;
+  return witnesses.filter((witness) => Date.parse(witness.boxAt) < stopBeganBeforeMs);
+}
+
+/** The mirror: taken once the stop had ended, the box reading no more than a minute behind the
+ * latest record. The witness store also hands back AEAT disagreements kept from during the stop,
+ * whatever their age, so a waiting check is judged on these alone. */
+export function takenAfterStopEnded(
+  witnesses: readonly ClockWitness[],
+  latest: LatestRecord,
+): ClockWitness[] {
+  const stopBeganBeforeMs = latest.at.getTime() - CLOCK_BEHIND_MARGIN_MS;
+  return witnesses.filter((witness) => Date.parse(witness.boxAt) >= stopBeganBeforeMs);
+}
+
+export interface ClosingWitnesses {
+  authority: ClockWitness | null;
+  devices: readonly ClockWitness[];
+  admin: ClockAdminReading | null;
+}
+
+const NO_WITNESSES: ClosingWitnesses = { authority: null, devices: [], admin: null };
+
+/** The witnesses as a confirmation's `proof` stores them. */
+export function storedWitnesses(witnesses: ClosingWitnesses) {
+  const { authority, admin } = witnesses;
+  return {
+    authority:
+      authority === null
+        ? null
+        : {
+            boxAt: authority.boxAt,
+            witnessAt: authority.witnessAt,
+            uncertaintyMs: authority.uncertaintyMs,
+          },
+    devices: witnesses.devices.map((witness) => ({
+      deviceId: witness.id,
+      address: witness.address,
+      boxAt: witness.boxAt,
+      witnessAt: witness.witnessAt,
+    })),
+    admin:
+      admin === null
+        ? null
+        : { boxAt: admin.boxAt, witnessAt: admin.witnessAt, uncertaintyMs: admin.uncertaintyMs },
+  };
+}
+
+/** Writes the confirmation closing `check` without lifting a stop, so it names no record, with
+ * `proof.closing` from the boot reading taken now. */
+export async function writeClosing(
+  tx: Transaction,
+  input: {
+    check: OpenCheck;
+    reading: Reading;
+    boot: BootReading;
+    nodeId: string;
+    source: ClockConfirmationSource;
+    personId: string | null;
+    witnesses: ClosingWitnesses;
+    unconfirmed: boolean;
+  },
+): Promise<ClockConfirmation> {
+  const { check, reading, boot, source, personId } = input;
+  const seq = await nextConfirmationSeq(tx);
+  const [row] = await tx
+    .insert(clockConfirmations)
+    .values({
+      seq,
+      nodeId: input.nodeId as NodeId,
+      boxClockAt: reading.instant,
+      confirmedAt: reading.instant,
+      stepMs: 0,
+      source,
+      personId,
+      reason: check.reason,
+      proof: {
+        ...storedWitnesses(input.witnesses),
+        closing: {
+          bootMs: boot.ms,
+          bootId: boot.id,
+          ...correctedStart(check, {
+            confirmedAt: reading.instant,
+            bootMs: boot.ms,
+            bootId: boot.id,
+          }),
+          unconfirmed: input.unconfirmed,
+        },
+      },
+      checkId: check.id,
+      registroId: null,
+      recordAt: null,
+    })
+    .returning({ id: clockConfirmations.id });
+  return {
+    id: row!.id,
+    seq,
+    source,
+    personId,
+    confirmedAt: reading.instant.toISOString(),
+    checkId: check.id,
+    recordId: null,
+  };
+}
+
 /** Whether a record was written since the check opened: a node's head past its stored entry, or a
  * node missing from it. Heads a correct writer never stores count as moved. */
 function headsMoved(detail: unknown, current: Record<string, number>): boolean {
@@ -77,46 +214,27 @@ function headsMoved(detail: unknown, current: Record<string, number>): boolean {
 export async function openClockCheck(
   tx: Transaction,
   input: {
-    reading: { instant: Date; offsetMinutes: number };
+    reading: Reading;
     boot: BootReading;
     nodeId: string;
   },
 ): Promise<{ id: string } | null> {
-  const { reading, boot } = input;
-  const nodeId = input.nodeId as NodeId;
+  const { reading, boot, nodeId } = input;
   if (isBeforeFirstIssueDate(reading)) return null;
   if ((await clockBehindChain(tx, reading)) === null) return null;
   const heads = await chainHeads(tx);
   const open = await openCheck(tx);
   if (open !== null) {
     if (!headsMoved(open.detail, heads)) return { id: open.id };
-    await tx.insert(clockConfirmations).values({
-      seq: await nextConfirmationSeq(tx),
+    await writeClosing(tx, {
+      check: open,
+      reading,
+      boot,
       nodeId,
-      boxClockAt: reading.instant,
-      confirmedAt: reading.instant,
-      stepMs: 0,
       source: "elapsed",
       personId: null,
-      reason: open.reason,
-      proof: {
-        authority: null,
-        devices: [],
-        admin: null,
-        closing: {
-          bootMs: boot.ms,
-          bootId: boot.id,
-          ...correctedStart(open, {
-            confirmedAt: reading.instant,
-            bootMs: boot.ms,
-            bootId: boot.id,
-          }),
-          unconfirmed: true,
-        },
-      },
-      checkId: open.id,
-      registroId: null,
-      recordAt: null,
+      witnesses: NO_WITNESSES,
+      unconfirmed: true,
     });
   }
   // The stop proper holds, so a latest record exists.
@@ -125,7 +243,7 @@ export async function openClockCheck(
     .insert(clockChecks)
     .values({
       seq: await nextCheckSeq(tx),
-      nodeId,
+      nodeId: nodeId as NodeId,
       openedAt: reading.instant,
       reason: "behind_chain",
       detail: {
@@ -139,4 +257,81 @@ export async function openClockCheck(
     })
     .returning({ id: clockChecks.id });
   return { id: row!.id };
+}
+
+/** The open check, with the latest record, once its stop has ended by itself: the stop proper no
+ * longer holds and no confirmation has closed it. Null before 28-10-2024. */
+export async function waitingCheck(
+  tx: Transaction,
+  reading: Reading,
+): Promise<{ check: OpenCheck; latest: LatestRecord } | null> {
+  if (isBeforeFirstIssueDate(reading)) return null;
+  const check = await openCheck(tx);
+  if (check === null || (await clockBehindChain(tx, reading)) !== null) return null;
+  const latest = await latestRecord(tx);
+  return latest === undefined ? null : { check, latest };
+}
+
+export async function waitingClockCheck(
+  tx: Transaction,
+  reading: Reading,
+): Promise<{ checkId: string; openedAt: string } | null> {
+  const waiting = await waitingCheck(tx, reading);
+  if (waiting === null) return null;
+  return { checkId: waiting.check.id, openedAt: waiting.check.openedAt.toISOString() };
+}
+
+/** The witnesses taken after the stop ended, judged as during a stop. */
+export function judgeAfterStopEnded(
+  witnesses: readonly ClockWitness[],
+  latest: LatestRecord,
+): { agreeing: Omit<ClosingWitnesses, "admin">; contrary: Omit<ClosingWitnesses, "admin"> } {
+  const verdict = judgeClockWitnesses(takenAfterStopEnded(witnesses, latest));
+  const group = new Set(agreeingDeviceGroup(verdict.agreeing));
+  return {
+    agreeing: {
+      authority: verdict.agreeing.find((witness) => witness.kind === "authority") ?? null,
+      devices: verdict.agreeing.filter((witness) => group.has(witness)),
+    },
+    contrary: {
+      authority: verdict.authorityDisagrees[0] ?? null,
+      devices: verdict.devicesDisagreeing,
+    },
+  };
+}
+
+/** Closes a check that waits, on a fresh witness taken after its stop ended, AEAT first: AEAT
+ * agreeing closes it `authority`, AEAT disagreeing `elapsed` and unconfirmed; with no AEAT
+ * witness, any group of devices from two addresses disagreeing closes it `elapsed`, else one
+ * agreeing closes it `devices`. With no such witness it writes nothing and the check waits on. */
+export async function closeClockCheckByItself(
+  tx: Transaction,
+  input: {
+    reading: Reading;
+    boot: BootReading;
+    witnesses: readonly ClockWitness[];
+    nodeId: string;
+  },
+): Promise<{ confirmation: ClockConfirmation | null }> {
+  const waiting = await waitingCheck(tx, input.reading);
+  if (waiting === null) return { confirmation: null };
+  const { agreeing, contrary } = judgeAfterStopEnded(input.witnesses, waiting.latest);
+  let source: ClockConfirmationSource;
+  if (contrary.authority !== null) source = "elapsed";
+  else if (agreeing.authority !== null) source = "authority";
+  else if (contrary.devices.length > 0) source = "elapsed";
+  else if (agreeing.devices.length > 0) source = "devices";
+  else return { confirmation: null };
+  const unconfirmed = source === "elapsed";
+  const confirmation = await writeClosing(tx, {
+    check: waiting.check,
+    reading: input.reading,
+    boot: input.boot,
+    nodeId: input.nodeId,
+    source,
+    personId: null,
+    witnesses: unconfirmed ? NO_WITNESSES : { ...agreeing, admin: null },
+    unconfirmed,
+  });
+  return { confirmation };
 }

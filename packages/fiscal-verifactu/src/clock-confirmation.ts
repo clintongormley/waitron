@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { agreeingDeviceGroup, CLOCK_WITNESS_MARGIN_MS, judgeClockWitnesses } from "@waitron/fiscal";
 import type {
+  ClockAdminConfirm,
   ClockAdminReading,
   ClockConfirmation,
   ClockConfirmRequest,
@@ -19,7 +20,15 @@ import {
   latestRecord,
   type LatestRecord,
 } from "./clock-behind.js";
-import { nextConfirmationSeq, openCheck } from "./clock-checks.js";
+import {
+  judgeAfterStopEnded,
+  nextConfirmationSeq,
+  openCheck,
+  storedWitnesses,
+  takenDuringStop,
+  waitingCheck,
+  writeClosing,
+} from "./clock-checks.js";
 import { recordDisproofs } from "./clock-stop-incidents.js";
 import { isBeforeFirstIssueDate, refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
@@ -54,12 +63,7 @@ async function judge(
   )
     return null;
   const gapMs = latest.at.getTime() - reading.instant.getTime();
-  // Taken during this stop: the box's own clock already read more than a minute behind the latest
-  // record when the witness was taken. An unreadable boxAt compares false and is left out.
-  const stopBeganBeforeMs = latest.at.getTime() - CLOCK_BEHIND_MARGIN_MS;
-  const verdict = judgeClockWitnesses(
-    witnesses.filter((witness) => Date.parse(witness.boxAt) < stopBeganBeforeMs),
-  );
+  const verdict = judgeClockWitnesses(takenDuringStop(witnesses, latest));
   // A witness taken after the reading may describe the clock before it stepped back.
   const taken = verdict.agreeing.filter(
     (witness) => Date.parse(witness.boxAt) <= reading.instant.getTime(),
@@ -137,11 +141,37 @@ function adminAgrees(reading: ClockAdminReading): boolean {
   return differenceMs + reading.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
 }
 
+/** The administrator's confirmation of a check that waits: refused `not_stopped` with none, and
+ * `contrary_proof` on a witness taken after the stop ended that disagrees. */
+async function closeWaitingAsAdmin(
+  tx: Transaction,
+  input: ClockConfirmRequest,
+  admin: ClockAdminConfirm,
+): Promise<{ confirmation: ClockConfirmation }> {
+  const waiting = await waitingCheck(tx, input.reading);
+  if (waiting === null) refuse("not_stopped");
+  const { agreeing, contrary } = judgeAfterStopEnded(input.witnesses, waiting.latest);
+  if (contrary.authority !== null || contrary.devices.length > 0) refuse("contrary_proof");
+  if (!adminAgrees(admin.reading)) refuse("differs");
+  const confirmation = await writeClosing(tx, {
+    check: waiting.check,
+    reading: input.reading,
+    boot: input.boot,
+    nodeId: input.nodeId,
+    source: "admin",
+    personId: admin.personId,
+    witnesses: { ...agreeing, admin: admin.reading },
+    unconfirmed: false,
+  });
+  return { confirmation };
+}
+
 /** Confirms the box's clock while the stop proper holds, writing one `clock_confirmations` row
  * naming the latest record and closing the open check, which lifts the stop. With no `admin`, only
  * when the witnesses are ready; otherwise it writes nothing and answers null. With `admin`, on the
  * administrator's device unless a witness taken during the stop disagrees; a refusal throws
- * `clock.confirm_refused`, and a reading before 28-10-2024 `clock.unusable`, writing nothing. */
+ * `clock.confirm_refused`, and a reading before 28-10-2024 `clock.unusable`, writing nothing. With
+ * `admin` and no stop, it closes a check that waits instead. */
 export async function confirmClockStop(
   tx: Transaction,
   input: ClockConfirmRequest,
@@ -152,7 +182,7 @@ export async function confirmClockStop(
   if (admin === undefined) {
     if (judged === null || judged.proof !== "ready") return { confirmation: null };
   } else {
-    if (judged === null || !judged.stopped) refuse("not_stopped");
+    if (judged === null || !judged.stopped) return closeWaitingAsAdmin(tx, input, admin);
     if (judged.contrary.authority !== null || judged.contrary.devices.length > 0)
       refuse("contrary_proof");
     if (!adminAgrees(admin.reading)) refuse("differs");
@@ -175,28 +205,10 @@ export async function confirmClockStop(
       personId,
       reason: check?.reason ?? "behind_chain",
       proof: {
-        authority:
-          agreeing.authority === null
-            ? null
-            : {
-                boxAt: agreeing.authority.boxAt,
-                witnessAt: agreeing.authority.witnessAt,
-                uncertaintyMs: agreeing.authority.uncertaintyMs,
-              },
-        devices: agreeing.devices.map((witness) => ({
-          deviceId: witness.id,
-          address: witness.address,
-          boxAt: witness.boxAt,
-          witnessAt: witness.witnessAt,
-        })),
-        admin:
-          admin === undefined
-            ? null
-            : {
-                boxAt: admin.reading.boxAt,
-                witnessAt: admin.reading.witnessAt,
-                uncertaintyMs: admin.reading.uncertaintyMs,
-              },
+        ...storedWitnesses({
+          ...agreeing,
+          admin: admin === undefined ? null : admin.reading,
+        }),
         heads: await chainHeads(tx),
       },
       checkId: check?.id ?? null,

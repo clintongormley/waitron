@@ -772,3 +772,113 @@ describe("an administrator's device", () => {
     });
   });
 });
+
+describe("an administrator's device while a check waits", () => {
+  /** A sale at T and a check opened at R; the stop has ended once the clock reads T. */
+  async function waitingCheck(): Promise<string> {
+    await sale(T);
+    return openCheck(R);
+  }
+
+  it("agreeing, closes the waiting check with source admin, naming no record", async () => {
+    const checkId = await waitingCheck();
+    const admin = adminReading(T - 2 * S, 10 * S, S);
+    const devices = twoDevices(T);
+    const answer = await confirmAsAdmin(T, devices, admin);
+    const written = await rows();
+    expect(written).toEqual([
+      {
+        id: answer.confirmation!.id,
+        seq: 1,
+        nodeId,
+        boxClockAt: new Date(T),
+        confirmedAt: new Date(T),
+        stepMs: 0,
+        source: "admin",
+        personId: PERSON,
+        reason: "behind_chain",
+        proof: {
+          authority: null,
+          devices: storedDevices(devices),
+          admin: {
+            boxAt: admin.reading.boxAt,
+            witnessAt: admin.reading.witnessAt,
+            uncertaintyMs: S,
+          },
+          // The opening stored no boot reading, so no elapsed time is known.
+          closing: {
+            bootMs: BOOT.ms,
+            bootId: null,
+            correctedStart: iso(T),
+            partial: true,
+            unconfirmed: false,
+          },
+        },
+        checkId,
+        registroId: null,
+        recordAt: null,
+      },
+    ]);
+    expect(answer).toEqual({
+      confirmation: {
+        id: written[0]!.id,
+        seq: 1,
+        source: "admin",
+        personId: PERSON,
+        confirmedAt: iso(T),
+        checkId,
+        recordId: null,
+      },
+    });
+    await adminRefused(T, [], adminReading(T, 0, 0), "clock.confirm_refused", {
+      reason: "not_stopped",
+    });
+  });
+
+  it("an AEAT disagreement kept from during the stop does not refuse it", async () => {
+    const checkId = await waitingCheck();
+    const answer = await confirmAsAdmin(
+      T,
+      [authority(R - 10 * M, 2 * H, 500)],
+      adminReading(T, 0, 0),
+    );
+    expect(answer.confirmation).toMatchObject({ source: "admin", checkId, recordId: null });
+  });
+
+  it("an AEAT disagreement taken after the stop ended refuses it as contrary proof", async () => {
+    await waitingCheck();
+    await adminRefused(
+      T,
+      [authority(T - 20 * S, 2 * H, 500)],
+      adminReading(T, 0, 0),
+      "clock.confirm_refused",
+      { reason: "contrary_proof" },
+    );
+  });
+
+  it("two devices disagreeing after the stop ended refuse it as contrary proof", async () => {
+    await waitingCheck();
+    await adminRefused(T, twoDevicesAgainst(T), adminReading(T, 0, 0), "clock.confirm_refused", {
+      reason: "contrary_proof",
+    });
+  });
+
+  it("a device that differs is refused, and writes nothing", async () => {
+    await waitingCheck();
+    await adminRefused(T, [], adminReading(T, 2 * M, 0), "clock.confirm_refused", {
+      reason: "differs",
+    });
+  });
+
+  it("with no stop and no waiting check, is refused as not stopped", async () => {
+    await sale(T);
+    await adminRefused(T, [], adminReading(T, 0, 0), "clock.confirm_refused", {
+      reason: "not_stopped",
+    });
+  });
+
+  it("the automatic path does not close a waiting check", async () => {
+    await waitingCheck();
+    await confirmsNothing(T, [authority(T - 10 * S, 5 * S, 500), ...twoDevices(T)]);
+  });
+});
