@@ -153,6 +153,22 @@ describe("the venue logo in a handheld's bar", () => {
     });
   });
 
+  it("with find-bill in More, the logo and More share one row", async () => {
+    startFrom(withLogo(LIGHT));
+    await atViewport(1280, async () => {
+      const loads = nextLogoLoad();
+      const { el } = await mount({ affordances: ["find-bill", "station", "expo"] });
+      await loads;
+      await settle(el);
+      expect(steps(el)).toBe(0);
+      expect(
+        head(el).querySelector('wt-row-actions[data-test="more-menu"] .find-bill'),
+      ).not.toBeNull();
+      expect(logoOf(el)).not.toBeNull();
+      expectOneRow(el);
+    });
+  });
+
   it("names the logo by a legal name that arrives later", async () => {
     startFrom(withLogo(LIGHT));
     await atViewport(1280, async () => {

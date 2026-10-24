@@ -107,7 +107,8 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
-    this.addEventListener("wt-logo-load", () => this.#refit());
+    // No step back: the bar draws its logo only while no step is taken.
+    this.addEventListener("wt-logo-load", () => void this.#fit());
     this.addEventListener("wt-guide-open", (event) =>
       this.#onGuideOpen(event as CustomEvent<{ href: string }>),
     );
@@ -548,12 +549,6 @@ export class TillShell extends LitElement {
     } else if (changed.has("transferCount")) {
       void this.#fit();
     }
-  }
-
-  /** The bar's logo changes width once its image arrives, after the render. */
-  #refit(): void {
-    this.#stepBackOwed = true;
-    void this.#fit();
   }
 
   /** Observes the host, not the header: its width comes from its container, so a fit does not
