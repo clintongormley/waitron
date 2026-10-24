@@ -216,6 +216,7 @@ describe("dashboard-alerts-bell", () => {
   });
 
   it("words the same three alerts in Spanish", async () => {
+    setLocale("es-ES");
     const alerts = clockAlerts();
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts });
     el.open();

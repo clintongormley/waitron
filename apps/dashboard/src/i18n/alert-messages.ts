@@ -28,6 +28,7 @@ export const ALERT_MESSAGES: Readonly<
   Record<
     string,
     Words & {
+      readonly one?: Words & { readonly param: string };
       readonly variants?: Readonly<Record<string, Words & { readonly mode: "replace" | "append" }>>;
     }
   >
@@ -151,6 +152,11 @@ export const ALERT_MESSAGES: Readonly<
   "clock.records_misdated": {
     en: "{count} sales were recorded with a time later than the real time (from {from:minute} to {to:minute}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.",
     es: "Se registraron {count} ventas con una hora posterior a la real (de {from:minute} a {to:minute}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del equipo.",
+    one: {
+      param: "count",
+      en: "One sale was recorded with a time later than the real time, at {from:minute}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.",
+      es: "Se registró una venta con una hora posterior a la real, a las {from:minute}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.",
+    },
     variants: {
       partial: {
         mode: "append",

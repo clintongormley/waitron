@@ -125,10 +125,12 @@ it("explains a release into a closed station in English and Spanish", () => {
 });
 
 it("marks every amount slot in the alert wording as money", () => {
-  const unmarked = Object.entries(ALERT_MESSAGES).flatMap(([code, { en, es }]) =>
-    [en, es].flatMap((text) =>
-      [...text.matchAll(/\{(amount|captured|expected)\}/g)].map((m) => `${code}: ${m[0]}`),
-    ),
+  const unmarked = Object.entries(ALERT_MESSAGES).flatMap(([code, entry]) =>
+    [entry, entry.one, ...Object.values(entry.variants ?? {})]
+      .flatMap((words) => (words ? [words.en, words.es] : []))
+      .flatMap((text) =>
+        [...text.matchAll(/\{(amount|captured|expected)\}/g)].map((m) => `${code}: ${m[0]}`),
+      ),
   );
   expect(unmarked).toEqual([]);
 });
@@ -462,6 +464,10 @@ describe("payments restarted on a clock behind the last sale", () => {
       devices: { en: "two tills or handhelds", es: expect.any(String) },
       admin: { en: "an administrator", es: expect.any(String) },
     });
+    expect(ALERT_WORDS["clock_confirmed_by"]!.otherwise).toEqual({
+      en: "a check recorded on the box",
+      es: "una comprobación anotada en el equipo",
+    });
   });
 });
 
@@ -487,6 +493,27 @@ describe("sales recorded with a time later than the real time", () => {
     expect(alertMessage("clock.records_misdated", params, "en")).toBe(LIST_EN);
     expect(alertMessage("clock.records_misdated", params, "es")).toBe(fill(entry.es));
     expect(entry.es).toContain(t("nav.box_status", "es-ES"));
+  });
+
+  it("says one sale in the singular, in each language, and the list may be short after it", () => {
+    const one = { ...params, count: 1, to: params.from };
+    expect(alertMessage("clock.records_misdated", one, "en")).toBe(
+      `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.`,
+    );
+    expect(alertMessage("clock.records_misdated", one, "es")).toBe(
+      `Se registró una venta con una hora posterior a la real, a las ${from}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.`,
+    );
+    expect(alertMessage("clock.records_misdated", { ...one, partial: true }, "en")).toBe(
+      `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page. The box restarted during the stop, so the list may be short.`,
+    );
+  });
+
+  it("keeps the plural for two sales, in each language", () => {
+    const two = { ...params, count: 2 };
+    expect(alertMessage("clock.records_misdated", two, "en")).toBe(LIST_EN.replace("3 ", "2 "));
+    expect(alertMessage("clock.records_misdated", two, "es")).toBe(
+      `Se registraron 2 ventas con una hora posterior a la real (de ${from} a ${to}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del equipo.`,
+    );
   });
 
   it("adds that the list may be short when the box restarted during the stop", () => {

@@ -178,9 +178,16 @@ describe("dashboard-alerts-screen", () => {
         api: stubApi({ listAlerts }),
       });
       await flush(el);
-      const shown = [...rows(el, "open-alerts-table")].map(
-        (row) => row.querySelector("td")!.textContent!,
-      );
+      // The message alone: the cell's text up to its first line break.
+      const shown = [...rows(el, "open-alerts-table")].map((row) => {
+        const nodes = [...row.querySelector("[part=alert-message]")!.childNodes];
+        const end = nodes.findIndex((node) => node.nodeName === "BR");
+        return nodes
+          .slice(0, end)
+          .filter((node) => node.nodeType !== Node.COMMENT_NODE)
+          .map((node) => node.textContent)
+          .join("");
+      });
       const expected =
         locale === "en-GB"
           ? [
@@ -189,12 +196,7 @@ describe("dashboard-alerts-screen", () => {
               `The payment stop that began at ${at("2026-10-19T23:41:00.000Z")} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.`,
             ]
           : alerts.map((alert) => alertMessage(alert.code, alert.params, "es"));
-      expect(shown, locale).toHaveLength(3);
-      for (const text of expected)
-        expect(
-          shown.filter((row) => row.includes(text)),
-          text,
-        ).toHaveLength(1);
+      expect(shown, locale).toEqual(expected);
       cleanupWidgets();
     }
   });

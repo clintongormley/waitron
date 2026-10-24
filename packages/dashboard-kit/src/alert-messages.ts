@@ -10,12 +10,14 @@ import { GENERIC_ALERT } from "./strings.js";
  * an instant in `toISOString`'s shape as `YYYY-MM-DD HH:MM` in the browser's zone, in either
  * language; `{name:list}` writes the words a registered word list gives the param's value.
  * A variant is chosen by its param being `true`: a `replace` variant's words stand instead of the
- * message, and otherwise each `append` variant's words follow it. */
+ * message, and otherwise each `append` variant's words follow it. `one` words stand instead of the
+ * message's own when the param they name is the number 1; variants apply over them as usual. */
 export type AlertMessageTable = Readonly<Record<string, AlertMessageEntry>>;
 
 type Words = { readonly en: string; readonly es: string };
 
 export type AlertMessageEntry = Words & {
+  readonly one?: Words & { readonly param: string };
   readonly variants?: Readonly<Record<string, Words & { readonly mode: "replace" | "append" }>>;
 };
 
@@ -97,7 +99,8 @@ function chooseTemplate(
   const chosen = Object.entries(entry.variants ?? {}).filter(([name]) => params[name] === true);
   const replacing = chosen.find(([, variant]) => variant.mode === "replace");
   if (replacing) return pickLocale(replacing[1], l);
-  return [entry, ...chosen.map(([, variant]) => variant)].map((w) => pickLocale(w, l)).join(" ");
+  const base = entry.one && params[entry.one.param] === 1 ? entry.one : entry;
+  return [base, ...chosen.map(([, variant]) => variant)].map((w) => pickLocale(w, l)).join(" ");
 }
 
 export function alertMessage(

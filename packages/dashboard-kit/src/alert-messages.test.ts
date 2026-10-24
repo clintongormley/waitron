@@ -212,6 +212,7 @@ registerAlertMessages({
       short: { mode: "append", en: "The count may be short.", es: "ES short." },
       late: { mode: "append", en: "It came late.", es: "ES late." },
     },
+    one: { param: "count", en: "Found one.", es: "ES found one." },
   },
 });
 
@@ -244,5 +245,25 @@ describe("a message with variants chosen by a true param", () => {
       alertMessage("test.variants", { count: 0, unknown: true, short: true, when }, "en"),
     ).toBe(`Could not count since ${formatIsoMinute(when)}.`);
     expect(alertMessage("test.variants", { count: 0, unknown: true }, "es")).toBe("ES unknown.");
+  });
+});
+
+describe("a message with its own words for one", () => {
+  it("writes the words for one when the named param is exactly 1, in the alert's language", () => {
+    expect(alertMessage("test.variants", { count: 1 }, "en")).toBe("Found one.");
+    expect(alertMessage("test.variants", { count: 1 }, "es")).toBe("ES found one.");
+  });
+
+  it("keeps the message's own words for any other count, or a 1 that is not a number", () => {
+    for (const count of [0, 2, "1", true]) {
+      expect(alertMessage("test.variants", { count }, "en")).toBe(`Found ${String(count)}.`);
+    }
+  });
+
+  it("appends a variant after the words for one, and a replacing variant still stands alone", () => {
+    expect(alertMessage("test.variants", { count: 1, short: true }, "en")).toBe(
+      "Found one. The count may be short.",
+    );
+    expect(alertMessage("test.variants", { count: 1, unknown: true }, "es")).toBe("ES unknown.");
   });
 });
