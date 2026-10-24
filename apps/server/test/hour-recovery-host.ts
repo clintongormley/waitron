@@ -19,7 +19,7 @@ import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
-import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
+import { readHourHistoryWithRecordFloor } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -60,6 +60,13 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { sealNodeState, writeSealedStateRow } from "../src/sealed-state.js";
+import {
+  createFakeTimersHourClock,
+  recoverySelectPastWaits,
+  selectPastWaits,
+  selectPastWaits as selectPastWaits_,
+  type HourTestClock,
+} from "../src/testing/hour-test-clock.js";
 
 const mocked = vi.hoisted(() => ({ internet: vi.fn() }));
 export const external: { internet: Mock } = mocked;
@@ -86,6 +93,11 @@ export const bases = [
 export const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 export let root: string;
 export let key: { secret: string; name: string };
+/** Over the suite's fake timers; reset before each test. */
+export let clock: HourTestClock;
+/** Defaults to a browser on another device; a case about the box's own screen sets it. */
+export const seams: { requestFromBox: () => boolean } = { requestFromBox: () => false };
+const client = () => ({ onBox: seams.requestFromBox() });
 let value: unknown;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "hour-recovery-host-"));
@@ -93,6 +105,8 @@ beforeEach(async () => {
   await mkdir(join(root, "venue"));
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  clock = createFakeTimersHourClock();
+  seams.requestFromBox = () => false;
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "unavailable",
@@ -114,7 +128,7 @@ beforeEach(async () => {
           value = next;
         },
       }),
-    monotonicNow: () => 0,
+    monotonicNow: () => clock.monotonic(),
     read: async () => ({
       scope,
       bases,
@@ -125,22 +139,22 @@ beforeEach(async () => {
           {
             source: "box",
             result: "usable",
-            instantMs: Date.now(),
+            instantMs: clock.wall(),
             uncertaintyMs: 0,
-            wallStartedMs: Date.now(),
-            wallFinishedMs: Date.now(),
-            monotonicStartedMs: 0,
-            monotonicFinishedMs: 0,
+            wallStartedMs: clock.wall(),
+            wallFinishedMs: clock.wall(),
+            monotonicStartedMs: clock.monotonic(),
+            monotonicFinishedMs: clock.monotonic(),
           },
           {
             source: "browser",
             result: "usable",
-            instantMs: Date.now(),
+            instantMs: clock.wall(),
             uncertaintyMs: 0,
-            wallStartedMs: Date.now(),
-            wallFinishedMs: Date.now(),
-            monotonicStartedMs: 0,
-            monotonicFinishedMs: 0,
+            wallStartedMs: clock.wall(),
+            wallFinishedMs: clock.wall(),
+            monotonicStartedMs: clock.monotonic(),
+            monotonicFinishedMs: clock.monotonic(),
           },
         ],
         Date.parse("2026-10-15T00:00:00Z"),
@@ -148,14 +162,20 @@ beforeEach(async () => {
     }),
   });
   await withOperationAuthority(first, "administrator", async (authority) => {
-    const selected = await setup.select({ binding: first, authority, answer: "no" });
+    const selected = await selectPastWaits(clock, () =>
+      setup.select({
+        binding: first,
+        authority,
+        comparisonId: "comparison",
+      }),
+    );
     if (selected.status !== "selected") throw new Error("initial selection");
     await setup.prepare({ binding: first, authority, input: selected.input }, (prepared) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
     );
   });
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
-  vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+  clock.set(Date.parse("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
   vi.useRealTimers();
@@ -170,7 +190,9 @@ export async function host() {
     environment: scope.environment,
     bases,
     contextKey: JSON.stringify([binding, key.name]),
-    history: [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))],
+    history: [
+      await withTransaction(suite.db, (tx) => readHourHistoryWithRecordFloor(tx, "preproduction")),
+    ],
     oldMachineAbsent: false,
     oldMachineOffline: true,
     noParallelRecovery: true,
@@ -208,15 +230,48 @@ export async function host() {
     (secret === key.secret
       ? service
       : createSelectedRecoveryPreparation({ ...options, secret })
-    ).prepare(proposal);
+    ).prepare(proposal, client());
+  let comparisonId = "no-comparison";
   const compare = async () => {
     const challenge = (await prepare({ action: "clock-challenge" })) as { id: string };
-    return prepare({
+    const compared = (await prepare({
       action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
+      browser: { challengeId: challenge.id, instantMs: clock.wall() },
+    })) as { id: string };
+    comparisonId = compared.id;
+    return compared;
   };
-  return { configured, facts, prepare, compare, roots, service, selected, options };
+  /** One select naming the last comparison, with no wait. */
+  const select = () => prepare({ action: "select", comparisonId });
+  /** Compares and selects, repeated past the restore's settle wait. */
+  const selectPastWaits = () => recoverySelectPastWaits(clock, service, client());
+  return {
+    configured,
+    facts,
+    prepare,
+    compare,
+    select,
+    selectPastWaits,
+    roots,
+    service,
+    selected,
+    options,
+  };
+}
+/** A clock comparison through `service`, returning its id for the select that names it. */
+export async function compareWith(
+  service: { prepare(proposal: unknown, client: { onBox: boolean }): Promise<unknown> },
+  onBox = true,
+) {
+  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox })) as {
+    id: string;
+  };
+  return (
+    (await service.prepare(
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: clock.wall() } },
+      { onBox },
+    )) as { id: string }
+  ).id;
 }
 export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const f = await host();
@@ -288,16 +343,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     readIsolation: async () => isolation,
   };
   const service = createSelectedRecoveryPreparation(options);
-  const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-  await service.prepare({
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const outcome = (await service.prepare({
-    action: "select",
-    answer: "no",
-    installationCodes: ["06RB"],
-  })) as {
+  const outcome = (await recoverySelectPastWaits(clock, service, client())) as {
     input: unknown;
   };
   return { ...f, restore, options, isolation, service, outcome, database, entries };
@@ -392,22 +438,13 @@ export async function bucketCommand() {
     sourceId: selected.activationSourceId!,
     eventId: "bucket-entry",
   };
-  vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+  clock.set(Date.parse("2026-10-16T13:40:00Z"));
   const service = createSelectedRecoveryPreparation({
     ...f.options,
     binding: operationBinding,
     selected,
   });
-  const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-  await service.prepare({
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const outcome = (await service.prepare({
-    action: "select",
-    answer: "no",
-    installationCodes: ["06RB"],
-  })) as {
+  const outcome = (await recoverySelectPastWaits(clock, service, client())) as {
     input: unknown;
   };
   await writeFile(
@@ -481,6 +518,7 @@ export function restoreApp(deps: Partial<SetupDeps> = {}) {
         assertOtherAllowed: async () => {},
       },
       requestRestart() {},
+      requestFromBox: () => seams.requestFromBox(),
       ...deps,
     },
     () => {},
@@ -530,7 +568,7 @@ export async function recoveryInvoices() {
   const [standard] = await suite.db
     .select()
     .from(invoiceSeries)
-    .where(eq(invoiceSeries.code, "A-06RB"));
+    .where(eq(invoiceSeries.code, "A-0CNNY"));
   const sell = () =>
     withTransaction(suite.db, (tx) =>
       recordSale(
@@ -565,7 +603,7 @@ export async function recoveryInvoices() {
   ).toBe(1);
   await sell();
   const rows = await recordedRecoveryRows(suite.db);
-  expect(rows.records.map((row) => row.num_serie_factura)).toEqual(["A-06RB/123", "A-06RB/124"]);
+  expect(rows.records.map((row) => row.num_serie_factura)).toEqual(["A-0CNNY/123", "A-0CNNY/124"]);
   expect(rows.submissions.find((row) => row.registro_id === rows.records[0]?.id)).toMatchObject({
     estado: "aceptado",
     intentos: 1,
@@ -670,7 +708,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
 
 export async function interactiveHost() {
   const f = await archiveHost();
-  vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+  clock.set(Date.parse("2026-10-16T13:40:00Z"));
   const coordinator = createFirstSetupCoordinator();
   const options = { ...f.roots, coordinator, modules: ALL_MODULES, migrationsRoot: null };
   const session = createInteractiveRecoveryPreparation(options);
@@ -697,18 +735,31 @@ export async function interactiveHost() {
           f.options.selected.sourceId,
           { ...request, ...override, proposal },
           hold,
+          client(),
         ),
       );
     } finally {
       await copy.discard();
     }
   };
+  let comparisonId = "no-comparison";
   const compare = async (override: Partial<typeof request> = {}) => {
     const challenge = (await invoke({ action: "clock-challenge" }, override)) as { id: string };
-    return invoke(
-      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: Date.now() } },
+    const compared = (await invoke(
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: clock.wall() } },
       override,
-    );
+    )) as { id: string };
+    comparisonId = compared.id;
+    return compared;
   };
-  return { ...f, session, options, request, invoke, compare };
+  /** One select naming the last comparison, with no wait. */
+  const select = (override: Partial<typeof request> = {}, current = session) =>
+    invoke({ action: "select", comparisonId }, override, current);
+  /** Compares and selects, repeated past the restore's settle wait. */
+  const selectPastWaits = (override: Partial<typeof request> = {}) =>
+    selectPastWaits_(clock, async () => {
+      await compare(override);
+      return select(override);
+    });
+  return { ...f, session, options, request, invoke, compare, select, selectPastWaits };
 }

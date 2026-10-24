@@ -23,6 +23,7 @@ import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { startServerOrFirstSetupResolution } from "./node-entry.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePorts } from "./testing/free-ports.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -54,6 +55,7 @@ afterEach(async () => {
 async function fixture(workspace?: { root: string; stateDir: string; venueDir: string }) {
   if (workspace !== undefined) vi.setSystemTime(new Date(Date.now() + 3_600_000));
   const f = await hourFirstFiscalFixture({
+    clock: createFakeTimersHourClock(),
     database: () => suite.db,
     ...(workspace === undefined ? {} : { workspace }),
   });
@@ -116,10 +118,10 @@ it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   },
 );
 it.each([
-  { identity: "06R9", issuedAt: "2026-10-16T09:40:00.000Z", spent: true },
-  { identity: "06RA", issuedAt: "2026-10-16T10:40:00.000Z", spent: true },
-  { identity: "06RB", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
-  { identity: "06RC", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
+  { identity: "0CNJ4", issuedAt: "2026-10-16T09:40:00.000Z", spent: true },
+  { identity: "0CNM0", issuedAt: "2026-10-16T10:40:00.000Z", spent: true },
+  { identity: "0CNNW", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
+  { identity: "0CNQR", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
 ])(
   "retiring the unused PDF excludes hour $identity across changed bases, spent=$spent",
   async ({ identity, issuedAt, spent }) => {

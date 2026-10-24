@@ -11,7 +11,6 @@ import type { RecoveryKeyEntry } from "./recovery-key.js";
 
 const saved: RecoveryDocument = {
   kind: "waitron-recovery-document",
-  installationCodes: ["06RB"],
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
   taxpayerName: "Olivo Restauración SL",

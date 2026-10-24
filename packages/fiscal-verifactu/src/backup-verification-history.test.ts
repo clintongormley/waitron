@@ -18,7 +18,7 @@ import {
   type FiscalAllocation,
   type RecoveryApproval,
 } from "./allocation-envelope.js";
-import { encodeHourIdentity } from "./hour-identity.js";
+import { encodeMinuteIdentity } from "./hour-identity.js";
 import { installationChecksum } from "./allocation-identity.js";
 import {
   signPaperBlock,
@@ -69,10 +69,10 @@ async function activation(hour: number) {
     taxpayerNif: "89890001K",
     softwareId: "W1",
     environment: "preproduction",
-    installationIdentity: encodeHourIdentity(Date.parse(issuedAt)),
+    installationIdentity: encodeMinuteIdentity(Date.parse(issuedAt)),
     series: bases.map((b) => ({
       ...b,
-      code: `${b.code}-${encodeHourIdentity(Date.parse(issuedAt))}`,
+      code: `${b.code}-${encodeMinuteIdentity(Date.parse(issuedAt))}`,
     })),
     source: "hour",
     reservationEvidence: null,

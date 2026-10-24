@@ -28,7 +28,7 @@ const bases = [
   { code: "R", purpose: "rectificative" },
 ];
 
-function fixture(action = "promote", identity = "06RC", eventId = "promotion") {
+function fixture(action = "promote", identity = "0CNPG", eventId = "promotion") {
   const target = action === "setup" ? primary : standby;
   const binding: OperationBinding = {
     module: "fiscal-verifactu",
@@ -39,9 +39,9 @@ function fixture(action = "promote", identity = "06RC", eventId = "promotion") {
   };
   const operatorId = "administrator";
   const issuedAt =
-    identity === "06RB"
+    identity === "0CNNW"
       ? "2026-10-16T11:40:00.000Z"
-      : identity === "06RD"
+      : identity === "0CNRC"
         ? "2026-10-16T13:00:00.000Z"
         : "2026-10-16T12:00:00.000Z";
   const input = {
@@ -105,14 +105,14 @@ beforeEach(async () => {
   vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await activate(fixture("setup", "06RB", "original"));
+  await activate(fixture("setup", "0CNNW", "original"));
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
 });
 afterEach(() => vi.useRealTimers());
 
 it("refuses the original box's same-hour code before writing any standby fiscal row", async () => {
   const before = await snapshot();
-  await expect(activate(fixture("promote", "06RB"))).rejects.toMatchObject({
+  await expect(activate(fixture("promote", "0CNNW"))).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "installation_used" },
   });
@@ -124,16 +124,16 @@ it("activates all next-hour bases without an advance reservation and preserves o
   const result = await activate();
   expect(result.activationEventId).toBe("promotion");
   expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-    { code: "A-06RC", purpose: "standard" },
-    { code: "FF-06RC", purpose: "full" },
-    { code: "R-06RC", purpose: "rectificative" },
-    { code: "a/B_1.2-3-06RC", purpose: "standard" },
+    { code: "A-0CNPG", purpose: "standard" },
+    { code: "FF-0CNPG", purpose: "full" },
+    { code: "R-0CNPG", purpose: "rectificative" },
+    { code: "a/B_1.2-3-0CNPG", purpose: "standard" },
   ]);
   const after = await snapshot();
   expect(after.reservations).toEqual([]);
   expect(after.allocations).toHaveLength(2);
   expect(after.allocations[1]!.bases).toEqual(bases);
-  expect(after.sifs.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe("06RC");
+  expect(after.sifs.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe("0CNPG");
   expect(
     after.series.filter((row) => row.nodeId === standby.nodeId).map((row) => row.nextNumber),
   ).toEqual([1, 1, 1, 1]);
@@ -156,7 +156,7 @@ it("replays the exact committed promotion without changing counters or fiscal ro
 it("refuses a new event for an already active standby without retiring its series", async () => {
   await activate();
   const before = await snapshot();
-  await expect(activate(fixture("promote", "06RD", "replacement"))).rejects.toMatchObject({
+  await expect(activate(fixture("promote", "0CNRC", "replacement"))).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "standby_already_active" },
   });
@@ -167,68 +167,73 @@ it("also refuses reuse after the original SIF and every original series are reti
   await suite.db.update(registroSif).set({ revocadoEn: new Date("2026-10-16T11:45:00Z") });
   await suite.db.update(invoiceSeries).set({ retiredAt: new Date("2026-10-16T11:45:00Z") });
   const before = await snapshot();
-  await expect(activate(fixture("promote", "06RB"))).rejects.toMatchObject({
+  await expect(activate(fixture("promote", "0CNNW"))).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "installation_used" },
   });
   expect(await snapshot()).toEqual(before);
 });
 
-it.each(["no", "yes", "unknown"] as const)(
-  "refuses same-hour promotion selection against actual original-box history even after a %s answer",
-  async (answer) => {
-    const f = fixture();
-    let instant = Date.parse("2026-10-16T11:50:00.000Z");
-    let value: unknown = null;
-    const writes: unknown[] = [];
-    const selector = createHourSelection({
-      withState: async (_binding, run) =>
-        run({
-          value,
-          history: writes,
-          async replace(next) {
-            value = structuredClone(next);
-            writes.push(structuredClone(next));
-          },
-        }),
-      monotonicNow: () => 0,
-      read: async () => ({
-        scope: { taxpayerNif: "89890001K", environment: "preproduction" },
-        bases,
-        contextKey: "current-promotion-scope",
-        clock: compareHourClocks(
-          ["box", "browser"].map((source) => ({
-            source: source as "box" | "browser",
-            result: "usable" as const,
-            instantMs: instant,
-            uncertaintyMs: 0,
-            wallStartedMs: instant,
-            wallFinishedMs: instant,
-            monotonicStartedMs: 0,
-            monotonicFinishedMs: 0,
-          })),
-          Date.parse("2026-10-15T00:00:00.000Z"),
-        ),
-        history: (await FISCAL_OPERATIONS.readRecoveryHistory!(suite.db)) as HourHistorySource[],
+it("a promotion waits for the minute after the original box's, and refuses one far behind it", async () => {
+  const f = fixture();
+  let instant = Date.parse("2026-10-16T11:37:00.000Z");
+  let value: unknown = null;
+  const writes: unknown[] = [];
+  const selector = createHourSelection({
+    withState: async (_binding, run) =>
+      run({
+        value,
+        history: writes,
+        async replace(next) {
+          value = structuredClone(next);
+          writes.push(structuredClone(next));
+        },
       }),
+    monotonicNow: () => instant,
+    read: async () => ({
+      scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+      bases,
+      contextKey: "current-promotion-scope",
+      clock: compareHourClocks(
+        ["box", "browser"].map((source) => ({
+          source: source as "box" | "browser",
+          result: "usable" as const,
+          instantMs: instant,
+          uncertaintyMs: 0,
+          wallStartedMs: instant,
+          wallFinishedMs: instant,
+          monotonicStartedMs: 0,
+          monotonicFinishedMs: 0,
+        })),
+        Date.parse("2026-10-15T00:00:00.000Z"),
+      ),
+      history: (await FISCAL_OPERATIONS.readRecoveryHistory!(suite.db)) as HourHistorySource[],
+    }),
+  });
+  const before = await snapshot();
+  await withOperationAuthority(f.binding, f.operatorId, async (authority) => {
+    const select = () =>
+      selector.select({ binding: f.binding, authority, comparisonId: "comparison" });
+    await expect(select()).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: {
+        reason: "minute_not_later",
+        allowedFromMs: Date.parse("2026-10-16T11:41:00.000Z"),
+      },
     });
-    const before = await snapshot();
-    await withOperationAuthority(f.binding, f.operatorId, async (authority) => {
-      await expect(
-        selector.select({ binding: f.binding, authority, answer }),
-      ).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "hour_not_later" },
-      });
-      expect(writes).toEqual([]);
-      instant = Date.parse("2026-10-16T12:00:00.000Z");
-      const next = await selector.select({ binding: f.binding, authority, answer: "no" });
-      expect(next).toMatchObject({ status: "selected", identity: "06RC" });
-      expect(writes).toHaveLength(1);
+    expect(writes).toEqual([]);
+    instant = Date.parse("2026-10-16T11:40:30.000Z");
+    expect(await select()).toEqual({
+      status: "waiting",
+      targetMs: Date.parse("2026-10-16T11:41:00.000Z"),
+      remainingMs: 30_000,
     });
-    expect(await snapshot()).toEqual(before);
-  },
-);
+    instant = Date.parse("2026-10-16T11:41:00.000Z");
+    expect(await select()).toMatchObject({ status: "selected", identity: "0CNNX" });
+    expect(writes).toHaveLength(2);
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 it.each([
   ["oldMachineOffline", false, "old_machine_active"],
@@ -382,7 +387,7 @@ it.each(["sif", "series"] as const)(
         .where(eq(registroSif.nodeId, standby.nodeId));
     }
     const before = await snapshot();
-    await expect(activate(fixture("promote", "06RD", "new-event"))).rejects.toMatchObject({
+    await expect(activate(fixture("promote", "0CNRC", "new-event"))).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "standby_already_active" },
     });
@@ -417,10 +422,10 @@ it("detaches target, authority carrier and bases before its first awaited read",
           return pending;
         });
         expect(result.series.map(({ code }) => code)).toEqual([
-          "A-06RC",
-          "FF-06RC",
-          "R-06RC",
-          "a/B_1.2-3-06RC",
+          "A-0CNPG",
+          "FF-0CNPG",
+          "R-0CNPG",
+          "a/B_1.2-3-0CNPG",
         ]);
       },
     ),

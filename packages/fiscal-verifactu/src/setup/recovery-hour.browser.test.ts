@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import type { Mock } from "vitest";
@@ -29,16 +30,15 @@ const clock = {
     lowerMs: instant,
     upperMs: instant,
   })),
-  unavailable: [],
+  unavailable: [] as { source: string; result: "unavailable"; reason: string }[],
+  secondClock: true,
   disagreement: false,
-  requiresConfirmation: false,
-  boundaryWait: false,
   releaseBlocked: false,
   rangeBlocked: false,
 };
 const selected = {
   status: "selected",
-  identity: "06TH",
+  identity: "0CSQW",
   binding,
   input: { selected: "server-input" },
 };
@@ -55,7 +55,7 @@ async function mount(
       if (action === "clock-challenge")
         return { id: "challenge", boxInstantMs: instant, expiresInMs: 5000 };
       if (action === "compare-clocks") return { id: "comparison", clock };
-      if (action === "confirm-clock") return clock;
+      if (action === "preview") return { status: "preview" };
       if (action === "select") return selected;
       throw new Error("unexpected proposal");
     },
@@ -78,16 +78,12 @@ async function mount(
   return { el, prepare, host };
 }
 function check(el: Entry, name: string, value = true) {
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>(
-    name.startsWith("taxpayer-hour-")
-      ? `input[name="taxpayer-hour"][value="${name.slice(14)}"]`
-      : `input[name="${name}"]`,
-  );
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="${name}"]`);
   expect(input, `visible ${name} declaration`).not.toBeNull();
   input!.checked = value;
   input!.dispatchEvent(new Event("change", { bubbles: true }));
 }
-async function ready(el: Entry, answer = "no") {
+async function ready(el: Entry) {
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
   await key.updateComplete;
   for (const [name, value] of [
@@ -99,14 +95,8 @@ async function ready(el: Entry, answer = "no") {
     input.value = value!;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
-  const codes = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await codes.updateComplete;
-  const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  codeInput.value = "06RB";
-  codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   check(el, "recovery-old-box-stopped");
   check(el, "recovery-sole-operation");
-  check(el, `taxpayer-hour-${answer}`);
   await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
 }
 function button(el: Entry, name: string) {
@@ -115,6 +105,76 @@ function button(el: Entry, name: string) {
   );
   expect(value, `${name} action`).not.toBeNull();
   return value!;
+}
+const text = (el: Entry) => el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+const remaining = (el: Entry) =>
+  el.shadowRoot!.querySelector("[data-test=remaining]")?.textContent?.trim();
+const actionsOf = (prepare: Mock<(request: { proposal: unknown }) => Promise<unknown>>) =>
+  prepare.mock.calls.map(([r]) => (r.proposal as { action: string }).action);
+const quiet = (el: Entry) => {
+  const action = button(el, "select") as HTMLElement & { disabled: boolean; variant: string };
+  return { disabled: action.disabled, variant: action.variant };
+};
+const fakeClock = () =>
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
+const NOTHING_TO_DO = "Nothing to do; keep this page open.";
+const WHY_SECOND =
+  "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.";
+const ON_BOX = "This screen is on the box itself, so it does not count.";
+const RESTORE_DO =
+  "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.";
+const RESTORE_ENDS =
+  "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.";
+const WHY_REFUSED = "No series is made without a confirmed time, so none is ever repeated.";
+const DIFFER = "This box's time and this device's differ by more than 30 seconds.";
+const DIFFER_DO =
+  "Try from another phone or laptop that has the backup. If they still differ, the box's time may be wrong: ask for help.";
+const noSecondClock = {
+  ...clock,
+  usable: clock.usable.filter((r) => r.source === "box"),
+  unavailable: [
+    { source: "browser", result: "unavailable" as const, reason: "same_machine" },
+    { source: "internet", result: "unavailable" as const, reason: "offline" },
+  ],
+  secondClock: false,
+};
+/** A prepare double whose clock decision, held comparison and refusals a case can change. */
+function scripted(answers: unknown[] = [selected]) {
+  const state = {
+    decision: clock as typeof clock,
+    preview: undefined as unknown,
+    hold: undefined as Promise<void> | undefined,
+    fail: false,
+    refusal: undefined as unknown,
+  };
+  let compared = 0;
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "preview") {
+      if (state.preview !== undefined) return state.preview;
+      // What the real server's preview throws for a comparison that cannot admit a name.
+      if (!state.decision.secondClock)
+        throw { code: "sif.allocation_invalid", params: { reason: "second_clock_missing" } };
+      if (state.decision.disagreement)
+        throw { code: "sif.allocation_invalid", params: { reason: "clock_disagreement" } };
+      return { status: "preview" };
+    }
+    if (action === "select") {
+      const answer = answers.length > 1 ? answers.shift() : answers[0];
+      if (answer instanceof Error || (answer as { code?: string })?.code) throw answer;
+      return answer;
+    }
+    if (state.hold) await state.hold;
+    if (state.refusal !== undefined) throw state.refusal;
+    if (state.fail) {
+      state.fail = false;
+      throw new TypeError("Failed to fetch");
+    }
+    return { id: `comparison-${++compared}`, clock: state.decision };
+  });
+  return { state, prepare };
 }
 async function compare(el: Entry) {
   button(el, "compare").click();
@@ -155,13 +215,12 @@ it("decodes the printed key and sends independent recovery declarations before s
   );
   expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
     action: "select",
-    answer: "no",
-    installationCodes: ["06RB"],
+    comparisonId: "comparison",
   });
-  expect(el.shadowRoot!.textContent).toContain("06TH");
+  expect(el.shadowRoot!.textContent).toContain("0CSQW");
   expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
 });
-it("requires both explicit isolation declarations and the taxpayer-wide answer", async () => {
+it("requires both explicit isolation declarations", async () => {
   const { el, prepare } = await mount();
   await ready(el);
   check(el, "recovery-old-box-stopped", false);
@@ -173,86 +232,40 @@ it("requires both explicit isolation declarations and the taxpayer-wide answer",
   expect(button(el, "compare").disabled).toBe(true);
   expect(prepare).not.toHaveBeenCalled();
 });
-it("groups the three native answers as one required choice", async () => {
+it("asks no last-hour question and offers no clock confirmation", async () => {
   const { el } = await mount();
-  const radios = Array.from(
-    el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
-  );
-  expect(radios).toHaveLength(3);
-  expect(new Set(radios.map((r) => r.name)).size).toBe(1);
-  expect(radios.map((r) => r.value)).toEqual(["no", "yes", "unknown"]);
-  expect(radios.every((r) => r.required)).toBe(true);
+  await ready(el);
+  await compare(el);
+  expect(el.shadowRoot!.querySelectorAll('input[type="radio"]')).toHaveLength(0);
+  expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[name="recovery-clock-confirmed"]')).toBeNull();
+  expect(text(el)).not.toContain("UTC hour");
 });
-it("requires a fresh explicit confirmation for disagreeing readings", async () => {
+it("keeps the server's wait", async () => {
   const prepare = vi.fn(async (request: { proposal: unknown }) => {
     const action = (request.proposal as { action: string }).action;
     if (action === "clock-challenge") return { id: "challenge" };
-    if (action === "compare-clocks")
-      return {
-        id: "different-reading",
-        clock: { ...clock, requiresConfirmation: true, disagreement: true },
-      };
-    if (action === "confirm-clock") return clock;
-    return selected;
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    if (action === "preview") return { status: "preview" };
+    return {
+      status: "waiting",
+      targetMs: Date.parse("2026-10-18T13:00:00Z"),
+      remainingMs: 1_800_000,
+    };
   });
   const { el } = await mount(prepare);
   await ready(el);
   await compare(el);
-  expect(button(el, "select").disabled).toBe(true);
-  check(el, "recovery-clock-confirmed");
-  await el.updateComplete;
-  expect(button(el, "select").disabled).toBe(false);
   button(el, "select").click();
-  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
-  expect(prepare.mock.calls.slice(-2).map(([r]) => r.proposal)).toEqual([
-    { action: "confirm-clock", comparisonId: "different-reading" },
-    { action: "select", answer: "no", installationCodes: ["06RB"] },
-  ]);
-  button(el, "compare").click();
-  await vi.waitFor(() =>
-    expect(
-      prepare.mock.calls.filter(
-        ([r]) => (r.proposal as { action: string }).action === "compare-clocks",
-      ),
-    ).toHaveLength(2),
-  );
-  await el.updateComplete;
-  expect(
-    el.shadowRoot!.querySelector<HTMLInputElement>('[name="recovery-clock-confirmed"]')!.checked,
-  ).toBe(false);
+  await vi.waitFor(() => expect(remaining(el)).toBe("30:00"));
+  expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+    action: "select",
+    comparisonId: "comparison",
+  });
   expect(el.readCredentials()).toBeNull();
+  expect(button(el, "compare").disabled).toBe(false);
 });
-it.each(["yes", "unknown"])(
-  "keeps the server's %s wait and only sends the selected answer",
-  async (answer) => {
-    const prepare = vi.fn(async (request: { proposal: unknown }) => {
-      const action = (request.proposal as { action: string }).action;
-      if (action === "clock-challenge") return { id: "challenge" };
-      if (action === "compare-clocks") return { id: "comparison", clock };
-      return {
-        status: "waiting",
-        targetMs: Date.parse("2026-10-18T13:00:00Z"),
-        remainingMs: 1_800_000,
-        requiresClockConfirmation: false,
-      };
-    });
-    const { el } = await mount(prepare);
-    await ready(el, answer);
-    await compare(el);
-    button(el, "select").click();
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain("2026-10-18T13:00:00.000Z"),
-    );
-    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
-      action: "select",
-      answer,
-      installationCodes: ["06RB"],
-    });
-    expect(el.readCredentials()).toBeNull();
-    expect(button(el, "compare").disabled).toBe(false);
-  },
-);
-it.each(["key", "answer", "isolation", "clear", "disconnect"])(
+it.each(["key", "isolation", "clear", "disconnect"])(
   "invalidates the selected input after %s changes",
   async (fault) => {
     const { el } = await mount();
@@ -267,7 +280,6 @@ it.each(["key", "answer", "isolation", "clear", "disconnect"])(
       input.value = "bad";
       input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     }
-    if (fault === "answer") check(el, "taxpayer-hour-yes");
     if (fault === "isolation") check(el, "recovery-sole-operation", false);
     if (fault === "clear") el.clear();
     if (fault === "disconnect") el.remove();
@@ -324,6 +336,7 @@ it("ignores a selected response after the sole-recovery declaration changes", as
     const action = (request.proposal as { action: string }).action;
     if (action === "clock-challenge") return { id: "challenge" };
     if (action === "compare-clocks") return { id: "comparison", clock };
+    if (action === "preview") return { status: "preview" };
     return held;
   });
   const { el } = await mount(prepare);
@@ -333,8 +346,7 @@ it("ignores a selected response after the sole-recovery declaration changes", as
   await vi.waitFor(() =>
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
+      comparisonId: "comparison",
     }),
   );
   check(el, "recovery-sole-operation", false);
@@ -343,9 +355,9 @@ it("ignores a selected response after the sole-recovery declaration changes", as
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(el.readCredentials()).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("06TH");
+  expect(el.shadowRoot!.textContent).not.toContain("0CSQW");
 });
-it("marks each missing declaration and the unanswered group after an attempted recovery", async () => {
+it("marks each missing declaration after an attempted recovery", async () => {
   const { el } = await mount();
   expect(el.readCredentials()).toBeNull();
   await el.updateComplete;
@@ -358,13 +370,6 @@ it("marks each missing declaration and the unanswered group after an attempted r
         .textContent!.trim(),
     ).not.toBe("");
   }
-  const fieldset = el.shadowRoot!.querySelector("fieldset")!;
-  expect(fieldset.getAttribute("aria-invalid")).toBe("true");
-  expect(
-    el
-      .shadowRoot!.querySelector(`#${fieldset.getAttribute("aria-describedby")}`)!
-      .textContent!.trim(),
-  ).not.toBe("");
 });
 it("clears a parent request's key refusal when the printed control is edited", async () => {
   const { el } = await mount();
@@ -404,6 +409,7 @@ it("drops a late selected answer after the matching printed key changes", async 
     const action = (request.proposal as { action: string }).action;
     if (action === "clock-challenge") return { id: "challenge" };
     if (action === "compare-clocks") return { id: "comparison", clock };
+    if (action === "preview") return { status: "preview" };
     return held;
   });
   const { el } = await mount(prepare);
@@ -413,8 +419,7 @@ it("drops a late selected answer after the matching printed key changes", async 
   await vi.waitFor(() =>
     expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
       action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
+      comparisonId: "comparison",
     }),
   );
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
@@ -427,7 +432,7 @@ it("drops a late selected answer after the matching printed key changes", async 
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(el.readCredentials()).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("06TH");
+  expect(el.shadowRoot!.textContent).not.toContain("0CSQW");
 });
 it("all three actions expose a visible native button", async () => {
   const { el } = await mount();
@@ -524,9 +529,8 @@ it("places the recovery authenticator's real refusal beside the key without disa
   expect(button(el, "compare").disabled).toBe(false);
 });
 it.each([
-  { releaseBlocked: true, rangeBlocked: false, boundaryWait: false },
-  { releaseBlocked: false, rangeBlocked: true, boundaryWait: false },
-  { releaseBlocked: false, rangeBlocked: false, boundaryWait: true },
+  { releaseBlocked: true, rangeBlocked: false },
+  { releaseBlocked: false, rangeBlocked: true },
 ])("keeps Select quiet while the clock has a blocking condition %j", async (blocking) => {
   const prepare = vi.fn(async (request: { proposal: unknown }) =>
     (request.proposal as { action: string }).action === "clock-challenge"
@@ -538,182 +542,611 @@ it.each([
   await compare(el);
   expect(button(el, "select").disabled).toBe(true);
 });
-it("allows manual acceptance of a disagreement only when the box interval is within one hour", async () => {
-  const prepare = vi.fn(async (request: { proposal: unknown }) =>
-    (request.proposal as { action: string }).action === "clock-challenge"
-      ? { id: "challenge" }
-      : {
-          id: "comparison",
-          clock: {
-            ...clock,
-            usable: clock.usable.map((reading) =>
-              reading.source === "browser"
-                ? { ...reading, lowerMs: instant + 3_600_000, upperMs: instant + 3_600_000 }
-                : reading,
-            ),
-            boundaryWait: true,
-            disagreement: true,
-            requiresConfirmation: true,
-          },
-        },
-  );
+it("a box clock before this release shows only the release line when the preview is refused", async () => {
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks")
+      return { id: "comparison", clock: { ...clock, releaseBlocked: true } };
+    // What the real server's preview throws for a box clock before the release.
+    throw { code: "sif.allocation_invalid", params: { reason: "clock_unconfirmed" } };
+  });
   const { el } = await mount(prepare);
   await ready(el);
   await compare(el);
-  check(el, "recovery-clock-confirmed");
-  await el.updateComplete;
-  expect(button(el, "select").disabled).toBe(false);
+  await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
+  expect(text(el)).toContain("Box time precedes this Waitron release.");
+  expect(formError(el)).toBe("");
 });
-it("manual confirmation never enables an ambiguous box-hour interval", async () => {
-  const prepare = vi.fn(async (request: { proposal: unknown }) =>
-    (request.proposal as { action: string }).action === "clock-challenge"
-      ? { id: "challenge" }
-      : {
-          id: "comparison",
-          clock: {
-            ...clock,
-            usable: clock.usable.map((reading) =>
-              reading.source === "box"
-                ? {
-                    ...reading,
-                    lowerMs: Date.parse("2026-10-18T12:59:59Z"),
-                    upperMs: Date.parse("2026-10-18T13:00:01Z"),
-                  }
-                : reading,
-            ),
-            boundaryWait: true,
-            disagreement: true,
-            requiresConfirmation: true,
-          },
-        },
-  );
-  const { el } = await mount(prepare);
-  await ready(el);
-  await compare(el);
-  check(el, "recovery-clock-confirmed");
-  await el.updateComplete;
-  expect(button(el, "select").disabled).toBe(true);
-});
-
-it("requires the one code from the sheet and sends its normalised value to the hour selector", async () => {
+it("sends no installation code", async () => {
   const { el, prepare } = await mount();
   await ready(el);
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]');
-  expect(field, "public code field from the recovery sheet").not.toBeNull();
-  await field!.updateComplete;
-  const input = field!.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "06rb";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await el.updateComplete;
   await compare(el);
   button(el, "select").click();
-  await vi.waitFor(() =>
-    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    }),
-  );
-  expect(input.isConnected, "the edited control stays mounted").toBe(true);
-  expect(
-    field!.shadowRoot!.querySelector("input"),
-    "the native control survives the selection render",
-  ).toBe(input);
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
-  input.value = "06RD";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect(el.readCredentials()).toBeNull();
-  expect(button(el, "select").disabled).toBe(true);
+  expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+    action: "select",
+    comparisonId: "comparison",
+  });
 });
 
-it("does not expose a selected result after its reported code was edited during the request", async () => {
-  let release!: (value: unknown) => void;
-  const prepare = vi.fn(async (request: { proposal: unknown }) => {
-    const action = (request.proposal as { action: string }).action;
-    if (action === "clock-challenge") return { id: "challenge" };
-    if (action === "compare-clocks") return { id: "comparison", clock };
-    return new Promise((resolve) => {
-      release = resolve;
-    });
-  });
-  const { el } = await mount(prepare);
-  await ready(el);
-  await compare(el);
-  button(el, "select").click();
-  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "06RC";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  release(selected);
-  await el.updateComplete;
-  await Promise.resolve();
-  expect(el.readCredentials()).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("06TH");
-});
-it("marks a missing code beside its native field and keeps selection disabled", async () => {
+it("has no installation-code field", async () => {
   const { el } = await mount();
-  await ready(el);
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  expect(el.readCredentials()).toBeNull();
-  await el.updateComplete;
-  await field.updateComplete;
-  expect(input.getAttribute("aria-invalid")).toBe("true");
-  expect(field.shadowRoot!.textContent).toContain("four-character code");
-  expect(button(el, "select").disabled).toBe(true);
+  expect(el.shadowRoot!.querySelector('[name="recovery-installation-codes"]')).toBeNull();
 });
 
-it("explains a reported-hour clash and allows another comparison", async () => {
-  const prepare = vi.fn(async (request: { proposal: unknown }) => {
-    const action = (request.proposal as { action: string }).action;
-    if (action === "clock-challenge") return { id: "challenge" };
-    if (action === "compare-clocks") return { id: "comparison", clock };
-    throw { code: "sif.allocation_invalid", params: { reason: "hour_not_later" } };
-  });
+const selects = (prepare: Mock<(request: { proposal: unknown }) => Promise<unknown>>) =>
+  prepare.mock.calls
+    .map(([r]) => r.proposal as { action: string })
+    .filter((p) => p.action === "select");
+it("explains a waiting restore with a countdown that goes back to the server at zero", async () => {
+  const { prepare } = scripted([
+    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+    selected,
+  ]);
   const { el } = await mount(prepare);
   await ready(el);
   await compare(el);
-  button(el, "select").click();
-  await vi.waitFor(() =>
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(text(el)).toContain(WHY_WAIT);
+    expect(text(el)).toContain(NOTHING_TO_DO);
+    expect(text(el)).toContain("Continues in 1:24");
+    expect(
+      el.shadowRoot!.querySelector("[data-test=remaining]")!.closest("[role=timer]"),
+    ).not.toBeNull();
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:23");
+    expect(el.readCredentials()).toBeNull();
+    vi.advanceTimersByTime(83_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
+    const sequence = actionsOf(prepare);
+    const first = sequence.indexOf("select"),
+      second = sequence.lastIndexOf("select");
+    expect(sequence.slice(first + 1, second)).toEqual(["clock-challenge", "compare-clocks"]);
+    expect(selects(prepare)).toEqual([
+      { action: "select", comparisonId: "comparison-2" },
+      { action: "select", comparisonId: "comparison-3" },
+    ]);
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+    expect(text(el)).toContain("0CSQW");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a countdown reaching zero accepts nothing the server did not select", async () => {
+  const { prepare } = scripted([
+    { status: "waiting", targetMs: instant + 1_000, remainingMs: 1_000 },
+    { status: "waiting", targetMs: instant + 31_000, remainingMs: 30_000 },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("0:01"));
+    vi.advanceTimersByTime(1_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("0:30");
+    expect(el.readCredentials()).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("Check again during a wait shows the server's time left", async () => {
+  const { state, prepare } = scripted();
+  state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:01");
+    expect(text(el)).toContain(WHY_WAIT);
+    expect(actionsOf(prepare)).toEqual(["clock-challenge", "compare-clocks", "preview"]);
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("Compare clocks with no second clock explains the wait and checks again by itself", async () => {
+  const { state, prepare } = scripted();
+  state.decision = noSecondClock;
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    expect(text(el)).toContain(WHY_SECOND);
+    expect(text(el)).toContain(ON_BOX);
+    expect(text(el)).toContain(RESTORE_ENDS);
     expect(
       (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
-    ).toContain("later than the known installation codes"),
-  );
-  expect(el.readCredentials()).toBeNull();
-  expect(button(el, "compare").disabled).toBe(false);
+    ).toBe("");
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+    state.decision = clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  } finally {
+    vi.useRealTimers();
+  }
 });
-
-it("opens the installation code field without a validation refusal", async () => {
-  const { el } = await mount();
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  expect(field.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("false");
-  expect(field.shadowRoot!.querySelector("[data-error]")).toBeNull();
+it("Compare clocks with clocks that differ explains the refusal, not a failure", async () => {
+  const { state, prepare } = scripted();
+  state.decision = {
+    ...clock,
+    usable: [
+      { source: "box", lowerMs: instant, upperMs: instant },
+      { source: "browser", lowerMs: instant + 45_000, upperMs: instant + 45_000 },
+    ],
+    disagreement: true,
+  };
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(text(el)).toContain(DIFFER_DO));
+    expect(text(el)).toContain(WHY_REFUSED);
+    expect(text(el)).toContain(DIFFER);
+    expect(
+      (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("");
+    const before = prepare.mock.calls.length;
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(prepare.mock.calls).toHaveLength(before);
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+  } finally {
+    vi.useRealTimers();
+  }
 });
-
-it("refuses a list of installation codes in the single-code field", async () => {
-  const { el, prepare } = await mount();
+it("with no second clock it explains itself and carries on when the internet arrives", async () => {
+  const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
   await ready(el);
   await compare(el);
-  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
-  await field.updateComplete;
-  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  expect(button(el, "compare").disabled).toBe(false);
-  input.value = "06RB, 06RC";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  state.decision = noSecondClock;
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    expect(text(el)).toContain(WHY_SECOND);
+    expect(text(el)).toContain(ON_BOX);
+    expect(text(el)).toContain(RESTORE_ENDS);
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(selects(prepare)).toHaveLength(0);
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+    state.decision = clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a phone with no second clock does not say it is the box", async () => {
+  const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  state.decision = {
+    ...noSecondClock,
+    unavailable: [
+      { source: "browser", result: "unavailable" as const, reason: "challenge" },
+      { source: "internet", result: "unavailable" as const, reason: "offline" },
+    ],
+  };
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+  expect(text(el)).toContain(WHY_SECOND);
+  expect(text(el)).not.toContain(ON_BOX);
+});
+it("a clock refusal shows both readings and no countdown, and waits for Check again", async () => {
+  const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  state.decision = {
+    ...clock,
+    usable: [
+      { source: "box", lowerMs: instant, upperMs: instant },
+      { source: "browser", lowerMs: instant + 45_000, upperMs: instant + 45_000 },
+    ],
+    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+    disagreement: true,
+  };
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+    expect(text(el)).toContain(WHY_REFUSED);
+    expect(text(el)).toContain(DIFFER_DO);
+    expect(text(el)).toContain(new Date(instant).toISOString());
+    expect(text(el)).toContain(new Date(instant + 45_000).toISOString());
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(selects(prepare)).toHaveLength(0);
+    const before = prepare.mock.calls.length;
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(prepare.mock.calls).toHaveLength(before);
+    expect(button(el, "compare").textContent?.trim()).toBe("Check again");
+    await userEvent.click(button(el, "compare"));
+    await vi.waitFor(() => expect(prepare.mock.calls.length).toBeGreaterThan(before));
+    expect(actionsOf(prepare).slice(before)).toEqual(
+      expect.arrayContaining(["clock-challenge", "compare-clocks"]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a clock refusal from the server explains itself the same way", async () => {
+  const { prepare } = scripted([
+    { code: "sif.allocation_invalid", params: { reason: "clock_disagreement" } },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+  expect(text(el)).toContain(DIFFER_DO);
+});
+it("a missing second clock reported by the server starts the 15-second check", async () => {
+  const { prepare } = scripted([
+    { code: "sif.allocation_invalid", params: { reason: "second_clock_missing" } },
+    selected,
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a later minute in use names its time and does not count down", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-18T20:04:00Z") },
+    },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(text(el)).toContain(
+        "The series cannot be made yet: a later minute is already in use. You can carry on from 22:04.",
+      ),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(selects(prepare)).toHaveLength(1);
+    expect(el.readCredentials()).toBeNull();
+    expect(button(el, "compare").disabled).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("draws Make the series quiet and disabled while a countdown runs", async () => {
+  const { prepare } = scripted([
+    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+  expect(button(el, "select").textContent?.trim()).toBe("Make the series");
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() => expect(remaining(el)).toBeDefined());
   await el.updateComplete;
-  expect(button(el, "compare").disabled).toBe(true);
-  expect(button(el, "select").disabled).toBe(true);
-  expect(el.readCredentials()).toBeNull();
-  expect(
-    prepare.mock.calls.every(
-      ([request]) => (request.proposal as { action: string }).action !== "select",
+  expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+});
+it("keeps the countdown's explanation on screen while its re-check is in flight", async () => {
+  const { state, prepare } = scripted([
+    { status: "waiting", targetMs: instant + 1_000, remainingMs: 1_000 },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("0:01"));
+    let release!: () => void;
+    state.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    vi.advanceTimersByTime(1_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(text(el)).toContain(WHY_WAIT);
+    release();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("keeps checking for a second clock after one automatic re-check is lost", async () => {
+  const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  state.decision = noSecondClock;
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    let release!: () => void;
+    state.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    const before = prepare.mock.calls.length;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(prepare.mock.calls.length).toBeGreaterThan(before));
+    await el.updateComplete;
+    expect(text(el)).toContain(RESTORE_DO);
+    state.fail = true;
+    release();
+    await vi.waitFor(() => expect(state.fail).toBe(false));
+    state.hold = undefined;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(text(el)).toContain(RESTORE_DO);
+    state.decision = clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("stops checking for a second clock when a re-check is refused, and shows the failure", async () => {
+  const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  state.decision = noSecondClock;
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    state.refusal = { code: "setup.attempt_conflict" };
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() =>
+      expect(
+        (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+      ).not.toBe(""),
+    );
+    await el.updateComplete;
+    expect(text(el)).not.toContain(RESTORE_ENDS);
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+    const after = prepare.mock.calls.length;
+    vi.advanceTimersByTime(45_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prepare.mock.calls).toHaveLength(after);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("an edit to a declaration stops the wait", async () => {
+  const { prepare } = scripted([
+    { status: "waiting", targetMs: instant + 1_000, remainingMs: 1_000 },
+    selected,
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("0:01"));
+    check(el, "recovery-old-box-stopped", false);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    check(el, "recovery-old-box-stopped");
+    await el.updateComplete;
+    vi.advanceTimersByTime(5_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(selects(prepare)).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("explains each wait in Spanish with the restore page's words", async () => {
+  const { state, prepare } = scripted([
+    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+  ]);
+  const { el } = await mount(prepare);
+  el.locale = "es";
+  await el.updateComplete;
+  await ready(el);
+  await compare(el);
+  state.decision = noSecondClock;
+  expect(button(el, "select").textContent?.trim()).toBe("Crear las series");
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
     ),
-  ).toBe(true);
+  );
+  expect(text(el)).toContain(
+    "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
+  );
+  expect(text(el)).toContain("Esta pantalla está en el propio equipo y no cuenta.");
+  expect(text(el)).toContain(
+    "Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.",
+  );
+  state.decision = {
+    ...clock,
+    usable: [
+      { source: "box", lowerMs: instant, upperMs: instant },
+      { source: "browser", lowerMs: instant + 45_000, upperMs: instant + 45_000 },
+    ],
+    disagreement: true,
+  };
+  await userEvent.click(button(el, "compare"));
+  await vi.waitFor(() => expect(button(el, "select").disabled).toBe(false));
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "Prueba desde otro móvil o portátil que tenga la copia. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
+    ),
+  );
+  expect(text(el)).toContain(
+    "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
+  );
+  expect(text(el)).toContain(
+    "Sin una hora confirmada no se crean series, para que ninguna se repita.",
+  );
+  expect(button(el, "compare").textContent?.trim()).toBe("Comprobar otra vez");
+  state.decision = clock;
+  await userEvent.click(button(el, "compare"));
+  await vi.waitFor(() => expect(button(el, "select").disabled).toBe(false));
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+  expect(text(el)).toContain(
+    "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
+  );
+  expect(text(el)).toContain("No hace falta hacer nada; deja esta página abierta.");
+  expect(text(el)).toContain("Sigue en");
+});
+it("says in Spanish that the series cannot be made yet", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-18T20:04:00Z") },
+    },
+  ]);
+  const { el } = await mount(prepare);
+  el.locale = "es";
+  await el.updateComplete;
+  await ready(el);
+  await compare(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.",
+    ),
+  );
+});
+it("keeps the 15-second rhythm when a re-check again finds no second clock", async () => {
+  const { state, prepare } = scripted();
+  state.decision = noSecondClock;
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    let release!: () => void;
+    state.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    const compares = () => actionsOf(prepare).filter((a) => a === "compare-clocks").length;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() => expect(compares()).toBe(2));
+    vi.advanceTimersByTime(10_000);
+    state.hold = undefined;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(text(el)).toContain(RESTORE_DO);
+    vi.advanceTimersByTime(5_000);
+    await vi.waitFor(() => expect(compares()).toBe(3));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+const formError = (el: Entry) =>
+  (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error;
+
+it.each([
+  ["challenge", { challenge: { id: 7 } }, ["clock-challenge"]],
+  [
+    "comparison",
+    { comparison: { id: "comparison", clock: {} } },
+    ["clock-challenge", "compare-clocks"],
+  ],
+])(
+  "a malformed %s from the box fails the comparison and shows no readings",
+  async (_name, answers, sent) => {
+    const prepare = vi.fn(async (request: { proposal: unknown }) => {
+      const action = (request.proposal as { action: string }).action;
+      if (action === "clock-challenge")
+        return (answers as { challenge?: unknown }).challenge ?? { id: "challenge" };
+      if (action === "compare-clocks")
+        return (answers as { comparison?: unknown }).comparison ?? { id: "comparison", clock };
+      throw new Error("unexpected proposal");
+    });
+    const { el } = await mount(prepare);
+    await ready(el);
+    button(el, "compare").click();
+    await vi.waitFor(() => expect(formError(el)).not.toBe(""));
+    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+    expect(actionsOf(prepare)).toEqual(sent);
+    expect(el.readCredentials()).toBeNull();
+  },
+);
+
+it("a wait from the box with no target fails instead of counting down", async () => {
+  const { prepare } = scripted([{ status: "waiting", remainingMs: 90_000 }]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(formError(el)).not.toBe(""));
+  expect(remaining(el)).toBeUndefined();
+  expect(text(el)).not.toContain(WHY_WAIT);
+  expect(el.readCredentials()).toBeNull();
+});
+
+it("a fiscal refusal that is not about the clock fails without explaining a wait", async () => {
+  const { prepare } = scripted([
+    { code: "sif.allocation_invalid", params: { reason: "event_mismatch" } },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(formError(el)).not.toBe(""));
+  expect(text(el)).not.toContain(WHY_WAIT);
+  expect(text(el)).not.toContain(WHY_REFUSED);
+  expect(text(el)).not.toContain(RESTORE_DO);
+  expect(el.readCredentials()).toBeNull();
+});
+it("names the box's own clock reading «Servidor» in Spanish, apart from a till", async () => {
+  const { el } = await mount();
+  el.locale = "es";
+  await el.updateComplete;
+  await ready(el);
+  await compare(el);
+  const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-readings] dt")].map((dt) =>
+    dt.textContent!.trim(),
+  );
+  expect(labels).toEqual(["Servidor", "Navegador", "Internet"]);
 });

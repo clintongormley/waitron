@@ -6,6 +6,7 @@ import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { declaredFirstFiscalFixture, publicDigest } from "../test/declared-first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { mountSetup } from "./setup-api.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => {
     const now = Date.now(),
@@ -60,7 +61,10 @@ describe("hour recovery document route", () => {
   it("delivers one transient node key and accepts an explicit matching kept document", async () => {
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime("2026-10-16T11:40:00Z");
-    const f = await hourFirstFiscalFixture({ database: () => venue.db });
+    const f = await hourFirstFiscalFixture({
+      clock: createFakeTimersHourClock(),
+      database: () => venue.db,
+    });
     fixtures.push(f);
     const app = new Hono();
     mountSetup(app, { environment: "production", firstFiscal: f.host }, () => {});

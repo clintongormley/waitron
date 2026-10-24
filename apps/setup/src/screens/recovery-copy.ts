@@ -14,6 +14,12 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
 import { t } from "../i18n/t.js";
 
+interface StagedCopy {
+  eventId: string;
+  api: SetupApi;
+  id: Promise<string>;
+}
+
 @customElement("setup-recovery-copy")
 export class SetupRecoveryCopy extends LitElement {
   static override styles = [
@@ -59,24 +65,62 @@ export class SetupRecoveryCopy extends LitElement {
   @state() private error?: "key" | "environment" | "file" | "kit" | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
+  #staged?: StagedCopy;
   #prepare: NonNullable<SetupRecoveryAllocation["prepare"]> = async (request) => {
     const current = this.#previewCurrent;
     if (!current?.()) throw new Error("Selected recovery copy changed");
-    const source =
-      this.bucketKit !== undefined
-        ? { kind: "bucket" as const, kit: this.bucketKit, environment: this.environment }
-        : this.cloudPointId !== undefined
-          ? { kind: "cloud" as const, pointId: this.cloudPointId }
-          : {
-              kind: "archive" as const,
-              artifact: this.artifact!,
-              recoveryKey: this.recoveryKey,
-              environment: this.environment,
-            };
-    const result = await this.api.prepareRecovery(source, request);
-    if (!current()) throw new Error("Selected recovery copy changed");
-    return result;
+    if (this.bucketKit !== undefined || this.cloudPointId !== undefined) {
+      const source =
+        this.bucketKit !== undefined
+          ? { kind: "bucket" as const, kit: this.bucketKit, environment: this.environment }
+          : { kind: "cloud" as const, pointId: this.cloudPointId! };
+      const result = await this.api.prepareRecovery(source, request);
+      if (!current()) throw new Error("Selected recovery copy changed");
+      return result;
+    }
+    for (let attempt = 0; ; attempt += 1) {
+      const staged = this.#stage(request.binding.eventId);
+      const stagedId = await staged.id;
+      if (!current()) throw new Error("Selected recovery copy changed");
+      try {
+        const result = await this.api.prepareRecovery({ kind: "staged", stagedId }, request);
+        if (!current()) throw new Error("Selected recovery copy changed");
+        return result;
+      } catch (cause) {
+        if ((cause as ApiError | undefined)?.code !== "restore.staged_copy_missing" || attempt > 0)
+          throw cause;
+        // The box no longer holds the copy; nothing is left there to discard.
+        if (this.#staged === staged) this.#staged = undefined;
+      }
+    }
   };
+  #stage(eventId: string): StagedCopy {
+    if (this.#staged?.eventId !== eventId) {
+      this.#discardStaged();
+      const staged: StagedCopy = {
+        eventId,
+        api: this.api,
+        id: this.api
+          .stageRecovery(this.artifact!, this.recoveryKey, this.environment, eventId)
+          .then(({ stagedId }) => stagedId),
+      };
+      staged.id.catch(() => {
+        if (this.#staged === staged) this.#staged = undefined;
+      });
+      this.#staged = staged;
+    }
+    return this.#staged;
+  }
+  #discardStaged(): void {
+    const staged = this.#staged;
+    this.#staged = undefined;
+    void staged?.id
+      .then(
+        (stagedId) => staged.api.discardStagedRecovery(stagedId),
+        () => {},
+      )
+      .catch(() => {});
+  }
 
   constructor() {
     super();
@@ -105,6 +149,7 @@ export class SetupRecoveryCopy extends LitElement {
     super.disconnectedCallback();
   }
   #invalidate(): void {
+    this.#discardStaged();
     this.#attempt += 1;
     this.preview = undefined;
     this.#previewCurrent = undefined;

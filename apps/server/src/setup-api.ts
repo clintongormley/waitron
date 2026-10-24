@@ -1,6 +1,8 @@
 import {
   mountRecoveryPreparationApi,
   type PrepareRecovery,
+  type StageRecovery,
+  type DiscardStagedRecovery,
 } from "./setup-recovery-preparation-api.js";
 import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
@@ -151,6 +153,11 @@ export interface SetupDeps {
     options: { oldBoxGone: boolean },
   ) => Promise<void>;
   prepareRecovery?: PrepareRecovery;
+  stageRecovery?: StageRecovery;
+  discardStagedRecovery?: DiscardStagedRecovery;
+  clearStagedRecovery?: () => Promise<void>;
+  /** Whether a request came from a browser on the box itself; tests replace it. */
+  requestFromBox?: (c: Context) => boolean;
   previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
   previewBucketRestore?: (
     input: Omit<BucketRestoreInput, "venueConfirmed">,
@@ -738,7 +745,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     hold: (request) => holds.get(request),
     busy: () => provisioning || fiscalTesting || configurationStaging || emailTesting(),
     run: createErrorBoundary(
-      { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503 },
+      { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503, "restore.staged_copy_missing": 409 },
       "setup.restore_failed",
     ),
   });
@@ -1358,6 +1365,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             { artifact, recoveryKey, environment: rawEnvironment, ...credentials },
             { oldBoxGone },
           );
+          // The restore is already recorded, so it must still answer and restart; the next start
+          // that reaches the server's boot clears the staging folder.
+          await deps.clearStagedRecovery?.().catch(() => {
+            log("warn", "setup.staged_recovery_clear_failed", {});
+          });
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
           setTimeout(() => requestRestart(), 0);
           return response;

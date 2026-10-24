@@ -251,7 +251,7 @@ it.each(["archive", "stream"] as const)(
     const restored = await f.snapshot();
     expect(restored.records).toEqual(f.original);
     expect(restored.allocations).toHaveLength(2);
-    expect(restored.allocations.map((row) => row.installationIdentity)).toEqual(["06RB", "06RC"]);
+    expect(restored.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
     const activation = restored.allocations.find((row) => row.eventKey === f.binding.eventId)!;
     expect(activation.approval.operatorId).toEqual({
       kind: "recovery-key",
@@ -259,9 +259,9 @@ it.each(["archive", "stream"] as const)(
       eventId: f.binding.eventId,
     });
     expect(activation.result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-      { code: "A-06RC", purpose: "standard" },
-      { code: "FF-06RC", purpose: "full" },
-      { code: "R-06RC", purpose: "rectificative" },
+      { code: "A-0CNQR", purpose: "standard" },
+      { code: "FF-0CNQR", purpose: "full" },
+      { code: "R-0CNQR", purpose: "rectificative" },
     ]);
     expect(f.journal()).not.toContain(f.key.secret);
     expect(f.journal()).not.toContain(f.encryptionKey);
@@ -319,7 +319,7 @@ it("completes a real sale after current-hour recovery without calling fetch or r
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, sale.saleId));
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.numSerieFactura).toBe("A-06RC/1");
+    expect(rows[0]?.numSerieFactura).toBe("A-0CNQR/1");
     expect(
       (await copy.venue.select().from(registrosFacturacion)).filter(
         (row) => row.saleId !== sale.saleId,
@@ -330,14 +330,16 @@ it("completes a real sale after current-hour recovery without calling fetch or r
     await copy.close();
   }
 });
-it("refuses a fresh recovery of the older backup in an already spent hour", async () => {
+it("refuses a fresh recovery of the older backup whose settle wait would land on the spent minute", async () => {
   const f = await stage("archive");
   await f.run();
   const committed = await f.snapshot();
   const retained = f.journal();
+  // The settle wait alone ends at 12:40, the spent minute (0CNQR).
+  vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
   await expect(f.nextEvent()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "hour_not_later" },
+    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:41:00Z") },
   });
   expect(await f.snapshot()).toEqual(committed);
   expect(committed.records).toEqual(f.original);
@@ -374,7 +376,7 @@ it("restores offline through current hour authority while retired paper input gr
   expect(network).toHaveBeenCalledTimes(0);
   const rows = await f.snapshot();
   expect(rows.allocations).toHaveLength(2);
-  expect(rows.allocations[1]!.allocation.installationIdentity).toBe("06RC");
+  expect(rows.allocations[1]!.allocation.installationIdentity).toBe("0CNQR");
   expect(rows.records).toEqual(f.original);
   expect(f.journal()).toBe(retained);
 });

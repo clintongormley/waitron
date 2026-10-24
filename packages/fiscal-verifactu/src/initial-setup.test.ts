@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import type { InitialSetupContext } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedSoldRegistro, seedTenants, TENANT_A } from "../test/fixtures.js";
 import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
 import { FISCAL_INITIAL_SETUP as productionInitialSetup } from "./index.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
@@ -18,6 +18,7 @@ import {
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
+import { registroSif } from "./schema/sif.js";
 import { validateInitialPaperCandidates } from "./initial-paper-candidates.js";
 import type { PaperConsumption } from "./paper-protocol.js";
 import type { AllocationContext, FiscalAllocation } from "./allocation-envelope.js";
@@ -600,4 +601,29 @@ it("refuses malformed Cloud request fields before creating a frozen setup reques
       params: { reason: "malformed_allocation" },
     }),
   );
+});
+
+it("gives first setup the database's newest fiscal record time as its floor", async () => {
+  const [sif] = await suite.db
+    .insert(registroSif)
+    .values({
+      nodeId: TENANT_A.nodeId,
+      nif: "89890001K",
+      idSistemaInformatico: "W1",
+      numeroInstalacion: "0CNNW",
+      registradoEn: new Date("2026-07-20T10:00:00Z"),
+    })
+    .returning({ id: registroSif.id });
+  await seedSoldRegistro(suite.db, {
+    locationId: TENANT_A.locationId,
+    nodeId: TENANT_A.nodeId,
+    sifId: sif!.id,
+    nif: "89890001K",
+    secuencia: 1,
+    huella: "A".repeat(64),
+  });
+  const source = await withTransaction(suite.db, (tx) =>
+    FISCAL_INITIAL_SETUP.localHistory!(tx, "preproduction"),
+  );
+  expect(source).toMatchObject({ timeFloorMs: Date.parse("2026-07-20T19:20:30+01:00") });
 });

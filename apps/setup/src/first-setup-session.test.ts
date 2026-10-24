@@ -496,7 +496,7 @@ describe("first setup tab ownership", () => {
     const pending = session.candidates(
       "example-module",
       { serials: [9] },
-      "administrator password",
+      async () => "administrator password",
     );
     await started.promise;
     await expect(session.importInput("example-module", {})).rejects.toMatchObject({
@@ -791,7 +791,11 @@ describe("module preparation in the owned tab", () => {
     );
     await session.open();
     await session.claim(venue);
-    await session.candidates("example-module", { answer: "yes" }, "administrator password");
+    await session.candidates(
+      "example-module",
+      { comparisonId: "comparison" },
+      async () => "administrator password",
+    );
     expect(await session.preparation("example-module", { action: "selection" })).toEqual({
       status: "waiting",
       targetMs: 1234,
@@ -846,5 +850,150 @@ describe("module preparation in the owned tab", () => {
       code: "setup.attempt_conflict",
     });
     expect(session.state).toEqual(initial);
+  });
+  it("asks for the password once across two waiting answers and the taken name", async () => {
+    let prompts = 0;
+    const password = async () => {
+      prompts++;
+      return "administrator password";
+    };
+    const answers = [
+      { state: initial, preparation: { status: "waiting", targetMs: 1234, remainingMs: 90_000 } },
+      { state: initial, preparation: { status: "waiting", targetMs: 1234, remainingMs: 60_000 } },
+      { state: { ...initial, revision: 2, status: "consumption-intent" } },
+    ];
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : ends(path, "reconfirm")
+          ? json({ reconfirmation: "proof" })
+          : json(answers.shift()),
+    );
+    await session.open();
+    await session.claim(venue);
+    for (let call = 0; call < 3; call++)
+      await session.candidates("example-module", { comparisonId: `c${call}` }, password);
+    expect(prompts).toBe(1);
+    expect(requests.map(({ path }) => path)).toEqual([
+      "/setup-api/first-setup/claim",
+      "/setup-api/first-setup/reconfirm",
+      "/setup-api/first-setup/candidates",
+      "/setup-api/first-setup/candidates",
+      "/setup-api/first-setup/candidates",
+    ]);
+    expect(
+      requests.slice(2).map(({ body }) => (body as { reconfirmation: string }).reconfirmation),
+    ).toEqual(["proof", "proof", "proof"]);
+    expect(JSON.stringify({ ...sessionStorage })).not.toContain("proof");
+  });
+  it("asks once more when the server refuses a held grant", async () => {
+    let prompts = 0;
+    const password = async () => {
+      prompts++;
+      return "administrator password";
+    };
+    const grants = ["first", "second"];
+    const answers: (() => Response)[] = [
+      () =>
+        json({ state: initial, preparation: { status: "waiting", targetMs: 1, remainingMs: 1 } }),
+      () => Response.json({ error: { code: "setup.owner_required", params: {} } }, { status: 403 }),
+      () => json({ state: { ...initial, revision: 2, status: "consumption-intent" } }),
+    ];
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : ends(path, "reconfirm")
+          ? json({ reconfirmation: grants.shift() })
+          : answers.shift()!(),
+    );
+    await session.open();
+    await session.claim(venue);
+    await session.candidates("example-module", {}, password);
+    await session.candidates("example-module", {}, password);
+    expect(prompts).toBe(2);
+    expect(
+      requests
+        .filter(({ path }) => ends(path, "candidates"))
+        .map(({ body }) => (body as { reconfirmation: string }).reconfirmation),
+    ).toEqual(["first", "first", "second"]);
+  });
+  it("does not ask again when the server refuses a grant it has just given", async () => {
+    let prompts = 0;
+    const password = async () => {
+      prompts++;
+      return "administrator password";
+    };
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : ends(path, "reconfirm")
+          ? json({ reconfirmation: "fresh" })
+          : Response.json({ error: { code: "setup.owner_required", params: {} } }, { status: 403 }),
+    );
+    await session.open();
+    await session.claim(venue);
+    await expect(session.candidates("example-module", {}, password)).rejects.toMatchObject({
+      code: "setup.owner_required",
+    });
+    expect(prompts).toBe(1);
+    expect(requests.map(({ path }) => path)).toEqual([
+      "/setup-api/first-setup/claim",
+      "/setup-api/first-setup/reconfirm",
+      "/setup-api/first-setup/candidates",
+    ]);
+    expect(session.recoveryRequired).toBe(true);
+  });
+  it.each([
+    ["registered", "recovery-document"],
+    ["kept", "recovery-document-kept"],
+  ])("refuses a recovery document the box did not report as %s", async (_, route) => {
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : ends(path, "reconfirm")
+          ? json({ reconfirmation: "proof" })
+          : json({ accepted: false }),
+    );
+    await session.open();
+    await session.claim(venue);
+    const reference = {
+      stageId: "stage",
+      inputDigest: "a".repeat(64),
+      bindingDigest: "b".repeat(64),
+      documentDigest: "c".repeat(64),
+    };
+    await expect(
+      route === "recovery-document"
+        ? session.registerRecoveryDocument("example-module", { ...reference, statement: {} })
+        : session.confirmRecoveryDocument("example-module", reference, "administrator password"),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(requests.at(-1)!.path).toBe(`/setup-api/first-setup/${route}`);
+  });
+  it("sends no confirmation after the tab's session is disposed during its password check", async () => {
+    const reconfirmed = deferred<Response>(),
+      started = deferred<void>();
+    const { session, requests } = create((path) => {
+      if (ends(path, "claim")) return claim();
+      if (ends(path, "reconfirm")) {
+        started.resolve();
+        return reconfirmed.promise;
+      }
+      return json({ state: initial });
+    });
+    await session.open();
+    await session.claim(venue);
+    const pending = session.confirm(
+      "example-module",
+      { statement: true },
+      "administrator password",
+    );
+    await started.promise;
+    await session.dispose();
+    reconfirmed.resolve(json({ reconfirmation: "proof" }));
+    await expect(pending).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(requests.map(({ path }) => path)).toEqual([
+      "/setup-api/first-setup/claim",
+      "/setup-api/first-setup/reconfirm",
+    ]);
   });
 });

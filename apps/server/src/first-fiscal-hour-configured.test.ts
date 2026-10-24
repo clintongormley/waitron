@@ -20,6 +20,11 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { mountSetup } from "./setup-api.js";
 import { MODULE, PASSWORD, request } from "../test/first-fiscal.js";
+import {
+  createFakeTimersHourClock,
+  selectPastWaits,
+  type HourTestClock,
+} from "./testing/hour-test-clock.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -31,22 +36,21 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
+let clock: HourTestClock;
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(NOW);
-  external.internet.mockImplementation(async () => {
-    const mono = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: Date.now(),
-      uncertaintyMs: 500,
-      wallStartedMs: Date.now(),
-      wallFinishedMs: Date.now(),
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  });
+  clock = createFakeTimersHourClock();
+  external.internet.mockImplementation(async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: clock.wall(),
+    wallFinishedMs: clock.wall(),
+    monotonicStartedMs: clock.monotonic(),
+    monotonicFinishedMs: clock.monotonic(),
+  }));
 });
 afterEach(async () => {
   vi.useRealTimers();
@@ -95,51 +99,62 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
       owner = { ...value.state, capability: owner.capability };
     return { status: response.status, body: value };
   };
+  let comparisonId = "";
   const clocks = async () => {
     const challenge = await post("preparation", {
       module: MODULE,
       proposal: { action: "clock-challenge" },
     });
     expect(challenge.status).toBe(200);
-    return post("preparation", {
+    const compared = await post("preparation", {
       module: MODULE,
       proposal: {
         action: "compare-clocks",
-        browser: { challengeId: challenge.body.preparation.id, instantMs: NOW },
+        browser: { challengeId: challenge.body.preparation.id, instantMs: clock.wall() },
       },
     });
+    comparisonId = compared.body.preparation?.id ?? "";
+    return compared;
   };
-  const select = async (answer = "no", reconfirmation?: string) =>
+  const select = async (reconfirmation?: string) =>
     post("candidates", {
       module: MODULE,
-      proposal: { answer },
+      proposal: { comparisonId },
       reconfirmation: reconfirmation ?? (await host.owner.reconfirm(owner, PASSWORD, "block-use")),
     });
-  return { host, post, clocks, select, stateDir };
+  const choose = async () => {
+    const result = await selectPastWaits(clock, async () => {
+      expect((await clocks()).status).toBe(200);
+      const answer = await select();
+      return { ...answer, preparation: answer.body.preparation };
+    });
+    expect(result.body.preparation).toBeUndefined();
+    return result;
+  };
+  return { host, post, clocks, select, choose, stateDir };
 }
 
 it.each(["production", "preproduction"] as const)(
   "configured %s setup shares clock and durable selection with operation preparation",
   async (environment) => {
     const f = await fixture(environment);
-    expect((await f.clocks()).status).toBe(200);
-    const result = await f.select();
+    const result = await f.choose();
     expect(result.status).toBe(200);
     const state = (await f.host.store.read())!;
     const context = firstSetupModuleContext(state, MODULE);
     const saved = context.request as { input: unknown };
     expect(saved).toMatchObject({
       status: "selected",
-      identity: "06RB",
+      identity: "0CNNY",
       input: {
         allocation: {
           environment,
           source: "hour",
           reservationEvidence: null,
           series: [
-            { code: "A-06RB", purpose: "standard" },
-            { code: "FF-06RB", purpose: "full" },
-            { code: "R-06RB", purpose: "rectificative" },
+            { code: "A-0CNNY", purpose: "standard" },
+            { code: "FF-0CNNY", purpose: "full" },
+            { code: "R-0CNNY", purpose: "rectificative" },
           ],
         },
       },
@@ -147,8 +162,12 @@ it.each(["production", "preproduction"] as const)(
     const journal = JSON.parse(
       await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
     );
-    expect(journal.revisions).toHaveLength(1);
-    expect(journal.revisions[0].value.entries[0].identity).toBe("06RB");
+    expect(journal.revisions).toHaveLength(2);
+    expect(journal.revisions[0].value.entries[0].kind).toBe("wait");
+    expect(journal.revisions[1].value.entries.at(-1)).toMatchObject({
+      kind: "intent",
+      identity: "0CNNY",
+    });
     expect((await f.post("input", { module: MODULE, input: saved.input })).status).toBe(200);
     const value = await f.host.coordinator.run(() =>
       withOperationAuthority(context.binding, context.administratorId, (authority) =>
@@ -168,27 +187,24 @@ it.each(["production", "preproduction"] as const)(
   },
 );
 
-it.each(["yes", "unknown"])(
-  "a configured %s answer returns its durable wait without freezing a usable request",
-  async (answer) => {
-    const f = await fixture();
-    await f.clocks();
-    const result = await f.select(answer);
-    expect(result.status).toBe(200);
-    expect(result.body.preparation).toMatchObject({
-      status: "waiting",
-      targetMs: Date.parse("2026-10-16T12:00:00Z"),
-    });
-    const state = (await f.host.store.read())!;
-    expect(state.status).toBe("claimed");
-    expect(firstSetupModuleContext(state, MODULE).request).toBeNull();
-    const journal = JSON.parse(
-      await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
-    );
-    expect(journal.revisions[0].value.entries[0].kind).toBe("wait");
-    expect(journal.revisions[0].value.entries[0]).not.toHaveProperty("identity");
-  },
-);
+it("a configured first selection returns its durable settle wait without freezing a usable request", async () => {
+  const f = await fixture();
+  await f.clocks();
+  const result = await f.select();
+  expect(result.status).toBe(200);
+  expect(result.body.preparation).toMatchObject({
+    status: "waiting",
+    targetMs: Date.parse("2026-10-16T11:42:00Z"),
+  });
+  const state = (await f.host.store.read())!;
+  expect(state.status).toBe("claimed");
+  expect(firstSetupModuleContext(state, MODULE).request).toBeNull();
+  const journal = JSON.parse(
+    await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
+  );
+  expect(journal.revisions[0].value.entries[0].kind).toBe("wait");
+  expect(journal.revisions[0].value.entries[0]).not.toHaveProperty("identity");
+});
 
 it("rejects an unauthenticated clock action before contacting the outside source", async () => {
   const f = await fixture();
@@ -205,7 +221,7 @@ it("rejects an unauthenticated clock action before contacting the outside source
 it("a bad password grant cannot record an hour using the real configured contribution", async () => {
   const f = await fixture();
   await f.clocks();
-  const result = await f.select("no", "forged");
+  const result = await f.select("forged");
   expect(result.status).toBe(403);
   expect(result.body.error.code).toBe("setup.owner_required");
   await expect(readFile(join(f.stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
@@ -215,8 +231,7 @@ it("a bad password grant cannot record an hour using the real configured contrib
 
 it("writes and reads back the configured hour through the real provisioning and committed seats", async () => {
   const f = await fixture();
-  await f.clocks();
-  expect((await f.select()).status).toBe(200);
+  expect((await f.choose()).status).toBe(200);
   const state = (await f.host.store.read())!;
   const context = firstSetupModuleContext(state, MODULE);
   const input = (context.request as { input: unknown }).input;
@@ -240,16 +255,16 @@ it("writes and reads back the configured hour through the real provisioning and 
   expect(result.nodeId).toBe(context.binding.targetNodeId);
   const stored = await venue.db.select().from(registroSif);
   expect(stored).toHaveLength(1);
-  expect(stored[0]!.numeroInstalacion).toBe("06RB");
+  expect(stored[0]!.numeroInstalacion).toBe("0CNNY");
   expect(
     (await venue.db.select().from(invoiceSeries)).map(({ code, nextNumber }) => ({
       code,
       nextNumber,
     })),
   ).toEqual([
-    { code: "A-06RB", nextNumber: 1 },
-    { code: "FF-06RB", nextNumber: 1 },
-    { code: "R-06RB", nextNumber: 1 },
+    { code: "A-0CNNY", nextNumber: 1 },
+    { code: "FF-0CNNY", nextNumber: 1 },
+    { code: "R-0CNNY", nextNumber: 1 },
   ]);
   const committed = await withTransaction(venue.db, (tx) =>
     initialSetupFor(f.host.modules, MODULE)!.committed(tx, context, input),
@@ -260,7 +275,7 @@ it("writes and reads back the configured hour through the real provisioning and 
   });
 });
 
-it("manual displayed-time consent reaches the real configured selector after TLS comparison fails", async () => {
+it("with only the box's clock after TLS comparison fails, the real configured selector refuses and nothing confirms it", async () => {
   const f = await fixture();
   external.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
   const comparison = await f.post("preparation", {
@@ -268,35 +283,35 @@ it("manual displayed-time consent reaches the real configured selector after TLS
     proposal: { action: "compare-clocks", browser: null },
   });
   expect(comparison.status).toBe(200);
-  const before = await f.select();
+  const select = () =>
+    f.post("candidates", {
+      module: MODULE,
+      proposal: { comparisonId: comparison.body.preparation.id },
+      reconfirmation: "unused",
+    });
+  const before = await select();
   expect(before.status).toBe(400);
-  expect(before.body.error.code).toBe("sif.allocation_invalid");
-  const forged = await f.post("preparation", {
-    module: MODULE,
-    proposal: { action: "confirm-clock", comparisonId: "forged" },
+  expect(before.body.error).toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "second_clock_missing" },
   });
-  expect(forged.status).toBe(400);
-  expect(forged.body.error.code).toBe("sif.allocation_invalid");
-  expect(
-    (
-      await f.post("preparation", {
-        module: MODULE,
-        proposal: { action: "confirm-clock", comparisonId: comparison.body.preparation.id },
-      })
-    ).status,
-  ).toBe(200);
-  expect((await f.select()).status).toBe(200);
+  const confirmed = await f.post("preparation", {
+    module: MODULE,
+    proposal: { action: "confirm-clock", comparisonId: comparison.body.preparation.id },
+  });
+  expect(confirmed.status).toBe(400);
+  expect(confirmed.body.error.code).toBe("sif.allocation_invalid");
+  expect((await select()).status).toBe(400);
 });
 
 it("the configured input seat refuses changed names after the hour was frozen", async () => {
   const f = await fixture();
-  await f.clocks();
-  expect((await f.select()).status).toBe(200);
+  expect((await f.choose()).status).toBe(200);
   const context = firstSetupModuleContext((await f.host.store.read())!, MODULE);
   const input = structuredClone(
     (context.request as { input: { allocation: { installationIdentity: string } } }).input,
   );
-  input.allocation.installationIdentity = "06RC";
+  input.allocation.installationIdentity = "0CNPG";
   const result = await f.post("input", { module: MODULE, input });
   expect(result.status).toBe(400);
   expect(result.body.error.code).toBe("sif.allocation_invalid");
@@ -319,10 +334,10 @@ it("rejects uploaded clock scope and arbitrary sources before calling the intern
   expect(external.internet).not.toHaveBeenCalled();
 });
 
-it("reads an existing Yes countdown without another password grant or journal write", async () => {
+it("reads an existing settle wait without another password grant or journal write", async () => {
   const f = await fixture();
   await f.clocks();
-  const saved = await f.select("yes");
+  const saved = await f.select();
   expect(saved.status).toBe(200);
   const before = await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8");
   const preview = await f.post("preparation", {
@@ -332,7 +347,7 @@ it("reads an existing Yes countdown without another password grant or journal wr
   expect(preview.status, JSON.stringify(preview.body)).toBe(200);
   expect(preview.body.preparation).toMatchObject({
     status: "waiting",
-    targetMs: Date.parse("2026-10-16T12:00:00Z"),
+    targetMs: Date.parse("2026-10-16T11:42:00Z"),
   });
   expect(preview.body.preparation).not.toHaveProperty("input");
   expect(await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8")).toBe(before);

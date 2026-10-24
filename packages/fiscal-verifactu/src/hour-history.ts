@@ -1,6 +1,6 @@
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { decodeHourIdentity, isHourIdentity } from "./hour-identity.js";
+import { decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
 
 export interface HourScope {
   readonly taxpayerNif: string;
@@ -8,7 +8,7 @@ export interface HourScope {
 }
 export interface HourHistory {
   readonly scope: HourScope;
-  readonly greatestSpentHour: number | null;
+  readonly greatestSpentMinute: number | null;
   readonly recordedTimeFloorMs: number | null;
   readonly references: readonly string[];
   readonly contradictions: readonly string[];
@@ -17,6 +17,7 @@ export interface HourHistorySource {
   readonly reference: string;
   readonly complete: boolean;
   readonly records: readonly unknown[];
+  readonly timeFloorMs?: number;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -50,19 +51,26 @@ export function projectHourHistory(evidence: unknown): HourHistory {
     environment: evidence.scope.environment,
   };
   const sources: unknown[] = evidence.sources;
-  let greatestSpentHour: number | null = null;
+  let greatestSpentMinute: number | null = null;
   let recordedTimeFloorMs: number | null = null;
   const references = new Set<string>();
   const contradictions = new Set<string>();
   const seen = new Map<string, string>();
   if (sources.length === 0) contradictions.add("missing_sources");
   for (const source of sources) {
-    if (!record(source) || !text(source.reference) || !Array.isArray(source.records)) {
+    if (
+      !record(source) ||
+      !text(source.reference) ||
+      !Array.isArray(source.records) ||
+      ("timeFloorMs" in source && !Number.isSafeInteger(source.timeFloorMs))
+    ) {
       contradictions.add(`${record(source) ? String(source.reference) : "source"}:invalid_source`);
       continue;
     }
     references.add(source.reference);
     if (source.complete !== true) contradictions.add(`${source.reference}:incomplete`);
+    if (typeof source.timeFloorMs === "number")
+      recordedTimeFloorMs = Math.max(recordedTimeFloorMs ?? source.timeFloorMs, source.timeFloorMs);
     for (const row of source.records) {
       const reference = record(row) && text(row.reference) ? row.reference : source.reference;
       if (
@@ -75,7 +83,7 @@ export function projectHourHistory(evidence: unknown): HourHistory {
         !text(row.nodeId) ||
         typeof row.kind !== "string" ||
         !kinds.has(row.kind) ||
-        !isHourIdentity(row.identity) ||
+        !isMinuteIdentity(row.identity) ||
         (row.recordedAtMs !== null &&
           (!Number.isSafeInteger(row.recordedAtMs) || (row.recordedAtMs as number) < 0))
       ) {
@@ -97,8 +105,8 @@ export function projectHourHistory(evidence: unknown): HourHistory {
       if (previous !== undefined && previous !== fingerprint)
         contradictions.add(`${row.reference}:conflict`);
       seen.set(row.reference, fingerprint);
-      const hour = decodeHourIdentity(row.identity);
-      greatestSpentHour = Math.max(greatestSpentHour ?? hour, hour);
+      const hour = decodeMinuteIdentity(row.identity);
+      greatestSpentMinute = Math.max(greatestSpentMinute ?? hour, hour);
       if (row.recordedAtMs !== null)
         recordedTimeFloorMs = Math.max(
           recordedTimeFloorMs ?? (row.recordedAtMs as number),
@@ -108,7 +116,7 @@ export function projectHourHistory(evidence: unknown): HourHistory {
   }
   return Object.freeze({
     scope: Object.freeze({ ...scope }),
-    greatestSpentHour,
+    greatestSpentMinute,
     recordedTimeFloorMs,
     references: Object.freeze([...references]),
     contradictions: Object.freeze([...contradictions]),

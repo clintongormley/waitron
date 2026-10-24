@@ -27,6 +27,12 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
+import {
+  createFakeTimersHourClock,
+  recoverySelectPastWaits,
+  selectPastWaits,
+  type HourTestClock,
+} from "./hour-test-clock.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -48,9 +54,25 @@ const bases = [
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "rectificative" },
 ];
-export async function stagedHourRestore(db: Database, kind: "archive" | "stream", eventId: string) {
+export async function stagedHourRestore(
+  db: Database,
+  kind: "archive" | "stream",
+  eventId: string,
+  seams: {
+    clock?: HourTestClock;
+    /** Defaults to a browser on another device. */
+    requestFromBox?: () => boolean;
+  } = {},
+) {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  const clock = seams.clock ?? createFakeTimersHourClock();
+  const client = { onBox: (seams.requestFromBox ?? (() => false))() };
+  /** A clock of the suite's own keeps the faked `Date` beside it; the default one already is. */
+  const follow = () => {
+    if (clock.wall() !== Date.now()) vi.setSystemTime(clock.wall());
+  };
+  follow();
   const root = await mkdtemp(join(tmpdir(), "live-hour-restore-"));
   const roots = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
   await mkdir(roots.stateDir);
@@ -83,7 +105,7 @@ export async function stagedHourRestore(db: Database, kind: "archive" | "stream"
             value = next;
           },
         }),
-      monotonicNow: () => performance.now(),
+      monotonicNow: () => clock.monotonic(),
       read: async () => ({
         scope: { taxpayerNif: "89890001K", environment: "preproduction" },
         bases,
@@ -93,26 +115,34 @@ export async function stagedHourRestore(db: Database, kind: "archive" | "stream"
           ["box", "browser"].map((source) => ({
             source: source as "box" | "browser",
             result: "usable" as const,
-            instantMs: Date.now(),
+            instantMs: clock.wall(),
             uncertaintyMs: 0,
-            wallStartedMs: Date.now(),
-            wallFinishedMs: Date.now(),
-            monotonicStartedMs: 0,
-            monotonicFinishedMs: 0,
+            wallStartedMs: clock.wall(),
+            wallFinishedMs: clock.wall(),
+            monotonicStartedMs: clock.monotonic(),
+            monotonicFinishedMs: clock.monotonic(),
           })),
           Date.parse("2026-10-15T00:00:00Z"),
         ),
       }),
     });
     await withOperationAuthority(initial, "administrator", async (authority) => {
-      const selected = await setup.select({ binding: initial, authority, answer: "no" });
+      const selected = await selectPastWaits(clock, () => {
+        follow();
+        return setup.select({
+          binding: initial,
+          authority,
+          comparisonId: "comparison",
+        });
+      });
       if (selected.status !== "selected") throw new Error("initial hour not selected");
       await setup.prepare({ binding: initial, authority, input: selected.input }, (prepared) =>
         withTransaction(db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
       );
     });
     await db.update(invoiceSeries).set({ nextNumber: 123 });
-    vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+    clock.set(Date.parse("2026-10-16T12:40:00Z"));
+    follow();
     const encryptionKey = "synthetic archive encryption key";
     const databasePath = join(root, "backup.db");
     const manifest = await buildManifest({
@@ -177,6 +207,7 @@ export async function stagedHourRestore(db: Database, kind: "archive" | "stream"
       secret: key.secret,
       database: () => db,
       selected,
+      testClock: clock,
       readIsolation: async () => ({
         oldMachineAbsent: false,
         oldMachineOffline: true,
@@ -184,16 +215,9 @@ export async function stagedHourRestore(db: Database, kind: "archive" | "stream"
       }),
     };
     const service = createSelectedRecoveryPreparation(options);
-    const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
-    await service.prepare({
-      action: "compare-clocks",
-      browser: { challengeId: challenge.id, instantMs: Date.now() },
-    });
-    const outcome = (await service.prepare({
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    })) as { input: unknown };
+    const outcome = (await recoverySelectPastWaits(clock, service, client, follow)) as {
+      input: unknown;
+    };
     const common = {
       environment: "preproduction" as const,
       recoveryOperation: { binding, input: outcome.input },
@@ -215,12 +239,7 @@ export async function stagedHourRestore(db: Database, kind: "archive" | "stream"
         ...options,
         binding: { ...binding, eventId: binding.eventId + "-another" },
       });
-      const challenge = (await next.prepare({ action: "clock-challenge" })) as { id: string };
-      await next.prepare({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
-      return next.prepare({ action: "select", answer: "no", installationCodes: ["06RB"] });
+      return recoverySelectPastWaits(clock, next, client, follow);
     };
     const journalPath = join(roots.stateDir, "module-preparation-state.json");
     const journal = () => readFileSync(journalPath, "utf8");

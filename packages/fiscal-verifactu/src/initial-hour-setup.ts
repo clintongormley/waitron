@@ -7,7 +7,7 @@ import {
   type ModuleOperationHost,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { encodeHourIdentity, decodeHourIdentity, isHourIdentity } from "./hour-identity.js";
+import { encodeMinuteIdentity, decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
@@ -50,7 +50,7 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
     !exact(request, ["kind", "status", "identity", "input"]) ||
     request.kind !== "waitron-hour-setup" ||
     request.status !== "selected" ||
-    !isHourIdentity(request.identity) ||
+    !isMinuteIdentity(request.identity) ||
     !record(request.input) ||
     !record(request.input.allocation) ||
     typeof request.input.allocation.issuedAt !== "string"
@@ -61,7 +61,7 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   if (!Number.isSafeInteger(instant) || new Date(instant).toISOString() !== issuedAt) refuse();
   let identity: string;
   try {
-    identity = encodeHourIdentity(instant);
+    identity = encodeMinuteIdentity(instant);
   } catch {
     return refuse();
   }
@@ -82,7 +82,7 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
 
 async function reviewCommandClock(
   actions: InitialSetupCommandActions,
-): Promise<{ status: "ready" } | { status: "waiting" } | { status: "cancelled" }> {
+): Promise<{ status: "ready"; comparisonId: string } | { status: "cancelled" }> {
   const comparison = (await actions.prepare({
     action: "compare-clocks",
     browser: null,
@@ -93,21 +93,15 @@ async function reviewCommandClock(
     );
   for (const sample of comparison.clock.unavailable)
     actions.output(`${sample.source}: unavailable`);
-  if (comparison.clock.boundaryWait) {
-    actions.output("Clocks span a UTC-hour boundary. Check again before choosing an hour.");
-    return { status: "waiting" };
+  if (!comparison.clock.secondClock || comparison.clock.disagreement) {
+    actions.output("No series is made without a confirmed time, so none is ever repeated.");
+    if (!comparison.clock.secondClock)
+      actions.output(
+        "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+      );
+    return { status: "cancelled" };
   }
-  if (comparison.clock.requiresConfirmation) {
-    actions.output("Accepting a wrong time can reuse invoice names or date invoices incorrectly.");
-    const confirmed = (
-      await actions.prompt("The box's displayed date and time are correct? [y/N]: ")
-    )
-      .trim()
-      .toLowerCase();
-    if (confirmed !== "y" && confirmed !== "yes") return { status: "cancelled" };
-    await actions.prepare({ action: "confirm-clock", comparisonId: comparison.id });
-  }
-  return { status: "ready" as const };
+  return { status: "ready", comparisonId: comparison.id };
 }
 
 export function createHourInitialSetup(
@@ -120,11 +114,10 @@ export function createHourInitialSetup(
     configure: undefined,
     resolutionEvidence: () => ({ files: [], directories: [] }),
     async commandRecoveryDocument(context, imported, document) {
-      const selected = readHourSetupInput(context, imported.input);
+      readHourSetupInput(context, imported.input);
       if (document.key.nodeId !== context.binding.targetNodeId) refuse();
       const recovery: RecoveryDocument = {
         kind: "waitron-recovery-document",
-        installationCodes: [selected.allocation.installationIdentity],
         version: 1,
         scope: {
           taxpayerNif: context.taxId,
@@ -161,40 +154,24 @@ export function createHourInitialSetup(
       const reviewed = await reviewCommandClock(actions);
       if (reviewed.status !== "ready") return reviewed;
       const waiting = (targetMs: unknown) => {
-        actions.output(`Wait until ${new Date(targetMs as number).toISOString()}.`);
+        if (!Number.isSafeInteger(targetMs) || Number.isNaN(new Date(targetMs as number).getTime()))
+          return refuse();
+        actions.output("Waiting to confirm the time, so no invoice series is ever repeated.");
         actions.output(
-          "This countdown does not reserve a separate hour. Coordinate setups one at a time.",
+          `Continues at ${new Date(targetMs as number).toISOString()}; run the command again within a minute after that time (later, it waits again).`,
         );
         return { status: "waiting" as const };
       };
       const preview = await actions.prepare({ action: "selection" });
       if (!record(preview)) return refuse();
       if (preview.status === "waiting") return waiting(preview.targetMs);
-      if (
-        !["selected", "preview"].includes(preview.status as string) ||
-        !["no", "yes", "unknown"].includes(preview.answer as string)
-      )
-        return refuse();
-      actions.output(
-        "Include every venue using this taxpayer's NIF, interrupted setups and recoveries. Arrange them one at a time.",
-      );
-      const answer =
-        preview.status === "selected" || preview.answer !== "no"
-          ? (preview.answer as string)
-          : (
-              await actions.prompt(
-                "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-              )
-            )
-              .trim()
-              .toLowerCase();
-      if (!["no", "yes", "unknown"].includes(answer)) return { status: "cancelled" };
-      const selected = await actions.select({ answer });
+      if (!["selected", "preview"].includes(preview.status as string)) return refuse();
+      const selected = await actions.select({ comparisonId: reviewed.comparisonId });
       if (record(selected) && selected.status === "waiting") return waiting(selected.targetMs);
       if (!record(selected) || selected.status !== "selected") return refuse();
       return { status: "ready", input: selected.input };
     },
-    async preparation(context, proposal) {
+    async preparation(context, proposal, client) {
       contextBinding(context);
       if (!record(proposal)) return refuse("malformed_allocation");
       const session = hostedHourPreparation(host);
@@ -216,22 +193,17 @@ export function createHourInitialSetup(
         return session.compareClocks(
           context.binding,
           proposal.browser as { challengeId: string; instantMs: number } | null,
+          client,
         );
       }
-      if (
-        proposal.action === "confirm-clock" &&
-        exact(proposal, ["action", "comparisonId"]) &&
-        typeof proposal.comparisonId === "string"
-      )
-        return session.confirmClock(context.binding, proposal.comparisonId);
       return refuse("malformed_allocation");
     },
     async candidates(context, proposal) {
       contextBinding(context);
       if (
         !record(proposal) ||
-        !exact(proposal, ["answer"]) ||
-        !["no", "yes", "unknown"].includes(proposal.answer as string)
+        !exact(proposal, ["comparisonId"]) ||
+        typeof proposal.comparisonId !== "string"
       )
         return refuse("malformed_allocation");
       const result = await withOperationAuthority(
@@ -241,7 +213,7 @@ export function createHourInitialSetup(
           hostedHourPreparation(host).select({
             binding: context.binding,
             authority,
-            answer: proposal.answer as "no" | "yes" | "unknown",
+            comparisonId: proposal.comparisonId as string,
           }),
       );
       const value =
@@ -282,7 +254,7 @@ export function createHourInitialSetup(
     },
     documentConfirmation: undefined,
     recoveryDocument(context, imported, document) {
-      const selected = readHourSetupInput(context, imported.input);
+      readHourSetupInput(context, imported.input);
       let statement: ReturnType<typeof parseRecoveryDocumentPublic>;
       try {
         statement = parseRecoveryDocumentPublic(document.statement);
@@ -290,8 +262,6 @@ export function createHourInitialSetup(
         return refuse("outside_confirmation_missing");
       }
       if (
-        statement.installationCodes.length !== 1 ||
-        statement.installationCodes[0] !== selected.allocation.installationIdentity ||
         statement.scope.taxpayerNif !== context.taxId ||
         statement.scope.softwareId !== WAITRON_ID_SISTEMA ||
         statement.scope.environment !== context.environment ||
@@ -328,7 +298,7 @@ export function createHourInitialSetup(
       return [
         {
           namespace: JSON.stringify([context.taxId, context.environment, "hour"]),
-          position: decodeHourIdentity(allocation.installationIdentity),
+          position: decodeMinuteIdentity(allocation.installationIdentity),
         },
       ];
     },

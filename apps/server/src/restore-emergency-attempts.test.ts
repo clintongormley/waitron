@@ -1,7 +1,7 @@
 import { readFile, rm } from "node:fs/promises";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -21,15 +21,15 @@ it.each(["archive", "stream"] as const)(
     await expect(f.run()).resolves.toBe(true);
     expect(JSON.parse(retained).revisions.at(-1).value.entries.at(-1)).toMatchObject({
       kind: "intent",
-      identity: "06RC",
+      identity: "0CNQT",
       binding: f.binding,
     });
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
       `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}`,
     );
     expect((await f.snapshot()).allocations.map((row) => row.installationIdentity)).toEqual([
-      "06RB",
-      "06RC",
+      "0CNNY",
+      "0CNQT",
     ]);
     expect(f.journal()).toBe(retained);
     expect(retained).not.toContain(f.key.secret);
@@ -51,7 +51,10 @@ it.each(["archive", "stream"] as const)(
     await expect(readFile(trading)).rejects.toMatchObject({ code: "EISDIR" });
     await f.advanceCounters();
     const committed = await f.snapshot();
-    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual(["06RB", "06RC"]);
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
+      "0CNNY",
+      "0CNQT",
+    ]);
     expect(f.journal()).toBe(retained);
     await rm(trading, { recursive: true });
     await expect(f.run()).resolves.toBe(true);
@@ -70,22 +73,24 @@ it("retains the selected hour after a real hook transaction rolls back", async (
   ).rejects.toThrow("injected callback interruption");
   await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   const rows = await f.snapshot();
-  expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["06RB"]);
+  expect(rows.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNY"]);
   expect(
     rows.registrations.filter((row) => row.revocadoEn === null).map((row) => row.numeroInstalacion),
-  ).toEqual(["06RB"]);
+  ).toEqual(["0CNNY"]);
   expect(
     rows.series.map(({ code, nextNumber, retiredAt }) => ({ code, nextNumber, retiredAt })),
   ).toEqual([
-    { code: "A-06RB", nextNumber: 123, retiredAt: null },
-    { code: "FF-06RB", nextNumber: 123, retiredAt: null },
-    { code: "R-06RB", nextNumber: 123, retiredAt: null },
+    { code: "A-0CNNY", nextNumber: 123, retiredAt: null },
+    { code: "FF-0CNNY", nextNumber: 123, retiredAt: null },
+    { code: "R-0CNNY", nextNumber: 123, retiredAt: null },
   ]);
   expect(f.journal()).toBe(retained);
   expect(retained).not.toContain("injected callback interruption");
+  // The settle wait alone ends at 12:42, the rolled-back restore's name (0CNQT).
+  vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   await expect(f.nextEvent()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "hour_not_later" },
+    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:43:00Z") },
   });
   expect(f.journal()).toBe(retained);
 });
@@ -101,7 +106,7 @@ it.each(["archive", "stream"] as const)(
         expect(text).toBe(retained);
         expect(JSON.parse(text).revisions.at(-1).value.entries.at(-1)).toMatchObject({
           kind: "intent",
-          identity: "06RC",
+          identity: "0CNQT",
           binding: f!.binding,
         });
         expect(text).not.toContain(f!.key.secret);
@@ -113,8 +118,8 @@ it.each(["archive", "stream"] as const)(
     expect(seen).toBe(true);
     expect(f.journal()).toBe(retained);
     expect((await f.snapshot()).allocations.map((row) => row.installationIdentity)).toEqual([
-      "06RB",
-      "06RC",
+      "0CNNY",
+      "0CNQT",
     ]);
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
       `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}`,
@@ -138,7 +143,10 @@ it.each(["archive", "stream"] as const)(
     });
     await f.advanceCounters();
     const committed = await f.snapshot();
-    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual(["06RB", "06RC"]);
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
+      "0CNNY",
+      "0CNQT",
+    ]);
     expect(f.journal()).toBe(retained);
     await rm(credential, { recursive: true });
     await expect(f.run()).resolves.toBe(true);

@@ -14,9 +14,11 @@ import {
   configureModuleOperations,
   readOperationAuthority,
   withPreparedModuleOperations,
+  type ModuleOperationHost,
   type ModuleOperations,
   type OperationAuthority,
   type OperationBinding,
+  type OperationClient,
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
@@ -48,6 +50,7 @@ export function createNodeOperationPreparation(options: {
   credentialKeyRing?: TotpKeyRing;
   coordinator: FirstSetupCoordinator;
   environment: Readonly<Record<string, string | undefined>>;
+  testClock?: ModuleOperationHost["testClock"];
 }) {
   const node = Object.freeze({ ...options.node });
   const scopes = new AsyncLocalStorage<{
@@ -108,7 +111,7 @@ export function createNodeOperationPreparation(options: {
   });
   const modules = configureModuleOperations(
     options.modules,
-    createModuleOperationHost(options.environment, scoped),
+    createModuleOperationHost(options.environment, { ...scoped, testClock: options.testClock }),
   );
   const invoke = async <T>(
     supplied: OperationBinding,
@@ -166,6 +169,7 @@ export function createNodeOperationPreparation(options: {
       credentials: unknown,
       context: Context,
       proposal: unknown,
+      client: OperationClient,
     ): Promise<unknown> {
       const binding = Object.freeze({ ...suppliedBinding });
       if (!["promote", "re-register"].includes(binding.action)) return invalid(binding);
@@ -173,7 +177,7 @@ export function createNodeOperationPreparation(options: {
       return invoke(binding, credentials, context, async (authority) => {
         const contribution = modules.find((module) => module.name === binding.module)?.operations;
         if (contribution?.recovery === undefined) return invalid(binding);
-        return contribution.recovery({ binding: { ...binding }, authority }, held);
+        return contribution.recovery({ binding: { ...binding }, authority }, held, client);
       });
     },
     async withOperation<T>(

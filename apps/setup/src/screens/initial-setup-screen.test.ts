@@ -272,3 +272,71 @@ it("refuses a public request that omits the selected module", async () => {
   await expect(actions!.request()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(el.shadowRoot!.querySelector("[data-test=next]")!.hasAttribute("disabled")).toBe(true);
 });
+async function mountExample(handler?: (path: string, body: unknown) => Response) {
+  let actions: import("@waitron/module/src/setup-contract.js").InitialSetupActions | undefined;
+  const mounted = await mount(handler);
+  mounted.el.offerings = [{ module: "example-module", version: "1" }];
+  mounted.el.contributions = [
+    {
+      module: "example-module",
+      create(context) {
+        actions = context.api;
+        return document.createElement("test-example-initial-setup");
+      },
+    },
+  ];
+  await mounted.el.updateComplete;
+  return { ...mounted, actions: actions! };
+}
+it("sends the module's independent enrolment under its own module name", async () => {
+  const { actions, requests } = await mountExample();
+  await actions.enrol({ publicKey: "independent-key" }, "compared-fingerprint");
+  expect(requests.slice(1)).toEqual([
+    {
+      path: "/setup-api/first-setup/enrol",
+      body: {
+        module: "example-module",
+        publicKey: { publicKey: "independent-key" },
+        comparison: "compared-fingerprint",
+      },
+    },
+  ]);
+});
+it("refuses a module action after its screen is removed, before sending anything", async () => {
+  const { el, actions, requests } = await mountExample();
+  el.remove();
+  await expect(actions.preparation!({ action: "clock-challenge" })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(requests.map(({ path }) => path)).toEqual(["/setup-api/first-setup/claim"]);
+});
+it("refuses a second password request while the first is still open, and keeps the first", async () => {
+  const { el, actions, requests } = await mountExample((path) =>
+    path.endsWith("reconfirm")
+      ? Response.json({ reconfirmation: "proof" })
+      : path.endsWith("request")
+        ? Response.json({
+            attemptId: state.attemptId,
+            modules: [{ module: "example-module", request: { public: "request" } }],
+          })
+        : Response.json({ state }),
+  );
+  const candidates = actions.candidates({ serials: [1] });
+  await expect
+    .poll(() => el.shadowRoot!.querySelectorAll("[data-test=owner-password]").length)
+    .toBe(1);
+  await expect(actions.confirm({ current: "statement" })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelectorAll("[data-test=owner-password]")).toHaveLength(1);
+  el.shadowRoot!.querySelector("[data-test=owner-password]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "admin password" } }),
+  );
+  await el.updateComplete;
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=reconfirm]")!);
+  expect(await candidates).toEqual({ public: "request" });
+  expect(requests.filter((r) => r.path.endsWith("reconfirm")).map((r) => r.body)).toEqual([
+    { password: "admin password", purpose: "block-use" },
+  ]);
+});

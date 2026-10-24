@@ -29,8 +29,9 @@ const bases = [
 beforeEach(async () => {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(NOW);
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  // Two minutes early: a setup's settle wait then ends at NOW, whose name the cases expect.
+  vi.setSystemTime(NOW - 120_000);
   outside.release.mockReturnValue({ instantMs: NOW - 86_400_000 });
   outside.internet.mockImplementation(async () => {
     const mono = performance.now();
@@ -91,22 +92,29 @@ function fixture() {
     context(next: string) {
       key = next;
     },
-    select: () =>
+    select: (comparisonId: string) =>
       withOperationAuthority(binding, "administrator", (authority) =>
-        preparation.select({ binding, authority, answer: "no" }),
+        preparation.select({ binding, authority, comparisonId }),
       ),
   };
 }
 it("the default host clock provider reaches the unchanged real activation writer", async () => {
   const f = fixture();
-  const challenge = await f.preparation.clockChallenge(binding);
-  const comparison = await f.preparation.compareClocks(binding, {
-    challengeId: challenge.id,
-    instantMs: NOW,
-  });
+  const compare = async () => {
+    const challenge = await f.preparation.clockChallenge(binding);
+    return f.preparation.compareClocks(
+      binding,
+      { challengeId: challenge.id, instantMs: Date.now() },
+      { onBox: false },
+    );
+  };
+  const comparison = await compare();
   expect(comparison.clock.usable.map((row) => row.source)).toEqual(["browser", "internet", "box"]);
-  const selected = await f.select();
-  expect(selected).toMatchObject({ status: "selected", identity: "06RB" });
+  const waiting = await f.select(comparison.id);
+  expect(waiting).toMatchObject({ status: "waiting", targetMs: NOW, remainingMs: 120_000 });
+  vi.advanceTimersByTime(120_000);
+  const selected = await f.select((await compare()).id);
+  expect(selected).toMatchObject({ status: "selected", identity: "0CNNW" });
   if (selected.status !== "selected") throw new Error("expected selected hour");
   await withOperationAuthority(binding, "administrator", (authority) =>
     f.preparation.prepare({ binding, authority, input: selected.input }, (operation) =>
@@ -121,50 +129,33 @@ it("the default host clock provider reaches the unchanged real activation writer
   );
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([
     expect.objectContaining({
-      installationIdentity: "06RB",
+      installationIdentity: "0CNNW",
       environment: "preproduction",
       allocationKey: "hour/owned-hour",
     }),
   ]);
-  expect(f.history).toHaveLength(1);
+  expect(f.history).toHaveLength(2);
 });
 it("the default release provider refuses when the artifact has no embedded floor", async () => {
   const f = fixture();
   outside.release.mockReturnValue(null);
-  const displayed = await f.preparation.compareClocks(binding, null);
-  await f.preparation.confirmClock(binding, displayed.id);
-  await expect(f.select()).rejects.toMatchObject({
+  const compared = await f.preparation.compareClocks(binding, null, { onBox: true });
+  await expect(f.select(compared.id)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "clock_unconfirmed" },
   });
   expect(f.history).toEqual([]);
 });
-it("a new browser comparison invalidates the old operator confirmation", async () => {
+it("evicted frozen scopes cannot reuse their old clock reading", async () => {
   const f = fixture();
   outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
-  const displayed = await f.preparation.compareClocks(binding, null);
-  await f.preparation.confirmClock(binding, displayed.id);
-  const challenge = await f.preparation.clockChallenge(binding);
-  await f.preparation.compareClocks(binding, {
-    challengeId: challenge.id,
-    instantMs: NOW + 300_000,
-  });
-  await expect(f.select()).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "clock_unconfirmed" },
-  });
-  expect(f.history).toEqual([]);
-});
-it("evicted frozen scopes cannot reuse their old displayed-clock confirmation", async () => {
-  const f = fixture();
-  outside.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+  const ids: string[] = [];
   for (let index = 0; index < 65; index++) {
     f.context(`scope-${index}`);
-    const displayed = await f.preparation.compareClocks(binding, null);
-    await f.preparation.confirmClock(binding, displayed.id);
+    ids.push((await f.preparation.compareClocks(binding, null, { onBox: true })).id);
   }
   f.context("scope-0");
-  await expect(f.select()).rejects.toMatchObject({
+  await expect(f.select(ids[0]!)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "clock_stale" },
   });

@@ -38,10 +38,13 @@ export interface ModuleOperationHost {
     run: (state: {
       readonly value: unknown;
       readonly history: readonly unknown[];
-      replace(value: unknown): Promise<void>;
+      /** A `"wait"` write is checked against the owner's grant without spending it. */
+      replace(value: unknown, purpose?: "wait" | "intent"): Promise<void>;
     }) => Promise<T>,
   ): Promise<T>;
   readonly environment: Readonly<Record<string, string | undefined>>;
+  /** Set only by a test; production leaves it unset and modules read the real clocks. */
+  readonly testClock?: { wall(): number; monotonic(): number };
   readRetiredSetup?(module: string): Promise<
     readonly {
       readonly context: InitialSetupContext;
@@ -76,6 +79,11 @@ export function configureModuleOperations(
   });
 }
 
+/** Whether the request came from a browser running on the box itself. */
+export interface OperationClient {
+  readonly onBox: boolean;
+}
+
 export interface ModuleOperationPreparation {
   configure?(host: ModuleOperationHost): ModuleOperationPreparation;
   readRecoveryHistory?(db: Database): Promise<readonly unknown[]>;
@@ -93,6 +101,7 @@ export interface ModuleOperationPreparation {
   recovery?(
     operation: Pick<ModuleOperationInput, "binding" | "authority">,
     proposal: unknown,
+    client: OperationClient,
   ): Promise<unknown>;
   /** Rebuild transient admission checks without selecting another identity. */
   resumeRecovery?(operation: Pick<ModuleOperationInput, "binding" | "authority">): Promise<void>;

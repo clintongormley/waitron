@@ -540,6 +540,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **Non-blocking while pre-production; blocking before going live.**
   [Detail](backlog/fiscal.md#no-tax-0-is-an-open-fiscal-question-and-it-must-be-answered-before-the-first-live-filing)
 
+- **Rename the `hour-*` names to minute names** — left by A947 slice 4a, which made every
+  installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-*.ts` file names,
+  their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
+  say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
+  no compatibility code: until then any installation may be reset (CLAUDE.md §3).
+
+- **Should `packages/fiscal-verifactu` have a mutation floor?** It has no Stryker config, so the
+  minute-name rules A947 slice 4a added are covered by tests and hand-run deletions only (the
+  plan's Mutation section lists them). Decide whether it joins the mutation-tested packages.
+
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -4365,6 +4375,14 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
   folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
   should that page also say the disk is full and show the free space?
+
+- **A restore's staged backup copies may fill the disk for good.** The start's clean-up
+  (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) empties `backup-staging` but never
+  `restore-staging/staged-recovery`, where A947 slice 4a keeps each uploaded backup as a decrypted
+  copy; only `bootServer` removes that folder (`clearStagedRecoveries`, `apps/server/src/boot.ts`),
+  after the count check. So if those copies are what filled the disk, the box might show the
+  full-disk page on every start — read in the code, not run. The owner's ruling (2026-10-23): fix it
+  with the small-disk test set-up the full-disk start tests use, test first.
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`

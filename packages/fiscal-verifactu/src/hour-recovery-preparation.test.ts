@@ -87,20 +87,27 @@ beforeEach(async () => {
   vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
   await seedTenants(suite.db);
   await stampDeployment(suite.db, "preproduction");
+  let setupClock = clock("2026-10-16T11:38:00.000Z");
+  let setupMonotonic = 0;
   const setup = createHourPreparation({
     ...store(),
-    monotonicNow: () => 0,
+    monotonicNow: () => setupMonotonic,
     read: async () => ({
       scope,
       bases,
       contextKey: "original-owner",
-      clock: clock("2026-10-16T11:40:00.000Z"),
+      clock: setupClock,
       history: [{ reference: "empty", complete: true, records: [] }],
     }),
   });
   const first = { ...binding, action: "setup", eventId: "original-hour" };
   await withOperationAuthority(first, "administrator", async (authority) => {
-    const selected = await setup.select({ binding: first, authority, answer: "no" });
+    const run = () => setup.select({ binding: first, authority, comparisonId: "comparison" });
+    const waiting = await run();
+    if (waiting.status !== "waiting") throw new Error("setup did not wait");
+    setupClock = clock("2026-10-16T11:40:00.000Z");
+    setupMonotonic = waiting.remainingMs;
+    const selected = await run();
     if (selected.status !== "selected") throw new Error("setup not selected");
     await setup.prepare({ binding: first, authority, input: selected.input }, (prepared) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
@@ -110,13 +117,15 @@ beforeEach(async () => {
   vi.setSystemTime(new Date("2026-10-16T12:40:00.000Z"));
 });
 afterEach(() => vi.useRealTimers());
-async function fixture(monotonicNow = () => 0) {
+async function fixture() {
   const state = store();
+  let monotonic = 0;
   const facts: HourRecoveryFacts = {
     scope,
     bases,
     contextKey: "selected-backup/key-name/isolated",
-    clock: clock(),
+    // Two minutes before 12:40, so the name taken after the settle wait is 12:40's.
+    clock: clock("2026-10-16T12:38:00.000Z"),
     history: [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))],
     oldMachineOffline: true,
     oldMachineAbsent: false,
@@ -126,12 +135,29 @@ async function fixture(monotonicNow = () => 0) {
   return {
     state,
     facts,
+    get monotonic() {
+      return monotonic;
+    },
+    set monotonic(next: number) {
+      monotonic = next;
+    },
     preparation: createHourRecoveryPreparation({
       ...state,
       read: async () => facts,
-      monotonicNow,
+      monotonicNow: () => monotonic,
     }),
   };
+}
+async function settled(
+  f: Awaited<ReturnType<typeof fixture>>,
+  authority: ModuleOperationInput["authority"],
+) {
+  const run = () => f.preparation.select({ binding, authority, comparisonId: "comparison" });
+  const waiting = await run();
+  if (waiting.status !== "waiting") throw new Error("restore did not wait");
+  Object.assign(f.facts, { clock: clock(new Date(waiting.targetMs).toISOString()) });
+  f.monotonic += waiting.remainingMs;
+  return run();
 }
 async function snapshot() {
   return {
@@ -153,15 +179,15 @@ it("selects and activates the next hour through the unchanged restore hook while
   const f = await fixture();
   const before = await snapshot();
   await withOperationAuthority(binding, operator, async (authority) => {
-    const selected = await f.preparation.select({ binding, authority, answer: "no" });
+    const selected = await settled(f, authority);
     expect(selected.status).toBe("selected");
     if (selected.status !== "selected") throw new Error("not selected");
-    expect(selected.identity).toBe("06RC");
+    expect(selected.identity).toBe("0CNQR");
     expect(selected.input.approval.operatorId).toEqual(operator);
     expect(selected.input.allocation.series).toEqual([
-      { code: "A-06RC", purpose: "standard" },
-      { code: "FF-06RC", purpose: "full" },
-      { code: "R-06RC", purpose: "rectificative" },
+      { code: "A-0CNQR", purpose: "standard" },
+      { code: "FF-0CNQR", purpose: "full" },
+      { code: "R-0CNQR", purpose: "rectificative" },
     ]);
     await restore(f.preparation, { binding, authority, input: selected.input });
   });
@@ -176,7 +202,7 @@ it("selects and activates the next hour through the unchanged restore hook while
   );
   expect(
     after.sifs.filter((row) => row.revocadoEn === null).map((row) => row.numeroInstalacion),
-  ).toEqual(["06RC"]);
+  ).toEqual(["0CNQR"]);
   expect(after.activations).toHaveLength(2);
   expect(after.activations.find((row) => row.eventKey === "original-hour")).toEqual(
     before.activations[0],
@@ -191,9 +217,9 @@ it.each([
   const f = await fixture();
   const before = await snapshot();
   await withOperationAuthority(binding, supplied, async (authority) => {
-    await expect(f.preparation.select({ binding, authority, answer: "no" })).rejects.toMatchObject(
-      refusal("reauthentication_required"),
-    );
+    await expect(
+      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+    ).rejects.toMatchObject(refusal("reauthentication_required"));
   });
   expect(f.state.history).toEqual([]);
   expect(await snapshot()).toEqual(before);
@@ -208,9 +234,9 @@ it.each([
   Object.assign(f.facts, changed);
   const before = await snapshot();
   await withOperationAuthority(binding, operator, async (authority) => {
-    await expect(f.preparation.select({ binding, authority, answer: "no" })).rejects.toMatchObject(
-      refusal(reason),
-    );
+    await expect(
+      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+    ).rejects.toMatchObject(refusal(reason));
   });
   expect(f.state.history).toEqual([]);
   expect(await snapshot()).toEqual(before);
@@ -231,7 +257,7 @@ it("allows a later surviving host floor to raise an older selected backup floor"
             nodeId: TENANT_A.nodeId2,
             softwareId: "OTHER",
             kind: "retirement",
-            identity: "06RD",
+            identity: "0CNRC",
             recordedAtMs: Date.parse("2026-10-16T13:00:00Z"),
           },
         ],
@@ -239,9 +265,9 @@ it("allows a later surviving host floor to raise an older selected backup floor"
     ],
   });
   await withOperationAuthority(binding, operator, async (authority) => {
-    await expect(f.preparation.select({ binding, authority, answer: "no" })).rejects.toMatchObject(
-      refusal("hour_not_later"),
-    );
+    await expect(
+      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+    ).rejects.toMatchObject(refusal("minute_not_later"));
   });
   expect(f.state.history).toEqual([]);
 });
@@ -250,7 +276,7 @@ it("rejects an operation moved to another backup after selection without changin
   const f = await fixture();
   const before = await snapshot();
   await withOperationAuthority(binding, operator, async (authority) => {
-    const selected = await f.preparation.select({ binding, authority, answer: "no" });
+    const selected = await settled(f, authority);
     if (selected.status !== "selected") throw new Error("not selected");
     const other = { ...binding, sourceId: "different-selected-artifact" };
     await withOperationAuthority(other, operator, async (otherAuthority) => {
@@ -267,33 +293,25 @@ it("rejects an operation moved to another backup after selection without changin
 });
 
 it("does not let a forward wall-clock jump complete a retained recovery wait early", async () => {
-  let monotonic = 0;
-  const f = await fixture(() => monotonic);
+  const f = await fixture();
   await withOperationAuthority(binding, operator, async (authority) => {
-    expect(await f.preparation.select({ binding, authority, answer: "yes" })).toMatchObject({
-      status: "waiting",
-      remainingMs: 1200000,
-    });
-    Object.assign(f.facts, { clock: clock("2026-10-16T13:10:00.000Z") });
-    expect(await f.preparation.select({ binding, authority, answer: "yes" })).toMatchObject({
-      status: "waiting",
-      remainingMs: 1200000,
-    });
-    monotonic = 1200000;
-    expect(await f.preparation.select({ binding, authority, answer: "yes" })).toMatchObject({
-      status: "selected",
-      identity: "06RD",
-    });
+    const run = () => f.preparation.select({ binding, authority, comparisonId: "comparison" });
+    expect(await run()).toMatchObject({ status: "waiting", remainingMs: 120_000 });
+    Object.assign(f.facts, { clock: clock("2026-10-16T12:40:30.000Z") });
+    expect(await run()).toMatchObject({ status: "waiting", remainingMs: 120_000 });
+    f.monotonic = 120_000;
+    expect(await run()).toMatchObject({ status: "selected", identity: "0CNQR" });
   });
 });
 
 it("previews a later recovery hour without spending it", async () => {
   const f = await fixture();
+  Object.assign(f.facts, { clock: clock() });
   const before = await snapshot();
   await withOperationAuthority(binding, operator, async (authority) => {
     expect(await f.preparation.preview({ binding, authority })).toMatchObject({
       status: "preview",
-      identity: "06RC",
+      identity: "0CNQR",
     });
   });
   expect(f.state.history).toEqual([]);
@@ -304,7 +322,7 @@ it("replays the exact committed restore without another hour or counter change",
   const f = await fixture();
   let input: unknown;
   await withOperationAuthority(binding, operator, async (authority) => {
-    const selected = await f.preparation.select({ binding, authority, answer: "no" });
+    const selected = await settled(f, authority);
     if (selected.status !== "selected") throw new Error("not selected");
     input = selected.input;
     await restore(f.preparation, { binding, authority, input });
@@ -333,13 +351,13 @@ it.each(["context", "bases", "input", "isolation"])(
     const f = await fixture();
     const before = await snapshot();
     await withOperationAuthority(binding, operator, async (authority) => {
-      const selected = await f.preparation.select({ binding, authority, answer: "no" });
+      const selected = await settled(f, authority);
       if (selected.status !== "selected") throw new Error("not selected");
       const input = structuredClone(selected.input);
       if (part === "context") Object.assign(f.facts, { contextKey: "other-backup-or-key" });
       if (part === "bases")
         Object.assign(f.facts, { bases: [...bases, { code: "EXTRA", purpose: "standard" }] });
-      if (part === "input") input.allocation.series[0]!.code = "OTHER-06RC";
+      if (part === "input") input.allocation.series[0]!.code = "OTHER-0CNQR";
       if (part === "isolation") Object.assign(f.facts, { oldMachineOffline: false });
       await expect(restore(f.preparation, { binding, authority, input })).rejects.toMatchObject(
         refusal(part === "isolation" ? "old_machine_active" : "event_mismatch"),
@@ -353,7 +371,7 @@ it("does not treat supplied hour material as a substitute for the durable select
   const f = await fixture();
   const before = await snapshot();
   await withOperationAuthority(binding, operator, async (authority) => {
-    const selected = await f.preparation.select({ binding, authority, answer: "no" });
+    const selected = await settled(f, authority);
     if (selected.status !== "selected") throw new Error("not selected");
     const empty = createHourRecoveryPreparation({
       ...store(),
@@ -388,7 +406,7 @@ it("rechecks authority after a delayed source read before spending an hour", asy
   });
   let pending!: ReturnType<typeof delayed.select>;
   await withOperationAuthority(binding, operator, async (authority) => {
-    pending = delayed.select({ binding, authority, answer: "no" });
+    pending = delayed.select({ binding, authority, comparisonId: "comparison" });
     await entered;
   });
   const rejected = expect(pending).rejects.toMatchObject(refusal("reauthentication_required"));
@@ -404,7 +422,11 @@ it.each(["setup", "promote", "reserve"])(
     const other = { ...binding, action };
     await withOperationAuthority(other, operator, async (authority) => {
       await expect(
-        f.preparation.select({ binding: other, authority, answer: "no" }),
+        f.preparation.select({
+          binding: other,
+          authority,
+          comparisonId: "comparison",
+        }),
       ).rejects.toMatchObject(refusal("event_mismatch"));
     });
     expect(f.state.history).toEqual([]);
@@ -426,9 +448,9 @@ it("refuses an unknown prior-activation classification before spending an hour",
   const f = await fixture();
   Object.assign(f.facts, { priorActivation: "unknown" });
   await withOperationAuthority(binding, operator, async (authority) => {
-    await expect(f.preparation.select({ binding, authority, answer: "no" })).rejects.toMatchObject(
-      refusal("event_mismatch"),
-    );
+    await expect(
+      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+    ).rejects.toMatchObject(refusal("event_mismatch"));
   });
   expect(f.state.history).toEqual([]);
 });
@@ -438,7 +460,7 @@ it("cannot prepare another module's recovery event", async () => {
   const other = { ...binding, module: "other-module" };
   await withOperationAuthority(other, operator, async (authority) => {
     await expect(
-      f.preparation.select({ binding: other, authority, answer: "no" }),
+      f.preparation.select({ binding: other, authority, comparisonId: "comparison" }),
     ).rejects.toMatchObject(refusal("event_mismatch"));
   });
   expect(f.state.history).toEqual([]);

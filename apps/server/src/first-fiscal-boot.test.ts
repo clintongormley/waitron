@@ -20,6 +20,11 @@ import { freePorts } from "./testing/free-ports.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { DatabaseSync } from "node:sqlite";
+import {
+  createHourTestClock,
+  selectPastWaits,
+  type HourTestClock,
+} from "./testing/hour-test-clock.js";
 
 vi.mock("./trading-config.js", { spy: true });
 vi.mock("node:fs/promises", { spy: true });
@@ -27,21 +32,18 @@ vi.mock("./fiscal-readiness.js", { spy: true });
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
+const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
-    const wall = Date.now(),
-      monotonic = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: wall,
-      uncertaintyMs: 500,
-      wallStartedMs: wall,
-      wallFinishedMs: wall,
-      monotonicStartedMs: monotonic,
-      monotonicFinishedMs: monotonic,
-    };
-  },
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: time.clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: time.clock.wall(),
+    wallFinishedMs: time.clock.wall(),
+    monotonicStartedMs: time.clock.monotonic(),
+    monotonicFinishedMs: time.clock.monotonic(),
+  }),
 }));
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
@@ -82,6 +84,8 @@ it.each(["trading", "completion-state", "completion-marker"])(
       migrations = join(root, "migrations");
     await copyMigrationsRoot(migrations);
     const [port] = await freePorts(1);
+    const testClock = createHourTestClock(Date.now());
+    time.clock = testClock;
     const env = {
       WAITRON_ENV: "production",
       WAITRON_STATE_DIR: stateDir,
@@ -99,7 +103,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
     ).writeTradingEnv;
     let injected = false;
     try {
-      server = await startServer(env);
+      server = await startServer(env, {}, { testClock });
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
       const nonce = randomBytes(32).toString("base64url");
       let capability = "",
@@ -143,40 +147,34 @@ it.each(["trading", "completion-state", "completion-marker"])(
       };
       const readiness = await post("/setup-api/fiscal-test", live);
       expect(readiness).toEqual({ status: 200, body: { status: "uncertain" } });
-      const challenge = await post("/setup-api/first-setup/preparation", {
-        module: MODULE,
-        proposal: { action: "clock-challenge" },
-      });
-      expect(challenge.status).toBe(200);
-      const comparison = await post("/setup-api/first-setup/preparation", {
-        module: MODULE,
-        proposal: {
-          action: "compare-clocks",
-          browser: { challengeId: challenge.body.preparation.id, instantMs: Date.now() },
-        },
-      });
-      expect(comparison.status).toBe(200);
-      if (comparison.body.preparation.clock.requiresConfirmation) {
-        const confirmed = await post("/setup-api/first-setup/preparation", {
+      const chosen = await selectPastWaits(testClock, async () => {
+        const challenge = await post("/setup-api/first-setup/preparation", {
+          module: MODULE,
+          proposal: { action: "clock-challenge" },
+        });
+        expect(challenge.status).toBe(200);
+        const comparison = await post("/setup-api/first-setup/preparation", {
           module: MODULE,
           proposal: {
-            action: "confirm-clock",
-            comparisonId: comparison.body.preparation.id,
+            action: "compare-clocks",
+            browser: { challengeId: challenge.body.preparation.id, instantMs: testClock.wall() },
           },
         });
-        expect(confirmed.status).toBe(200);
-      }
-      const reconfirm = await post("/setup-api/first-setup/reconfirm", {
-        password: PASSWORD,
-        purpose: "block-use",
-      });
-      expect(reconfirm.status).toBe(200);
-      const chosen = await post("/setup-api/first-setup/candidates", {
-        module: MODULE,
-        proposal: { answer: "no" },
-        ...reconfirm.body,
+        expect(comparison.status).toBe(200);
+        const reconfirm = await post("/setup-api/first-setup/reconfirm", {
+          password: PASSWORD,
+          purpose: "block-use",
+        });
+        expect(reconfirm.status).toBe(200);
+        const answer = await post("/setup-api/first-setup/candidates", {
+          module: MODULE,
+          proposal: { comparisonId: comparison.body.preparation.id },
+          ...reconfirm.body,
+        });
+        return { ...answer, preparation: answer.body.preparation };
       });
       expect(chosen.status, JSON.stringify(chosen.body)).toBe(200);
+      expect(chosen.preparation).toBeUndefined();
       state = chosen.body.state;
       const response = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/request`, {
         dispatcher: agent,
@@ -202,7 +200,6 @@ it.each(["trading", "completion-state", "completion-marker"])(
       expect(staged.status).toBe(200);
       const statement = {
         kind: "waitron-recovery-document",
-        installationCodes: [prepared.allocation.installationIdentity],
         version: 1,
         scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "production" },
         taxpayerName: request.legalName,
@@ -350,7 +347,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
         if (child.pid !== undefined && child.exitCode === null) child.kill("SIGTERM");
         await closed;
       }
-      server = await startServer({ ...env, ...tradingEnv });
+      server = await startServer({ ...env, ...tradingEnv }, {}, { testClock });
       const resumedStatus = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/status`, {
         dispatcher: agent,
       } as RequestInit);
@@ -366,7 +363,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
       server = undefined;
       await rm(join(stateDir, "first-setup.json"));
       await rm(join(venueDir, "first-setup-claim.json"));
-      server = await startServer(env);
+      server = await startServer(env, {}, { testClock });
       const lost = await post("/setup-api/first-setup/claim", {
         clientClaimNonce: randomBytes(32).toString("base64url"),
         venue: request,

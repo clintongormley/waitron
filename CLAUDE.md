@@ -904,14 +904,19 @@ browser test** — most of these rules exist because a test passed while proving
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
-- **Re-registering a filing node activates a supplied signed identity and starts a new chain.** Correct
-  for a reimaged box, destructive for a working one. A cold restore (`waitron-restore`) and a rebuild
-  from the bucket require the recovery operation and node key before activating that outside
-  allocation; the box does not mint an installation number from its clock or a counter. One restore
-  takes one source, never both; the restore command refuses combined archive and bucket inputs before
-  either restore runs. The working-time chain continues from the backup's head. Guard:
-  `packages/workforce/src/restore-continuation.test.ts`. Restore inputs and the selected backup's
-  recovery-key warning: [conventions-data.md](docs/developers/conventions-data.md).
+- **Re-registering a filing node starts a new chain under a new installation name.** Correct for a
+  reimaged box, destructive for a working one. A setup, restore, re-registration or promotion names
+  its installation from the box's clock — five symbols for the UTC minute — only after a check
+  against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
+  every name in the history it can read; a setup or restore waits 90 to 150 seconds first. The one
+  exception is the preproduction throwaway, which names with no second clock and no history check
+  and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
+  `packages/fiscal-verifactu/src/hour-clock.test.ts` and
+  `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, the last weaker than its
+  name. One restore takes one source, never both. The working-time chain continues from the
+  backup's head. Guard: `packages/workforce/src/restore-continuation.test.ts`. Who takes the
+  throwaway, what the last guard misses, and the restore's key and source rules:
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **On a node that files, every start puts each sale left "being sent" back to waiting before its
   first filing pass** (`resetInFlightClaims`, `packages/fiscal-verifactu/src/drain.ts`) — safe only
   while no second process files from the database: the server opens the folder exclusively, and the

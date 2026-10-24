@@ -54,6 +54,9 @@ async function fixture() {
     authorizeReplacement: async () => {
       if (!replacementAllowed) throw new AppError("setup.owner_required", {});
     },
+    authorizeWait: async () => {
+      if (!replacementAllowed) throw new AppError("setup.owner_required", {});
+    },
     withVenueExclusion: async <T>(run: () => Promise<T>) => run(),
     readSetupFacts: (value: OperationBinding) => readFacts(value),
   };

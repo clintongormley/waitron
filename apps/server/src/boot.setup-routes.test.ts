@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
@@ -71,6 +72,7 @@ import {
   seedTradingVenue,
   fetchHealthOk,
 } from "./testing/boot-harness.js";
+import { createHourTestClock } from "./testing/hour-test-clock.js";
 
 const { beforeServerStarts, startServer } = serverFixture();
 
@@ -393,7 +395,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       stateDir: string;
       extraPorts: number[];
     }) => Promise<void>,
-    { extraPortCount = 0 } = {},
+    {
+      extraPortCount = 0,
+      beforeStart,
+    }: { extraPortCount?: number; beforeStart?: (stateDir: string) => Promise<void> } = {},
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
@@ -410,32 +415,36 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       generator: "scripts/generate-hour-release.mjs:v1",
       generatorSha256: "b".repeat(64),
     });
-    const clock = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
-    const internetSpy = vi.spyOn(clock, "observeInternetHourClock").mockImplementation(async () => {
-      const now = Date.now(),
-        mono = performance.now();
-      return {
+    const testClock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z"));
+    const internet = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
+    const internetSpy = vi
+      .spyOn(internet, "observeInternetHourClock")
+      .mockImplementation(async () => ({
         source: "internet",
         result: "usable",
-        instantMs: now,
+        instantMs: testClock.wall(),
         uncertaintyMs: 500,
-        wallStartedMs: now,
-        wallFinishedMs: now,
-        monotonicStartedMs: mono,
-        monotonicFinishedMs: mono,
-      };
-    });
+        wallStartedMs: testClock.wall(),
+        wallFinishedMs: testClock.wall(),
+        monotonicStartedMs: testClock.monotonic(),
+        monotonicFinishedMs: testClock.monotonic(),
+      }));
     try {
+      await beforeStart?.(stateDir);
       await withMockedKill(async (kills) => {
-        const server = await startServer({
-          WAITRON_VENUE_DIR: directory,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0",
-          ...env,
-        });
+        const server = await startServer(
+          {
+            WAITRON_VENUE_DIR: directory,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_ENV: "preproduction",
+            WAITRON_HTTP_LANDING_PORT: "0",
+            ...env,
+          },
+          {},
+          { testClock },
+        );
         const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
         try {
           await use({
@@ -451,6 +460,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
                     body.configurationImport === true
                       ? { configurationImport: true, newTaxpayer: body.newTaxpayer === true }
                       : undefined,
+                    testClock,
                   );
                   const {
                     venue: _,
@@ -635,7 +645,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   /** Cell 12 of the A680 plan's refusal matrix, read from the venue a Demo setup made. */
   function expectThrowawayVenue(db: Database, taxId: string): void {
     expect(db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
-      { numero_instalacion: "06RB" },
+      { numero_instalacion: "0CNNW" },
     ]);
     expect(
       db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
@@ -647,9 +657,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       },
     ]);
     expect(db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
-      { code: "A-06RB", purpose: "standard" },
-      { code: "FF-06RB", purpose: "full" },
-      { code: "R-06RB", purpose: "rectificative" },
+      { code: "A-0CNNW", purpose: "standard" },
+      { code: "FF-0CNNW", purpose: "full" },
+      { code: "R-0CNNW", purpose: "rectificative" },
     ]);
     expect(db.all(sql`select environment from deployment`)).toEqual([
       { environment: "preproduction" },
@@ -791,6 +801,99 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     } finally {
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("removes a decrypted copy a restore page left staged before the box stopped", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const leftover = (stateDir: string) =>
+      join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ stateDir }) => {
+          await expect(readdir(dirname(leftover(stateDir)))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        },
+        {
+          beforeStart: async (stateDir) => {
+            await mkdir(leftover(stateDir), { recursive: true });
+            await writeFile(join(leftover(stateDir), "venue.db"), "decrypted venue");
+          },
+        },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("leaves a staged decrypted copy for the next start when this one fails before holding the venue folder", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-early-"));
+    const leftover = join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
+    try {
+      await mkdir(leftover, { recursive: true });
+      await writeFile(join(leftover, "venue.db"), "decrypted venue");
+      await expect(
+        startServer(
+          {
+            WAITRON_VENUE_DIR: join(stateDir, "venue"),
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_HTTP_PORT: String(await freePort()),
+            WAITRON_HTTP_LANDING_PORT: "0",
+            WAITRON_SETUP_APP_DIR: join(stateDir, "no-such-app"),
+          },
+          {},
+        ),
+      ).rejects.toMatchObject({
+        code: "server.config_invalid",
+        params: { variable: "WAITRON_SETUP_APP_DIR" },
+      });
+      expect(await readdir(dirname(leftover))).toEqual(["archive-validate-left"]);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves a running process's staged copy alone when a second start is refused the venue folder", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-second-"));
+    const venueDir = join(stateDir, "venue");
+    const staged = join(stateDir, "restore-staging", "staged-recovery", "live-staged-copy");
+    await mkdir(venueDir, { recursive: true });
+    await mkdir(staged, { recursive: true });
+    await writeFile(join(staged, "venue.db"), "decrypted venue in use by the first process");
+    const holder = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const {DatabaseSync}=require("node:sqlite");const c=new DatabaseSync(${JSON.stringify(join(venueDir, "venue.lock"))});c.exec("begin immediate");process.stdout.write("held\\n");setInterval(()=>{},1000);`,
+      ],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    try {
+      await new Promise<void>((resolve) => holder.stdout!.once("data", () => resolve()));
+      await expect(
+        startServer(
+          {
+            WAITRON_VENUE_DIR: venueDir,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_HTTP_PORT: String(await freePort()),
+            WAITRON_HTTP_LANDING_PORT: "0",
+          },
+          {},
+        ),
+      ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+      expect(await readdir(dirname(staged))).toEqual(["live-staged-copy"]);
+    } finally {
+      holder.kill("SIGKILL");
+      await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
 
@@ -1546,7 +1649,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         target.store.venue.all(
           sql`select code from invoice_series where retired_at is null order by code`,
         ),
-      ).toEqual([{ code: "B-06RB" }, { code: "FB-06RB" }, { code: "RB-06RB" }]);
+      ).toEqual([{ code: "B-0CNNY" }, { code: "FB-0CNNY" }, { code: "RB-0CNNY" }]);
       expect(
         target.store.venue.all(sql`select operation_description, invoice_locales from locations`),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);

@@ -20,6 +20,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { activateFirstFiscal, finishFirstFiscalSetup } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => ({
@@ -63,7 +64,11 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
           },
         },
   );
-  const f = await hourFirstFiscalFixture({ database: () => suite.db, modules });
+  const f = await hourFirstFiscalFixture({
+    clock: createFakeTimersHourClock(),
+    database: () => suite.db,
+    modules,
+  });
   fixtures.push(f);
   const { host, staged } = f;
   const currentOwnerReference = async (recovered = f.ownerAttempt) => {

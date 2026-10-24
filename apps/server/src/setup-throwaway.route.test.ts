@@ -311,7 +311,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   /** Cell 12's facts, for a venue stamped `environment`. */
   function expectThrowawayVenue(environment: string) {
     expect(venueDb.db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
-      { numero_instalacion: "06RB" },
+      { numero_instalacion: "0CNNW" },
     ]);
     expect(
       venueDb.db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
@@ -323,9 +323,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       },
     ]);
     expect(venueDb.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
-      { code: "A-06RB", purpose: "standard" },
-      { code: "FF-06RB", purpose: "full" },
-      { code: "R-06RB", purpose: "rectificative" },
+      { code: "A-0CNNW", purpose: "standard" },
+      { code: "FF-0CNNW", purpose: "full" },
+      { code: "R-0CNNW", purpose: "rectificative" },
     ]);
     expect(venueDb.db.all(sql`select environment from deployment`)).toEqual([{ environment }]);
   }

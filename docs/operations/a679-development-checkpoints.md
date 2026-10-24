@@ -1,5 +1,7 @@
 # A679 development checkpoints through 19 October 2026
 
+> 2026-10-22: historical; series names are now five-symbol UTC minutes ([A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) §6.5).
+
 This is a historical snapshot of the former A679 backlog detail, retained verbatim below.
 Its dated statuses and earlier designs describe those checkpoints, rather than the current
 candidate. Follow the [current backlog](../backlog/fiscal.md)

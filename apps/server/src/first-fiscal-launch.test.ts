@@ -14,6 +14,7 @@ import { loadBoxEnv } from "./box-env.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { initialSetupInput } from "./testing/allocated-provision.js";
 import { freePorts } from "./testing/free-ports.js";
+import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
 import { request, firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
 import type { ModuleOperationHost } from "@waitron/module";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
@@ -74,6 +75,16 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 const dirs: string[] = [];
+// The CLI's environment is named, not inherited: the Stripe SDK bundled into it writes a line to
+// stderr when the caller is a Claude Code session (stripe@23.0.0 esm/stripe.core.js:139), and the
+// test reads stderr whole.
+function callerEnvironment(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    ["PATH", "HOME", "TMPDIR"].flatMap((key) =>
+      process.env[key] === undefined ? [] : [[key, process.env[key]]],
+    ),
+  );
+}
 function runCli(
   args: string[],
   env: NodeJS.ProcessEnv,
@@ -149,7 +160,7 @@ it.each(["direct", "supervised"])(
   "%s launch binds its passed/file-merged module evidence and activates owned hour setup despite conflicting process.env",
   async (kind) => {
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
-    vi.setSystemTime("2026-10-16T11:40:00Z");
+    vi.setSystemTime("2026-10-16T11:38:00Z");
     const f = await launchFixture(true);
     let server: StartedServer | undefined;
     const killed = vi.spyOn(process, "kill").mockReturnValue(true);
@@ -217,21 +228,23 @@ it.each(["direct", "supervised"])(
         venue: request,
       });
       capability = claim.capability;
-      const challenge = await post("preparation", {
-        module: MODULE,
-        proposal: { action: "clock-challenge" },
-      });
-      await post("preparation", {
-        module: MODULE,
-        proposal: {
-          action: "compare-clocks",
-          browser: { challengeId: challenge.preparation.id, instantMs: Date.now() },
-        },
-      });
-      await post("candidates", {
-        module: MODULE,
-        proposal: { answer: "no" },
-        ...(await post("reconfirm", { password: PASSWORD, purpose: "block-use" })),
+      await selectPastWaits(createFakeTimersHourClock(), async () => {
+        const challenge = await post("preparation", {
+          module: MODULE,
+          proposal: { action: "clock-challenge" },
+        });
+        const compared = await post("preparation", {
+          module: MODULE,
+          proposal: {
+            action: "compare-clocks",
+            browser: { challengeId: challenge.preparation.id, instantMs: Date.now() },
+          },
+        });
+        return post("candidates", {
+          module: MODULE,
+          proposal: { comparisonId: compared.preparation.id },
+          ...(await post("reconfirm", { password: PASSWORD, purpose: "block-use" })),
+        });
       });
       const exported = await fetch(`https://127.0.0.1:${f.port}/setup-api/first-setup/request`, {
         dispatcher: agent,
@@ -247,7 +260,6 @@ it.each(["direct", "supervised"])(
       );
       const statement = {
         kind: "waitron-recovery-document",
-        installationCodes: [input.allocation.installationIdentity],
         version: 1,
         scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
         taxpayerName: request.legalName,
@@ -317,7 +329,7 @@ it.each(["direct", "supervised"])(
             environment: row.environment,
             identity: row.installationIdentity,
           })),
-        ).toEqual([{ nodeId: f.input.nodeId, environment: "preproduction", identity: "06RB" }]);
+        ).toEqual([{ nodeId: f.input.nodeId, environment: "preproduction", identity: "0CNNW" }]);
       } finally {
         await db.close();
       }
@@ -327,7 +339,7 @@ it.each(["direct", "supervised"])(
     }
   },
 );
-it("the built owned CLI refuses JSON authority, completes preproduction, and refuses an outstanding wizard marker", async () => {
+it("the built owned CLI refuses JSON authority, prints why it waits and until when, and refuses an outstanding wizard marker", async () => {
   const f = await launchFixture();
   const path = join(f.root, "initial.json");
   await writeFile(path, JSON.stringify(f.input));
@@ -353,10 +365,16 @@ it("the built owned CLI refuses JSON authority, completes preproduction, and ref
   await writeFile(
     clock,
     `import https from "node:https";
+import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
-syncBuiltinESMExports();
 const RealDate = Date;
+const date = new RealDate("2026-10-16T11:40:00Z").toUTCString();
+https.request = (_url, _options, respond) => {
+  const request = new EventEmitter();
+  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
+  return request;
+};
+syncBuiltinESMExports();
 globalThis.Date = class extends RealDate {
   constructor(...args) { super(...(args.length ? args : ["2026-10-16T11:40:00Z"])); }
   static now() { return RealDate.parse("2026-10-16T11:40:00Z"); }
@@ -414,7 +432,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "--yes",
   ];
   const env = {
-    ...process.env,
+    ...callerEnvironment(),
     ...f.base,
     ...f.evidenceEnv,
     WAITRON_INITIAL_VENUE_INPUT: "",
@@ -429,32 +447,23 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     code: 1,
     stderr: expect.stringContaining("provisioning.initial_input_invalid"),
   });
-  const child = await runCli(args, env, [
+  const waited = await runCli(args, env, [
     ["address line 2 (blank if none): ", ""],
-    ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-    [
-      "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-      "no",
-    ],
     ["Confirm setup password: ", "synthetic-password"],
-    ["Have you kept this recovery PDF? [y/N]: ", "yes"],
-  ]);
+  ]).catch((error: { code: number; stdout: string; stderr: string }) => error);
+  expect({ code: (waited as { code?: number }).code, stderr: waited.stderr }).toEqual({
+    code: 1,
+    stderr: "",
+  });
+  expect(waited.stdout).toContain(
+    "Waiting to confirm the time, so no invoice series is ever repeated.\nContinues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).\n",
+  );
+  expect(waited.stdout).not.toContain("[no/yes/unknown]");
   const stored = await openVenueDatabase(f.base.WAITRON_VENUE_DIR);
   try {
-    const allocations = await stored.venue.select().from(fiscalAllocations);
-    expect(allocations.map((row) => row.installationIdentity)).toEqual(["06RB"]);
-    const series = await stored.venue.select().from(invoiceSeries);
-    expect(
-      series
-        .map((row) => ({ code: row.code, next: row.nextNumber }))
-        .sort((a, b) => a.code.localeCompare(b.code)),
-    ).toEqual([
-      { code: "A-06RB", next: 1 },
-      { code: "FF-06RB", next: 1 },
-      { code: "R-06RB", next: 1 },
-    ]);
-    expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
-    expect(child.stdout).toContain(`node:     ${allocations[0]!.nodeId}`);
+    expect(await stored.venue.select().from(fiscalAllocations)).toEqual([]);
+    expect(await stored.venue.select().from(invoiceSeries)).toEqual([]);
+    expect(await readDeploymentEnvironment(stored.venue)).toBeNull();
   } finally {
     await stored.close();
   }

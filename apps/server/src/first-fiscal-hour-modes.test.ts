@@ -16,28 +16,27 @@ import { request, PASSWORD } from "../test/first-fiscal.js";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
+import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
+const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
-    const mono = performance.now(),
-      now = Date.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: now,
-      uncertaintyMs: 500,
-      wallStartedMs: now,
-      wallFinishedMs: now,
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  },
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: time.clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: time.clock.wall(),
+    wallFinishedMs: time.clock.wall(),
+    monotonicStartedMs: time.clock.monotonic(),
+    monotonicFinishedMs: time.clock.monotonic(),
+  }),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+  time.clock = createFakeTimersHourClock();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -139,9 +138,9 @@ it.each(["demo", "prepare"])(
         nextNumber,
       })),
     ).toEqual([
-      { code: "A-06RB", purpose: "standard", nextNumber: 1 },
-      { code: "FF-06RB", purpose: "full", nextNumber: 1 },
-      { code: "R-06RB", purpose: "rectificative", nextNumber: 1 },
+      { code: "A-0CNNW", purpose: "standard", nextNumber: 1 },
+      { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
+      { code: "R-0CNNW", purpose: "rectificative", nextNumber: 1 },
     ]);
     await expect(readFile(join(stateDir, "first-setup.json"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -159,6 +158,8 @@ it("owned development Live consumes its durable hour through publication without
     "https://box.test",
     request,
     PASSWORD,
+    undefined,
+    time.clock,
   );
   const before = await readFile(join(stateDir, "module-preparation-state.json"), "utf8");
   const response = await app.request("https://box.test/setup-api/provision", {
@@ -176,9 +177,9 @@ it("owned development Live consumes its durable hour through publication without
       nextNumber,
     })),
   ).toEqual([
-    { code: "A-06RB", nextNumber: 1 },
-    { code: "FF-06RB", nextNumber: 1 },
-    { code: "R-06RB", nextNumber: 1 },
+    { code: "A-0CNNY", nextNumber: 1 },
+    { code: "FF-0CNNY", nextNumber: 1 },
+    { code: "R-0CNNY", nextNumber: 1 },
   ]);
   expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(before);
 });

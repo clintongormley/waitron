@@ -941,7 +941,7 @@ setup page's row):
   says 'enter the setup password'").
 - **Clock refusal**: the spec's refusal sentence, the setup row's what-to-do, both readings, «Comprobar
   otra vez» / "Check again"; no countdown, no automatic retry.
-- **`minute_not_later`**: «Todavía no se puede crear las series: ya se usó un minuto posterior a
+- **`minute_not_later`**: «Todavía no se pueden crear las series: ya se usó un minuto posterior a
   la hora de este equipo. Podrás seguir a partir de las {time}.» / "The series cannot be made yet:
   a later minute is already in use. You can carry on from {time}." with `allowedFromMs` in the
   venue's zone; no countdown (rule 4 is a refusal).

@@ -104,6 +104,7 @@ export { inTurn, keysInTurn } from "./attempt-turns.js";
 export { stagedPath, stageFile, writeFileAtomic } from "./fs-atomic.js";
 
 export { createModuleOperationHost, createFirstSetupRuntime } from "./first-setup-runtime.js";
+export type { PreparationAuthority } from "./first-setup-preparation.js";
 export { prepareFirstSetupCommand } from "./first-setup-command.js";
 export { completeFirstSetupCommand } from "./first-setup-command-activation.js";
 export { createFirstSetupCommandDeployment } from "./first-setup-command-deployment.js";

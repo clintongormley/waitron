@@ -94,6 +94,8 @@ const joinBinding: OperationBinding = {
 const binding: OperationBinding = { ...joinBinding, action: "promote", eventId: "promotion" };
 const context = { oldNodeNeutralised: true, noParallelRecovery: true };
 let root: string;
+/** The last clock comparison taken, which the next select names. */
+let comparisonId = "";
 let key: { name: string; secret: string };
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "hour-promotion-"));
@@ -103,8 +105,13 @@ beforeEach(async () => {
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   external.internet.mockImplementation(async () => ({
     source: "internet",
-    result: "unavailable",
-    reason: "offline",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 0,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
   }));
   await suite.db
     .insert(tenants)
@@ -142,7 +149,7 @@ beforeEach(async () => {
           value = next;
         },
       }),
-    monotonicNow: () => 0,
+    monotonicNow: () => performance.now(),
     read: async () => ({
       scope: { taxpayerNif: "89890001K", environment: "preproduction" },
       bases,
@@ -164,7 +171,11 @@ beforeEach(async () => {
     }),
   });
   await withOperationAuthority(first, ADMIN, async (authority) => {
-    const selected = await setup.select({ binding: first, authority, answer: "no" });
+    let selected = await setup.select({ binding: first, authority, comparisonId: "comparison" });
+    if (selected.status === "waiting") {
+      vi.advanceTimersByTime(selected.targetMs + 1 - Date.now());
+      selected = await setup.select({ binding: first, authority, comparisonId: "comparison" });
+    }
     if (selected.status !== "selected") throw new Error("first setup selection");
     await setup.prepare({ binding: first, authority, input: selected.input }, (ready) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, primary, ready)),
@@ -228,13 +239,27 @@ async function compare(
   auth: unknown = { breakGlass: key.secret },
   held = binding,
 ) {
-  const challenge = (await s.prepare(held, auth, context, { action: "clock-challenge" })) as {
+  const challenge = (await s.prepare(
+    held,
+    auth,
+    context,
+    { action: "clock-challenge" },
+    { onBox: true },
+  )) as {
     id: string;
   };
-  return s.prepare(held, auth, context, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
+  const compared = (await s.prepare(
+    held,
+    auth,
+    context,
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    },
+    { onBox: true },
+  )) as { id: string };
+  comparisonId = compared.id;
+  return compared;
 }
 async function rows() {
   return {
@@ -283,12 +308,17 @@ it.each(["key", "manager"])(
     ]);
     const auth = method === "key" ? { breakGlass: key.secret } : credentials;
     await compare(s, auth);
-    const selected = (await s.prepare(binding, auth, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    })) as { input: unknown };
-    expect(selected).toMatchObject({ status: "selected", identity: "06RC", bases });
+    const selected = (await s.prepare(
+      binding,
+      auth,
+      context,
+      {
+        action: "select",
+        comparisonId,
+      },
+      { onBox: true },
+    )) as { input: unknown };
+    expect(selected).toMatchObject({ status: "selected", identity: "0CNQR", bases });
     expect(await rows()).toEqual(before);
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: false });
     const after = await rows();
@@ -299,7 +329,7 @@ it.each(["key", "manager"])(
       after.series
         .filter((row) => row.nodeId === standby.nodeId)
         .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
-    ).toEqual(bases.map((base) => ({ ...base, code: `${base.code}-06RC`, nextNumber: 1 })));
+    ).toEqual(bases.map((base) => ({ ...base, code: `${base.code}-0CNQR`, nextNumber: 1 })));
     expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("primary");
     expect(await readSingletonRole(suite.db, standby.nodeId)).toBe("primary");
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: true });
@@ -310,28 +340,24 @@ it.each(["key", "manager"])(
   },
 );
 
-it("requires the sheet's newer code even when it is missing from the database", async () => {
+it("refuses a selection that still carries an installation code, writing nothing", async () => {
   const s = await service();
   await admit(s);
   await compare(s);
   const before = await rows();
   await expect(
-    s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06rc"],
-    }),
-  ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "hour_not_later" } });
+    s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      { action: "select", comparisonId, installationCodes: ["0CNQX"] },
+      { onBox: true },
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
   expect(await rows()).toEqual(before);
-  vi.setSystemTime(new Date("2026-10-16T13:00:00Z"));
-  await compare(s);
-  expect(
-    await s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06rc"],
-    }),
-  ).toMatchObject({ identity: "06RD", reportedIdentities: ["06RC"] });
 });
 
 it.each(["key", "isolation", "parallel", "source", "node"])(
@@ -355,6 +381,7 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
           ...(fault === "parallel" ? { noParallelRecovery: false } : {}),
         },
         { action: "clock-challenge" },
+        { onBox: true },
       ),
     ).rejects.toMatchObject({
       code:
@@ -376,11 +403,16 @@ it("retains the selected hour across restart but discards transient comparison a
   const first = await service();
   await admit(first);
   await compare(first);
-  const selected = (await first.prepare(binding, { breakGlass: key.secret }, context, {
-    action: "select",
-    answer: "no",
-    installationCodes: ["06RB"],
-  })) as { input: unknown };
+  const selected = (await first.prepare(
+    binding,
+    { breakGlass: key.secret },
+    context,
+    {
+      action: "select",
+      comparisonId,
+    },
+    { onBox: true },
+  )) as { input: unknown };
   const next = await service();
   await expect(promote(next, selected.input)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
@@ -389,11 +421,16 @@ it("retains the selected hour across restart but discards transient comparison a
   vi.setSystemTime(new Date("2026-10-16T13:10:00Z"));
   await compare(next);
   expect(
-    await next.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    }),
+    await next.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        comparisonId,
+      },
+      { onBox: true },
+    ),
   ).toEqual(selected);
   await promote(next, selected.input);
   expect((await rows()).allocations).toHaveLength(2);
@@ -404,7 +441,7 @@ it.each(["standard", "full", "rectificative"])(
   async (purpose) => {
     await suite.db.insert(invoiceSeries).values({
       nodeId: primary.nodeId,
-      code: "a/B_1.2-3-06RB",
+      code: "a/B_1.2-3-0CNNW",
       purpose,
     });
     const s = await service();
@@ -424,7 +461,67 @@ it.each(["standard", "full", "rectificative"])(
   },
 );
 
-it("serves clock, sheet-code selection and authenticated promotion through the management routes", async () => {
+it("never counts a browser on the box itself as the promotion's second clock", async () => {
+  const s = await service();
+  await admit(s);
+  external.internet.mockImplementation(async () => ({
+    source: "internet",
+    result: "unavailable",
+    reason: "offline",
+  }));
+  const compare = async (requestFromBox?: () => boolean) => {
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: suite.db,
+      nodeId: standby.nodeId,
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: s,
+      requestFromBox,
+      run: async () => {
+        throw new Error("not promoting");
+      },
+    });
+    const socket = new TLSSocket(new Socket());
+    Object.defineProperty(socket, "remoteAddress", { value: "127.0.0.1" });
+    try {
+      const send = async (proposal: unknown) => {
+        const response = await app.request(
+          "https://box.test/management-api/promote/preparation",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...context,
+              breakGlass: key.secret,
+              moduleOperation: { binding, input: null },
+              proposal,
+            }),
+          },
+          { incoming: { socket } },
+        );
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      const challenge = await send({ action: "clock-challenge" });
+      return (
+        await send({
+          action: "compare-clocks",
+          browser: { challengeId: challenge.id, instantMs: Date.now() },
+        })
+      ).clock as { secondClock: boolean; unavailable: unknown[] };
+    } finally {
+      socket.destroy();
+    }
+  };
+  const box = await compare();
+  expect(box.secondClock).toBe(false);
+  expect(box.unavailable).toContainEqual(
+    expect.objectContaining({ source: "browser", reason: "same_machine" }),
+  );
+  expect((await compare(() => false)).secondClock).toBe(true);
+});
+
+it("serves clock, selection and authenticated promotion through the management routes", async () => {
   const s = await service();
   await admit(s);
   const app = new Hono();
@@ -473,7 +570,7 @@ it("serves clock, sheet-code selection and authenticated promotion through the m
       ...body,
       proposal: { action: "clock-challenge" },
     });
-    await send("/preparation", {
+    const compared = await send("/preparation", {
       ...body,
       proposal: {
         action: "compare-clocks",
@@ -482,9 +579,9 @@ it("serves clock, sheet-code selection and authenticated promotion through the m
     });
     const selected = await send("/preparation", {
       ...body,
-      proposal: { action: "select", answer: "no", installationCodes: ["06RB"] },
+      proposal: { action: "select", comparisonId: compared.id },
     });
-    expect(selected).toMatchObject({ status: "selected", identity: "06RC" });
+    expect(selected).toMatchObject({ status: "selected", identity: "0CNQR" });
     const plain = await app.request("http://box.test/management-api/promote", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -522,19 +619,38 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
     targetNodeId: primary.nodeId,
   };
   const auth = { breakGlass: recoveryKey.secret };
-  const challenge = (await s.prepare(recovery, auth, context, { action: "clock-challenge" })) as {
+  const challenge = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    { action: "clock-challenge" },
+    { onBox: true },
+  )) as {
     id: string;
   };
-  await s.prepare(recovery, auth, context, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const selected = (await s.prepare(recovery, auth, context, {
-    action: "select",
-    answer: "no",
-    installationCodes: ["06RB"],
-  })) as { input: unknown };
-  expect(selected).toMatchObject({ identity: "06RC" });
+  comparisonId = (
+    (await s.prepare(
+      recovery,
+      auth,
+      context,
+      {
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      },
+      { onBox: true },
+    )) as { id: string }
+  ).id;
+  const selected = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    {
+      action: "select",
+      comparisonId,
+    },
+    { onBox: true },
+  )) as { input: unknown };
+  expect(selected).toMatchObject({ identity: "0CNQR" });
   const before = await rows();
   await s.withOperation({ binding: recovery, input: selected.input }, auth, context, (modules) =>
     provisionNode(
@@ -551,7 +667,7 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
     after.series.filter((row) => row.retiredAt !== null).map(({ nextNumber }) => nextNumber),
   ).toEqual(before.series.map(() => 123));
   expect(after.series.filter((row) => row.retiredAt === null).map(({ code }) => code)).toEqual(
-    bases.map((base) => `${base.code}-06RC`),
+    bases.map((base) => `${base.code}-0CNQR`),
   );
   await s.withOperation({ binding: recovery, input: selected.input }, auth, context, (modules) =>
     provisionNode(
@@ -588,19 +704,38 @@ async function selectedRegistrationCommand(derived = false) {
     targetNodeId: primary.nodeId,
   };
   const auth = { breakGlass: recoveryKey.secret };
-  const challenge = (await s.prepare(recovery, auth, context, { action: "clock-challenge" })) as {
+  const challenge = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    { action: "clock-challenge" },
+    { onBox: true },
+  )) as {
     id: string;
   };
-  await s.prepare(recovery, auth, context, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-  const selected = (await s.prepare(recovery, auth, context, {
-    action: "select",
-    answer: "no",
-    installationCodes: ["06RB"],
-  })) as { input: unknown };
-  expect(selected).toMatchObject({ identity: "06RC" });
+  comparisonId = (
+    (await s.prepare(
+      recovery,
+      auth,
+      context,
+      {
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      },
+      { onBox: true },
+    )) as { id: string }
+  ).id;
+  const selected = (await s.prepare(
+    recovery,
+    auth,
+    context,
+    {
+      action: "select",
+      comparisonId,
+    },
+    { onBox: true },
+  )) as { input: unknown };
+  expect(selected).toMatchObject({ identity: "0CNQR" });
   const file = join(root, "operation.json");
   await writeFile(file, JSON.stringify({ binding: recovery, input: selected.input }));
   await suite.db.archiveTo(join(venueDir, "venue.db"));
@@ -631,7 +766,7 @@ it.each([false, true])(
     }));
     await expect(registerTill(primary.nodeId, env, context)).resolves.toContainEqual({
       module: "fiscal-verifactu",
-      report: expect.stringContaining("installation 06RC"),
+      report: expect.stringContaining("installation 0CNQR"),
     });
     const store = await openVenueDatabase(venueDir);
     let after;
@@ -645,9 +780,9 @@ it.each([false, true])(
           .filter((row) => row.retiredAt === null)
           .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", purpose: "standard", nextNumber: 1 },
-        { code: "FF-06RC", purpose: "full", nextNumber: 1 },
-        { code: "R-06RC", purpose: "rectificative", nextNumber: 1 },
+        { code: "A-0CNQR", purpose: "standard", nextNumber: 1 },
+        { code: "FF-0CNQR", purpose: "full", nextNumber: 1 },
+        { code: "R-0CNQR", purpose: "rectificative", nextNumber: 1 },
       ]);
       await store.venue
         .update(invoiceSeries)
@@ -659,7 +794,7 @@ it.each([false, true])(
         allocations: await store.venue.select().from(fiscalAllocations),
       };
       expect(after.sif.filter((row) => row.revocadoEn === null)).toEqual([
-        expect.objectContaining({ numeroInstalacion: "06RC" }),
+        expect.objectContaining({ numeroInstalacion: "0CNQR" }),
       ]);
       expect(after.allocations).toHaveLength(2);
     } finally {
@@ -672,7 +807,7 @@ it.each([false, true])(
       ),
     ).resolves.toContainEqual({
       module: "fiscal-verifactu",
-      report: expect.stringContaining("installation 06RC"),
+      report: expect.stringContaining("installation 0CNQR"),
     });
     const replay = await openVenueDatabase(venueDir);
     try {
@@ -745,7 +880,7 @@ syncBuiltinESMExports();
     env: environment,
   });
   expect(first.stdout).toMatch(
-    /^fiscal-verifactu: .*\(installation 06RC\); series A-06RC, FF-06RC, R-06RC$/m,
+    /^fiscal-verifactu: .*\(installation 0CNQR\); series A-0CNQR, FF-0CNQR, R-0CNQR$/m,
   );
   expect(first.stdout + first.stderr).not.toContain(recoveryKey.secret);
   const store = await openVenueDatabase(venueDir);
@@ -758,7 +893,7 @@ syncBuiltinESMExports();
   try {
     const current = await snapshot(store.venue);
     expect(current.sif.filter((row) => row.revocadoEn === null)).toEqual([
-      expect.objectContaining({ numeroInstalacion: "06RC" }),
+      expect.objectContaining({ numeroInstalacion: "0CNQR" }),
     ]);
     expect(current.allocations).toHaveLength(2);
     expect(
@@ -769,9 +904,9 @@ syncBuiltinESMExports();
         .filter((row) => row.retiredAt === null)
         .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
     ).toEqual([
-      { code: "A-06RC", purpose: "standard", nextNumber: 1 },
-      { code: "FF-06RC", purpose: "full", nextNumber: 1 },
-      { code: "R-06RC", purpose: "rectificative", nextNumber: 1 },
+      { code: "A-0CNQR", purpose: "standard", nextNumber: 1 },
+      { code: "FF-0CNQR", purpose: "full", nextNumber: 1 },
+      { code: "R-0CNQR", purpose: "rectificative", nextNumber: 1 },
     ]);
     await store.venue
       .update(invoiceSeries)
@@ -786,7 +921,7 @@ syncBuiltinESMExports();
     env: environment,
   });
   expect(second.stdout).toMatch(
-    /^fiscal-verifactu: .*\(installation 06RC\); series A-06RC, FF-06RC, R-06RC$/m,
+    /^fiscal-verifactu: .*\(installation 0CNQR\); series A-0CNQR, FF-0CNQR, R-0CNQR$/m,
   );
   expect(second.stdout + second.stderr).not.toContain(recoveryKey.secret);
   const replay = await openVenueDatabase(venueDir);
@@ -805,7 +940,7 @@ it.each([
   ["changed event", "sif.allocation_invalid", undefined],
   ["different target", "module.operation_invalid", undefined],
   ["different state directory", "sif.allocation_invalid", undefined],
-  ["offline clock", "sif.allocation_invalid", "clock_unconfirmed"],
+  ["offline clock", "sif.allocation_invalid", "second_clock_missing"],
   ["no confirmations", "sif.allocation_invalid", "outside_confirmation_missing"],
 ])("register-till refuses %s without changing the selected venue", async (fault, code, reason) => {
   const { env, recovery, file } = await selectedRegistrationCommand();
@@ -843,7 +978,13 @@ it.each([
         input: JSON.parse(await readFile(file, "utf8")).input,
       }),
     );
-  if (fault !== "offline clock")
+  if (fault === "offline clock")
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "unavailable",
+      reason: "offline",
+    }));
+  else
     external.internet.mockImplementation(async () => ({
       source: "internet",
       result: "usable",
@@ -920,20 +1061,30 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   await compare(s);
   key = await mintBreakGlassKey(suite.db, standby.nodeId);
   await expect(
-    s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    }),
+    s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        comparisonId,
+      },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "clock_stale" } });
   await compare(s);
   expect(
-    await s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    }),
-  ).toMatchObject({ identity: "06RC" });
+    await s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        comparisonId,
+      },
+      { onBox: true },
+    ),
+  ).toMatchObject({ identity: "0CNQR" });
 });
 
 it("the real mirror boot serves preparation over verified HTTPS and promotes the dormant node once", async () => {
@@ -998,7 +1149,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
       ...body,
       proposal: { action: "clock-challenge" },
     });
-    await send("/preparation", {
+    const compared = await send("/preparation", {
       ...body,
       proposal: {
         action: "compare-clocks",
@@ -1007,9 +1158,9 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
     });
     const selected = await send("/preparation", {
       ...body,
-      proposal: { action: "select", answer: "no", installationCodes: ["06RB"] },
+      proposal: { action: "select", comparisonId: compared.id },
     });
-    expect(selected).toMatchObject({ identity: "06RC" });
+    expect(selected).toMatchObject({ identity: "0CNQR" });
     expect(
       await send("", { ...body, moduleOperation: { binding, input: selected.input } }),
     ).toMatchObject({ alreadyPrimary: false, restarting: true });
@@ -1030,12 +1181,17 @@ it.each(["key", "manager"])(
     const s = await service();
     await admit(s);
     await compare(s, auth);
-    const selected = (await s.prepare(binding, auth, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    })) as { input: unknown };
-    expect(selected).toMatchObject({ identity: "06RC" });
+    const selected = (await s.prepare(
+      binding,
+      auth,
+      context,
+      {
+        action: "select",
+        comparisonId,
+      },
+      { onBox: true },
+    )) as { input: unknown };
+    expect(selected).toMatchObject({ identity: "0CNQR" });
     await writeMirrorConfig(suite.db, standby.nodeId, {
       relayUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
@@ -1135,7 +1291,7 @@ it.each(["key", "manager"])(
       expect(before.allocations).toHaveLength(2);
       expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toEqual(
         expect.arrayContaining(
-          ["A-06RC", "FF-06RC", "R-06RC"].map((code) =>
+          ["A-0CNQR", "FF-0CNQR", "R-0CNQR"].map((code) =>
             expect.objectContaining({ code, nextNumber: 47 }),
           ),
         ),
@@ -1215,14 +1371,14 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
       nodeId: primary.nodeId,
       nif: "89890001K",
       idSistemaInformatico: "W1",
-      numeroInstalacion: "06RB",
+      numeroInstalacion: "0CNNW",
     }),
   );
   await spare.db.insert(invoiceSeries).values(
     bases.map((base) => ({
       ...base,
       nodeId: primary.nodeId,
-      code: `${base.code}-06RB`,
+      code: `${base.code}-0CNNW`,
       nextNumber: 123,
     })),
   );
@@ -1291,11 +1447,16 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
     const s = await service();
     await admit(s);
     await compare(s);
-    const selected = (await s.prepare(binding, { breakGlass: key.secret }, context, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RB"],
-    })) as {
+    const selected = (await s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      {
+        action: "select",
+        comparisonId,
+      },
+      { onBox: true },
+    )) as {
       input: {
         allocation: {
           installationIdentity: string;
@@ -1306,7 +1467,7 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
       };
     };
     const input = structuredClone(selected.input);
-    if (fault === "identity") input.allocation.installationIdentity = "06RD";
+    if (fault === "identity") input.allocation.installationIdentity = "0CNSM";
     if (fault === "allocation-id") input.allocation.allocationId = "changed-allocation";
     if (fault === "bases") input.allocation.series.pop();
     if (fault === "purpose") input.allocation.series[0]!.purpose = "full";
@@ -1347,13 +1508,19 @@ it.each(["module", "operation-action", "prepare-action", "promotion-action"])(
     const operation = { binding: { ...binding, action: "setup" }, input: {} };
     await expect(
       fault === "module"
-        ? s.prepare({ ...binding, module: "unknown" }, { breakGlass: key.secret }, context, {
-            action: "clock-challenge",
-          })
+        ? s.prepare(
+            { ...binding, module: "unknown" },
+            { breakGlass: key.secret },
+            context,
+            {
+              action: "clock-challenge",
+            },
+            { onBox: true },
+          )
         : fault === "operation-action"
           ? s.withOperation(operation, credentials, context, async () => "unexpected")
           : fault === "prepare-action"
-            ? s.prepare(joinBinding, credentials, context, {})
+            ? s.prepare(joinBinding, credentials, context, {}, { onBox: true })
             : s.withPromotion(
                 { ...operation, binding: joinBinding },
                 credentials,
@@ -1405,7 +1572,11 @@ it("refuses a configured preparation module after its authenticated call ends", 
       binding,
       { kind: "recovery-key", nodeId: standby.nodeId, eventId: binding.eventId },
       (authority) =>
-        configured[0]!.operations!.recovery!({ binding, authority }, { action: "clock-challenge" }),
+        configured[0]!.operations!.recovery!(
+          { binding, authority },
+          { action: "clock-challenge" },
+          { onBox: true },
+        ),
     ),
   ).rejects.toMatchObject({ code: "module.operation_invalid" });
 });

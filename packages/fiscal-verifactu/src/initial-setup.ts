@@ -1,6 +1,6 @@
 import { readHourSetupInput } from "./initial-hour-setup.js";
 import { projectHourHistory } from "./hour-history.js";
-import { readHourHistory } from "./hour-history-reader.js";
+import { readHourHistoryWithRecordFloor } from "./hour-history-reader.js";
 import "./errors.js";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -285,7 +285,7 @@ function createInitialSetup(
     return { scope, allocations, operationId };
   };
   const contribution: InitialSetupContribution = {
-    localHistory: readHourHistory,
+    localHistory: readHourHistoryWithRecordFloor,
     retainedAssignments(evidence) {
       if (!record(evidence)) refuse();
       if (evidence.format === "waitron-hour-history") {
@@ -294,7 +294,7 @@ function createInitialSetup(
         return {
           keys: [],
           positions:
-            history.greatestSpentHour === null
+            history.greatestSpentMinute === null
               ? []
               : [
                   {
@@ -303,7 +303,7 @@ function createInitialSetup(
                       history.scope.environment,
                       "hour",
                     ]),
-                    position: history.greatestSpentHour,
+                    position: history.greatestSpentMinute,
                   },
                 ],
         };

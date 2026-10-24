@@ -15,7 +15,9 @@ import {
   recoveryInvoices,
   managedHttp,
   interactiveHost,
+  clock,
 } from "../test/hour-recovery-host.js";
+import { recoverySelectPastWaits, selectPastWaits } from "./testing/hour-test-clock.js";
 import { Agent } from "undici";
 import { loadKeyRing } from "@waitron/credentials";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -224,20 +226,12 @@ describe("selected-hour admission before archive placement", () => {
         stateDir: newerState,
         binding: { ...f.options.binding, eventId: "newer-surviving-target" },
       });
-      const challenge = (await newer.prepare({ action: "clock-challenge" })) as { id: string };
-      await newer.prepare({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
-      const selected = (await newer.prepare({
-        action: "select",
-        answer: "no",
-        installationCodes: ["06RB"],
-      })) as {
+      agreeInternet();
+      const selected = (await recoverySelectPastWaits(clock, newer, { onBox: true })) as {
         identity: string;
         input: unknown;
       };
-      expect(selected.identity).toBe("06RD");
+      expect(selected.identity).toBe("0CNSP");
       await runRestoreHooks({
         db: suite.db,
         node,
@@ -246,11 +240,16 @@ describe("selected-hour admission before archive placement", () => {
         withModuleOperations: newer.runner(selected.input),
       });
       const before = await suite.db.select().from(invoiceSeries);
-      const fresh = (await f.service.prepare({ action: "clock-challenge" })) as { id: string };
-      await f.service.prepare({
-        action: "compare-clocks",
-        browser: { challengeId: fresh.id, instantMs: Date.now() },
-      });
+      const fresh = (await f.service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+        id: string;
+      };
+      await f.service.prepare(
+        {
+          action: "compare-clocks",
+          browser: { challengeId: fresh.id, instantMs: Date.now() },
+        },
+        { onBox: true },
+      );
       await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
       await writeFile(join(f.roots.stateDir, "trading.env"), "surviving destination identity");
       await expect(
@@ -269,7 +268,7 @@ describe("selected-hour admission before archive placement", () => {
             }),
       ).rejects.toMatchObject({
         code: "sif.allocation_invalid",
-        params: { reason: "hour_not_later" },
+        params: { reason: "minute_not_later" },
       });
       const retained = await openVenueDatabase(f.roots.venueDir);
       try {
@@ -400,9 +399,9 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
-        { code: "A-06RC", nextNumber: 1 },
-        { code: "FF-06RC", nextNumber: 1 },
-        { code: "R-06RC", nextNumber: 1 },
+        { code: "A-0CNQT", nextNumber: 1 },
+        { code: "FF-0CNQT", nextNumber: 1 },
+        { code: "R-0CNQT", nextNumber: 1 },
       ]);
       expect(
         before.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
@@ -612,9 +611,9 @@ describe("selected-hour admission before archive placement", () => {
     try {
       const rows = await restored.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RC",
-        "FF-06RC",
-        "R-06RC",
+        "A-0CNQT",
+        "FF-0CNQT",
+        "R-0CNQT",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         123, 123, 123,
@@ -672,9 +671,9 @@ describe("selected-hour admission before archive placement", () => {
       expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
       const rows = await placed.venue.select().from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RD",
-        "FF-06RD",
-        "R-06RD",
+        "A-0CNSP",
+        "FF-0CNSP",
+        "R-0CNSP",
       ]);
       expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
         125, 123, 123,
@@ -710,9 +709,9 @@ describe("selected-hour admission before archive placement", () => {
       expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
       const restored = await placed.venue.select().from(invoiceSeries);
       expect(restored.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-06RC",
-        "FF-06RC",
-        "R-06RC",
+        "A-0CNQT",
+        "FF-0CNQT",
+        "R-0CNQT",
       ]);
       expect(restored.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual(
         [125, 123, 123],
@@ -801,16 +800,22 @@ describe("selected-hour admission before archive placement", () => {
         expect(response.headers.get("cache-control")).toBe("no-store");
         return body;
       };
-      const challenge = await post({ action: "clock-challenge" });
-      await post({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
+      agreeInternet();
       expect(
-        await post({ action: "select", answer: "no", installationCodes: ["06RB"] }),
+        await selectPastWaits(clock, async () => {
+          const challenge = await post({ action: "clock-challenge" });
+          const compared = await post({
+            action: "compare-clocks",
+            browser: { challengeId: challenge.id, instantMs: Date.now() },
+          });
+          return post({
+            action: "select",
+            comparisonId: compared.id,
+          });
+        }),
       ).toMatchObject({
         status: "selected",
-        identity: "06RD",
+        identity: "0CNSP",
         binding: preparation.binding,
       });
       expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
@@ -845,6 +850,7 @@ describe("selected-hour admission before archive placement", () => {
               proposal: { action: "preview" },
             },
             hold,
+            { onBox: true },
           ),
         ),
       ).rejects.toMatchObject({
@@ -854,9 +860,7 @@ describe("selected-hour admission before archive placement", () => {
     } finally {
       await copy.discard();
     }
-    await expect(
-      f.invoke({ action: "select", answer: "no", installationCodes: ["06RB"] }),
-    ).rejects.toMatchObject({
+    await expect(f.select()).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "clock_stale" },
     });

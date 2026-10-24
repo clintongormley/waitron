@@ -142,7 +142,7 @@ it.each(["archive", "stream"] as const)(
       params: { reason: "prior_activation_requires_replay" },
     });
     expect(await f.snapshot()).toEqual(original);
-    expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["06RB"]);
+    expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
     await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
       code: "ENOENT",
     });
@@ -166,7 +166,10 @@ it.each(["archive", "stream"] as const)(
     const marker = JSON.parse(await readFile(markerPath, "utf8"));
     const committed = await f.snapshot();
     expect(committed.allocations).toHaveLength(2);
-    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual(["06RB", "06RC"]);
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
+      "0CNNW",
+      "0CNQR",
+    ]);
     const copy = await openVenueDatabase(f.venueDir);
     try {
       await runRestoreHooks({
@@ -411,11 +414,11 @@ for (const kind of ["archive", "stream"] as const)
       const f = await stage(kind);
       await killRestore(f, phase);
       const journal = f.journal();
-      expect(journal).toContain("06RC");
+      expect(journal).toContain("0CNQR");
       const priorIntent = JSON.parse(journal).revisions;
       if (phase === "before-commit") {
         const original = await f.snapshot();
-        expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["06RB"]);
+        expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
         expect(original.records).toEqual(f.originalRecords);
         await expect(f.run()).rejects.toMatchObject({
           code: "sif.allocation_invalid",
@@ -423,9 +426,11 @@ for (const kind of ["archive", "stream"] as const)
         });
         expect(await f.snapshot()).toEqual(original);
       }
+      // The settle wait alone ends at 12:40, the killed restore's name (0CNQR).
+      vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
       await expect(f.nextEvent()).rejects.toMatchObject({
         code: "sif.allocation_invalid",
-        params: { reason: "hour_not_later" },
+        params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:41:00Z") },
       });
       expect(f.journal()).toBe(journal);
       await f.freshStage();
@@ -433,7 +438,7 @@ for (const kind of ["archive", "stream"] as const)
       expect(JSON.parse(f.journal()).revisions.slice(0, priorIntent.length)).toEqual(priorIntent);
       const active = await f.snapshot();
       expect(active.allocations).toHaveLength(2);
-      expect(active.allocations.map((row) => row.installationIdentity)).toEqual(["06RB", "06RD"]);
+      expect(active.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNSM"]);
       expect(active.allocations[1]!.eventKey).toBe("fresh-after-interruption");
       expect(active.records).toEqual(f.originalRecords);
     });

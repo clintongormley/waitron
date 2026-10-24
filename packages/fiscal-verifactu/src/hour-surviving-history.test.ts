@@ -35,7 +35,7 @@ async function seed() {
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   await seedTenants(suite.db);
   await stampDeployment(suite.db, "preproduction");
-  await activate(binding, "06RB", "2026-10-16T11:40:00.000Z");
+  await activate(binding, "0CNNW", "2026-10-16T11:40:00.000Z");
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
 }
 async function activate(
@@ -102,7 +102,7 @@ it("retains the higher retired hour of another node without changing rows or cou
   const other = { ...node, nodeId: TENANT_A.nodeId2 };
   await activate(
     { ...binding, eventId: "other-node", targetNodeId: other.nodeId },
-    "06RD",
+    "0CNSM",
     "2026-10-16T13:40:00.000Z",
     other,
   );
@@ -121,15 +121,15 @@ it("retains the higher retired hour of another node without changing rows or cou
   };
   const sources = await read();
   expect(projectHourHistory({ scope, sources })).toMatchObject({
-    greatestSpentHour: 6925,
+    greatestSpentMinute: 415540,
     contradictions: [],
   });
   expect(
     projectHourHistory({ scope: { ...scope, environment: "production" }, sources }),
-  ).toMatchObject({ greatestSpentHour: null, contradictions: [] });
+  ).toMatchObject({ greatestSpentMinute: null, contradictions: [] });
   expect(
     projectHourHistory({ scope: { ...scope, taxpayerNif: "92470001W" }, sources }),
-  ).toMatchObject({ greatestSpentHour: null, contradictions: [] });
+  ).toMatchObject({ greatestSpentMinute: null, contradictions: [] });
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before.series);
   expect(await suite.db.select().from(registroSif)).toEqual(before.sifs);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
@@ -143,7 +143,7 @@ it("combines snapshots taken before and after retirement without inventing confl
   await suite.db.update(registroSif).set({ revocadoEn: new Date() });
   const later = await read();
   expect(projectHourHistory({ scope, sources: [...earlier, ...later] })).toMatchObject({
-    greatestSpentHour: 6923,
+    greatestSpentMinute: 415420,
     contradictions: [],
   });
 });
@@ -158,7 +158,7 @@ it("keeps incomplete scope evidence visibly incomplete", async () => {
 
 it("admits an empty migrated database as empty history without inventing an hour", async () => {
   expect(projectHourHistory({ scope, sources: await read() })).toMatchObject({
-    greatestSpentHour: null,
+    greatestSpentMinute: null,
     recordedTimeFloorMs: null,
     contradictions: [],
   });

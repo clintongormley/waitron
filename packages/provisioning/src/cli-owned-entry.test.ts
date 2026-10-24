@@ -45,7 +45,47 @@ afterAll(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true });
 });
 
-it("the built venue command reaches the owned terminal wait with no network or activation", async () => {
+const SETTLE = "2026-10-18T11:40:00Z";
+const AFTER_SETTLE = "2026-10-18T11:42:01Z";
+/** A preload that fixes the child's clock at `instant` and has the internet's clock agree. */
+function clockPreload(instant: string, extra = "") {
+  return `import https from "node:https";
+import { EventEmitter } from "node:events";
+import { syncBuiltinESMExports } from "node:module";
+const date = new Date(${JSON.stringify(instant)}).toUTCString();
+https.request = (_url, _options, respond) => {
+  const request = new EventEmitter();
+  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
+  return request;
+};
+${extra}syncBuiltinESMExports();
+const RealDate = Date;
+globalThis.Date = class extends RealDate {
+  constructor(...args) { super(...(args.length ? args : [${JSON.stringify(instant)}])); }
+  static now() { return RealDate.parse(${JSON.stringify(instant)}); }
+};
+Object.defineProperty(performance, "now", { value: () => 0 });
+`;
+}
+/** The first run stops at the settle wait and says until when; the operator runs it again after. */
+async function runPastSettle(
+  preload: string,
+  run: () => Promise<{ code: number | null; errors: string; childError?: string; output: string }>,
+  extra = "",
+) {
+  await writeFile(preload, clockPreload(SETTLE, extra));
+  const waited = await run();
+  expect(
+    { code: waited.code, errors: waited.errors, childError: waited.childError },
+    waited.output,
+  ).toEqual({ code: 1, errors: "", childError: undefined });
+  expect(waited.output).toContain(
+    "Waiting to confirm the time, so no invoice series is ever repeated.\nContinues at 2026-10-18T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).\n",
+  );
+  await writeFile(preload, clockPreload(AFTER_SETTLE, extra));
+}
+
+it("with no network the built venue command explains, asks nothing and spends no name", async () => {
   const target = join(directory!, "venue");
   const stateDir = join(directory!, "state");
   await mkdir(target);
@@ -107,11 +147,7 @@ syncBuiltinESMExports();\n`,
   );
   let output = "";
   let errors = "";
-  const questions = [
-    "The box's displayed date and time are correct? [y/N]: ",
-    "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-    "Confirm setup password: ",
-  ];
+  const questions = ["Confirm setup password: "];
   const answered = new Set<string>();
   child.stdout.on("data", (chunk: Buffer) => {
     output += chunk.toString();
@@ -135,15 +171,18 @@ syncBuiltinESMExports();\n`,
   });
   expect(code, JSON.stringify({ output, errors, childError, answered: [...answered] })).toBe(1);
   expect({ code, errors }).toEqual({ code: 1, errors: "" });
-  expect(output).toContain("Wait until ");
-  expect(answered.size).toBe(3);
+  expect(output).toContain("No series is made without a confirmed time, so none is ever repeated.");
+  expect(output).toContain(
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  );
+  expect(output).not.toContain("[no/yes/unknown]");
+  expect(answered.size).toBe(0);
   expect(output).not.toContain("SYNTHETIC-owner-password");
   const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
   expect(state).toMatchObject({ status: "claimed", consumptionIntent: false, inputs: {} });
-  const journal = JSON.parse(
-    await readFile(join(stateDir, "module-preparation-state.json"), "utf8"),
-  );
-  expect(journal.revisions.at(-1).value.entries).toMatchObject([{ kind: "wait", answer: "yes" }]);
+  await expect(readFile(join(stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
   const stored = await openVenueDatabase(target);
   try {
     expect(await readTenantIdentities(stored.venue)).toEqual([]);
@@ -168,20 +207,6 @@ it.each([false, true])(
     for (const name of ["venue.db", "venue.db-wal"])
       await copyFile(join(dirname(source), name), join(target, name));
     const preload = join(root, "preproduction-clock.mjs");
-    await writeFile(
-      preload,
-      `import https from "node:https";
-import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
-syncBuiltinESMExports();
-const RealDate = Date;
-globalThis.Date = class extends RealDate {
-  constructor(...args) { super(...(args.length ? args : ["2026-10-18T11:40:00Z"])); }
-  static now() { return RealDate.parse("2026-10-18T11:40:00Z"); }
-};
-Object.defineProperty(performance, "now", { value: () => 0 });
-`,
-    );
     const values = {
       "venue-dir": target,
       country: "ES",
@@ -236,11 +261,6 @@ Object.defineProperty(performance, "now", { value: () => 0 });
       let output = "";
       let errors = "";
       const questions = [
-        ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-        [
-          "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-          "no",
-        ],
         ["Confirm setup password: ", "SYNTHETIC-owner-password"],
         ["Have you kept this recovery PDF? [y/N]: ", "yes"],
       ] as const;
@@ -266,10 +286,10 @@ Object.defineProperty(performance, "now", { value: () => 0 });
       });
       return { code, errors, childError, output, answered };
     }
+    await runPastSettle(preload, () => executeCommand());
     let before: unknown;
     let countersBefore: unknown;
     if (interrupted) {
-      await mkdir(stateDir);
       const obstruction = join(stateDir, "trading.env.tmp");
       await mkdir(obstruction);
       const first = await executeCommand();
@@ -326,7 +346,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
       expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
       const { invoiceSeries } = await import("@waitron/db");
       const series = await stored.venue.select().from(invoiceSeries);
-      expect(series.map((row) => row.code).sort()).toEqual(["A-06SV", "FF-06SV", "R-06SV"]);
+      expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFY", "FF-0CRFY", "R-0CRFY"]);
       expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
       if (interrupted) expect(series).toEqual(countersBefore);
       const identity = await stored.venue.execute<{ public_key: string }>(
@@ -368,20 +388,6 @@ it("the built production command checks readiness and seals settings without sen
   for (const name of ["venue.db", "venue.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
   const preload = join(root, "clock.mjs");
-  await writeFile(
-    preload,
-    `import https from "node:https";
-import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
-syncBuiltinESMExports();
-const RealDate = Date;
-globalThis.Date = class extends RealDate {
-  constructor(...args) { super(...(args.length ? args : ["2026-10-18T11:40:00Z"])); }
-  static now() { return RealDate.parse("2026-10-18T11:40:00Z"); }
-};
-Object.defineProperty(performance, "now", { value: () => 0 });
-`,
-  );
   const certificate = {
     pfxBase64: certificateMaterial.pfx.toString("base64"),
     passphrase: "SYNTHETIC-certificate",
@@ -457,63 +463,63 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "admin-email": "owner@example.test",
     "recovery-pdf": join(root, "recovery.pdf"),
   };
-  const child = spawn(
-    process.execPath,
-    [
-      "--import",
-      preload,
-      binary,
-      "venue",
-      ...Object.entries(values).flatMap(([name, value]) => [`--${name}`, value]),
-      "--yes",
-    ],
-    {
-      env: {
-        ...process.env,
-        WAITRON_STATE_DIR: stateDir,
-        WAITRON_ENV: "production",
-        WAITRON_ADMIN_PIN: "4826",
-        WAITRON_ADMIN_PASSWORD: "SYNTHETIC-owner-password",
-        WAITRON_INITIAL_VENUE_INPUT: "",
-        WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
-        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
-        WAITRON_CREDENTIALS_KEY_VERSION: "1",
-        WAITRON_BUILD_ID: "synthetic-production-build",
-        WAITRON_SETUP_SETTINGS_FILE: settingsPath,
+  async function run() {
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        preload,
+        binary,
+        "venue",
+        ...Object.entries(values).flatMap(([name, value]) => [`--${name}`, value]),
+        "--yes",
+      ],
+      {
+        env: {
+          ...process.env,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "production",
+          WAITRON_ADMIN_PIN: "4826",
+          WAITRON_ADMIN_PASSWORD: "SYNTHETIC-owner-password",
+          WAITRON_INITIAL_VENUE_INPUT: "",
+          WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          WAITRON_BUILD_ID: "synthetic-production-build",
+          WAITRON_SETUP_SETTINGS_FILE: settingsPath,
+        },
+        signal: AbortSignal.timeout(30_000),
       },
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-  const answers = [
-    ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-    [
-      "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-      "no",
-    ],
-    ["Confirm setup password: ", "SYNTHETIC-owner-password"],
-    ["Have you kept this recovery PDF? [y/N]: ", "yes"],
-  ] as const;
-  const answered = new Map<string, number>();
-  let output = "",
-    errors = "";
-  child.stdout.on("data", (chunk: Buffer) => {
-    output += chunk.toString();
-    for (const [question, answer] of answers) {
-      const count = output.split(question).length - 1;
-      for (let i = answered.get(question) ?? 0; i < count; i++) child.stdin.write(`${answer}\n`);
-      answered.set(question, count);
-    }
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    errors += chunk.toString();
-  });
-  let childError: string | undefined;
-  const code = await new Promise<number | null>((resolve) => {
-    child.once("error", (error) => {
-      childError = error.name;
+    );
+    const answers = [
+      ["Confirm setup password: ", "SYNTHETIC-owner-password"],
+      ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+    ] as const;
+    const answered = new Map<string, number>();
+    let output = "",
+      errors = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+      for (const [question, answer] of answers) {
+        const count = output.split(question).length - 1;
+        for (let i = answered.get(question) ?? 0; i < count; i++) child.stdin.write(`${answer}\n`);
+        answered.set(question, count);
+      }
     });
-    child.once("close", resolve);
-  });
+    child.stderr.on("data", (chunk: Buffer) => {
+      errors += chunk.toString();
+    });
+    let childError: string | undefined;
+    const code = await new Promise<number | null>((resolve) => {
+      child.once("error", (error) => {
+        childError = error.name;
+      });
+      child.once("close", resolve);
+    });
+    return { code, errors, childError, output, answered };
+  }
+  await runPastSettle(preload, run);
+  const { code, errors, childError, output } = await run();
   expect({ code, errors, childError }, output).toEqual({
     code: 0,
     errors: "",
@@ -529,7 +535,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     const { invoiceSeries, sales, withTransaction } = await import("@waitron/db");
     expect(await stored.venue.select().from(sales)).toEqual([]);
     const series = await stored.venue.select().from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-06SV", "FF-06SV", "R-06SV"]);
+    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFY", "FF-0CRFY", "R-0CRFY"]);
     expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
     const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
     const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64") });
@@ -554,22 +560,6 @@ it("the built production command runs a confirmed isolated test and refuses acti
   for (const name of ["venue.db", "venue.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
   const preload = join(root, "clock.mjs");
-  await writeFile(
-    preload,
-    `import https from "node:https";
-import tls from "node:tls";
-import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
-tls.connect = () => { throw new Error("synthetic offline submission"); };
-syncBuiltinESMExports();
-const RealDate = Date;
-globalThis.Date = class extends RealDate {
-  constructor(...args) { super(...(args.length ? args : ["2026-10-18T11:40:00Z"])); }
-  static now() { return RealDate.parse("2026-10-18T11:40:00Z"); }
-};
-Object.defineProperty(performance, "now", { value: () => 0 });
-`,
-  );
   const certificate = {
     pfxBase64: certificateMaterial.pfx.toString("base64"),
     passphrase: "SYNTHETIC-certificate",
@@ -647,66 +637,70 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "admin-email": "owner@example.test",
     "recovery-pdf": join(root, "recovery.pdf"),
   };
-  const child = spawn(
-    process.execPath,
-    [
-      "--import",
-      preload,
-      binary,
-      "venue",
-      ...Object.entries(values).flatMap(([name, value]) => [`--${name}`, value]),
-      "--yes",
-      "--test-fiscal",
-    ],
-    {
-      env: {
-        ...process.env,
-        WAITRON_STATE_DIR: stateDir,
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "production",
-        WAITRON_ADMIN_PIN: "4826",
-        WAITRON_ADMIN_PASSWORD: "SYNTHETIC-owner-password",
-        WAITRON_INITIAL_VENUE_INPUT: "",
-        WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
-        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
-        WAITRON_CREDENTIALS_KEY_VERSION: "1",
-        WAITRON_BUILD_ID: "synthetic-production-build",
-        WAITRON_SETUP_SETTINGS_FILE: settingsPath,
+  async function run() {
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        preload,
+        binary,
+        "venue",
+        ...Object.entries(values).flatMap(([name, value]) => [`--${name}`, value]),
+        "--yes",
+        "--test-fiscal",
+      ],
+      {
+        env: {
+          ...process.env,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "production",
+          WAITRON_ADMIN_PIN: "4826",
+          WAITRON_ADMIN_PASSWORD: "SYNTHETIC-owner-password",
+          WAITRON_INITIAL_VENUE_INPUT: "",
+          WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          WAITRON_BUILD_ID: "synthetic-production-build",
+          WAITRON_SETUP_SETTINGS_FILE: settingsPath,
+        },
+        signal: AbortSignal.timeout(30_000),
       },
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-  const answers = [
-    ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-    [
-      "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-      "no",
-    ],
-    ["Confirm setup password: ", "SYNTHETIC-owner-password"],
-    ["Have you kept this recovery PDF? [y/N]: ", "yes"],
-    ["Send a preproduction fiscal test? [y/N]: ", "yes"],
-  ] as const;
-  const answered = new Map<string, number>();
-  let output = "",
-    errors = "";
-  child.stdout.on("data", (chunk: Buffer) => {
-    output += chunk.toString();
-    for (const [question, answer] of answers) {
-      const count = output.split(question).length - 1;
-      for (let i = answered.get(question) ?? 0; i < count; i++) child.stdin.write(`${answer}\n`);
-      answered.set(question, count);
-    }
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    errors += chunk.toString();
-  });
-  let childError: string | undefined;
-  const code = await new Promise<number | null>((resolve) => {
-    child.once("error", (error) => {
-      childError = error.name;
+    );
+    const answers = [
+      ["Confirm setup password: ", "SYNTHETIC-owner-password"],
+      ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+      ["Send a preproduction fiscal test? [y/N]: ", "yes"],
+    ] as const;
+    const answered = new Map<string, number>();
+    let output = "",
+      errors = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+      for (const [question, answer] of answers) {
+        const count = output.split(question).length - 1;
+        for (let i = answered.get(question) ?? 0; i < count; i++) child.stdin.write(`${answer}\n`);
+        answered.set(question, count);
+      }
     });
-    child.once("close", resolve);
-  });
+    child.stderr.on("data", (chunk: Buffer) => {
+      errors += chunk.toString();
+    });
+    let childError: string | undefined;
+    const code = await new Promise<number | null>((resolve) => {
+      child.once("error", (error) => {
+        childError = error.name;
+      });
+      child.once("close", resolve);
+    });
+    return { code, errors, childError, output, answered };
+  }
+  await runPastSettle(
+    preload,
+    run,
+    'import tls from "node:tls";\ntls.connect = () => { throw new Error("synthetic offline submission"); };\n',
+  );
+  const { code, errors, childError, output, answered } = await run();
   expect({ code, errors, childError }, output).toEqual({
     code: 1,
     errors: "",

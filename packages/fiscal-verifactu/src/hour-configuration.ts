@@ -37,8 +37,8 @@ function configured(host?: ModuleOperationHost): ModuleOperationPreparation {
   return {
     readRecoveryHistory: readHourRecoveryHistory,
     readRecoveryState: readHourRecoveryState,
-    async recovery(operation, proposal) {
-      return hostedHourRecovery(requireHost()).recovery(operation, proposal);
+    async recovery(operation, proposal, client) {
+      return hostedHourRecovery(requireHost()).recovery(operation, proposal, client);
     },
     async resumeRecovery(operation) {
       await hostedHourRecovery(requireHost()).resume(operation);

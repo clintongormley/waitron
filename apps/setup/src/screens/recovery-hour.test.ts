@@ -27,9 +27,8 @@ const clock = {
     upperMs: instant,
   })),
   unavailable: [],
+  secondClock: true,
   disagreement: false,
-  requiresConfirmation: false,
-  boundaryWait: false,
   releaseBlocked: false,
   rangeBlocked: false,
 };
@@ -43,8 +42,18 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
     preparation: Record<string, unknown>;
     artifact?: Blob;
   }> = [];
+  const stages: Array<{ request: unknown; artifact: Blob }> = [];
   const transport = vi.fn<typeof fetch>(async (url, init) => {
     if (String(url).endsWith("/preview")) return Response.json(preview);
+    if (String(url).endsWith("/recovery/stage")) {
+      const form = init!.body as FormData;
+      stages.push({
+        request: JSON.parse(String(form.get("request"))),
+        artifact: form.get("artifact") as Blob,
+      });
+      return Response.json({ stagedId: "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11" });
+    }
+    if (String(url).endsWith("/recovery/stage/discard")) return Response.json({ discarded: true });
     if (String(url).endsWith("/recovery/preparation")) {
       const body =
         init!.body instanceof FormData
@@ -56,11 +65,12 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
       if (proposal.action === "clock-challenge")
         return Response.json({ id: "challenge", boxInstantMs: instant, expiresInMs: 5000 });
       if (proposal.action === "compare-clocks") return Response.json({ id: "comparison", clock });
+      if (proposal.action === "preview") return Response.json({ status: "preview" });
       if (proposal.action === "select")
         return Response.json({
           status: "selected",
           binding: body.preparation.binding,
-          identity: "06TH",
+          identity: "0CRHE",
           input: { server: "selected-input" },
         });
     }
@@ -90,7 +100,7 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
   const entry = allocation.shadowRoot!.querySelector<LitElement>("vf-recovery-hour");
   expect(entry, "the selected source offers the module's hour form").not.toBeNull();
   await entry!.updateComplete;
-  return { el, entry: entry!, requests, artifact };
+  return { el, entry: entry!, requests, artifact, stages };
 }
 async function fill(entry: LitElement) {
   const key = entry.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
@@ -104,19 +114,8 @@ async function fill(entry: LitElement) {
     input.value = value!;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
-  const codes = entry.shadowRoot!.querySelector<LitElement>(
-    '[name="recovery-installation-codes"]',
-  )!;
-  await codes.updateComplete;
-  const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  codeInput.value = "06RB";
-  codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  for (const name of ["recovery-old-box-stopped", "recovery-sole-operation", "taxpayer-hour-no"]) {
-    const field = entry.shadowRoot!.querySelector<HTMLInputElement>(
-      name.startsWith("taxpayer-hour-")
-        ? `[name="taxpayer-hour"][value="${name.slice(14)}"]`
-        : `[name="${name}"]`,
-    )!;
+  for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
+    const field = entry.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
     field.checked = true;
     field.dispatchEvent(new Event("change"));
   }
@@ -133,12 +132,21 @@ async function fill(entry: LitElement) {
   await vi.waitFor(() =>
     expect(entry.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
   );
+  await vi.waitFor(() =>
+    expect(
+      (
+        entry.shadowRoot!.querySelector("[data-test=select]") as HTMLElement & {
+          disabled: boolean;
+        }
+      ).disabled,
+    ).toBe(false),
+  );
   entry.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
 }
 it.each(["archive", "bucket", "cloud"] as const)(
   "prepares %s recovery through the real client and forwards bound credentials",
   async (kind) => {
-    const { el, entry, requests, artifact } = await mounted(kind);
+    const { el, entry, requests, artifact, stages } = await mounted(kind);
     await fill(entry);
     await vi.waitFor(() =>
       expect(el.readCredentials()?.recoveryOperation.input).toEqual({ server: "selected-input" }),
@@ -157,7 +165,14 @@ it.each(["archive", "bucket", "cloud"] as const)(
       sourceId: "archive-digest",
       targetNodeId: "node-1",
     });
-    expect(requests).toHaveLength(3);
+    expect(requests.map((r) => (r.preparation.proposal as { action: string }).action)).toEqual([
+      "clock-challenge",
+      "compare-clocks",
+      "preview",
+      "clock-challenge",
+      "compare-clocks",
+      "select",
+    ]);
     for (const request of requests) {
       expect(request.preparation).toMatchObject({
         binding: credentials.recoveryOperation.binding,
@@ -166,12 +181,20 @@ it.each(["archive", "bucket", "cloud"] as const)(
       });
       expect(request.source).toEqual(
         kind === "archive"
-          ? { kind, recoveryKey: "archive password", environment: "production" }
+          ? { kind: "staged", stagedId: "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11" }
           : kind === "bucket"
             ? { kind, kit: "private selected kit", environment: "production" }
             : { kind, pointId: "selected-cloud-point" },
       );
-      if (kind === "archive") expect(await request.artifact!.text()).toBe(await artifact.text());
+      expect(request.artifact).toBeUndefined();
+    }
+    expect(stages).toHaveLength(kind === "archive" ? 1 : 0);
+    if (kind === "archive") {
+      expect(stages[0]!.request).toEqual({
+        eventId: credentials.recoveryOperation.binding.eventId,
+        source: { kind, recoveryKey: "archive password", environment: "production" },
+      });
+      expect(await stages[0]!.artifact.text()).toBe(await artifact.text());
     }
     if (kind === "bucket") el.bucketKit = "different kit";
     else if (kind === "cloud") el.selectionId = "approval-2";

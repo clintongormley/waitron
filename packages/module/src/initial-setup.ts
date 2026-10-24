@@ -1,6 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import type { OperationBinding } from "./operation-authority.js";
-import type { ModuleOperationHost } from "./operation-preparation.js";
+import type { ModuleOperationHost, OperationClient } from "./operation-preparation.js";
 
 export interface InitialSetupContext {
   readonly attemptId: string;
@@ -82,7 +82,11 @@ export interface InitialSetupContribution {
   assignmentKeys?(context: InitialSetupContext, input?: unknown): readonly string[];
   resolutionEvidence?(): { files: readonly string[]; directories: readonly string[] };
   configure?(host: ModuleOperationHost): InitialSetupContribution;
-  preparation?(context: InitialSetupContext, proposal: unknown): Promise<unknown>;
+  preparation?(
+    context: InitialSetupContext,
+    proposal: unknown,
+    client: OperationClient,
+  ): Promise<unknown>;
   /** A pending result stays unfrozen so the owner can finish waiting before choosing material. */
   pending?(request: unknown): boolean;
   candidates(context: InitialSetupContext, proposal: unknown): unknown;

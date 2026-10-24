@@ -175,7 +175,8 @@ export type RecoveryPreparationSource =
       environment: "production" | "preproduction";
     }
   | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
-  | { kind: "cloud"; pointId: string };
+  | { kind: "cloud"; pointId: string }
+  | { kind: "staged"; stagedId: string };
 
 export interface BucketRestoreBody {
   /** The recovery kit as pasted or read from its file; as sensitive as the recovery key. */
@@ -402,6 +403,32 @@ export class SetupApi {
     });
     if (!response.ok) throw await apiError(response);
     return response.json() as Promise<unknown>;
+  }
+
+  /** Checks the backup once on the box, so the clock requests that follow carry only its id. */
+  async stageRecovery(
+    artifact: Blob,
+    recoveryKey: string,
+    environment: "production" | "preproduction",
+    eventId: string,
+  ): Promise<{ stagedId: string }> {
+    const form = new FormData();
+    form.set(
+      "request",
+      JSON.stringify({ eventId, source: { kind: "archive", recoveryKey, environment } }),
+    );
+    form.set("artifact", artifact);
+    const response = await this.#fetchImpl(this.#baseUrl + "/setup-api/recovery/stage", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!response.ok) throw await apiError(response);
+    return (await response.json()) as { stagedId: string };
+  }
+
+  discardStagedRecovery(stagedId: string): Promise<{ discarded: true }> {
+    return this.#request("/setup-api/recovery/stage/discard", "POST", { stagedId });
   }
 
   previewCloudRestore(pointId: string): Promise<RecoveryBackupPreview> {

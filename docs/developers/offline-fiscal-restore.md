@@ -2,8 +2,9 @@
 > environment variables and qualification results below describe the earlier register-based
 > implementation. They are retained for original-evidence inspection and historical tests;
 > do not use them to prepare a new setup or recovery. Production composition now selects
-> the hour-based preparation API. Follow [first Live setup](../operations/first-live-fiscal-setup.md)
-> or [recovery with an hour code](../operations/hour-recovery.md). Cloud accounts, backup
+> the hour-based preparation API (five-symbol UTC-minute names since 2026-10-22, A947 slice 4a).
+> Follow [first Live setup](../operations/first-live-fiscal-setup.md) or
+> [recovering a box](../operations/hour-recovery.md). Cloud accounts, backup
 > transport and recovery authentication remain separate from naming authority.
 
 # Recover a filing box from an old backup

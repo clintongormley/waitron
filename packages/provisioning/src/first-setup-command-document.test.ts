@@ -7,7 +7,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
-import { prepareFirstSetupCommand } from "./first-setup-command.js";
+import { prepareCommandPastWaits } from "../test/settle-wait.js";
 import { firstFiscalPublicDigest } from "./first-setup-public-digest.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 
@@ -27,10 +27,10 @@ beforeEach(() => {
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "usable",
-    instantMs: NOW,
+    instantMs: Date.now(),
     uncertaintyMs: 500,
-    wallStartedMs: NOW,
-    wallFinishedMs: NOW,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
     monotonicStartedMs: performance.now(),
     monotonicFinishedMs: performance.now(),
   }));
@@ -76,7 +76,7 @@ async function fixture() {
     },
     clearScreen() {},
   };
-  const prepared = await prepareFirstSetupCommand(
+  const prepared = await prepareCommandPastWaits(
     runtime,
     { ...claim.state, capability: claim.capability },
     io,
@@ -111,12 +111,11 @@ it("saves the real module PDF privately and grants activation only for its exact
     inputDigest: firstFiscalPublicDigest(before!.inputs[MODULE]),
     statement: {
       kind: "waitron-recovery-document",
-      installationCodes: ["06RB"],
       version: 1,
       scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
       taxpayerName: request.legalName,
       venueName: request.location.name,
-      createdAt: "2026-10-16T11:40:00.000Z",
+      createdAt: "2026-10-16T11:42:00.001Z",
       nodeKey: { nodeId: before!.frozen.nodeId },
     },
   });

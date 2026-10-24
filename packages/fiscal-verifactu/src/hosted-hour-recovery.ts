@@ -1,4 +1,3 @@
-import { reportedHourCodes } from "./reported-hour-codes.js";
 import { AppError } from "@waitron/shared";
 import type {
   ModuleOperationHost,
@@ -12,6 +11,7 @@ import {
   recoveryHourOperator,
 } from "./hour-recovery-preparation.js";
 import { createSetupHourClock, type SetupBrowserClockSample } from "./hour-setup-clock.js";
+import { testClockOptions } from "./hour-preparation.js";
 import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
 
@@ -27,11 +27,17 @@ function exact(value: unknown, keys: readonly string[]): value is Record<string,
     keys.every((key) => Object.hasOwn(value, key))
   );
 }
-function createHostedHourRecovery(host: ModuleOperationHost) {
+function createHostedHourRecovery(
+  host: ModuleOperationHost,
+  clock: { wall?(): number; monotonicNow?(): number } = {},
+) {
   if (host.readRecoveryFacts === undefined || host.withPreparationState === undefined)
     return refuse("outside_confirmation_missing");
-  const clocks = createSetupHourClock();
-  const confirmed = new Map<string, string>();
+  const monotonicNow = clock.monotonicNow ?? (() => performance.now());
+  const clocks = createSetupHourClock({
+    ...(clock.wall === undefined ? {} : { wall: clock.wall }),
+    monotonic: monotonicNow,
+  });
   const facts = async (binding: Parameters<NonNullable<typeof host.readRecoveryFacts>>[0]) => {
     const current = await host.readRecoveryFacts!(binding);
     if (current.country !== "ES") return refuse();
@@ -39,7 +45,7 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
   };
   const options: Parameters<typeof createHourRecoveryPreparation>[0] = {
     withState: host.withPreparationState,
-    monotonicNow: () => performance.now(),
+    monotonicNow,
     readContext: async (binding) => {
       const current = await facts(binding);
       return {
@@ -48,9 +54,9 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
         history: current.history as readonly HourHistorySource[],
       };
     },
-    read: async (binding) => {
+    read: async (binding, comparisonId) => {
       const current = await facts(binding);
-      const reading = clocks.read(current.contextKey, confirmed.get(current.contextKey));
+      const reading = clocks.read(current.contextKey, comparisonId);
       return {
         ...current,
         scope: { taxpayerNif: current.taxId, environment: current.environment },
@@ -71,29 +77,27 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
   const recovery: NonNullable<ModuleOperationPreparation["recovery"]> = async (
     supplied,
     proposal,
+    client,
   ) => {
     const operation = { ...supplied, binding: Object.freeze({ ...supplied.binding }) };
     const check = () => operatorFor(operation);
     check();
     if (
-      exact(proposal, ["action", "answer", "installationCodes"]) &&
+      exact(proposal, ["action", "comparisonId"]) &&
       proposal.action === "select" &&
-      ["no", "yes", "unknown"].includes(proposal.answer as string)
+      typeof proposal.comparisonId === "string"
     )
       return preparationFor(operation.binding).select({
         ...operation,
-        answer: proposal.answer as "no" | "yes" | "unknown",
-        reportedIdentities: reportedHourCodes(proposal.installationCodes),
+        comparisonId: proposal.comparisonId,
       });
     if (exact(proposal, ["action"]) && proposal.action === "preview")
       return preparationFor(operation.binding).preview(operation);
     return host.withPreparationState!(operation.binding, async () => {
       const current = await facts(operation.binding);
       check();
-      if (exact(proposal, ["action"]) && proposal.action === "clock-challenge") {
-        confirmed.delete(current.contextKey);
+      if (exact(proposal, ["action"]) && proposal.action === "clock-challenge")
         return clocks.challenge(current.contextKey);
-      }
       if (exact(proposal, ["action", "browser"]) && proposal.action === "compare-clocks") {
         if (
           proposal.browser !== null &&
@@ -102,24 +106,14 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
             !Number.isSafeInteger(proposal.browser.instantMs))
         )
           return refuse();
-        confirmed.delete(current.contextKey);
         const result = await clocks.compare(
           current.contextKey,
           current.environment,
           proposal.browser as SetupBrowserClockSample | null,
+          client,
         );
         check();
         return result;
-      }
-      if (
-        exact(proposal, ["action", "comparisonId"]) &&
-        proposal.action === "confirm-clock" &&
-        typeof proposal.comparisonId === "string"
-      ) {
-        const reading = clocks.read(current.contextKey, proposal.comparisonId);
-        if (confirmed.size === 64) confirmed.delete(confirmed.keys().next().value!);
-        confirmed.set(current.contextKey, proposal.comparisonId);
-        return reading.clock;
       }
       return refuse();
     });
@@ -139,8 +133,7 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
         const current = await facts(held.binding);
         operatorFor(held);
         if (current.priorActivation === "committed") return;
-        confirmed.delete(current.contextKey);
-        await clocks.compare(current.contextKey, current.environment, null);
+        await clocks.compare(current.contextKey, current.environment, null, { onBox: true });
         operatorFor(held);
       });
     },
@@ -150,7 +143,7 @@ const hosted = new WeakMap<ModuleOperationHost, ReturnType<typeof createHostedHo
 export function hostedHourRecovery(host: ModuleOperationHost) {
   let value = hosted.get(host);
   if (value === undefined) {
-    value = createHostedHourRecovery(host);
+    value = createHostedHourRecovery(host, testClockOptions(host));
     hosted.set(host, value);
   }
   return value;

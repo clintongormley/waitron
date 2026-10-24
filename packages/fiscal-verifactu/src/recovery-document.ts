@@ -1,4 +1,3 @@
-import { isHourIdentity } from "./hour-identity.js";
 import { encodeNodeKey } from "./paper-register-compact.js";
 import type { RegisterScope, NamedNodeKey } from "./paper-register-protocol.js";
 
@@ -9,7 +8,6 @@ export type RecoveryDocument = {
   taxpayerName: string;
   venueName: string;
   createdAt: string;
-  installationCodes: readonly string[];
   nodeKey: NamedNodeKey;
 };
 export type RecoveryDocumentPublic = Omit<RecoveryDocument, "nodeKey"> & {
@@ -48,7 +46,6 @@ function checked(value: unknown, secret: boolean): RecoveryDocument | RecoveryDo
       "taxpayerName",
       "venueName",
       "createdAt",
-      "installationCodes",
       "nodeKey",
     ]) ||
     value.kind !== "waitron-recovery-document" ||
@@ -59,11 +56,6 @@ function checked(value: unknown, secret: boolean): RecoveryDocument | RecoveryDo
     typeof value.scope.softwareId !== "string" ||
     !/^[A-Z0-9]{2}$/.test(value.scope.softwareId) ||
     !["production", "preproduction"].includes(value.scope.environment as string) ||
-    !Array.isArray(value.installationCodes) ||
-    value.installationCodes.length === 0 ||
-    value.installationCodes.length > 256 ||
-    !value.installationCodes.every(isHourIdentity) ||
-    new Set(value.installationCodes).size !== value.installationCodes.length ||
     !label(value.taxpayerName) ||
     !label(value.venueName) ||
     typeof value.createdAt !== "string" ||

@@ -50,6 +50,11 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { parseEnvFile } from "./env-file.js";
 import type { SetupDeps } from "./setup-api.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
+import {
+  createFakeTimersHourClock,
+  selectPastWaits,
+  type HourTestClock,
+} from "./testing/hour-test-clock.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -61,20 +66,40 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const roots: string[] = [];
+let clock: HourTestClock;
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime("2026-10-16T11:40:00Z");
+  clock = createFakeTimersHourClock();
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "usable",
-    instantMs: Date.now(),
+    instantMs: clock.wall(),
     uncertaintyMs: 500,
-    wallStartedMs: Date.now(),
-    wallFinishedMs: Date.now(),
-    monotonicStartedMs: performance.now(),
-    monotonicFinishedMs: performance.now(),
+    wallStartedMs: clock.wall(),
+    wallFinishedMs: clock.wall(),
+    monotonicStartedMs: clock.monotonic(),
+    monotonicFinishedMs: clock.monotonic(),
   }));
 });
+type Host = ReturnType<typeof createFirstSetupModuleHost>;
+async function compareAndSelect(host: Host, owner: Parameters<Host["preparation"]["select"]>[0]) {
+  const compared = (await host.preparation.prepare(
+    owner,
+    MODULE,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  )) as { id: string };
+  return host.preparation.select(
+    owner,
+    MODULE,
+    { comparisonId: compared.id },
+    await host.owner.reconfirm(owner, PASSWORD, "block-use"),
+  );
+}
+function chooseMinute(host: Host, owner: Parameters<Host["preparation"]["select"]>[0]) {
+  return selectPastWaits(clock, () => compareAndSelect(host, owner));
+}
 afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -97,13 +122,7 @@ async function fixture() {
     randomBytes(32).toString("base64url"),
   );
   let owner = { ...claim.state, capability: claim.capability };
-  await host.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null });
-  const selected = await host.preparation.select(
-    owner,
-    MODULE,
-    { answer: "no" },
-    await host.owner.reconfirm(owner, PASSWORD, "block-use"),
-  );
+  const selected = await chooseMinute(host, owner);
   owner = { ...owner, revision: selected.state.revision };
   const input = (firstSetupModuleContext(selected.state, MODULE).request as { input: unknown })
     .input;
@@ -325,31 +344,21 @@ it("empty never-activated hour restart retains originals and burns the entire ho
     randomBytes(32).toString("base64url"),
   );
   const owner = { ...claim.state, capability: claim.capability };
-  await next.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null });
-  await expect(
-    next.preparation.select(
-      owner,
-      MODULE,
-      { answer: "no" },
-      await next.owner.reconfirm(owner, PASSWORD, "block-use"),
-    ),
-  ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "hour_not_later" } });
+  vi.setSystemTime("2026-10-16T11:40:00Z");
+  await expect(compareAndSelect(next, owner)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later" },
+  });
   vi.setSystemTime("2026-10-16T12:01:00Z");
-  await next.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null });
-  const selected = await next.preparation.select(
-    owner,
-    MODULE,
-    { answer: "no" },
-    await next.owner.reconfirm(owner, PASSWORD, "block-use"),
-  );
+  const selected = await chooseMinute(next, owner);
   expect(firstSetupModuleContext(selected.state, MODULE).request).toMatchObject({
-    identity: "06RC",
+    identity: "0CNPK",
     input: {
       allocation: {
         series: [
-          { code: "B-06RC", purpose: "standard" },
-          { code: "FULL-06RC", purpose: "full" },
-          { code: "RECT-06RC", purpose: "rectificative" },
+          { code: "B-0CNPK", purpose: "standard" },
+          { code: "FULL-0CNPK", purpose: "full" },
+          { code: "RECT-0CNPK", purpose: "rectificative" },
         ],
       },
     },
@@ -634,11 +643,11 @@ it("hour Finish preserves issued records, their chain, filing outbox and advance
   const f = await fixture();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
   const series = (await suite.db.select().from(invoiceSeries)).find(
-    (row) => row.code === "A-06RB",
+    (row) => row.code === "A-0CNNY",
   )!;
   const clock = {
     ...steadyClock,
-    now: () => ({ ...steadyClock.now(), instant: new Date("2026-10-16T11:41:00Z") }),
+    now: () => ({ ...steadyClock.now(), instant: new Date("2026-10-16T11:43:00Z") }),
   };
   const backend = new VerifactuBackend({
     db: suite.db,

@@ -5,43 +5,88 @@ import type {
   ModuleRecoveryCredentials,
   SetupContribution,
 } from "@waitron/module/src/setup-contract.js";
-import type { HourClockDecision } from "../hour-clock.js";
-import { reportedHourCodes } from "../reported-hour-codes.js";
+import { isMinuteIdentity } from "../hour-identity.js";
 import "./recovery-key.js";
-import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import {
+  ClockWait,
+  clockWaitStrings,
+  dateTimeFormat,
+  readClocks,
+  record,
+  renderClockProblem,
+  validWait,
+  type ClockComparison,
+} from "./clock-wait.js";
 
 type Context = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
-type Answer = "no" | "yes" | "unknown";
 interface Draft {
-  installationCodes: string;
-  answer?: Answer;
   oldBoxGone: boolean;
   soleRecovery: boolean;
-  confirmed: boolean;
 }
-const empty = (): Draft => ({
-  installationCodes: "",
-  oldBoxGone: false,
-  soleRecovery: false,
-  confirmed: false,
-});
-interface Comparison {
-  id: string;
-  clock: HourClockDecision;
+const empty = (): Draft => ({ oldBoxGone: false, soleRecovery: false });
+interface Selected {
+  status: "selected";
+  identity: string;
+  input: unknown;
 }
-type Result =
-  | { status: "selected"; identity: string; input: unknown }
-  | {
-      status: "waiting";
-      targetMs: number;
-      remainingMs: number | null;
-      requiresClockConfirmation: boolean;
-    };
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+const strings = {
+  en: {
+    ...clockWaitStrings.en,
+    heading: "Recover this box",
+    stopped: "The old box is stopped and will stay offline.",
+    sole: "I am the only person recovering this taxpayer, across all venues.",
+    compare: "Compare clocks",
+    select: "Make the series",
+    again: "Check again",
+    readings: "Clock comparison",
+    box: "Box",
+    browser: "Browser",
+    internet: "Internet",
+    unavailable: "Unavailable",
+    failed: "Check the fields and compare clocks again.",
+    missing: "Complete recovery before continuing.",
+    key: "Check the key for this backup.",
+    chosen: "Series name",
+    blocked: "Box time precedes this Waitron release.",
+    rangeBlocked: "This date is outside the range of series names.",
+    secondClockDo:
+      "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.",
+    secondClockEnds:
+      "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.",
+    differDo:
+      "Try from another phone or laptop that has the backup. If they still differ, the box's time may be wrong: ask for help.",
+    clear: "Clear",
+  },
+  es: {
+    ...clockWaitStrings.es,
+    heading: "Recuperar esta caja",
+    stopped: "La caja anterior está apagada y seguirá desconectada.",
+    sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
+    compare: "Comparar relojes",
+    select: "Crear las series",
+    again: "Comprobar otra vez",
+    readings: "Comparación de relojes",
+    box: "Servidor",
+    browser: "Navegador",
+    internet: "Internet",
+    unavailable: "No disponible",
+    failed: "Revisa los campos y vuelve a comparar los relojes.",
+    missing: "Completa la recuperación antes de continuar.",
+    key: "Revisa la clave de esta copia.",
+    chosen: "Nombre de las series",
+    blocked: "La hora de la caja es anterior a esta versión de Waitron.",
+    rangeBlocked: "Esta fecha está fuera del rango de nombres de serie.",
+    secondClockDo:
+      "Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
+    secondClockEnds:
+      "Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.",
+    differDo:
+      "Prueba desde otro móvil o portátil que tenga la copia. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
+    clear: "Borrar",
+  },
+};
 @customElement("vf-recovery-hour")
 export class RecoveryHourEntry extends LitElement {
   static override styles = [
@@ -50,13 +95,6 @@ export class RecoveryHourEntry extends LitElement {
       :host {
         display: block;
         overflow-wrap: anywhere;
-      }
-      fieldset {
-        border: var(--wt-field-line-width) solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        padding: var(--wt-space-3);
-        margin: var(--wt-space-4) 0;
-        min-width: 0;
       }
       label {
         display: flex;
@@ -91,16 +129,15 @@ export class RecoveryHourEntry extends LitElement {
   @property() refusedField?: string;
   @state() private draft = empty();
   @state() private busy = false;
-  @state() private comparison?: Comparison;
-  @state() private result?: Result;
+  @state() private comparison?: ClockComparison;
   @state() private error = false;
   @state() private keyError = false;
-  @state() private hourUsed = false;
   @state() private attempted = false;
   @state() private refusalDismissed = false;
   #secret?: string;
   #generation = 0;
   #scope?: DraftScope<Draft>;
+  #wait = new ClockWait<Selected>(this, () => void this.#select(true));
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
@@ -116,12 +153,7 @@ export class RecoveryHourEntry extends LitElement {
         id: this,
         current: () => this.draft,
         snapshot: (value) => ({ ...value }),
-        equal: (a, b) =>
-          a.installationCodes === b.installationCodes &&
-          a.answer === b.answer &&
-          a.oldBoxGone === b.oldBoxGone &&
-          a.soleRecovery === b.soleRecovery &&
-          a.confirmed === b.confirmed,
+        equal: (a, b) => a.oldBoxGone === b.oldBoxGone && a.soleRecovery === b.soleRecovery,
         restore: () => this.clear(),
       }).scope;
       this.#scope.commit(empty());
@@ -146,15 +178,14 @@ export class RecoveryHourEntry extends LitElement {
     ++this.#generation;
     this.busy = false;
     this.comparison = undefined;
-    this.result = undefined;
     this.error = false;
     this.keyError = false;
-    this.hourUsed = false;
+    this.#wait.show();
   }
   #edit(change: Partial<Draft>): void {
     this.#edited("recoveryOperation");
     this.#invalidate();
-    this.draft = { ...this.draft, confirmed: false, ...change };
+    this.draft = { ...this.draft, ...change };
     this.#scope?.changed();
     this.#notify();
   }
@@ -178,27 +209,19 @@ export class RecoveryHourEntry extends LitElement {
       }),
     );
   }
-  #codes(): string[] | undefined {
-    try {
-      return reportedHourCodes([this.draft.installationCodes]);
-    } catch {
-      return undefined;
-    }
-  }
   #credentials(): ModuleRecoveryCredentials | null {
     if (
       this.busy ||
       !this.#secret ||
-      !this.#codes() ||
       !this.draft.oldBoxGone ||
       !this.draft.soleRecovery ||
-      this.result?.status !== "selected"
+      this.#wait.result?.status !== "selected"
     )
       return null;
     return {
       recoveryOperation: {
         binding: { ...this.context.binding },
-        input: structuredClone(this.result.input),
+        input: structuredClone(this.#wait.result.input),
       },
       nodeRecoverySecret: this.#secret,
       recoveryContext: {
@@ -216,35 +239,14 @@ export class RecoveryHourEntry extends LitElement {
     return credentials;
   }
   get #canCompare(): boolean {
-    return Boolean(
-      this.#secret && this.#codes() && this.draft.oldBoxGone && this.draft.soleRecovery,
-    );
+    return Boolean(this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery);
   }
   get #canSelect(): boolean {
     const clock = this.comparison?.clock;
-    const box = clock?.usable.find((reading) => reading.source === "box");
-    const acceptedBoundary =
-      clock?.disagreement === true &&
-      this.draft.confirmed &&
-      box !== undefined &&
-      Math.floor(box.lowerMs / 3_600_000) === Math.floor(box.upperMs / 3_600_000);
-    return (
-      this.#canCompare &&
-      this.draft.answer !== undefined &&
-      clock !== undefined &&
-      !clock.releaseBlocked &&
-      !clock.rangeBlocked &&
-      (!clock.boundaryWait || acceptedBoundary) &&
-      (!clock.requiresConfirmation || this.draft.confirmed)
-    );
+    return this.#canCompare && clock !== undefined && !clock.releaseBlocked && !clock.rangeBlocked;
   }
-  async #run(kind: "compare" | "select"): Promise<void> {
-    if (this.busy || !(kind === "compare" ? this.#canCompare : this.#canSelect)) return;
-    const generation = ++this.#generation;
-    const context = this.context;
-    const current = () =>
-      this.isConnected && this.context === context && this.#generation === generation;
-    const request = {
+  #request(context: Context) {
+    return {
       binding: { ...context.binding },
       context: {
         selectedSourceId: context.selection.sourceId,
@@ -253,6 +255,13 @@ export class RecoveryHourEntry extends LitElement {
       },
       nodeRecoverySecret: this.#secret!,
     };
+  }
+  #begin(): { call: (proposal: unknown) => Promise<unknown>; current: () => boolean } {
+    const generation = ++this.#generation;
+    const context = this.context;
+    const request = this.#request(context);
+    const current = () =>
+      this.isConnected && this.context === context && this.#generation === generation;
     const call = async (proposal: unknown) => {
       const result = await context.prepare({ ...request, proposal });
       if (!current()) throw new Error("stale recovery");
@@ -261,67 +270,63 @@ export class RecoveryHourEntry extends LitElement {
     this.busy = true;
     this.error = false;
     this.keyError = false;
-    this.hourUsed = false;
-    this.result = undefined;
+    return { call, current };
+  }
+  #failed(cause: unknown): void {
+    this.error = true;
+    this.keyError =
+      record(cause) &&
+      (cause.code === "promotion.break_glass_invalid" ||
+        (record(cause.params) && cause.params.field === "nodeRecoverySecret"));
+  }
+  async #compare(): Promise<void> {
+    if (this.busy || !this.#canCompare) return;
+    const { call, current } = this.#begin();
+    this.comparison = undefined;
+    this.#wait.show();
     this.#notify();
     try {
-      if (kind === "compare") {
-        this.comparison = undefined;
-        this.draft = { ...this.draft, confirmed: false };
-        const challenge = await call({ action: "clock-challenge" });
-        if (!record(challenge) || typeof challenge.id !== "string")
-          throw new Error("invalid challenge");
-        const compared = await call({
-          action: "compare-clocks",
-          browser: { challengeId: challenge.id, instantMs: Date.now() },
-        });
-        if (
-          !record(compared) ||
-          typeof compared.id !== "string" ||
-          !record(compared.clock) ||
-          !Array.isArray(compared.clock.usable) ||
-          !Array.isArray(compared.clock.unavailable)
-        )
-          throw new Error("invalid comparison");
-        this.comparison = compared as unknown as Comparison;
-      } else {
-        if (this.comparison!.clock.requiresConfirmation)
-          await call({ action: "confirm-clock", comparisonId: this.comparison!.id });
-        const selected = await call({
-          action: "select",
-          answer: this.draft.answer,
-          installationCodes: this.#codes(),
-        });
-        if (!record(selected)) throw new Error("invalid selection");
-        if (selected.status === "selected") {
-          const selectedBinding = selected.binding;
-          if (
-            !record(selectedBinding) ||
-            Object.entries(context.binding).some(
-              ([key, value]) => selectedBinding[key] !== value,
-            ) ||
-            typeof selected.identity !== "string" ||
-            !/^[0-9A-HJKMNP-TV-Z]{4}$/.test(selected.identity) ||
-            selected.input === undefined
-          )
-            throw new Error("invalid selection");
-        } else if (selected.status !== "waiting" || !Number.isSafeInteger(selected.targetMs))
-          throw new Error("invalid wait");
-        this.result = selected as unknown as Result;
-      }
+      this.comparison = await readClocks(call);
+      if (this.comparison.clock.releaseBlocked) return;
+      this.#wait.showPreview(await call({ action: "preview" }));
     } catch (cause) {
+      if (current()) this.#wait.settle(cause, false, (error) => this.#failed(error));
+    } finally {
       if (current()) {
-        this.error = true;
-        this.hourUsed =
-          record(cause) &&
-          cause.code === "sif.allocation_invalid" &&
-          record(cause.params) &&
-          cause.params.reason === "hour_not_later";
-        this.keyError =
-          record(cause) &&
-          (cause.code === "promotion.break_glass_invalid" ||
-            (record(cause.params) && cause.params.field === "nodeRecoverySecret"));
+        this.busy = false;
+        this.#notify();
       }
+    }
+  }
+  async #select(automatic = false): Promise<void> {
+    if (this.busy || this.#wait.result?.status === "selected") return;
+    if (!(automatic ? this.#canCompare : this.#canSelect)) return;
+    const { call, current } = this.#begin();
+    const context = this.context;
+    // An automatic re-check leaves the current explanation up until its answer replaces it.
+    if (!automatic) this.#wait.show();
+    this.#notify();
+    try {
+      const comparison = await readClocks(call);
+      this.comparison = comparison;
+      if (!comparison.clock.secondClock) return this.#wait.waitForSecondClock();
+      if (comparison.clock.disagreement) return this.#wait.show({ kind: "disagreement" });
+      const selected = await call({ action: "select", comparisonId: comparison.id });
+      if (!record(selected)) throw new Error("invalid selection");
+      if (selected.status === "selected") {
+        const selectedBinding = selected.binding;
+        if (
+          !record(selectedBinding) ||
+          Object.entries(context.binding).some(([key, value]) => selectedBinding[key] !== value) ||
+          !isMinuteIdentity(selected.identity) ||
+          selected.input === undefined
+        )
+          throw new Error("invalid selection");
+      } else if (selected.status !== "waiting" || !validWait(selected))
+        throw new Error("invalid wait");
+      this.#wait.show(undefined, selected as unknown as Selected);
+    } catch (cause) {
+      if (current()) this.#wait.settle(cause, automatic, (error) => this.#failed(error));
     } finally {
       if (current()) {
         this.busy = false;
@@ -331,84 +336,17 @@ export class RecoveryHourEntry extends LitElement {
   }
   override render() {
     const en = this.locale === "en";
-    const words = en
-      ? {
-          heading: "Recover this box",
-          codes: "Installation code",
-          codesHint: "Code on your recovery sheet",
-          codesInvalid: "Enter the four-character code from your recovery sheet.",
-          stopped: "The old box is stopped and will stay offline.",
-          sole: "I am the only person recovering this taxpayer, across all venues.",
-          question: "Has this taxpayer started setup or recovery during this UTC hour? *",
-          wider: "Include other venues and interrupted attempts.",
-          no: "No",
-          yes: "Yes",
-          unknown: "I don’t know",
-          compare: "Compare clocks",
-          select: "Select hour",
-          again: "Check again",
-          confirm: "The box’s displayed time is correct.",
-          readings: "Clock comparison",
-          box: "Box",
-          browser: "Browser",
-          internet: "Internet",
-          unavailable: "Unavailable",
-          warning:
-            "The clocks disagree, or no independent comparison is available. A wrong time can reuse names or date invoices incorrectly.",
-          failed: "Check the fields and compare clocks again.",
-          used: "Wait for a UTC hour later than the known installation codes.",
-          missing: "Complete recovery before continuing.",
-          key: "Check the key for this backup.",
-          chosen: "Selected hour code",
-          waiting: "Wait until",
-          blocked: "Box time precedes this Waitron release.",
-          rangeBlocked: "This date is outside the supported hour range.",
-          boundary: "The readings cross a UTC hour. Compare again after the changeover.",
-          clear: "Clear",
-        }
-      : {
-          heading: "Recuperar esta caja",
-          codes: "Código de instalación",
-          codesHint: "Código de tu hoja de recuperación",
-          codesInvalid: "Introduce el código de cuatro caracteres de tu hoja de recuperación.",
-          stopped: "La caja anterior está apagada y seguirá desconectada.",
-          sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
-          question:
-            "¿Este contribuyente ha iniciado una configuración o recuperación durante esta hora UTC? *",
-          wider: "Incluye otros locales e intentos interrumpidos.",
-          no: "No",
-          yes: "Sí",
-          unknown: "No lo sé",
-          compare: "Comparar relojes",
-          select: "Seleccionar hora",
-          again: "Comprobar de nuevo",
-          confirm: "La hora mostrada por la caja es correcta.",
-          readings: "Comparación de relojes",
-          box: "Caja",
-          browser: "Navegador",
-          internet: "Internet",
-          unavailable: "No disponible",
-          warning:
-            "Los relojes no coinciden o no hay una comparación independiente. Una hora incorrecta puede repetir nombres o fechar mal las facturas.",
-          failed: "Revisa los campos y vuelve a comparar los relojes.",
-          used: "Espera a una hora UTC posterior a los códigos de instalación conocidos.",
-          missing: "Completa la recuperación antes de continuar.",
-          key: "Revisa la clave de esta copia.",
-          chosen: "Código de hora seleccionado",
-          waiting: "Espera hasta",
-          blocked: "La hora de la caja es anterior a esta versión de Waitron.",
-          rangeBlocked: "Esta fecha está fuera del rango de horas admitido.",
-          boundary: "Las lecturas abarcan dos horas UTC. Compara de nuevo tras el cambio de hora.",
-          clear: "Borrar",
-        };
+    const words = en ? strings.en : strings.es;
     const format = (ms: number) =>
-      new Intl.DateTimeFormat(en ? "en-GB" : "es-ES", {
+      dateTimeFormat(en ? "en" : "es", this.context.selection.timeZone, {
         dateStyle: "medium",
         timeStyle: "long",
-        timeZone: this.context.selection.timeZone,
       }).format(ms);
     const utc = (ms: number) => new Date(ms).toISOString();
     const clock = this.comparison?.clock;
+    const result = this.#wait.result;
+    const canSelect =
+      this.#canSelect && !this.busy && !this.#wait.waiting && result?.status !== "selected";
     return html`<h3>${words.heading}</h3>
       <vf-recovery-key
         .selection=${this.context.selection}
@@ -419,22 +357,9 @@ export class RecoveryHourEntry extends LitElement {
           this.#secret = event.detail.secret;
           this.#edited("nodeRecoverySecret");
           this.#invalidate();
-          this.draft = { ...this.draft, confirmed: false };
           this.#notify();
         }}
       ></vf-recovery-key>
-      <wt-input
-        name="recovery-installation-codes"
-        required
-        label=${words.codes}
-        placeholder=${words.codesHint}
-        .value=${this.draft.installationCodes}
-        .error=${this.attempted && !this.#codes() ? words.codesInvalid : ""}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.#edit({ installationCodes: event.detail.value });
-        }}
-      ></wt-input>
       <label
         ><input
           type="checkbox"
@@ -463,17 +388,6 @@ export class RecoveryHourEntry extends LitElement {
       <p id="sole-error" class="error">
         ${this.attempted && !this.draft.soleRecovery ? words.sole : ""}
       </p>
-      <fieldset
-        aria-invalid=${this.attempted && this.draft.answer === undefined ? "true" : "false"}
-        aria-describedby="answer-error"
-      >
-        <legend>${words.question}</legend>
-        <p>${words.wider}</p>
-        ${(["no", "yes", "unknown"] as const).map((answer) => html`<label><input type="radio" name="taxpayer-hour" value=${answer} required .checked=${this.draft.answer === answer} @change=${() => this.#edit({ answer })} />${words[answer]}</label>`)}
-      </fieldset>
-      <p id="answer-error" class="error">
-        ${this.attempted && this.draft.answer === undefined ? words.question : ""}
-      </p>
       ${
         clock
           ? html`<section aria-label=${words.readings} data-test="clock-readings">
@@ -495,50 +409,34 @@ export class RecoveryHourEntry extends LitElement {
                 )}
               </dl>
               ${clock.releaseBlocked || clock.rangeBlocked ? html`<p role="status">${clock.rangeBlocked ? words.rangeBlocked : words.blocked}</p>` : nothing}
-              ${clock.boundaryWait ? html`<p role="status">${words.boundary}</p>` : nothing}
-              ${
-                clock.requiresConfirmation
-                  ? html`<p role="status">${words.warning}</p>
-                      <label
-                        ><input
-                          type="checkbox"
-                          name="recovery-clock-confirmed"
-                          required
-                          .checked=${this.draft.confirmed}
-                          @change=${(event: Event) => {
-                            ++this.#generation;
-                            this.busy = false;
-                            this.result = undefined;
-                            this.draft = {
-                              ...this.draft,
-                              confirmed: (event.currentTarget as HTMLInputElement).checked,
-                            };
-                            this.#scope?.changed();
-                            this.#notify();
-                          }}
-                        />${words.confirm} *</label
-                      >`
-                  : nothing
-              }
             </section>`
           : nothing
       }
-      ${this.result?.status === "selected" ? html`<p role="status">${words.chosen}: <strong>${this.result.identity}</strong></p>` : this.result?.status === "waiting" ? html`<p role="status">${words.waiting} ${format(this.result.targetMs)} (${utc(this.result.targetMs)})</p>` : nothing}
+      ${renderClockProblem(this.#wait.problem, words, clock, this.locale, this.context.selection.timeZone)}
+      ${
+        result?.status === "waiting"
+          ? this.#wait.renderWait(words)
+          : result?.status === "selected"
+            ? html`<p role="status" data-test="selected-hour">
+                ${words.chosen}: <strong>${result.identity}</strong>
+              </p>`
+            : nothing
+      }
       <wt-form-actions
-        .error=${this.error ? (this.hourUsed ? words.used : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : this.attempted && !this.#credentials() ? words.missing : ""}
+        .error=${this.error ? words.failed : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : this.attempted && !this.#credentials() ? words.missing : ""}
       >
         <wt-button
           data-test="compare"
           variant=${this.#canCompare ? "primary" : "secondary"}
           ?disabled=${this.busy || !this.#canCompare}
-          @click=${() => void this.#run("compare")}
-          >${this.comparison || this.result ? words.again : words.compare}</wt-button
+          @click=${() => void this.#compare()}
+          >${this.comparison || result ? words.again : words.compare}</wt-button
         >
         <wt-button
           data-test="select"
-          variant=${this.#canSelect ? "primary" : "secondary"}
-          ?disabled=${this.busy || !this.#canSelect}
-          @click=${() => void this.#run("select")}
+          variant=${canSelect ? "primary" : "secondary"}
+          ?disabled=${!canSelect}
+          @click=${() => void this.#select()}
           >${words.select}</wt-button
         >
         <wt-button data-test="clear" variant="secondary" @click=${() => this.clear()}

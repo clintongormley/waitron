@@ -41,7 +41,9 @@ for (const theme of ["light", "dark"] as const)
             "invalid",
             "compared",
             "disagreement",
+            "second-clock",
             "waiting",
+            "later",
             "selected",
             "refusal",
           ] as const) {
@@ -54,10 +56,14 @@ for (const theme of ["light", "dark"] as const)
                   upperMs: instant + (state === "disagreement" ? 180_000 : 0),
                 },
               ],
-              unavailable: [{ source: "internet", result: "unavailable", reason: "tls" }],
+              unavailable: [
+                { source: "internet", result: "unavailable", reason: "tls" },
+                ...(state === "second-clock"
+                  ? [{ source: "browser", result: "unavailable", reason: "same_machine" }]
+                  : []),
+              ],
+              secondClock: state !== "second-clock",
               disagreement: state === "disagreement",
-              requiresConfirmation: state === "disagreement",
-              boundaryWait: false,
               releaseBlocked: false,
               rangeBlocked: false,
             };
@@ -83,15 +89,30 @@ for (const theme of ["light", "dark"] as const)
                     status: 400,
                   };
                 if (action === "clock-challenge") return { id: "challenge" };
-                if (action === "compare-clocks") return { id: "comparison", clock };
+                if (action === "compare-clocks")
+                  return {
+                    id: "comparison",
+                    clock:
+                      state === "second-clock"
+                        ? { ...clock, usable: clock.usable.slice(0, 1) }
+                        : clock,
+                  };
+                if (action === "preview") return { status: "preview" };
+                if (state === "later")
+                  throw {
+                    code: "sif.allocation_invalid",
+                    params: {
+                      reason: "minute_not_later",
+                      allowedFromMs: Date.parse("2026-10-18T20:04:00Z"),
+                    },
+                  };
                 return state === "waiting"
                   ? {
                       status: "waiting",
                       targetMs: Date.parse("2026-10-18T13:00:00Z"),
                       remainingMs: 1_800_000,
-                      requiresClockConfirmation: false,
                     }
-                  : { status: "selected", identity: "06TH", binding, input: { selected: true } };
+                  : { status: "selected", identity: "0CSQW", binding, input: { selected: true } };
               },
             }) as RecoveryHourEntry;
             host.append(el);
@@ -109,23 +130,11 @@ for (const theme of ["light", "dark"] as const)
                 input.value = value!;
                 input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
               }
-              const codes = el.shadowRoot!.querySelector<LitElement>(
-                '[name="recovery-installation-codes"]',
-              )!;
-              await codes.updateComplete;
-              const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-              codeInput.value = "06RB";
-              codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
               for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
                 const input = el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
                 input.checked = true;
                 input.dispatchEvent(new Event("change"));
               }
-              const radio = el.shadowRoot!.querySelector<HTMLInputElement>(
-                `[name="taxpayer-hour"][value="${state === "waiting" ? "unknown" : "no"}"]`,
-              )!;
-              radio.checked = true;
-              radio.dispatchEvent(new Event("change"));
               await vi.waitFor(() =>
                 expect(
                   (
@@ -150,13 +159,16 @@ for (const theme of ["light", "dark"] as const)
                 await vi.waitFor(() =>
                   expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
                 );
-              if (state === "waiting" || state === "selected") {
+              if (state !== "compared" && state !== "refusal") {
                 el.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
-                await vi.waitFor(() =>
-                  expect(el.shadowRoot!.textContent).toContain(
-                    state === "selected" ? "06TH" : "2026-10-18T13:00:00.000Z",
-                  ),
-                );
+                const shown: string = {
+                  disagreement: "[data-test=clock-refused]",
+                  "second-clock": "[data-test=clock-wait]",
+                  waiting: "[data-test=remaining]",
+                  later: "[data-test=minute-not-later]",
+                  selected: "[data-test=selected-hour]",
+                }[state]!;
+                await vi.waitFor(() => expect(el.shadowRoot!.querySelector(shown)).not.toBeNull());
               }
             }
             await el.updateComplete;

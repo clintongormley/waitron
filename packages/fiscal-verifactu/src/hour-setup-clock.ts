@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { DeploymentEnvironment } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { compareHourClocks, confirmHourClock, type HourClockObservation } from "./hour-clock.js";
+import {
+  canSelectHour,
+  compareHourClocks,
+  type HourClockDecision,
+  type HourClockObservation,
+} from "./hour-clock.js";
 import { observeInternetHourClock } from "./hour-clock-internet.js";
 import { readHourRelease } from "./hour-release.js";
 import "./errors.js";
@@ -22,10 +27,17 @@ interface Reading {
   readonly wall: number;
   readonly monotonic: number;
 }
+export interface SetupClockClient {
+  readonly onBox: boolean;
+}
 interface Session {
-  challenge?: { id: string; wall: number; monotonic: number };
-  comparison?: object;
-  reading?: Reading;
+  readonly challenges: Map<string, { wall: number; monotonic: number }>;
+  readonly readings: Map<string, Reading>;
+}
+const PER_SESSION = 8;
+function keep<T>(map: Map<string, T>, id: string, value: T) {
+  if (map.size === PER_SESSION) map.delete(map.keys().next().value!);
+  map.set(id, value);
 }
 function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -43,7 +55,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
     if (value === undefined) {
       // A bounded process-local cache grants nothing after eviction or restart.
       if (sessions.size === 64) sessions.delete(sessions.keys().next().value!);
-      value = {};
+      value = { challenges: new Map(), readings: new Map() };
       sessions.set(key, value);
     }
     return value;
@@ -72,31 +84,32 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
   return {
     challenge(key: string) {
       const state = session(key);
-      state.challenge = { id: randomUUID(), wall: wall(), monotonic: monotonic() };
-      state.comparison = undefined;
-      state.reading = undefined;
-      return { id: state.challenge.id, boxInstantMs: state.challenge.wall, expiresInMs: 5000 };
+      const id = randomUUID();
+      const issued = { wall: wall(), monotonic: monotonic() };
+      keep(state.challenges, id, issued);
+      return { id, boxInstantMs: issued.wall, expiresInMs: 5000 };
     },
     async compare(
       key: string,
       environment: DeploymentEnvironment,
       browser: SetupBrowserClockSample | null,
+      client: SetupClockClient,
     ) {
       const state = session(key);
-      const challenge = state.challenge;
-      if (challenge !== undefined && browser?.challengeId === challenge.id)
-        state.challenge = undefined;
-      state.reading = undefined;
-      const comparison = {};
-      state.comparison = comparison;
+      const challenge =
+        browser === null || typeof browser.challengeId !== "string"
+          ? undefined
+          : state.challenges.get(browser.challengeId);
+      if (challenge !== undefined) state.challenges.delete(browser!.challengeId);
       const received = box();
       const elapsed =
         challenge === undefined ? NaN : received.monotonicFinishedMs - challenge.monotonic;
       const observations: HourClockObservation[] = [];
-      if (
+      if (browser !== null && client.onBox)
+        observations.push({ source: "browser", result: "unavailable", reason: "same_machine" });
+      else if (
         browser !== null &&
         challenge !== undefined &&
-        browser.challengeId === challenge.id &&
         Number.isSafeInteger(browser.instantMs) &&
         Number.isFinite(elapsed) &&
         elapsed >= 0 &&
@@ -115,8 +128,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         });
       } else observations.push({ source: "browser", result: "unavailable", reason: "challenge" });
       observations.push(structuredClone(await internet(environment)));
-      if (sessions.get(key) !== state || state.comparison !== comparison)
-        return refuse("clock_stale");
+      if (sessions.get(key) !== state) return refuse("clock_stale");
       const sample = box();
       const clock = compareHourClocks([...observations, sample], release());
       const reading: Reading = {
@@ -125,25 +137,39 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         wall: sample.wallFinishedMs,
         monotonic: sample.monotonicFinishedMs,
       };
-      state.reading = reading;
+      keep(state.readings, reading.id, reading);
       return { id: reading.id, clock };
     },
-    read(key: string, confirmationId?: string) {
+    /** With no `comparisonId`, the newest fresh reading that admits a name, else the newest's answer. */
+    read(key: string, comparisonId?: string) {
       const state = session(key);
-      if (state.reading === undefined) return refuse("clock_stale");
-      let clock: ReturnType<typeof compareHourClocks>;
-      try {
-        clock = current(state.reading, box());
-      } catch (error) {
-        state.reading = undefined;
-        throw error;
-      }
-      if (confirmationId !== undefined && confirmationId !== state.reading.id)
-        return refuse("clock_confirmation_required");
-      return {
-        clock,
-        ...(confirmationId === undefined ? {} : { confirmation: confirmHourClock(clock) }),
+      const check = (id: string) => {
+        const held = state.readings.get(id);
+        if (held === undefined) return refuse("clock_stale");
+        try {
+          return current(held, box());
+        } catch (error) {
+          state.readings.delete(id);
+          throw error;
+        }
       };
+      if (comparisonId !== undefined) return { clock: check(comparisonId) };
+      const ids = [...state.readings.keys()].reverse();
+      if (ids.length === 0) return refuse("clock_stale");
+      let newest: { clock: HourClockDecision } | { error: unknown } | undefined;
+      for (const id of ids) {
+        let clock: HourClockDecision;
+        try {
+          clock = check(id);
+        } catch (error) {
+          newest ??= { error };
+          continue;
+        }
+        if (canSelectHour(clock)) return { clock };
+        newest ??= { clock };
+      }
+      if ("error" in newest!) throw newest.error;
+      return { clock: newest!.clock };
     },
   };
 }

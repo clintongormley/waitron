@@ -3453,24 +3453,46 @@ venue has ONE node and no failover at all until slice 3 (2026-09-19,
 
 **Provisioning and boot**
 
-## A restore selects a fresh hour; the working-time chain continues
+## A restore names a fresh minute; the working-time chain continues
 
-On the A679 candidate, authenticate with the recovery key matching the selected backup and
-confirm that the former seller is stopped and no parallel recovery is underway. The module
-selects an eligible UTC hour strictly later than its known history. It retains recovered
-invoices and counters, retires recovered active series and activates the fresh complete series
-set. The public production preparation API does not fall back to signed paper, Cloud receipts
-or random emergency identities from environment files. Follow
-[recovery with an hour code](../operations/hour-recovery.md).
+Authenticate with the recovery key matching the selected backup and confirm that the former
+seller is stopped and no parallel recovery is underway. No installation code is typed
+(`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no installation-code
+field"). The module names the new series from the box's clock, five symbols for the UTC minute,
+after a second clock on another machine agrees within 30 seconds
+(`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
+seconds of the box"). The minute is strictly later than every name in the history it can read
+(`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
+the surviving database") and begins no earlier than the backup's newest record or creation time
+(`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"), and is taken 90 to 150
+seconds after the clock check (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore
+waits until a minute start 90 to 150 seconds after its check"). It retains recovered invoices
+and counters, retires recovered active series and activates the fresh complete series set. The
+public production preparation API does not fall back to signed paper, Cloud receipts or random
+emergency identities from environment files. Follow
+[recovering a box](../operations/hour-recovery.md).
+
+The one allocation outside the clock rule is the preproduction throwaway
+(`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`). Demo and Preparation setups take
+it, as does a Live setup through the setup page on a development box (`throwawayMarker`,
+`apps/server/src/setup-api.ts`), and so does the readiness sample
+(`packages/provisioning/src/fiscal-readiness-runner.ts`). It names from the box's clock with no
+second clock and no history check, and is refused outside preproduction
+(`packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts`).
+
+`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts` is weaker than its name: it
+has restore cases and one promotion, no setup or re-registration case, and a reference clock more
+than 15 seconds wrong can still repeat a name (its ±45.5 s control).
 
 Cold restore checks the key saved in the selected backup; live takeover checks the live
 verifier. Keep older named paper keys while their backups remain. The archive password is
-separate. Hour selection does not discover all missing history or stop a returning old seller.
-Archive and bucket input remain mutually exclusive.
+separate. Name selection does not discover names made after the backup or by a box this one
+never saw, and does not stop a returning old seller. Archive and bucket input remain mutually
+exclusive.
 
 The working-time chain continues from the backup's head. Its surviving-fork refusal is checked
-by `packages/workforce/src/restore-continuation.test.ts`; hour naming does not transfer working-
-time rows between nodes.
+by `packages/workforce/src/restore-continuation.test.ts`; minute naming does not transfer
+working-time rows between nodes.
 
 ### Historical signed-allocation restore qualification
 

@@ -40,6 +40,8 @@ export function createFirstSetupModuleHost(options: {
     NonNullable<import("@waitron/provisioning").FirstSetupFrozen["configurationImport"]>
   >;
   assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
+  testClock?: ModuleOperationHost["testClock"];
+  grantClock?: () => number;
 }) {
   const evidence: {
     current?: {

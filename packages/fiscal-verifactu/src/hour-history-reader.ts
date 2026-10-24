@@ -4,10 +4,12 @@ import {
   type Transaction,
   type DeploymentEnvironment,
 } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import type { HourHistorySource } from "./hour-history.js";
-import { isHourAllocatedSeries } from "./hour-identity.js";
+import { isMinuteAllocatedSeries, isMinuteSeriesBases } from "./hour-identity.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { registroSif } from "./schema/sif.js";
 
 function validBases(value: unknown): value is { code: string; purpose: string }[] {
@@ -20,11 +22,7 @@ function validBases(value: unknown): value is { code: string; purpose: string }[
         typeof base.code === "string" &&
         typeof base.purpose === "string",
     ) &&
-    isHourAllocatedSeries(
-      value.map((base) => ({ code: `${base.code}-0000`, purpose: base.purpose })),
-      "0000",
-      value,
-    )
+    isMinuteSeriesBases(value)
   );
 }
 function time(...values: (Date | string | null | undefined)[]): number | null {
@@ -153,9 +151,9 @@ export async function readHourHistory(
       result?.activationEventId !== row.eventKey ||
       result.sifId !== row.sifId ||
       !validBases(row.bases) ||
-      !isHourAllocatedSeries(allocation.series, row.installationIdentity, row.bases) ||
+      !isMinuteAllocatedSeries(allocation.series, row.installationIdentity, row.bases) ||
       !Array.isArray(result.series) ||
-      !isHourAllocatedSeries(result.series, row.installationIdentity, row.bases) ||
+      !isMinuteAllocatedSeries(result.series, row.installationIdentity, row.bases) ||
       result.series.some(
         (entry) =>
           !series.some(
@@ -201,4 +199,24 @@ export async function readHourHistory(
     });
   }
   return { reference: "venue", complete, records };
+}
+
+// No index covers this column, so this reads every fiscal record: keep it off any path a trading box runs.
+export async function readNewestRecordTime(tx: Transaction): Promise<number | null> {
+  const [newest] = await tx
+    .select({
+      generatedAt: sql<string | null>`max(${registrosFacturacion.fechaHoraHusoGenRegistro})`,
+    })
+    .from(registrosFacturacion);
+  const generatedAt = newest?.generatedAt ?? null;
+  return generatedAt === null ? null : Date.parse(generatedAt);
+}
+
+export async function readHourHistoryWithRecordFloor(
+  tx: Transaction,
+  environment: DeploymentEnvironment | null,
+): Promise<HourHistorySource> {
+  const source = await readHourHistory(tx, environment);
+  const timeFloorMs = await readNewestRecordTime(tx);
+  return timeFloorMs === null ? source : { ...source, timeFloorMs };
 }

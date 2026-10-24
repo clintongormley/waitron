@@ -40,7 +40,7 @@ afterAll(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true });
 });
 
-it("the built command resumes its kept hour and PDF after a preactivation refusal in another process", async () => {
+it("the built command waits, then takes its name in another process and resumes its kept name and PDF after a preactivation refusal", async () => {
   const target = join(directory!, "venue");
   const stateDir = join(directory!, "state");
   const pdfPath = join(directory!, "kept.pdf");
@@ -49,21 +49,30 @@ it("the built command resumes its kept hour and PDF after a preactivation refusa
   const source = databases.rows.find((row) => row.name === "main")!.file;
   for (const name of ["venue.db", "venue.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
-  const preload = join(directory!, "clock.mjs");
-  await writeFile(
-    preload,
-    `import https from "node:https";
+  async function clockAt(instant: string) {
+    const preload = join(directory!, `clock-${instant.replaceAll(":", "")}.mjs`);
+    await writeFile(
+      preload,
+      `import https from "node:https";
+import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
-syncBuiltinESMExports();
 const RealDate = Date;
+const date = new RealDate(${JSON.stringify(instant)}).toUTCString();
+https.request = (_url, _options, respond) => {
+  const request = new EventEmitter();
+  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
+  return request;
+};
+syncBuiltinESMExports();
 globalThis.Date = class extends RealDate {
-  constructor(...args) { super(...(args.length ? args : ["2026-10-18T11:40:00Z"])); }
-  static now() { return RealDate.parse("2026-10-18T11:40:00Z"); }
+  constructor(...args) { super(...(args.length ? args : [${JSON.stringify(instant)}])); }
+  static now() { return RealDate.parse(${JSON.stringify(instant)}); }
 };
 Object.defineProperty(performance, "now", { value: () => 0 });
 `,
-  );
+    );
+    return preload;
+  }
   const values = {
     "venue-dir": target,
     country: "ES",
@@ -87,7 +96,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "admin-email": "owner@example.test",
     "recovery-pdf": pdfPath,
   };
-  async function run(origin: string) {
+  async function run(origin: string, preload: string) {
     const child = spawn(
       process.execPath,
       [
@@ -116,11 +125,6 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     let output = "",
       errors = "";
     const answers = [
-      ["The box's displayed date and time are correct? [y/N]: ", "yes"],
-      [
-        "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
-        "no",
-      ],
       ["Confirm setup password: ", "SYNTHETIC-owner-password"],
       ["Have you kept this recovery PDF? [y/N]: ", "yes"],
     ];
@@ -145,7 +149,19 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     });
     return { code, errors, childError, output };
   }
-  const first = await run("");
+  const waited = await run("", await clockAt("2026-10-18T11:38:00Z"));
+  expect(
+    { code: waited.code, errors: waited.errors, childError: waited.childError },
+    waited.output,
+  ).toEqual({ code: 1, errors: "", childError: undefined });
+  expect(waited.output).toContain(
+    "Waiting to confirm the time, so no invoice series is ever repeated.\nContinues at 2026-10-18T11:40:00.000Z; run the command again within a minute after that time (later, it waits again).\n",
+  );
+  expect(waited.output).not.toContain("[no/yes/unknown]");
+  expect(JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8")).status).toBe(
+    "claimed",
+  );
+  const first = await run("", await clockAt("2026-10-18T11:40:00Z"));
   expect(
     { code: first.code, errors: first.errors, childError: first.childError },
     first.output,
@@ -162,7 +178,10 @@ Object.defineProperty(performance, "now", { value: () => 0 });
   } finally {
     await empty.close();
   }
-  const second = await run("https://olivo.example.test:3443");
+  const second = await run(
+    "https://olivo.example.test:3443",
+    await clockAt("2026-10-18T11:40:00Z"),
+  );
   expect(
     { code: second.code, errors: second.errors, childError: second.childError },
     second.output,
@@ -178,14 +197,15 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     await readFile(join(stateDir, "module-preparation-state.json"), "utf8"),
   );
   expect(journal.revisions.at(-1).value.entries).toMatchObject([
-    { kind: "intent", identity: "06SV" },
-    { kind: "resume", identity: "06SV" },
+    { kind: "wait", targetMs: Date.parse("2026-10-18T11:40:00Z") },
+    { kind: "intent", identity: "0CRFW" },
+    { kind: "resume", identity: "0CRFW" },
   ]);
   const stored = await openVenueDatabase(target);
   try {
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
     const series = await stored.venue.select().from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-06SV", "FF-06SV", "R-06SV"]);
+    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
     expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   } finally {
     await stored.close();

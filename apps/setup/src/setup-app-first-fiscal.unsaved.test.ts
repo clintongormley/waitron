@@ -4,7 +4,7 @@ import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import { wizardApi, venue } from "../test/first-setup-browser.js";
+import { wizardApi, venue, initial } from "../test/first-setup-browser.js";
 const hosts: HTMLElement[] = [];
 afterEach(async () => {
   hosts.splice(0).forEach((host) => host.remove());
@@ -27,7 +27,36 @@ async function screen(app: SetupApp, name: string) {
   return el;
 }
 it("protects a nested module draft through the wizard's real leave coordinator", async () => {
-  const { api } = wizardApi();
+  const instant = Date.now();
+  const { api } = wizardApi({
+    intercept(path, body) {
+      if (!path.endsWith("/preparation")) return undefined;
+      const action = (body as { proposal: { action: string } }).proposal.action;
+      return Response.json({
+        state: initial,
+        preparation:
+          action === "clock-challenge"
+            ? { id: "challenge" }
+            : action === "selection"
+              ? { status: "preview" }
+              : {
+                  id: "comparison",
+                  clock: {
+                    usable: ["box", "browser"].map((source) => ({
+                      source,
+                      lowerMs: instant,
+                      upperMs: instant,
+                    })),
+                    unavailable: [],
+                    secondClock: true,
+                    disagreement: false,
+                    releaseBlocked: false,
+                    rangeBlocked: false,
+                  },
+                },
+      });
+    },
+  });
   const host = document.createElement("div");
   document.body.append(host);
   applyTokens(host);
@@ -51,8 +80,11 @@ it("protects a nested module draft through the wizard's real leave coordinator",
     "vf-first-setup-hour",
   )!;
   await hour.updateComplete;
+  await expect
+    .poll(() => hour.shadowRoot!.querySelector("[data-test=clock-readings]"))
+    .not.toBeNull();
   const answer = hour.shadowRoot!.querySelector<HTMLInputElement>(
-    'input[name="taxpayer-hour"][value="yes"]',
+    'input[name="setup-details-confirmed"]',
   )!;
   await userEvent.click(answer);
   await hour.updateComplete;
@@ -76,7 +108,7 @@ it("protects a nested module draft through the wizard's real leave coordinator",
   await app.updateComplete;
   expect(app.shadowRoot!.querySelector("[data-test=screen-first-setup]")).not.toBeNull();
   expect(
-    hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="taxpayer-hour"][value="yes"]')!
+    hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!
       .checked,
   ).toBe(true);
   emit(app, "setup-goto", { screen: "email" });

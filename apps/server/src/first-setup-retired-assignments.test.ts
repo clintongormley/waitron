@@ -13,12 +13,17 @@ import {
   readFirstSetupRetirements,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import { encodeHourIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
+import {
+  createFakeTimersHourClock,
+  selectPastWaits,
+  type HourTestClock,
+} from "./testing/hour-test-clock.js";
 import { ALL_MODULES } from "@waitron/composition";
 
 const outside = vi.hoisted(() => ({ internet: vi.fn(), release: vi.fn() }));
@@ -33,23 +38,22 @@ const roots: string[] = [];
 const modules = ALL_MODULES.filter((m) => ["core", MODULE, "fiscal-none"].includes(m.name));
 const first = Date.parse("2026-10-16T11:40:00.000Z");
 const instant = (index: number) => first + (index - 1) * 3_600_000;
+let clock: HourTestClock;
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(first);
+  clock = createFakeTimersHourClock();
   outside.release.mockReturnValue({ instantMs: first - 86_400_000 });
-  outside.internet.mockImplementation(async () => {
-    const mono = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: Date.now(),
-      uncertaintyMs: 500,
-      wallStartedMs: Date.now(),
-      wallFinishedMs: Date.now(),
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  });
+  outside.internet.mockImplementation(async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: clock.wall(),
+    wallFinishedMs: clock.wall(),
+    monotonicStartedMs: clock.monotonic(),
+    monotonicFinishedMs: clock.monotonic(),
+  }));
 });
 afterEach(async () => {
   vi.useRealTimers();
@@ -68,27 +72,40 @@ function ownerFor(state: FirstSetupState, capability: string) {
 }
 async function compare(host: Host, state: FirstSetupState, capability: string) {
   const owner = ownerFor(state, capability);
-  const challenge = (await host.preparation.prepare(owner, MODULE, {
-    action: "clock-challenge",
-  })) as { id: string };
-  await host.preparation.prepare(owner, MODULE, {
-    action: "compare-clocks",
-    browser: { challengeId: challenge.id, instantMs: Date.now() },
-  });
-}
-async function choose(host: Host, state: FirstSetupState, capability: string) {
-  await compare(host, state, capability);
-  const owner = ownerFor(state, capability);
-  return host.preparation.select(
+  const challenge = (await host.preparation.prepare(
     owner,
     MODULE,
-    { answer: "no" },
-    await host.owner.reconfirm(owner, PASSWORD, "block-use"),
-  );
+    {
+      action: "clock-challenge",
+    },
+    { onBox: true },
+  )) as { id: string };
+  const compared = (await host.preparation.prepare(
+    owner,
+    MODULE,
+    {
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: clock.wall() },
+    },
+    { onBox: true },
+  )) as { id: string };
+  return compared.id;
+}
+function choose(host: Host, state: FirstSetupState, capability: string) {
+  const owner = ownerFor(state, capability);
+  return selectPastWaits(clock, async () => {
+    const comparisonId = await compare(host, state, capability);
+    return host.preparation.select(
+      owner,
+      MODULE,
+      { comparisonId },
+      await host.owner.reconfirm(owner, PASSWORD, "block-use"),
+    );
+  });
 }
 function selectedRequest(state: FirstSetupState, index: number) {
   const context = firstSetupModuleContext(state, MODULE);
-  const identity = encodeHourIdentity(instant(index));
+  const identity = encodeMinuteIdentity(instant(index));
   return {
     kind: "waitron-hour-setup",
     status: "selected",
@@ -121,7 +138,7 @@ function retainedHour(index = 42, softwareId = "W1") {
             environment: "production",
             softwareId,
             nodeId: "retired-peer",
-            identity: encodeHourIdentity(instant(index)),
+            identity: encodeMinuteIdentity(instant(index)),
             recordedAtMs: instant(index),
           },
         ],
@@ -163,18 +180,21 @@ async function fixture(
     : [retained.previousIndex, retiredIndex]) {
     vi.setSystemTime(instant(hour));
     if (hour !== retiredIndex) {
-      await compare(oldHost, old, oldClaim.capability);
       const owner = ownerFor(old, oldClaim.capability);
       const grant = await oldHost.owner.reconfirm(owner, PASSWORD, "block-use");
       const context = firstSetupModuleContext(old, MODULE);
       const seat = initialSetupFor(oldHost.modules, MODULE)!;
       await oldHost.owner.consumeReconfirmation(owner, grant, "block-use");
-      const candidates = await oldHost.withPreparationAuthorization(
-        async () => {
+      const candidates = await selectPastWaits(clock, async () => {
+        const comparisonId = await compare(oldHost, old, oldClaim.capability);
+        const authorize = async () => {
           await oldHost.owner.authorize(owner);
-        },
-        async () => seat.candidates(context, { answer: "no" }),
-      );
+        };
+        return oldHost.withPreparationAuthorization(
+          { intent: authorize, wait: authorize },
+          async () => seat.candidates(context, { comparisonId }),
+        );
+      });
       old = await oldHost.store.update(old.frozen.attemptId, old.revision, {
         kind: "candidates",
         module: MODULE,
@@ -367,27 +387,34 @@ it.each([1, 2])(
       { mountSetup } = await import("./setup-api.js");
     const app = new Hono();
     mountSetup(app, { environment: "production", firstFiscal: f.host }, () => {});
-    await compare(f.host, f.state, f.claim.capability);
     const owner = ownerFor(f.state, f.claim.capability);
-    const response = await app.request("/setup-api/first-setup/candidates", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Waitron-Setup-Owner": owner.capability,
-        "X-Waitron-Setup-Attempt": owner.attemptId,
-        "X-Waitron-Setup-Revision": String(owner.revision),
-        "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
-      },
-      body: JSON.stringify({
-        module: MODULE,
-        proposal: { answer: "no" },
-        reconfirmation: await f.host.owner.reconfirm(owner, PASSWORD, "block-use"),
-      }),
+    const response = await selectPastWaits(clock, async () => {
+      const comparisonId = await compare(f.host, f.state, f.claim.capability);
+      const sent = await app.request("/setup-api/first-setup/candidates", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Waitron-Setup-Owner": owner.capability,
+          "X-Waitron-Setup-Attempt": owner.attemptId,
+          "X-Waitron-Setup-Revision": String(owner.revision),
+          "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
+        },
+        body: JSON.stringify({
+          module: MODULE,
+          proposal: { comparisonId },
+          reconfirmation: await f.host.owner.reconfirm(owner, PASSWORD, "block-use"),
+        }),
+      });
+      const body = (await sent.json()) as { preparation?: unknown };
+      return { code: sent.status, body, preparation: body.preparation };
     });
-    expect(response.status).toBe(index === 1 ? 400 : 200);
+    expect(response.code).toBe(index === 1 ? 400 : 200);
     if (index === 1) {
-      expect(await response.json()).toEqual({
-        error: { code: "sif.allocation_invalid", params: { reason: "hour_not_later" } },
+      expect(response.body).toEqual({
+        error: {
+          code: "sif.allocation_invalid",
+          params: { reason: "minute_not_later", allowedFromMs: instant(1) + 180_000 },
+        },
       });
       expect(await f.host.store.read()).toEqual(f.state);
     } else {
@@ -396,7 +423,7 @@ it.each([1, 2])(
       expect(
         (current.frozen.modules.find((m) => m.module === MODULE)!.request as { identity: string })
           .identity,
-      ).toBe("06RC");
+      ).toBe("0CNQT");
     }
   },
 );
@@ -574,12 +601,12 @@ it.each(["reuse", "later"])(
     expect(
       (previous.frozen.modules.find((m) => m.module === MODULE)!.request as { identity: string })
         .identity,
-    ).toBe("06SM");
+    ).toBe("0CR2T");
     const selection = choose(f.host, f.state, f.claim.capability);
     if (which === "reuse")
       await expect(selection).rejects.toMatchObject({
         code: "sif.allocation_invalid",
-        params: { reason: "hour_not_later" },
+        params: { reason: "minute_not_later" },
       });
     else {
       const result = await selection;
@@ -588,7 +615,7 @@ it.each(["reuse", "later"])(
         identity: string;
         input: unknown;
       };
-      expect(selected.identity).toBe("06SP");
+      expect(selected.identity).toBe("0CR6J");
       const path = join(f.old.stateDir, "module-preparation-state.json");
       const journal = await readFile(path);
       const restart = createFirstSetupModuleHost({
@@ -606,11 +633,12 @@ it.each(["reuse", "later"])(
         ownerFor(result.state, f.claim.capability),
         MODULE,
         { action: "selection" },
+        { onBox: true },
       );
       expect(preview).toMatchObject({
         status: "selected",
-        identity: "06SP",
-        issuedAt: "2026-10-18T06:40:00.000Z",
+        identity: "0CR6J",
+        issuedAt: "2026-10-18T06:42:00.001Z",
       });
       const input = selected.input as ReturnType<typeof hourSetupInput>;
       const previousRequest = previous.frozen.modules.find((m) => m.module === MODULE)!.request as {

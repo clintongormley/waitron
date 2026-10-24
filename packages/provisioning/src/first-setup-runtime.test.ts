@@ -111,7 +111,7 @@ it("includes a revoked identity on another node in the actual local history", as
       nodeId: TENANT_A.nodeId,
       nif: "89890001K",
       idSistemaInformatico: "OTHER",
-      numeroInstalacion: "06RC",
+      numeroInstalacion: "0CNPH",
       registradoEn: new Date("2026-10-16T12:01:00Z"),
       revocadoEn: new Date("2026-10-16T12:02:00Z"),
     });
@@ -123,7 +123,7 @@ it("includes a revoked identity on another node in the actual local history", as
     complete: true,
     records: [
       expect.objectContaining({
-        identity: "06RC",
+        identity: "0CNPH",
         nodeId: TENANT_A.nodeId,
         softwareId: "OTHER",
         environment: "preproduction",
@@ -190,8 +190,7 @@ it("refuses facts when another enabled module's frozen version changes", async (
   expect(f.database).not.toHaveBeenCalled();
 });
 
-function currentClock() {
-  const instantMs = Date.parse("2026-10-16T11:40:00Z");
+function currentClock(instantMs = Date.parse("2026-10-16T11:40:00Z")) {
   return compareHourClocks(
     ["box", "browser"].map((source) => ({
       source: source as "box" | "browser",
@@ -206,25 +205,50 @@ function currentClock() {
     Date.parse("2026-10-15T00:00:00Z"),
   );
 }
+type ReadClock = NonNullable<
+  NonNullable<Parameters<typeof hour.createHostedHourPreparation>[1]>["readClock"]
+>;
+/**
+ * Selects through the real host, each time with a fresh owner password grant, and while the
+ * selection waits, moves its clocks (wall and monotonic together) 1 ms past the target and asks
+ * again.
+ */
 async function selectThroughHost(
   f: Awaited<ReturnType<typeof fixture>>,
-  readClock = async () => ({ clock: currentClock() }),
+  readClock: (instantMs: number) => ReadClock = (instantMs) => async () => ({
+    clock: currentClock(instantMs),
+  }),
 ) {
   const owner = { ...f.claim.state, capability: f.claim.capability };
-  const reconfirmation = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
+  let instantMs = Date.parse("2026-10-16T11:40:00Z");
+  let monotonic = 0;
   const preparation = hour.createHostedHourPreparation(f.bound, {
-    monotonicNow: () => 0,
-    readClock,
+    monotonicNow: () => monotonic,
+    readClock: (context) => readClock(instantMs)(context),
   });
-  return f.host.coordinator.run((hold) =>
-    f.host.withPreparationAuthorization(
-      () => f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
-      () =>
-        withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-          preparation.select({ binding: f.context.binding, authority, answer: "no" }),
-        ),
-    ),
-  );
+  for (let round = 0; ; round++) {
+    const reconfirmation = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
+    const result = await f.host.coordinator.run((hold) =>
+      f.host.withPreparationAuthorization(
+        {
+          intent: () =>
+            f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
+          wait: () => f.host.owner.checkReconfirmation(owner, reconfirmation, "block-use", hold),
+        },
+        () =>
+          withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
+            preparation.select({
+              binding: f.context.binding,
+              authority,
+              comparisonId: "comparison",
+            }),
+          ),
+      ),
+    );
+    if (result.status !== "waiting" || round === 3) return result;
+    monotonic += result.targetMs + 1 - instantMs;
+    instantMs = result.targetMs + 1;
+  }
 }
 
 it.each(["production", "preproduction"] as const)(
@@ -235,16 +259,16 @@ it.each(["production", "preproduction"] as const)(
     const selection = await selectThroughHost(f);
     expect(selection).toMatchObject({
       status: "selected",
-      identity: "06RB",
+      identity: "0CNNY",
       scope: { taxpayerNif: request.taxId, environment },
       input: {
         allocation: {
           environment,
-          installationIdentity: "06RB",
+          installationIdentity: "0CNNY",
           series: [
-            { code: "A-06RB", purpose: "standard" },
-            { code: "FF-06RB", purpose: "full" },
-            { code: "R-06RB", purpose: "rectificative" },
+            { code: "A-0CNNY", purpose: "standard" },
+            { code: "FF-0CNNY", purpose: "full" },
+            { code: "R-0CNNY", purpose: "rectificative" },
           ],
         },
       },
@@ -260,7 +284,7 @@ it("the hosted selector refuses an older hour than another node's revoked real i
       nodeId: TENANT_A.nodeId,
       nif: request.taxId,
       idSistemaInformatico: "OTHER",
-      numeroInstalacion: "06RC",
+      numeroInstalacion: "0CNPH",
       registradoEn: new Date("2026-10-16T12:01:00Z"),
       revocadoEn: new Date("2026-10-16T12:02:00Z"),
     });
@@ -268,7 +292,7 @@ it("the hosted selector refuses an older hour than another node's revoked real i
   const f = await fixture();
   await expect(selectThroughHost(f)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "hour_not_later" },
+    params: { reason: "minute_not_later" },
   });
 });
 
@@ -280,12 +304,12 @@ it("an imported setup retains its fresh host identity and exact configured base 
     binding: f.context.binding,
     input: {
       allocation: {
-        installationIdentity: "06RB",
+        installationIdentity: "0CNNY",
         environment: "production",
         series: [
-          { code: "FF-06RB", purpose: "full" },
-          { code: "R-06RB", purpose: "rectificative" },
-          { code: "a/B_1.2-3-06RB", purpose: "standard" },
+          { code: "FF-0CNNY", purpose: "full" },
+          { code: "R-0CNNY", purpose: "rectificative" },
+          { code: "a/B_1.2-3-0CNNY", purpose: "standard" },
         ],
       },
     },
@@ -305,7 +329,7 @@ it("the hosted selector refuses an occupied inventory with no deployment stamp",
       nodeId: TENANT_A.nodeId,
       nif: request.taxId,
       idSistemaInformatico: "OTHER",
-      numeroInstalacion: "06RA",
+      numeroInstalacion: "0CNM0",
     });
   });
   const f = await fixture();
@@ -375,33 +399,19 @@ it("owner recovery invalidates the previously selected setup fingerprint", async
 
 it("a clock provider cannot replace the host's scope or bases", async () => {
   const f = await fixture();
-  const owner = { ...f.claim.state, capability: f.claim.capability };
-  const grant = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
-  const preparation = hour.createHostedHourPreparation(f.bound, {
-    monotonicNow: () => 0,
-    readClock: async (context) => {
-      Object.assign(context, { taxId: "89890001K", environment: "production" });
-      Object.assign(context.bases[0]!, { code: "changed" });
-      return {
-        clock: currentClock(),
-        scope: { taxpayerNif: "89890001K", environment: "production" },
-        bases: [
-          { code: "injected", purpose: "standard" },
-          { code: "FF", purpose: "full" },
-          { code: "R", purpose: "rectificative" },
-        ],
-      };
-    },
+  const selection = await selectThroughHost(f, (instantMs) => async (context) => {
+    Object.assign(context, { taxId: "89890001K", environment: "production" });
+    Object.assign(context.bases[0]!, { code: "changed" });
+    return {
+      clock: currentClock(instantMs),
+      scope: { taxpayerNif: "89890001K", environment: "production" },
+      bases: [
+        { code: "injected", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "R", purpose: "rectificative" },
+      ],
+    };
   });
-  const selection = await f.host.coordinator.run((hold) =>
-    f.host.withPreparationAuthorization(
-      () => f.host.owner.consumeReconfirmation(owner, grant, "block-use", hold),
-      () =>
-        withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-          preparation.select({ binding: f.context.binding, authority, answer: "no" }),
-        ),
-    ),
-  );
   expect(selection).toMatchObject({
     status: "selected",
     input: {
@@ -409,9 +419,9 @@ it("a clock provider cannot replace the host's scope or bases", async () => {
         taxpayerNif: request.taxId,
         environment: "preproduction",
         series: [
-          { code: "A-06RB", purpose: "standard" },
-          { code: "FF-06RB", purpose: "full" },
-          { code: "R-06RB", purpose: "rectificative" },
+          { code: "A-0CNNY", purpose: "standard" },
+          { code: "FF-0CNNY", purpose: "full" },
+          { code: "R-0CNNY", purpose: "rectificative" },
         ],
       },
     },
@@ -427,7 +437,11 @@ it("cannot retain an hour selection without a fresh owner password grant", async
   await expect(
     f.host.coordinator.run(() =>
       withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-        preparation.select({ binding: f.context.binding, authority, answer: "no" }),
+        preparation.select({
+          binding: f.context.binding,
+          authority,
+          comparisonId: "comparison",
+        }),
       ),
     ),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
@@ -468,4 +482,38 @@ it("a module cannot read setup facts or enter preparation during host initializa
   await Promise.all(checks);
   expect(configured).toBe(true);
   expect((await f.host.store.read())!.revision).toBe(1);
+});
+
+it("hands a module the public evidence its host was given, for the binding the module names", async () => {
+  const f = await fixture();
+  let bound!: ModuleOperationHost;
+  const modules = f.args.modules.map((module) => {
+    if (module.name !== MODULE) return module;
+    const seat = module.provisioning!.initialSetup!;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning!,
+        initialSetup: {
+          ...seat,
+          configure(host: ModuleOperationHost) {
+            bound = host;
+            return seat.configure!(host);
+          },
+        },
+      },
+    };
+  });
+  const evidence = { trust: "synthetic trust", current: "synthetic current" };
+  const asked: OperationBinding[] = [];
+  createFirstSetupModuleHost({
+    ...f.args,
+    modules,
+    readPublicEvidence: async (binding) => {
+      asked.push(binding);
+      return evidence;
+    },
+  });
+  expect(await bound.readPublicEvidence(f.context.binding)).toBe(evidence);
+  expect(asked).toEqual([f.context.binding]);
 });

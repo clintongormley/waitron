@@ -10,7 +10,7 @@ import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import { withTransaction, stampDeployment, nodeRoles } from "@waitron/db";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
-import { prepareFirstSetupCommand } from "./first-setup-command.js";
+import { prepareCommandPastWaits } from "../test/settle-wait.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { planVenue } from "./venue-plan.js";
@@ -41,10 +41,10 @@ beforeEach(() => {
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "usable",
-    instantMs: NOW,
+    instantMs: Date.now(),
     uncertaintyMs: 500,
-    wallStartedMs: NOW,
-    wallFinishedMs: NOW,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
     monotonicStartedMs: performance.now(),
     monotonicFinishedMs: performance.now(),
   }));
@@ -76,7 +76,7 @@ async function fixture(kept = true) {
     prompt: async () => "no",
     promptSecret: async () => PASSWORD,
   };
-  const prepared = await prepareFirstSetupCommand(
+  const prepared = await prepareCommandPastWaits(
     runtime,
     { ...claim.state, capability: claim.capability },
     io,
@@ -179,9 +179,9 @@ it("commits a real prepared hour only after kept consent and publishes its check
     await venue.db.execute("select code, next_number from invoice_series order by code"),
   ).toMatchObject({
     rows: [
-      { code: "A-06RB", next_number: 1 },
-      { code: "FF-06RB", next_number: 1 },
-      { code: "R-06RB", next_number: 1 },
+      { code: "A-0CNNY", next_number: 1 },
+      { code: "FF-0CNNY", next_number: 1 },
+      { code: "R-0CNNY", next_number: 1 },
     ],
   });
 });

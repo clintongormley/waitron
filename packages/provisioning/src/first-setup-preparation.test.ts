@@ -17,6 +17,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
+import { moveFakeClockPast } from "../test/settle-wait.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -29,15 +30,15 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(NOW);
   external.internet.mockImplementation(async () => ({
     source: "internet",
     result: "usable",
-    instantMs: NOW,
+    instantMs: Date.now(),
     uncertaintyMs: 500,
-    wallStartedMs: NOW,
-    wallFinishedMs: NOW,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
     monotonicStartedMs: performance.now(),
     monotonicFinishedMs: performance.now(),
   }));
@@ -70,26 +71,48 @@ async function fixture(
     randomBytes(32).toString("base64url"),
   );
   let owner = { ...claim.state, capability: claim.capability };
-  const compare = () =>
-    host.preparation.prepare(owner, MODULE, {
-      action: "compare-clocks",
-      browser: null,
-    });
-  const select = async (answer = "no", proof?: string) => {
+  let comparisonId = "no-comparison";
+  const compare = async () => {
+    const compared = (await host.preparation.prepare(
+      owner,
+      MODULE,
+      {
+        action: "compare-clocks",
+        browser: null,
+      },
+      { onBox: true },
+    )) as { id: string };
+    comparisonId = compared.id;
+    return compared;
+  };
+  const select = async (proof?: string) => {
     const result = await host.preparation.select(
       owner,
       MODULE,
-      { answer },
+      { comparisonId },
       proof ?? (await host.owner.reconfirm(owner, PASSWORD, "block-use")),
     );
     if (result) owner = { ...owner, revision: result.state.revision };
     return result;
+  };
+  /** Compares and selects, and while the selection waits, moves the faked clock past it and repeats. */
+  const selectPastWaits = async () => {
+    for (let round = 0; ; round++) {
+      await compare();
+      const result = await select();
+      const waiting = (result as { preparation?: { status?: string; targetMs?: number } })
+        .preparation;
+      if (waiting?.status !== "waiting") return result;
+      if (round === 3) throw new Error("still waiting after 3 clock moves");
+      moveFakeClockPast(waiting.targetMs!);
+    }
   };
   return {
     root,
     host,
     compare,
     select,
+    selectPastWaits,
     settings,
     get owner() {
       return owner;
@@ -126,22 +149,21 @@ function opaqueModules(overrides: Partial<InitialSetupContribution> = {}) {
 
 it("freezes a password-confirmed real hour request and imports only its matching activation input", async () => {
   const f = await fixture();
-  await f.compare();
-  await f.select();
+  await f.selectPastWaits();
   let state = (await f.host.store.read())!;
   expect(state.status).toBe("consumption-intent");
   const context = firstSetupModuleContext(state, MODULE);
   expect(context.request).toMatchObject({
     kind: "waitron-hour-setup",
     status: "selected",
-    identity: "06RB",
+    identity: "0CNNY",
     input: {
       allocation: {
-        installationIdentity: "06RB",
+        installationIdentity: "0CNNY",
         series: [
-          { code: "A-06RB", purpose: "standard" },
-          { code: "FF-06RB", purpose: "full" },
-          { code: "R-06RB", purpose: "rectificative" },
+          { code: "A-0CNNY", purpose: "standard" },
+          { code: "FF-0CNNY", purpose: "full" },
+          { code: "R-0CNNY", purpose: "rectificative" },
         ],
       },
     },
@@ -153,8 +175,8 @@ it("freezes a password-confirmed real hour request and imports only its matching
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
   );
-  expect(journal.revisions[0].value.entries[0].identity).toBe("06RB");
-  expect(journal.revisions[0].binding).toEqual(context.binding);
+  expect(journal.revisions.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
+  expect(journal.revisions.at(-1).binding).toEqual(context.binding);
   expect(
     initialSetupFor(f.host.modules, MODULE)!.inspect(
       firstSetupModuleContext(state, MODULE),
@@ -166,33 +188,33 @@ it("freezes a password-confirmed real hour request and imports only its matching
 it("refuses a missing password grant before recording a selected hour", async () => {
   const f = await fixture();
   await f.compare();
-  await expect(f.select("no", "invalid-proof")).rejects.toMatchObject({
+  await expect(f.select("invalid-proof")).rejects.toMatchObject({
     code: "setup.owner_required",
   });
   expect((await f.host.store.read())!.status).toBe("claimed");
   await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
     { code: "ENOENT" },
   );
-  await f.select();
+  await f.selectPastWaits();
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
 
-it("retains an authenticated waiting decision without freezing usable activation input", async () => {
+it("retains an authenticated settle wait without freezing usable activation input", async () => {
   const f = await fixture();
   await f.compare();
-  const pending = f.select("yes");
+  const pending = f.select();
   await expect(pending).resolves.toMatchObject({
-    preparation: { status: "waiting", targetMs: Date.parse("2026-10-16T12:00:00Z") },
+    preparation: { status: "waiting", targetMs: Date.parse("2026-10-16T11:42:00Z") },
   });
   const first = await pending;
   expect(first.preparation).toMatchObject({
     status: "waiting",
-    targetMs: Date.parse("2026-10-16T12:00:00Z"),
+    targetMs: Date.parse("2026-10-16T11:42:00Z"),
   });
-  const second = await f.select("yes");
+  const second = await f.select();
   expect(second.preparation).toMatchObject({
     status: "waiting",
-    targetMs: Date.parse("2026-10-16T12:00:00Z"),
+    targetMs: Date.parse("2026-10-16T11:42:00Z"),
   });
   const state = (await f.host.store.read())!;
   expect(state.status).toBe("claimed");
@@ -208,23 +230,23 @@ it("binds preparation to the current owner capability and revision", async () =>
       { ...f.owner, capability: randomBytes(32).toString("base64url") },
       MODULE,
       { action: "selection" },
+      { onBox: true },
     ),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   const before = f.owner;
-  await f.compare();
-  await f.select();
+  await f.selectPastWaits();
   await expect(
-    f.host.preparation.prepare(before, MODULE, { action: "selection" }),
+    f.host.preparation.prepare(before, MODULE, { action: "selection" }, { onBox: true }),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   await expect(
-    f.host.preparation.prepare(f.owner, MODULE, { action: "selection" }),
-  ).resolves.toMatchObject({ status: "selected", identity: "06RB" });
+    f.host.preparation.prepare(f.owner, MODULE, { action: "selection" }, { onBox: true }),
+  ).resolves.toMatchObject({ status: "selected", identity: "0CNNY" });
 });
 
 it("refuses uploaded activation material before any owned request exists", async () => {
   const f = await fixture();
   await expect(
-    f.host.preparation.import(f.owner, MODULE, { allocation: { installationIdentity: "06RB" } }),
+    f.host.preparation.import(f.owner, MODULE, { allocation: { installationIdentity: "0CNNY" } }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
   expect((await f.host.store.read())!.inputs).toEqual({});
   expect((await f.host.store.read())!.status).toBe("claimed");
@@ -232,8 +254,7 @@ it("refuses uploaded activation material before any owned request exists", async
 
 it("keeps exact input replay read-only and refuses an edited allocation", async () => {
   const f = await fixture();
-  await f.compare();
-  await f.select();
+  await f.selectPastWaits();
   const state = (await f.host.store.read())!;
   const input = (firstSetupModuleContext(state, MODULE).request as { input: unknown }).input;
   const imported = await f.host.preparation.import(f.owner, MODULE, input);
@@ -254,7 +275,12 @@ it("refuses module selection drift before running another preparation", async ()
     ),
   });
   await expect(
-    changed.preparation.prepare(f.owner, MODULE, { action: "compare-clocks", browser: null }),
+    changed.preparation.prepare(
+      f.owner,
+      MODULE,
+      { action: "compare-clocks", browser: null },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect((await changed.store.read())!.status).toBe("claimed");
 });
@@ -269,7 +295,7 @@ it.each([
 ])("refuses preparation for non-offering $module", async ({ module, code, params }) => {
   const f = await fixture();
   for (const result of [
-    () => f.host.preparation.prepare(f.owner, module, {}),
+    () => f.host.preparation.prepare(f.owner, module, {}, { onBox: true }),
     () => f.host.preparation.select(f.owner, module, {}, "unused"),
     () => f.host.preparation.import(f.owner, module, {}),
   ])
@@ -280,8 +306,7 @@ it.each([
 it("checks retired assignments before freezing or accepting a supplied request", async () => {
   let retired: Awaited<ReturnType<NonNullable<ModuleOperationHost["readRetiredSetup"]>>> = [];
   const f = await fixture({ readRetiredSetup: async () => retired });
-  await f.compare();
-  await f.select();
+  await f.selectPastWaits();
   const state = (await f.host.store.read())!;
   const context = firstSetupModuleContext(state, MODULE);
   const input = (context.request as { input: unknown }).input;
@@ -306,19 +331,19 @@ it("awaits the opaque module before freezing and consumes a grant even when it h
     }),
   });
   const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");
-  const pending = f.select("no", proof);
+  const pending = f.select(proof);
   expect((await f.host.store.read())!.status).toBe("claimed");
   release();
   await pending;
   expect(firstSetupModuleContext((await f.host.store.read())!, MODULE).request).toEqual({
     candidate: "olivo-2",
   });
-  await expect(f.select("no", proof)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expect(f.select(proof)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
 });
 
 it("does not freeze opaque candidates without a valid password grant", async () => {
   const f = await fixture({ modules: opaqueModules() });
-  await expect(f.select("no", "invalid")).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(f.select("invalid")).rejects.toMatchObject({ code: "setup.owner_required" });
   expect(firstSetupModuleContext((await f.host.store.read())!, MODULE).request).toBeNull();
   await f.select();
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
@@ -413,11 +438,28 @@ it("accepts a strictly later assignment in its own namespace", async () => {
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
 
+it("hands the module where the request came from", async () => {
+  const preparation = vi.fn(async (_context: InitialSetupContext, proposal: unknown) => proposal);
+  const f = await fixture({ modules: opaqueModules({ preparation }) });
+  await f.host.preparation.prepare(f.owner, MODULE, { step: 1 }, { onBox: false });
+  await f.host.preparation.prepare(f.owner, MODULE, { step: 2 }, { onBox: true });
+  expect(preparation.mock.calls.map((call) => call.slice(1))).toEqual([
+    [{ step: 1 }, { onBox: false }],
+    [{ step: 2 }, { onBox: true }],
+  ]);
+});
+
 it("reuses an existing owner hold for preparation and candidate selection", async () => {
   const f = await fixture({ modules: opaqueModules() });
   await expect(
     f.host.coordinator.run((hold) =>
-      f.host.preparation.prepare(f.owner, MODULE, { publicValue: "checked" }, hold),
+      f.host.preparation.prepare(
+        f.owner,
+        MODULE,
+        { publicValue: "checked" },
+        { onBox: true },
+        hold,
+      ),
     ),
   ).resolves.toEqual({ publicValue: "checked" });
   const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");
@@ -487,4 +529,93 @@ it.each(["keys", "positions"])("serves a module that declares only assignment %s
   });
   await f.select();
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
+});
+
+it("keeps one password grant through every wait and spends it only on taking the name", async () => {
+  const f = await fixture();
+  const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");
+  await f.compare();
+  const first = await f.select(proof);
+  expect(first.preparation).toMatchObject({ status: "waiting" });
+  vi.advanceTimersByTime(30_000);
+  await f.compare();
+  expect((await f.select(proof)).preparation).toMatchObject({ status: "waiting" });
+  moveFakeClockPast((first.preparation as { targetMs: number }).targetMs);
+  await f.compare();
+  await f.select(proof);
+  expect((await f.host.store.read())!.status).toBe("consumption-intent");
+});
+
+it("refuses a wait with a garbage grant and records no wait", async () => {
+  const f = await fixture();
+  await f.compare();
+  await expect(f.select("x".repeat(43))).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
+    { code: "ENOENT" },
+  );
+});
+
+it("refuses a new wait with an expired grant, recording nothing, and takes the name after it with fresh grants", async () => {
+  const f = await fixture();
+  const proof = await f.host.owner.reconfirm(f.owner, PASSWORD, "block-use");
+  await f.compare();
+  const first = await f.select(proof);
+  await f.compare();
+  expect((await f.select(proof)).preparation).toMatchObject({ status: "waiting" });
+  vi.advanceTimersByTime(300_001);
+  expect(Date.now()).toBeGreaterThan((first.preparation as { targetMs: number }).targetMs);
+  await f.compare();
+  const ledger = join(f.root, "state/module-preparation-state.json");
+  const entryKinds = async () =>
+    JSON.parse(await readFile(ledger, "utf8")).revisions.flatMap(
+      (row: { value: { entries: { kind: string }[] } }) =>
+        row.value.entries.map((entry) => entry.kind),
+    );
+  const savedBefore = await entryKinds();
+  await expect(f.select(proof)).rejects.toMatchObject({ code: "setup.owner_required" });
+  const state = (await f.host.store.read())!;
+  expect(state.status).toBe("claimed");
+  expect(firstSetupModuleContext(state, MODULE).request).toBeNull();
+  const savedAfter = await entryKinds();
+  expect(savedAfter).toHaveLength(savedBefore.length);
+  expect(savedAfter).not.toContain("intent");
+  await f.selectPastWaits();
+  expect((await f.host.store.read())!.status).toBe("consumption-intent");
+});
+
+it.each([
+  ["a garbage grant", async () => "x".repeat(43)],
+  [
+    "a grant for another purpose",
+    async (f: Awaited<ReturnType<typeof fixture>>) =>
+      f.host.owner.reconfirm(f.owner, PASSWORD, "activation"),
+  ],
+])(
+  "refuses %s on a retry inside a recorded wait and leaves the ledger as it was",
+  async (_, proof) => {
+    const f = await fixture();
+    await f.compare();
+    expect((await f.select()).preparation).toMatchObject({ status: "waiting" });
+    const ledger = join(f.root, "state/module-preparation-state.json");
+    const before = await readFile(ledger, "utf8");
+    vi.advanceTimersByTime(30_000);
+    await f.compare();
+    await expect(f.select(await proof(f))).rejects.toMatchObject({
+      code: "setup.owner_required",
+    });
+    expect(await readFile(ledger, "utf8")).toBe(before);
+  },
+);
+
+it("refuses a first wait with a grant for another purpose and records no wait", async () => {
+  const f = await fixture();
+  await f.compare();
+  await expect(
+    f.select(await f.host.owner.reconfirm(f.owner, PASSWORD, "activation")),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
+    { code: "ENOENT" },
+  );
 });

@@ -37,13 +37,13 @@ it("the real HTTPS trading listener replaces a lost key, includes retained recov
     nodeId: node.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "W1",
-    numeroInstalacion: "06RB",
+    numeroInstalacion: "0CNNW",
   });
   await suite.db.insert(invoiceSeries).values(
     [
-      { code: "A-06RB", purpose: "standard" as const },
-      { code: "FF-06RB", purpose: "full" as const },
-      { code: "R-06RB", purpose: "rectificative" as const },
+      { code: "A-0CNNW", purpose: "standard" as const },
+      { code: "FF-0CNNW", purpose: "full" as const },
+      { code: "R-0CNNW", purpose: "rectificative" as const },
     ].map((base) => ({ ...base, nodeId: node.nodeId, nextNumber: 123 })),
   );
   const token = await withTransaction(suite.db, async (tx) => {
@@ -69,13 +69,13 @@ it("the real HTTPS trading listener replaces a lost key, includes retained recov
       complete: true,
       records: [
         {
-          reference: "restored-sheet/06RC",
+          reference: "restored-sheet/0CNPG",
           kind: "backup",
           taxpayerNif: "89890001K",
           environment: "preproduction",
           softwareId: "W2",
           nodeId: "retired-node",
-          identity: "06RC",
+          identity: "0CNPG",
           recordedAtMs: null,
         },
       ],
@@ -131,7 +131,7 @@ it("the real HTTPS trading listener replaces a lost key, includes retained recov
           "utf8",
         ),
       );
-      expect(document.installationCodes).toEqual(["06RB"]);
+      expect(document).not.toHaveProperty("installationCodes");
       expect(document.nodeKey.nodeId).toBe(node.nodeId);
       key = document.nodeKey.secret;
     } finally {
@@ -155,9 +155,9 @@ it("the real HTTPS trading listener replaces a lost key, includes retained recov
         nextNumber: s.nextNumber,
       })),
     ).toEqual([
-      { code: "A-06RB", nextNumber: 123 },
-      { code: "FF-06RB", nextNumber: 123 },
-      { code: "R-06RB", nextNumber: 123 },
+      { code: "A-0CNNW", nextNumber: 123 },
+      { code: "FF-0CNNW", nextNumber: 123 },
+      { code: "R-0CNNW", nextNumber: 123 },
     ]);
     expect(await readFile(historyPath)).toEqual(originalHistory);
     const log = await readFile(join(scratch, "logs/waitron.log"), "utf8");

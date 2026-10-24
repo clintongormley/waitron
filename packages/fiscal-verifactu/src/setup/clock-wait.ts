@@ -1,0 +1,292 @@
+import { html, nothing, type ReactiveControllerHost } from "lit";
+import type { HourClockDecision } from "../hour-clock.js";
+import { createWaitCountdown, formatRemaining, type WaitCountdown } from "./wait-countdown.js";
+
+/** What a page explains instead of a name: design §6.5, "Every wait explains itself". */
+export type ClockProblem =
+  { kind: "second-clock" } | { kind: "disagreement" } | { kind: "later"; allowedFromMs?: number };
+
+export interface ClockWords {
+  whyWait: string;
+  nothingToDo: string;
+  continuesIn: string;
+  whySecondClock: string;
+  onBox: string;
+  secondClockDo: string;
+  secondClockEnds: string;
+  whyRefused: string;
+  differ: string;
+  differDo: string;
+  later: string;
+  laterFrom: (time: string) => string;
+}
+
+export interface ClockComparison {
+  id: string;
+  clock: HourClockDecision;
+}
+
+export interface ClockWaitAnswer {
+  status: "waiting";
+  targetMs: number;
+  remainingMs: number;
+}
+
+/** The wait words both setup pages share; each page adds the three that name its own devices. */
+export const clockWaitStrings = {
+  en: {
+    whyWait: "Waiting to confirm the time, so no invoice series is ever repeated.",
+    nothingToDo: "Nothing to do; keep this page open.",
+    continuesIn: "Continues in",
+    whySecondClock:
+      "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
+    onBox: "This screen is on the box itself, so it does not count.",
+    whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
+    differ: "This box's time and this device's differ by more than 30 seconds.",
+    later: "The series cannot be made yet: a later minute is already in use.",
+    laterFrom: (time: string) => `You can carry on from ${time}.`,
+  },
+  es: {
+    whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
+    nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
+    continuesIn: "Sigue en",
+    whySecondClock:
+      "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
+    onBox: "Esta pantalla está en el propio equipo y no cuenta.",
+    whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
+    differ: "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
+    later:
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
+    laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
+  },
+} satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds" | "differDo">>;
+
+const formats = new Map<string, Intl.DateTimeFormat>();
+
+/** One formatter per language, zone and style, rather than one per redraw of a counting page. */
+export function dateTimeFormat(
+  locale: "en" | "es",
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = JSON.stringify([locale, timeZone, options]);
+  let format = formats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "es-ES", { ...options, timeZone });
+    formats.set(key, format);
+  }
+  return format;
+}
+
+export const SECOND_CLOCK_POLL_MS = 15_000;
+
+export const record = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** A whole millisecond a `Date` can hold. */
+const instantMs = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Math.abs(value as number) <= 8_640_000_000_000_000;
+
+export function validWait(result: Record<string, unknown>): boolean {
+  return (
+    instantMs(result.targetMs) &&
+    typeof result.remainingMs === "number" &&
+    Number.isFinite(result.remainingMs) &&
+    result.remainingMs >= 0
+  );
+}
+
+/** The explanation a refusal from the box carries; undefined for any other error. */
+export function clockProblem(error: unknown): ClockProblem | undefined {
+  if (!record(error) || error.code !== "sif.allocation_invalid" || !record(error.params))
+    return undefined;
+  const { reason, allowedFromMs } = error.params;
+  if (reason === "second_clock_missing") return { kind: "second-clock" };
+  if (reason === "clock_disagreement") return { kind: "disagreement" };
+  if (reason === "minute_not_later")
+    return {
+      kind: "later",
+      ...(instantMs(allowedFromMs) ? { allowedFromMs } : {}),
+    };
+  return undefined;
+}
+
+/** Asks the box for a clock challenge, then for its comparison with this browser's time. */
+export async function readClocks(
+  send: (proposal: unknown) => Promise<unknown>,
+): Promise<ClockComparison> {
+  const challenge = await send({ action: "clock-challenge" });
+  if (!record(challenge) || typeof challenge.id !== "string") throw new Error("invalid challenge");
+  const compared = await send({
+    action: "compare-clocks",
+    browser: { challengeId: challenge.id, instantMs: Date.now() },
+  });
+  if (
+    !record(compared) ||
+    typeof compared.id !== "string" ||
+    !record(compared.clock) ||
+    !Array.isArray(compared.clock.usable) ||
+    !Array.isArray(compared.clock.unavailable)
+  )
+    throw new Error("invalid comparison");
+  return compared as unknown as ClockComparison;
+}
+
+/** Checks again every 15 seconds; starting it again while it runs keeps its rhythm. */
+function createSecondClockPoll(host: ReactiveControllerHost, run: () => void) {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const stop = () => {
+    if (timer !== undefined) clearInterval(timer);
+    timer = undefined;
+  };
+  host.addController({ hostDisconnected: stop });
+  return {
+    get running() {
+      return timer !== undefined;
+    },
+    start() {
+      timer ??= setInterval(run, SECOND_CLOCK_POLL_MS);
+    },
+    stop,
+  };
+}
+
+/**
+ * What a setup page explains about the clocks — a problem, the server's answer, or neither — and
+ * the two timers that run `recheck` by themselves: the countdown at zero, and every 15 seconds
+ * while no second clock is known.
+ */
+export class ClockWait<Selected extends { status: "selected" }> {
+  readonly #host: ReactiveControllerHost;
+  readonly #countdown: WaitCountdown;
+  readonly #poll: ReturnType<typeof createSecondClockPoll>;
+  #problem: ClockProblem | undefined;
+  #result: Selected | ClockWaitAnswer | undefined;
+
+  constructor(host: ReactiveControllerHost, recheck: () => void) {
+    this.#host = host;
+    this.#countdown = createWaitCountdown(host, recheck);
+    this.#poll = createSecondClockPoll(host, recheck);
+  }
+
+  get problem(): ClockProblem | undefined {
+    return this.#problem;
+  }
+
+  get result(): Selected | ClockWaitAnswer | undefined {
+    return this.#result;
+  }
+
+  /** Waiting on the server's countdown or for a second clock. */
+  get waiting(): boolean {
+    return this.#result?.status === "waiting" || this.#problem?.kind === "second-clock";
+  }
+
+  /** Replaces what the page explains: a problem, a server answer, or neither. */
+  show(problem?: ClockProblem, result?: Selected | ClockWaitAnswer): void {
+    this.#countdown.stop();
+    this.#poll.stop();
+    this.#problem = problem;
+    this.#result = result;
+    this.#host.requestUpdate();
+    if (result?.status === "waiting") this.#countdown.start(result.remainingMs);
+  }
+
+  waitForSecondClock(): void {
+    this.#result = undefined;
+    this.#countdown.stop();
+    this.#problem = { kind: "second-clock" };
+    this.#poll.start();
+    this.#host.requestUpdate();
+  }
+
+  /** Shows a wait the box has already recorded; any other preview changes nothing. */
+  showPreview(preview: unknown): void {
+    if (
+      record(preview) &&
+      preview.status === "waiting" &&
+      validWait(preview) &&
+      (preview.remainingMs as number) > 0
+    )
+      this.show(undefined, preview as unknown as ClockWaitAnswer);
+  }
+
+  /**
+   * Shows what a failed request means. While the page checks for a second clock by itself
+   * (`automatic`), a request lost on the way (no refusal code) is left to the next check.
+   */
+  settle(error: unknown, automatic: boolean, fail: (error: unknown) => void): void {
+    const problem = clockProblem(error);
+    if (problem?.kind === "second-clock") this.waitForSecondClock();
+    else if (problem) this.show(problem);
+    else if (!(
+      automatic &&
+      this.#poll.running &&
+      (error as { code?: unknown } | null)?.code === undefined
+    )) {
+      this.show();
+      fail(error);
+    }
+  }
+
+  renderWait(words: ClockWords) {
+    return renderWait(words, this.#countdown);
+  }
+}
+
+export function renderClockProblem(
+  problem: ClockProblem | undefined,
+  words: ClockWords,
+  clock: HourClockDecision | undefined,
+  locale: "en" | "es",
+  timeZone: string,
+) {
+  if (problem?.kind === "second-clock")
+    return html`<section data-test="clock-wait">
+      <p role="status">${words.whySecondClock}</p>
+      ${
+        clock?.unavailable.some((r) => r.source === "browser" && r.reason === "same_machine")
+          ? html`<p>${words.onBox}</p>`
+          : nothing
+      }
+      <p>${words.secondClockDo}</p>
+      <p>${words.secondClockEnds}</p>
+    </section>`;
+  if (problem?.kind === "disagreement")
+    return html`<section data-test="clock-refused">
+      <p role="status">${words.whyRefused}</p>
+      <p>${words.differ}</p>
+      <p>${words.differDo}</p>
+    </section>`;
+  if (problem?.kind === "later") {
+    const time =
+      problem.allowedFromMs === undefined
+        ? undefined
+        : dateTimeFormat(locale, timeZone, {
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+          }).format(problem.allowedFromMs);
+    return html`<p role="status" data-test="minute-not-later">
+      ${words.later}${time === undefined ? nothing : html` ${words.laterFrom(time)}`}
+    </p>`;
+  }
+  return nothing;
+}
+
+function renderWait(words: ClockWords, countdown: WaitCountdown) {
+  return html`<section data-test="hour-wait">
+    <p role="status">${words.whyWait}</p>
+    <p>${words.nothingToDo}</p>
+    ${
+      countdown.remainingMs === undefined
+        ? nothing
+        : html`<p>
+            ${words.continuesIn}
+            <span role="timer" data-test="remaining"
+              >${formatRemaining(countdown.remainingMs)}</span
+            >
+          </p>`
+    }
+  </section>`;
+}

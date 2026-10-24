@@ -3,7 +3,9 @@
 **Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.
 **Status:** design; all four questions and the owner's two follow-ups of about 22:25 answered
 (§12); the owner approved the second revision on 2026-10-22 at about 02:40, and the amendment below
-adds the owner's direction of about 03:12. Nothing in it is built.
+adds the owner's direction of about 03:12. Slice 4a is built on the branch
+`feat/a947-4a-minute-names` (decisions made while building it are listed below); nothing else in
+it is built.
 **Item:** A947. **Refreshes:** the
 [topology design](2026-09-16-sqlite-litestream-topology-design.md) §4.4 (on-prem primary → on-prem
 mirror), §5 (promotion, return, tail shipper, split brain), §6 (trust and fencing) and §11 (build
@@ -11,6 +13,124 @@ order, slices 3–5). Where this document and that one differ, this one is newer
 rewritten, and carries a dated pointer here.
 
 **Mock-ups:** [`docs/backlog/mockups/a947-two-box-failover/`](../../backlog/mockups/a947-two-box-failover/README.md).
+
+> **Decisions made while building slice 4a (2026-10-22).** Where slice 4a's code does more, or
+> other, than the text below says, it is recorded here and the text below is narrowed to match:
+>
+> 1. **A clock a little behind a backup's floor waits rather than being refused** (§6.7, "The extra
+>    check", item 1). The name is the first minute that begins at or after the floor — the
+>    backup's newest record, its creation time, or the minute after its newest name — and the
+>    90-to-150-second wait, whichever is later. When that minute begins at most 150 seconds ahead
+>    of the box's clock the box waits for it; further ahead it refuses `minute_not_later` with the
+>    minute as `allowedFromMs`. It never takes a minute that begins before the floor.
+>    Tests: `packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backup floor at %s rounds up
+>    to a minute start: %s" (a floor at 09:01:59 waits until 09:02:00; one at 09:02:10.5 is
+>    refused, allowed from 09:03:00) — run as a re-registration with an activation row's time, not
+>    a restore's backup floor; it covers a restore because both go through the same target
+>    arithmetic (`packages/fiscal-verifactu/src/hour-selection.ts`, `earliestMs` and `targetMs`),
+>    and no restore case waits for a floor within 150 seconds;
+>    `apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors" (a restore refused for a
+>    floor days ahead, and one waiting once past both).
+> 2. **Only taking the name needs the page's own comparison.** The reads that carry no comparison
+>    id — the preview, prepare and resume — use this box's newest clock reading that itself admits
+>    a name and is no more than 30 seconds old; a select must name its comparison.
+>    Tests: `packages/fiscal-verifactu/src/hour-setup-clock.test.ts`, "a read with no comparison id
+>    uses the newest reading that admits a name" and "a read with no comparison id does not use a
+>    passing reading older than thirty seconds"; `hour-selection.test.ts`, "refuses a select that
+>    names no clock comparison".
+> 3. **A restore checks its backup once, and the newest page wins.** The page uploads the backup
+>    once (`POST /setup-api/recovery/stage`) and the clock requests that follow carry only the
+>    staged copy's id. A newer restore page's upload that passes its check replaces the staged copy,
+>    and the older page's id is then refused until the server restarts (it remembers the last 64
+>    replaced ids). An id the box no longer holds — after a restart, an
+>    unused hour or a discard — is answered `restore.staged_copy_missing` instead, and the page
+>    uploads again under the same restore event. A reloaded restore page starts a new 90-to-150-second
+>    wait, because the setup app makes a new restore event id each time it builds the page
+>    (`apps/setup/src/screens/recovery-allocation.ts`, `eventId: crypto.randomUUID()`) and waits are
+>    kept per event (`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`).
+>    Tests: `apps/server/src/hour-recovery-staged.test.ts`, "lets the newest restore event's checked
+>    upload replace the copy, and keeps it when an upload fails its check" and "refuses a staged id
+>    from another restore event, and answers a copy it no longer holds as missing";
+>    `apps/setup/src/screens/recovery-copy.test.ts`, "uploads again under the same restore event
+>    when the box no longer holds the staged copy". No test reloads a restore page end to end.
+> 4. **When each page explains a clock refusal.** On the restore page, pressing «Comparar relojes»
+>    / "Compare clocks" and getting a refusal shows the restore row's explanation (§6.5 tables);
+>    for no second clock it also starts the quiet 15-second re-check, and for clocks that differ it
+>    waits for «Comprobar otra vez». The setup page compares clocks by itself when it opens, and
+>    shows no explanation and retries nothing until **Make the series** is pressed.
+>    Tests: `packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "Compare clocks
+>    with no second clock explains the wait and checks again by itself" and "Compare clocks with
+>    clocks that differ explains the refusal, not a failure";
+>    `packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "a preview refused for %s on
+>    load shows the readings with no failure and no explanation".
+> 5. **The setup and restore pages' refusal for a later minute in use** (`minute_not_later`), which
+>    §6.5 words only for the switch dialog: «Todavía no se pueden crear las series: ya se usó un
+>    minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.» / "The series
+>    cannot be made yet: a later minute is already in use. You can carry on from 22:04." — «se
+>    pueden», agreeing with «las series». Tests: `first-hour.browser.test.ts`, "says in Spanish that
+>    the series cannot be made yet, with the plural verb"; `recovery-hour.browser.test.ts`, "says in
+>    Spanish that the series cannot be made yet".
+> 6. **The stream loop test gains no step in slice 4a**, though §11's preamble asks each slice for
+>    one. Its two boxes take fixed test names, not minute names: box A through a fixture
+>    (`applyAllocatedTestVenue`, name `S000001`), box B, rebuilt from the bucket, through the paper
+>    path (`apps/server/src/testing/stream-loop-scenario.ts:470`,
+>    `createPaperAllocationPreparation`, name `P000042`). No test checks this;
+>    `git diff --stat origin/main...HEAD` over `apps/server/src/stream-loop.e2e.test.ts` and that
+>    scenario file printed nothing.
+> 7. **A recorded wait lapses 60 seconds after it is due; a later request starts a fresh
+>    90-to-150-second wait** (`hour-selection.ts`, `WAIT_REUSE_MS`). So a select made hours after
+>    its wait never takes a name without its own 90 seconds.
+>    Tests: `hour-selection.test.ts`, "a select more than a minute after its wait's target starts a
+>    new wait" (59 seconds past the target takes the name; an hour past waits again);
+>    `initial-hour-setup.test.ts`, "a terminal run more than a minute after its wait's target waits
+>    again" (60.001 seconds past waits again).
+> 8. **A wait spends no password; only taking the name does** (the setup page). Each request of a
+>    press checks the owner's password grant, and only the one that takes the name spends it, so
+>    the page asks for the password once across the press, its waits and the name.
+>    Tests: `packages/provisioning/src/first-setup-preparation.test.ts`, "keeps one password grant
+>    through every wait and spends it only on taking the name" and "refuses a wait with a garbage
+>    grant and records no wait"; `apps/setup/src/first-setup-session.test.ts`, "asks for the
+>    password once across two waiting answers and the taken name".
+> 9. **A browser counts as the box by its source address**: loopback, or any address one of the
+>    box's interfaces holds, Docker bridges included (`apps/server/src/request-from-box.ts`,
+>    `addressIsBox`). Its clock is then never the second clock. So a kiosk browser in a container on
+>    a Docker bridge, or a browser on a host running the server under a bridge network or Docker
+>    Desktop, would count as another device (§13); the box runs with the host's network
+>    (`deploy/compose.yml:17`), where the rule holds.
+>    Tests: `apps/server/src/request-from-box.test.ts`, "counts %s as the box itself" and "counts %s
+>    as another device"; `hour-setup-clock.test.ts`, "a browser on the box itself is never the
+>    second clock". No test runs a browser in a container.
+> 10. **With no second clock, the page checks again every 15 seconds by itself**, and carries on
+>     once a second clock appears; a re-check that again finds none keeps the 15-second rhythm
+>     (`setup/clock-wait.ts`, `createSecondClockPoll`). On the setup page this starts only once
+>     **Make the series** is pressed (item 4).
+>     Tests: `first-hour.browser.test.ts` and `recovery-hour.browser.test.ts`, each "with no second
+>     clock it explains itself and carries on when the internet arrives" and "a missing second
+>     clock reported by the server starts the 15-second check"; `recovery-hour.browser.test.ts`,
+>     "keeps the 15-second rhythm when a re-check again finds no second clock".
+> 11. **The 90-to-150-second wait at a setup or restore counts from the box's reading at the first
+>     select**, not from the comparison's; later selects keep the target that select stored. The
+>     select reads the box's clock afresh: it must come after the comparison's reading on the box's
+>     steady clock (else `clock_stale`) and match its wall-clock change to within a second (else
+>     `clock_corrected`), so its wall time can be up to a second earlier than the comparison's.
+>     Tests: `hour-setup-clock.test.ts`, "projects surviving observations forward before selecting
+>     after an hour boundary" (the select uses a box reading 2 seconds after the comparison's) and
+>     "a forward clock correction invalidates a reading"; `hour-selection.test.ts`, "setup checked
+>     at %s waits until %s" and "a restart keeps the recorded target". The two bounds were tried by
+>     a throwaway probe of `createSetupHourClock` (2026-10-22): the wall clock stepped back
+>     900 ms was accepted, 1001 ms refused `clock_corrected`, the steady clock 1 ms back refused
+>     `clock_stale`.
+> 12. **The command-line setup prints the time to come back instead of counting down**: "Continues
+>     at <time>; run the command again within a minute after that time (later, it waits again).",
+>     then exits with status 1. Run again inside that minute, it takes the name, asking nothing.
+>     Tests: `initial-hour-setup.test.ts`, "the terminal asks nothing, prints why it waits and until
+>     when, and keeps the wait" and "the terminal run again after its wait's target selects that
+>     minute's name, asking nothing"; `packages/provisioning/src/cli-first-setup.test.ts`, "the
+>     venue command claims ownership, retains its settle wait and says why and until when, before
+>     any venue write".
+> 13. **The `hour-*` file names and identifiers, and the stored `source: "hour"` label, are kept for
+>     now.** The rename is the backlog's fiscal entry "Rename the `hour-*` names to minute names".
+>     No test checks this; it is a naming choice.
 
 > **Amendment 2026-10-22 — every clock wait explains itself, with a countdown.** The owner, at
 > about 03:12: "But explain that on the screen and provide a countdown for the user to see." What
@@ -90,7 +210,7 @@ rewritten, and carries a dated pointer here.
 >   with a name per minute. So this revision adds a floor: the clock rule above, and, for a setup or
 >   a restore — the two that cannot see every name already used — a wait of 90 to 150 seconds before
 >   the name is taken, checked by a sweep of clock errors; a till, phone or internet clock more than
->   15 seconds wrong can still lead to a repeat, and that is disclosed. **That the new rules refuse is not proven yet**: the proof is slice 4a's
+>   15 seconds wrong can still lead to a repeat, and that is disclosed. **That the new rules refuse is not proven yet** _(2026-10-22: slice 4a added that test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`.)_: the proof is slice 4a's
 >   committed test, and slice 4a takes the code off the sheet and the form only if that test passes
 >   in the same pull request.
 > - **Things found against B3, the USB installer design, and A993.** B3 runs a first setup on the
@@ -1221,8 +1341,12 @@ it flags, and a confirmation passes it.
   the same wrong date is the disclosed limit below).
 - **At a first setup and a restore** — the two that cannot see every name already used:
   1. **The time floor also counts the backup's newest invoice record and the moment the backup was
-     made**, not only its allocations, so a clock between the backup's last allocation and its last
-     sale is refused by the backup itself. This reads records; it changes none.
+     made**, not only its allocations, so a box whose clock is behind the backup's last sale never
+     takes a minute that begins before that floor. (Amended 2026-10-22, slice 4a as built: when the
+     first minute starting at or after the floor begins at most 150 seconds ahead of the box's
+     clock, the box waits for it rather than refusing; further ahead it refuses `minute_not_later`
+     and names that minute — the decisions list at the top, item 1.) This reads records; it changes
+     none.
   2. **The name is taken 90 to 150 seconds after the check.** The box waits until its own clock has
      passed its checked reading by 90 seconds, then waits for the next minute to begin on its own
      clock, and takes that minute as the current one — it never takes a minute ahead of its own
@@ -1260,7 +1384,7 @@ the same minute, neither knowing of the other (§6.5).
 **What the run proves, and what it does not — the owner's condition is not met yet.** Proven on
 today's code: the five checks above that refused, and that with the code requirement removed a
 confirmed or shared wrong clock, a stale sheet, a restore in the same hour as an unseen name, or an
-earlier confirmed fast clock (F1, then F2) reuses or undercuts a name. **Not proven, because it is not built: that the new rules refuse.** That proof is slice 4a's
+earlier confirmed fast clock (F1, then F2) reuses or undercuts a name. **Not proven, because it is not built: that the new rules refuse.** _(2026-10-22: slice 4a added that test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`.)_ That proof is slice 4a's
 committed test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, run against
 the minute code: B2, S, D4 and B4 (its browser sample arriving from the loopback source address and,
 in a second case, from one of the box's own interface addresses) must refuse; F1's fast box must be
@@ -1710,7 +1834,7 @@ calls marked **my call** are the ones to look at:
 
 And the owner's "prove it" condition is **not yet met**: §6.7's run shows today's name-picking code fails;
 the proof that the new rules refuse is slice 4a's committed test, on which slice 4a's removal of
-the code depends.
+the code depends. _(2026-10-22: slice 4a added that test, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`.)_
 
 ## 13. What this design does not settle, for the builder
 

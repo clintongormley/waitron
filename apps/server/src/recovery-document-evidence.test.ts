@@ -35,18 +35,18 @@ const intent = {
     { code: "R", purpose: "rectificative" },
   ],
   answer: "no",
-  identity: "06RC",
+  identity: "0CNPT",
   issuedAt: "2026-10-16T12:10:00.000Z",
   references: [],
 };
 const record = {
-  reference: "retained/06RD",
+  reference: "retained/0CNSM",
   kind: "backup",
   taxpayerNif: "89890001K",
   environment: "preproduction",
   softwareId: "W2",
   nodeId: "former-node",
-  identity: "06RD",
+  identity: "0CNSM",
   recordedAtMs: null,
 };
 beforeEach(async () => {
@@ -58,7 +58,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
-async function retain(stateDir: string, identity = "06RD") {
+async function retain(stateDir: string, identity = "0CNSM") {
   await mkdir(join(stateDir, "module-evidence", module.name), { recursive: true });
   await writeFile(
     join(stateDir, "module-evidence", module.name, "hour-history.json"),
@@ -94,7 +94,7 @@ it("exports current journal and retained public hour evidence without private pr
           environment: "preproduction",
           softwareId: "W2",
           nodeId: "retired-node",
-          identity: "06RC",
+          identity: "0CNPT",
           recordedAtMs: 1792152600000,
         },
       ],
@@ -148,10 +148,12 @@ it("retains the anchor's journal and both public floors after workspace selectio
     ],
   );
   await selectFirstSetupWorkspace(roots, await archive.apply(prepared));
-  await retain(selected.stateDir, "06RE");
+  await retain(selected.stateDir, "0CNVG");
   const evidence = await readRecoveryDocumentEvidence(selected, module);
   expect(evidence).toMatchObject({
-    "hour-history": { records: [{ identity: "06RD" }, { identity: "06RE" }, { identity: "06RC" }] },
+    "hour-history": {
+      records: [{ identity: "0CNSM" }, { identity: "0CNVG" }, { identity: "0CNPT" }],
+    },
   });
 });
 it("modules without preparation-history sources have no document evidence", async () => {

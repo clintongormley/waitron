@@ -4,6 +4,7 @@ import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
+import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
 
 const sockets: TLSSocket[] = [];
 afterEach(() => {
@@ -22,12 +23,12 @@ const preparation = {
   proposal: { action: "clock-challenge" },
 };
 const bucket = { kind: "bucket", kit: "private bucket kit", environment: "preproduction" };
-function fixture() {
+function fixture(extra: Partial<SetupDeps> = {}) {
   const app = new Hono();
   const log = vi.fn();
   const coordinator = createFirstSetupCoordinator();
-  const execute = vi.fn(async (_source, _input, hold) =>
-    coordinator.held(hold, async () => ({ id: "module-clock-challenge", expiresInMs: 5000 })),
+  const execute = vi.fn<PrepareRecovery>(async (_source, _input, hold) =>
+    coordinator.held(hold!, async () => ({ id: "module-clock-challenge", expiresInMs: 5000 })),
   );
   mountSetup(
     app,
@@ -35,6 +36,7 @@ function fixture() {
       environment: "preproduction",
       firstSetup: { coordinator, assertOtherAllowed: async () => {} },
       prepareRecovery: execute,
+      ...extra,
     } as SetupDeps,
     log,
   );
@@ -59,16 +61,31 @@ it("prepares a bucket recovery within the existing setup hold without reflecting
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ id: "module-clock-challenge", expiresInMs: 5000 });
   expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(execute).toHaveBeenCalledWith(bucket, preparation, expect.any(Object));
+  expect(execute).toHaveBeenCalledWith(bucket, preparation, expect.any(Object), { onBox: true });
   expect(JSON.stringify(log.mock.calls)).not.toContain(preparation.nodeRecoverySecret);
   expect(JSON.stringify(log.mock.calls)).not.toContain(bucket.kit);
+});
+it("tells the preparation whether the request came from the box itself", async () => {
+  const from = (address: string) => {
+    const socket = new TLSSocket(new Socket());
+    sockets.push(socket);
+    Object.defineProperty(socket, "remoteAddress", { value: address });
+    return { incoming: { socket } };
+  };
+  const { app, execute } = fixture();
+  expect((await app.request(path, request(), from("127.0.0.1"))).status).toBe(200);
+  expect((await app.request(path, request(), from("192.0.2.7"))).status).toBe(200);
+  expect(execute.mock.calls.map((call) => call[3])).toEqual([{ onBox: true }, { onBox: false }]);
+  const other = fixture({ requestFromBox: () => false });
+  expect((await other.app.request(path, request(), from("127.0.0.1"))).status).toBe(200);
+  expect(other.execute.mock.calls.map((call) => call[3])).toEqual([{ onBox: false }]);
 });
 it("forwards a managed Cloud point without accepting client-supplied archive credentials", async () => {
   const { app, execute } = fixture();
   const source = { kind: "cloud", pointId: "d0000000-0000-4000-8000-000000000002" };
   const response = await app.request(path, request(source), tls());
   expect(response.status).toBe(200);
-  expect(execute).toHaveBeenCalledWith(source, preparation, expect.any(Object));
+  expect(execute).toHaveBeenCalledWith(source, preparation, expect.any(Object), { onBox: true });
 });
 it("reads archive bytes and the separate backup password from multipart input", async () => {
   const { app, execute } = fixture();
@@ -82,6 +99,7 @@ it("reads archive bytes and the separate backup password from multipart input", 
     { ...source, artifact: new Uint8Array([7, 2, 9]) },
     preparation,
     expect.any(Object),
+    { onBox: true },
   );
 });
 it.each(["plain", "forwarded", "origin", "site"])(
@@ -203,4 +221,181 @@ it("stops reading an oversized streamed archive even without Content-Length", as
   expect(cancelled).toBe(true);
   expect(consumed).toBeLessThan(9);
   expect(execute).not.toHaveBeenCalled();
+});
+
+const stagedId = "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11";
+function stageFixture() {
+  const stageRecovery = vi.fn(async () => ({ stagedId }));
+  const discardStagedRecovery = vi.fn(async () => {});
+  return {
+    ...fixture({ stageRecovery, discardStagedRecovery }),
+    stageRecovery,
+    discardStagedRecovery,
+  };
+}
+function stageForm(
+  request: unknown,
+  artifact: Uint8Array<ArrayBuffer> | null = new Uint8Array([7, 2, 9]),
+) {
+  const form = new FormData();
+  form.set("request", JSON.stringify(request));
+  if (artifact !== null) form.set("artifact", new Blob([artifact]), "selected.wbk");
+  return { method: "POST", body: form };
+}
+const archiveSource = {
+  kind: "archive",
+  recoveryKey: "archive password",
+  environment: "production",
+};
+it("stages a checked archive once for its restore event and answers only its id", async () => {
+  const { app, stageRecovery, log } = stageFixture();
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "interactive-restore", source: archiveSource }),
+    tls(),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ stagedId });
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(stageRecovery).toHaveBeenCalledWith("interactive-restore", {
+    ...archiveSource,
+    artifact: new Uint8Array([7, 2, 9]),
+  });
+  expect(JSON.stringify(log.mock.calls)).not.toContain("archive password");
+});
+it.each([
+  ["no artifact", { eventId: "e", source: archiveSource }, null, "artifact"],
+  ["a bucket source", { eventId: "e", source: bucket }, new Uint8Array([1]), "body"],
+  ["no event", { source: archiveSource }, new Uint8Array([1]), "body"],
+  ["an empty event", { eventId: "", source: archiveSource }, new Uint8Array([1]), "eventId"],
+])("refuses a stage with %s", async (_name, request, artifact, field) => {
+  const { app, stageRecovery } = stageFixture();
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm(request, artifact),
+    tls(),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.request_invalid", params: { field } },
+  });
+  expect(stageRecovery).not.toHaveBeenCalled();
+});
+it("refuses a stage over plain transport", async () => {
+  const { app, stageRecovery } = stageFixture();
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "e", source: archiveSource }),
+  );
+  expect(response.status).toBe(403);
+  expect(stageRecovery).not.toHaveBeenCalled();
+});
+it("prepares from a staged copy named in a small JSON body", async () => {
+  const { app, execute } = stageFixture();
+  const source = { kind: "staged", stagedId };
+  const response = await app.request(path, request(source), tls());
+  expect(response.status).toBe(200);
+  expect(execute).toHaveBeenCalledWith(source, preparation, expect.any(Object), { onBox: true });
+});
+it.each(["../../state/secrets", "5C1D6C43-4F61-4C4A-9E0B-0A8F2F8D9A1", "", 7])(
+  "refuses a malformed staged id (%j) before it reaches the preparation",
+  async (id) => {
+    const { app, execute } = stageFixture();
+    const response = await app.request(path, request({ kind: "staged", stagedId: id }), tls());
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "stagedId" } },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  },
+);
+it("refuses a staged source sent beside an uploaded artifact", async () => {
+  const { app, execute } = stageFixture();
+  const form = new FormData();
+  form.set("request", JSON.stringify({ source: { kind: "staged", stagedId }, preparation }));
+  form.set("artifact", new Blob([new Uint8Array([1])]), "selected.wbk");
+  const response = await app.request(path, { method: "POST", body: form }, tls());
+  expect(response.status).toBe(400);
+  expect(execute).not.toHaveBeenCalled();
+});
+it("discards a staged copy by its id", async () => {
+  const { app, discardStagedRecovery } = stageFixture();
+  const response = await app.request(
+    "/setup-api/recovery/stage/discard",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stagedId }),
+    },
+    tls(),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ discarded: true });
+  expect(discardStagedRecovery).toHaveBeenCalledWith(stagedId);
+  const bad = await app.request(
+    "/setup-api/recovery/stage/discard",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stagedId: "x" }),
+    },
+    tls(),
+  );
+  expect(bad.status).toBe(400);
+  expect(discardStagedRecovery).toHaveBeenCalledTimes(1);
+});
+it("discards the staged copy once the restore is staged, and keeps it when the restore is refused", async () => {
+  const clearStagedRecovery = vi.fn(async () => {});
+  const stageRestore = vi.fn<NonNullable<SetupDeps["stageRestore"]>>(async () => {});
+  const { app } = fixture({ clearStagedRecovery, stageRestore, requestRestart: () => {} });
+  const restore = () =>
+    app.request("/setup-api/restore", {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "archive password",
+        "x-waitron-restore-environment": "preproduction",
+      },
+      body: new Uint8Array([7, 2, 9]),
+    });
+  stageRestore.mockRejectedValueOnce(new Error("refused"));
+  expect((await restore()).status).toBe(500);
+  expect(clearStagedRecovery).not.toHaveBeenCalled();
+  expect((await restore()).status).toBe(202);
+  expect(clearStagedRecovery).toHaveBeenCalledTimes(1);
+});
+it("accepts a staged restore and restarts even when the staged copy cannot be deleted", async () => {
+  const clearStagedRecovery = vi.fn(async () => {
+    throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+  });
+  const stageRestore = vi.fn<NonNullable<SetupDeps["stageRestore"]>>(async () => {});
+  const requestRestart = vi.fn();
+  const { app, log } = fixture({ clearStagedRecovery, stageRestore, requestRestart });
+  const response = await app.request("/setup-api/restore", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-recovery-key": "archive password",
+      "x-waitron-restore-environment": "preproduction",
+    },
+    body: new Uint8Array([7, 2, 9]),
+  });
+  expect(response.status).toBe(202);
+  expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
+  await vi.waitFor(() => expect(requestRestart).toHaveBeenCalledTimes(1));
+  expect(stageRestore).toHaveBeenCalledTimes(1);
+  expect(log).toHaveBeenCalledWith("warn", "setup.staged_recovery_clear_failed", {});
+});
+it("keeps the stage route unavailable without the first-setup host", async () => {
+  const stageRecovery = vi.fn(async () => ({ stagedId }));
+  const app = new Hono();
+  mountSetup(app, { environment: "preproduction", stageRecovery }, () => {});
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "e", source: archiveSource }),
+    tls(),
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+  expect(stageRecovery).not.toHaveBeenCalled();
 });

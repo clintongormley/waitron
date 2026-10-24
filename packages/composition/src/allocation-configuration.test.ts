@@ -318,7 +318,7 @@ it("refuses legacy paper input through a configured production host without dura
 });
 
 it("activates the current hour through production composition without signed-file authority", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   vi.spyOn(release, "readHourRelease").mockReturnValue({
     instantMs: Date.parse("2026-10-15T00:00:00Z"),
@@ -327,36 +327,56 @@ it("activates the current hour through production composition without signed-fil
     generator: "scripts/generate-hour-release.mjs:v1",
     generatorSha256: "b".repeat(64),
   });
-  vi.spyOn(internet, "observeInternetHourClock").mockResolvedValue({
+  vi.spyOn(internet, "observeInternetHourClock").mockImplementation(async () => ({
     source: "internet",
-    result: "unavailable",
-    reason: "tls",
-  });
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 0,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }));
   const { operations, history } = hourHost();
   await withOperationAuthority(binding, operatorId, async (authority) => {
     const operation = { binding, authority };
-    const compared = (await operations.recovery!(operation, {
-      action: "compare-clocks",
-      browser: null,
-    })) as { id: string };
-    await operations.recovery!(operation, { action: "confirm-clock", comparisonId: compared.id });
-    const selected = (await operations.recovery!(operation, {
-      action: "select",
-      answer: "no",
-      installationCodes: ["06RA"],
-    })) as { status: string; input: unknown };
+    const compareAndSelect = async () => {
+      const compared = (await operations.recovery!(
+        operation,
+        {
+          action: "compare-clocks",
+          browser: null,
+        },
+        { onBox: true },
+      )) as { id: string };
+      return (await operations.recovery!(
+        operation,
+        {
+          action: "select",
+          comparisonId: compared.id,
+        },
+        { onBox: true },
+      )) as { status: string; targetMs?: number; input: unknown };
+    };
+    let selected = await compareAndSelect();
+    expect(selected).toMatchObject({
+      status: "waiting",
+      targetMs: Date.parse("2026-10-16T11:42:00Z"),
+    });
+    vi.advanceTimersByTime(selected.targetMs! + 1 - Date.now());
+    selected = await compareAndSelect();
     expect(selected.status).toBe("selected");
-    expect(history).toHaveLength(1);
+    expect(history).toHaveLength(2);
     const selectedHistory = structuredClone(history);
     const result = await operations.prepare({ ...operation, input: selected.input }, (prepared) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
     );
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-      { code: "A-06RB", purpose: "standard" },
-      { code: "FF-06RB", purpose: "full" },
-      { code: "R-06RB", purpose: "rectificative" },
+      { code: "A-0CNNY", purpose: "standard" },
+      { code: "FF-0CNNY", purpose: "full" },
+      { code: "R-0CNNY", purpose: "rectificative" },
     ]);
-    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "06RB" }]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "0CNNY" }]);
     expect(
       (
         await suite.db.select({ allocation: fiscalAllocations.allocation }).from(fiscalAllocations)
@@ -370,6 +390,6 @@ it("activates the current hour through production composition without signed-fil
       params: { reason: "event_mismatch" },
     });
     expect(history).toEqual(selectedHistory);
-    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "06RB" }]);
+    expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "0CNNY" }]);
   });
 });

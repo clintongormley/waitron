@@ -902,7 +902,10 @@ The owner approved the generated PDF and exact retained CLI-launch patch on 19 O
 The [approved design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
 and [historical decision/checkpoint snapshot](../operations/a679-development-checkpoints.md)
 retain the decisions and their earlier alternatives. No simultaneous-box reservation guarantee
-or conversion of old fiscal records is part of this change.
+or conversion of old fiscal records is part of this change. (2026-10-22: A947 slice 4a replaced
+the hour names with five-symbol UTC-minute names, the recent-setup question with a 30-second
+check against a second clock, and dropped the installation code from the sheet; see the
+[A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) §6.5 and §6.7.)
 
 - **A795, owner decisions 2026-10-18 (design §9, Q1–Q3).** Replacing the AEAT certificate needs the
   existing `system.manage` (managers and admins); no new permission. Warnings go by type, in

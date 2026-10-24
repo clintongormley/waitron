@@ -5,6 +5,7 @@ import {
   initialSetupFor,
   type ModuleConfig,
   type ModuleOperationHost,
+  type OperationClient,
   type WaitronModule,
 } from "@waitron/module";
 import type { createFirstSetupOwner, FirstSetupOwnerAttempt } from "./first-setup-owner.js";
@@ -31,9 +32,14 @@ interface Options {
     hold: FirstSetupHold,
   ): Promise<string>;
   withPreparationAuthorization<T>(
-    authorize: () => Promise<void>,
+    authorize: PreparationAuthority,
     run: () => Promise<T>,
   ): Promise<T>;
+}
+/** `intent` spends the owner's grant; `wait` only checks it. */
+export interface PreparationAuthority {
+  intent(): Promise<void>;
+  wait(): Promise<void>;
 }
 
 function invalid(): never {
@@ -154,11 +160,12 @@ export function createFirstSetupPreparation(options: Options) {
             throw new AppError("setup.not_ready", {});
           const binding = await options.resumeBinding(owner, module, held);
           await options.owner.consumeReconfirmation(owner, reconfirmation, "block-use", held);
+          const resumeAuthority = async () => {
+            await options.owner.authorize(owner);
+            if ((await options.resumeBinding!(owner, module, held)) !== binding) conflict();
+          };
           await options.withPreparationAuthorization(
-            async () => {
-              await options.owner.authorize(owner);
-              if ((await options.resumeBinding!(owner, module, held)) !== binding) conflict();
-            },
+            { intent: resumeAuthority, wait: resumeAuthority },
             () => seat.resume!(context, structuredClone(state.inputs[module]), binding),
           );
           await options.owner.authorize(owner);
@@ -168,13 +175,14 @@ export function createFirstSetupPreparation(options: Options) {
         owner: FirstSetupOwnerAttempt,
         module: string,
         proposal: unknown,
+        client: OperationClient,
         hold?: FirstSetupHold,
       ) {
         return inside(hold, async () => {
           const state = await options.owner.authorize(owner);
           const { seat, context } = selected(state, module);
           if (seat.preparation === undefined) invalid();
-          return seat.preparation(context, proposal);
+          return seat.preparation(context, proposal, client);
         });
       },
       select(
@@ -189,22 +197,30 @@ export function createFirstSetupPreparation(options: Options) {
           if (state.status !== "claimed") conflict();
           const { seat, context } = selected(state, module);
           let reconfirmed = false;
-          const confirm = async () => {
-            if (reconfirmed) return;
+          const grant = () => {
             if (
               typeof reconfirmation !== "string" ||
               !reconfirmation.length ||
               Buffer.byteLength(reconfirmation) > 65536
             )
               invalid();
-            await options.owner.consumeReconfirmation(owner, reconfirmation, "block-use", held);
+            return reconfirmation;
+          };
+          const check = async () => {
+            if (reconfirmed) return;
+            await options.owner.checkReconfirmation(owner, grant(), "block-use", held);
+          };
+          const confirm = async () => {
+            if (reconfirmed) return;
+            await options.owner.consumeReconfirmation(owner, grant(), "block-use", held);
             reconfirmed = true;
           };
-          const request = await options.withPreparationAuthorization(confirm, async () =>
-            seat.request(context, await seat.candidates(context, proposal)),
+          const request = await options.withPreparationAuthorization(
+            { intent: confirm, wait: check },
+            async () => seat.request(context, await seat.candidates(context, proposal)),
           );
           if (seat.pending?.(request)) {
-            await confirm();
+            await check();
             return { state, preparation: request };
           }
           await assertFreshAssignment(

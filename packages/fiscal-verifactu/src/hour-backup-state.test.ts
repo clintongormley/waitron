@@ -3,7 +3,7 @@ import { publicHourSelectionHistory } from "./hour-selection.js";
 import { projectHourHistory } from "./hour-history.js";
 
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" } as const;
-function intent(identity = "06RB", issuedAt = "2026-10-16T11:40:00.000Z") {
+function intent(identity = "0CNNW", issuedAt = "2026-10-16T11:40:00.000Z") {
   return {
     kind: "intent",
     softwareId: "other-software",
@@ -33,7 +33,7 @@ function state(...entries: unknown[]) {
 }
 it("exports abandoned and older-software intents without raw keys, PDFs or owner context", () => {
   const original = intent();
-  const high = intent("06RC", "2026-10-16T12:01:00.000Z");
+  const high = intent("0CNPH", "2026-10-16T12:01:00.000Z");
   const source = publicHourSelectionHistory([
     state({ ...original, secret: "NEVER-BACK-UP", pdf: "%PDF-secret", contextKey: "private" }),
     state(original, high),
@@ -44,47 +44,47 @@ it("exports abandoned and older-software intents without raw keys, PDFs or owner
     records: [
       {
         ...scope,
-        reference: "intent/fiscal-verifactu/06RB",
+        reference: "intent/fiscal-verifactu/0CNNW",
         kind: "intent",
         softwareId: "other-software",
         nodeId: "old-node",
-        identity: "06RB",
+        identity: "0CNNW",
         recordedAtMs: 1792150800000,
       },
       {
         ...scope,
-        reference: "intent/fiscal-verifactu/06RB",
+        reference: "intent/fiscal-verifactu/0CNNW",
         kind: "intent",
         softwareId: "other-software",
         nodeId: "old-node",
-        identity: "06RB",
+        identity: "0CNNW",
         recordedAtMs: 1792150800000,
       },
       {
         ...scope,
-        reference: "intent/fiscal-verifactu/06RC",
+        reference: "intent/fiscal-verifactu/0CNPH",
         kind: "intent",
         softwareId: "other-software",
         nodeId: "old-node",
-        identity: "06RC",
+        identity: "0CNPH",
         recordedAtMs: 1792152060000,
       },
     ],
   });
   expect(JSON.stringify(source)).not.toMatch(/NEVER-BACK-UP|PDF-secret|private|owner|context/);
   expect(projectHourHistory({ scope, sources: [source] })).toMatchObject({
-    greatestSpentHour: 6924,
+    greatestSpentMinute: 415441,
     recordedTimeFloorMs: 1792152060000,
     contradictions: [],
   });
 });
 it("keeps conflicting revisions visible rather than allowing an older revision to lower the floor", () => {
-  const high = intent("06RC", "2026-10-16T12:01:00.000Z");
+  const high = intent("0CNPH", "2026-10-16T12:01:00.000Z");
   const low = { ...intent(), binding: high.binding };
   const source = publicHourSelectionHistory([state(high), state(low)]);
   expect(projectHourHistory({ scope, sources: [source] })).toMatchObject({
-    greatestSpentHour: 6924,
-    contradictions: ["intent/fiscal-verifactu/06RC:conflict"],
+    greatestSpentMinute: 415441,
+    contradictions: ["intent/fiscal-verifactu/0CNPH:conflict"],
   });
 });
 it("does not mark a waiting hour as spent", () => {
@@ -121,7 +121,7 @@ const publicRow = {
   ...scope,
   softwareId: "old-software",
   nodeId: "retired-node",
-  identity: "06RC",
+  identity: "0CNPH",
   recordedAtMs: 1792152060000,
 };
 function project(retained: readonly unknown[]) {
@@ -167,7 +167,7 @@ it.each([
       environment: "production",
       softwareId: "W1",
       nodeId: "node",
-      identity: "06RC",
+      identity: "0CNPH",
       wrong: null,
     },
   ].map((row) => ({ reference: "prepared-hours", complete: true, records: [row] })),
@@ -187,11 +187,11 @@ it("whitelists nested scope fields instead of copying a private property", () =>
   expect(source.records).toEqual([
     {
       ...scope,
-      reference: "intent/fiscal-verifactu/06RB",
+      reference: "intent/fiscal-verifactu/0CNNW",
       kind: "intent",
       softwareId: "other-software",
       nodeId: "old-node",
-      identity: "06RB",
+      identity: "0CNNW",
       recordedAtMs: 1792150800000,
     },
   ]);

@@ -23,28 +23,28 @@ import { freePorts } from "./testing/free-ports.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
+import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
+  time.clock = createFakeTimersHourClock();
 });
 afterEach(() => vi.useRealTimers());
 
 const calls = vi.hoisted(() => ({ throwaway: vi.fn(), outside: vi.fn(), drain: vi.fn() }));
+const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
-    const mono = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: Date.now(),
-      uncertaintyMs: 500,
-      wallStartedMs: Date.now(),
-      wallFinishedMs: Date.now(),
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  },
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: time.clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: time.clock.wall(),
+    wallFinishedMs: time.clock.wall(),
+    monotonicStartedMs: time.clock.monotonic(),
+    monotonicFinishedMs: time.clock.monotonic(),
+  }),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -200,14 +200,14 @@ it.each([true, false])(
         {
           id: expect.any(String),
           entorno: "preproduction",
-          num_serie_factura: "A-06RB/1",
+          num_serie_factura: "A-0CNNW/1",
           huella: expect.any(String),
         },
       ]);
       expect(first.series.map(({ code, next_number }) => ({ code, next_number }))).toEqual([
-        { code: "A-06RB", next_number: 2 },
-        { code: "FF-06RB", next_number: 1 },
-        { code: "R-06RB", next_number: 1 },
+        { code: "A-0CNNW", next_number: 2 },
+        { code: "FF-0CNNW", next_number: 1 },
+        { code: "R-0CNNW", next_number: 1 },
       ]);
       await server.close();
       server = undefined;
@@ -235,6 +235,8 @@ it.each([true, false])(
           `https://127.0.0.1:${port}`,
           request,
           PASSWORD,
+          undefined,
+          time.clock,
         );
         production = owned.initialOperations;
         const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {

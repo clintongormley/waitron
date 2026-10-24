@@ -10,21 +10,19 @@ import {
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createModuleOperationHost } from "./module-operation-host.js";
+import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
+const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
-    const now = Date.now(),
-      mono = performance.now();
-    return {
-      source: "internet",
-      result: "usable",
-      instantMs: now,
-      uncertaintyMs: 500,
-      wallStartedMs: now,
-      wallFinishedMs: now,
-      monotonicStartedMs: mono,
-      monotonicFinishedMs: mono,
-    };
-  },
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: time.clock.wall(),
+    uncertaintyMs: 500,
+    wallStartedMs: time.clock.wall(),
+    wallFinishedMs: time.clock.wall(),
+    monotonicStartedMs: time.clock.monotonic(),
+    monotonicFinishedMs: time.clock.monotonic(),
+  }),
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -69,7 +67,8 @@ it("the bound runtime retains its recovery document after restart and prepares o
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime("2026-10-16T11:40:00Z");
-  const f = await hourFirstFiscalFixture({ database: () => venue.db });
+  time.clock = createFakeTimersHourClock();
+  const f = await hourFirstFiscalFixture({ database: () => venue.db, clock: time.clock });
   try {
     const make = () =>
       createFirstSetupModuleHost({
@@ -107,10 +106,15 @@ it("the bound runtime retains its recovery document after restart and prepares o
       code: "sif.allocation_invalid",
       params: { reason: "clock_stale" },
     });
-    await restarted.preparation.prepare(f.ownerAttempt, f.module, {
-      action: "compare-clocks",
-      browser: null,
-    });
+    await restarted.preparation.prepare(
+      f.ownerAttempt,
+      f.module,
+      {
+        action: "compare-clocks",
+        browser: null,
+      },
+      { onBox: true },
+    );
     await restarted.recoveryDelivery.confirmRecoveryDocumentKept(
       f.ownerAttempt,
       { ...f.staged.ref, kept: true },
@@ -172,7 +176,8 @@ it("binds module-declared outside evidence and rejects prior password and docume
   const { randomBytes } = await import("node:crypto");
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime("2026-10-16T11:40:00Z");
-  const f = await hourFirstFiscalFixture({ database: () => venue.db });
+  time.clock = createFakeTimersHourClock();
+  const f = await hourFirstFiscalFixture({ database: () => venue.db, clock: time.clock });
   try {
     const outside = join(f.root, "retained-history.json");
     await writeFile(outside, '{"retained":42}');
