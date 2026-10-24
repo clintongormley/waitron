@@ -903,12 +903,13 @@ browser test** — most of these rules exist because a test passed while proving
   routes they name; a new money route is seen by none. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
   **A confirmation of the clock (`clock_confirmations`: AEAT's time, two agreeing devices from two
-  addresses, or an administrator's own device, never one on the box) lifts it for one step back**,
-  with no limit on the gap; once a record is written under it every reading is held to the minute
-  against the latest time written since. Guards:
-  `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` and
-  `packages/fiscal-verifactu/src/clock-confirmation.test.ts`, weaker than the rule — they cover the
-  readings they name. Receipt:
+  addresses, or an administrator's own device, never one on the box outside development) lifts it
+  for one step back**, with no limit on the gap; once a record is written under it every reading is
+  held to the minute against the latest time written since. Guards:
+  `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
+  `packages/fiscal-verifactu/src/clock-confirmation.test.ts` and
+  `apps/server/src/clock-confirm.route.test.ts`, weaker than the rule — they cover the readings and
+  requests they name. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back).
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain

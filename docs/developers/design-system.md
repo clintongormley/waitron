@@ -5512,9 +5512,9 @@ alert list, and holds no staged input.
   above its buttons, in its own sentence for `same_machine` (this screen is the box itself),
   `differs`, `challenge` (the check took too long) and `contrary_proof`, and every open read is read
   again. A confirmation closes the dialog and reads every open read again.
-- **Sales dated wrongly.** Under the rows, a section headed "Sales dated wrongly" for each open
-  `clock.records_misdated` alert, with "Go through these with your tax adviser, then mark the alert
-  as handled in the bell." under the heading. An alert that lists sales draws them in a
+- **Sales dated wrongly.** Under the rows, one section headed "Sales dated wrongly", with "Go
+  through these with your tax adviser, then mark the alert as handled in the bell." under the
+  heading and one entry for each open `clock.records_misdated` alert. An alert that lists sales draws them in a
   `wt-data-table` (Invoice, Time recorded), read from `GET /api/box/clock-misdated` only while such
   an alert is open, with a sentence above it when the list may be short (`partial`); an alert that
   cannot tell draws its sentence and no table. A failed list read says "The list of sales dated
