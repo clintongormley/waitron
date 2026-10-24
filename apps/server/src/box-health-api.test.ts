@@ -67,11 +67,14 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     db,
     readHealth: vi.fn(readHealth),
     freeSpace: vi.fn<(personId: string) => Promise<FreedSpace>>(async () => FREED),
-    clockRestart: {
+    clockConfirm: {
       backend: new FakeFiscalBackend(db),
       witnesses: () => [],
       clock: systemClock(),
       nodeId: "node-1",
+      steady: () => 0,
+      readBoot: () => ({ ms: 0, id: null }),
+      devMode: false,
     },
   };
   const app = new Hono();

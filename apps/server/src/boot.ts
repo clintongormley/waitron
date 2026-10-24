@@ -178,6 +178,7 @@ import { BOX_EMAIL_CHECK_MS, readBoxEmailContext, startBoxEmailDuty } from "./bo
 import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
+import { bootReader } from "./boot-reader.js";
 import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -1564,6 +1565,7 @@ async function bootServer(
   // it: a node without a `fiscal.aeat` cert sells and chains locally, and its drain skips filing.
   const awaitingFiscalCert = { current: false };
   const clockWitnesses = createClockWitnessStore();
+  const boxBoot = bootReader();
   const authorityClock = createAuthorityClockStatus({ onSample: clockWitnesses.noteAuthority });
   const isMirror = holders.mode.current === "mirror";
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
@@ -2451,11 +2453,15 @@ async function bootServer(
         // A deletion changes what the disk holds, so the next read walks it afresh.
         onFreed: () => diskUsageCache.clear(),
       }),
-      clockRestart: {
+      clockConfirm: {
         backend: tillBackend,
         witnesses: () => clockWitnesses.witnesses(),
         clock: tillClock,
         nodeId: till.nodeId,
+        steady: () => performance.now(),
+        readBoot: () => boxBoot.readBoot(),
+        requestFromBox: seams.requestFromBox,
+        devMode: config.devMode,
       },
     },
     log,
