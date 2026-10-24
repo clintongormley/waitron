@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import type { Transaction } from "@waitron/db";
 import {
   judgeClockWitnesses,
@@ -7,6 +6,7 @@ import {
   type TrustedClock,
 } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
+import { elapsedClock } from "./boot-reader.js";
 import { readClockStopState } from "./box-health.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
@@ -19,31 +19,6 @@ type Reading = ReturnType<TrustedClock["now"]>;
 /** How much further the wall clock may move than the elapsed-time clock between two checks before
  * the wall clock is taken to have jumped. */
 const JUMP_MS = 60_000;
-
-function uptimeMs(): number {
-  return Number.parseFloat(readFileSync("/proc/uptime", "utf8")) * 1000;
-}
-
-/** Linux's boot-time clock (`/proc/uptime`), which keeps counting while the machine is suspended,
- * so a resume is not read as a jump; performance.now() stops during a suspend there. Where
- * `/proc/uptime` gives no number at start, performance.now(). A later read that fails answers NaN,
- * which no jump compares above. */
-export function elapsedClock(): () => number {
-  try {
-    if (Number.isFinite(uptimeMs())) {
-      return () => {
-        try {
-          return uptimeMs();
-        } catch {
-          return Number.NaN;
-        }
-      };
-    }
-  } catch {
-    // Unreadable: fall back to performance.now().
-  }
-  return () => performance.now();
-}
 
 /** A day of minutely checks while every record fails; past it the earliest entries are kept. */
 const PENDING_MAX = 1_440;
