@@ -92,7 +92,8 @@ bigger: each of the four text sizes grows by the same percentage, to the nearest
 Waitron's size, and 130% the largest. Spacing stays as it is, and so does the smallest size of a
 button, a till's product buttons included, so a long name that no longer fits takes another line.
 
-On a till whose venue's default content language is Spanish, a word of eight letters or more in a
+On a till or handheld whose venue's [default content language](content-and-images.md#languages) is
+Spanish, a word of eight letters or more in a
 product name, on a product button or a bill line, can break at a syllable with a hyphen; a shorter
 word is never hyphenated. In a language the browser does not hyphenate, English among them, a word
 longer than its button or line breaks inside the word, with no hyphen, at any text size; larger text

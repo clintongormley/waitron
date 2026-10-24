@@ -99,7 +99,8 @@ redondeado al píxel. El 100 % es el tamaño de Waitron, y el 130 %, el mayor. L
 cambian, ni tampoco el tamaño mínimo de un botón, incluidos los botones de producto de una caja, así
 que un nombre largo que ya no cabe ocupa otra línea.
 
-En una caja de un local cuyo idioma de contenido predeterminado es el español, una palabra de ocho
+En una caja o un terminal de camarero de un local cuyo [idioma de contenido
+predeterminado](content-and-images.md#languages) es el español, una palabra de ocho
 letras o más en el nombre de un producto, en un botón de producto o en una línea de la cuenta, puede
 cortarse por una sílaba con un guion; una palabra más corta nunca se divide con guion. En un idioma
 que el navegador no divide con guiones, entre ellos el inglés, una palabra más larga que su botón o

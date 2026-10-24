@@ -1209,7 +1209,7 @@ describe("till-basket: a line name's language", () => {
     expect(el.shadowRoot!.querySelector(".product-name")!.getAttribute("lang")).toBe("en");
   });
 
-  it("an English venue's names wrap as before", async () => {
+  it("an English venue's names break as with no language set", async () => {
     setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
     const store = new WorkingOrderStore();
     store.addProduct({ ...cafe, id: "long", name: "Strawberries" }, "1");
@@ -1220,7 +1220,7 @@ describe("till-basket: a line name's language", () => {
     expect(own.getAttribute("lang")).toBe("en");
     const asEnglish = textBoxes(own);
     expect(asEnglish.length).toBeGreaterThan(1);
-    // Before this change a name had no language and no hyphenation; the English one breaks as that did.
+    // With no `lang` and no hyphenation, an English name breaks at the same places.
     own.removeAttribute("lang");
     own.style.hyphens = "manual";
     expect(textBoxes(own)).toEqual(asEnglish);
