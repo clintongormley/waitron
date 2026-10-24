@@ -55,6 +55,7 @@ import {
   IDENTITY_BACKUP_VERIFICATION,
   IDENTITY_CONFIGURATION_TRANSFER,
   IDENTITY_CHANGE_SOURCES,
+  IDENTITY_PERSONAL_DATA,
 } from "@waitron/identity";
 import { validateThemeConfiguration } from "@waitron/layouts";
 import type { ModuleConfigurationTransfer, WaitronModule } from "@waitron/module";
@@ -199,6 +200,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     backup: { verification: IDENTITY_BACKUP_VERIFICATION },
     changes: IDENTITY_CHANGE_SOURCES,
     configurationTransfer: IDENTITY_CONFIGURATION_TRANSFER,
+    personalData: IDENTITY_PERSONAL_DATA,
   },
   {
     name: "workforce",

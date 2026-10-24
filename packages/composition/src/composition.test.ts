@@ -26,12 +26,18 @@ import {
 import {
   IDENTITY_MIGRATIONS,
   IDENTITY_BACKUP_VERIFICATION,
+  IDENTITY_PERSONAL_DATA,
   registerModulePermissions,
   roleHasPermission,
 } from "@waitron/identity";
 import { MEDIA_MIGRATIONS } from "@waitron/media";
 import { manifestSets } from "@waitron/migrations";
-import { orderedMigrationSets, selectTimeRecordExport } from "@waitron/module";
+import {
+  orderedMigrationSets,
+  personalDataParts,
+  selectTimeRecordExport,
+  validatePersonalDataParts,
+} from "@waitron/module";
 import { PAYMENTS_ALERTS, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import {
@@ -332,6 +338,24 @@ describe("ALL_MODULES staff-notices seat", () => {
     expect(ALL_MODULES.filter((m) => m.staffNotices !== undefined).map((m) => m.name)).toEqual([
       "fiscal-verifactu",
     ]);
+  });
+});
+
+describe("ALL_MODULES personal-data seat", () => {
+  it("identity carries its part, by reference", () => {
+    expect(ALL_MODULES.find((m) => m.name === "identity")?.personalData).toBe(
+      IDENTITY_PERSONAL_DATA,
+    );
+  });
+
+  it("no other module carries the seat", () => {
+    expect(ALL_MODULES.filter((m) => m.personalData !== undefined).map((m) => m.name)).toEqual([
+      "identity",
+    ]);
+  });
+
+  it("every module's file names are valid and unique", () => {
+    expect(() => validatePersonalDataParts(personalDataParts(ALL_MODULES))).not.toThrow();
   });
 });
 
