@@ -5257,11 +5257,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Investigate the table-name reset's main-CI failure.** In
-  `apps/server/src/floor-today-name.test.ts`, “a new business day clears a free table's name
-  (reset clears)” retained a name instead of null (CI 40055003794, server shard 11). Cause
-  unverified; reproduce with the business-day clock and keep the reset assertion.
-
 - **A backlog detail link still names the old five-handler heading.** The till entry’s
   `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
   no longer matches “Three till handlers still leave a failed list refresh unhandled”.
