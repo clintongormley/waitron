@@ -32,6 +32,17 @@ section 18's pictures 23 and 42 (lines 2878, 2896). Earlier plans: slice 7
 current), slice 8 (`2026-10-24-a841-8-logo-screens.md`: the Logo field), slice 10
 (`2026-10-24-a841-10-text-size.md`: the shape this plan follows).
 
+**Revision, 2026-10-25,** after the fresh-context review (`~/waitron-campaign/a841-review/plan9-review.md`,
+1 HIGH, 2 MEDIUM, 7 LOW) and lane A's rulings (`plan9-rulings.md`): no test updates the append-only
+`sale_receipt_headers` — "not in this location" moves the department, and a sale with no department
+gets its header when it is made (H1); the preview's "read throws" case renames on the route's second
+read (M1); the preview never draws the venue's logo for a department that cannot be trusted, as the
+design says (M2, D7); `receipt-print.ts` cites re-read (L1); the unprintable-paper case in A4 and A7
+(L2); one decision point, `venueLogoMayPrint` (L3); "How it prints" follows a reframe through a new
+`watchMediaImage` in `@waitron/ui` (L4, Task B3, D12); A8 restores its theme (L5); Remove and Use
+Waitron's look go through the real save route (L6); B1's staff session, the 58 mm backlog line, and
+9b after 9a (L7); who lands 9a is the owner's answer, asked by the controller.
+
 ---
 
 ## What the landed code already does (receipts, main `0569c71fd`)
@@ -50,10 +61,10 @@ current), slice 8 (`2026-10-24-a841-8-logo-screens.md`: the Logo field), slice 1
   `apps/server/src/receipt-print.ts:199`, `invoice-document.ts:103`, `receipt-presentation.ts:26`,
   `receipt-preview-api.ts:368`.
 - **The receipt.** `buildReceiptBytes` (`apps/server/src/receipt-print.ts:172-230`) reads the sale's
-  department (`:191-192`), that department's printed receipt only when there is one (`:194-207`, on
-  the printer's paper), then `resolveReceiptTrim(authored, {}, …)` (`:209`) and
-  `const logo = department?.logo ?? null` (`:210`). Every optional read reports to a
-  `console.warn("receipt.optional_read_failed", event)` diagnostic (`:186-191`).
+  department (`:193-194`), that department's printed receipt only when there is one (`:196-208`, on
+  the printer's paper), then `resolveReceiptTrim(authored, {}, …)` (`:210`) and
+  `const logo = department?.logo ?? null` (`:211`). Every optional read reports to a
+  `console.warn("receipt.optional_read_failed", event)` diagnostic (`:187-192`).
 - **The A4 invoice.** `readInvoiceDocument` (`apps/server/src/invoice-document.ts:31-160`) does the
   same on the 80 mm pictures (`:98-115`, `"80mm"` at `:111`); the page draws the dots centred at the
   top (`invoice-page.ts:208-225`), written to the PDF at `invoice-pdf.ts:31`. Every A4 path —
@@ -104,10 +115,12 @@ current), slice 8 (`2026-10-24-a841-8-logo-screens.md`: the Logo field), slice 1
 
 ## Decisions this plan makes (the design or the brief left them open)
 
-**D1. Two pull requests.** 9a (Tasks A1-A10): the four places that read a department's receipt
-settings, `unreadable`, the theme read, and the guide's receipts section. 9b (Tasks B1-B5): the
-Look card's "How it prints". Each leaves main working: after 9a paper prints the logo and the card
-says nothing yet; 9b only adds a read route and a widget.
+**D1. Two pull requests, 9a first.** 9a (Tasks A1-A10): the four places that read a department's
+receipt settings, `unreadable`, the theme read, and the guide's receipts section. 9b (Tasks B1-B6):
+the Look card's "How it prints". **9b lands after 9a**: its guide paragraph links to 9a's
+`{#logo-receipts}` section (Task B5), and `guide-content.test.ts` refuses a link to a missing id. In
+that order each leaves main working: after 9a paper prints the logo and the card says nothing yet;
+9b only adds a read route, a media-image watcher and a widget.
 
 **D2. The shape of `unreadable`.** `@waitron/module` gains, beside the contract,
 
@@ -186,17 +199,21 @@ export async function resolvePrintedLogo(tx: Transaction, department: PrintedDep
 export async function readVenueLogoName(tx: Transaction, department: PrintedDepartmentReceipt | null, diagnostic: ReceiptReadDiagnostic): Promise<VenueReceiptConfig>;
 ```
 
-`resolvePrintedLogo`: a department naming a logo → `{ venue: {}, logo: department.logo }` (its
-picture, or `null` when its picture is bad — the fallback follows the name); a department that is
-`unreadable` → `{ venue: {}, logo: null }`; otherwise the theme's `{ venue: { logo: name }, logo:
-picture }`, or `{ venue: {}, logo: null }` without one. A failed theme read reports
+**Every decision whether the venue's logo may print goes through `venueLogoMayPrint`**, and
+nowhere else: `resolvePrintedLogo`, `readVenueLogoName` and the preview (D7) each ask it once and
+have no branch of their own on `unreadable` or on the department's logo. `resolvePrintedLogo`: when
+`venueLogoMayPrint` says no → `{ venue: {}, logo: department?.logo ?? null }` — a department naming
+its own logo prints its picture, or nothing when that picture is bad (the fallback follows the
+name), and an untrusted department, whose answer never holds a logo (D2), prints nothing; when it
+says yes → the theme's `{ venue: { logo: name }, logo: picture }`, or `{ venue: {}, logo: null }`
+without one. Task A5's proof by deletion relies on this single decision point. A failed theme read reports
 `{ operation: "readPrintedThemeLogo", code: "receipt.read_failed" }` (`readVenueLogoName`:
 `"readThemeInUse"`) and prints no venue logo; the sale prints, as every other optional read does
-(`receipt-print.ts:186-191`). `readVenueLogoName` reads `readThemeInUse` (the ticket view needs the
+(`receipt-print.ts:187-192`). `readVenueLogoName` reads `readThemeInUse` (the ticket view needs the
 name, not ~10 KB of dots).
 
 **D5. Which paper's pictures.** The receipt: the printer's paper, as the department's
-(`receipt-print.ts:206`). The A4 invoice: `"80mm"`, as the department's (`invoice-document.ts:111`;
+(`receipt-print.ts:207`). The A4 invoice: `"80mm"`, as the department's (`invoice-document.ts:111`;
 design line 1624). The Receipts tab's preview: the paper it draws at (`receipt-preview-api.ts:355-361`).
 The Look card: 80 mm, the paper the A4 invoice also uses.
 
@@ -208,16 +225,19 @@ rendition route, the same kind of address `/api/theme` serves the screens (`venu
 The till changes nothing: it already draws `logoUrl` (`till-ticket-view.ts:691-698`). Never the dark
 image (design line 1607).
 
-**D7. The Receipts tab's preview.** The snapshot transaction reads `readVenueLogo` for the preview's
-paper only when the draft names no logo; `renderDraftPreview` draws that picture where it draws
-nothing today. A draft that names a logo draws it exactly as today — the saved picture or its library
-image — never `printedLogo`, whatever the stored row holds (design lines 1693-1695). The preview
-shows the **draft as it would print once saved**: for a department whose stored row cannot be
-trusted, a draft naming no logo shows the venue's logo, which is what it prints after Save rewrites
-the row (until then its receipts print none). The dashboard learns nothing new — the server draws the
-preview — and the Receipts tab gains no words (no line saying the logo shown is the venue's; Left for
-later). The preview's `logo` mark (`receipt-preview-api.ts:293`) covers the venue's logo too, so
-focusing the Logo field outlines the logo that prints.
+**D7. The Receipts tab's preview** (design lines 1693-1695 and 1699-1704). When the draft names no
+logo, the snapshot transaction also reads `VENUE_SERVICE.readPrintedDepartmentReceipt(tx,
+checked.scope, id, printer.paperWidth)` — one select — and asks `venueLogoMayPrint` about the draft
+as the department would print it: `{ receipt: checked.input.receipt, logo: null }`, with
+`unreadable: true` added when the stored answer carries it. Only when that says yes does it read
+`readVenueLogo` for the preview's paper, and `renderDraftPreview` draws that picture where it draws
+nothing today. So **a department whose stored settings cannot be trusted never shows the venue's
+logo in its preview**, as the design says; a readable department whose draft names no logo shows
+the theme's `printedLogo`. A draft that names a logo draws it exactly as today — the saved picture
+or its library image (`:363-376`, `:237-259`) — never `printedLogo`. The dashboard learns nothing
+new — the server draws the preview — and the Receipts tab gains no words (Left for later). The
+preview's `logo` mark (`receipt-preview-api.ts:293`) covers the venue's logo too, so focusing the
+Logo field outlines the logo that prints.
 
 **D8. "How it prints": a read route.** `GET /management-api/theme-logo-print?image=<library name>`
 in `mountThemesApi`. A GET, so the dashboard's `background` request is passive (automatic reads must
@@ -252,7 +272,17 @@ which would need a number the design never chose.
 **D10. The widget.** `dashboard-theme-logo-print` (`apps/dashboard/src/widgets/theme-logo-print.ts`),
 rendered by the Logo field after the dark-screens fieldset while there is a logo (picture 23). Its
 `image` is the draft's light name, so it asks again when the light image is picked or replaced, never
-for a dark-image change, and disappears with Remove. It dispatches nothing, so the draft and
+for a dark-image change, and disappears with Remove. **It also asks again when the image changes
+under the same name** — a reframe or a replaced source in the image library the picker embeds — by
+watching the key the Logo field's thumbnail already redraws on: the image's `display` presentation
+address (`liveMediaImage(this.image, "display")`, `apps/dashboard/src/widgets/image-upload.ts:333`),
+which names the source file and framing (`renditionUrl`, `packages/media/src/presentation.ts:10-16`)
+and which `packages/ui/src/live-media-image.ts` refreshes on every library edit
+(`invalidateMediaImages`, `:152-154`, called by the library's client after a PATCH,
+`packages/media/src/dashboard/client.ts:93-98`) and every 15 s (`:48-50`). The directive keeps its
+subscription private, so `live-media-image.ts` gains `watchMediaImage` (Task B3), built on the same
+`subscribe`; the widget asks again when the watched address changes from one known address to
+another, not on its first arrival. It dispatches nothing, so the draft and
 `saveActionState` never see it. States: **asking** — the paper box, empty, with `aria-busy="true"`,
 and the caption; **shown** — the picture on paper (`paperGround`) drawn a third of its dots wide
 (`width: (widthDots / paperDots) * 100%` of a box `calc(var(--wt-space-6) * 6)` wide, 192 px:
@@ -269,10 +299,13 @@ carries `custom_themes` (`packages/db/src/configuration-transfer.ts:87`) and its
 logo without printable dots (`packages/layouts/src/theme-configuration.ts:51-64`), and removing the
 logo stores no dots (`theme-store.test.ts:572`, "stores no dots without a logo").
 
-**D12. Mutation.** No source file of a mutation-tested package changes: `ui`, `ui-core`, `shared`,
-`fiscal` and `db` are untouched (the trim rules in `packages/shared/src/receipt-text.ts` already
-handle a venue logo). No Stryker run is owed. If a task finds it must change one of them, it stops
-and reports.
+**D12. Mutation.** One mutation-tested file changes: `packages/ui/src/live-media-image.ts` gains
+`watchMediaImage` (D10, Task B3), so Task B3 runs `pnpm --filter @waitron/ui exec stryker run
+--mutate src/live-media-image.ts` and kills every survivor in the new function (a local run prints a
+score and gates nothing; the nightly merged `mutation-ui` score does, `docs/developers/ci-and-gates.md:416`).
+`ui-core`, `shared`, `fiscal` and `db` are untouched (the trim rules in
+`packages/shared/src/receipt-text.ts` already handle a venue logo). If a task finds it must change
+another mutation-tested file, it stops and reports.
 
 **D13. Fiscal code is untouched.** No file under `packages/fiscal`, `packages/fiscal-verifactu` or
 `packages/core` changes; `computeHuella`, the chain, invoice numbering, `registros_facturacion` and
@@ -298,17 +331,27 @@ unedited; Task A9 also runs those two files locally.
   `@waitron/venue-service` and `apps/server`, and what a receipt and an A4 invoice print — the FULL
   review path.
 - Coverage `98/98/98/95` in every package touched — `@waitron/venue-service`, `@waitron/layouts`,
-  `@waitron/server`, `@waitron/dashboard` (`@waitron/module` gains a type only) — never an exclude or
+  `@waitron/server`, `@waitron/ui`, `@waitron/dashboard` (`@waitron/module` gains a type only) — never an exclude or
   ignore comment over reachable code. `apps/server/src/testing/**` is outside the server's coverage
   (`apps/server/vitest.config.ts:43`).
-- No mutation-tested source changes (D12).
+- One mutation-tested source file changes, `packages/ui/src/live-media-image.ts`, with its Stryker run in Task B3 (D12).
 - One `withTransaction` per request; the theme read and the department read run on the same
   transaction, awaited in turn, never `Promise.all`; sharp never runs inside a transaction (CLAUDE.md
   §3).
-- Database tests through `useVenueDb`. A case that records a sale in a shared database
-  (`invoice-document.test.ts` has `resetPerTest: false`, `:39-40`) restores what it changed in
-  `finally`, as its neighbours do (`:466-536`), so later cases see no theme in use. Sales use the real
-  clock, as the files' existing sales do (CLAUDE.md §4's fiscal-clock rule).
+- Database tests through `useVenueDb`. Two of the files keep one database for every case:
+  `invoice-document.test.ts` (`resetPerTest: false`, `:39-41`) and `receipt-preview-api.test.ts`
+  (`:34-38`). In them every case restores what it changed — the theme it put in use (`clearThemes`),
+  a renamed table, a moved department — in `finally`, as their neighbours do
+  (`invoice-document.test.ts:466-536`), so later cases see no theme in use; Task A8's describe also
+  runs `clearThemes` in its `afterEach`. Sales use the real clock, as the files' existing sales do
+  (CLAUDE.md §4's fiscal-clock rule).
+- **No test writes to an append-only table after the fact.** `sale_receipt_headers` is declared
+  `appendOnly` (`packages/venue-service/src/classification.ts:19`), and the suites built from
+  `migrationOptionsFor` (`receipt-print.test.ts:152-155`, `invoice-document.test.ts:41`,
+  `receipt-preview-api.test.ts:35`) install its `RAISE(ABORT)` triggers: an update of a sold sale's
+  header answers "sale_receipt_headers is append-only" (review E1). A sale with no department gets its
+  header with no department when the sale is made (`receipt-print.test.ts:2952-2975`'s pattern), and
+  "a department not in this location" moves the department, not the header (Task A3).
 - A cannot-be-trusted case asserts what prints (no logo picture) **and** that the sale still prints
   its text; every such case has its control beside it (design line 2448): the same department with a
   readable logo prints its own, and with no receipt row prints the theme's.
@@ -332,11 +375,13 @@ unedited; Task A9 also runs those two files locally.
    the theme in use holds now, as a department's trim already does ("reprints with the trim saved
    since", `receipt-print.test.ts:2748`). Test in Task A4.
 3. **The theme's dots unprintable for one paper only**: that paper prints no logo, the other prints
-   its own, and the ticket view still shows the image. Tests in Tasks A2 and A4.
+   its own, and the ticket view still shows the image. Tests in Tasks A2, A4 and A7.
 4. **A logo picked while the last "How it prints" answer is still on its way**: the late answer must
-   not replace the new one. Test in Task B3.
+   not replace the new one. Test in Task B4.
 5. **A faint near-white logo** (one black dot) is not "blank"; a white one on a see-through
-   background is. Tests in Tasks B1 and B3.
+   background is. Tests in Tasks B1 and B4.
+6. **A logo reframed in the image library while the editor is open**: "How it prints" must redraw
+   under the same name. Tests in Tasks B3 and B4.
 
 ---
 
@@ -375,7 +420,8 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   department:** one more select, on `custom_themes` by its `in_use` unique index; the receipt and
   invoice read one paper's dots (at most about 13 KB of base64 at 80 mm), the ticket view none.
 - **With a department naming its own logo, or one that cannot be trusted:** no theme read.
-- **Per Receipts tab preview of a draft with no logo:** the same one select; no drawing.
+- **Per Receipts tab preview of a draft with no logo:** the department's printed receipt (one
+  select), then, when the venue's logo may print, the theme's (one select); no drawing.
 - **Per "How it prints" answer:** one transaction (the session, the image row), then one decode and
   dither outside it — about 26 ms for a 1200 × 400 logo and 0.3 s at worst (slice 7's probe P1) —
   then cached by rendition address, so asking again for the same framing draws nothing.
@@ -394,11 +440,12 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
 | `apps/server/src/invoice-document.ts` | A6 | `resolvePrintedLogo` on 80 mm |
 | `apps/server/src/receipt-presentation.ts` | A7 | `readVenueLogoName` |
 | `apps/server/src/receipt-preview-api.ts` | A8 | the venue's dots for a draft with no logo |
-| `apps/server/src/guide/{en,es}/appearance.md`, `content-and-images.md` | A9, B4 | receipts section; "How it prints" |
+| `apps/server/src/guide/{en,es}/appearance.md`, `content-and-images.md` | A9, B5 | receipts section; "How it prints" |
 | `apps/server/src/receipt-logo.ts`, `themes-api.ts` | B1 | `countBlackDots`; the print route |
 | `apps/dashboard/src/api/client.ts`, `widgets/print-paper.ts` | B2 | `getThemeLogoPrint`; `rasterUrl` |
-| `apps/dashboard/src/widgets/theme-logo-print.ts` (new), `i18n/strings.ts` | B3 | the widget and its words |
-| `apps/dashboard/src/widgets/theme-logo-field.ts` | B4 | renders it |
+| `packages/ui/src/live-media-image.ts` | B3 | `watchMediaImage` |
+| `apps/dashboard/src/widgets/theme-logo-print.ts` (new), `i18n/strings.ts` | B4 | the widget and its words |
+| `apps/dashboard/src/widgets/theme-logo-field.ts` | B5 | renders it |
 
 ---
 
@@ -516,19 +563,33 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
     bytes are `[0xf0]` on 58 mm and `[0xf0, 0x0f]` on 80 mm — different from every department picture
     the receipt tests use (`receipt-print.test.ts:3413-3420,3446-3449`);
   - `putThemeInUse(db: Database, input?: { light?: string; printedLogo?: unknown; name?: string }): Promise<string>`
-    — a custom theme in use, `{ ...WAITRON_CHOICES, logo: { light }, printedLogo }`, defaulting to
-    `THEME_LOGO` and `THEME_DOTS`;
+    — clears any theme's `in_use` (the column's unique index refuses a second 1,
+    `theme-store.ts:91`), then inserts a custom theme in use, `{ ...WAITRON_CHOICES, brandColor:
+    "#1e5b3a", logo: { light }, printedLogo }`, defaulting to `THEME_LOGO` and `THEME_DOTS`; answers
+    its id;
   - `clearThemes(db: Database): Promise<void>`;
+  - `saveThemeThroughRoute(db: Database, id: string, theme: ThemeChoices): Promise<Response>` — starts
+    a manager's management session (`persons` insert and `startManagementSession`, as
+    `apps/server/src/themes-api.test.ts:23-32` does), mounts `mountThemesApi` on a fresh `Hono` and
+    sends `PUT /management-api/themes/:id` with `{ theme }`: the request the Look card's Save makes,
+    so a test of Remove or Use Waitron's look goes through the real save (design line 2449-2450);
   - `UNTRUSTED_CASES: readonly UntrustedCase[]` with `interface UntrustedCase { readonly name: string;
-    apply(db: Database, at: { departmentId: string; saleId: string; foreignDepartmentId: string }): Promise<void>;
-    undo(db: Database, at: { departmentId: string; saleId: string }): Promise<void> }`, one per design
-    line 2443-2445: "the read throws" (rename `department_receipts` to
-    `test_hidden_department_receipts`, undo renames back), `{bad json`, `null`, `[]`, `42` (raw
+    apply(db: Database, at: UntrustedAt): Promise<void>; undo(db: Database, at: UntrustedAt): Promise<void> }`
+    and `type UntrustedAt = { departmentId: string; locationId: string; foreignLocationId: string }`,
+    one per design lines 2443-2445: "the read throws" (rename `department_receipts` to
+    `test_hidden_department_receipts`; undo renames back), `{bad json`, `null`, `[]`, `42` (raw
     `insert … on conflict (department_id) do update` of the document, as
     `department-receipts.test.ts:55-59` does), "a numeric logo" (`{"logo":7,"phone":"910111111"}`),
     "a logo longer than 255 bytes", "a logo that is not a library name" (`"../secret.png"`), and "a
-    department not in this location" (sets the sale's `sale_receipt_headers.department_id` to
-    `foreignDepartmentId`; undo sets it back). Every stored-document undo deletes the row.
+    department not in this location": `update departments set location_id = foreignLocationId`
+    for the department (undo moves it back to `locationId`) — **never an update of
+    `sale_receipt_headers`, which is append-only** (`packages/venue-service/src/classification.ts:19`;
+    the review's E1 saw "sale_receipt_headers is append-only"). The header keeps naming the
+    department, and `readSaleReceiptHeader` reads it with no location filter
+    (`packages/venue-service/src/operations.ts:651-661`), so the department read is what finds no
+    department here (the review's E3 read `{ receipt: {}, logo: null, unreadable: true }` after the
+    move). `foreignLocationId` is a second `locations` row the test inserts. Every stored-document
+    undo deletes the row.
 
 - [ ] **Step 1: Write the failing tests** in `receipt-venue-logo.test.ts` (`useVenueDb` with
   `CORE_MIGRATIONS`; departments are plain `PrintedDepartmentReceipt` literals, the theme a real row):
@@ -542,6 +603,9 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   - "a failed theme read reports and prints nothing": rename `custom_themes` to `test_hidden_custom_themes` in `try`/`finally` → `{ venue: {}, logo: null }` and the diagnostic called once with `{ operation: "readPrintedThemeLogo", code: "receipt.read_failed" }`.
   - `readVenueLogoName`: `null` department → `{ logo: THEME_LOGO }`; own logo → `{}`; untrusted → `{}`; failed read → `{}` and `{ operation: "readThemeInUse", code: "receipt.read_failed" }`.
   - `venueLogoMayPrint`: `true` for `null` and for a trusted department naming no logo; `false` for an own logo and for `unreadable: true`.
+  - `saveThemeThroughRoute`: a theme put in use with a logo, saved through it with `logo: null` →
+    status 200 and the stored row holds no `printedLogo` (the helper's own check that it reaches the
+    real route).
 
 - [ ] **Step 2: Run them to see them fail**
 
@@ -549,8 +613,11 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   Expected: FAIL — `Failed to load url ./receipt-venue-logo.js`.
 
 - [ ] **Step 3: Implement** `receipt-venue-logo.ts` (D4) and `testing/theme-logo.ts` as Interfaces
-  says. Each read awaits in turn on the caller's transaction; a caught throw calls the diagnostic
-  inside its own `try`, as `department-receipts.ts:231-239` does.
+  says. **`resolvePrintedLogo` and `readVenueLogoName` decide whether the venue's logo may print only
+  by calling `venueLogoMayPrint`** — no branch of their own on `unreadable` or on the department's
+  logo (D4): Task A5's proof by deletion relies on it. Each read awaits in turn on the caller's
+  transaction; a caught throw calls the diagnostic inside its own `try`, as
+  `department-receipts.ts:231-239` does.
 
 - [ ] **Step 4: Run the tests and typecheck**
 
@@ -562,7 +629,7 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
 ### Task A4: The receipt prints the theme's logo, the department's first (`apps/server`)
 
 **Files:**
-- Modify: `apps/server/src/receipt-print.ts:194-210`
+- Modify: `apps/server/src/receipt-print.ts:196-211`
 - Test: `apps/server/src/receipt-print.test.ts` — a new describe "the theme's logo on thermal
   receipts" after "department receipt presentation on thermal jobs" (`:3359`), reusing that
   describe's `setupReceipt` pattern (`:3360-3402`), `storeDepartmentReceipt` (`:278-291`),
@@ -581,14 +648,25 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   - "a department naming a logo whose pictures are bad prints nothing, not the theme's": the
     corrupt-pictures write of `:3457-3459` with a theme in use → `[]`, and the job still contains the
     department's text.
-  - "a sale with no department prints the theme's logo": sell, then `update sale_receipt_headers set
-    department_id = null`, reprint → the reprint prints `[[0xf0, 0x0f]]`.
-  - "the reprint follows the theme in use now": sell with the theme in use (prints its dots); rewrite
-    the theme row to its choices with `logo: null` and no `printedLogo` (what saving Remove or Use
-    Waitron's look stores, `theme-store.test.ts:572-585`), reprint → `[]`; put a second theme in use
-    with `printedLogo` `"80mm"` `{ widthDots: 8, heightDots: 1, data: "/w==" }` → the next reprint
-    prints `[[0xff]]`; switch `in_use` to none (Waitron's theme) → `[]`. A theme not in use never
-    prints.
+  - `it.each(["absent", "null"])` "a sale with no department prints the theme's logo: header %s" —
+    in the describe "automatic F1 receipt delivery enrollment" (`:2768`), beside "omits optional
+    decoration with an %s department header" (`:2952-2990`), whose pattern it follows: `issued("auto")`
+    makes a sale with no header, and for `"null"` the case inserts its header with `departmentId:
+    null` before anything reads it; `putThemeInUse`; reprint → `[[0xf0, 0x0f]]`. No case updates
+    `sale_receipt_headers` (Global Constraints).
+  - `it.each(["58mm", "80mm"])` "theme dots that cannot print on %s print no logo, and the sale
+    prints": a theme in use whose `printedLogo` `"80mm"` is `{ widthDots: 16, heightDots: 1, data:
+    "x" }` → on 80 mm the job prints `[]` and still holds the sale's lines and total, with
+    `registroCount` 1; on 58 mm it prints `[[0xf0]]`.
+  - `it.each(["Remove", "Use Waitron's look"])` "saving %s stops the logo printing": sell with the
+    theme in use (prints its dots); `saveThemeThroughRoute` with the theme's choices and `logo: null`
+    (Remove; the fixture's theme sets `brandColor: "#1e5b3a"` so the two saves differ) or with
+    `WAITRON_CHOICES` (Use Waitron's look, which puts Waitron's choices and no logo in the draft,
+    design section 8a) → 200; reprint → `[]`.
+  - "the reprint follows the theme in use now": sell with the theme in use; put a second theme in use
+    with `printedLogo` `"80mm"` `{ widthDots: 8, heightDots: 1, data: "/w==" }` (`putThemeInUse`
+    clears the first theme's `in_use`) → the reprint prints `[[0xff]]`; switch `in_use` to none
+    (Waitron's theme) → `[]`. A theme not in use never prints.
   - The existing "uses the current department logo on %s and omits it after clearing"
     (`:3404-3442`) is unchanged: it has no theme in use (P4).
 
@@ -600,7 +678,7 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
 
 - [ ] **Step 3: Implement** in `buildReceiptBytes`: after the department read,
   `const { venue, logo } = await resolvePrintedLogo(tx, department, printer.paperWidth, diagnostic)`,
-  then `resolveReceiptTrim(authored, venue, …)` and `logo` in place of `:210`.
+  then `resolveReceiptTrim(authored, venue, …)` and `logo` in place of `:211`.
 
 - [ ] **Step 4: Run the file**
 
@@ -628,8 +706,9 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   without a logo and reports it": `custom_themes` renamed after the sale, reprint → `[]`, the job
   exists, `console.warn` called with `"receipt.optional_read_failed", { operation:
   "readPrintedThemeLogo", code: "receipt.read_failed" }`.
-  Foreign department: a department of a second location created in the test (`locations` +
-  `departments` inserts, as `department-receipts.test.ts:36-53` does).
+  "A department not in this location" needs a second `locations` row (insert it as
+  `department-receipts.test.ts:36-41` does) and moves the sale's department there; `undo` moves it
+  back.
 
 - [ ] **Step 2: Run them**
 
@@ -637,7 +716,9 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   Expected: PASS once Tasks A1 and A4 are in. This task adds no code, so prove the cases bite:
   delete the `unreadable` check from `venueLogoMayPrint` and run again — every case of both
   `it.each` sets must fail with `[[240, 15]]` where `[]` was expected (an untrusted department keeps
-  no logo name, so without the check the theme's logo prints). Restore the check. The reprint path
+  no logo name, so without the check the theme's logo prints). The proof holds only because every
+  decision goes through `venueLogoMayPrint` (Task A3, Step 3); if a case still passes with the check
+  deleted, look for a second decision point and remove it. Restore the check. The reprint path
   (`enqueueReceiptCopy` → `buildReceiptBytes`, `receipt-print.ts:326-335`) makes no mandatory
   department read, so "the read throws" can rename the table before the reprint.
 
@@ -656,12 +737,15 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   `UNTRUSTED_CASES` (A3).
 
 - [ ] **Step 1: Write the failing tests.** Every case calls `clearThemes` and its case's `undo` in
-  `finally` (the suite keeps one database, `:39-40`).
+  `finally` (the suite keeps one database, `:39-41`). Headers are inserted once, when the case makes
+  its sale, as `:455-460` does — never updated (`sale_receipt_headers` is append-only; this suite is
+  built with `migrationOptionsFor`, `:41`).
   - "a department with no receipt logo prints the theme's 80 mm logo, and its trim names it":
     `document.logo` `toEqual({ widthDots: 16, heightDots: 1, bits: new Uint8Array([0xf0, 0x0f]) })`,
     `document.receipt.logo` `THEME_LOGO`.
   - "a department's own receipt logo wins": own 80 mm `QA==` → `bits` `[64]`.
-  - "a sale with no department prints the theme's logo" (header `departmentId: null`).
+  - "a sale with no department prints the theme's logo": the header inserted with `departmentId:
+    null` (and a second case with no header at all).
   - "no theme in use prints none" — the control.
   - `it.each(UNTRUSTED_CASES)` "prints no logo when the department cannot be trusted: %s" →
     `document.logo` `null`, `document.receipt.logo` undefined, and `buildReceiptDocument(document)`
@@ -698,7 +782,11 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   - "a department with no receipt logo shows the theme's light image": upload two library images,
     theme in use with `logo: { light: A, dark: B }` → `receiptTrim` `toEqual({ logo: A, logoUrl:
     <A's display address from readPresentations> })`, never B's address.
-  - "a sale with no department shows it too" (`fixture("null")` and `fixture("absent")`).
+  - "a sale with no department shows it too" (`fixture("null")` and `fixture("absent")`, which insert
+    the header, or none, when the sale is made, `:65-71`).
+  - "theme dots that cannot print still show the image on the ticket": a theme whose `printedLogo`
+    `"80mm"` data is `"x"` → `receiptTrim` still `{ logo: A, logoUrl: <A's display address> }` (the
+    ticket view reads the name, never the dots).
   - "a department's own logo wins" → its own name and address.
   - `it.each(UNTRUSTED_CASES)` "shows no logo when the department cannot be trusted: %s" →
     `receiptTrim.logo` and `.logoUrl` undefined; for the numeric-logo case the phone still shows.
@@ -725,10 +813,14 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
 **Files:**
 - Modify: `apps/server/src/receipt-preview-api.ts:219-259,329-392`
 - Test: `apps/server/src/receipt-preview-api.test.ts` (its `rendered`, `libraryImage`, `sizes`,
-  `departmentId`, `:820-980`)
+  `departmentId`, `:780-980`). The file keeps one database (`resetPerTest: false`, `:34-38`), and the
+  "top block" describe's `afterEach` (`:781-785`) clears receipts and images, not themes: the new
+  describe runs `clearThemes` in its own `afterEach`, and each case also restores in `finally` any
+  table it renamed, so the later `marks.logo: null` pins (`:826-847`) still see no theme in use.
 
 **Interfaces:**
-- Consumes: `readVenueLogo` (A3), `putThemeInUse`, `THEME_DOTS`, `UNTRUSTED_CASES` (A3).
+- Consumes: `venueLogoMayPrint`, `readVenueLogo` (A3); `putThemeInUse`, `clearThemes`, `THEME_DOTS`,
+  `UNTRUSTED_CASES` (A3).
 - Produces: `ReceiptPreviewSnapshot` gains `venueLogo: MonoRaster | null`.
 
 - [ ] **Step 1: Write the failing tests**, a new describe "the theme's logo in a department's
@@ -741,22 +833,41 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
   - "no theme in use draws none" → `[]` and `marks.logo` `null` (the existing `:826-847` cases keep
     passing unchanged: no theme).
   - `it.each` over `UNTRUSTED_CASES` whose `name` is not "a department not in this location" (the
-    route refuses that with `department.not_found`, `:56`) "a draft naming its logo draws it from its
-    image while the stored settings cannot be trusted: %s": stored settings untrusted, the draft names
-    `libraryImage(46)` → its drawn size, not `[16, 1]`; "the read throws" applies after the
-    route's own management read by renaming inside a `readDepartmentReceipt` spy, as
-    `receipt-print.test.ts:3500-3510` does.
-  - "a draft with no logo shows the theme's logo even while the stored settings cannot be trusted"
-    (D7): stored `{bad json` → `[[16, 1]]`.
+    route refuses that one with `department.not_found`, `:56`) **"a draft with no logo draws no logo
+    while the stored settings cannot be trusted: %s"** (D7; design lines 1693-1695), theme in use →
+    status 200, `sizes(result)` `[]`, `marks.logo` `null`. "The read throws" renames
+    `department_receipts` inside a `vi.spyOn(VENUE_SERVICE, "readDepartmentReceipt")` whose
+    implementation reads first and renames after, on its **first** call — the draft's read in
+    `checkedDepartmentReceiptWrite` (`apps/server/src/department-receipt-draft.ts:36`) — so the
+    `readPrintedDepartmentReceipt` of D7 is the read that fails (it catches, answering
+    `unreadable`). The control beside it: the same department with a readable stored document and no
+    logo → `[[16, 1]]`.
+  - "a draft naming its saved logo draws it from its image when the printed read throws" (review
+    M1): the stored row names `libraryImage(46)` with its pictures, the draft names the same image;
+    the spy reads and then renames on its **second** call — the route's own
+    `readDepartmentReceipt` (`receipt-preview-api.ts:365`), which still answers — so
+    `readPrintedDepartmentReceipt` (`:368`) throws inside and answers no picture → status 200, the
+    image's drawn size (as "draws a library logo fitted to the paper", `:851-861`), never `[16, 1]`.
+    Count calls in a `mockImplementation`; a `mockImplementationOnce` on the first call breaks the
+    route's mandatory second read and answers 500 (the review's E2).
+  - `it.each` over the stored-document `UNTRUSTED_CASES` (`{bad json` through "not a library name")
+    "a draft naming a logo draws it from its image while the stored settings cannot be trusted: %s":
+    the draft names `libraryImage(47)` → its drawn size, never `[16, 1]`. These pass before the
+    change — with a stored row that is not the draft's logo, `readPrintedDepartmentReceipt` is never
+    called (`:364-376`) — and stay as guards that the venue's logo never replaces a draft's own.
 
 - [ ] **Step 2: Run them to see them fail**
 
   Run: `pnpm --filter @waitron/server exec vitest run src/receipt-preview-api.test.ts -t "department's preview"`
-  Expected: FAIL — a draft with no logo draws `[]`.
+  Expected: FAIL — "a draft with no logo draws the theme's dots" and its readable control draw `[]`;
+  the untrusted no-logo cases, the saved-logo case and the draft-logo guards pass already.
 
-- [ ] **Step 3: Implement** D7: in the snapshot transaction, after `printer` is chosen,
-  `venueLogo = receipt.logo === undefined ? ((await readVenueLogo(tx, printer.paperWidth, diagnostic))?.picture ?? null) : null`
-  with the `console.warn("receipt.optional_read_failed", …)` diagnostic the print path uses; in
+- [ ] **Step 3: Implement** D7: in the snapshot transaction, after `printer` is chosen and only when
+  `receipt.logo === undefined`, read `VENUE_SERVICE.readPrintedDepartmentReceipt(tx, checked.scope,
+  id, printer.paperWidth)`; if `venueLogoMayPrint({ receipt: checked.input.receipt, logo: null,
+  ...(stored.unreadable ? { unreadable: true } : {}) })`, set `venueLogo` to `(await readVenueLogo(tx,
+  printer.paperWidth, diagnostic))?.picture ?? null`, else `null` — with the
+  `console.warn("receipt.optional_read_failed", …)` diagnostic the print path uses. In
   `renderDraftPreview`, `filename === undefined ? snapshot.venueLogo : …`.
 
 - [ ] **Step 4: Run the preview files**
@@ -833,7 +944,9 @@ every one.
 **Files:**
 - Modify: `apps/server/src/receipt-logo.ts` (add `countBlackDots`), `apps/server/src/themes-api.ts:108`
 - Test: `apps/server/src/receipt-logo.test.ts`, new `apps/server/src/themes-api.logo-print.test.ts`
-  (its setup copies `themes-api.logo.test.ts:51-92`: sessions, `splitPicture`, `uploadImage`)
+  (its setup copies `themes-api.logo.test.ts:51-92` — `splitPicture`, `uploadImage`, the manager and
+  supervisor sessions — and adds a **staff** session the same way, `cookieFor("staff")`, as
+  `themes-api.test.ts:23-32` makes one; the copied setup makes only the other two)
 
 **Interfaces:**
 - Produces: `countBlackDots(raster: MonoRaster): number` — set bits inside `widthDots` on each row;
@@ -921,7 +1034,49 @@ every one.
 
 - [ ] **Step 5: Commit** — `git commit -s -m "Dashboard: ask how a theme logo prints, and draw a raster (A841 slice 9)"`
 
-### Task B3: The "How it prints" widget and its words (`apps/dashboard`)
+### Task B3: Watching a library image's address (`@waitron/ui`)
+
+**Files:**
+- Modify: `packages/ui/src/live-media-image.ts` (beside `invalidateMediaImages`, `:152-154`)
+- Test: `packages/ui/src/live-media-image.test.ts`
+
+**Interfaces:**
+- Produces: `export function watchMediaImage(reference: string, shape: "source" | "square" | "till" | "display", listener: (address: string | undefined) => void): () => void`
+  — subscribes through the module's own `subscribe` (`:51-79`), so it shares the directive's
+  batched passive refresh, its 15 s poll and `invalidateMediaImages`; after each refresh that
+  answers for `reference` it calls `listener` with that shape's address (`undefined` when the image
+  is explicitly missing); the answer unsubscribes. A `reference` that is not a library name
+  (`MEDIA_FILENAME`) subscribes nothing and returns a no-op, as the directive does (`:165`).
+
+- [ ] **Step 1: Write the failing tests** in `live-media-image.test.ts`, with the file's existing
+  fetch stub pattern (`:46-64`):
+  - "a watcher hears each refreshed address": watch `A` for `"display"` → after the first refresh the
+    listener has `["/d/1.webp"]`; the stub answers `/d/2.webp` and `invalidateMediaImages()` runs →
+    `["/d/1.webp", "/d/2.webp"]`.
+  - "an explicitly missing image is heard as undefined" (the answer's `images` lacks `A`).
+  - "unsubscribing stops the calls and the poll": after the returned function runs, a refresh adds no
+    call, and with no other consumer the 15 s timer stops (as "unsubscribes replaced references…",
+    `:181-204`, checks for the directive).
+  - "a name that is not a library name subscribes nothing": `watchMediaImage("../x.png", …)` → no
+    fetch.
+
+- [ ] **Step 2: Run them to see them fail**
+
+  Run: `pnpm --filter @waitron/ui exec vitest run src/live-media-image.test.ts`
+  Expected: FAIL — `watchMediaImage` is not exported.
+
+- [ ] **Step 3: Implement** as Interfaces says; no change to the directive's behaviour.
+
+- [ ] **Step 4: Run the tests, typecheck and mutation**
+
+  Run: `pnpm --filter @waitron/ui exec vitest run src/live-media-image.test.ts && pnpm --filter @waitron/ui typecheck`
+  Expected: PASS. Then `pnpm --filter @waitron/ui exec stryker run --mutate src/live-media-image.ts`
+  and add a case for every survivor inside `watchMediaImage` (D12); report the score in the commit
+  message.
+
+- [ ] **Step 5: Commit** — `git commit -s -m "Let a screen watch a library image's address (A841 slice 9)"`
+
+### Task B4: The "How it prints" widget and its words (`apps/dashboard`)
 
 **Files:**
 - Create: `apps/dashboard/src/widgets/theme-logo-print.ts`, `theme-logo-print.test.ts`,
@@ -930,7 +1085,8 @@ every one.
   `:6360`)
 
 **Interfaces:**
-- Consumes: `getThemeLogoPrint`, `ThemeLogoPrint`, `rasterUrl`, `paperGround` (B2).
+- Consumes: `getThemeLogoPrint`, `ThemeLogoPrint`, `rasterUrl`, `paperGround` (B2);
+  `watchMediaImage` (B3).
 - Produces: `<dashboard-theme-logo-print>` with `api: DashboardApi` and `image: string | null`
   properties; dispatches no event. `data-test` hooks: `logo-print` (the figure), `logo-print-blank`,
   `logo-print-failed`.
@@ -963,6 +1119,12 @@ department's receipt logo ("Logotipo del recibo de …").
   - "an answer for an image no longer held is dropped": `image = A` (pending), then `image = B`;
     resolve B with `BLACK`, then A with `BLANK` → no `logo-print-blank`; the api was called with A
     then B.
+  - "asks again when the image changes under the same name" (D10; the review's L4): `fetch` stubbed
+    to answer `/media/presentations` with `A`'s `display` `/d/1.webp` → after it arrives the api has
+    one call (the first address asks nothing more); the stub answers `/d/2.webp` and
+    `invalidateMediaImages()` runs (what the library's client does after a reframe,
+    `packages/media/src/dashboard/client.ts:93-98`) → a second call with `A`; a refresh answering
+    `/d/2.webp` again asks nothing.
   - "Spanish": `setLocale("es-ES")` → the caption equals `es["appearance.logo_print"]`; restore the
     locale in `afterEach`.
   - `theme-logo-print.a11y.test.ts`: axe over asking, shown, blank and failed, in light and dark.
@@ -979,7 +1141,9 @@ department's receipt logo ("Logotipo del recibo de …").
   `apps/dashboard/src/widgets/fix-line-styles.ts:5-11`, with the warning icon the Look card's brand
   warning uses, `look-card.ts:645`); caption and failure line in `--wt-font-size-sm` and
   `--wt-color-text-muted`; the retry a `wt-button` `variant="secondary"`. A request generation
-  guards each answer.
+  guards each answer. While `image` is set the widget holds one `watchMediaImage(image, "display",
+  …)` subscription (replaced when `image` changes, ended on disconnect) and asks again when the
+  heard address differs from the last known one.
 
 - [ ] **Step 4: Run them and typecheck**
 
@@ -988,7 +1152,7 @@ department's receipt logo ("Logotipo del recibo de …").
 
 - [ ] **Step 5: Commit** — `git commit -s -m "Dashboard: a widget shows how a logo prints, and says when it prints blank (A841 slice 9)"`
 
-### Task B4: "How it prints" under the Logo field, and its guide paragraph (`apps/dashboard`, guides)
+### Task B5: "How it prints" under the Logo field, and its guide paragraph (`apps/dashboard`, guides)
 
 **Files:**
 - Modify: `apps/dashboard/src/widgets/theme-logo-field.ts:98-126`
@@ -997,7 +1161,7 @@ department's receipt logo ("Logotipo del recibo de …").
   `apps/server/src/guide/es/appearance.md` (`:118-143`)
 
 **Interfaces:**
-- Consumes: `<dashboard-theme-logo-print>` (B3).
+- Consumes: `<dashboard-theme-logo-print>` (B4).
 
 - [ ] **Step 1: Write the failing tests.**
   - `theme-logo-field.test.ts` (its `api()` gains `getThemeLogoPrint: vi.fn(async () => BLACK)`):
@@ -1035,7 +1199,7 @@ department's receipt logo ("Logotipo del recibo de …").
 
 - [ ] **Step 5: Commit** — `git commit -s -m "The Look card shows how the logo prints on receipts (A841 slice 9)"`
 
-### Task B5: Visual check of 9b (the controller dispatches it)
+### Task B6: Visual check of 9b (the controller dispatches it)
 
 Against picture `23-q5-logo-on-receipts-light.png` (its left panel) and `17-logo-editor-light.png`,
 on `wa-wt demo <worktree-name>`, signed in as a manager, the Look card's editor open. Save each to
@@ -1079,20 +1243,24 @@ Every existing assertion this plan changes, and the design line behind it:
   in use are Tasks A4-A8's "own logo wins", "bad pictures print nothing" and "no theme in use"
   cases, each beside a case where the theme's logo does print.
 - Possibly, setup only: a Look card or Logo field mount gaining a `getThemeLogoPrint` stub (Task
-  B4, Step 1), named in that commit.
+  B5, Step 1), named in that commit.
 
 ## Driver steps (not implementer tasks)
 
 - **Before each PR:** rebase; `/finish-branch` on the FULL path (risk triggers: the
   `VenueServiceContribution` contract, and what a receipt and an A4 invoice print). 9a's description
-  says, in plain words: D1-D7 and D13; the probes; the departures; that no fiscal file changes and
-  CI runs `@waitron/fiscal-verifactu`'s whole suite because `@waitron/module` changed (P3); and that
-  every venue with a theme in use holding a logo starts printing it on the next receipt of every
-  department with no receipt logo, as the owner chose (Q5 A). 9b's lists D8-D10 and the four new
-  Spanish strings with their English.
-- **Who lands 9a.** Lanes land their own pull requests except truly fiscal ones (invoices, chain,
-  series, AEAT filing). 9a changes the picture an A4 invoice prints and nothing of its fiscal content
-  (D13); lane A decides before landing whether that counts, and says so in the PR thread.
+  **opens with the fiscal-untouched receipts**: 9a changes only the picture printed on the receipt
+  and on the A4 invoice's copy — no invoice number, series, chain, filed record or required invoice
+  field; `git diff --stat main -- packages/fiscal packages/fiscal-verifactu packages/core` prints
+  nothing; the golden huella cases of `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and
+  `inmutabilidad.test.ts` pass unedited (Task A9's run); and CI runs `@waitron/fiscal-verifactu`'s
+  whole suite because `@waitron/module` changed (P3). Then, in plain words: D1-D7 and D13; the
+  probes; the departures; and that every venue with a theme in use holding a logo starts printing it
+  on the next receipt of every department with no receipt logo, as the owner chose (Q5 A). 9b's
+  description lists D8-D10, the `@waitron/ui` mutation score of Task B3, and the four new Spanish
+  strings with their English, and says it lands only after 9a (D1).
+- **Who lands 9a.** The plan does not decide it. The controller has asked the owner whether lane A
+  may land 9a; it waits for that answer. 9b waits for 9a whichever way the answer goes.
 - **After 9a lands:** in `docs/backlog.md`'s A841 entry (`:2904-2963`), after slice 10b's sentence:
   "Slice 9a landed {date} (#{n}): the logo of the theme in use prints on receipts and A4 invoices of
   every department with no receipt logo of its own and of a sale with no department, a department's
@@ -1110,16 +1278,18 @@ Every existing assertion this plan changes, and the design line behind it:
   of fourteen tasks; `unreadable` keeps the readable fields of case 3 (D2), not taken: an empty
   receipt; "prints blank" means zero black dots (D9), not taken: a threshold; "How it prints" is
   drawn by a read route under `venue.view` from the draft's image (D8), not taken: drawing the saved
-  `printedLogo`, which an unsaved logo does not have yet.
-- **Backlog entries to add** (printers area), each one line with this plan as its pointer: "A
-  department's Receipts preview shows the theme's logo with no words saying it is the venue's (A841
-  slice 9, D7)"; "A department's Receipts preview does not redraw when the theme in use changes while
-  it is open (A841 slice 9)".
+  `printedLogo`, which an unsaved logo does not have yet; "How it prints" asks again when the light
+  image's `display` address changes, so a reframe in the library is followed (D10), not taken:
+  following the image's name only.
+- **Backlog entries to add**, each one line with this plan as its pointer. In the printers area: "A
+  department's Receipts preview shows the theme's logo, for a readable department whose draft names
+  no logo, with no words saying it is the venue's (A841 slice 9, D7)"; "A department's Receipts
+  preview does not redraw when the theme in use changes while it is open (A841 slice 9)". In the
+  A841 area: "The Look card's "How it prints" draws the 80 mm picture only; a logo blank at 80 mm
+  and not at 58 mm was not measured (A841 slice 9, D5)".
 
 ## Left for later
 
 - Slices 11, 12 and 14 are untouched.
-- The Receipts tab's wording for the venue's logo, and its redraw on a theme switch (backlog lines
-  above).
-- A 58 mm "How it prints": the card draws the 80 mm picture only (D5); a logo blank at 80 mm and not
-  at 58 mm was not measured.
+- The Receipts tab's wording for the venue's logo, its redraw on a theme switch, and a 58 mm "How it
+  prints" — each a backlog line in the Driver steps.
