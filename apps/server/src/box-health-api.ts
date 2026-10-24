@@ -2,6 +2,8 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { BootReading, ClockWitness, FiscalBackend, TrustedClock } from "@waitron/fiscal";
+// The registry of `clock.confirm_refused`, which this file throws.
+import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import {
   createErrorBoundary,
