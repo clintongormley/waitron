@@ -260,14 +260,20 @@ A773-2's pass task landed first (design §7). **Dependencies:** A773-2's pass (s
 
 **What it changes.** A handheld gets the till's ☰ → Zones on this device. Its choice narrows the
 handheld's Floor the way a till's choice narrows a till's: the Floor is handed only the chosen zones
-and, once a choice is saved, opens on its chosen first table zone (D2b); and a table's New order in
+and, once a choice is saved, opens on its "Opens first" zone (D2b); and a table's New order in
 a zone the device does not show cannot be added to or sent from this device (D3). Worked example 6 (design §4): Luis unticks Inside and Bar; his Floor shows no
 zone tabs, while a manager's phone with the same profile still shows all three.
 
-**Review path: FULL.** Which zones a signed-in device works in. No server route changes (D5), so
-no till route stops refusing or starts serving; the FULL path is for the device-scope change.
+**Review path: FULL.** Which zones a signed-in device works in, and **a cross-package contract
+change**: the device-zones read gains `saved: boolean` (D2b) — its type in
+`packages/module/src/module.ts:529-542`, its reader in `packages/venue-service/src/device-zone-selection.ts`,
+the server routes that send it (`GET`/`PUT /api/device/zones`, `apps/server/src/device-api.ts:362-394`,
+which pass the reader's answer through) and the till client's type (`apps/till/src/api/client.ts:14`,
+`:3449-3462`, which imports the same type from `@waitron/venue-service`). No route stops refusing
+or starts serving anything (D5).
 
-**Migration: none.** The choice is already stored per device and profile with no form-factor
+**Migration: none** — `saved` is worked out from whether a stored row exists, not stored itself.
+The choice is already stored per device and profile with no form-factor
 column (`packages/venue-service/src/schema/device-zone-selection.ts:4-54`, read), and its read and
 write ignore the form factor except to fingerprint it (`packages/venue-service/src/device-zone-selection.ts:28`,
 `:98`, read). No schema file changes in this slice.
@@ -340,30 +346,30 @@ applied only in the till app; the floor read returns the profile's zones whateve
   The **opening zone** is D2b. **Alternative, for the owner if wanted:** table zones only on a
   handheld too, as on the till's Floor ("Floor contains only selected table zones",
   `docs/developers/design-system.md:5338`).
-- **D2b. A handheld with no saved choice opens its Floor exactly as today; a saved table zone as
-  "Opens first" applies.** (Coordinator's ruling, 2026-10-24.) Today a handheld's Floor gets no
+- **D2b. A handheld with no saved choice keeps today's tabs and opening zone; a saved choice's
+  "Opens first" zone always applies on a handheld, a counter zone included.** (Driver's ruling,
+  2026-10-24, replacing an earlier counter-zone fallback.) Today a handheld's Floor gets no
   `selectedZoneId` (`till-app.ts:17758-17763` reads the choice, which a handheld never holds), so it
   opens on the URL's zone (`till-floor-screen.ts:874-879`) or else the first tab
-  (`resolveActiveTabKey`, `packages/ui/src/floor.ts:68-74`). Once a choice is held, the Floor's
-  `willUpdate` sets the zone from `selectedZoneId` (`till-floor-screen.ts:935`), which would win over
-  the URL's zone after a reload. With no stored choice the read answers the **profile's** start
-  (`device-zone-selection.ts:84-90`), and provisioning gives every order-taking profile the counter
-  zone as its start (`packages/venue-service/src/provisioning.ts:156-181`) — the demo's Downstairs
-  bar. **The read cannot tell a saved choice from none:** `DeviceZoneSelection` carries
-  `profileId`, `snapshot`, `zones`, `selectedZoneIds`, `startingZoneId` and `adjusted`
-  (`packages/module/src/module.ts:529-542`), and whether a row is stored enters only the hashed
-  snapshot (`device-zone-selection.ts:106`); an unsaved read and a saved choice of every zone with
-  the profile's start are identical. So, by the ruling's fallback: **on a handheld a start that is
-  a counter zone is ignored** — `deviceZoneNavigation`'s handheld branch answers `startingZoneId`
-  only when the chosen start is a chosen **table** zone, else `null`, and the handheld's Floor gets
-  `selectedZoneId` from that (`null` → `undefined`, so the URL's zone or the first tab, as today).
-  The till's `selectedZoneId` expression is unchanged. **What the fallback leaves open** (for the
-  coordinator): a profile whose start a manager set to a **table** zone still takes over a handheld
-  with no saved choice (it opens there, where today it opens on the URL's zone or the first tab);
-  and a counter zone a person saves as "Opens first" on a handheld is ignored. The full fix is a
-  `saved: boolean` on the read (`module.ts:529-542`, set at `device-zone-selection.ts:111` from
-  `stored !== undefined`), a cross-package change to what a server read sends the till, with no
-  migration; Task 5 files it in the backlog.
+  (`resolveActiveTabKey`, `packages/ui/src/floor.ts:68-74`). With no stored choice the read answers
+  the **profile's** start (`device-zone-selection.ts:84-90`) — and provisioning gives every
+  order-taking profile the counter zone as its start (`packages/venue-service/src/provisioning.ts:156-181`),
+  the demo's Downstairs bar — so following the read's start would change where every handheld
+  opens. Today's read cannot tell a saved choice from none: it carries `profileId`, `snapshot`,
+  `zones`, `selectedZoneIds`, `startingZoneId` and `adjusted` (`packages/module/src/module.ts:529-542`),
+  and whether a row is stored enters only the hashed snapshot (`device-zone-selection.ts:106`). So
+  **the read gains `saved: boolean`**, true when a stored choice exists for this device and its
+  current profile (`stored !== undefined`, `device-zone-selection.ts:54-62`, returned at `:111`).
+  It is per profile, because the stored row is (`schema/device-zone-selection.ts:12`). A save equal
+  to the default still answers `saved: true`: the person chose, so their "Opens first" applies; the
+  snapshot already changes on that save, since it hashes `stored !== undefined` (`:106`), so the
+  till's 15-second re-read notices it (`till-app.ts:9174-9184` compares snapshots). On a handheld
+  `deviceZoneNavigation` answers `startingZoneId` = the read's start **only when `saved`**, else
+  `null`, and the Floor gets `selectedZoneId` from that (`null` → `undefined`: the URL's zone or the
+  first tab, as today). With `saved`, the Floor's `willUpdate` sets the zone from `selectedZoneId`
+  (`till-floor-screen.ts:935`), so a saved "Opens first" wins over the URL's zone after a reload, as
+  on a till. The till's own expression (`:17758-17763`) and its use of the read are unchanged; the
+  till ignores `saved`.
 - **D2c. A failed zones read at a handheld's sign-in does not cost the rest of its setup.** On a
   till the read and the offers read share one `try` (`till-app.ts:5000-5040`): a failed zones read
   skips the offers, and that is the till's design — with no choice a till cannot pick its Counter
@@ -402,7 +408,8 @@ applied only in the till app; the floor read returns the profile's zones whateve
   `:604`), which this slice does not change. (Observed, not changed: on a handheld that list holds
   only the profile's counter zones, because the route's `zones` are counters only, `till-api.ts:1537-1541`,
   `:1566-1568`; on a till it holds every profile zone. Task 5 files it in the backlog.)
-- **D5. No server route changes.** `GET`/`PUT /api/device/zones` have no form-factor gate
+- **D5. No route stops refusing or starts serving; the zones read gains one field (D2b).**
+  `GET`/`PUT /api/device/zones` have no form-factor gate
   (`device-api.ts:362-394`, read), and a handheld already saves through them: the case
   "phone-portrait keeps its profile start instead of a stored Till display preference" PUTs a
   handheld's choice and expects 200 (`apps/server/src/till-api.profile-zones.test.ts:1919-1946`;
@@ -472,8 +479,9 @@ applied only in the till app; the floor read returns the profile's zones whateve
 
 ### Changed test checks (from the probes; the implementer confirms each)
 
-The first probe (D1–D4 in the till app, D2 in `device-zones.ts`, without D2b's counter-start
-fallback or D2c's separate `try`, which came from the review afterwards) ran these 14 files:
+The first probe (D1–D4 in the till app, D2 in `device-zones.ts`, honouring the read's start on a
+handheld whether saved or not; D2b's `saved` and D2c's separate `try` came from the review
+afterwards) ran these 14 files:
 `src/state/device-zones.test.ts`, `till-app-allergy`, `till-app-bill-payments`,
 `till-app-handheld-pay`, `till-app.nfc`, `till-app.notices`, `till-app-drafts`,
 `till-app-kitchen-note`, `till-app-parties`, `till-app-table-service`, `till-app-open-table`,
@@ -483,9 +491,10 @@ vitest run <those files>` in `apps/till` of the probe worktree → `Test Files 1
 
 - `src/state/device-zones.test.ts` "phone-portrait retains its Floor home and never gains a Counter"
   and "tablet-landscape retains …" — expected `floorZoneIds: ["room"]`, `startingZoneId: "room"`.
-  After D2 and D2b they are `floorZoneIds: ["bar", "room"]` and `startingZoneId: null` (the chosen
-  start `bar` is a counter zone, now on a handheld's Floor but never its opening zone). Reason: D2,
-  D2b. The name still holds (Floor home, never a Counter).
+  After D2 and D2b, with the case's selection marked `saved: true` (Task 1b's stub change), they
+  are `floorZoneIds: ["bar", "room"]` and `startingZoneId: "bar"` — what the probe printed (a saved
+  counter-zone start applies on a handheld). Reason: D2, D2b. The name still holds (Floor home,
+  never a Counter).
 
 The same probe then ran the other 25 `till-app*` suites and the 13 other files that mount
 `TillApp` (ran: `pnpm exec vitest run` on `src/till-app-adjustments`, `-allergy.editor-recovery`,
@@ -496,9 +505,10 @@ The same probe then ran the other 25 `till-app*` suites and the 13 other files t
 `.nfc.a11y`, `till-app.test.ts`, `.theme`, `.unsaved-changes`, seven `src/screens/till-table-order-screen.*`
 suites, `till-counter-cleanup.look`, `adjustment-dialog.combined(.a11y|.unsaved)`, `guide-sheet`,
 `sent-orders.reorder.a11y`, `till-shell.device-zones.look` → `Test Files 38 passed (38)`,
-`Tests 1936 passed (1936)`). D2b, D2c, D3b and D8 were not probed; D2b only takes back the
-handheld's opening zone towards today's, and D2c and D8 touch paths no existing test drives on a
-handheld (read), so the implementer treats any new failure as a STOP.
+`Tests 1936 passed (1936)`). D2b's `saved`, D2c, D3b and D8 were not probed. With `saved` the
+handheld stubs that say `saved: false` (Task 1b) open as today, closer to `main` than the probe
+was; D2c and D8 touch paths no existing test drives on a handheld (read). The implementer treats
+any new failure as a STOP.
 
 **Probe 2 (D6, the shell).** The probe then added D6 to `till-shell.ts` (with the brand fix; its
 help badge borrowed `help.more.settings`, where the build uses the new `help.more.zones`) and ran
@@ -568,12 +578,13 @@ suites — passed with D1–D4 and D6 together.
    uses the profile (`packages/db/src/trigger-refusals.ts:41`, read). So the case is two handhelds,
    as in worked example 6 (Luis's phone and a manager's phone). Task 1 pins it on the server; Task
    4a pins the client side.
-4. **A handheld with no saved choice whose profile's start is a counter zone** — every
-   provisioned order-taking profile (D2b). Expected: the Floor opens on the URL's zone, else the
-   first tab, never the counter start; `/api/default-service-zone/offers` still answers the
-   profile's start (D5); a table in a chosen zone takes dishes and no error shows. Task 4a pins it
-   with a counter start that is not the first tab, so the old (probe) code and the fixed code open
-   on different zones.
+4. **A handheld with no saved choice whose profile's start is not its first tab** — every
+   provisioned order-taking profile starts on its counter zone (D2b), and a manager may set a table
+   zone. Expected: the Floor opens on the URL's zone, else the first tab, never the profile's start;
+   after the person saves a choice, its "Opens first" zone applies, a counter zone included.
+   `/api/default-service-zone/offers` still answers the profile's start (D5); a table in a chosen
+   zone takes dishes and no error shows. Task 1b pins `saved` on the server; Task 4a pins the
+   opening zone with values the old and new code treat differently.
 5. **The zone choice cannot be read at a handheld's sign-in** (a transient failure). Expected (D2c):
    the Floor shows the profile's zones unnarrowed, `device_zones.read_failed` shows,
    `listDefaultZoneOffers` still runs and the transfer accept list is filled; the next poll tick
@@ -581,7 +592,8 @@ suites — passed with D1–D4 and D6 together.
 
 ---
 
-**Task order and why.** The server pin first (Task 1, no product change); the navigation function
+**Task order and why.** The server pin first (Task 1, no product change); the read's `saved`
+field (Task 1b, server side, before anything on the till reads it); the navigation function
 (Task 2); the ☰ entry (Task 3, shell only); the app in two parts (Task 4a: D1–D4 and D2b; Task 4b:
 D2c and D8, the failure and narrowing paths); the docs, guide and backlog (Task 5); the LOOK
 (Task 6). Each task leaves the tree green; each is sized well under 100 tool calls.
@@ -612,34 +624,97 @@ D2c and D8, the failure and narrowing paths); the docs, guide and backlog (Task 
 - [ ] **Step 4:** typecheck server; eslint the test; `pnpm format:check`.
 - [ ] **Step 5: Ledger and commit** `git commit -s -m "A797-4: pin that a handheld's zone choice is its own"`
 
+### Task 1b: The device-zones read says whether the choice was saved
+
+**Files:**
+- Modify: `packages/module/src/module.ts:529-542` (`saved: boolean` on `DeviceZoneSelection`),
+  `packages/venue-service/src/device-zone-selection.ts:111` (return `saved: stored !== undefined`)
+- Test: `packages/venue-service/src/device-zone-selection.test.ts` (new case; one whole-shape
+  check gains the key), `apps/server/src/device-zones-api.test.ts` (one route case)
+- Stubs that build the read and must gain the field, because each is typed `DeviceZoneSelection`
+  and the till's typecheck refuses it without (ran: `grep -rnE "(: |\): )DeviceZoneSelection( =| \{| =>)" --include='*.ts' apps packages`):
+  `apps/till/test/device-zones.ts` (`deviceZonesFixture` `:3-31` and `deviceZonesFor` `:33-65`:
+  `saved: false`, as both select every zone like an unsaved read); `apps/till/src/till-app-device-zones.test.ts`
+  (`selection()` `:48`: a third parameter `saved = true`, these being chosen subsets);
+  `apps/till/src/state/device-zones.test.ts` (`selection` `:5`: `saved: true`);
+  `apps/till/src/widgets/device-zones-dialog.test.ts:13`, `device-zones-dialog.unsaved.test.ts:10`,
+  `device-zones-dialog.a11y.test.ts:8` (`saved: true`; the dialog does not read it). Two untyped
+  stubs gain it too so they stay faithful to the wire (allowed, not required):
+  `apps/till/test/native-reload.ts:86-100` (`saved: false`) and `apps/till/src/api/client.test.ts:5664-5672`
+  (`saved: true`; its case compares the response with itself, so no check changes).
+
+**Interfaces:**
+- Produces: `DeviceZoneSelection.saved: boolean` — true when `device_zone_selections` holds a row
+  for this device and its **current** profile. Consumed by Task 2.
+
+Every consumer of the type (ran: `grep -rnE "DeviceZoneSelection\b" --include='*.ts' apps packages`,
+less `…Input`): the reader and writer (`device-zone-selection.ts:20-152`), the module port
+(`module.ts:1118-1128`), the server routes (`device-api.ts:369`, `:385`, pass-through), the offers
+route (`till-api.ts:1532`, reads `zones`, `selectedZoneIds`, `startingZoneId` only), the till client
+(`client.ts:3449-3462`), `TillApp` (`till-app.ts:2748`, `:2753`, `:2760` and the zone methods),
+`state/device-zones.ts`, `widgets/device-zones-dialog.ts:90`, `:102`. None but Task 2 reads `saved`.
+
+**Tests that pin the read's whole shape** (ran: `grep -nE "toEqual|toStrictEqual"` beside
+`startingZoneId`/`selectedZoneIds`/`adjusted` in the server, venue-service and till tests; every
+other check of the read is a `toMatchObject` or compares one read with another, so it holds
+unchanged): **one** — `packages/venue-service/src/device-zone-selection.test.ts` "defaults to
+current profile zones and isolates devices and switched profiles" (`:108-130`, a literal `toEqual`).
+It gains `saved: false` with every other value unchanged (owner's standing rule for a whole-shape
+pin); list it under "Changed test checks". `apps/till/src/api/client.test.ts`'s "device zones %s
+preserves method, body, signal and the response" uses `toEqual` against its own stub, so it
+changes only through the stub.
+
+- [ ] **Step 1: Failing tests.** In `device-zone-selection.test.ts`, "says whether this device saved
+  a choice under its current profile": a fresh read answers `saved: false`; after `save(f, [f.dining,
+  f.terrace], f.dining)` — **the default's own values** (every zone, the profile's start) — the read
+  answers `saved: true`, the same `selectedZoneIds` and `startingZoneId` as before, and a different
+  `snapshot`; the other device's read still answers `saved: false`; after switching the device to
+  `secondProfileId` (as the file's first case does) it answers `saved: false`. The equal-to-default
+  save is the control: a `saved` worked out by comparing the choice with the default would answer
+  `false` there, and the case would fail. In `device-zones-api.test.ts`, extend "serves admitted
+  staff without a selling action…" (`:123`) by one line before the PUT and one after: the GET's
+  `json.saved` is `false`, the PUT's `json.saved` is `true` (its body equals the default, `f.input`
+  being the current read, `:91-96`).
+- [ ] **Step 2: Run; expect FAIL**
+  `pnpm --filter @waitron/venue-service exec vitest run --project node src/device-zone-selection.test.ts`
+  (`saved` is `undefined`) and `pnpm --filter @waitron/server exec vitest run src/device-zones-api.test.ts`.
+- [ ] **Step 3: Implement** the type field and the return value; add `saved: false` to the
+  whole-shape case's expected object; add the field to the stubs listed above.
+- [ ] **Step 4: Run; expect PASS** — both commands above, then
+  `pnpm --filter @waitron/till exec vitest run src/state/device-zones.test.ts src/widgets/device-zones-dialog.test.ts src/widgets/device-zones-dialog.unsaved.test.ts src/widgets/device-zones-dialog.a11y.test.ts src/api/client.test.ts src/till-app-device-zones.test.ts`
+  (unchanged behaviour: the till does not read `saved` yet). Typecheck module, venue-service,
+  server and till; eslint; `pnpm format:check`.
+- [ ] **Step 5: Ledger and commit** `git commit -s -m "A797-4: the device-zones read says whether this device saved its choice"`
+
 ### Task 2: `deviceZoneNavigation` keeps every chosen zone on a handheld's Floor
 
 **Files:**
 - Modify: `apps/till/src/state/device-zones.ts:13-31`
-- Test: `apps/till/src/state/device-zones.test.ts` (`:91-106` changes; two new cases)
+- Test: `apps/till/src/state/device-zones.test.ts` (`:91-106` changes; one new `it.each`)
 
 **Interfaces:**
 - Produces (unchanged signature): `deviceZoneNavigation(formFactor: FormFactor, selection: DeviceZoneSelection): { counterZoneIds: readonly string[]; floorZoneIds: readonly string[]; startingZoneId: string | null; home: "counter" | "floor" | null }`.
   For `phone-portrait`/`tablet-landscape`: `counterZoneIds` `[]`; `floorZoneIds` every chosen zone
-  the profile still offers, in `selection.zones` order, any kind (D2); `startingZoneId` the chosen
-  start **only if it is one of those and a `table_tab` zone**, else `null` (D2b: no fallback to the
-  first zone, so the Floor keeps today's URL-or-first-tab opening); `home` `"floor"` whenever
-  `floorZoneIds` is not empty, else `null`. `till` and `kds` unchanged.
+  the profile still offers, in `selection.zones` order, any kind (D2); `startingZoneId` the read's
+  start **only when `selection.saved` and it is one of those** (any kind), else `null` (D2b: no
+  fallback to the first zone, so an unsaved handheld keeps today's URL-or-first-tab opening);
+  `home` `"floor"` whenever `floorZoneIds` is not empty, else `null`. `till` and `kds` unchanged.
+- Consumes: Task 1b's `saved`.
 
-- [ ] **Step 1: Change the two cases' expectations and add two.** "%s retains its Floor home and
-  never gains a Counter" (`selectedZoneIds: ["bar", "room"]`, start `"bar"`) now expects
-  `{ counterZoneIds: [], floorZoneIds: ["bar", "room"], startingZoneId: null, home: "floor" }`
-  (Changed test checks, D2, D2b). New `it.each` over both handheld form factors, "%s shows only the
-  chosen zones, of every kind, and opens on none but a chosen table start":
-  `selectedZoneIds: ["shop", "garden", "foreign"]`, start `"foreign"` → `{ counterZoneIds: [],
-  floorZoneIds: ["shop", "garden"], startingZoneId: null, home: "floor" }`; the same with start
-  `"shop"` (a counter zone) → `startingZoneId: null`; with start `"garden"` → `startingZoneId:
-  "garden"`. Before the change the first two answer `floorZoneIds: ["garden"]`, `startingZoneId:
-  "garden"` (the table-only branch and its first-zone fallback, `device-zones.ts:17`, `:24-25`,
-  read), so they fail.
+- [ ] **Step 1: Change the two cases' expectations and add one.** "%s retains its Floor home and
+  never gains a Counter" (`selectedZoneIds: ["bar", "room"]`, start `"bar"`, `saved: true` from
+  Task 1b) now expects `{ counterZoneIds: [], floorZoneIds: ["bar", "room"], startingZoneId:
+  "bar", home: "floor" }` (Changed test checks, D2, D2b). New `it.each` over both handheld form
+  factors, "%s shows only the chosen zones, of every kind, and opens only on a saved start":
+  `selectedZoneIds: ["shop", "garden", "foreign"]` → `floorZoneIds: ["shop", "garden"]`,
+  `counterZoneIds: []`, `home: "floor"`, and `startingZoneId` `"shop"` with `saved: true` and start
+  `"shop"` (a counter zone); `null` with `saved: false` and start `"shop"`; `null` with `saved:
+  false` and start `"garden"` (a table zone). Before the change the table-only branch and its
+  first-zone fallback (`device-zones.ts:17`, `:24-25`, read) answer `floorZoneIds: ["garden"]`,
+  `startingZoneId: "garden"` for all three, so each fails.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/device-zones.test.ts`
   — the changed cases print `floorZoneIds` `["room"]` against `["bar","room"]` (the probe printed
-  that), and the new ones `["garden"]` against `["shop","garden"]`.
+  that), and the new one `["garden"]` against `["shop","garden"]`.
 - [ ] **Step 3: Implement** the handheld branch per the Interfaces block.
 - [ ] **Step 4: Run; expect PASS** (read the `Tests` count: 7 at `c4d7ffa3f` (ran: the probe
   printed `7 tests | 2 failed`) plus 2 new, an `it.each` over the two handheld form factors).
@@ -695,13 +770,14 @@ D2c and D8, the failure and narrowing paths); the docs, guide and backlog (Task 
 - Test: `apps/till/src/till-app-device-zones.test.ts` (new `describe("a handheld's zones")`)
 
 **Interfaces:**
-- Consumes: Task 2's `deviceZoneNavigation`; Task 3's `open-device-zones` from the ☰ entry.
+- Consumes: Task 1b's `saved` (through Task 2); Task 2's `deviceZoneNavigation`; Task 3's
+  `open-device-zones` from the ☰ entry.
 - Produces: `#choosesZones(): boolean` (D1); a `mountHandheld` helper in the test file that Task 4b
   reuses.
 
 - [ ] **Step 1: Failing tests.** Add `mountHandheld(chosen, formFactor = "phone-portrait", over = {})`,
   calling the file's `mount` (`:127-195`) with `getTill` and `getDeviceIdentity` answering that form
-  factor. Use the file's zones (`bar` prepay, `shop` ticket-then-pay, `room` and `garden` table;
+  factor; `selection(ids, start, saved)` from Task 1b builds each answer. Use the file's zones (`bar` prepay, `shop` ticket-then-pay, `room` and `garden` table;
   `:18-47`) and give `floorZones` distinct `displayOrder`s so the first tab is `bar`. Cases (each
   `it.each(["phone-portrait", "tablet-landscape"])` where cheap):
   1. "reads the device's zones at sign-in and narrows Floor to them" — `api.getDeviceZones` called
@@ -717,11 +793,15 @@ D2c and D8, the failure and narrowing paths); the docs, guide and backlog (Task 
      `setDeviceZones` once and the floor's `.zones` become `["garden"]`.
   5. "a profile switch shows the new profile's own zones" (Review focus 1) — `getDeviceZones`
      answers profile A's choice, then after a switch profile B's; the floor follows B.
-  6. "with no saved choice a counter start does not take over the Floor" (Review focus 4, D2b) —
-     every zone chosen, `startingZoneId: "shop"` (a counter zone that is not the first tab), as
-     provisioning answers: with no URL zone the floor's active tab is `bar` (the first), and with
-     `till-zone=garden` in the URL it is `garden` — never `shop`. The probe's code (start honoured)
-     opens on `shop` in both. And with `startingZoneId: "room"` (a table start) it opens on `room`.
+  6. "an unsaved handheld opens as today; a saved one opens on its Opens first zone" (Review
+     focus 4, D2b). Two halves, each with a value the old and new code treat differently:
+     (a) every zone chosen, `saved: false`, `startingZoneId: "garden"` — a **table** zone that is
+     not the first tab (the first is `bar`): with no URL zone the floor's active tab is `bar`, and
+     with `till-zone=room` in the URL it is `room` — never `garden`. The probe's code (start
+     honoured whether saved or not) and the earlier plan's counter-only fallback both open on `garden`.
+     (b) every zone chosen, `saved: true`, `startingZoneId: "shop"` — a **counter** zone: the floor
+     opens on `shop`, with or without a URL zone. `main` opens on `bar` (no `selectedZoneId`), and
+     the counter-only fallback ignores `shop`.
   7. "a hidden zone's table takes no new dishes; a shown one does, whatever the profile's start"
      (D3, D5) — `listDefaultZoneOffers` context `bar`, choice `["garden"]`: at a `room` table the
      order screen's `orderingAllowed` is `false` (no pick lands; Send all is disabled); at a
@@ -732,8 +812,9 @@ D2c and D8, the failure and narrowing paths); the docs, guide and backlog (Task 
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-device-zones.test.ts`
   — cases 1–4 and 7 fail (no `getDeviceZones` call on a handheld; Floor unnarrowed;
   `#openDeviceZones` returns at `:9099`; ordering allowed everywhere); 5 fails on the floor's zones;
-  6, 8 and 9 pass already (6 because today a handheld never gets `selectedZoneId`) — they pin what
-  must not change, and 6 must still pass after Step 3.
+  6(b) fails (no `selectedZoneId` on a handheld today); 6(a), 8 and 9 pass already (6(a) because
+  today a handheld never gets `selectedZoneId`) — they pin what must not change, and must still
+  pass after Step 3.
 - [ ] **Step 3: Implement** D1–D4 and D2b: add `#choosesZones()`; use it at `:5001`, `:9099`,
   `:9150`, `:9156`; set `profileServiceZones` from the choice only when `this.formFactor === "till"`
   (`:5005`, `:9224`); hand the Floor `floorZoneIds`' zones whenever `#deviceNavigation()` is not
@@ -822,21 +903,21 @@ section together.
 - [ ] **Step 3: design-system.md** — `:5338` "On a till, Settings → Zones on this device…" becomes
   the rule for both: a till's under ☰ → Settings, a handheld's under ☰ → Zones on this device; a
   till's Floor shows only chosen table zones, a handheld's every chosen zone (D2), and a handheld
-  opens first only on a chosen table zone (D2b). In the handheld paragraph (`:5285-5289`) add
+  opens on its "Opens first" zone only once a choice is saved, and before that as it always has
+  (D2b). In the handheld paragraph (`:5285-5289`) add
   "Zones on this device stays in More, like Find a bill."
 - [ ] **Step 4: Backlog** — the two A797 entries and `till.md`'s A182 entry: Q51 answered
   2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so nothing
   waits for Q51; slice 4 in review with this plan linked; the build order (slice 4, then 5, then 1–3
   after #2037). Add a dated line to the A740 decision record (`till.md:1720`): a handheld has the
   same choice in ☰ → Zones on this device; it narrows its Floor (every kind of zone it shows) and
-  work on a hidden zone's tables (D3); it opens first only on a chosen table zone (D2b); its
-  new-order start stays the profile's (D5). Add three short entries in the till area, each worded
+  work on a hidden zone's tables (D3); it opens on its "Opens first" zone once a choice is saved
+  (D2b, the read's `saved`); its new-order start stays the profile's (D5). Add two short entries in
+  the till area, each worded
   as read, not as a bug confirmed by a run: (a) **hiding a zone does not check its other tables'
   unsent dishes, on a till or a handheld** (D3b: the guard checks the counter basket and the open
-  table only, since A740's #1825; ticking the zone again brings them back); (b) **the device zone
-  read cannot tell a saved choice from none**, so a handheld ignores a counter-zone "Opens first"
-  and a table-zone profile start still takes over an unsaved handheld (D2b; the fix is a `saved`
-  field on the read); (c) **a handheld's transfer accept list holds only counter zones** (D4).
+  table only, since A740's #1825; ticking the zone again brings them back); (b) **a handheld's
+  transfer accept list holds only counter zones** (D4).
 - [ ] **Step 5: Design** — status line: "Q51 answered 2026-10-24: all recommended; (c)'s Ready
   warning time in each prep station's editor; build plan `docs/superpowers/plans/2026-10-24-a797-device-screens-build.md`".
   Under §10 add the answer in one paragraph. Under §5's last bullet add one dated sentence: "The plan
@@ -870,7 +951,8 @@ section together.
   - untick Dining room, Downstairs bar **and Upstairs bar** → Save → the Floor shows Terrace with
     **no zone tabs**; untick only Dining room and Downstairs bar → **two** tabs, Terrace and
     Upstairs bar;
-  - set Terrace as Opens first, sign out and in → the Floor opens on Terrace.
+  - set Terrace as Opens first, sign out and in → the Floor opens on Terrace; then set Upstairs
+    bar (a counter zone) as Opens first → it opens there (D2b).
 - [ ] **Step 4: Compare** — on the second handheld (same profile, no choice saved) all four zone
   tabs still show (worked example 6's manager's phone).
 - [ ] **Step 5: Save** every screenshot as a PNG under `/Users/clintongormley/waitron-campaign-c/a797-4-shots/`
@@ -887,11 +969,14 @@ section together.
 - `/finish-branch` with this plan named. Review path **FULL**: two Codex run-it reviews (the second
   told to set this plan's checklist aside and test what it does not name).
 - PR body sections: **Build order** (slice 4 before slice 1 because #2037 holds the core-migration
-  slot; slice 5 next); **Changed test checks** (one line per test, from the ledger: Task 2's two
-  `device-zones.test.ts` cases, Task 3's 29 ☰ checks, grouped as in Probe 2); **Fixture-only** (if
-  any); **Decisions** D1–D8 (with D2b, D2c, D3b) in one line each; **Till behaviour changes**: D8's
-  new words at a till's table (the dialog's refusal and the waiting narrowing); **No server route
-  change** with D5's receipt; **LOOK** (what the screenshots showed). First line: no venue reset.
+  slot; slice 5 next); **Changed test checks** (one line per test, from the ledger: Task 1b's
+  whole-shape case "defaults to current profile zones and isolates devices and switched profiles",
+  Task 2's two `device-zones.test.ts` cases, Task 3's 29 ☰ checks, grouped as in Probe 2); **Fixture-only** (if
+  any), naming the stubs Task 1b gave `saved`; **Contract change**: the device-zones read gains
+  `saved` (type, reader, routes, till client; no migration); **Decisions** D1–D8 (with D2b, D2c,
+  D3b) in one line each; **Till behaviour changes**: D8's new words at a till's table (the dialog's
+  refusal and the waiting narrowing); **No route stops refusing or starts serving**, with D5's
+  receipt; **LOOK** (what the screenshots showed). First line: no venue reset.
 - **Owner FYI** (one line in the PR and the lane's questions file, not a question): worked example
   6 says Luis's Floor shows no zone tabs once he unticks Inside and Bar; with the demo's data his
   profile also allows the Upstairs bar, a counter zone, so he must untick it too (D2 keeps counter
