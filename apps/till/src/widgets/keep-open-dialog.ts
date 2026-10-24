@@ -6,7 +6,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import type { KeepOpenPeriod } from "../api/client.js";
+import type { KeepOpenZone } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";
@@ -28,9 +28,8 @@ export class TillKeepOpenDialog extends LitElement {
       }
     `,
   ];
-  @property({ attribute: false }) period?: KeepOpenPeriod;
+  @property({ attribute: false }) zone?: KeepOpenZone;
   @property() selected = "";
-  @property() subject: "period" | "zone" = "period";
   @property({ type: Boolean }) busy = false;
   @property() refusal: string | null = null;
   @property() refusalField: string | null = null;
@@ -56,13 +55,7 @@ export class TillKeepOpenDialog extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     if (!this.isConnected || !this.active) return;
     if (changed.has("refusal")) this.fieldEdited = false;
-    const previous = changed.get("period") as KeepOpenPeriod | undefined;
-    if (changed.has("period") && previous && previous.id !== this.period?.id) {
-      this.selected = "";
-      this.#baseline = "";
-      this.#scope?.commit("");
-    }
-    if (!this.period?.choices.includes(this.selected)) this.selected = "";
+    if (!this.zone?.choices.includes(this.selected)) this.selected = "";
     if (!this.#scope) {
       const { coordinator, scope } = draftScopeFor(this, {
         id: this,
@@ -86,17 +79,17 @@ export class TillKeepOpenDialog extends LitElement {
     this.#scope?.commit(this.selected);
   }
   #confirm(until: string | null): void {
-    if (!this.isConnected || !this.active || this.busy || !this.period) return;
+    if (!this.isConnected || !this.active || this.busy || !this.zone) return;
     if (
       until === null
-        ? this.period.extendedUntil === null
-        : !this.period.choices.includes(until) || saveActionState(this.#scope).unchanged
+        ? this.zone.extendedUntil === null
+        : !this.zone.choices.includes(until) || saveActionState(this.#scope).unchanged
     )
       return;
     this.fieldEdited = true;
     this.dispatchEvent(
       new CustomEvent("keep-open-confirm", {
-        detail: { periodId: this.period.id, until },
+        detail: { zoneId: this.zone.id, until },
         bubbles: true,
         composed: true,
       }),
@@ -114,24 +107,8 @@ export class TillKeepOpenDialog extends LitElement {
     this.#scope = undefined;
     this.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
   }
-  #delay(): string | null {
-    const p = this.period!,
-      next = p.next;
-    if (this.subject === "zone" || !next || !this.selected) return null;
-    const clockMinute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-    const serviceMinute = (time: string) =>
-      (clockMinute(time) - clockMinute(p.dayEndsAt) + 1440) % 1440;
-    const selected = serviceMinute(this.selected) || 1440;
-    if (selected >= (serviceMinute(next.endsAt) || 1440))
-      return t("keep_open.drops").replace("{next}", () => next.name);
-    if (selected <= serviceMinute(next.startsAt)) return null;
-    return t("keep_open.delays")
-      .replace("{next}", () => next.name)
-      .replace("{time}", () => this.selected)
-      .replace("{scheduled}", () => next.startsAt);
-  }
   override render() {
-    const p = this.period;
+    const p = this.zone;
     if (!p) return nothing;
     const action = saveActionState(this.#scope),
       missing = !p.choices.includes(this.selected);
@@ -140,27 +117,17 @@ export class TillKeepOpenDialog extends LitElement {
         ? ""
         : codeMessage(this.refusal);
     const fieldError = this.refusalField === "until" && !this.fieldEdited ? refusal : "";
-    const delay = this.#delay();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
       .beforeClose=${this.#leave ? this.#beforeClose : () => !this.busy}
-      .heading=${this.subject === "zone" ? t("keep_open.zone_heading").replace("{zone}", () => p.name) : t("keep_open.heading").replace("{period}", () => p.name)}
+      .heading=${t("keep_open.zone_heading").replace("{zone}", () => p.name)}
       @wt-close=${(e: Event) => this.#closed(e)}
     >
       <div class="body">
         <p data-ends>
-          ${t(
-            this.subject === "zone"
-              ? p.running
-                ? "keep_open.zone_closes"
-                : "keep_open.zone_closed"
-              : p.running
-                ? "keep_open.ends"
-                : "keep_open.ended",
-          )
+          ${t(p.running ? "keep_open.zone_closes" : "keep_open.zone_closed")
             .replace("{zone}", () => p.name)
-            .replace("{period}", () => p.name)
             .replace("{time}", () => p.endsAt)}
         </p>
         <wt-combobox
@@ -180,7 +147,6 @@ export class TillKeepOpenDialog extends LitElement {
             this.#scope?.changed();
           }}
         ></wt-combobox>
-        ${delay ? html`<p data-delay>${delay}</p>` : nothing}
         ${refusal ? html`<p class="refusal" role="alert">${fieldError ? t("form.fix_fields") : refusal}</p>` : nothing}
       </div>
       <wt-button

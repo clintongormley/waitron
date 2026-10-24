@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import type {
   TillApi,
   MenuState,
-  KeepOpenPeriod,
+  KeepOpenZone,
   PeriodExtensionWrite,
   StaffMember,
 } from "../api/client.js";
@@ -34,7 +34,7 @@ export class TillKeepOpen extends LitElement {
   @property({ attribute: false }) zoneKeepOpen: MenuState["service"]["zoneKeepOpen"] = null;
   @property({ attribute: false }) keepOpen: MenuState["service"]["keepOpen"] = null;
   @state() private busy = false;
-  @state() private period: KeepOpenPeriod | null = null;
+  @state() private period: KeepOpenZone | null = null;
   @state() private refusal: string | null = null;
   @state() private refusalField: string | null = null;
   @state() private authorizers: StaffMember[] | null = null;
@@ -199,8 +199,7 @@ export class TillKeepOpen extends LitElement {
       ${
         this.period !== null
           ? html`<till-keep-open-dialog
-              .period=${this.period}
-              .subject=${this.subject}
+              .zone=${this.period}
               .busy=${this.busy || this.authorizers !== null}
               .refusal=${this.refusal}
               .refusalField=${this.refusalField}
@@ -208,9 +207,9 @@ export class TillKeepOpen extends LitElement {
                 e.stopPropagation();
                 this.#reset();
               }}
-              @keep-open-confirm=${(e: CustomEvent<PeriodExtensionWrite>) => {
+              @keep-open-confirm=${(e: CustomEvent<{ zoneId: string; until: string | null }>) => {
                 e.stopPropagation();
-                void this.#write(e.detail);
+                void this.#write({ periodId: e.detail.zoneId, until: e.detail.until });
               }}
             ></till-keep-open-dialog>`
           : nothing

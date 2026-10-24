@@ -136,27 +136,6 @@ it.each(["period_extension.invalid", "period_extension.not_allowed"])(
     await expect.poll(() => calls.filter((c) => c.method === "PUT").length).toBe(2);
   },
 );
-it("a changed subject refreshes the editor without keeping an invalid old endpoint", async () => {
-  let reads = 0;
-  const { el } = await mount({}, (_p, i) =>
-    i.method === "PUT"
-      ? refusal("period_extension.not_allowed")
-      : json({
-          period:
-            ++reads === 1
-              ? period
-              : { ...period, id: "dinner", name: "Dinner", choices: ["20:15", "05:00"] },
-        }),
-  );
-  act(el);
-  const d = await dialog(el);
-  await save(d);
-  await expect.poll(() => reads).toBe(2);
-  await el.updateComplete;
-  await d.updateComplete;
-  expect(d.period!.id).toBe("dinner");
-  expect(d.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
-});
 it.each(["pin.invalid", "pin.throttled"])(
   "retries the selected endpoint with a manager and keeps the PIN dialog after %s",
   async (code) => {

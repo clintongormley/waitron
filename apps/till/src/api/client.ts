@@ -1445,7 +1445,7 @@ export interface StationMoveAnswer {
   moved: { workingOrderLineId: string; fromStationId: string }[];
 }
 
-export interface KeepOpenPeriod {
+export interface KeepOpenZone {
   id: string;
   name: string;
   endsAt: string;
@@ -1453,7 +1453,6 @@ export interface KeepOpenPeriod {
   extendedUntil: string | null;
   dayEndsAt: string;
   choices: readonly string[];
-  next: { name: string; startsAt: string; endsAt: string } | null;
 }
 export interface PeriodExtensionWrite {
   periodId: string;
@@ -3231,9 +3230,7 @@ export class TillApi {
     );
   }
 
-  keepOpen(
-    zoneId: string,
-  ): Promise<{ period: KeepOpenPeriod | null; zone: KeepOpenPeriod | null }> {
+  keepOpen(zoneId: string): Promise<{ period: KeepOpenZone | null; zone: KeepOpenZone | null }> {
     return this.#request(`/api/service-zones/${encodeURIComponent(zoneId)}/keep-open`, "GET");
   }
 
