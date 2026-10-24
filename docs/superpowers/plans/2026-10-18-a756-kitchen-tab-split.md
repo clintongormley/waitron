@@ -3249,7 +3249,7 @@ read and written by nothing, for A760's migration squash.
   `strings.ts`, with their tests and fixtures.
 - dashboard app: `src/dashboard-app.ts`, `src/screens/kitchen-screen.ts` and its five suites
   (deleted), `src/api/client.ts`, `src/api/live-queries.ts`, `src/i18n/strings.ts`, and the suites
-  named in Tasks 48a and 48b.
+  named in Tasks 48a–48c.
 - docs: the guides `apps/server/src/guide/{en,es}/kitchen-service.md`,
   `docs/developers/design-system.md`, `docs/developers/conventions-ui.md`, `docs/backlog.md`,
   `docs/backlog/kitchen.md`, the A664 personal-data audit and the A760 inventory (one dated pointer
@@ -3336,8 +3336,13 @@ read and written by nothing, for A760's migration squash.
    `"line"` or `"ticket"`, checked by a `parseBumpMode` beside `parseTicketGrouping`
    (`apps/server/src/management-api.ts:366-371`) with `isBumpMode` from `@waitron/shared`; anything
    else, `null` included, is refused `management.request_invalid { field: "bumpMode" }`, today's
-   code for a bad station field, which the editor already shows under a field it names
-   (`stationRefusalField`, `packages/venue-service/src/dashboard/station-editor.ts`). A refused
+   code for a bad station field. The editor does not map this refusal to the field:
+   `stationRefusalField` (`packages/venue-service/src/dashboard/station-editor.ts:164-183`) and the
+   `Field` type (`:70`) know name, colour, printers and the minutes only, as they do not know
+   `ticketGrouping` either, and `refusalText` (`:185`) has no string for it. Following PR 6's
+   ticket-grouping precedent, this PR adds none: a two-choice dropdown cannot send another value,
+   and the route's check is tested server-side (Task 43); any such refusal shows as the generic
+   save error above the buttons. A refused
    PATCH writes nothing (`updateStation` validates before its one `update`,
    `apps/server/src/kitchen.ts:164-213`). POST is unchanged (Decision 2).
 
@@ -3368,7 +3373,9 @@ read and written by nothing, for A760's migration squash.
    queue. The widget's `bumpMode` property goes; it reads `group.bumpMode` in `#bump` and
    `#bumpLabel` (`:1154-1157`). Nothing on the server reads the mode for a bump: the whole-ticket
    route accepts a bump at any station, as today (`git grep -n -E 'bumpMode|bump_mode' -- apps/server/src ':!*.test.ts'`
-   lists only `kitchen.ts`, `management-api.ts`, `till-setup.ts` and the format-1 JSON fixture),
+   lists only `kitchen.ts`, `till-setup.ts` and the format-1 JSON fixture; it is case-sensitive,
+   and `management-api.ts` names the mode only as `getBumpMode`, `setBumpMode` and `BumpMode`, in
+   its imports `:93-102` and the two venue routes `:1714-1735` — no advance route reads it),
    because "the per-line ticket-item state is always the source of truth" (`kitchen.ts:225-226`).
    With the queue's 35 server suites run in the probe with the key added
    (`git grep -l -E 'listStationQueues?\(|/queue"|station-screen' -- 'apps/server/src/*.test.ts'`,
@@ -3440,11 +3447,15 @@ read and written by nothing, for A760's migration squash.
    ticket", `apps/dashboard/src/i18n/strings.ts:1267-1269`): A773 §7.1 names the setting "done on
    the screen", and the owner-approved pictures 04 (A756) and 10 (A773) both label it "Done on the
    screen", 04 with the choices "One item at a time" and "Whole ticket at once". Spanish, new text:
-   "Hecho en la pantalla", "Un artículo cada vez", "Toda la comanda a la vez" (the till's own
-   button stays "Avanzar comanda", `apps/till/src/i18n/strings.ts:2401`). This differs from PR 6,
+   «Marcado en la pantalla», «Un plato cada vez», «Toda la comanda a la vez» (coordinator's
+   ruling of 2026-10-24: "plato" as the station editor's own strings say it, e.g.
+   `prep.health.empty`, `packages/venue-service/src/dashboard/strings.ts:1120`, and as the Spanish
+   guide does, `apps/server/src/guide/es/kitchen-service.md:118`, "si se marca como listo cada
+   plato o la comanda completa"; "Hecho" would clash with «Hecho aquí», `strings.ts:1244`). The
+   till's own button stays "Avanzar comanda", `apps/till/src/i18n/strings.ts:2401`. This differs from PR 6,
    which kept the Kitchen tab's built words: there the built control (a switch) differed from the
    picture's (a dropdown); here both pictures and the spec name the setting, and "Bump mode" is
-   kitchen jargon. Task 52 records it as an open point for the owner. Keys
+   kitchen jargon. Task 52 records the wording as an owner FYI, built as above, not a blocker. Keys
    `prep.bump_mode`, `prep.bump_mode.line`, `prep.bump_mode.ticket`, EN and ES, in
    `packages/venue-service/src/dashboard/strings.ts` beside `prep.ticket_grouping*` (`:307-310`,
    ES `:1193-1196`). No hint. Save sends only what changed (`sendable`, `station-editor.ts:429-454`)
@@ -3455,7 +3466,7 @@ read and written by nothing, for A760's migration squash.
    Fire control left the Kitchen tab in #1944 (`git log -S getFireControl -- apps/dashboard/src/api/client.ts`
    names `509e8d42a`); `kitchen-screen.ts` draws only the bump buttons (`:100-111`), and
    `git grep -n -i firecontrol -- apps/dashboard/src ':!*.test.ts'` prints nothing (six suites keep
-   a dead `getFireControl` stub, removed beside each `getBumpMode` stub in Task 48b). So the bump
+   a dead `getFireControl` stub, removed beside each `getBumpMode` stub in Task 48c). So the bump
    mode is the core panel's last control, and this PR removes the `kitchen` entry of
    `CORE_SETTINGS_PANELS` (`apps/dashboard/src/dashboard-app.ts:337-345`, import `:85`),
    `kitchen-screen.ts` and its five suites. (The "Kitchen tab itself goes" paragraph above
@@ -3464,13 +3475,17 @@ read and written by nothing, for A760's migration squash.
    (`packages/venue-service/src/dashboard/index.ts:140-157`,
    `service-settings-panel.ts:130-144`), which PR 8 moves; `VENUE_SETTINGS_TABS`
    (`venue-settings-screen.ts:11`) keeps `kitchen`, and a tab shows only when a panel on it is
-   visible (`#tabs`, `:56-58`). Who then sees Kitchen: venue-service's panel needs `venue.view` to
-   read and `venue_service.manage` to edit (`index.ts:145-146`); the core panel had no permission
-   rule (`dashboard-app.ts:337-345`) while its read needed `venue.view`
-   (`withVenueReadAuth`, `apps/server/src/management-api.ts:459-468`). So a session without
-   `venue.view`, or a venue without venue service, now has no Kitchen tab, and a session that sees
-   no panel at all gets Venue settings' heading and no tabs, which the page already draws
-   (`venue-settings-screen.ts:96-99`). Six `dashboard-app*.test.ts` cases and the leave-check
+   visible (`#tabs`, `:56-58`). Who then sees Kitchen: venue-service's panel shows to a session
+   holding `venue_service.manage` or `venue.view` (`requiresPermission` and `readPermission`,
+   `index.ts:145-146`, read by `#mayRead`, `dashboard-app.ts:1481-1486`) and is editable with
+   `venue_service.manage`. Every role but staff holds `venue.view` (supervisor, and manager and
+   admin through it, `packages/identity/src/permissions.ts:45-54`, admin holding every
+   permission), and staff are sent to My schedule before Venue settings (`#permittedScreen`,
+   `dashboard-app.ts:1941`), so no real session loses the tab while venue service is on. A venue
+   without venue service loses Kitchen and keeps Venue details, whose core panels need
+   `venue.view`; before, its Kitchen tab held only the bump buttons. A session that sees no panel
+   at all (only test stubs with no permissions) gets the heading and no tabs, which the page
+   already draws (`venue-settings-screen.ts:96-99`). Six `dashboard-app*.test.ts` cases and the leave-check
    suite relied on the core panel; Tasks 48a and 48b move them, each with its reason.
 
 10. **Error codes.** None added or removed: refusals are `management.request_invalid` and
@@ -3497,9 +3512,8 @@ read and written by nothing, for A760's migration squash.
 4. **An imported station row with `bump_mode: "bogus"`**: refused before any row is written; a
    current file carrying `venue.location.bumpMode` is accepted and the target venue's column is
    not written (Tasks 45, 49b).
-5. **Venue settings for a supervisor with no `venue.view`, and for a venue without venue
-   service**: no Kitchen tab, no read refused, and an address naming `kitchen` opens the first
-   visible tab, or the heading alone (Task 48b).
+5. **Venue settings for a venue without venue service**: no Kitchen tab, Venue details kept, and
+   an address naming `kitchen` opens Venue details (Task 48b).
 
 ### Task 42: storage — the station's bump mode column, one core migration
 
@@ -3690,10 +3704,10 @@ typed order fixture names it. No behaviour changes.
   - `till-station-screen.test.ts`: `"threads bumpMode through to the widget"` (`:209`) →
     `"hands the widget each station's orders with their own bump mode"` — a station whose queue
     read answers an order with `bumpMode: "ticket"`; the widget's order carries it. The cases
-    passing `bumpMode: "ticket"` to the screen (`:277`, `:704`, `:1156`, the `it.each` at `:1232`,
-    and the `bump` helper at `:1348`) set it on their queue orders instead (setup; their checks
-    stay). `:1875`'s `queue.bumpMode = "ticket"` (`:1891`) sets it on `sameOrderAtBarra`'s order
-    (setup). New: `"a merged
+    passing `bumpMode: "ticket"` to the screen (the cases starting at `:277`, `:704` and `:1156`,
+    the `it.each` starting at `:1232`, and the `bump` helper starting at `:1348`) set it on their queue orders instead (setup; their checks
+    stay). The case starting at `:1875` sets `queue.bumpMode = "ticket"` (`:1891`); it sets
+    the mode on `sameOrderAtBarra`'s order instead (setup). New: `"a merged
     device screen bumps a whole order at one station and a single dish at another"` and `"a
     station's changed bump mode reaches an open device screen at its next refresh"` — fake timers,
     `getDeviceStationScreen` answering `line` then `ticket` for the same station; after one
@@ -3747,10 +3761,8 @@ screen onto orders elsewhere is setup.
     the late-flags fieldset its previous sibling and the rest-of-order switch its next.
   - `"sends only a changed bump mode, and nothing for a choice put back"` — choose Whole ticket at
     once: Save enabled, sends `{ bumpMode: "ticket" }`; choose back: Save quiet.
-  - `"reads the bump mode in Spanish"` — label "Hecho en la pantalla", options "Un artículo cada
-    vez", "Toda la comanda a la vez".
-  - `"shows a refused bump mode under its field"` — a refusal
-    `management.request_invalid { field: "bumpMode" }` marks that combobox.
+  - `"reads the bump mode in Spanish"` — label «Marcado en la pantalla», options «Un plato cada
+    vez», «Toda la comanda a la vez».
   - `station-editor.a11y.test.ts`: its fixture gains `bumpMode: "ticket"`, so its axe cases run
     over the new combobox in both themes.
   - `prep-stations-screen.test.ts`: `"hands the station's printing choices to the editor and saves
@@ -3796,21 +3808,14 @@ exists**, so the suite is green before and after (the Task 25a pattern).
 
 **Files:**
 - Modify: `apps/dashboard/src/dashboard-app.ts` (import `:85`; the `kitchen` entry of
-  `CORE_SETTINGS_PANELS` `:337-345`), `apps/dashboard/src/api/client.ts` (`BumpMode` `:738`;
-  `setBumpMode`/`getBumpMode` `:3274-3280`), `apps/dashboard/src/api/live-queries.ts:489`,
-  `apps/dashboard/src/i18n/strings.ts` (EN `:1267-1269`, ES `:4537-4539`)
+  `CORE_SETTINGS_PANELS` `:337-345`)
 - Delete: `apps/dashboard/src/screens/kitchen-screen.ts`, `kitchen-screen.test.ts`,
   `kitchen-screen.a11y.test.ts`, `kitchen-screen.unsaved.test.ts`,
   `kitchen-screen.waiter-authority.test.ts`
 - Test: `apps/dashboard/src/dashboard-app.test.ts` (`:1724`, `:1746`, `:1778`, `:1793`, `:2811`,
   `:2829`, `:2852`), `dashboard-app.settings-panels.test.ts` (`:138`, `:179`),
-  `dashboard-app.a11y.test.ts:356`, `api/client.test.ts:1654`, `api/client-routes.test.ts:83-84`,
-  `api/live-queries.test.ts:206`
-- Modify (stubs, setup): the `getBumpMode` stub and the dead `getFireControl` stub beside it in
-  `dashboard-app.a11y.test.ts:359-360`, `dashboard-app.help.test.ts:74-75`,
-  `dashboard-app.module-order.test.ts:60-61`, `dashboard-app.settings-panels.test.ts:109-110`,
-  `dashboard-app.test.ts:139-140`, `dashboard-app.venue-settings-unsaved.test.ts:50-51` (and that
-  file's mount helper stops looking for `dashboard-kitchen-screen`, `:128-131`)
+  `dashboard-app.a11y.test.ts:356`, and `dashboard-app.venue-settings-unsaved.test.ts`'s mount
+  helper, which stops looking for `dashboard-kitchen-screen` (`:128-131`)
 
 - [ ] **Step 1: Change the tests first.**
   - `dashboard-app.test.ts`:
@@ -3823,7 +3828,7 @@ exists**, so the suite is green before and after (the Task 25a pattern).
     - `:1778` `"keeps Kitchen with only its core panel when venue service is disabled"` → `"has no
       Kitchen tab when venue service is disabled"`: the tab list has no `kitchen`, and the address
       `/manage/venue-settings/view/kitchen` is replaced by the first visible tab, or left at Venue
-      settings when none is.
+      settings when none is (this stub session holds no `venue.view`).
     - `:1793` `"hands each core panel the shell's api"`: the session gains `venue.view` and the loop
       runs over `dashboard-venue-details-panel` and `dashboard-venue-defaults-panel`, opened at
       `/view/venue-details` (setup: the same check over the core panels that remain).
@@ -3831,7 +3836,8 @@ exists**, so the suite is green before and after (the Task 25a pattern).
       check reads `dashboard-venue-details-panel` with `venue.view`, and the address is
       `/view/venue-details` (setup and address).
     - `:2829` `"shows a supervisor Venue settings without its Receipts tab"`: the pathname check
-      becomes "no tabs, the heading alone" — this supervisor has no permissions and no modules.
+      becomes "no tabs, the heading alone" — this stub supervisor has no permissions and no
+      modules (a real supervisor holds `venue.view`, Decision 9).
     - `:2852` `"shows a supervisor Kitchen settings without edit controls"`: deleted — its subject
       is the core panel's read-only bump buttons; venue service's panel keeps its own read-only
       cases (`packages/venue-service/src/dashboard/service-settings-panel.test.ts`).
@@ -3845,24 +3851,51 @@ exists**, so the suite is green before and after (the Task 25a pattern).
     `id: "defaults"` (setup).
   - `dashboard-app.a11y.test.ts:356`: the session gains `venue.view`, so the page draws a tab and
     the axe check has something to read (setup).
-  - `client.test.ts:1654`, `client-routes.test.ts:83-84`: deleted with the two methods;
-    `live-queries.test.ts:206`: the `getBumpMode` row goes.
 - [ ] **Step 2: Run and watch the changed cases fail.**
   `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.settings-panels.test.ts -t "Venue settings|Kitchen|core panel"`
-- [ ] **Step 3: Implement**; delete the five files; remove the stubs listed.
-- [ ] **Step 4: Run** (browser runs; free memory first) `pnpm --filter @waitron/dashboard exec vitest run src/screens src/api src/dashboard-app.a11y.test.ts src/dashboard-app.help.test.ts src/dashboard-app.module-order.test.ts src/dashboard-app.settings-panels.test.ts src/dashboard-app.test.ts src/dashboard-app.venue-settings-unsaved.test.ts`
-  — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/style-token-names.test.ts scripts/guide-links.test.ts`;
-  `git grep -n -E 'bump_mode|bumpMode|BumpMode|bump-mode|kitchen-screen\.|dashboard-kitchen-screen|kitchen\.bump_|getFireControl' -- apps/dashboard`
-  prints nothing (on `97a8b7699` it lists exactly the 18 files this task changes or deletes).
-- [ ] **Step 5:** typecheck `@waitron/dashboard`; prettier; commit
+- [ ] **Step 3: Implement**; delete the five files. The client methods, the live-query row, the
+  strings and the test stubs stay until Task 48c: every stub object that names `getBumpMode` is
+  cast `as unknown as DashboardApi` or passed through a `stubApi(overrides: Record<string,
+  unknown>)` (`dashboard-app.a11y.test.ts:38`, `:110`; `dashboard-app.help.test.ts:40`, `:135`;
+  `dashboard-app.module-order.test.ts:63`; `dashboard-app.settings-panels.test.ts:111`;
+  `dashboard-app.test.ts:105`, `:200`; `dashboard-app.venue-settings-unsaved.test.ts:112`), so a
+  stub naming a method nothing calls still compiles and this commit stays green.
+- [ ] **Step 4: Run** (browser runs; free memory first) `pnpm --filter @waitron/dashboard exec vitest run src/screens src/dashboard-app.a11y.test.ts src/dashboard-app.help.test.ts src/dashboard-app.module-order.test.ts src/dashboard-app.settings-panels.test.ts src/dashboard-app.test.ts src/dashboard-app.venue-settings-unsaved.test.ts`
+  — PASS; `pnpm exec vitest run scripts/style-token-names.test.ts scripts/guide-links.test.ts`;
+  typecheck `@waitron/dashboard`.
+- [ ] **Step 5:** prettier; commit
   `git commit -s -m "The Kitchen tab's bump mode buttons go; Kitchen keeps venue service's panel (A756 PR 7)"`,
   then update the ledger.
 
 **Assertions changed** (A773 §7.1, "Every station setting is set on the station itself"; the "Kitchen
 tab itself goes" paragraph above): the five deleted files; `dashboard-app.test.ts` `:1724`, `:1746`,
-`:1778`, `:2829` and `:2852` (deleted); `settings-panels.test.ts:138` moved to another tab; the two
-client cases and the live-query row. `:1793`, `:2811`, `settings-panels.test.ts:179` and
-`a11y.test.ts:356` are setup.
+`:1778`, `:2829` and `:2852` (deleted); `settings-panels.test.ts:138` moved to another tab.
+`:1793`, `:2811`, `settings-panels.test.ts:179` and `a11y.test.ts:356` are setup.
+
+### Task 48c: the dashboard's bump-mode client, live query and strings go
+
+**Files:**
+- Modify: `apps/dashboard/src/api/client.ts` (`BumpMode` `:738`; `setBumpMode`/`getBumpMode`
+  `:3274-3280`), `apps/dashboard/src/api/live-queries.ts:489`, `apps/dashboard/src/i18n/strings.ts`
+  (EN `:1267-1269`, ES `:4537-4539`)
+- Test: `api/client.test.ts:1654`, `api/client-routes.test.ts:83-84`, `api/live-queries.test.ts:206`
+- Modify (stubs, setup): the `getBumpMode` stub and the dead `getFireControl` stub beside it in
+  `dashboard-app.a11y.test.ts:359-360`, `dashboard-app.help.test.ts:74-75`,
+  `dashboard-app.module-order.test.ts:60-61`, `dashboard-app.settings-panels.test.ts:109-110`,
+  `dashboard-app.test.ts:139-140`, `dashboard-app.venue-settings-unsaved.test.ts:50-51`
+
+- [ ] **Step 1: Change the tests first.** `client.test.ts:1654` and `client-routes.test.ts:83-84`
+  are deleted with the two methods; `live-queries.test.ts:206`'s `getBumpMode` row goes.
+- [ ] **Step 2: Implement**; remove the stubs listed.
+- [ ] **Step 3: Run** (browser runs; free memory first) `pnpm --filter @waitron/dashboard exec vitest run src/api src/dashboard-app.a11y.test.ts src/dashboard-app.help.test.ts src/dashboard-app.module-order.test.ts src/dashboard-app.settings-panels.test.ts src/dashboard-app.test.ts src/dashboard-app.venue-settings-unsaved.test.ts`
+  — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts`;
+  `git grep -n -E 'bump_mode|bumpMode|BumpMode|bump-mode|kitchen-screen\.|dashboard-kitchen-screen|kitchen\.bump_|getFireControl' -- apps/dashboard`
+  prints nothing (on `97a8b7699` it lists exactly the 18 files Tasks 48b and 48c change or delete).
+- [ ] **Step 4:** typecheck `@waitron/dashboard`; prettier; commit
+  `git commit -s -m "The dashboard's bump mode client and strings go (A756 PR 7)"`, then update the
+  ledger.
+
+**Assertions changed** (A773 §7.1): the two client cases deleted and the live-query row removed.
 
 ### Task 49a: the venue-wide bump mode leaves the server and the till's start read
 
@@ -3881,7 +3914,10 @@ client cases and the live-query row. `:1793`, `:2811`, `settings-panels.test.ts:
     supervisor read Kitchen settings while refusing edits"` (`:277`) loses `/bump-mode` from both
     its lists and keeps `/courses`; the cases `:1947` and `:1976` are deleted; the staff and
     no-session cases (`:2004`, `:2031`) lose their `/bump-mode` requests (`:2022-2023`,
-    `:2044-2045`); the fire-control case `:2847` loses its bump read (`:2878-2880`).
+    `:2044-2045`); the fire-control case `:2847` (`"retired fire-control routes leave the stored %s value and bump
+    mode unchanged"`) loses its bump read (`:2878-2880`) and is renamed `"retired fire-control
+    routes leave the stored %s value and the venue row unchanged"` — its whole-row
+    `toEqual(before)` still covers the column.
   - `till-api.test.ts`: the whole-answer pin `:1363-1365` loses `bumpMode` and its comment;
     `:1586` (`"GET /api/till echoes a non-default bump_mode …"`) → `"GET /api/till carries no bump
     mode, whatever the venue's column holds"` — with `locations.bump_mode = 'ticket'`,
@@ -3902,7 +3938,8 @@ client cases and the live-query row. `:1793`, `:2811`, `settings-panels.test.ts:
 
 **Assertions changed** (A773 §7.1): the bump-mode route cases and auth-list entries deleted; the
 start-read pin loses a key; `till-api.test.ts:1586` inverted and `:1621` cut; the revision case
-loses its bump-mode step.
+loses its bump-mode step; `management-api.test.ts:2847` loses its bump read and is renamed (its
+whole-row check of the venue row stays).
 
 ### Task 49b: configuration copies stop carrying the venue's bump mode
 
@@ -4009,7 +4046,7 @@ server does not send it.
   you edit it in **Prep stations**." The sentences after it (late flags, identical dishes, held
   groups) stay. ES `:117-119`: "Tú decides cuándo pedir la preparación desde el terminal; no hay un
   modo de marcha para todo el local. Cada estación de preparación fija si su pantalla de cocina
-  marca como hecho un artículo cada vez o toda la comanda a la vez, en **Hecho en la pantalla** al
+  marca un plato cada vez o toda la comanda a la vez, en **Marcado en la pantalla** al
   editarla en **Estaciones de preparación**." No heading changes; both keep `{#service-lifetime}`'s
   section. Run `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
   `pnpm exec vitest run scripts/guide-links.test.ts`.
@@ -4038,16 +4075,20 @@ server does not send it.
   moves its last setting, Changes after sending (venue service's panel); PR 7 removed its core
   panel." Add open points: "From PR 7: the station editor labels the bump mode "Done on the
   screen", "One item at a time" and "Whole ticket at once" (pictures 04 and 10); the Kitchen tab
-  said "Bump mode", "Per item" and "Whole ticket". The Spanish words are new: "Hecho en la
-  pantalla", "Un artículo cada vez", "Toda la comanda a la vez". Ask the owner whether they read
-  right." "From PR 7: Add station sets no bump mode; a new station starts at one item at a time."
-  "From PR 7: Venue settings for a session without `venue.view`, or a venue without venue service,
-  shows its heading and no tabs; the core Kitchen panel used to show there, with its read refused."
+  said "Bump mode", "Per item" and "Whole ticket". Owner FYI, not a blocker: the Spanish is new
+  and built as «Marcado en la pantalla», «Un plato cada vez», «Toda la comanda a la vez» (the
+  coordinator's choice of 2026-10-24); say if other words read better." "From PR 7: Add station sets no bump mode; a new station starts at one item at a time."
   In `docs/backlog.md`'s A756 entry (`:1575-1577`) say "PRs 1–6 landed (#1852, #1854, #1858,
   #2020, #2023, #2031); PR 7 is in review; PR 8 is buildable. Open points are in the detail." A785
-  (`:2022-2025`): its bump-mode sentence goes ("Its bump mode never refreshes …"); the entry keeps
-  the theme, and gains "**2026-10-24 (A756 PR 7):** a station's bump mode now travels on its queue
-  and refreshes every 15 s; only the start-up theme is left."
+  (`:2022-2025`) names only the bump mode today, which this PR makes refresh; the theme is what is
+  left (`docs/developers/conventions-ui.md:1567`: a kitchen screen in device mode "takes the theme
+  in use when it starts"). Rewrite it as a short theme-only entry: "**A785. A kitchen screen in
+  device mode keeps the theme it started with until reload (left open by A768, 2026-10-17).**
+  Nobody signs in on it, so it runs no menu-state poll and never sees the setup revision move
+  when the theme in use changes. Its station queue read could name the revision, as
+  `/api/menu-state` does. (A756 PR 7, 2026-10-24, moved the bump mode onto each queue order, so
+  that refreshes.)" Before writing it, re-read conventions-ui.md's device-mode line after Step 3's
+  edit; if it no longer leaves the theme, delete A785 instead.
 - [ ] **Step 6: Missed claims.**
   `git grep -n -i -E 'bump.?mode|bump_mode|whole-ticket bump|per item|venue-wide bump|modo de marcado|por artículo' -- docs/backlog.md docs/backlog docs/developers apps/server/src/guide README.md 'packages/*/README.md'`
   — each hit is rewritten here, is a dated pointer of Step 4 or 5, or is history in a dated plan or
@@ -4168,21 +4209,37 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
   about. Read, not run: that nothing on the server reads the mode for a bump (a `git grep`), and
   that a pre-PR-7 file is refused by its core version (Task 49b runs it). Every file that names the
   mode (`git grep -l -E 'bump_mode|bumpMode|BumpMode' -- apps packages ':!**/drizzle/**'`, 62 files
-  on `97a8b7699`) is assigned: the 17 dashboard files to Tasks 48a–48b (five deleted); server
+  on `97a8b7699`) is assigned: the 17 dashboard files to Tasks 48a–48c (five deleted); server
   `kitchen.ts` and `management-api.ts` to Tasks 43 and 49a, `till-setup.ts`, `till-api.test.ts`,
   `till-api.setup-revision.test.ts` and `management-api.test.ts` to Task 49a,
   `configuration-import.test.ts` and `configuration-transfer.test.ts` to Task 49b; the 33 till files
   to Tasks 46a, 46b and 50 (`client.ts`, `till-app.test.ts` and `till-app-setup-refresh.test.ts` to
   two of them each); `tenants.ts` to Task 42 (comment), provisioning's two files to Task 49b; and
-  one left with a stated reason (the format-1 JSON fixture, Decision 6). Tasks 42–52 (46, 48 and
-  49 each split in two) each stay one package or one layer: storage (42), the station routes (43),
+  one left with a stated reason (the format-1 JSON fixture, Decision 6). Tasks 42–52 (46 and 49 each split in
+  two, 48 in three) each stay one package or one layer: storage (42), the station routes (43),
   the queue answer (44), the import check (45), the till's order type and its fixtures (46a), the
   till's reading of it (46b), the editor (47), the leave-check suite's move (48a), the core panel's
-  removal (48b), the server's venue mode and start read (49a), provisioning's copies (49b), and the
+  removal (48b), the dashboard's client methods and strings (48c), the server's venue mode and start read (49a), provisioning's copies (49b), and the
   till's start-read type and fixtures (50). The order keeps each commit green and each consumer
   ahead of its source: the server sends the mode on each order (44) before the till's type requires
   it (46a); the till stops reading the start read's mode (46b) before the server stops sending it
   (49a); the leave-check suite gets venue service's panel (48a) before the core panel goes (48b);
-  and the dashboard stops calling the bump-mode routes (48b) before the server removes them (49a),
+  and the dashboard stops calling the bump-mode routes (48b, its client methods going in 48c)
+  before the server removes them (49a),
   as PR 6's Task 37 came before its Task 38. Task 46b is the largest (three till files and five
   suites); its implementer follows the handover rule if it runs long.
+- PR 7 fresh-context review (2026-10-24), folded in after checking each finding against the code:
+  the editor's refusal case for the bump mode is dropped and Decision 3 corrected
+  (`stationRefusalField`, `Field` and `refusalText`, `station-editor.ts:70`, `:164-185`, know no
+  ticket-grouping field either; PR 6's precedent); Decision 9 now says who sees Kitchen
+  (`#mayRead`, `dashboard-app.ts:1481-1486`: `venue_service.manage` or `venue.view`; every role but
+  staff holds `venue.view`, `packages/identity/src/permissions.ts:45-54`; staff never reach Venue
+  settings, `dashboard-app.ts:1941`), and the open point about sessions left with no tabs is
+  dropped; Task 48b is split, 48c taking the client methods, live-query row, strings and stubs
+  (every stub is cast or typed `Record<string, unknown>`, so the commit between stays green); the
+  Spanish words follow the coordinator's ruling («Marcado en la pantalla», «Un plato cada vez»,
+  «Toda la comanda a la vez»), recorded as an owner FYI; A785 becomes a theme-only entry, its
+  receipt `conventions-ui.md:1567`; Decision 4's `git grep` claim is corrected (case-sensitive:
+  `management-api.ts` names the mode only as `getBumpMode`/`setBumpMode`/`BumpMode`, in its
+  venue routes); `management-api.test.ts:2847` is renamed in Task 49a and listed as changed; Task
+  46b's line numbers say where each case starts.
