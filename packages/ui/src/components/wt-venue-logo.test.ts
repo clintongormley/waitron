@@ -142,10 +142,8 @@ describe("wt-venue-logo", () => {
     const el = await logo(`light="/no-such.png"`, "dark");
     await new Promise<void>((resolve) => el.addEventListener("wt-logo-error", () => resolve()));
     await el.updateComplete;
-    expect(box(el).hasAttribute("data-plate")).toBe(false);
-    const frame = box(el).getBoundingClientRect();
-    expect(frame.width).toBe(0);
-    expect(frame.height).toBeCloseTo(40, 1);
+    expect(el.shadowRoot!.querySelector("[data-plate]")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".box")).toBeNull();
   });
 
   it("draws a plated 4:1 banner logo 4 px inside its box", async () => {

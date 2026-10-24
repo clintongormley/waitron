@@ -183,7 +183,11 @@ export { WtNotice } from "./components/wt-notice.js";
 export { WtBanner } from "./components/wt-banner.js";
 export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";
 export { WtThemeChooser, type WtThemeLabels } from "./components/wt-theme-chooser.js";
-export { WtVenueLogo, type WtVenueLogoSize } from "./components/wt-venue-logo.js";
+export {
+  VENUE_LOGO_RETRY_MS,
+  WtVenueLogo,
+  type WtVenueLogoSize,
+} from "./components/wt-venue-logo.js";
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";

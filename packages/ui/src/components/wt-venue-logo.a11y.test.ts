@@ -55,6 +55,14 @@ describe.each(["light", "dark"] as const)("wt-venue-logo a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("a failed logo showing a text fallback", async () => {
+    const el = await logo(`light="/no-such.png" alt="Bar Lucía"`, theme);
+    el.innerHTML = `<span slot="fallback">Bar Lucía</span>`;
+    await vi.waitFor(() => expect(el.failed).toBe(true));
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("an empty box", async () => {
     await logo("", theme);
     await expectNoA11yViolations(host);
