@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -763,7 +763,6 @@ describe("what moves, ends or keeps today's name", () => {
 
 describe("a reset clears today's name", () => {
   const REMOVALS = enabledTableRemovals(ALL_MODULES);
-  const DAY = 24 * 60 * 60 * 1000;
 
   const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
   const resetRoom = (zoneId: string, now = new Date()) =>
@@ -913,13 +912,33 @@ describe("a reset clears today's name", () => {
     expect(await nameOf(table.bar!)).toBe(corner);
   });
 
-  // Last: it moves every zone in the shared database a day ahead.
-  it("a new business day clears a free table's name (reset clears)", async () => {
-    const { table } = await LONG_TABLE();
-    await rename(table.bar!, suffixed("Window"));
+  it.each([
+    ["2026-10-24T02:32:00Z", "2026-10-23", "2026-10-24T03:00:00Z", "2026-10-24"],
+    ["2026-10-24T03:09:08Z", "2026-10-24", "2026-10-25T04:00:00Z", "2026-10-25"],
+    ["2026-10-24T03:21:57Z", "2026-10-24", "2026-10-25T04:00:00Z", "2026-10-25"],
+    ["2026-03-28T04:21:57Z", "2026-03-28", "2026-03-29T03:00:00Z", "2026-03-29"],
+    ["2026-10-23T03:21:57Z", "2026-10-23", "2026-10-24T03:00:00Z", "2026-10-24"],
+    ["2026-10-25T04:21:57Z", "2026-10-25", "2026-10-26T04:00:00Z", "2026-10-26"],
+  ])(
+    "a new business day clears a free table's name (reset clears) from %s",
+    async (at, day, boundary, nextDay) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(at));
+      try {
+        const { table } = await LONG_TABLE();
+        const name = suffixed("Window");
+        await rename(table.bar!, name);
 
-    await newDay(new Date(Date.now() + DAY));
+        vi.setSystemTime(new Date(new Date(boundary).getTime() - 1));
+        expect(await newDay(new Date())).toBe(day);
+        expect(await nameOf(table.bar!)).toBe(name);
 
-    expect(await nameOf(table.bar!)).toBeNull();
-  });
+        vi.setSystemTime(new Date(boundary));
+        expect(await newDay(new Date())).toBe(nextDay);
+        expect(await nameOf(table.bar!)).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });
