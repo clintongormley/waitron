@@ -92,9 +92,10 @@ bigger: each of the four text sizes grows by the same percentage, to the nearest
 Waitron's size, and 130% the largest. Spacing stays as it is, and so does the smallest size of a
 button, a till's product buttons included, so a long name that no longer fits takes another line.
 
-On a till whose venue's default content language is Spanish, a long product name on a product
-button or a bill line breaks at a syllable, with a hyphen. Names in a language the browser does not
-hyphenate, English among them, can break inside a word from 115%.
+On a till whose venue's default content language is Spanish, a word of eight letters or more in a
+product name, on a product button or a bill line, can break at a syllable with a hyphen; a shorter
+word is never hyphenated. Names in a language the browser does not hyphenate, English among them,
+can break inside a word from 115%.
 
 A saved text size reaches the dashboards and tills as a saved theme's colours do (see
 [Save a theme](appearance.md#save)). A kitchen screen that nobody signs in on takes it when it next

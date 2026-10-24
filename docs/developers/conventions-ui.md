@@ -1555,8 +1555,10 @@ The `lang` on a till's product button names and bill line names is the venue's d
 language, which is not part of the start read: the till reads the content languages at start and
 again 60 s after each read answers (`#refreshContentLanguages`, `apps/till/src/till-app.ts`), and the
 menu browser and the basket redraw on a change (`ContentLanguageController`), so the `lang` follows
-within about a minute. Names are hyphenated by that language's rules (`hyphens: auto`); Chromium does
-not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
+within about a minute. A word of 8 letters or more can be hyphenated by that language's rules
+(`hyphens: auto` with `hyphenate-limit-chars: 8 auto auto`); a shorter one never is, so a short word
+that fits a line stays whole, as `apps/till/src/widgets/menu-browser.home-columns.test.ts`
+requires (it fails at 7). Chromium does not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
 long word overflowing a narrow box, where `es`, `de` and `fr` broke it with a hyphen). A table
 order's draft arrangement slots its own name into the basket's `lead-<n>`
 (`apps/till/src/screens/till-table-order-screen.ts`), and that name carries no `lang`.

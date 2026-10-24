@@ -254,6 +254,9 @@ export class TillMenuBrowser extends LitElement {
 
       .name[lang] {
         hyphens: auto;
+        /* No hyphen in a word under 8 letters, so one that fits a line stays whole:
+           menu-browser.home-columns.test.ts. */
+        hyphenate-limit-chars: 8 auto auto;
       }
 
       .price,

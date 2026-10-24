@@ -1179,6 +1179,8 @@ describe("till-basket: a line name's language", () => {
     const own = name.querySelector<HTMLElement>(".product-name")!;
     expect(own.getAttribute("lang")).toBe("es");
     expect(getComputedStyle(own).hyphens).toBe("auto");
+    // A word under 8 letters is never hyphenated, as on the product buttons.
+    expect(getComputedStyle(own).getPropertyValue("hyphenate-limit-chars")).toBe("8");
     expect(own.textContent).toBe("Cortado");
     expect(own.textContent).not.toContain(t("basket.not_offered"));
     expect(name.textContent).toContain(t("basket.not_offered"));

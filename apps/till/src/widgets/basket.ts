@@ -151,6 +151,9 @@ export class TillBasket extends LitElement {
 
       .product-name {
         hyphens: auto;
+        /* No hyphen in a word under 8 letters, so one that fits a line stays whole:
+           menu-browser.home-columns.test.ts. */
+        hyphenate-limit-chars: 8 auto auto;
       }
 
       /* The name, or what is slotted in its place, on a row of its own above the line's controls,

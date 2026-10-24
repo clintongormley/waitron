@@ -851,6 +851,8 @@ describe("till-menu-browser", () => {
       )!;
       expect(productName.getAttribute("lang")).toBe("es");
       expect(getComputedStyle(productName).hyphens).toBe("auto");
+      // A word under 8 letters is never hyphenated, so it stays whole where it fits.
+      expect(getComputedStyle(productName).getPropertyValue("hyphenate-limit-chars")).toBe("8");
       const sectionName = root(el).querySelector<HTMLElement>(
         '[data-region="shortcuts"] wt-button[data-kind="section"] .name',
       )!;
