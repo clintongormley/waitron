@@ -2648,7 +2648,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });
 
-  it("says changes to sent items are switched off, and reloads the line's actions", async () => {
+  it("says the item's station does not allow changes once sent, and reloads the line's actions", async () => {
     const { el, screen } = await openBurgerTab({
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_fired" }),
     });

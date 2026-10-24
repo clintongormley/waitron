@@ -2901,7 +2901,6 @@ export class TillApp extends LitElement {
   @state() private nameRefusal: { name: string; message: string } | null = null;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
-  /** The venue's setting for changing sent lines, read with {@link tabLines}. */
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
   @state() private cancelOffer: number | null = null;
   @state() private editDeadEnds: {

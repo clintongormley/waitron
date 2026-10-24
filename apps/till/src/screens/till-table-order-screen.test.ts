@@ -3354,7 +3354,7 @@ describe("till-table-order-screen", () => {
       expect(lineAction(el, "change", 6)).toBeNull();
     });
 
-    it("with changes to sent items switched off, Sent offers Void and neither Change nor Recall", async () => {
+    it("at a Not allowed station, Sent offers Void and neither Change nor Recall", async () => {
       const { el } = await mountLines(
         [burgerLine, recalledLine, noRouteLine, preparingBurger].map((line) => ({
           ...line,
