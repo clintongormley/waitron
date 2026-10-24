@@ -1,4 +1,11 @@
-import type { AeatCertDraft, EmailSettingsDraft, ProvisionBody } from "./client.js";
+import type {
+  AeatCertDraft,
+  EmailSettingsDraft,
+  ProvisionBody,
+  RecoveryBackupPreview,
+  RecoveryPreparationSource,
+  RecoveryRestoreCredentials,
+} from "./client.js";
 
 export interface FirstSetupOwner {
   attemptId: string;
@@ -96,4 +103,34 @@ export function firstSetupHeaders(owner: FirstSetupOwner): Record<string, string
     "X-Waitron-Setup-Revision": String(owner.revision),
     "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
   };
+}
+
+export interface BackupRepairObservation {
+  inspectionId: string;
+  revision: number | null;
+  ownerGeneration: number | null;
+}
+export interface BackupRepairProof {
+  observation: BackupRepairObservation;
+  nodeRecoverySecret: string;
+  context: { oldBoxGone: boolean; soleRecovery: boolean };
+}
+export interface BackupRepairOpenRequest extends BackupRepairProof {
+  source: Exclude<RecoveryPreparationSource, { kind: "staged" }>;
+  recoveryId?: string;
+}
+export interface BackupRepairResumeRequest extends BackupRepairProof {
+  recoveryId: string;
+}
+export interface BackupRepairSession {
+  sessionId: string;
+  recoveryId: string;
+  preview: RecoveryBackupPreview;
+  binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
+  input?: unknown;
+}
+export interface BackupRepairStatus {
+  phase: "unstarted" | "prepared" | "placement-started" | "restored" | "selected" | "uncertain";
+  recoveryId?: string;
+  proofRequired: true;
 }

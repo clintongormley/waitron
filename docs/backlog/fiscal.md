@@ -876,6 +876,12 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **Backup access is independent of a retained setup's password (A731; owner, 2026-10-15).**
+  Authenticate the selected backup with its own named node key, plus the archive key or source
+  credentials it needs. Keep unrelated local records opaque and retain their files. A key that
+  opens the backup does not replace fiscal history admission. Follow
+  [repair recovery](../operations/hour-recovery.md#recover-while-first-setup-is-blocked).
+
 - **Pre-squash certificate metadata (A889).** Until a pre-A795 test box is reset under
   [A760](../operations/a760-migration-squash.md), reinstall its certificate through the
   certificate card if it shows **Installed: not recorded**. The card's expiry alerts and
@@ -1472,13 +1478,3 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
   [Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
   (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
   open.
-
-
-## A731. Recover from backup from the first-setup repair page
-
-Required before any venue goes live; owner 2026-10-15 at about 17:15. Connect the repair
-page to existing archive, bucket and managed-Cloud recovery, retaining real owner proof and the
-selected backup’s named node recovery key, archive encryption key where applicable and current
-outside recovery evidence. Follow [the offline restore procedure](../developers/offline-fiscal-restore.md).
-Unresolved first-setup guards currently block restore; the page must say this path is not yet
-available until this item lands. Do not expose retained business records without proof.

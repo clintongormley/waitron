@@ -27,6 +27,31 @@ Confirm that the former seller is stopped and no parallel recovery is underway. 
 fresh name does not stop a copied or returning machine. Arrange recovery with the business's
 other venues so that only one fresh setup or recovery runs at a time.
 
+## Recover while first setup is blocked
+
+On the interrupted-setup repair page, choose **Recover from backup**. This is separate from the
+ordinary Restore page: it authenticates the selected copy before showing its private preview and
+keeps the old attempt and database files separately. You do not need the old setup password to
+prove access to an independently authenticated backup.
+
+Choose an archive, bucket copy or supported Cloud copy. Supply its named node recovery key,
+and its archive key or source credentials where applicable. Choose the saved recovery PDF or enter the grouped key from your recovery sheet. Cloud approval is separate from this key;
+production Cloud recovery remains unavailable through the current client.
+
+After **Open backup**, check the authenticated details and use the module's recovery controls.
+The key still needs to pass the current history and clock checks. Keep the former box stopped,
+coordinate with the other venues and follow any wait before selecting the series.
+
+Opening a backup pauses ordinary setup even if its key is refused. Retry recovery on this page,
+or restart the box to return to ordinary setup. Going back or refreshing the page does not resume it.
+
+If the page closes or the box restarts, enter the proof again. Reopen the same source when only
+preparation was saved. **Finish saved recovery** proves the retained committed target before
+completing the same event; it does not choose a new name. Do not erase a retained operation to
+make another source fit. The bilingual [backup recovery guide](../../apps/server/src/guide/en/backup-recovery.md)
+walks through the controls. It is served with the other guides during normal operation; the
+repair-only listener does not link to or serve those guides.
+
 ## Make the new series
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and

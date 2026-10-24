@@ -77,6 +77,8 @@ export class SetupRecoveryAllocation extends LitElement {
       }
     `,
   ];
+  @property({ attribute: false })
+  binding?: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
   @property({ attribute: false }) preview?: RecoveryBackupPreview;
   @property({ attribute: false }) prepare?: (
     request: ModuleRecoveryPreparationRequest,
@@ -96,7 +98,7 @@ export class SetupRecoveryAllocation extends LitElement {
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage") || changed.has("refusedField")) this.refusalDismissed = false;
-    if (changed.has("preview") || changed.has("prepare")) {
+    if (changed.has("preview") || changed.has("prepare") || changed.has("binding")) {
       this.#clear();
       const preview = this.preview;
       const contribution = SETUP_MODULES.find(
@@ -114,7 +116,7 @@ export class SetupRecoveryAllocation extends LitElement {
                 nodeId: preview.nodeId,
                 keyName: preview.nodeRecoveryKeyName,
               },
-              binding: {
+              binding: this.binding ?? {
                 module: preview.fiscalSelection.module,
                 action: "restore",
                 eventId: crypto.randomUUID(),

@@ -404,11 +404,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   topic is current; the campaign runner prohibits editing root rules. Correct that summary in
   separately authorised instruction housekeeping, preserving key/source/working-time safeguards.
 
-- **A731. Recover from backup from the first-setup repair page.** Required before go-live.
-  Add the existing archive, bucket and managed-Cloud recovery flow behind real owner proof,
-  with the selected backup’s recovery key and current outside evidence.
-  [Detail](backlog/fiscal.md#a731-recover-from-backup-from-the-first-setup-repair-page) · [Implementation plan](superpowers/plans/2026-10-24-a731-repair-backup.md).
-
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
   old-backup/new-hardware operational exercise remain queued. Cloud allocation production
@@ -5319,6 +5314,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **The first fiscal-hour end-to-end file exceeds the four-minute job budget on slow CI runners.**
+  Four successful main runs on 24 October measured the file alone at 248–250 seconds. Split or
+  reduce its repeated setup while preserving its restart assertions.
+  [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
 
 - **A backlog detail link still names the old five-handler heading.** The till entry’s
   `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`

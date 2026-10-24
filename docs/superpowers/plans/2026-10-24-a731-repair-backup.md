@@ -10,7 +10,11 @@
 
 **Spec:** owner-approved A731 connects the repair page to existing archive, bucket and managed-Cloud recovery with the selected backup's named node recovery key and archive encryption key where applicable. Retained business records are not exposed without their owner proof. See `docs/backlog/fiscal.md` → A731 and the current recovery policy in `docs/operations/hour-recovery.md`. Preserve the original-retention boundaries of `docs/superpowers/plans/2026-10-15-a679-first-setup-repair.md`; its register-based authority is historical. A732 is withdrawn, A733 is shipped, and A1042 waits for A731.
 
-**Evidence status:** source contracts below were read at `80563e1420e9b19235c27d8c0e196e49f2c19255`; new interfaces are proposed. The driver ran `pnpm --filter @waitron/server exec vitest run src/first-setup-resolution.boot.test.ts -t 'direct entry'`: three existing cases passed, with 23 deselected. That checks existing entry refusal only. None of the new recovery behavior below has been implemented or verified.
+**Planning evidence (before implementation):** source contracts below were read at `80563e1420e9b19235c27d8c0e196e49f2c19255`; new interfaces are proposed. The driver ran `pnpm --filter @waitron/server exec vitest run src/first-setup-resolution.boot.test.ts -t 'direct entry'`: three existing cases passed, with 23 deselected. That checks existing entry refusal only. None of the new recovery behavior below had been implemented or verified at that planning checkpoint.
+
+**Execution checkpoint, 24 October 2026:** Task 1 is implemented on the isolated feature branch. Its 134 new cases pass; the five listed V1 suites pass 281 unchanged cases, and the two protected fiscal suites pass 20 unchanged cases. Coverage measured over the new journal file alone is 98.70% statements, 98.76% lines, 100% functions and 98.44% branches; this is not package-wide coverage or CI. Four installed disposable-checkout deletion controls fail their expected assertions and pass after restoration. Tasks 2–4, whole-branch review and integration remain open; no recovery API or page is enabled by this checkpoint.
+
+**Task 1 interface clarification:** the store also exposes `inspect(recoveryId): Promise<string>` to derive the original-files digest before the first append. Both this inspection and writes require the authenticated host's anchor/source exclusion; the store has a separate internal write turn. Original-file binding omits the live `venue.holder.json` heartbeat and its `.partial` file, whose bytes change while the venue lock is held (`packages/store/src/venue-liveness.ts`), and the operation's own output. Database and sidecar files stay in place and are streamed into the digest. Other control files have private immutable copies. The fixed discovery witness retains the initial record so an interrupted first append can resume its exact event and timestamp.
 
 ## Global constraints
 
@@ -78,21 +82,49 @@ No required edit to Lane A's `restore.ts`, `restore-request.ts`, `recovery-prepa
 - `createFirstSetupBackupWorkspace(anchor: FirstSetupRoots)` returns `read(): Promise<readonly BackupRepairRecord[]>`, `append(record: Omit<BackupRepairRecord, "version" | "sequence" | "previousRecordDigest" | "recordedAt">): Promise<BackupRepairRecord>`, and `select(restored: BackupRepairRecord): Promise<BackupRepairTarget>`.
 - `resolveFirstSetupBackupWorkspace(anchor: FirstSetupRoots): Promise<{ kind: "absent" } | { kind: "repair"; target: BackupRepairTarget } | { kind: "selected"; target: BackupRepairTarget }>`; `assertFirstSetupBackupBootTarget(roots: FirstSetupRoots): Promise<void>`.
 
-- [ ] **RED:** add chain/selection cases to the new provisioning suites using literal synthetic operation bindings and JSON payloads, independent of server recovery code. Missing namespace returns absent; prepared/started/restored records never admit trading; selected returns only the exact target. V1 ordinary empty retirement still resolves exactly as before. New imports/behavior must fail before implementation.
-- [ ] Run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-backup-workspace.test.ts src/first-setup-backup-workspace.durability.test.ts`. Expected RED: missing new exports first, then specific phase/admission assertions while building; retain actual failures, not unrelated fixture errors.
-- [ ] Implement the store beneath `<anchorState>/first-setup-resolutions/backup-recovery/<recoveryId>/`; targets beneath that operation's `target/{venue,state}`. Use paired fixed discovery at `<anchor{State,Venue}>/first-setup-resolutions/backup-recovery/current.json` and paired target backlinks in the same relative namespace. Do not place V2 records in V1's numbered UUID record stream. No directory scan may select an orphan target.
-- [ ] Preserve original control files as immutable private evidence, and retain old database/sidecar files in place with a manifest of names, sizes and digests. Stream fingerprints; do not inherit V1's 128 MiB snapshot limit as an excuse to drop a database. Validate regular files and canonical ancestor chains. Any unreadable/ambiguous original blocks recovery rather than being discarded. Existing V1 retirement chains remain independently retained. The new observation manifest excludes only this operation's V2 output subtree; it must still cover old sibling records, original directories and V1 selection. After its own first write, compare that manifest rather than demanding the old public inspection ID stay unchanged by the new namespace itself. Test both a legitimate own append and an unrelated changed original.
-- [ ] Test then implement interruption at each append, file sync, rename, directory sync, paired discovery/backlink write and selection completion. An incomplete/mismatched chain remains repair-only. After fresh authorisation, reconcile only identical witnesses; never fall back to normal boot after a malformed V2 record. Repeated exact completion does not allocate or rewrite old evidence.
-- [ ] Serialize journal writes with the shared coordinator under anchor/source venue exclusion; the API service owns authorisation. Use a distinct store coordinator internally if needed to avoid queueing recursively behind its own held turn. Durably record retirement intent before placement; durably record restored completion before selection. `select` cannot independently grant authority.
-- [ ] **GREEN:** rerun the two new suites plus `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-resolution.test.ts src/first-setup-resolution.integrity.test.ts src/first-setup-workspace.test.ts src/first-setup-state.test.ts src/first-setup-host-path.test.ts`. Require nonzero test counts and unchanged V1 assertions. Parent makes a focused `git commit -s` after checking the index.
+- [x] **RED:** add chain/selection cases to the new provisioning suites using literal synthetic operation bindings and JSON payloads, independent of server recovery code. Missing namespace returns absent; prepared/started/restored records never admit trading; selected returns only the exact target. V1 ordinary empty retirement still resolves exactly as before. New imports/behavior must fail before implementation.
+- [x] Run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-backup-workspace.test.ts src/first-setup-backup-workspace.durability.test.ts`. Expected RED: missing new exports first, then specific phase/admission assertions while building; retain actual failures, not unrelated fixture errors.
+- [x] Implement the store beneath `<anchorState>/first-setup-resolutions/backup-recovery/<recoveryId>/`; targets beneath that operation's `target/{venue,state}`. Use paired fixed discovery at `<anchor{State,Venue}>/first-setup-resolutions/backup-recovery/current.json` and paired target backlinks in the same relative namespace. Do not place V2 records in V1's numbered UUID record stream. No directory scan may select an orphan target.
+- [x] Preserve original control files as immutable private evidence, and retain old database/sidecar files in place with a manifest of names, sizes and digests. Stream fingerprints; do not inherit V1's 128 MiB snapshot limit as an excuse to drop a database. Validate regular files and canonical ancestor chains. Any unreadable/ambiguous original blocks recovery rather than being discarded. Existing V1 retirement chains remain independently retained. The new observation manifest excludes only this operation's V2 output subtree; it must still cover old sibling records, original directories and V1 selection. After its own first write, compare that manifest rather than demanding the old public inspection ID stay unchanged by the new namespace itself. Test both a legitimate own append and an unrelated changed original.
+- [x] Test then implement interruption at each append, file sync, rename, directory sync, paired discovery/backlink write and selection completion. An incomplete/mismatched chain remains repair-only. After fresh authorisation, reconcile only identical witnesses; never fall back to normal boot after a malformed V2 record. Repeated exact completion does not allocate or rewrite old evidence.
+- [x] Serialize journal writes with the shared coordinator under anchor/source venue exclusion; the API service owns authorisation. Use a distinct store coordinator internally if needed to avoid queueing recursively behind its own held turn. Durably record retirement intent before placement; durably record restored completion before selection. `select` cannot independently grant authority.
+- [x] **GREEN:** rerun the two new suites plus `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-resolution.test.ts src/first-setup-resolution.integrity.test.ts src/first-setup-workspace.test.ts src/first-setup-state.test.ts src/first-setup-host-path.test.ts`. Require nonzero test counts and unchanged V1 assertions. Parent makes a focused `git commit -s` after checking the index.
+
+**Execution clarification, 24 October 2026:** original binding excludes root-level `venue.holder.json`, `venue.holder.json.partial` and `venue.lock-journal` as well as this operation's V2 output. Actual repeated `lockVenueDatabase` calls change the lock journal; the new repeated-exclusion test checks stable binding and still refuses a newly appearing `venue.db-wal`. Originals remain in place.
 
 ## Task 2: Authenticate selected source, retain history, place through unchanged core
 
+**Execution checkpoint, 24 October 2026:** Task 1 is committed at `d0bc15a952f187d4c849c8734dc66024ea463f21`. Task 2's source/proof, Cloud reconciliation, memory-only sessions, isolated preparation and fresh archive/bucket placement are implemented internally. An operation-local copy of projected public history remains bound to the journal digest and is republished after core secret placement. Exact module commit verification precedes restored/selection. Unknown files at either target root and further preparation after placement starts are refused. Tests retain a populated original database byte for byte and cover interruptions before the restored record and before selection; a restarted service rejects the old session. The internal archive/bucket service now seals publication entries to the exact source/event/input/target and public-evidence digest under the named node recovery key. A separate `resume` operation authenticates a private consistent target copy, checks the module's exact committed event, then admits a new memory-only session. Replay preserves counters advanced after proof and republishes secrets through unchanged core. Source reauthentication now reopens a prepared operation, including a placement-started record with no target database or unrecognised top-level files. It keeps the recovery ID, event, target and sealed input, reconstructs the same public evidence and requires fresh clock readings before placement. Partial databases and changed or unrecognised top-level target files remain retained and refused. Cloud placement, routes and the page remain open. No repair API or page is enabled; package-wide CI and whole-branch review have not run.
+
+**Cloud implementation checkpoint, 24 October 2026:** checked Cloud placement and committed-target
+restart now exist internally. `BackupRepairOptions.cloud?: Omit<CloudRecoveryOptions, "stateDir">`
+configures private clients; it never supplies a retained original state directory. Pre-proof
+approvals live in owned temporary directories. After authenticated preparation writes the V2
+journal, the service copies the approval into that operation's private `cloud` directory and
+constructs the client there. If this transfer was interrupted before an input or publication was
+sealed, fresh approval may recover the same journal; exact source and named-node proof remain
+required. This does not reset its event or target. Other missing or changed approval state refuses.
+A new approval invalidates an older in-flight proof. The encrypted publication seals the Cloud
+identity and omits the source’s `backup.env`. Fresh placement calls `restoreFromArtifact` with the
+original checked request and matching target state. Restart reauthenticates the committed target
+and checks the sealed Cloud identity, origin and current runtime. Client reconciliation checks run
+before resumed secret publication; acknowledgement runs separately after local selection. A
+refused acknowledgement leaves `restored` pending. Before publication, an expired existing
+approval may renew without changing the journal input, event or target, and invalidates any older
+in-flight proof. Sealed publication blocks approval replacement. Public API/page/boot integration,
+whole-branch review and package-wide CI remain open; this checkpoint enables no repair entry.
+
+**History-reader checkpoint, 24 October 2026:** `readFirstSetupBackupHistory` collects retained database history through private database/WAL/journal/SHM copies, together with the existing module projection of preparation and document history. Its 19 cases cover original-byte preservation, WAL-only rows, ordinary V1 workspace retention, stale evidence, invalid files, domain refusals and scratch cleanup. A real module-selection case refuses a later retained name and accepts a later clock. Eleven installed omission controls fail assertions and pass after restoration. The seven focused server suites pass 168 cases; the two protected fiscal suites pass 20 unchanged cases. Source-only coverage meets the unchanged thresholds; this is not package-wide CI or full Task 2 qualification. Integration with the authenticated service, complete current/retired attempt admission and durable target evidence carry-forward remain open before preparation or placement can be enabled.
+
 **Interfaces — consume Task 1 and existing signatures:**
 
+- Internal history collection: `readFirstSetupBackupHistory(roots & { module, withVenueExclusion, recheck })` returns `{ databases, documents }` for module policy only. Call it after selected-backup proof inside the authenticated service's coordinator turn. Its venue locks exclude other processes; the service's coordinator serialises same-process actions. Supply the session's original/source recheck callback. The reader projects current/previous setup inputs and archived snapshots through the module's backup seat. The service separately projects database history and persists the combined public evidence in its target. Keep collected local history out of API responses. Unprojectable public history and retained legacy operation files refuse admission; they are not interpreted as empty history.
 - `BackupRepairSource` is `Exclude<RecoveryPreparationSource, { kind: "staged" }>` from `setup-recovery-preparation-api.ts`. `BackupRepairSourceDeps = Pick<ValidationDeps, "stateDir" | "stagingDir" | "migrationsRoot" | "modules"> & { bucket: Omit<PrepareStreamDeps, "kit" | "stateDir" | "migrationsRoot" | "oldBoxGone">; cloudRecovery?: ReturnType<typeof createCloudRecoveryClient> }`. `openFirstSetupBackupSource(source: BackupRepairSource, deps: BackupRepairSourceDeps): Promise<{ copy: ValidatedArtifact; sourceId: string; cloudRequest?: ArchiveRestoreRequest }>` owns private-copy disposal in `first-setup-backup-source.ts`. Keep Cloud request/verification fields intact.
+- Source-opening clarification: `openFirstSetupBackupSource(source, deps, context?)` accepts `{ oldBoxGone: boolean }` as an optional third argument, defaulting to false; the service must pass the repair request's confirmation. `authenticatedFirstSetupBackupPreview(selected, binding, secret, deps)` checks the selected copy's named node key through `withRecoveryKeyAuthority` before returning its preview, using a separate private copy for preview migrations. It returns no authority or repair grant. The service still derives the binding, rechecks source/original evidence under exclusion, and owns session admission.
 - `BackupRepairOptions = FirstSetupRoots & { environment: DeploymentEnvironment; modules: readonly WaitronModule[]; host: FirstFiscalHost; sources: BackupRepairSourceDeps; workspace: ReturnType<typeof createFirstSetupBackupWorkspace>; log: Logger }`. `createFirstSetupBackupRecovery(options: BackupRepairOptions)` in `first-setup-backup-recovery.ts` produces `open(request: BackupRepairOpenRequest, client: OperationClient): Promise<BackupRepairSession>`, `prepare(sessionId: string, proposal: unknown, client: OperationClient): Promise<unknown>`, `commit(sessionId: string, input: unknown): Promise<{ recoveryId: string; restarting: true }>`, `close(sessionId: string): Promise<void>`, `cloudStart(): Promise<CloudRecoveryView>`, `cloudStatus(): Promise<CloudRecoveryView>`, and `cloudStartAgain(): Promise<CloudRecoveryView>`. These Cloud adapters delegate to the existing optional client and grant no recovery-key authority.
 - `BackupRepairOpenRequest = { observation: Omit<BackupRepairObservation, "originalsDigest">; source: BackupRepairSource; nodeRecoverySecret: string; context: Pick<RecoveryEntryContext, "oldBoxGone" | "soleRecovery">; recoveryId?: string }`; `BackupRepairSession = { sessionId: string; recoveryId: string; preview: RecoveryBackupPreview; binding: OperationBinding }`. The server derives the originals digest and `selectedSourceId` from its private validated copy; the client need not preview unauthenticated records to construct a request. Session IDs are opaque, at least 256 random bits, bounded to one active repair selection per boot, and expire after 15 minutes without an authenticated action. Generate the event and target once, on the server; clients cannot supply paths, authority, a previous allocation or an arbitrary binding.
+
+- Restart interface: `BackupRepairResumeRequest = Omit<BackupRepairOpenRequest, "source" | "recoveryId"> & { recoveryId: string }`; `resume(request, client): Promise<BackupRepairResumeSession>` takes no source credentials or download. `BackupRepairResumeSession extends BackupRepairSession` adds the journal's exact `input` after fresh target proof, so a restarted browser can submit it to `commit` without retaining a previous session or selection in storage. Prepared operations do not use this interface. They call `open` with their saved `recoveryId`, the exact archive or signed bucket source and fresh named-node proof. The target folders must contain no database or unrecognised top-level files; fresh clock preparation retains the existing event and any sealed input. The authenticated response also carries the saved `input` in this case.
 
 - [ ] **RED:** create real-database tests in the two new server suites, using `useVenueDb` and existing backup fixtures. Table-test archive encryption key, selected backup key/name, wrong/missing node key, cross-environment, another retained node/business with valid selected-backup proof, stale inspection, stale owner generation and altered source bytes. Before successful key authentication no response includes taxpayer, location, invoice records, copy contents or disk identity. Existing unauthenticated normal preview behavior is not reused as repair authority.
 - [ ] Run `pnpm --filter @waitron/server exec vitest run src/first-setup-backup-source.test.ts src/first-setup-backup-recovery.test.ts`. Expected RED: new exports missing, followed by the named proof/retention assertions. Do not substitute a mocked successful restore hook for the core behavior.
@@ -120,18 +152,85 @@ No required edit to Lane A's `restore.ts`, `restore-request.ts`, `recovery-prepa
 - [ ] Add HTTP, spoofed HTTPS/forwarded headers, cross-origin, stale session, expiry, replay and concurrent-tab tests. Race `/commit` against `/open`, normal empty start-again and a second commit using controlled barriers, not sleeps; no stale target may become selected, and a losing interrupted operation stays repair-only with its evidence retained. Alter source/verifier or V1 workspace selection after derivation but before lock acquisition to prove the under-lock recheck.
 - [ ] **GREEN:** rerun new suites and `pnpm --filter @waitron/server exec vitest run src/first-setup-entry.test.ts src/first-setup-resolution.bootstrap.test.ts src/first-setup-resolution.route.test.ts src/module-operation-host-routing.test.ts src/node-entry.test.ts`. Real listener cases must fetch both HTTPS API and HTTP bootstrap in the three modes, use `freePorts(n)` once per case, close only owned listeners, and write fixture DBs only while their server is stopped. Parent commits with `-s`.
 
+**Restart interface clarification from Task 2:** mount `POST /resume` beneath the same backup
+prefix for `BackupRepairResumeRequest`, with the same TLS, origin, exact-field and 131072-byte JSON
+checks. It takes `observation`, `recoveryId`, `nodeRecoverySecret` and the two confirmations in
+`context`; it takes no source credentials or client-supplied paths. Return the authenticated
+`BackupRepairResumeSession`, including its exact saved input. The repair browser session and
+`SetupApi` need corresponding `resume` / `resumeFirstSetupBackup` methods. Prepared-source reopen
+continues through multipart `/open` with `recoveryId`; committed-target completion uses `/resume`.
+These routes and browser methods remain unimplemented at this checkpoint.
+
+**Task 3 API/entry implementation checkpoint, 24 October:** the unpublished branch now mounts the
+bounded TLS routes, including `/resume`, plus public progress that carries no backup preview or
+saved input. The direct, supervised and already-recovery listeners authenticate an archive through
+real HTTPS; their HTTP listeners serve public guidance. V2 selection carries its roots without a
+V1 binding, rechecks under exclusion and precedes raw database opens. A pending V2 journal skips
+ordinary source cleanup; an absent namespace leaves ordinary filesystem refusals to strict boot.
+Full Task 3 source/boot/race qualification and Task 4 remain open. In particular, qualify the V1
+retired-workspace anchor path, factory configuration failures and listener/session disposal before
+calling Task 3 complete. The prior statement about unimplemented browser methods still applies.
+
+**Task 3 handoff ruling:** ordinary setup must close its long-lived store before backup proof binds
+the retained files. A new real-server case first showed shutdown changing `waitron.log` and both
+databases' WAL/SHM files, then refusing the journal. Its new repair boundary drains other setup
+requests, closes the store under the shared host coordinator and sends subsequent logs to stdout.
+Other setup actions answer `setup.not_ready` until restart; public status/inspection and the repair
+routes remain available. The same case now retains every bound file and reads the prepared journal
+after shutdown. Keep the ordinary POST guard unchanged. Further request-race and alternate-action
+qualification remains required; this checkpoint does not complete that qualification.
+
+**Task 3 anchor and listener qualification checkpoint, 24 October:** the factory now resolves the
+actual V1 anchor for journal access while the repair host stays at its selected source. A new
+real-database journey authenticates, prepares, restores and admits the same selected target from
+the original folders, V1 replacement and V2 target, preserving the original setup bytes and the
+backup's counter. V1 entry discovery checks its original anchor for V2 progress. Invalid Cloud
+origins no longer prevent public repair status; the Cloud action validates its setting when used.
+Configured preproduction Cloud and a real loopback S3 missing-pointer response are exercised through
+the factory. The API tests cover bucket and Cloud proof, provider refusal and streamed upload limits.
+
+An optional `RecoveryServeOptions.onClose` connects resolution disposal to explicit listener
+closure. Closure waits for disposal, removes the private backup copy and invalidates its grant in
+the direct, supervised and saved-recovery listener tests. These tests do not establish supervised
+process-signal handling. The focused 12-file repair run passes 312 cases; its diagnostic coverage
+over the entry, API, recovery and publication files is 98.18% statements, 99.85% lines, 99.19%
+functions and 96.59% branches. This is a four-file diagnostic, not package-wide CI. The existing
+entry checks pass 206 cases and the protected fiscal files pass 20 unchanged cases. Normal setup
+request-drain/alternate-action races, supervised signal handling, Task 4 and whole-branch
+qualification remain open. Do not finish or land this partial feature.
+
+**Task 3 request handoff and process shutdown checkpoint, 24 October:** four real child-process
+cases first exited directly on SIGTERM or SIGINT. The supervised recovery listener now uses the
+existing shutdown handler and listener-close helper. The same four cases pass with private proof
+copies removed, including saved recovery level. A fifth process case reauthenticates an interrupted
+committed target and checks cleanup after its recovery-requested restart. These checks cover an
+already authenticated copy; they do not establish cleanup during an unfinished source download.
+
+Two controlled uploads cover ordinary configuration work and first-setup offerings. Backup proof
+waits for those requests, closes its pool after their bodies finish and fences later ordinary
+actions. In an installed disposable checkout, removing that request drain makes the offerings case
+observe an early pool close. Removing signal-handler wiring fails the four signal cases. The seven
+cases pass before and after restoring those omissions. Three API races queue a second open, second
+commit or ordinary start-again behind placement; the first commit selects its original target and
+the queued action refuses. The focused boundary run passes 95 cases, the existing entry run passes
+132 cases and the protected fiscal files pass 20 unchanged cases. Task 4 and whole-branch
+qualification remain open; this is not a finish-branch checkpoint.
+
 ## Task 4: Guided page, documentation twins and final qualification
 
 **Interfaces — produce:** `FirstSetupBackupSession` in the new browser session file owns `open(request): Promise<BackupRepairSession>`, `prepare(proposal): Promise<unknown>`, `commit(input): Promise<void>`, `dispose(): Promise<void>`. It consumes new `SetupApi.openFirstSetupBackup`, `prepareFirstSetupBackup`, `commitFirstSetupBackup`, `closeFirstSetupBackup` methods matching Task 3. Its generation/disconnect handling discards late replies; it stores no secrets/grant in local/session storage. Add client Cloud adapter methods for the repair prefix rather than sending ordinary Cloud POSTs.
 
-- [ ] **RED:** add client/session/screen behavior tests and extend the existing resolution suites without replacing their assertions. The repair page offers **Recover from backup / Recuperar desde una copia**, all three supported source choices, the selected backup's named key/PDF picker. Lost setup passwords, unreadable attempt verifiers and different retained nodes must not hide the authenticated backup preview. Private preview appears only after selected-backup proof. Module history refusal leaves the page retryable without disclosing local records. Source/point/environment changes discard the session and prepared input. Reload/reconnect asks for proof again. An invalid or late response cannot install a grant after navigation/disconnect.
-- [ ] Run `pnpm --filter @waitron/setup exec vitest run src/first-setup-backup-session.test.ts src/screens/first-setup-backup-screen.test.ts src/setup-app-resolution.test.ts src/setup-app-resolution.unsaved.test.ts`. Expected RED: missing new client/screen behavior; existing tests retain their current assertions.
-- [ ] Implement the dedicated screen with existing field primitives, semantic names, required markers, per-field errors plus one bottom error, draft scope and disabled busy actions. Keep server refusals retryable. For proof entry use the existing module recovery-key picker contract; after proof, pass the authenticated preview and preparation callback into `SetupRecoveryAllocation`. Preserve its module-owned clock/countdown/no-installation-code behavior. Do not route through the ordinary unauthenticated `setup-recovery-copy` preview. Keep normal first-setup session ownership separate.
-- [ ] Test EN/ES, light/dark and phone width, native checkbox/input state, keyboard submission, unsaved navigation, rejected preparation and close/reopen. New screen axe checks cover source selection, proof refusal, authenticated review, clock wait and restarting. Render and LOOK at the page; string/API assertions alone are insufficient. Restore global locale between cases and advance awaited animation frames when using fake timers.
-- [ ] Update the current runbook and support instructions with prerequisites, selected-backup proof, opaque retained originals and separate fiscal history admission, source choices, supported Cloud availability and interrupted reauthentication. Add matching English/Spanish `backup-recovery.md` guide sections with identical `{#id}` anchors. Confirm guide rendering using `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`; no new guide link is required on the repair-only listener unless its serving route is also mounted and listener-tested. Keep the historical offline procedure historical; add only a dated current-procedure pointer if needed. Remove the completed A731 backlog entry only when implementation/qualification is actually complete, under the shared backlog waiver. Do not mark this plan's existence as completion.
-- [ ] **GREEN:** rerun the focused setup suites and `pnpm --filter @waitron/setup exec vitest run src/screens/first-setup-backup-screen.a11y.test.ts src/setup-app-resolution.a11y.test.ts src/first-setup-session.test.ts src/first-setup-retirement.test.ts`. Run `pnpm --filter @waitron/setup build` because browser unit tests alone do not open the built bundle. Parent retains test counts and LOOK receipts and commits with `-s`.
-- [ ] Audit the whole base-to-tip prose path set for claims of unsupported repair recovery or old authority, including `README.md`, current operations/support docs and EN/ES strings. Change only current affected statements; historical specs get dated pointers. No golden/assertion weakening to accommodate new wire bodies.
+**PDF proof clarification:** before source authentication, the existing module key picker receives no `selection`. It reads a valid recovery PDF or decodes a typed key; the server then authenticates that key against the selected backup before returning any private identity. Once a preview is authenticated, `SetupRecoveryAllocation` supplies the full exact selection as before. `SetupContribution.createRecoveryKey` therefore accepts an optional selection. Do not ask the owner to type a full node ID from the sheet: `recovery-pdf-content.ts` prints its shortened form. Both modes keep the module's software-ID check and generation/disconnect checks.
+
+- [x] **RED:** add client/session/screen behavior tests and extend the existing resolution suites without replacing their assertions. The repair page offers **Recover from backup / Recuperar desde una copia**, all three supported source choices, the selected backup's named key/PDF picker. Lost setup passwords, unreadable attempt verifiers and different retained nodes must not hide the authenticated backup preview. Private preview appears only after selected-backup proof. Module history refusal leaves the page retryable without disclosing local records. Source/point/environment changes discard the session and prepared input. Reload/reconnect asks for proof again. An invalid or late response cannot install a grant after navigation/disconnect.
+- [x] Run `pnpm --filter @waitron/setup exec vitest run src/first-setup-backup-session.test.ts src/screens/first-setup-backup-screen.test.ts src/setup-app-resolution.test.ts src/setup-app-resolution.unsaved.test.ts`. Expected RED: missing new client/screen behavior; existing tests retain their current assertions.
+- [x] Implement the dedicated screen with existing field primitives, semantic names, required markers, per-field errors plus one bottom error, draft scope and disabled busy actions. Keep server refusals retryable. For proof entry use the existing module recovery-key picker contract; after proof, pass the authenticated preview and preparation callback into `SetupRecoveryAllocation`. Preserve its module-owned clock/countdown/no-installation-code behavior. Do not route through the ordinary unauthenticated `setup-recovery-copy` preview. Keep normal first-setup session ownership separate.
+- [x] Test EN/ES, light/dark and phone width, native checkbox/input state, keyboard submission, unsaved navigation, rejected preparation and close/reopen. New screen axe checks cover source selection, proof refusal, authenticated review, clock wait and restarting. Render and LOOK at the page; string/API assertions alone are insufficient. Restore global locale between cases and advance awaited animation frames when using fake timers.
+- [x] Update the current runbook and support instructions with prerequisites, selected-backup proof, opaque retained originals and separate fiscal history admission, source choices, supported Cloud availability and interrupted reauthentication. Add matching English/Spanish `backup-recovery.md` guide sections with identical `{#id}` anchors. Confirm guide rendering using `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`; no new guide link is required on the repair-only listener unless its serving route is also mounted and listener-tested. Keep the historical offline procedure historical; add only a dated current-procedure pointer if needed. Remove the completed A731 backlog entry only when implementation/qualification is actually complete, under the shared backlog waiver. Do not mark this plan's existence as completion.
+- [x] **GREEN:** rerun the focused setup suites and `pnpm --filter @waitron/setup exec vitest run src/screens/first-setup-backup-screen.a11y.test.ts src/setup-app-resolution.a11y.test.ts src/first-setup-session.test.ts src/first-setup-retirement.test.ts`. Run `pnpm --filter @waitron/setup build` because browser unit tests alone do not open the built bundle. Parent retains test counts and LOOK receipts and commits with `-s`.
+- [x] Audit the whole base-to-tip prose path set for claims of unsupported repair recovery or old authority, including `README.md`, current operations/support docs and EN/ES strings. Change only current affected statements; historical specs get dated pointers. No golden/assertion weakening to accommodate new wire bodies.
 - [ ] Parent runs `finish-branch` using `/Users/clintongormley/.codex/skills/finish-branch/SKILL.md`: initial rebase, one whole-branch Claude run-it review of the complete candidate in a disposable installed checkout, triage/fix findings inline, normal pre-push hook once and current-head required CI coverage. Review invocation: `~/workspace/tools/claude-seat.sh review-run <candidate-checkout> <brief-file> <report-file>`. No per-task subagent ritual. Use the current standing direct-Codex review workflow rather than repeating historical copied review waves. The owner already authorised unattended finish and land. Hold the campaign main lock for the entire landing, install and cleanup, then check the exact merge SHA's own CI; no extra approval round is needed.
+
 
 ## Execution checks and handoff
 
@@ -140,3 +239,42 @@ Run each listed command from this registered worktree; tests created by a task m
 Self-review against the approved scope: three source adapters, selected-backup proof, opaque local preservation and current recovery authority/history, no fiscal/guard change, separate durable resolution, exact replay, serialized actions, stale-source recheck, HTTP/TLS separation, three boot modes, existing resolution and documentation twins are assigned above. Production managed-Cloud enablement and disclosure of unproved local records are outside this implementation; neither has an invented bypass.
 
 **Required overlap:** server host/API/entry wiring and setup shell/client are shared conceptual seams with A1042; parent should sequence that build after A731. Lane A and parked A696/A951 implementation files are read dependencies only. Re-read their landed interfaces before execution; if a new signature makes direct reuse impossible, report the exact required overlap before changing a reserved file.
+
+**Task 4 qualification checkpoint, 24 October 2026:** the repair client, memory-only session,
+source/proof screen and EN/ES guides are implemented. The complete setup coverage run passes
+2,124 tests at 98.20% statements, 99.51% lines, 99.09% functions and 96.01% branches. Forty
+accessibility/capture cases cover both languages, both themes and both widths. The built bundle
+opens the repair form in eight corresponding browser cases after its initial reads settle.
+The two key-entry browser suites plus the unchanged golden and immutability suites pass 46 cases;
+the API/entry/boot and guide selection passes 107. The recovery service file passes its original
+65 cases plus the new delayed-opening case; a separate new case exercises an unfinished bucket
+restore. The source has not changed between those service runs.
+
+Listener disposal now marks the service closed under its coordinator, then waits outside that turn
+for open/resume cleanup. The earlier delayed-opener test changes only its release/await sequence;
+all its assertions remain. Four installed disposable-checkout omissions are caught by assertions:
+missing opening drain, late-grant rejection, preview clearing and known-PDF identity matching.
+The same selected cases pass before and after restoration. Whole-branch review, the normal push
+hook and required current-head CI remain before landing.
+
+**24 October 2026, review and CI follow-up:** the single whole-branch Claude review completed.
+The moved staging-directory import and two shutdown fixture waits are corrected. The page now
+explains the restart needed after an unsuccessful backup open, and an already-selected target
+shows reconnection. Three new browser checks first failed, then passed; the final page/session
+selection passes 139 cases and the real refused-key/retry/restart plus guide selection passes 32.
+
+The first successful PR CI run measured the new resume, recovery and Cloud files at 334.6, 273.8
+and 255.3 seconds. Their existing cases now run across three files per group, with shared fixtures
+under `apps/server/test/`. Canonical test statements and assertion calls are retained. To run all
+156 cases after this split, use:
+
+```bash
+pnpm --filter @waitron/server exec vitest run src/first-setup-backup-resume*.test.ts src/first-setup-backup-recovery*.test.ts src/first-setup-backup-cloud*.test.ts
+```
+
+The earlier single-file commands and counts above describe their dated pre-split checkpoints.
+The duration table is refreshed from the newest six successful main runs, with new repair-file
+measurements from the successful PR run and focused local coverage collectors. Those collectors
+measure file times; they do not establish package-wide coverage. Required current-head CI remains
+the final gate. The unrelated first-fiscal-hour file's existing budget overrun is recorded in the
+CI backlog.

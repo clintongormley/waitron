@@ -7,6 +7,7 @@ import type {
   FirstSetupWorkspaceSelection,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
+import "./screens/first-setup-backup-screen.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import {
   LeaveController,
@@ -74,6 +75,7 @@ const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
   | "first-owner"
+  | "first-backup"
   | "first-setup"
   | "connection"
   | "role"
@@ -909,7 +911,15 @@ export class SetupApp extends LitElement {
     const navigate = () => {
       if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
       const finished = this.leave.coordinator.request({
-        scopes: owner ? [owner] : [],
+        scopes:
+          origin === "first-backup"
+            ? "all"
+            : [
+                ...(owner ? [owner] : []),
+                ...(origin === "first-owner" && destination === "first-backup"
+                  ? [this.#firstPasswordOwner]
+                  : []),
+              ],
         reason: "navigation",
         proceed: () => {
           if (!this.isConnected || this.screen !== origin || (owner && !owner.isConnected)) return;
@@ -2236,6 +2246,7 @@ export class SetupApp extends LitElement {
             `
           : nothing
       }
+      ${inspection && !this.firstRestarting ? html`<wt-button data-test="recover-backup" variant="secondary" ?disabled=${this.firstOwnerBusy} @click=${(event: Event) => dispatchSetupGoto(event.currentTarget as HTMLElement, "first-backup")}>${t.recoverBackup}</wt-button>` : nothing}
       ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
       ${!missing && state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
       ${!missing && state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
@@ -2283,6 +2294,12 @@ export class SetupApp extends LitElement {
   #renderScreen(): TemplateResult {
     const firstSession = this.#firstSession;
     switch (this.screen) {
+      case "first-backup":
+        return html`<setup-first-backup
+          data-test="screen-first-backup"
+          .api=${this.api}
+          .inspection=${this.firstInspection}
+        ></setup-first-backup>`;
       case "first-owner":
         return this.#renderFirstOwner();
       case "first-setup":

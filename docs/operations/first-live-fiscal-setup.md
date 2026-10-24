@@ -86,7 +86,9 @@ reset counters or require a new name because the clock has advanced. Starting ag
 to a positively empty, never-activated attempt; it retains the original evidence and spends the
 former name. A missing database is a different condition.
 
-Repair-page recovery from backup remains queued as A731. Secure-connection repair is available:
+For an authenticated archive, bucket or supported Cloud copy, choose **Recover from backup**
+and follow the [repair recovery procedure](hour-recovery.md#recover-while-first-setup-is-blocked).
+Secure-connection repair is available:
 choose **Set up secure connection** on the repair page and follow the
 [connection repair procedure](../../apps/server/README.md#repairing-the-secure-connection).
 A732's proposed fresh-workspace action and recovery desk were withdrawn by the owner on

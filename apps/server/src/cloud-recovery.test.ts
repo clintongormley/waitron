@@ -603,3 +603,157 @@ describe("Cloud selected-copy preview", () => {
     ).toBeUndefined();
   });
 });
+
+describe("checked committed-target reconciliation", () => {
+  async function approved() {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await expect(client.start()).rejects.toThrow("Cloud recovery is unavailable");
+    const view = await client.status();
+    return {
+      ...f,
+      client,
+      binding: { requestId: view.requestId, pointId: point.id },
+      path: join(f.stateDir, "cloud-recovery.json"),
+    };
+  }
+
+  it.each([undefined, "staged", "restored", "reported"] as const)(
+    "checks the committed target before reconciling phase %s, without downloading again",
+    async (phase) => {
+      const f = await approved();
+      const saved = JSON.parse(await readFile(f.path, "utf8"));
+      if (phase !== undefined) {
+        saved.phase = phase;
+        await writeFile(f.path, JSON.stringify(saved));
+      }
+      const before = await readFile(f.path, "utf8");
+      const callsBefore = f.calls.length;
+      let checked = 0;
+      await f.client.reconcileRestored(f.binding, async () => {
+        checked++;
+        expect(await readFile(f.path, "utf8")).toBe(before);
+      });
+      expect(checked).toBe(1);
+      const result = JSON.parse(await readFile(f.path, "utf8"));
+      expect(result).toEqual({ ...saved, phase: phase === "reported" ? "reported" : "restored" });
+      if (phase === "reported" || phase === "restored")
+        expect(await readFile(f.path, "utf8")).toBe(before);
+      expect(f.calls.length).toBe(callsBefore);
+      expect(f.options.download).not.toHaveBeenCalled();
+      expect(await createCloudRecoveryClient(f.options).replacementIdentity()).toMatchObject({
+        ...f.binding,
+        phase: phase === "reported" ? "reported" : "restored",
+      });
+    },
+  );
+
+  it.each([undefined, "staged", "restored", "reported"] as const)(
+    "retains phase %s and identity when the committed-target check refuses",
+    async (phase) => {
+      const f = await approved();
+      const saved = JSON.parse(await readFile(f.path, "utf8"));
+      if (phase !== undefined) {
+        saved.phase = phase;
+        await writeFile(f.path, JSON.stringify(saved));
+      }
+      const before = await readFile(f.path, "utf8");
+      await expect(
+        f.client.reconcileRestored(f.binding, async () => {
+          throw new Error("target is incomplete");
+        }),
+      ).rejects.toThrow("target is incomplete");
+      expect(await readFile(f.path, "utf8")).toBe(before);
+      expect(f.options.download).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["requestId", "pointId"] as const)(
+    "refuses a different %s before inspecting the target",
+    async (key) => {
+      const f = await approved();
+      const before = await readFile(f.path, "utf8");
+      let checked = false;
+      await expect(
+        f.client.reconcileRestored(
+          { ...f.binding, [key]: "715955bb-2dbd-4481-9746-f6d3e95a8651" },
+          async () => {
+            checked = true;
+          },
+        ),
+      ).rejects.toThrow();
+      expect(checked).toBe(false);
+      expect(await readFile(f.path, "utf8")).toBe(before);
+    },
+  );
+
+  it("refuses an absent private request before inspecting the target", async () => {
+    const f = await fixture();
+    let checked = false;
+    await expect(
+      createCloudRecoveryClient(f.options).reconcileRestored(
+        { requestId: point.venueId, pointId: point.id },
+        async () => {
+          checked = true;
+        },
+      ),
+    ).rejects.toThrow();
+    expect(checked).toBe(false);
+    await expect(readFile(join(f.stateDir, "cloud-recovery.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("holds the client exclusion until the committed check completes", async () => {
+    const f = await approved();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    expect(typeof f.client.reconcileRestored).toBe("function");
+    const pending = f.client.reconcileRestored(f.binding, async () => {
+      entered();
+      await barrier;
+    });
+    try {
+      await started;
+      await expect(f.client.reconcileRestored(f.binding, async () => {})).rejects.toThrow();
+      await expect(f.client.startAgain()).rejects.toThrow();
+    } finally {
+      release();
+      await pending;
+    }
+    expect((await f.client.replacementIdentity()).phase).toBe("restored");
+  });
+
+  it("does not overwrite private state changed while the committed check awaited", async () => {
+    const f = await approved();
+    let replaced = "";
+    await expect(
+      f.client.reconcileRestored(f.binding, async () => {
+        const state = JSON.parse(await readFile(f.path, "utf8"));
+        state.pointId = "715955bb-2dbd-4481-9746-f6d3e95a8651";
+        replaced = JSON.stringify(state);
+        await writeFile(f.path, replaced);
+      }),
+    ).rejects.toThrow();
+    expect(await readFile(f.path, "utf8")).toBe(replaced);
+  });
+
+  it("does not report provider acknowledgement until its separate report succeeds", async () => {
+    const f = await approved();
+    await f.client.reconcileRestored(f.binding, async () => {});
+    const original = f.options.fetch;
+    f.options.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).endsWith("/restored") ? new Response(null, { status: 503 }) : original(url, init),
+    ) as typeof fetch;
+    await expect(createCloudRecoveryClient(f.options).reportRestored()).rejects.toThrow();
+    expect(JSON.parse(await readFile(f.path, "utf8")).phase).toBe("restored");
+    await createCloudRecoveryClient({ ...f.options, fetch: original }).reportRestored();
+    expect(JSON.parse(await readFile(f.path, "utf8")).phase).toBe("reported");
+  });
+});

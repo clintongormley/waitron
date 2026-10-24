@@ -468,3 +468,32 @@ it.each(["en-GB", "es-ES"])(
     expect(requests.some((r) => /\/(recover|start-again|provision)$/.test(r.path))).toBe(false);
   },
 );
+
+it.each(["checkable", "uncheckable"] as const)(
+  "opens independent backup repair with an %s setup password and no normal restore preview",
+  async (check) => {
+    const { app, requests } = await mount({
+      inspection: { password: check, database: "unknown", emptyDatabase: false },
+      intercept(path) {
+        if (path.endsWith("/backup/status"))
+          return Response.json({ phase: "unstarted", proofRequired: true });
+      },
+    });
+    const recover = q<WtButton>(app, "recover-backup");
+    expect(recover).not.toBeNull();
+    await userEvent.click(recover.shadowRoot!.querySelector("button")!);
+    await expect.poll(() => app.shadowRoot!.querySelector("setup-first-backup")).not.toBeNull();
+    expect(
+      requests.some((request) => /\/(recover|restore|preview|claim|provision)$/.test(request.path)),
+    ).toBe(false);
+    const repair = app.shadowRoot!.querySelector<HTMLElement & { inspection: unknown }>(
+      "setup-first-backup",
+    )!;
+    expect(repair.inspection).toEqual({
+      ...inspection,
+      password: check,
+      database: "unknown",
+      emptyDatabase: false,
+    });
+  },
+);

@@ -27,6 +27,29 @@ import { mountDiscovery } from "./discovery-api.js";
 import { isLoopbackHost } from "./primary-url.js";
 import "./errors.js";
 
+function closeWithCleanup<T extends { close(done?: (error?: Error) => void): T }>(
+  server: T,
+  cleanup: () => Promise<void>,
+  log: Logger,
+): void {
+  const close = server.close.bind(server);
+  let disposing: Promise<void> | undefined;
+  server.close = (done) => {
+    close((error) => {
+      disposing ??= cleanup();
+      void disposing.then(
+        () => done?.(error),
+        (failure: unknown) => {
+          if (done !== undefined)
+            done(failure instanceof Error ? failure : new Error("Recovery cleanup failed"));
+          else log("warn", "recovery.cleanup_failed", {});
+        },
+      );
+    });
+    return server;
+  };
+}
+
 /** Existence-only candidate; `serveRecovery` validates before exposing the protected app. */
 export function recoveryTlsFiles(stateDir: string): TlsFiles | undefined {
   return mintedBoxLeaf(stateDir);
@@ -47,6 +70,7 @@ export interface RecoveryServeOptions {
   /** Defaults to the real `tightenTlsDir`. */
   tightenTls?: (stateDir: string) => Promise<void>;
   onRepaired?: () => Promise<void>;
+  onClose?: () => Promise<void>;
   bootstrapOnly?: boolean;
   operatorTls?: boolean;
 }
@@ -175,6 +199,7 @@ export async function serveRecovery(
         resolve(server);
       },
     );
+    if (opts.onClose !== undefined) closeWithCleanup(server, opts.onClose, opts.log);
     server.on("error", (error: NodeJS.ErrnoException) => {
       reject(new AppError("server.listen_failed", { port: opts.port, code: error.code ?? "" }));
     });

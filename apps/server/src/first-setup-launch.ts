@@ -86,6 +86,7 @@ export async function startServerOrFirstSetupResolution(
         : effectiveEnv.WAITRON_HTTP_HOST,
       landing: landingConfigFrom(effectiveEnv, admission.roots.stateDir, port),
       onRepaired,
+      ...(admission.kind === "resolution" ? { onClose: admission.dispose } : {}),
       operatorTls:
         !isUnset(effectiveEnv.WAITRON_TLS_CERT_FILE) || !isUnset(effectiveEnv.WAITRON_TLS_KEY_FILE),
     };
@@ -94,7 +95,12 @@ export async function startServerOrFirstSetupResolution(
       return listen(new Hono(), { ...options, bootstrapOnly: true });
     if (admission.kind === "normal")
       return admission.run(async () => {
-        if (admission.roots.binding === null) return (seams.startServer ?? startServer)(env, base);
+        if (
+          admission.roots.binding === null &&
+          admission.roots.stateDir === stateDir &&
+          admission.roots.venueDir === venueDir
+        )
+          return (seams.startServer ?? startServer)(env, base);
         const selectedBase = {
           ...env,
           WAITRON_STATE_DIR: admission.roots.stateDir,

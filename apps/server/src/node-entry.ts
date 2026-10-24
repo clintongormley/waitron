@@ -47,6 +47,7 @@ import {
 } from "./recovery-state.js";
 import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
+import { closeListener } from "./close-listener.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
@@ -57,6 +58,7 @@ import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
 
@@ -306,12 +308,20 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
   };
-  const space = await freeSpaceAtStart({
-    ...cleanUp,
-    stateDir: deps.stateDir,
-    venueDir: deps.venueDir,
-    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
-  });
+  const backupEntry = await resolveFirstSetupBackupEntry(deps);
+  const cleanupRoots = backupEntry.kind === "selected" ? backupEntry.roots : deps;
+  const space =
+    backupEntry.kind === "repair"
+      ? { freeBytes: null, belowFloor: false }
+      : await freeSpaceAtStart({
+          ...cleanUp,
+          stateDir: cleanupRoots.stateDir,
+          venueDir: cleanupRoots.venueDir,
+          logDir:
+            backupEntry.kind === "selected"
+              ? join(cleanupRoots.stateDir, "logs")
+              : (deps.logDir ?? join(deps.stateDir, "logs")),
+        });
 
   const admission = await resolveFirstSetupEntry(
     deps,
@@ -332,6 +342,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     onRepaired: async () => {
       (deps.exit ?? DEFAULT_EXIT)(0);
     },
+    ...(admission.kind === "resolution" ? { onClose: admission.dispose } : {}),
     operatorTls:
       !isUnset(transportEnv.WAITRON_TLS_CERT_FILE) || !isUnset(transportEnv.WAITRON_TLS_KEY_FILE),
   };
@@ -397,11 +408,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       landing: landingConfigFrom(deps.baseEnv, admission.roots.stateDir, port),
       onRepaired: transport.onRepaired,
       operatorTls: transport.operatorTls,
+      onClose: admission.dispose,
     });
     return;
   }
 
-  const selected = admission.roots.binding === null ? deps : rooted;
+  const selected = admission.roots.binding === null && !moved ? deps : rooted;
   return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }
 
@@ -642,7 +654,11 @@ function bootThisProcess(): Promise<void> {
     readRecoveryState,
     writeRecoveryState,
     startServer,
-    serveRecovery,
+    serveRecovery: async (app, options) => {
+      const listener = await serveRecovery(app, options);
+      installShutdownHandlers({ close: () => closeListener(listener) });
+      return listener;
+    },
     installShutdownHandlers,
     // `unref` so the timer alone never holds the process open: the listener the server bound is
     // what keeps it alive, and a process that dies before the threshold has not stayed up.

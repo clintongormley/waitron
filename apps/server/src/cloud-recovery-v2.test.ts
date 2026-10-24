@@ -708,3 +708,50 @@ describe("target-bound snapshot recovery v2", () => {
     expect((await stat(join(f.stateDir, "cloud-recovery.json"))).size).toBeLessThanOrEqual(65536);
   });
 });
+
+describe("checked v2 committed-target reconciliation", () => {
+  it.each([undefined, "staged", "restored", "reported"] as const)(
+    "retains the exact v2 target and verification while reconciling phase %s",
+    async (phase) => {
+      const f = await fixture();
+      const client = createCloudRecoveryClient(f.options);
+      await client.start();
+      const view = await client.status();
+      const saved = await f.saved();
+      if (phase !== undefined) saved.phase = phase;
+      await writeFile(join(f.stateDir, "cloud-recovery.json"), JSON.stringify(saved));
+      let checked = 0;
+      const before = f.calls.length;
+      await client.reconcileRestored({ requestId: view.requestId, pointId: point.id }, async () => {
+        checked++;
+      });
+      expect(checked).toBe(1);
+      expect(await f.saved()).toEqual({
+        ...saved,
+        phase: phase === "reported" ? "reported" : "restored",
+      });
+      expect(f.calls.length).toBe(before);
+    },
+  );
+
+  it.each(["before", "during"] as const)(
+    "refuses a runtime target changed %s the committed check without advancing saved state",
+    async (when) => {
+      const f = await fixture();
+      const client = createCloudRecoveryClient(f.options);
+      await client.start();
+      const view = await client.status();
+      const before = await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8");
+      if (when === "before") f.changeTarget();
+      let checked = 0;
+      await expect(
+        client.reconcileRestored({ requestId: view.requestId, pointId: point.id }, async () => {
+          checked++;
+          if (when === "during") f.changeTarget();
+        }),
+      ).rejects.toThrow(unavailable);
+      expect(checked).toBe(when === "before" ? 0 : 1);
+      expect(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).toBe(before);
+    },
+  );
+});

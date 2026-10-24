@@ -1464,6 +1464,14 @@ export type NonDbSource =
       project(input: {
         readonly preparations: readonly unknown[];
         readonly retained: readonly unknown[];
+        readonly recovery?: {
+          readonly history: readonly unknown[];
+          readonly setups: readonly {
+            readonly context: import("./initial-setup.js").InitialSetupContext;
+            readonly input: unknown;
+          }[];
+          readonly publicEvidence: readonly unknown[];
+        };
       }): unknown;
     };
 

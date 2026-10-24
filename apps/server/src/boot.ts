@@ -7,6 +7,7 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import {
   assertOtherSetupAllowed,
   assertFirstSetupBootTarget,
+  assertFirstSetupBackupBootTarget,
   readTenantIdentities,
 } from "@waitron/provisioning";
 import {
@@ -32,6 +33,8 @@ import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
+import { firstSetupBackupRecoveryFor } from "./first-setup-backup-entry.js";
+import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { liveResourceTypes } from "./live-resources.js";
@@ -866,6 +869,7 @@ async function bootServer(
     assertBuiltApp(config.setupAppDir, "WAITRON_SETUP_APP_DIR");
   }
 
+  await assertFirstSetupBackupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
   await assertFirstSetupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
@@ -926,7 +930,13 @@ async function bootServer(
   // half is left whole: it is the installer's channel, reachable only with a shell on the box, and
   // masking it would erase the difference between a wrong password and none at all. Pinned by
   // `recovery-surface.test.ts` → "the caught error's own words on the page".
-  const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
+  let backupRepairOnly = false;
+  const normalLogSink = tee(stdoutSink, fileSink);
+  const log = createLogger(
+    (line) => (backupRepairOnly ? stdoutSink(line) : normalLogSink(line)),
+    now,
+    () => verbosity.current(),
+  );
   // Before ANY write, including migrations: a host pointed at another environment's database must
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
@@ -1004,6 +1014,34 @@ async function bootServer(
   const build = applicationVersion(process.env);
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
+  const normalSetupRequests = new Set<Promise<void>>();
+  app.use("/setup-api/*", async (c, next) => {
+    const repair = c.req.path.startsWith("/setup-api/first-setup/resolution/backup/");
+    const publicRead =
+      c.req.method === "GET" &&
+      [
+        "/setup-api/status",
+        "/setup-api/discovery",
+        "/setup-api/first-setup/status",
+        "/setup-api/first-setup/resolution",
+      ].includes(c.req.path);
+    if (repair || publicRead) return next();
+    if (backupRepairOnly)
+      return c.json({ error: { code: "setup.not_ready", params: {} } }, 503, {
+        "Cache-Control": "no-store",
+      });
+    let settle!: () => void;
+    const settled = new Promise<void>((done) => {
+      settle = done;
+    });
+    normalSetupRequests.add(settled);
+    try {
+      await next();
+    } finally {
+      settle();
+      normalSetupRequests.delete(settled);
+    }
+  });
   // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
@@ -1096,6 +1134,26 @@ async function bootServer(
       cloudRecovery,
       bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
     });
+    const backupRepair = firstSetupBackupRecoveryFor(config, env, firstSetupHost, stdoutLog);
+    undoOnFailure.push(() => backupRepair.dispose());
+    let repairHandoff: Promise<void> | undefined;
+    mountFirstSetupBackupApi(
+      app,
+      backupRepair,
+      stdoutLog,
+      () => process.kill(process.pid, "SIGTERM"),
+      {
+        enter: () =>
+          (repairHandoff ??= (async () => {
+            backupRepairOnly = true;
+            await Promise.all([...normalSetupRequests]);
+            // Close this pool before proof binds the source's database sidecars.
+            await firstSetupHost.resolution.withVenueExclusion(() =>
+              firstSetupHost.coordinator.run(() => store.close()),
+            );
+          })()),
+      },
+    );
     mountSetup(
       app,
       {
@@ -1371,7 +1429,7 @@ async function bootServer(
       health,
       log,
       {
-        stopWork: () => Promise.resolve(),
+        stopWork: () => backupRepair.dispose(),
         settleRequests: () => Promise.resolve(),
         closePools: () => store.close(),
       },
