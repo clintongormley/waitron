@@ -1,0 +1,693 @@
+import { constants } from "node:fs";
+import { lstat, open, readdir, rename, unlink } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { basename, dirname, join, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { AppError, isUuid, isAppError } from "@waitron/shared";
+import type { OperationBinding } from "@waitron/module";
+import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
+import { createFirstSetupCoordinator } from "./first-setup-state.js";
+import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup-resolution.js";
+import { resolveFirstSetupWorkspace, firstSetupAnchorFor } from "./first-setup-workspace.js";
+import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import "./errors.js";
+
+export interface BackupRepairTarget {
+  recoveryId: string;
+  anchor: FirstSetupRoots;
+  source: FirstSetupRoots;
+  target: FirstSetupRoots;
+  generation: number;
+}
+export interface BackupRepairObservation {
+  inspectionId: string;
+  revision: number | null;
+  ownerGeneration: number | null;
+  originalsDigest: string;
+}
+export type BackupRepairPhase = "prepared" | "placement-started" | "restored" | "selected";
+export interface BackupRepairRecord {
+  version: 2;
+  sequence: number;
+  previousRecordDigest: string | null;
+  target: BackupRepairTarget;
+  observation: BackupRepairObservation;
+  sourceId: string;
+  activationSourceId: string;
+  binding: OperationBinding;
+  input: unknown;
+  retainedEvidenceDigest: string;
+  phase: BackupRepairPhase;
+  recordedAt: string;
+}
+type RecordInput = Omit<
+  BackupRepairRecord,
+  "version" | "sequence" | "previousRecordDigest" | "recordedAt"
+>;
+interface Witness {
+  version: 2;
+  target: BackupRepairTarget;
+  initialRecordDigest: string;
+  initialRecord: BackupRepairRecord;
+}
+interface Original {
+  path: string;
+  kind: "directory" | "file";
+  size: number;
+  digest: string | null;
+}
+const NAMESPACE = join("first-setup-resolutions", "backup-recovery");
+const LIMIT = 131072;
+const HASH = /^[a-f0-9]{64}$/;
+const PHASES: BackupRepairPhase[] = ["prepared", "placement-started", "restored", "selected"];
+const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const missing = (error: unknown) =>
+  error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
+function invalid(): never {
+  throw new AppError("setup.attempt_invalid", {});
+}
+function conflict(): never {
+  throw new AppError("setup.attempt_conflict", {});
+}
+function writeFailure(error: unknown): never {
+  if (isAppError(error)) throw error;
+  invalid();
+}
+function uncertain(): never {
+  throw new AppError("setup.attempt_uncertain", {});
+}
+function exact(value: unknown, keys: string[]): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === keys.length &&
+    keys.every((key) => Object.hasOwn(value, key))
+  );
+}
+function hash(value: unknown): value is string {
+  return typeof value === "string" && HASH.test(value);
+}
+function sourceIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 1024;
+}
+function positive(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+function roots(value: unknown): value is FirstSetupRoots {
+  return (
+    exact(value, ["venueDir", "stateDir"]) &&
+    [value.venueDir, value.stateDir].every(
+      (path) => typeof path === "string" && path.length > 1 && resolve(path) === path,
+    )
+  );
+}
+async function canonical(value: FirstSetupRoots): Promise<FirstSetupRoots> {
+  if (!roots(value)) invalid();
+  return {
+    venueDir: await canonicalFirstSetupDirectory(value.venueDir),
+    stateDir: await canonicalFirstSetupDirectory(value.stateDir),
+  };
+}
+function targetValid(value: unknown): asserts value is BackupRepairTarget {
+  if (
+    !exact(value, ["recoveryId", "anchor", "source", "target", "generation"]) ||
+    typeof value.recoveryId !== "string" ||
+    !isUuid(value.recoveryId) ||
+    !roots(value.anchor) ||
+    !roots(value.source) ||
+    !roots(value.target) ||
+    value.generation !== 1
+  )
+    invalid();
+  const base = join(value.anchor.stateDir, NAMESPACE, value.recoveryId, "target");
+  if (
+    value.target.venueDir !== join(base, "venue") ||
+    value.target.stateDir !== join(base, "state")
+  )
+    invalid();
+}
+function publicJson(value: unknown, seen = new Set<unknown>(), depth = 0): void {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number" && Number.isFinite(value)) return;
+  if (typeof value !== "object" || seen.has(value) || depth > 64) invalid();
+  seen.add(value);
+  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) invalid();
+  if (Array.isArray(value)) {
+    if (
+      Object.keys(value).length !== value.length ||
+      Reflect.ownKeys(value).length !== value.length + 1
+    )
+      invalid();
+  } else if (Reflect.ownKeys(value).length !== Object.keys(value).length) invalid();
+  for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(value)))
+    if (descriptor.get !== undefined || descriptor.set !== undefined) invalid();
+  for (const child of Object.values(value)) publicJson(child, seen, depth + 1);
+  seen.delete(value);
+}
+const INPUT_KEYS = [
+  "target",
+  "observation",
+  "sourceId",
+  "activationSourceId",
+  "binding",
+  "input",
+  "retainedEvidenceDigest",
+  "phase",
+];
+function inputValid(value: unknown): asserts value is RecordInput {
+  if (!exact(value, INPUT_KEYS)) invalid();
+  targetValid(value.target);
+  const observation = value.observation,
+    binding = value.binding;
+  if (
+    !exact(observation, ["inspectionId", "revision", "ownerGeneration", "originalsDigest"]) ||
+    !hash(observation.inspectionId) ||
+    !hash(observation.originalsDigest) ||
+    !(observation.revision === null || positive(observation.revision)) ||
+    !(observation.ownerGeneration === null || positive(observation.ownerGeneration)) ||
+    (observation.revision === null) !== (observation.ownerGeneration === null) ||
+    !sourceIdentifier(value.sourceId) ||
+    !sourceIdentifier(value.activationSourceId) ||
+    !hash(value.retainedEvidenceDigest) ||
+    !PHASES.includes(value.phase as BackupRepairPhase) ||
+    !exact(binding, ["module", "action", "eventId", "sourceId", "targetNodeId"]) ||
+    !Object.values(binding).every(
+      (part) => typeof part === "string" && part.length > 0 && part.length <= 256,
+    ) ||
+    binding.sourceId !== value.activationSourceId ||
+    !isUuid(String(binding.eventId)) ||
+    !isUuid(String(binding.targetNodeId))
+  )
+    invalid();
+  publicJson(value.input);
+  if (Buffer.byteLength(JSON.stringify(value)) > LIMIT) invalid();
+  if (value.phase !== "prepared" && value.input === null) invalid();
+}
+function recordInput(record: BackupRepairRecord): RecordInput {
+  return Object.fromEntries(
+    INPUT_KEYS.map((key) => [key, record[key as keyof BackupRepairRecord]]),
+  ) as unknown as RecordInput;
+}
+function recordValid(value: unknown): asserts value is BackupRepairRecord {
+  if (!exact(value, [...INPUT_KEYS, "version", "sequence", "previousRecordDigest", "recordedAt"]))
+    invalid();
+  inputValid(Object.fromEntries(INPUT_KEYS.map((key) => [key, value[key]])));
+  if (
+    value.version !== 2 ||
+    !positive(value.sequence) ||
+    value.sequence > 128 ||
+    !(value.previousRecordDigest === null || hash(value.previousRecordDigest)) ||
+    typeof value.recordedAt !== "string" ||
+    !Number.isFinite(Date.parse(value.recordedAt)) ||
+    new Date(value.recordedAt).toISOString() !== value.recordedAt
+  )
+    invalid();
+}
+function transition(previous: BackupRepairRecord | undefined, next: RecordInput): void {
+  if (previous === undefined) {
+    if (next.phase !== "prepared") conflict();
+    return;
+  }
+  const old = recordInput(previous);
+  if (!isDeepStrictEqual({ ...old, phase: next.phase, input: next.input }, next)) conflict();
+  const before = PHASES.indexOf(previous.phase),
+    after = PHASES.indexOf(next.phase);
+  if (after !== before + 1 && !(before === 0 && after === 0)) conflict();
+  if (before > 0 && !isDeepStrictEqual(previous.input, next.input)) conflict();
+}
+async function read(path: string): Promise<unknown> {
+  await firstSetupDirectory(dirname(path));
+  return readDurableHostJson(path, LIMIT);
+}
+async function immutable(path: string, value: unknown): Promise<void> {
+  const old = await read(path);
+  if (old !== null) {
+    if (!isDeepStrictEqual(old, value)) conflict();
+    await firstSetupDirectory(dirname(path), true);
+    return;
+  }
+  await firstSetupDirectory(dirname(path), true);
+  await writeDurableHostJson(path, value, LIMIT);
+}
+function currentPaths(anchor: FirstSetupRoots) {
+  return [...new Set(Object.values(anchor).map((root) => join(root, NAMESPACE, "current.json")))];
+}
+function backlinkPaths(target: BackupRepairTarget) {
+  return Object.values(target.target).map((root) => join(root, NAMESPACE, "backlink.json"));
+}
+function folder(target: BackupRepairTarget) {
+  return join(target.anchor.stateDir, NAMESPACE, target.recoveryId);
+}
+async function witness(anchor: FirstSetupRoots): Promise<Witness | null> {
+  const values = await Promise.all(currentPaths(anchor).map(read));
+  const found = values.filter((value) => value !== null);
+  if (found.length === 0) {
+    for (const root of new Set(Object.values(anchor))) {
+      try {
+        await lstat(join(root, NAMESPACE));
+        uncertain();
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+    }
+    return null;
+  }
+  const first = found[0];
+  if (
+    !exact(first, ["version", "target", "initialRecordDigest", "initialRecord"]) ||
+    first.version !== 2 ||
+    !hash(first.initialRecordDigest)
+  )
+    uncertain();
+  targetValid(first.target);
+  recordValid(first.initialRecord);
+  if (
+    digest(first.initialRecord) !== first.initialRecordDigest ||
+    !isDeepStrictEqual(first.initialRecord.target, first.target) ||
+    first.initialRecord.sequence !== 1 ||
+    first.initialRecord.phase !== "prepared"
+  )
+    uncertain();
+  if (
+    !isDeepStrictEqual(first.target.anchor, anchor) ||
+    found.some((value) => !isDeepStrictEqual(value, first))
+  )
+    uncertain();
+  return first as unknown as Witness;
+}
+async function sourceFor(anchor: FirstSetupRoots): Promise<FirstSetupRoots> {
+  const selected = await resolveFirstSetupWorkspace(anchor);
+  return { venueDir: selected.venueDir, stateDir: selected.stateDir };
+}
+async function originals(
+  anchor: FirstSetupRoots,
+  source: FirstSetupRoots,
+  id: string,
+): Promise<Original[]> {
+  const entries = new Map<string, Original>();
+  const output = join(anchor.stateDir, NAMESPACE, id);
+  const containers = new Set(
+    Object.values(anchor).flatMap((root) => [
+      join(root, "first-setup-resolutions"),
+      join(root, NAMESPACE),
+    ]),
+  );
+  const pointers = new Set(currentPaths(anchor));
+  const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
+  async function walk(path: string, isRoot = false): Promise<void> {
+    if (path === output || pointers.has(path)) return;
+    // Heartbeats describe the live lock holder, never retained setup or recovery authority.
+    if (
+      rootsToRead.some(
+        (root) =>
+          path === join(root, "venue.holder.json") ||
+          path === join(root, "venue.holder.json.partial"),
+      )
+    )
+      return;
+    if (entries.has(path)) return;
+    let info;
+    try {
+      info = await lstat(path);
+    } catch (error) {
+      if (missing(error) && isRoot) return;
+      throw error;
+    }
+    if (info.isSymbolicLink()) invalid();
+    if (info.isDirectory()) {
+      if (!isRoot && !containers.has(path))
+        entries.set(path, { path, kind: "directory", size: 0, digest: null });
+      for (const name of (await readdir(path)).sort()) await walk(join(path, name));
+      return;
+    }
+    if (!info.isFile()) invalid();
+    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const before = await file.stat();
+      if (!before.isFile() || before.ino !== info.ino || before.dev !== info.dev) conflict();
+      const hasher = createHash("sha256"),
+        buffer = Buffer.alloc(65536);
+      let size = 0;
+      for (;;) {
+        const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+        if (bytesRead === 0) break;
+        hasher.update(buffer.subarray(0, bytesRead));
+        size += bytesRead;
+      }
+      const after = await file.stat(),
+        now = await lstat(path);
+      if (
+        size !== before.size ||
+        after.size !== before.size ||
+        after.mtimeMs !== before.mtimeMs ||
+        after.ctimeMs !== before.ctimeMs ||
+        now.ino !== before.ino ||
+        now.dev !== before.dev ||
+        now.isSymbolicLink()
+      )
+        conflict();
+      entries.set(path, { path, kind: "file", size, digest: hasher.digest("hex") });
+    } finally {
+      await file.close();
+    }
+  }
+  for (const root of rootsToRead) {
+    await firstSetupDirectory(root);
+    await walk(root, true);
+  }
+  return [...entries.values()].sort((a, b) => a.path.localeCompare(b.path, "en"));
+}
+async function stableOriginals(anchor: FirstSetupRoots, source: FirstSetupRoots, id: string) {
+  const first = await originals(anchor, source, id),
+    second = await originals(anchor, source, id);
+  if (!isDeepStrictEqual(first, second)) conflict();
+  return second;
+}
+function archived(original: Original): boolean {
+  return (
+    original.kind === "file" &&
+    !["venue.db", "venue.db-wal", "venue.db-shm", "venue.lock"].includes(basename(original.path)) &&
+    !original.path.split("/").includes(".venue.db-litestream")
+  );
+}
+async function fingerprint(path: string): Promise<{ size: number; digest: string }> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    if (!(await file.stat()).isFile()) invalid();
+    const hasher = createHash("sha256"),
+      buffer = Buffer.alloc(65536);
+    let size = 0;
+    for (;;) {
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+      hasher.update(buffer.subarray(0, bytesRead));
+    }
+    return { size, digest: hasher.digest("hex") };
+  } finally {
+    await file.close();
+  }
+}
+async function archiveControls(base: string, entries: Original[]): Promise<void> {
+  const directory = join(base, "evidence");
+  await firstSetupDirectory(directory, true);
+  for (const [index, original] of entries.entries()) {
+    if (!archived(original)) continue;
+    const path = join(directory, `${index}.bin`);
+    try {
+      if (
+        !isDeepStrictEqual(await fingerprint(path), {
+          size: original.size,
+          digest: original.digest,
+        })
+      )
+        conflict();
+      await firstSetupDirectory(directory, true);
+      continue;
+    } catch (error) {
+      if (!missing(error)) throw error;
+    }
+    const temporary = join(directory, `.first-setup-${randomUUID()}.tmp`);
+    try {
+      const source = await open(
+        original.path,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+      try {
+        if (!(await source.stat()).isFile()) invalid();
+        const destination = await open(
+          temporary,
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+          0o600,
+        );
+        try {
+          const buffer = Buffer.alloc(65536);
+          for (;;) {
+            const { bytesRead } = await source.read(buffer, 0, buffer.length, null);
+            if (bytesRead === 0) break;
+            await destination.writeFile(buffer.subarray(0, bytesRead));
+          }
+          await destination.sync();
+        } finally {
+          await destination.close();
+        }
+      } finally {
+        await source.close();
+      }
+      if (
+        !isDeepStrictEqual(await fingerprint(temporary), {
+          size: original.size,
+          digest: original.digest,
+        })
+      )
+        conflict();
+      await rename(temporary, path);
+      await firstSetupDirectory(directory, true);
+    } finally {
+      await unlink(temporary).catch(() => undefined);
+    }
+  }
+}
+async function checkedRecords(
+  anchor: FirstSetupRoots,
+  selection: Witness,
+): Promise<BackupRepairRecord[]> {
+  const path = folder(selection.target);
+  await firstSetupDirectory(path);
+  const names = (await readdir(path)).filter((name) => /^\d+\.json$/.test(name)).sort();
+  if (names.length === 0 || names.length > 128) uncertain();
+  const records: BackupRepairRecord[] = [];
+  for (const [index, name] of names.entries()) {
+    if (name !== `${String(index + 1).padStart(6, "0")}.json`) uncertain();
+    const record = await read(join(path, name));
+    recordValid(record);
+    const previous = records.at(-1);
+    if (
+      record.sequence !== index + 1 ||
+      record.previousRecordDigest !== (previous === undefined ? null : digest(previous)) ||
+      !isDeepStrictEqual(record.target, selection.target)
+    )
+      uncertain();
+    transition(previous, recordInput(record));
+    records.push(record);
+  }
+  if (digest(records[0]) !== selection.initialRecordDigest) uncertain();
+  const manifest = await read(join(path, "originals.json"));
+  if (
+    !exact(manifest, ["version", "entries"]) ||
+    manifest.version !== 1 ||
+    !Array.isArray(manifest.entries) ||
+    digest(manifest.entries) !== records[0]!.observation.originalsDigest
+  )
+    uncertain();
+  for (const [index, original] of (manifest.entries as Original[]).entries()) {
+    if (
+      archived(original) &&
+      !isDeepStrictEqual(await fingerprint(join(path, "evidence", `${index}.bin`)), {
+        size: original.size,
+        digest: original.digest,
+      })
+    )
+      uncertain();
+  }
+  if (
+    !isDeepStrictEqual(
+      manifest.entries,
+      await stableOriginals(anchor, selection.target.source, selection.target.recoveryId),
+    )
+  )
+    conflict();
+  if (!isDeepStrictEqual(await sourceFor(anchor), selection.target.source)) conflict();
+  return records;
+}
+const coordinators = new Map<string, ReturnType<typeof createFirstSetupCoordinator>>();
+export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
+  const key = JSON.stringify(anchorInput);
+  let coordinator = coordinators.get(key);
+  if (coordinator === undefined) {
+    coordinator = createFirstSetupCoordinator();
+    coordinators.set(key, coordinator);
+  }
+  const turn = coordinator;
+  async function inspect(id: string): Promise<string> {
+    if (!isUuid(id)) invalid();
+    const anchor = await canonical(anchorInput);
+    return digest(await stableOriginals(anchor, await sourceFor(anchor), id));
+  }
+  async function readRecords(): Promise<BackupRepairRecord[]> {
+    const anchor = await canonical(anchorInput),
+      selected = await witness(anchor);
+    return selected === null ? [] : checkedRecords(anchor, selected);
+  }
+  async function append(input: RecordInput, selecting = false): Promise<BackupRepairRecord> {
+    inputValid(input);
+    if (input.phase === "selected" && !selecting) conflict();
+    const anchor = await canonical(anchorInput);
+    if (
+      !isDeepStrictEqual(anchor, input.target.anchor) ||
+      !isDeepStrictEqual(await canonical(input.target.source), input.target.source) ||
+      !isDeepStrictEqual(await sourceFor(anchor), input.target.source)
+    )
+      conflict();
+    let selected: Witness | null;
+    try {
+      selected = await witness(anchor);
+    } catch (error) {
+      const values = await Promise.all(currentPaths(anchor).map(read));
+      if (values.some((value) => value !== null)) throw error;
+      selected = null;
+    }
+    if (selected !== null && !isDeepStrictEqual(selected.target, input.target)) conflict();
+    const path = folder(input.target);
+    let previous: BackupRepairRecord | undefined;
+    if (selected !== null) {
+      try {
+        previous = (await checkedRecords(anchor, selected)).at(-1);
+      } catch (error) {
+        const names = await readdir(path).catch((readError: unknown) => {
+          if (missing(readError)) return [];
+          throw readError;
+        });
+        if (
+          (await read(join(path, "000001.json"))) !== null ||
+          names.some((name) => /^\d+\.json$/.test(name))
+        )
+          throw error;
+      }
+    }
+    if (previous !== undefined && isDeepStrictEqual(recordInput(previous), input)) {
+      for (const pointer of currentPaths(anchor)) await immutable(pointer, selected);
+      await immutable(join(path, `${String(previous.sequence).padStart(6, "0")}.json`), previous);
+      for (const backlink of backlinkPaths(input.target)) await immutable(backlink, selected);
+      return previous;
+    }
+    transition(previous, input);
+    if (selected === null) {
+      for (const directory of Object.values(input.target.target)) {
+        await firstSetupDirectory(directory);
+        try {
+          if ((await readdir(directory)).length !== 0) conflict();
+        } catch (error) {
+          if (!missing(error)) throw error;
+        }
+      }
+    }
+    const entries = await stableOriginals(anchor, input.target.source, input.target.recoveryId);
+    if (digest(entries) !== input.observation.originalsDigest) conflict();
+    let record: BackupRepairRecord = {
+      ...structuredClone(input),
+      version: 2,
+      sequence: (previous?.sequence ?? 0) + 1,
+      previousRecordDigest: previous === undefined ? null : digest(previous),
+      recordedAt: new Date().toISOString(),
+    };
+    recordValid(record);
+    if (previous === undefined && selected !== null) {
+      if (!isDeepStrictEqual(recordInput(selected.initialRecord), input)) conflict();
+      record = selected.initialRecord;
+    }
+    selected ??= {
+      version: 2,
+      target: input.target,
+      initialRecordDigest: digest(record),
+      initialRecord: record,
+    };
+    for (const pointer of currentPaths(anchor)) await immutable(pointer, selected);
+    await archiveControls(path, entries);
+    await immutable(join(path, "originals.json"), { version: 1, entries });
+    await immutable(join(path, `${String(record.sequence).padStart(6, "0")}.json`), record);
+    for (const directory of Object.values(input.target.target))
+      await firstSetupDirectory(directory, true);
+    for (const backlink of backlinkPaths(input.target)) await immutable(backlink, selected);
+    return record;
+  }
+  return {
+    inspect,
+    read: readRecords,
+    // The authenticated host holds anchor/source exclusion before entering this independent turn.
+    append: async (input: RecordInput) => {
+      inputValid(input);
+      const copy = structuredClone(input);
+      return turn.run(() => append(copy)).catch(writeFailure);
+    },
+    select: (restored: BackupRepairRecord) =>
+      turn
+        .run(async () => {
+          recordValid(restored);
+          const records = await readRecords(),
+            last = records.at(-1);
+          if (
+            restored.phase !== "restored" ||
+            !isDeepStrictEqual(records[restored.sequence - 1], restored) ||
+            last === undefined ||
+            !["restored", "selected"].includes(last.phase)
+          )
+            conflict();
+          await append({ ...recordInput(restored), phase: "selected" }, true);
+          return structuredClone(restored.target);
+        })
+        .catch(writeFailure),
+  };
+}
+export async function resolveFirstSetupBackupWorkspace(
+  anchorInput: FirstSetupRoots,
+): Promise<{ kind: "absent" } | { kind: "repair" | "selected"; target: BackupRepairTarget }> {
+  try {
+    const anchor = await canonical(anchorInput),
+      selected = await witness(anchor);
+    if (selected === null) return { kind: "absent" };
+    const records = await checkedRecords(anchor, selected),
+      last = records.at(-1)!;
+    let paired = true;
+    for (const path of [...currentPaths(anchor), ...backlinkPaths(selected.target)])
+      paired &&= isDeepStrictEqual(await read(path), selected);
+    return {
+      kind: paired && last.phase === "selected" ? "selected" : "repair",
+      target: selected.target,
+    };
+  } catch {
+    uncertain();
+  }
+}
+export async function assertFirstSetupBackupBootTarget(input: FirstSetupRoots): Promise<void> {
+  try {
+    const target = await canonical(input),
+      backlinks = await Promise.all(
+        Object.values(target).map((root) => read(join(root, NAMESPACE, "backlink.json"))),
+      );
+    if (backlinks.every((value) => value === null)) {
+      const v1 = await read(join(target.venueDir, "first-setup-workspace.json"));
+      const anchor = v1 === null ? target : await firstSetupAnchorFor(target);
+      const location = await resolveFirstSetupBackupWorkspace(anchor);
+      if (
+        location.kind !== "absent" ||
+        Object.values(target).some(
+          (root) =>
+            basename(dirname(root)) === "target" &&
+            basename(dirname(dirname(dirname(root)))) === "backup-recovery",
+        )
+      )
+        uncertain();
+      return;
+    }
+    const backlink = backlinks[0];
+    if (
+      !exact(backlink, ["version", "target", "initialRecordDigest", "initialRecord"]) ||
+      backlink.version !== 2 ||
+      !hash(backlink.initialRecordDigest)
+    )
+      uncertain();
+    targetValid(backlink.target);
+    if (
+      !backlinks.every((value) => isDeepStrictEqual(value, backlink)) ||
+      !isDeepStrictEqual(backlink.target.target, target)
+    )
+      uncertain();
+    const resolved = await resolveFirstSetupBackupWorkspace(backlink.target.anchor);
+    if (resolved.kind !== "selected" || !isDeepStrictEqual(resolved.target, backlink.target))
+      uncertain();
+  } catch {
+    uncertain();
+  }
+}

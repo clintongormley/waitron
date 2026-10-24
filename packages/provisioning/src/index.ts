@@ -165,3 +165,14 @@ export * from "./artifact-cipher.js";
 export * from "./backup-archive.js";
 export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
+export {
+  createFirstSetupBackupWorkspace,
+  resolveFirstSetupBackupWorkspace,
+  assertFirstSetupBackupBootTarget,
+} from "./first-setup-backup-workspace.js";
+export type {
+  BackupRepairTarget,
+  BackupRepairObservation,
+  BackupRepairPhase,
+  BackupRepairRecord,
+} from "./first-setup-backup-workspace.js";
