@@ -90,6 +90,7 @@ function harness(
     endStop: vi.fn(),
     clear: vi.fn(),
   };
+  const readBoot = vi.fn((): BootReading => ({ ...BOOT }));
   const read = vi.fn(async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX));
   const transaction = vi.fn(async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX));
   const files = { current: options.files ?? true };
@@ -105,7 +106,7 @@ function harness(
     },
     wall: () => wallMs,
     monotonic: () => monoMs,
-    boot: { readBoot: () => BOOT, elapsed: () => monoMs },
+    boot: { readBoot, elapsed: () => monoMs },
     nodeId: "node-1",
     read: read as never,
     transaction: transaction as never,
@@ -138,6 +139,7 @@ function harness(
   return {
     backend,
     store,
+    readBoot,
     read,
     transaction,
     logs,
@@ -464,7 +466,7 @@ describe("startClockWatch", () => {
     expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps at most six hours of unrecorded disproofs, logging each one it leaves out", async () => {
+  it("keeps at most 1 440 unrecorded disproofs, logging each one it leaves out", async () => {
     const many = Array.from({ length: 1_441 }, (_, index) =>
       authority(START_MS - index * 1_000, 3_600_000),
     );
@@ -592,6 +594,39 @@ describe("startClockWatch", () => {
     });
   });
 
+  it("hands the opening and the confirmation the boot reading taken with the clock reading", async () => {
+    const h = harness({ checks: true, stop: { ...STOPPED, proof: "ready" } });
+    await h.tick();
+    expect(h.readBoot).toHaveBeenCalledTimes(1);
+    const taken = h.readBoot.mock.results[0]!.value as BootReading;
+    expect((h.backend.openClockCheck!.mock.calls[0]![1] as { boot: BootReading }).boot).toBe(taken);
+    expect((h.backend.confirmClockStop!.mock.calls[0]![1] as { boot: BootReading }).boot).toBe(
+      taken,
+    );
+  });
+
+  it("still confirms when opening the check fails", async () => {
+    const h = harness({ checks: true, stop: { ...STOPPED, proof: "ready" } });
+    h.backend.openClockCheck!.mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    await h.tick();
+    expect(h.logs[0]).toEqual({
+      level: "warn",
+      event: "clock_watch.check_failed",
+      fields: { errorCode: "storage.disk_full" },
+    });
+    expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(1);
+    expect(h.store.clear).toHaveBeenCalledTimes(1);
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes nothing for ready witnesses on a seat that can neither open a check nor confirm", async () => {
+    const h = harness({ stop: { ...STOPPED, proof: "ready" } });
+    await h.tick();
+    expect(h.transaction).not.toHaveBeenCalled();
+    expect(h.store.clear).not.toHaveBeenCalled();
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["none", "contrary", "confirmed"] as const)(
     "asks for no confirmation when the proof is %s",
     async (proof) => {
@@ -643,6 +678,21 @@ describe("startClockWatch", () => {
     await h.tick();
     await h.tick({ monoMs: Number.NaN, wallMs: 15_000 });
     expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks for no confirmation and no AEAT time when stopped while the check is being opened", async () => {
+    const h = harness({ checks: true, stop: { ...STOPPED, proof: "ready" } });
+    let release!: (answer: { id: string } | null) => void;
+    h.backend.openClockCheck!.mockImplementationOnce(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    h.timers.at(-1)!.fn();
+    await vi.waitFor(() => expect(h.backend.openClockCheck).toHaveBeenCalledTimes(1));
+    const stopping = h.watch.stop();
+    release({ id: "check-1" });
+    await stopping;
+    expect(h.backend.confirmClockStop).not.toHaveBeenCalled();
+    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
   });
 
   it("stop waits for a confirmation in flight", async () => {

@@ -14,13 +14,39 @@ const { beforeServerStarts, startServer } = serverFixture();
 
 const seen = vi.hoisted(() => ({
   stops: [] as { calls: number }[],
+  readers: [] as unknown[],
+  watchBoots: [] as unknown[],
+  confirmReadBoots: [] as unknown[],
 }));
+
+vi.mock("./boot-reader.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./boot-reader.js")>();
+  return {
+    ...actual,
+    bootReader: (...args: Parameters<typeof actual.bootReader>) => {
+      const reader = actual.bootReader(...args);
+      seen.readers.push(reader);
+      return reader;
+    },
+  };
+});
+vi.mock("./box-health-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./box-health-api.js")>();
+  return {
+    ...actual,
+    mountBoxHealthApi: (...args: Parameters<typeof actual.mountBoxHealthApi>) => {
+      seen.confirmReadBoots.push(args[1].clockConfirm.readBoot);
+      return actual.mountBoxHealthApi(...args);
+    },
+  };
+});
 
 vi.mock("./clock-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-watch.js")>();
   return {
     ...actual,
     startClockWatch: (...args: Parameters<typeof actual.startClockWatch>) => {
+      seen.watchBoots.push(args[0].boot);
       const watch = actual.startClockWatch(...args);
       const seenStop = { calls: 0 };
       seen.stops.push(seenStop);
@@ -44,6 +70,9 @@ let scratch: string;
 
 beforeEach(async () => {
   seen.stops.length = 0;
+  seen.readers.length = 0;
+  seen.watchBoots.length = 0;
+  seen.confirmReadBoots.length = 0;
   vi.mocked(startMenuActivation).mockClear();
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-watch-"));
 });
@@ -94,6 +123,19 @@ describe("boot's clock watch", () => {
       await server.close();
     }
     expect(seen.stops[0]!.calls).toBe(1);
+  });
+
+  it("shares one boot reader between the watch and the administrator's confirm route", async () => {
+    const env = await tradingEnv();
+    const server = await startServer(env, env);
+    try {
+      expect(seen.readers).toHaveLength(1);
+      const reader = seen.readers[0] as { readBoot: unknown };
+      expect(seen.watchBoots).toEqual([reader]);
+      expect(seen.confirmReadBoots).toEqual([reader.readBoot]);
+    } finally {
+      await server.close();
+    }
   });
 
   it("is stopped when the start fails after it began", async () => {

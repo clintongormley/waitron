@@ -2462,7 +2462,7 @@ async function bootServer(
         clock: tillClock,
         nodeId: till.nodeId,
         steady: () => performance.now(),
-        readBoot: () => boxBoot.readBoot(),
+        readBoot: boxBoot.readBoot,
         requestFromBox: seams.requestFromBox,
         devMode: config.devMode,
       },

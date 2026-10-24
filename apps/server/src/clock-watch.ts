@@ -7,7 +7,7 @@ import {
   type TrustedClock,
 } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
-import { bootReader, type BootReader } from "./boot-reader.js";
+import { bootReader, type BootReader, type BootReading } from "./boot-reader.js";
 import { readClockStopState } from "./box-health.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
@@ -24,8 +24,9 @@ type Reading = ReturnType<TrustedClock["now"]>;
  * the wall clock is taken to have jumped. */
 const JUMP_MS = 60_000;
 
-/** Six hours of checks every 15 s while every record fails; past it the earliest entries are
- * kept. */
+/** The most unrecorded disproofs kept while every record fails: forward jumps, and AEAT's
+ * disagreements from the watch's ask (at most once a minute, during a stop) and from AEAT's replies
+ * to filings (`aeat-transport.ts`). Past it the earliest are kept. */
 const PENDING_MAX = 1_440;
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
@@ -126,10 +127,13 @@ export function startClockWatch(deps: {
     return !(since >= 0 && since < AUTHORITY_EVERY_MS);
   }
 
-  async function openCheck(reading: Pick<Reading, "instant" | "offsetMinutes">): Promise<void> {
+  async function openCheck(
+    reading: Pick<Reading, "instant" | "offsetMinutes">,
+    bootAt: BootReading,
+  ): Promise<void> {
     if (deps.backend.openClockCheck === undefined) return;
     const check = await deps.transaction((tx) =>
-      deps.backend.openClockCheck!(tx, { reading, boot: boot.readBoot(), nodeId: deps.nodeId }),
+      deps.backend.openClockCheck!(tx, { reading, boot: bootAt, nodeId: deps.nodeId }),
     );
     // A watch started during a stop logs the check it finds open once, as if it had opened it.
     if (check !== null && check.id !== lastCheckId) {
@@ -140,13 +144,14 @@ export function startClockWatch(deps: {
 
   async function confirm(
     reading: Pick<Reading, "instant" | "offsetMinutes">,
+    bootAt: BootReading,
     witnesses: readonly ClockWitness[],
   ): Promise<void> {
     if (deps.backend.confirmClockStop === undefined) return;
     const { confirmation } = await deps.transaction((tx) =>
       deps.backend.confirmClockStop!(tx, {
         reading,
-        boot: boot.readBoot(),
+        boot: bootAt,
         witnesses,
         nodeId: deps.nodeId,
       }),
@@ -186,13 +191,20 @@ export function startClockWatch(deps: {
     if (stopped) return;
     let stop = null;
     let reading: Reading | undefined;
+    let bootAt: BootReading | undefined;
     let judged: readonly ClockWitness[] = [];
     if (deps.backend.clockStopState !== undefined) {
       stop = await deps.read((tx) =>
         readClockStopState(tx, {
           backend: deps.backend,
           witnesses: () => (judged = deps.store.witnesses()),
-          clock: { now: () => (reading = deps.clock.now()) },
+          clock: {
+            now: () => {
+              reading = deps.clock.now();
+              bootAt = boot.readBoot();
+              return reading;
+            },
+          },
         }),
       );
     }
@@ -204,12 +216,21 @@ export function startClockWatch(deps: {
       if (reading === undefined || recordable(reading)) deps.store.endStop();
     } else {
       const at = { instant: reading!.instant, offsetMinutes: reading!.offsetMinutes };
+      // A write that keeps failing must not keep the confirmation, AEAT's time and the disproofs
+      // from running. The opening and the confirmation are separate transactions so that the
+      // opening survives a failing confirmation.
       try {
-        await openCheck(at);
-        if (!stopped && stop.proof === "ready") await confirm(at, judged);
+        await openCheck(at, bootAt!);
       } catch (error) {
-        // A write that keeps failing must not keep AEAT's time and the disproofs from running.
         deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+      }
+      if (stopped) return;
+      if (stop.proof === "ready") {
+        try {
+          await confirm(at, bootAt!, judged);
+        } catch (error) {
+          deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+        }
       }
       if (stopped) return;
       if (deps.filesRecords() && deps.backend.readAuthorityTime !== undefined && authorityDue()) {

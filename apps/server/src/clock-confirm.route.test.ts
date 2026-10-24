@@ -670,12 +670,15 @@ it("empties the witness store after a confirmation, and not after a refusal", as
   noteDevice(stop, 0);
   expect(stop.witnesses.witnesses()).toHaveLength(1);
 
+  const before = count("clock_confirmations");
   const refused = await confirm(stop, mario.cookie, 61_000);
   expect(refused.json).toEqual(refusal("differs"));
+  expect(count("clock_confirmations")).toBe(before);
   expect(stop.witnesses.witnesses()).toHaveLength(1);
 
   const confirmed = await confirm(stop, mario.cookie);
   expect(confirmed.status).toBe(200);
+  expect(count("clock_confirmations")).toBe(before + 1);
   expect(stop.witnesses.witnesses()).toEqual([]);
 });
 

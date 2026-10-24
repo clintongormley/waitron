@@ -597,8 +597,10 @@ check), each in the task named:
   expecting two HEADs; `:380` "still reads the stop and asks AEAT on every check while a record
   keeps failing" → "still reads the stop on every check, and asks AEAT once a minute, while a record
   keeps failing", its second tick at `:384` advancing the steady clock 60 s, every count unchanged;
-  `:467` "keeps at most a day of unrecorded disproofs…" → "keeps at most six hours…" (1 440 checks
-  at 15 s), its assertion unchanged. Fixtures only, no assertion changed, in `c0c6da41e`: the
+  `:467` "keeps at most a day of unrecorded disproofs…" → "keeps at most 1 440 unrecorded
+  disproofs…", its assertion unchanged: the cap counts disproofs, not looks (forward jumps, and
+  AEAT's disagreements from the watch's once-a-minute ask and from AEAT's replies to filings), so it
+  names no span of time. Fixtures only, no assertion changed, in `c0c6da41e`: the
   file's `STOPPED` state rebuilt in R3's shape (`proof "none"`, `agreeing`, `contrary`,
   `confirmation: null`), and the case "still reads AEAT's time while a restart is in force…"
   (`:200`, C21) given a covering confirmation (`proof "confirmed"`, `confirmation`) in place of the
