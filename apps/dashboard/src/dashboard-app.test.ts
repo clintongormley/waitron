@@ -1721,21 +1721,51 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  it("opens Venue settings, with Kitchen among its tabs, under one h1", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  const venueServiceRequest: DashboardRequest = async (path, method, body, options) =>
+    path === "/management-api/venue-service"
+      ? ({
+          departments: [],
+          zones: [],
+          hours: [],
+          readiness: [],
+          settings: { editSentLines: true },
+          releaseReminderMinutesByDepartment: {},
+          needsClearingDepartmentIds: [],
+          serviceSteps: [],
+          courses: [],
+        } as never)
+      : stubRequest(path, method, body, options);
+
+  const settingsTabKeys = (el: DashboardApp) =>
+    [
+      ...venueSettings(el)!
+        .shadowRoot!.querySelector("wt-tabs")!
+        .shadowRoot!.querySelectorAll('[role="tab"]'),
+    ].map((tab) => tab.getAttribute("data-key"));
+
+  it("opens Venue settings under one h1, with Kitchen holding venue service's panel", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings", "venue-service"],
+        permissions: ["booking.manage", "venue_service.manage", "venue.view"],
+      }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: venueServiceRequest,
+    });
     await flush(el);
     navVenueSettings(el)!.click();
     await flush(el);
     expect(mountedScreens(el)).toEqual(["dashboard-venue-settings-screen"]);
     const page = venueSettings(el)!;
-    const keys = [
-      ...page.shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
-    ].map((tab) => tab.getAttribute("data-key"));
-    expect(keys).toEqual(["kitchen"]);
-    expect(page.shadowRoot!.querySelector("dashboard-kitchen-screen")).not.toBeNull();
+    expect(settingsTabKeys(el)).toEqual(["venue-details", "kitchen"]);
+    expect(page.shadowRoot!.querySelector("dashboard-kitchen-screen")).toBeNull();
     expect(allH1(el.shadowRoot!)).toHaveLength(1);
-    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   });
 
   const panelsOn = (el: DashboardApp, tab: string) =>
@@ -1743,7 +1773,7 @@ describe("dashboard-app", () => {
       child.tagName.toLowerCase(),
     );
 
-  it("puts venue service's kitchen panel after the core one", async () => {
+  it("Kitchen holds venue service's panel alone", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -1752,61 +1782,60 @@ describe("dashboard-app", () => {
         permissions: ["booking.manage", "venue_service.manage"],
       }),
     });
-    const request: DashboardRequest = async (path, method, body, options) =>
-      path === "/management-api/venue-service"
-        ? ({
-            departments: [],
-            zones: [],
-            hours: [],
-            readiness: [],
-            settings: { editSentLines: true },
-            releaseReminderMinutesByDepartment: {},
-            needsClearingDepartmentIds: [],
-            serviceSteps: [],
-            courses: [],
-          } as never)
-        : stubRequest(path, method, body, options);
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: venueServiceRequest,
+    });
     await flush(el);
-    expect(panelsOn(el, "kitchen")).toEqual([
-      "dashboard-kitchen-screen",
-      "dashboard-venue-service-settings",
-    ]);
+    expect(panelsOn(el, "kitchen")).toEqual(["dashboard-venue-service-settings"]);
     expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
   });
 
-  it("keeps Kitchen with only its core panel when venue service is disabled", async () => {
+  it("has no Kitchen tab when venue service is disabled", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings"],
-        permissions: ["booking.manage", "venue_service.manage"],
+        permissions: ["booking.manage", "venue_service.manage", "venue.view"],
       }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
-    expect(panelsOn(el, "kitchen")).toEqual(["dashboard-kitchen-screen"]);
-    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+    expect(settingsTabKeys(el)).toEqual(["venue-details"]);
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   });
 
   it("hands each core panel the shell's api", async () => {
-    history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    history.replaceState(null, "", "/manage/venue-settings/view/venue-details");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     const page = venueSettings(el)!;
-    for (const tag of ["dashboard-kitchen-screen"])
+    for (const tag of ["dashboard-venue-details-panel", "dashboard-venue-defaults-panel"])
       expect(page.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag)!.api).toBe(
         api,
       );
-    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   });
 
   it("replaces the retired Tables tab's address with the first visible tab", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/tables");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          modules: ["bookings", "venue-service"],
+          permissions: ["booking.manage", "venue_service.manage"],
+        }),
+        listStaff: vi.fn().mockResolvedValue([]),
+      }),
+      request: venueServiceRequest,
     });
     await flush(el);
     expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
@@ -1862,14 +1891,17 @@ describe("dashboard-app", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
-        modules: ["bookings", "adjustments"],
-        permissions: ["booking.manage", "adjustment.manage", "report.view"],
+        modules: ["bookings", "adjustments", "venue-service"],
+        permissions: ["booking.manage", "adjustment.manage", "report.view", "venue_service.manage"],
       }),
       liveData: new LiveData(),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api,
-      request: adjustmentsRequest,
+      request: (path, method, body, options) =>
+        path === "/management-api/venue-service"
+          ? venueServiceRequest(path, method, body, options)
+          : adjustmentsRequest(path, method, body, options),
     });
     await flush(el);
     await vi.waitFor(() => expect(location.pathname).toBe("/manage/venue-settings/view/kitchen"));
@@ -2809,7 +2841,11 @@ describe("dashboard-app", () => {
   });
 
   it("offers a manager Venue settings in Venue operations, opening on its first permitted tab", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(navItem(el, "receipts")).toBeNull();
@@ -2819,11 +2855,11 @@ describe("dashboard-app", () => {
     expect(panel.contains(item)).toBe(true);
     item.click();
     await flush(el);
-    const kitchen = venueSettings(el)!.shadowRoot!.querySelector<
+    const details = venueSettings(el)!.shadowRoot!.querySelector<
       HTMLElement & { api?: DashboardApi }
-    >("dashboard-kitchen-screen");
-    expect(kitchen!.api).toBe(api);
-    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+    >("dashboard-venue-details-panel");
+    expect(details!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   });
 
   it("shows a supervisor Venue settings without its Receipts tab", async () => {
@@ -2846,32 +2882,8 @@ describe("dashboard-app", () => {
     await flush(el);
     const page = venueSettings(el)!;
     expect(page.shadowRoot!.querySelector("dashboard-receipts-screen")).toBeNull();
-    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
-  });
-
-  it("shows a supervisor Kitchen settings without edit controls", async () => {
-    const supervisor = stubApi({
-      getMe: vi.fn().mockResolvedValue({
-        ...meResponse,
-        role: "supervisor",
-        permissions: ["venue.view"],
-        modules: [],
-      }),
-    });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
-    await flush(el);
-    navVenueSettings(el)!.click();
-    await flush(el);
-    const settings = venueSettings(el)!;
-    const tabs = settings.shadowRoot!.querySelector<HTMLElement>("wt-tabs")!;
-    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "kitchen" } }));
-    await flush(el);
-    const kitchen = settings.shadowRoot!.querySelector<HTMLElement>("dashboard-kitchen-screen")!;
-    await vi.waitFor(() =>
-      expect(kitchen.shadowRoot!.querySelector("section.bump")).not.toBeNull(),
-    );
-    expect(kitchen.shadowRoot!.querySelector("[data-test=bump-line]")).toBeNull();
-    expect(kitchen.shadowRoot!.querySelector("[data-test=fire-waiter]")).toBeNull();
+    expect(page.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+    expect(page.shadowRoot!.querySelector("h1")).not.toBeNull();
   });
 
   it("Products and menus lists Courses after Modifiers to someone with venue.view", async () => {
