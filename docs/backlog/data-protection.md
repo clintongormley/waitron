@@ -76,11 +76,12 @@ by the answers):
   Profile page's button, the explanation file inside the ZIP, and the guide pages, in English and
   Spanish), **S2b** (the workforce and staffing files) and **S2c** (the counts of voids, refunds and
   drawer openings, and an admin's download of another person's data).
-- **Mount the own download from `boot.ts` once #1990 lands** — the route is mounted through
-  `mountMeApi`, which gets module names and rebuilds the modules with `modulesNamed`
-  (`apps/server/src/modules.ts`), and is not given boot's `now`, because #1990 also edits
-  `boot.ts`. Afterwards boot passes its module list (`setsToMigrate`) and `now`, as it does for the
-  attendance export, and `modulesNamed` and `MeApiDeps.now` are deleted.
+- **Mount the own download from `boot.ts`** — the route is mounted through `mountMeApi`, which
+  gets module names and rebuilds the modules with `modulesNamed` (`apps/server/src/modules.ts`),
+  and is not given boot's `now`, because #1990 was editing `boot.ts` while the route was built.
+  #1990 has since landed, so the next step is for `boot.ts` to pass its module list
+  (`setsToMigrate`) and `now`, as it does for the attendance export, and to delete `modulesNamed`
+  and `MeApiDeps.now`.
 - **S3** — an admin finds an invoice customer by tax number and downloads what the box holds.
 - **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
   checklist.
