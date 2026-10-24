@@ -682,26 +682,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   top of `main()` that `dev-onboard.ts` has. Found by A680.
 
 - **Loose ends left by A680 (#1718).**
-  - The setup wizard has no text for `sif.throwaway_allocation_refused`. A box started with
-    `WAITRON_ENV=production` still offers Demo and Preparation
-    (`apps/setup/src/screens/mode-screen.ts` shows only a production warning), and either one is
-    refused with that code, so the operator sees the wizard's generic failure (its plan's D6).
-  - Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
-    #1700. Neither needs a supplied allocation since A680, so on a shared network a stranger can
-    set up an unconfigured box in either mode before its owner does. Only a preproduction venue can
-    come of it (its plan's unsure point 2).
-  - The throwaway-allocation seat names a Spanish term in a country-neutral contract:
-    `ModuleProvisioning.throwawayAllocation.prepare` takes `taxpayerNif`
-    (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
-    Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
-    shape, so a rename changes both. Owner's call.
-  - The route tests in `apps/server/src/setup-throwaway.route.test.ts` are named after its plan's
-    table ("cell 1" … "cell 14"), which goes when plans are deleted at go-live, and the file does
-    not follow its siblings' `setup-api.<topic>.test.ts` pattern. Rename both to describe the
-    behaviour.
-  - Whether a throwaway venue can get an offline recovery pack is untested. #1717's recovery pack
-    checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably
-    be refused one, which fits a practice-only venue, but nothing ran it.
+  [Detail](backlog/setup.md#loose-ends-left-by-a680-1718)
 
 - **A fresh Demo venue opens its dashboard on a red tax-filing alert** (`fiscal.submission_delayed`
   over the demo seed's back-dated sales). Found by A680.
