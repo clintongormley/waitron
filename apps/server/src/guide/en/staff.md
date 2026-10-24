@@ -19,8 +19,16 @@ Google link. Re-enabling it sends a new invitation. Managers do not see these ac
 
 ## Your own account {#own-account}
 
-Open **Your profile** from the account menu to change your own sign-in details. Your own email,
+Open **Account settings** from the account menu to change your own sign-in details. Your own email,
 password, PIN, passkeys and two-factor settings remain yours to manage.
+
+## Download your data {#own-data}
+
+Open **Account settings** from the account menu and, on **Your details**, press **Download**
+beside **Copy of your data**. You get a ZIP file with your profile and sign-in details as `.json`
+files, and a `README.txt` that explains each file, who else receives the data, how long it is
+kept and your rights. It never holds a secret such as your PIN or password. For anything else
+about your data, ask the venue.
 
 ## Delete a staff role {#delete-staff-role}
 

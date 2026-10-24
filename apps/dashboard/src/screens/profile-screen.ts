@@ -23,8 +23,10 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
@@ -891,6 +893,13 @@ export class ProfileScreen extends LitElement {
           <div class="action-row">
             <div class="text">
               <span class="field-value">${t("profile.data_copy")}</span>
+              <wt-help-tooltip
+                mode="help-mode"
+                aria-label=${t("profile.data_copy_help_label")}
+                guide-href=${guideHref("staff.own-data")}
+                guide-label=${t("profile.data_copy_help_guide")}
+                >${t("profile.data_copy_help")}</wt-help-tooltip
+              >
               <span class="field-meta">${t("profile.data_copy_hint")}</span>
             </div>
             <wt-button

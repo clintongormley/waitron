@@ -1,5 +1,5 @@
 import type { DownloadedFile } from "@waitron/dashboard-kit";
-import type { WtButton } from "@waitron/ui";
+import { setHelpMode, type WtButton } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -270,3 +270,55 @@ describe.each(["light", "dark"] as const)("profile-screen copy of your data a11y
     await expectNoA11yViolations(host);
   });
 });
+
+const tooltip = (el: ProfileScreen) => row(el).querySelector<HTMLElement>(".text wt-help-tooltip");
+
+describe("profile-screen copy of your data help", () => {
+  it("carries one help-mode tooltip that links the guide's section", async () => {
+    const previous = currentLocale();
+    setLocale("en");
+    try {
+      const { el } = await mount(stubApi());
+      expect(row(el).querySelectorAll("wt-help-tooltip")).toHaveLength(1);
+      const help = tooltip(el)!;
+      expect(help.getAttribute("mode")).toBe("help-mode");
+      expect(help.getAttribute("guide-href")).toBe("/help/en/staff#own-data");
+      expect(help.getAttribute("aria-label")).toBe(t("profile.data_copy_help_label"));
+      expect(help.getAttribute("guide-label")).toBe(t("profile.data_copy_help_guide"));
+      expect(help.textContent!.trim()).toBe(t("profile.data_copy_help"));
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("links the Spanish guide in Spanish", async () => {
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mount(stubApi());
+      const help = tooltip(el)!;
+      expect(help.getAttribute("guide-href")).toBe("/help/es/staff#own-data");
+      expect(help.getAttribute("aria-label")).toBe(t("profile.data_copy_help_label"));
+      expect(help.getAttribute("guide-label")).toBe(t("profile.data_copy_help_guide"));
+      expect(help.textContent!.trim()).toBe(t("profile.data_copy_help"));
+    } finally {
+      setLocale(previous);
+    }
+  });
+});
+
+describe.each(["light", "dark"] as const)(
+  "profile-screen copy of your data help a11y (%s)",
+  (theme) => {
+    it("is accessible with help mode on", async () => {
+      setHelpMode(true);
+      try {
+        const { el, host } = await mount(stubApi(), theme);
+        expect(tooltip(el)).not.toBeNull();
+        await expectNoA11yViolations(host);
+      } finally {
+        setHelpMode(false);
+      }
+    });
+  },
+);
