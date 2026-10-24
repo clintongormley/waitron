@@ -78,6 +78,16 @@ describe("zipArchive", () => {
     expect(u16(end, 20)).toBe(0);
   });
 
+  it.each([
+    ["1970-01-01T00:00:00Z", "1970-01-01"],
+    ["2107-06-01T12:00:00Z", "2107-06-01"],
+  ])("builds a ZIP whose request time %s is outside 1980-2099; the name keeps %s", (at, day) => {
+    const when = new Date(at);
+    const entries = unzipSync(zipArchive([{ name: "profile.json", content: '{"a":1}' }], when));
+    expect(strFromU8(entries["profile.json"]!)).toBe('{"a":1}');
+    expect(archiveFileName("Marta López", when, "UTC")).toBe(`marta-lopez-${day}.zip`);
+  });
+
   it("marks a non-ASCII entry name as UTF-8 and leaves an ASCII one unmarked", () => {
     const flag = (name: string) => u16(zipArchive([{ name, content: "x" }], AT), 6) & (1 << 11);
     expect(flag("café.txt")).not.toBe(0);

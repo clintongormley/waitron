@@ -44,11 +44,20 @@ export function archiveFileName(label: string, at: Date, timeZone: string): stri
   return `${safeName(label)}-${civilDateOf(at, knownZone(timeZone))}.zip`;
 }
 
+/** fflate throws for a modification time outside 1980–2099 in local time, as a box whose clock
+ * reset to 1970 would give it. */
+function zipTime(at: Date): Date {
+  const earliest = new Date(1980, 0, 1);
+  const latest = new Date(2099, 11, 31, 23, 59, 58);
+  return at < earliest ? earliest : at > latest ? latest : at;
+}
+
 export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8Array<ArrayBuffer> {
   const entries: Zippable = {};
+  const mtime = zipTime(at);
   for (const file of files) {
     const data = typeof file.content === "string" ? strToU8(file.content) : file.content;
-    entries[file.name] = [data, { mtime: at }];
+    entries[file.name] = [data, { mtime }];
   }
   return zipSync(entries);
 }
