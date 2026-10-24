@@ -603,6 +603,32 @@ describe("service periods gate only added dishes and added stored quantities", (
     ]);
   });
 
+  it("a confirmed table group replays its answer when retried without the confirmation", async () => {
+    at(mondayAt("13:50"));
+    const v = await mealVenue();
+    const { partyId, tabId } = await savedTableDraft(v);
+    at(mondayAt("14:05"));
+    const [party] = await suite.db
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, partyId));
+    const body = {
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
+      submissionId: randomUUID(),
+      expectedPartyRevision: party!.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups: [{ lines: [{ menuItemId: v.toast.almuerzo, quantity: "1" }], release: "hold" }],
+    };
+    const url = `/api/parties/${partyId}/groups`;
+    const submitted = await sendAsTill(v, "POST", url, {
+      ...body,
+      lateSend: { menuIds: [v.menus.Almuerzo] },
+    });
+    expect(submitted.status).toBe(200);
+    expect(await sendAsTill(v, "POST", url, body)).toEqual(submitted);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toHaveLength(1);
+  });
+
   it("a table draft sent during Lunch replays the same submission after Lunch ends", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
@@ -1872,6 +1898,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     ]);
     expect(await printed(c.upstairs.printerId)).toEqual([]);
   });
+
   it("makes a table's cocktail confirmed late at 14:05 at the Upstairs bar, not Lunch's Downstairs bar", async () => {
     at(mondayAt("13:00"));
     const c = await cocktailVenue();
@@ -1887,6 +1914,9 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     expect(answer.status).toBe(200);
     const fired = (answer.body as { groups: { lineIds: string[] }[] }).groups[0]!;
     expect(await stationOf(fired.lineIds[0]!)).toMatchObject({ stationId: c.upstairs.stationId });
+    expect(await marksOf(c.tabId)).toEqual([
+      { unitPriceGross: 800, latePeriodName: "Lunch", lateConfirmedBy: c.v.personId },
+    ]);
     expect(await printed(c.upstairs.printerId)).toEqual([
       expect.stringMatching(/^Upstairs bar\n[^]*\n1\.000 x Mojito\n/),
     ]);
