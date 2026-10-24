@@ -3268,6 +3268,7 @@ export const en = {
     "Compared with the tax agency at {time} · the box was {seconds} s behind",
   "box_status.clock.proof.authority": "Tax agency: matches (checked {time})",
   "box_status.clock.proof.devices": "Devices: {count} read {time}",
+  "box_status.clock.proof.device_one": "Devices: 1 read {time}",
   "box_status.clock.stop.none":
     "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), or two tills or handhelds.",
   "box_status.clock.stop.contrary": "Other clocks say the box's clock is wrong.",
@@ -6635,6 +6636,7 @@ export const es: Record<StringKey, string> = {
     "Comparado con Hacienda el {time} · el equipo iba {seconds} s atrasado",
   "box_status.clock.proof.authority": "Hacienda: coincide (comprobado {time})",
   "box_status.clock.proof.devices": "Dispositivos: {count} marcan {time}",
+  "box_status.clock.proof.device_one": "Dispositivos: 1 marca {time}",
   "box_status.clock.stop.none":
     "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.",
   "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del equipo está mal.",
@@ -6681,7 +6683,7 @@ export const es: Record<StringKey, string> = {
   "box_status.other_alerts_one": "1 aviso más",
   "box_status.read_error": "No se ha podido leer el estado del equipo.",
   "box_status.misdated.title": "Ventas con fecha incorrecta",
-  "box_status.misdated.line": "Revísalas con tu asesor y después marca el aviso como atendido.",
+  "box_status.misdated.line": "Revísalas con tu asesor y después marca el aviso como resuelto.",
   "box_status.misdated.col_invoice": "Factura",
   "box_status.misdated.col_at": "Hora registrada",
   "box_status.misdated.read_error": "No se ha podido leer la lista de ventas con fecha incorrecta.",

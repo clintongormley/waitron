@@ -639,6 +639,36 @@ describe("dashboard-box-status-screen's Clock row during a payment stop", () => 
     expect(broken).toEqual([]);
   });
 
+  // Spanish, where the verb follows the count.
+  it("counts one agreeing device in the singular and two in the plural", async () => {
+    setLocale("es");
+    const time = formatIsoMinute("2026-10-22T18:01:00.000Z");
+    const one = await mount(stubApi({}, { ...health(), clockStop: STOP }));
+    const oneText = text(q(one.el, "[data-test=row-clock] .words"));
+    expect(oneText).toContain(fill("box_status.clock.proof.device_one", { time }));
+    expect(oneText).not.toContain(fill("box_status.clock.proof.devices", { count: "1", time }));
+    cleanupWidgets();
+    const device = STOP.agreeing.devices[0]!;
+    const two = await mount(
+      stubApi(
+        {},
+        {
+          ...health(),
+          clockStop: {
+            ...STOP,
+            agreeing: {
+              ...STOP.agreeing,
+              devices: [device, { ...device, id: "d2", label: "Terrace" }],
+            },
+          },
+        },
+      ),
+    );
+    expect(text(q(two.el, "[data-test=row-clock] .words"))).toContain(
+      fill("box_status.clock.proof.devices", { count: "2", time }),
+    );
+  });
+
   it("draws no restart button, whatever the proof", async () => {
     for (const proof of ["none", "contrary", "ready", "confirmed"] as const) {
       const { el } = await mount(stubApi({}, { ...health(), clockStop: { ...STOP, proof } }));
@@ -986,6 +1016,12 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       t("box_status.misdated.col_at"),
     ]);
     expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(MISDATED.variants!.partial!.es);
+  });
+
+  it.each(["en", "es"])("names the bell's own button word in what to do, in %s", (locale) => {
+    setLocale(locale);
+    const button = t("alerts.mark_handled").split(" ").at(-1)!.toLocaleLowerCase(locale);
+    expect(t("box_status.misdated.line").toLocaleLowerCase(locale)).toContain(button);
   });
 
   it("says a list may be short when the box restarted during the stop", async () => {

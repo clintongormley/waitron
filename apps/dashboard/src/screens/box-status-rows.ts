@@ -301,11 +301,11 @@ function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
     );
   if (devices.length > 0) {
     const latest = devices.reduce((a, b) => (b.witnessAt > a.witnessAt ? b : a));
+    const time = formatIsoMinute(latest.witnessAt);
     details.push(
-      fill("box_status.clock.proof.devices", {
-        count: String(devices.length),
-        time: formatIsoMinute(latest.witnessAt),
-      }),
+      devices.length === 1
+        ? fill("box_status.clock.proof.device_one", { time })
+        : fill("box_status.clock.proof.devices", { count: String(devices.length), time }),
     );
   }
   return details;
