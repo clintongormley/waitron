@@ -464,7 +464,6 @@ export interface KeepOpenSubject {
   extendedUntil: string | null;
   dayEndsAt: string;
   choices: readonly string[];
-  next: { name: string; startsAt: string; endsAt: string } | null;
 }
 
 export interface StationTodayState {
@@ -838,7 +837,7 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
     at: Date,
-  ): Promise<{ period: KeepOpenSubject | null; zone: KeepOpenSubject | null }>;
+  ): Promise<{ zone: KeepOpenSubject | null }>;
   readZoneKeepOpenState(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -864,13 +863,6 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
     input: { until: string | null },
-    at: Date,
-  ): Promise<void>;
-  keepPeriodOpen(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-    input: { periodId: string; until: string | null },
     at: Date,
   ): Promise<void>;
   resolveSalePolicy(

@@ -172,23 +172,6 @@ beforeEach(async () => {
 afterEach(() => vi.useRealTimers());
 
 describe("the till keeps a running period open today", () => {
-  it("offers the current period to staff without management permission", async () => {
-    const answer = await call("GET", read(), undefined, staffCookie);
-    expect(answer.status).toBe(200);
-    expect(answer.json).toMatchObject({
-      period: {
-        id: lunch,
-        name: "Lunch",
-        endsAt: "14:00",
-        running: true,
-        extendedUntil: null,
-        next: { name: "Afternoon", startsAt: "14:00" },
-      },
-    });
-    const period = (answer.json as { period: { choices: string[] } }).period;
-    expect(period.choices[0]).toBe("14:15");
-    expect(period.choices.at(-1)).toBe("05:00");
-  });
   it("the period extension is no longer a till route", async () => {
     const answer = await call("PUT", `/api/service-zones/${zone}/period-extension`, {
       periodId: lunch,
@@ -270,6 +253,17 @@ describe("the till keeps a zone open today", () => {
         0,
       );
     });
+  });
+  it("offers the zone's choices to staff without management permission", async () => {
+    const answer = await call("GET", read(), undefined, staffCookie);
+    expect(answer.status).toBe(200);
+    expect(answer.json).not.toHaveProperty("period");
+    expect(answer.json).toMatchObject({
+      zone: { id: zone, name: "Dining", endsAt: "23:30", running: true, extendedUntil: null },
+    });
+    const choices = (answer.json as { zone: { choices: string[] } }).zone.choices;
+    expect(choices[0]).toBe("23:45");
+    expect(choices.at(-1)).toBe("03:00");
   });
   it("seats a table during the overnight extension and refuses at its exact end", async () => {
     expect(await zoneState()).toMatchObject({ closed: false, closesAt: "23:30" });

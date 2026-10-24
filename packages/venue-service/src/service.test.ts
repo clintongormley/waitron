@@ -44,7 +44,6 @@ describe("VENUE_SERVICE", () => {
       "findOrderModes",
       "findOrderZones",
       "getOrderContext",
-      "keepPeriodOpen",
       "keepZoneOpen",
       "kitchenNoteKey",
       "listDepartmentSentTransfers",
