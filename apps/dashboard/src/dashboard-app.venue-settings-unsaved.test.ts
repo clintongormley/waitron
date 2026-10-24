@@ -1,3 +1,4 @@
+import { html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import {
@@ -8,7 +9,7 @@ import {
   type WtTabs,
 } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "./icons.js";
-import { createRequest, LiveData } from "@waitron/dashboard-kit";
+import { createRequest, LiveData, type DashboardContribution } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import { DashboardApp } from "./dashboard-app.js";
@@ -28,6 +29,35 @@ import {
   mountReceiptTab,
   venueServiceModel,
 } from "./testing/department-receipt-app-fixture.js";
+
+// A test module's panel holds the Kitchen tab, so these cases switch tabs whichever modules add
+// panels there.
+vi.mock("@waitron/dashboard-modules", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/dashboard-modules")>();
+  const kitchenTest = {
+    module: "kitchen-test",
+    screen: {
+      id: "kitchen-test-home",
+      navLabelKey: "nav.kitchen-test",
+      group: "reports",
+      requiresPermission: "test.use",
+    },
+    strings: {
+      en: { "nav.kitchen-test": "kitchen-test" },
+      es: { "nav.kitchen-test": "kitchen-test" },
+    },
+    create: () => ({ render: () => html`<p>kitchen-test</p>` }),
+    settingsPanels: [
+      {
+        id: "kitchen-test",
+        tab: "kitchen",
+        requiresPermission: "venue.view",
+        create: () => ({ render: () => html`<p data-test="kitchen-test">kitchen-test</p>` }),
+      },
+    ],
+  } satisfies DashboardContribution;
+  return { ...real, DASHBOARD_MODULES: [...real.DASHBOARD_MODULES, kitchenTest] };
+});
 
 afterEach(() => {
   cleanupWidgets();
@@ -83,7 +113,7 @@ async function mount(
           sessionDefault: locale,
           venueName: "Venue",
           permissions,
-          modules: ["venue-service"],
+          modules: ["venue-service", "kitchen-test"],
         }),
         getLocales: async () => ({
           locales: [
@@ -132,9 +162,7 @@ async function mount(
   }
   const ready = permissions.includes("venue.view")
     ? { panel: "dashboard-venue-details-panel", marker: "[data-test=edit]" }
-    : permissions.includes("venue_service.manage")
-      ? { panel: "dashboard-venue-service-settings", marker: "[data-test=kitchen-changes]" }
-      : undefined;
+    : undefined;
   if (ready === undefined) {
     await expect
       .poll(() => app.shadowRoot!.querySelector("dashboard-venue-settings-screen"))
@@ -582,7 +610,7 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
     sessionDefault: "en-GB",
     venueName: legalName,
     permissions: ["venue.view", "venue.configure"],
-    modules: ["venue-service"],
+    modules: ["venue-service", "kitchen-test"],
   }));
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
     getMe,
@@ -669,7 +697,7 @@ it("a rename answered after Back and Discard closed its dialog still updates the
     sessionDefault: "en-GB",
     venueName: legalName,
     permissions: ["venue.view", "venue.configure"],
-    modules: ["venue-service"],
+    modules: ["venue-service", "kitchen-test"],
   }));
   let answer!: () => void;
   const { app } = await mount(undefined, "en-GB", "light", {
@@ -761,7 +789,7 @@ it("the newest banner read wins when two reads finish in the opposite order", as
     sessionDefault: "en-GB",
     venueName,
     permissions: ["venue.view", "venue.configure"],
-    modules: ["venue-service"],
+    modules: ["venue-service", "kitchen-test"],
   });
   const pending: ((value: ReturnType<typeof response>) => void)[] = [];
   const getMe = vi
@@ -800,7 +828,7 @@ it("a failed banner read keeps the name the banner shows", async () => {
       sessionDefault: "en-GB",
       venueName: "Initial SL",
       permissions: ["venue.view", "venue.configure"],
-      modules: ["venue-service"],
+      modules: ["venue-service", "kitchen-test"],
     })
     .mockRejectedValue(new Error("network"));
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
