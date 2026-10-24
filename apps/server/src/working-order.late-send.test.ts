@@ -19,6 +19,7 @@ import {
   createServiceZone,
   replaceMenuWeek,
   saveMenuPeriod,
+  updateDepartment,
   workingLineContexts,
 } from "@waitron/venue-service";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
@@ -400,6 +401,73 @@ describe("a dish whose period ended earlier today", () => {
     });
     expect(lateSend.confirm).not.toHaveBeenCalled();
     expect(await orderRows(id)).toEqual([]);
+  });
+
+  it("is refused menu_period.ended when the confirmation covers only some late menus, and writes nothing", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    const { lateSend } = confirming([v.menus.almuerzo]);
+    const id = randomUUID();
+    await expect(
+      open(
+        v,
+        [
+          { menuItemId: v.toast.almuerzo, quantity: "1" },
+          { menuItemId: v.caña, quantity: "1" },
+        ],
+        id,
+        lateSend,
+      ),
+    ).rejects.toMatchObject({ code: "menu_period.ended" });
+    expect(lateSend.confirm).not.toHaveBeenCalled();
+    expect(await orderRows(id)).toEqual([]);
+  });
+
+  it("marks only the late dish, not an also-sold dish beside it", async () => {
+    at("19:30");
+    const v = await mealVenue();
+    const { personId, lateSend } = confirming([v.menus.almuerzo]);
+    const id = randomUUID();
+    await open(
+      v,
+      [
+        { menuItemId: v.salad, quantity: "1" },
+        { menuItemId: v.toast.almuerzo, quantity: "1" },
+      ],
+      id,
+      lateSend,
+    );
+    const marks = await suite.db
+      .select({
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        latePeriodName: workingLineContexts.latePeriodName,
+        lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+      })
+      .from(workingLineContexts)
+      .innerJoin(
+        workingOrderLines,
+        eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
+      )
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(marks).toHaveLength(2);
+    expect(marks).toEqual(
+      expect.arrayContaining([
+        { unitPriceGross: 800, latePeriodName: "Lunch", lateConfirmedBy: personId },
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]),
+    );
+  });
+
+  it("asks the confirmation with the department's own manager setting", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    await withTransaction(suite.db, (tx) =>
+      updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
+    );
+    const { lateSend } = confirming([v.menus.almuerzo]);
+    await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], randomUUID(), lateSend);
+    expect(lateSend.confirm).toHaveBeenCalledTimes(1);
+    expect(lateSend.confirm).toHaveBeenCalledWith(expect.anything(), true);
   });
 
   it("answers product.unavailable when it is sold out, even with a confirmation", async () => {
