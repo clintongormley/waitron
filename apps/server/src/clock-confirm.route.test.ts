@@ -8,15 +8,17 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { withTransaction, type Database } from "@waitron/db";
+import { incidents as incidentRows, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { BootReading, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin, persons, startManagementSession, type PersonRoleValue } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { jobOrigin } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
 import {
+  clockCheckWaitingReader,
   clockStopReader,
   collectBoxHealth,
   type BoxHealth,
@@ -176,6 +178,7 @@ function healthReaders(
     paymentsEnabled: true,
     canFree: () => true,
     clockStop: clockStopReader({ backend, witnesses: () => stop.witnesses.witnesses(), clock }),
+    clockCheckWaiting: clockCheckWaitingReader({ backend, clock }),
   };
 }
 
@@ -1083,4 +1086,282 @@ it("shows a restart whose person has no row with no name", async () => {
     restartedAt: "2026-10-22T09:00:00.000Z",
     clockAt: "2026-10-22T09:00:00.000Z",
   });
+});
+
+async function healthOf(stop: Stop): Promise<BoxHealth> {
+  const answer = await send(stop.app, marta.cookie, "GET", "/api/box/health");
+  expect(answer.status).toBe(200);
+  return answer.json as unknown as BoxHealth;
+}
+
+interface MisdatedLists {
+  lists: {
+    confirmationId: string;
+    records: {
+      recordId: string;
+      series: string;
+      number: number | null;
+      at: string;
+      offsetMinutes: number;
+    }[];
+  }[];
+}
+
+async function misdatedOf(app: Hono, cookie = marta.cookie): Promise<MisdatedLists> {
+  const answer = await send(app, cookie, "GET", "/api/box/clock-misdated");
+  expect(answer.status).toBe(200);
+  return answer.json as unknown as MisdatedLists;
+}
+
+/** The record's invoice series code and number, read from its sale rather than its number. */
+function invoiceOf(recordId: string): {
+  series: string;
+  number: number;
+  at: string;
+  offset: number;
+} {
+  const [row] = venue.db.all<{ series: string; number: number; at: string; offset: number }>(sql`
+    select s.code as series, sa.invoice_number as number,
+      r.fecha_hora_huso_gen_registro as at, r.offset_minutos as offset
+    from registros_facturacion r
+    join sales sa on sa.id = r.sale_id
+    join invoice_series s on s.id = sa.series_id
+    where r.id = ${recordId}
+  `);
+  return row!;
+}
+
+function handOpenMisdated(at: number): void {
+  // An earlier case's open alert naming the same first sale would stand for the next one.
+  venue.db.run(
+    sql`update incidents set acknowledged_at = ${new Date(at).toISOString()}
+        where code = 'clock.records_misdated' and acknowledged_at is null`,
+  );
+}
+
+function misdatedIncident(confirmationId: string): string {
+  const [row] = venue.db.all<{ id: string }>(
+    sql`select id from incidents where code = 'clock.records_misdated'
+        and json_extract(params, '$.confirmationId') = ${confirmationId}`,
+  );
+  return row!.id;
+}
+
+/** A Box status app whose routes read and write `db`. */
+function boxApp(stop: Stop, db: Database): Hono {
+  const app = new Hono();
+  mountBoxHealthApi(
+    app,
+    {
+      db,
+      readHealth: () => stop.health(db),
+      freeSpace: () => Promise.reject(new Error("not freed here")),
+      clockConfirm: {
+        backend: venue.backend,
+        witnesses: () => stop.witnesses.witnesses(),
+        clearWitnesses: () => stop.witnesses.clear(),
+        clock: stop.clock,
+        nodeId: venue.cfg.nodeId,
+        steady: () => 0,
+        readBoot: () => BOOT,
+        requestFromBox: () => false,
+        devMode: false,
+      },
+    },
+    () => {},
+  );
+  return app;
+}
+
+it("says a check waits from its opening reading once its stop ends by itself, until an administrator closes it", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  handOpenMisdated(stop.behind);
+  const before = await healthOf(stop);
+  expect(before.clockStop).toMatchObject({ proof: "none", recordId: stop.recordId });
+  expect(before.clockCheckWaiting).toBeNull();
+
+  await waitingCheck(stop);
+  const waitingNow = await healthOf(stop);
+  expect(waitingNow.clockStop).toBeNull();
+  expect(waitingNow.clockCheckWaiting).toEqual({ since: new Date(stop.behind).toISOString() });
+
+  expect((await confirm(stop, mario.cookie)).status).toBe(200);
+  expect((await healthOf(stop)).clockCheckWaiting).toBeNull();
+});
+
+it("lists the sales a closing found dated wrongly, by series, number and time, on the stored values alone, until its alert is handled", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  handOpenMisdated(stop.behind);
+  await waitingCheck(stop);
+  const confirmed = await confirm(stop, mario.cookie);
+  expect(confirmed.status).toBe(200);
+  const confirmationId = confirmed.json.confirmationId as string;
+  const record = invoiceOf(stop.recordId);
+
+  const listed = (await misdatedOf(stop.app)).lists.find(
+    (list) => list.confirmationId === confirmationId,
+  );
+  // Earlier records stamped after the stop's start are listed too; this stop's sale is the latest.
+  expect(listed?.records.at(-1)).toEqual({
+    recordId: stop.recordId,
+    series: record.series,
+    number: record.number,
+    at: new Date(record.at).toISOString(),
+    offsetMinutes: record.offset,
+  });
+  expect(
+    (await misdatedOf(stop.app)).lists.filter((list) => list.confirmationId === confirmationId),
+  ).toHaveLength(1);
+
+  const open = (await healthOf(stop)).misdatedOpen.find(
+    (entry) => entry.confirmationId === confirmationId,
+  );
+  expect(open).toMatchObject({
+    confirmationId,
+    count: listed!.records.length,
+    from: listed!.records[0]!.at,
+    to: new Date(record.at).toISOString(),
+    partial: false,
+    unconfirmed: false,
+  });
+
+  const refused = await send(stop.app, sergio.cookie, "GET", "/api/box/clock-misdated");
+  expect(refused.status).toBe(403);
+  expect(refused.json).toMatchObject({
+    code: "authorization.not_permitted",
+    params: { permission: "system.manage" },
+  });
+
+  // The boot-time clock an hour on and two sales since: the list is what the closing stored.
+  stop.setBoot({ ms: BOOT.ms + 2 * HOUR, id: BOOT.id });
+  for (let sale = 0; sale < 2; sale += 1)
+    expect((await cashSale(venue.appAt(clockAt(nowMs() + 1000)))).status).toBe(200);
+  expect(
+    (await misdatedOf(stop.app)).lists.find((list) => list.confirmationId === confirmationId),
+  ).toEqual(listed);
+
+  const handled = await send(
+    stop.app,
+    marta.cookie,
+    "POST",
+    `/management-api/alerts/incidents/${misdatedIncident(confirmationId)}/handled`,
+  );
+  expect(handled.status).toBe(204);
+  expect(
+    (await misdatedOf(stop.app)).lists.some((list) => list.confirmationId === confirmationId),
+  ).toBe(false);
+  expect(
+    (await healthOf(stop)).misdatedOpen.some((entry) => entry.confirmationId === confirmationId),
+  ).toBe(false);
+});
+
+it("says an alert that cannot tell which sales are dated wrongly is unconfirmed, with no count, and lists none for it", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  const [sale] = venue.db.all<{ id: string }>(
+    sql`select sale_id as id from registros_facturacion where id = ${stop.recordId}`,
+  );
+  const confirmationId = randomUUID();
+  const from = new Date(stop.behind).toISOString();
+  await venue.db.insert(incidentRows).values({
+    source: jobOrigin("dashboard").source,
+    saleId: sale!.id,
+    code: "clock.records_misdated",
+    params: {
+      confirmationId,
+      count: 0,
+      from,
+      fromOffsetMinutes: 60,
+      partial: true,
+      unconfirmed: true,
+    },
+    severity: "error",
+    detectedAt: from,
+  });
+  try {
+    expect(
+      (await healthOf(stop)).misdatedOpen.find((entry) => entry.confirmationId === confirmationId),
+    ).toEqual({
+      confirmationId,
+      count: 0,
+      from,
+      fromOffsetMinutes: 60,
+      partial: true,
+      unconfirmed: true,
+    });
+    expect(
+      (await misdatedOf(stop.app)).lists.some((list) => list.confirmationId === confirmationId),
+    ).toBe(false);
+  } finally {
+    handOpenMisdated(stop.behind);
+  }
+});
+
+it("reads a waiting check and the wrongly dated sales on a full disk with a change waiting, and leaves the change waiting", async () => {
+  const closedFirst = await stoppedBox(10 * MINUTE);
+  handOpenMisdated(closedFirst.behind);
+  await waitingCheck(closedFirst);
+  const confirmed = await confirm(closedFirst, mario.cookie);
+  expect(confirmed.status).toBe(200);
+  const confirmationId = confirmed.json.confirmationId as string;
+  // A second stop's check, left waiting while the first's alert stays open.
+  const waitingStop = await stoppedBox(10 * MINUTE);
+  await waitingCheck(waitingStop);
+
+  venue.db.run(
+    sql`insert into change_log (id, payload) values ('clock-check-1', '{"resource":"zz","id":"1"}')`,
+  );
+  const changeWaits = () =>
+    venue.db.all<{ id: string }>(sql`select id from change_log where id = 'clock-check-1'`).length;
+  try {
+    const db = writeRefusingDb(venue.db);
+    await expect(withTransaction(db, async () => {})).rejects.toMatchObject({
+      code: "storage.disk_full",
+    });
+
+    const health = await waitingStop.health(db);
+    expect(health.clockCheckWaiting).toEqual({ since: new Date(waitingStop.behind).toISOString() });
+    expect(health.misdatedOpen.map((entry) => entry.confirmationId)).toContain(confirmationId);
+    const lists = await misdatedOf(boxApp(waitingStop, db));
+    expect(lists.lists.map((list) => list.confirmationId)).toContain(confirmationId);
+    expect(changeWaits()).toBe(1);
+  } finally {
+    venue.db.run(sql`delete from change_log where id = 'clock-check-1'`);
+  }
+});
+
+it("names no person for a confirmation no administrator made", async () => {
+  const state = {
+    clockAt: "2026-10-22T09:00:00.000Z",
+    offsetMinutes: 60,
+    lastRecordAt: "2026-10-22T09:10:00.000Z",
+    lastRecordOffsetMinutes: 60,
+    recordId: "record-1",
+    gapMs: 10 * MINUTE,
+    proof: "confirmed" as const,
+    agreeing: { authority: null, devices: [] },
+    contrary: { authority: null, devices: [] },
+    confirmation: {
+      id: "confirmation-1",
+      source: "devices" as const,
+      personId: null,
+      confirmedAt: "2026-10-22T09:00:00.000Z",
+    },
+  };
+  const read = clockStopReader({
+    backend: { clockStopState: async () => state },
+    witnesses: () => [],
+    clock: systemClock(),
+  });
+
+  expect((await read(venue.db))?.confirmation).toEqual({
+    id: "confirmation-1",
+    source: "devices",
+    personName: null,
+    confirmedAt: "2026-10-22T09:00:00.000Z",
+  });
+});
+
+it("says no check waits on a seat that keeps no checks", async () => {
+  const read = clockCheckWaitingReader({ backend: {}, clock: systemClock() });
+  expect(await read(venue.db)).toBeNull();
 });

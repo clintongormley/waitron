@@ -285,7 +285,7 @@ import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
-import { clockStopReader, collectBoxHealth } from "./box-health.js";
+import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
@@ -2446,6 +2446,7 @@ async function bootServer(
             witnesses: () => clockWitnesses.witnesses(),
             clock: tillClock,
           }),
+          clockCheckWaiting: clockCheckWaitingReader({ backend: tillBackend, clock: tillClock }),
         }),
       freeSpace: createSpaceFreer({
         ...leftoverDeps,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, locations, printers } from "@waitron/db";
+import { CORE_MIGRATIONS, incidents, invoiceSeries, locations, printers } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
@@ -343,6 +343,70 @@ describe("collectBoxHealth", () => {
     );
     expect(health.clockStop).toBe(view);
     expect(asked).toEqual([suite.db]);
+  });
+
+  it("passes the waiting check reader's answer through, asking it with the database, and is null without one", async () => {
+    const asked: unknown[] = [];
+    const health = await collectBoxHealth(
+      suite.db,
+      stubReaders({
+        clockCheckWaiting: async (db) => {
+          asked.push(db);
+          return { since: "2026-10-22T09:00:00.000Z" };
+        },
+      }),
+    );
+    expect(health.clockCheckWaiting).toEqual({ since: "2026-10-22T09:00:00.000Z" });
+    expect(asked).toEqual([suite.db]);
+    expect((await collectBoxHealth(suite.db, stubReaders())).clockCheckWaiting).toBeNull();
+  });
+
+  it("lists each open wrongly-dated-sales alert's params, oldest first, and no handled one", async () => {
+    const params = (confirmationId: string) => ({
+      confirmationId,
+      count: 2,
+      from: "2026-10-22T08:00:00.000Z",
+      fromOffsetMinutes: 120,
+      to: "2026-10-22T08:30:00.000Z",
+      toOffsetMinutes: 120,
+      partial: false,
+      unconfirmed: false,
+    });
+    await suite.db.insert(incidents).values([
+      {
+        source: "dashboard",
+        code: "clock.records_misdated",
+        params: params("later"),
+        severity: "error",
+        detectedAt: "2026-10-22T09:30:00.000Z",
+      },
+      {
+        source: "fiscal_filing",
+        code: "clock.records_misdated",
+        params: params("earlier"),
+        severity: "error",
+        detectedAt: "2026-10-22T09:00:00.000Z",
+      },
+      {
+        source: "payment_check",
+        code: "clock.records_misdated",
+        params: params("handled"),
+        severity: "error",
+        detectedAt: "2026-10-22T08:00:00.000Z",
+        acknowledgedAt: "2026-10-22T09:45:00.000Z",
+      },
+      {
+        source: "dashboard",
+        code: "clock.behind_chain_restarted",
+        params: params("other code"),
+        severity: "warning",
+        detectedAt: "2026-10-22T08:00:00.000Z",
+      },
+    ]);
+
+    const health = await collectBoxHealth(suite.db, stubReaders());
+
+    expect(health.misdatedOpen).toEqual([params("earlier"), params("later")]);
   });
 
   it("settles the notice log, so an owner that stops failing is logged as recovered", async () => {

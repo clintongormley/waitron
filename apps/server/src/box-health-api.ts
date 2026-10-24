@@ -9,9 +9,10 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, diskFullIn } from "@waitron/shared";
-import { displayNameOf, type BoxHealth } from "./box-health.js";
+import { displayNameOf, readMisdatedOpen, type BoxHealth } from "./box-health.js";
 import { clockChallenges } from "./clock-challenges.js";
 import type { FreedSpace } from "./free-space-now.js";
+import { invoiceNumberParts } from "./invoice-number-parts.js";
 import type { Logger } from "./logger.js";
 import { requestFromBox } from "./request-from-box.js";
 
@@ -85,7 +86,8 @@ async function requiredNameOf(tx: Transaction, personId: string): Promise<string
   return name;
 }
 
-/** `GET /api/box/health` and `POST /api/box/free-space`, both `system.manage`; `POST
+/** `GET /api/box/health`, `POST /api/box/free-space` and `GET /api/box/clock-misdated`, all
+ * `system.manage`; `POST
  * /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both `person.admin` and refused on
  * the box itself. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
@@ -104,6 +106,35 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
     }),
   );
   const clockConfirm = deps.clockConfirm;
+  const misdatedRecords = clockConfirm.backend.misdatedRecords?.bind(clockConfirm.backend);
+  if (misdatedRecords !== undefined) {
+    const misdatedRun = createErrorBoundary(STATUS, "box-clock-misdated.failed");
+    // Each open alert's list, from the values its closing stored; one that cannot tell lists none.
+    app.get("/api/box/clock-misdated", (c) =>
+      misdatedRun(c, log, async () => {
+        await authorizeSystemManager(deps.db, c);
+        // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses.
+        const lists = await deps.db.withWriteLock(async () => {
+          const found = [];
+          for (const { confirmationId } of await readMisdatedOpen(deps.db)) {
+            const answer = await misdatedRecords(deps.db, confirmationId);
+            if (answer?.known !== true) continue;
+            found.push({
+              confirmationId,
+              records: answer.records.map((record) => ({
+                recordId: record.recordId,
+                ...invoiceNumberParts(record.invoiceNumber),
+                at: record.generatedAt,
+                offsetMinutes: record.offsetMinutes,
+              })),
+            });
+          }
+          return found;
+        });
+        return c.json({ lists }, 200);
+      }),
+    );
+  }
   const confirmClockStop = clockConfirm.backend.confirmClockStop?.bind(clockConfirm.backend);
   if (confirmClockStop === undefined) return;
   const challenges = clockChallenges({
