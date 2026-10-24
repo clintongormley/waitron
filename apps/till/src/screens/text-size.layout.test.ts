@@ -1,41 +1,29 @@
 import { afterEach, expect, it } from "vitest";
-import { page } from "vitest/browser";
-import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import type { WtFloorMap } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
-import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  pageAt,
+  resetPage,
+  textRects,
+  toggleFloorView,
+} from "../widgets/test-helpers.js";
 import "./till-floor-screen.js";
 import "../widgets/station-queue.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
 import type { FloorZone, StationQueueGroup, TableState } from "../api/client.js";
-import indexHtml from "../../index.html?raw";
-
-// Vitest's own default frame, which every other case runs in.
-const DEFAULT_FRAME = [414, 896] as const;
-
-let pageStyle: HTMLStyleElement | undefined;
 
 afterEach(async () => {
   cleanupWidgets();
-  pageStyle?.remove();
-  pageStyle = undefined;
-  document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
-    (sheet) => sheet !== TEXT_130_SHEET,
-  );
-  await page.viewport(...DEFAULT_FRAME);
+  await resetPage();
 });
 
-/** Puts the till at `scale`% text: 130 adopts the real theme sheet at that size, 100 leaves Waitron's. */
+/** The page at `width` × `height` with its text at `scale`%. */
 async function atScale(scale: number, width: number, height: number): Promise<void> {
-  if (scale === 130) document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
-  await page.viewport(width, height);
+  await pageAt(width, height, scale);
   expect(window.innerWidth).toBe(width);
-  // The page's own style (apps/till/index.html), whose padding narrows the screen on a phone.
-  pageStyle = document.createElement("style");
-  pageStyle.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
-  document.head.append(pageStyle);
-  await document.fonts.ready;
 }
 
 /** Fails unless `text` is drawn at `sizes[scale]`, so a sheet that stopped reaching the screen cannot
@@ -45,13 +33,6 @@ function expectDrawnAt(text: HTMLElement, scale: number, sizes: Record<number, s
     getComputedStyle(text).fontSize,
     `${text.className || text.getAttribute("part")} at ${scale}%`,
   ).toBe(sizes[scale]);
-}
-
-/** The client rects of `node`'s text, which an `overflow: hidden` ancestor does not cut down. */
-function textRects(node: Node): DOMRect[] {
-  const range = document.createRange();
-  range.selectNodeContents(node);
-  return [...range.getClientRects()].filter((rect) => rect.width > 0);
 }
 
 /** "inside" when every rect lies within `outer`; otherwise how far it runs past each side. */

@@ -3,39 +3,30 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { page } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import type { Station, TillProduct, TillZoneMenu } from "../api/client.js";
 import {
   cleanupWidgets,
   mountWidget,
+  pageAt,
+  resetPage,
   servedMenus,
+  textRects,
   expectNoA11yViolations,
 } from "../widgets/test-helpers.js";
 import "./till-counter-screen.js";
 import "../widgets/till-shell.js";
 import type { TillShell } from "../widgets/till-shell.js";
-import indexHtml from "../../index.html?raw";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
-
-// Vitest's own default frame, which every other case runs in.
-const DEFAULT_FRAME = [414, 896] as const;
 
 const originalLocale = currentLocale();
 const originalContentLanguages = currentContentLanguages();
 
-let pageStyle: HTMLStyleElement | undefined;
-
 afterEach(async () => {
   cleanupWidgets();
   setLocale(originalLocale);
-  pageStyle?.remove();
-  pageStyle = undefined;
-  document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
-    (sheet) => sheet !== TEXT_130_SHEET,
-  );
   setContentLanguages(originalContentLanguages);
-  await page.viewport(...DEFAULT_FRAME);
+  await resetPage();
 });
 
 function product(key: string, name: string, unitPrice: string): TillProduct {
@@ -87,17 +78,18 @@ const menus: TillZoneMenu[] = servedMenus(
   })),
 );
 
-/** `croquetas` of fifteen make a three-digit line total. */
-async function mountCounter(width: number, height: number, croquetas = "15"): Promise<HTMLElement> {
-  await page.viewport(width, height);
+/** `croquetas` of fifteen make a three-digit line total; `scale` is the text size, as `pageAt`. */
+async function mountCounter(
+  width: number,
+  height: number,
+  croquetas = "15",
+  scale = 100,
+): Promise<HTMLElement> {
+  await pageAt(width, height, scale);
   expect(window.innerWidth).toBe(width);
   const store = new WorkingOrderStore();
   store.addProduct(cafe, "1");
   store.addProduct(croquetasDish, croquetas);
-  // The page's own style (apps/till/index.html), whose padding narrows the screen on a phone.
-  pageStyle = document.createElement("style");
-  pageStyle.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
-  document.head.append(pageStyle);
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store,
     products: [cafe, croquetasDish],
@@ -181,13 +173,6 @@ const allWhole = Object.fromEntries(
 const box = (el: HTMLElement, tag: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(tag)!.getBoundingClientRect();
 
-/** The client rects of `node`'s text, which a break inside a word splits. */
-function textRects(node: Node): DOMRect[] {
-  const range = document.createRange();
-  range.selectNodeContents(node);
-  return [...range.getClientRects()].filter((rect) => rect.width > 0);
-}
-
 // What this browser does with one long word, so a CI log says which browser hyphenated what before
 // the layout cases below rely on it.
 it.each(["es", "en"])("one long word in a 70 px box under lang=%s", async (lang) => {
@@ -211,12 +196,6 @@ it.each(["es", "en"])("one long word in a 70 px box under lang=%s", async (lang)
   }
 });
 
-/** Puts the till at `scale`% text: 130 adopts the real theme sheet at that size, 100 leaves Waitron's. */
-async function atScale(scale: number): Promise<void> {
-  if (scale === 130) document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
-  await document.fonts.ready;
-}
-
 /** A product name's computed size on Waitron's look at each text size. */
 const NAME_SIZE: Record<number, string> = { 100: "14px", 130: "18px" };
 
@@ -233,8 +212,7 @@ function expectDrawnAt(el: HTMLElement, scale: number): void {
 it.each([100, 130])(
   "on a 1280 × 800 till at %i%, the basket stays beside the menu, the pay buttons are whole and Park ends above the screen's bottom",
   async (scale) => {
-    await atScale(scale);
-    const el = await mountCounter(1280, 800, "2");
+    const el = await mountCounter(1280, 800, "2", scale);
     await document.fonts.ready;
     expectDrawnAt(el, scale);
     expect(scrollY).toBe(0);
@@ -254,8 +232,7 @@ it.each([100, 130])(
 );
 
 it.each([100, 130])("at 1024 × 768 and %i%, every selling control is whole", async (scale) => {
-  await atScale(scale);
-  const el = await mountCounter(1024, 768);
+  const el = await mountCounter(1024, 768, "15", scale);
   await document.fonts.ready;
   expectDrawnAt(el, scale);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1024);
@@ -265,8 +242,7 @@ it.each([100, 130])("at 1024 × 768 and %i%, every selling control is whole", as
 it.each([100, 130])(
   "on a 390 px phone at %i%, the basket sits under the menu with every selling control whole",
   async (scale) => {
-    await atScale(scale);
-    const el = await mountCounter(390, 844);
+    const el = await mountCounter(390, 844, "15", scale);
     await document.fonts.ready;
     expectDrawnAt(el, scale);
     const browser = box(el, "till-menu-browser");
@@ -299,13 +275,9 @@ const LONG_NAMES = [
  * second and fourth on its bill, with every break other than a hyphen switched off. */
 async function mountLongNames(width: number, height: number, lang: string): Promise<HTMLElement> {
   setContentLanguages({ defaultLanguage: lang, languages: [lang] });
-  await atScale(130);
-  await page.viewport(width, height);
+  await pageAt(width, height, 130);
   const store = new WorkingOrderStore();
   for (const index of [0, 1, 3]) store.addProduct(LONG_NAMES[index]!, "1");
-  pageStyle = document.createElement("style");
-  pageStyle.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
-  document.head.append(pageStyle);
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store,
     products: LONG_NAMES,

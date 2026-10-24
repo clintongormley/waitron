@@ -20,6 +20,8 @@ import type {
 } from "../api/client.js";
 import type { DocumentMember, ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
+import indexHtml from "../../index.html?raw";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -100,6 +102,43 @@ export function cleanupWidgets(): void {
   history.replaceState(originalHistoryState, "", originalUrl);
   document.body.style.background = "";
   document.documentElement.style.background = "";
+}
+
+/** Vitest's own default frame, which `resetPage` puts back. */
+const DEFAULT_FRAME = [414, 896] as const;
+
+let pageStyle: HTMLStyleElement | undefined;
+
+/**
+ * Frames the page at `width` × `height` with the till's own page style (`apps/till/index.html`, whose
+ * padding narrows the screen on a phone) and its text at `scale`%: 130 adopts the real theme sheet at
+ * that size, 100 leaves Waitron's. Undo with {@link resetPage}.
+ */
+export async function pageAt(width: number, height: number, scale = 100): Promise<void> {
+  if (scale === 130) document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+  await page.viewport(width, height);
+  pageStyle = document.createElement("style");
+  pageStyle.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+  document.head.append(pageStyle);
+  await document.fonts.ready;
+}
+
+/** Undoes {@link pageAt}, and any `page.viewport` a case set. */
+export async function resetPage(): Promise<void> {
+  pageStyle?.remove();
+  pageStyle = undefined;
+  document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+    (sheet) => sheet !== TEXT_130_SHEET,
+  );
+  await page.viewport(...DEFAULT_FRAME);
+}
+
+/** The client rects of `node`'s text, measured where they are drawn: a break inside a word splits
+ * them, and an `overflow: hidden` ancestor does not cut them down. */
+export function textRects(node: Node): DOMRect[] {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return [...range.getClientRects()].filter((rect) => rect.width > 0);
 }
 
 export function formatViolations(violations: axe.Result[]): string {
