@@ -17,8 +17,10 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   AppError,
   isAppError,
+  isBumpMode,
   isStationColour,
   isTicketGrouping,
+  type BumpMode,
   type StationColour,
   type TicketGrouping,
 } from "@waitron/shared";
@@ -99,7 +101,6 @@ import {
   setProductCourse,
   updateCourse,
   updateStation,
-  type BumpMode,
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
@@ -367,6 +368,12 @@ function parseTicketGrouping(value: unknown): TicketGrouping | undefined {
   if (value === undefined) return undefined;
   if (!isTicketGrouping(value))
     throw new AppError("management.request_invalid", { field: "ticketGrouping" });
+  return value;
+}
+
+function parseBumpMode(value: unknown): BumpMode | undefined {
+  if (value === undefined) return undefined;
+  if (!isBumpMode(value)) throw new AppError("management.request_invalid", { field: "bumpMode" });
   return value;
 }
 
@@ -1620,6 +1627,7 @@ export function mountManagementApi(
         colour?: unknown;
         ticketGrouping?: unknown;
         printHeldWork?: unknown;
+        bumpMode?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
@@ -1637,6 +1645,7 @@ export function mountManagementApi(
         colour?: StationColour;
         ticketGrouping?: TicketGrouping;
         printHeldWork?: boolean;
+        bumpMode?: BumpMode;
         warmAfterMinutes?: number;
         overdueAfterMinutes?: number;
         forgottenAfterMinutes?: number;
@@ -1668,6 +1677,8 @@ export function mountManagementApi(
       if (colour !== undefined) patch.colour = colour;
       const ticketGrouping = parseTicketGrouping(body.ticketGrouping);
       if (ticketGrouping !== undefined) patch.ticketGrouping = ticketGrouping;
+      const bumpMode = parseBumpMode(body.bumpMode);
+      if (bumpMode !== undefined) patch.bumpMode = bumpMode;
       Object.assign(patch, parseStationTimingPatch(body));
       const printerIds = parseStationPrinterIds(body.printerIds);
       if (printerIds !== undefined) patch.printerIds = printerIds;

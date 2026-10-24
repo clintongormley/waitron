@@ -1787,6 +1787,47 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }
   });
 
+  it("PATCH saves a station's bump mode and refuses any other value", async () => {
+    const name = unique("Bump mode");
+    const id = await createStation(name);
+    const saved = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ bumpMode: "ticket" }) },
+      managerCookie,
+    );
+    expect(saved.status).toBe(204);
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      bumpMode: "ticket",
+    });
+    for (const bumpMode of ["Ticket", null, 1, true]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ bumpMode }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "bumpMode" },
+        },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        bumpMode: "ticket",
+      });
+    }
+    const refused = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ name: "Renamed", bumpMode: "bogus" }) },
+      managerCookie,
+    );
+    expect(refused.status).toBe(400);
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      name,
+      bumpMode: "ticket",
+    });
+  });
+
   it("PATCH saves a station's held printing and refuses a non-boolean", async () => {
     const id = await createStation(unique("Held printing"));
     for (const printHeldWork of [true, false, true]) {

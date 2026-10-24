@@ -231,6 +231,7 @@ describe("kitchen-station config", () => {
         colour: "orange",
         ticketGrouping: "combined",
         printHeldWork: false,
+        bumpMode: "line",
         ...defaultThresholds,
       },
       {
@@ -243,6 +244,7 @@ describe("kitchen-station config", () => {
         colour: "amber",
         ticketGrouping: "combined",
         printHeldWork: false,
+        bumpMode: "line",
         ...defaultThresholds,
       },
       {
@@ -255,6 +257,7 @@ describe("kitchen-station config", () => {
         colour: "red",
         ticketGrouping: "combined",
         printHeldWork: false,
+        bumpMode: "line",
         ...defaultThresholds,
       },
     ]);
@@ -279,6 +282,29 @@ describe("kitchen-station config", () => {
     expect(
       (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
     ).toMatchObject({ ticketGrouping: "combined", printHeldWork: false, printMovedSlips: true });
+  });
+
+  it("a new station is done one item at a time", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    expect(
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
+    ).toMatchObject({ bumpMode: "line" });
+  });
+
+  it("updateStation writes a station's bump mode and leaves the others", async () => {
+    const cfg = await setupVenue();
+    const { id: bar } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
+    const { id: grill } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Grill" }));
+    const before = await asApp(cfg, (tx) => listStations(tx, cfg));
+    await asApp(cfg, (tx) => updateStation(tx, cfg, bar, { bumpMode: "ticket" }));
+    const after = await asApp(cfg, (tx) => listStations(tx, cfg));
+    expect(after.find((s) => s.id === bar)).toEqual({
+      ...before.find((s) => s.id === bar),
+      bumpMode: "ticket",
+    });
+    expect(after.find((s) => s.id === grill)).toEqual(before.find((s) => s.id === grill));
+    expect(after.find((s) => s.id === grill)!.bumpMode).toBe("line");
   });
 
   it("a station stored with no MOVED slips choice answers that it prints them", async () => {
@@ -356,6 +382,7 @@ describe("kitchen-station config", () => {
         colour: "red",
         ticketGrouping: "combined",
         printHeldWork: false,
+        bumpMode: "line",
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
