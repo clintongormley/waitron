@@ -94,7 +94,7 @@ A773-1 receipts below are hunk headers of
 | Identical dishes on a ticket | `service_settings.kitchen_ticket_grouping` (`settings.ts:20-22`); read `apps/server/src/kitchen-print.ts:531,1354` | Each station's own | No design change | **Waits for A773-1** (PR 6): `kitchen-print.ts:531` is inside A773-1's `@@ -529,13 planKitchenTickets` |
 | Held courses (print in advance) | `service_settings.print_held_work` (`settings.ts:23`); read `order-groups.ts:1435` | Each station's own (A773 §6) | No design change | **Waits for A773-1** (PR 6): A773-1 rewrites `printHoldTickets` (`@@ -1463`) |
 | MOVED slips | `service_settings.print_moved_slips` (`settings.ts:24`) + nullable `kitchen_stations.print_moved_slips` (`packages/db/src/schema/kitchen-stations.ts:25-26`); read `kitchen-print.ts:1346` | Each station's own, no venue fallback | No design change | **Waits for A773-1** (PR 6): A773-1 rewrites `printMovedSlips` (`@@ -1385`, `@@ -1393`) |
-| Changes after sending | `service_settings.edit_sent_lines` (`settings.ts:16`); read `apps/server/src/working-order.ts:2352,5054`, `apps/server/src/till-api.ts:3525` | Each station, three values (A773 §7.4) | A773-1's Recall reads it as an interim (A773 §3.10; A773-1 plan "Recall alone uses interim `edit_sent_lines`") | **Waits for A773-1** (PR 8) |
+| Changes after sending | `service_settings.edit_sent_lines` (`settings.ts:16`); read `apps/server/src/working-order.ts:2352,5054`, `apps/server/src/till-api.ts:3525` | Each station, three values (A773 §7.4) | A773-1's Recall reads it as an interim (A773 §3.10; A773-1 plan "Recall alone uses interim `edit_sent_lines`") | **Planned** (PR 8, 2026-10-24; A773-1 landed in #1897) |
 | Waits for the pass | — | Each station, and a stations-table column (A773 §5, §7.1) | A773-2 builds it | **A773-2** |
 | The department dialog's tabs; Receipt editing in it | One-form dialog (`packages/venue-service/src/dashboard/department-edit-dialog.ts`, `department-settings.ts`); separate Edit receipt modal (`apps/dashboard/src/screens/department-receipt-dialog.ts`) opened from the list's Receipt link (`packages/venue-service/src/dashboard/departments-list.ts:214-231`) | Details · Service · Receipts · Transfers; the link goes | No | **Now** (PRs 1 and 3) |
 
@@ -104,7 +104,8 @@ A773-1 rewrites. PR 2 still touches three A773-1 files outside their hunks (stat
 **The Kitchen tab itself goes** in whichever PR removes its last control. After PRs 4–8 only fire
 control is left, which A773-2 removes; if A773-2 lands first, PR 7 or PR 5 (whichever is last)
 removes `kitchen` from `VENUE_SETTINGS_TABS` (`apps/dashboard/src/screens/venue-settings-screen.ts:11-16`),
-the core panel and `kitchen-screen.ts`.
+the core panel and `kitchen-screen.ts`. (2026-10-24: PR 7 removed the core panel; PR 8 removes
+venue service's, the last, and keeps the `kitchen` key as an owner question — PR 8 Decision 10.)
 
 ### The wording question is moot
 
@@ -4111,6 +4112,1075 @@ server does not send it.
   update the ledger to `Status: done` for PR 7's build, then `/finish-branch` with this plan's path
   as its note.
 
+## PR 8 — Changes after sending, three values, on each station
+
+Planned 2026-10-24, after PR 7 landed (#2037). Branch `feat/a756-8-changes-after-sending`, worktree
+`/Users/clintongormley/workspace/worktrees/waitron-feat-a756-8-changes-after-sending`, cut from
+`main` at `d7d428e52`. Ledger: `~/waitron-campaign-c/item-a756-ledger.md`, the one PRs 4–7 used;
+every task ends by updating it (done, changed test checks, next step).
+**Review path: FULL** — a core migration and a venue-service migration that drops a table, the
+venue-service module seat losing a method (a cross-package contract), a change to what the till's
+tab-lines read answers, the configuration format moving to 8, and the rule that decides whether a
+sent dish may be recalled or changed. Implementers are dispatched as `subagent_type: "implementer"`.
+
+**Goal.** Whether staff may change or recall a dish after it was sent ("Changes after sending")
+stops being one venue-wide switch on the Kitchen tab and becomes each prep station's own choice,
+with three values: not allowed; while held; while held or waiting (A773 §7.4). The server decides
+Recall, and every other change to a sent dish that today reads the venue switch, from the station
+that holds each part of the dish; the till offers Recall from the same per-line value. A new
+station starts at "While held or waiting", today's venue default. The venue-wide switch, its
+venue-service panel and the `service_settings` table that held it go, so the Kitchen tab has no
+panel left and no one sees it (A756 mock-up 01: "The tab goes").
+
+**Files it touches.**
+- shared: `packages/shared/src/changes-after-sending.ts` (new) and its test, `src/index.ts`.
+- db: `src/schema/kitchen-stations.ts`, `src/configuration-transfer.ts`, a generated core migration
+  in `drizzle/`, and the tests `src/schema/kitchen-stations.test.ts`,
+  `src/configuration-transfer.test.ts`.
+- server: `src/changes-after-sending.ts` (new), `src/kitchen.ts`, `src/management-api.ts`,
+  `src/draft-recall.ts`, `src/working-order.ts`, `src/till-api.ts`, `src/errors.ts`, the test helper
+  `src/testing/changes-after-sending.ts` (new), and the tests named in Tasks 53–64b.
+- module contract: `packages/module/src/module.ts` (the seat's `readEditSentLines` goes).
+- venue-service: `src/schema/settings.ts` (deleted), `src/schema/index.ts`, `src/kitchen-notices.ts`,
+  `src/routes.ts`, `src/service.ts`, `src/provisioning.ts`, `src/classification.ts`,
+  `src/configuration-transfer.ts`, a generated migration in `drizzle/`; dashboard
+  `station-editor.ts`, `routing-client.ts`, `prep-stations-screen.ts`, `client.ts`,
+  `live-queries.ts`, `index.ts`, `strings.ts`, `service-settings-panel.ts` (deleted) and its three
+  suites (deleted); the tests named in the tasks.
+- provisioning: `src/configuration-transfer.ts` (format 8), `test/configuration-bundle.ts`,
+  `src/configuration-transfer.boundaries.test.ts`.
+- till: `src/api/client.ts`, `src/screens/till-table-order-screen.ts`, `src/till-app.ts`,
+  `src/i18n/codes.ts`, and the tests and helpers named in Tasks 59a, 59b and 60b.
+- dashboard app: `src/dashboard-app.test.ts`, `src/dashboard-app.venue-settings-unsaved.test.ts`,
+  `src/testing/department-receipt-app-fixture.ts`.
+- scripts: `scripts/schema-constraints.test.ts` (one list entry, Decision 11).
+- docs: guides `apps/server/src/guide/{en,es}/modifiers.md` and `kitchen-service.md`,
+  `docs/developers/design-system.md`, `docs/developers/conventions-data.md`, `docs/backlog.md`,
+  `docs/backlog/kitchen.md`, `docs/backlog/dashboard.md`, the A664 personal-data audit and
+  retention inventory and the A760 inventory (one dated pointer each).
+
+### PR 8 decisions (each with its receipt)
+
+1. **A dish's own work sits at exactly one station; its split-off extras can sit at others.
+   Every part of the dish is checked against its own station, and all must allow the change**
+   (the "Parts that wait" check, A9). Receipts, on `d7d428e52`:
+   - One kitchen record per line, and every record names a station: `ticket_items` has the unique
+     key `ticket_items_working_order_line_id_key` on `working_order_line_id` and a NOT NULL
+     `station_id` with a foreign key to `kitchen_stations`
+     (`packages/db/src/schema/ticket-items.ts:46-55`, `:82`); the key is in the migrated schema —
+     `scripts/schema-constraints.test.ts:495` names it, and that guard passed in this plan's probe
+     (Decision 3). Routing is single-target (`docs/backlog.md:1593-1595`, A9: "single-target only").
+   - An extra can be routed to a station of its own and then has its own record there:
+     `chooseExtraMakerBeside` (`packages/venue-service/src/routing-store.ts:751-778`) places an extra
+     at its own station unless it "follows its dish". Run:
+     `pnpm --filter @waitron/server exec vitest run src/kitchen-allergy.reads.test.ts -t "routed extra"`
+     printed `Tests 1 passed | 8 skipped (9)`; that case routes an extra to "Side station" and
+     finds its ticket there (`:154-155`, `:162`). Recall already gathers a dish's own record and its
+     split-off extras' (`dishKitchenItems`, `apps/server/src/dish-kitchen.ts:48-75`), and an extra's
+     started work already refuses its dish's Recall ("an extra's started work refuses its parent's
+     Recall", `apps/server/src/draft-recall.test.ts:678`).
+   - **So one station does not always answer.** The rule is per record: a dish may be recalled or
+     changed only if **every** kitchen record of the dish and its extras allows it at its own
+     station (Decision 5). The refusal comes before any write, as today's checks do.
+   - **A moved dish** reads the station it is at now: a station move rewrites the record's
+     `station_id` (`moveDishesToStation`, `apps/server/src/station-move.ts`), and closing a
+     station for today moves its waiting work the same way (`station-move.ts:282`).
+   - **A deleted station's** row stays (`deleteStation` sets `active = false`,
+     `apps/server/src/station-delete.ts:208`) and it refuses deletion while it holds work in
+     progress (`station.work_in_progress`, `:174`), so a record's station row is always there
+     to read; its column is read whether the station is active or not.
+   - **A dish no station makes has no record, so no station decides, and it may be recalled or
+     changed** (subject to every other rule: bill open, editor, not served). Why this default:
+     (a) the setting exists "for a printer-only station, which cannot see a change"
+     (`docs/backlog/kitchen.md:388`), and a dish no station makes reaches no printer and no
+     screen; (b) two of today's three gates already let it through with the switch off — the line
+     edit and the older recall gate only lines that hold a record (`working-order.ts:2703`,
+     `:5451-5454`), pinned by "still changes a no-preparation line that was released, which has no
+     ticket item" (`apps/server/src/tabs.test.ts:1840`); (c) the owner's chosen answer A of
+     A773-1's open point 4 says so in its picture: "A line no station makes remains selectable"
+     (`docs/backlog/mockups/a773-1-open-points/04-changes-after-sending.png`). Only `recallToDraft`
+     refuses such a dish today, because it reads the venue switch before reading any record
+     (`apps/server/src/draft-recall.ts:233-234`; pinned by "the venue setting refuses Recall even
+     when a sent dish has no preparation record", `draft-recall.test.ts:1110`). That one check
+     changes (Task 57) and is recorded as an owner FYI.
+   - **A made-here dish** has a record (at the station it was made for) in state `ready`
+     (`ticket-items.ts:27-31`), so it is refused as started (`isStarted`,
+     `apps/server/src/kitchen-print.ts:786-788`) or, at a "Not allowed" station, as not allowed —
+     as today with the switch off.
+
+2. **Storage: one column on `kitchen_stations`, three English values, no CHECK.**
+   `kitchen_stations.changes_after_sending` (`label`, `.$type<ChangesAfterSending>()`, NOT NULL,
+   default `'held-or-waiting'`), declared after `bumpMode`
+   (`packages/db/src/schema/kitchen-stations.ts:33`), with PR 7's comment shape: "The station
+   routes and the import refuse a value outside `isChangesAfterSending`; a CHECK would rebuild this
+   table." (No CHECK for PR 6's and PR 7's reason, `kitchen-stations.ts:27-31`.) The values live in
+   `packages/shared/src/changes-after-sending.ts`, beside `bump-mode.ts`:
+   `CHANGES_AFTER_SENDING = ["never", "held", "held-or-waiting"] as const`, `ChangesAfterSending`,
+   `isChangesAfterSending`, and the one rule both server and till use:
+   `allowsChangeAfterSending(value: ChangesAfterSending, fired: boolean): boolean` — `true` for
+   `held-or-waiting`, `!fired` for `held`, `false` for `never`. "Held" is a record whose `fired_at`
+   is null ("NULL = HELD", `ticket-items.ts:64`); "waiting" is a fired record not started. A started
+   record (`preparing` or `ready`) is refused `ticket.already_started` by the check every path
+   already makes after this one, whatever the value (A773 §3.10).
+
+3. **Migrations: one core migration adds the column; one venue-service migration drops
+   `service_settings`. No venue reset.** After PR 6 the table holds only `id` and `edit_sent_lines`
+   (`packages/venue-service/src/schema/settings.ts:6-15`), so with the switch gone it holds
+   nothing; it is dropped rather than kept empty. Nothing points at it:
+   ``git grep -n -i 'references `service_settings`' -- 'packages/*/drizzle/*.sql'`` (exit 1),
+   `git grep -n -i trigger -- 'packages/*/drizzle/*.sql' | grep -i service_settings` (exit 1), and
+   no other set's SQL names it (`git grep -n -i service_settings -- 'packages/*/drizzle/*.sql'`
+   lists only venue-service's own files). Outside its package, `git grep -n -E 'service_settings|serviceSettings' -- ':!**/drizzle/**' ':!docs/superpowers'`
+   finds, besides venue-service's own code and tests and docs, only
+   `scripts/schema-constraints.test.ts:789` (its singleton CHECK), `apps/server/src/draft-recall.test.ts`
+   (Task 57) and the format-1 JSON fixture (left, Decision 8); it is in no
+   `scripts/write-path-tables.json` entry, append-only list or `migration-upgrade` hand list.
+   **Measured 2026-10-24** in a scratch copy of this worktree (`cp -c -R` to
+   `/tmp/a756-8-scratch.ny1A/w`, its `.git` pointer removed; a second copy, `control`, unchanged
+   for the walk; both deleted afterwards), with `changes-after-sending.ts` and the column added, and
+   the schema index's `settings.js` export and the `service_settings` classification line removed
+   (and, for the upgrade suites below, `listStations` reading the column and provisioning's
+   `service_settings` insert removed):
+   - `pnpm db:generate --name station_changes_after_sending` in `packages/db` wrote
+     `drizzle/0189_station_changes_after_sending.sql` holding exactly
+     ``ALTER TABLE `kitchen_stations` ADD `changes_after_sending` text DEFAULT 'held-or-waiting' NOT NULL;``
+     — no `__new_` table.
+   - `pnpm db:generate --name retire_service_settings` in `packages/venue-service` wrote
+     `drizzle/0069_retire_service_settings.sql` holding exactly ``DROP TABLE `service_settings`;``.
+   - `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run scripts/migration-upgrade.test.ts` passed
+     (`Tests 4 passed (4)`) and printed `348 steps` and `229 tables hold rows after the last step`;
+     the same run in the unchanged copy printed `346 steps` and `230 tables` — the control that the
+     walk applied both new steps and that one table left.
+   - `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts scripts/module-graph-honesty.test.ts scripts/apply-migrations-callers.test.ts scripts/id-columns-are-references.test.ts scripts/column-vocabulary.test.ts scripts/append-only-migration-sets.test.ts scripts/no-tenant-column.test.ts scripts/live-subscriptions.test.ts`
+     printed `Tests 3 failed | 599 passed (602)`: `schema-constraints` "carries every check
+     constraint the product declares" (`expected [ 'service_settings_singleton_ck' ] to deeply
+     equal []`), `id-columns-are-references` (`service_settings: expected 0 to be greater than 0`,
+     the table still in venue-service's transfer list) and `live-subscriptions` (two dashboard
+     queries still naming it). With the list entry, the transfer entry
+     (`packages/venue-service/src/configuration-transfer.ts:714`) and the two live-query entries
+     (`packages/venue-service/src/dashboard/live-queries.ts:97`, `:239`) removed, those three files
+     and `classification-complete` printed `Tests 13 passed (13)`.
+   - `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad` `Tests 2 passed (2)`;
+     `pnpm --filter @waitron/composition exec vitest run` `Tests 128 passed (128)`;
+     `pnpm --filter @waitron/migrations exec vitest run` `Tests 40 passed (40)`;
+     `pnpm --filter @waitron/db exec vitest run src/schema src/classification.test.ts src/kitchen-timing-upgrade.test.ts src/drawer-refund-upgrade.test.ts`
+     `Tests 911 passed (911)`; server `backup-verification-compatibility`, `printing-retirement-upgrade`,
+     `recovery-backup-preview.older`, `draft-line-place-upgrade`, `printer-pickup-upgrade`
+     `Tests 111 passed (111)`; root `menu-sections-upgrade`, `fiscal-allocation-migration`,
+     `fiscal-certificate-migration` `Tests 7 passed (7)`; venue-service `department-receipts.upgrade`,
+     `order-kitchen-notes.upgrade`, `party-allergy.upgrade` `Tests 3 passed (3)` — all unchanged.
+   - Failed, each fixed by a named task (Decision 11): `canvas-retirement-upgrade.test.ts` (two
+     cases: its fill wrote a station through today's `createStation`, `table kitchen_stations has no
+     column named changes_after_sending`; and its retained-rows snapshot still listed
+     `service_settings`), `station-order-migration.test.ts` (`no such column:
+     "changes_after_sending"` once `listStations` reads it), venue-service
+     `kitchen-allergy.upgrade.test.ts` (`no such table: service_settings`, its after-snapshot reading
+     every table the before-snapshot had), `migrations.test.ts` (four cases), `classification.test.ts`
+     (one) and `backup-verification.test.ts` (one, which inserts a `service_settings` row as
+     "invented state"). With Decision 11's edits the first three files passed (`Tests 6 passed
+     (6)` for the two server files; `Tests 1 passed (1)` for `kitchen-allergy.upgrade`). The other
+     three are Task 64b's edits, not re-run in the probe (the `backup-verification` replacement row
+     is the implementer's: a `holiday_geographies` insert with a made-up location id failed its
+     foreign key in the probe).
+   **No venue reset**: the walk passed with rows in every table, and no shipped migration file is
+   edited. 0189 and 0069 were free on `d7d428e52`; `feat/a739-payment-window` (parked) carries core
+   migrations that already collide with `main`'s, so whichever lands second regenerates (Global
+   Constraints).
+
+4. **What each existing station reads: the column default, `held-or-waiting`; the venue's switch is
+   dropped, not copied** (CLAUDE.md §3, "No backwards-compatibility or data-migration code until
+   Waitron is in production"; PRs 4–7 did the same). A venue that never changed the switch sees no
+   change: the switch's default and its missing-row reading are both "allowed"
+   (`settings.ts:12`; `readEditSentLines`, `packages/venue-service/src/kitchen-notices.ts:316-323`),
+   and A773 §14.4 maps "yes" to "while held or waiting". A venue that had turned it off gets
+   `held-or-waiting` at every station until a manager sets each station. **A new station starts at
+   `held-or-waiting`** ("A new station starts with sensible defaults", A773 §7.1): `createStation`
+   leaves the column to its default, as it does `bump_mode` (`apps/server/src/kitchen.ts:79-123`);
+   Add station sets none of the station's choices; provisioning's first station and an import that
+   omits the column take the default too. Picture 10 draws Bar at "Not allowed (printer only)",
+   that station's state in the story, not a default.
+
+5. **The rule on the server: every path that reads the venue switch today reads each record's
+   station instead.** A new `apps/server/src/changes-after-sending.ts` exports
+   `refuseChangesAfterSending(tx: Transaction, workingOrderId: string, records: readonly { stationId: string; firedAt: string | null }[]): Promise<void>`:
+   one `select id, changes_after_sending from kitchen_stations where id in (…)` over the distinct
+   station ids (none when `records` is empty), then `ticket.already_fired { workingOrderId }` if any
+   record's station does not `allowsChangeAfterSending(value, record.firedAt !== null)`. It runs
+   where the venue check runs today, before the started check, so which code a refused write answers
+   is unchanged at the two ends of the scale. The three readers
+   (`git grep -n readEditSentLines -- apps/server/src ':!*.test.ts'`):
+   - **`recallToDraft`** (A773's Recall, `apps/server/src/draft-recall.ts:233-234`): the venue check
+     moves after `dishKitchenItems` (`:235`) and becomes
+     `refuseChangesAfterSending(tx, line.workingOrderId, items)` — every record of the dish and its
+     extras, held or fired. No records: allowed (Decision 1).
+   - **`recallLines`** (the older `POST /api/working-orders/:id/lines/recall`,
+     `working-order.ts:2655-2705`): today it refuses only when some record's line was ever fired
+     (`sentAt !== null`, `:2703`). It now passes every record of the named lines and their extras
+     (`items`, `:2690-2702`). Its till client method has no caller in the till app
+     (`git grep -n -E '\.recallLines\(' -- apps/till/src` lists only `client.test.ts` and
+     `client.recall-ownership.test.ts`), and the route stays.
+   - **`applyLineEdits`** (a change to a line through `updateOrderLine` or the whole-order save,
+     `working-order.ts:5446-5455`): today it refuses a line with a record that was ever fired when
+     the switch is off. It now passes the line's records (`[line, ...line.children]`'s tickets,
+     `:5449-5451`). The guide says the same switch governs these changes today
+     (`apps/server/src/guide/en/modifiers.md:155-159`), so the station's choice replaces it there
+     too.
+   **Held dishes at a "Not allowed" station are now refused by all three**, where today
+   `recallLines` and `applyLineEdits` let a never-fired held line through with the switch off
+   (`tabs.test.ts:1797`, "still recalls a held line that was never sent"). That is the spec's
+   value: "never" (A773 §3.10, "When it is offered … never; while held; or while held or
+   waiting"); the case moves to a "While held" station (Task 57) and is listed as changed.
+   **Several lines or parts at different stations:** all-or-nothing, before any write — the three
+   paths already check before writing (`recallLines` reads, checks, then updates at `:2719`;
+   `recallToDraft` checks before `acquireBillEditor` at `:257`; `applyLineEdits` checks inside
+   `kitchenHas`, called before each line's write). Firing ("Fire now") and Void are not gated, as
+   today and as A773 §3.7 says ("Not gated by the station's 'changes after sending'"): `fireHeldLine`
+   and `cancelLine` never read the switch (`order-groups.test.ts:5830` "fires while sent edits are
+   disabled"; `tabs.test.ts:1808` "still voids a sent line").
+   **The refusal keeps its code, `ticket.already_fired`** (`apps/server/src/errors.ts:834-841`), whose
+   meaning is unchanged ("the line has already gone to the kitchen, so this write is refused"); its
+   registry comment names the station's choice instead of `edit_sent_lines`. No code is added or
+   retired, so `scripts/errors-reachable.test.ts` and `scripts/alert-codes.test.ts` are run, not
+   changed. The till's wording (`apps/till/src/i18n/codes.ts:593-596`) changes "this venue does not
+   allow changing items once sent" to the station: EN "This item has already gone to the kitchen,
+   and its station does not allow changes once sent. You can cancel it", ES "Este plato ya ha ido a
+   cocina y su estación no permite cambios después de enviarlo. Puedes cancelarlo". One check pins
+   the Spanish (`apps/till/src/till-app-table-service.test.ts:2653`, Task 59b).
+
+6. **Validation at the station routes.** PATCH `/management-api/stations/:id` accepts
+   `changesAfterSending`, one of the three values, checked by a `parseChangesAfterSending` beside
+   `parseBumpMode` (`apps/server/src/management-api.ts:372-375`); anything else, `null` included,
+   is refused `management.request_invalid { field: "changesAfterSending" }`, writing nothing
+   (`updateStation` validates before its one `update`). The editor maps no refusal to this field,
+   as for `bumpMode` and `ticketGrouping` (PR 7 Decision 3). POST is unchanged (Decision 4).
+   `Station` (`apps/server/src/kitchen.ts:28-44`) gains `changesAfterSending`, read in
+   `listStations` (`:125-148`). **Measured** in the scratch copy with that read: of
+   `kitchen.test.ts management-api.test.ts device-api.test.ts till-api.station-today.test.ts configuration-transfer.test.ts configuration-import.test.ts station-delete.test.ts management-api.station-disable.test.ts`,
+   exactly two cases failed (`Tests 2 failed | 730 passed (732)`): `kitchen.test.ts` "defaults
+   isDefault to false and lists active stations by name" and "updateStation renames but cannot
+   reactivate a removed station" — the two whole-shape pins PR 7 also grew; each gains
+   `changesAfterSending: "held-or-waiting"`, every other value unchanged.
+
+7. **The till learns each line's value from the tab-lines read it already makes.** Today
+   `GET /api/working-orders/:id/lines` answers one `editSentLines` for the tab
+   (`apps/server/src/till-api.ts:3916`), stored by the till (`till-app.ts:10669`, state `:2905`)
+   and handed to the table screen (`:17863`, `:17997`), whose `#canRecall` reads it
+   (`till-table-order-screen.ts:2068-2083`, property `:1162`). Instead each `TabLine` carries
+   `changesAfterSending: ChangesAfterSending | null` — its own record's station's value, null with
+   no record — read in `readTabLines` (`apps/server/src/working-order.ts:3920-4021`) by a left join
+   from `ticket_items.station_id` to `kitchen_stations`, beside `stationId` (`:3952`). The till's
+   `#canRecall` replaces `this.editSentLines` with: the dish and each of its extras rows that has a
+   value allows it (`allowsChangeAfterSending(row.changesAfterSending, row.firedAt !== null)`);
+   rows with null pass. That mirrors the server's per-record rule (Decision 5), so the till offers
+   Recall exactly when the server would take it, other conditions equal; the server still decides.
+   **Freshness is unchanged:** the value travels with the tab-lines read, read as often as the switch
+   is today; it is not a start-read value, so CLAUDE.md §3's `setupRevision` rule does not apply.
+   **Measured** in a second scratch copy with the join and field added and `service_settings` kept:
+   the 19 server suites that read tab lines
+   (`git grep -l -E 'readTabLines|/lines`|/lines"' -- 'apps/server/src/*.test.ts'`) printed
+   `Tests 1648 passed (1648)` — no whole-shape pin sees the new key, so Task 58's new cases are its
+   only checks. `apps/server/src/till-api.fiscal-sale-paths.test.ts` is not among them and names
+   neither the switch nor the read (`git grep -n -E 'editSentLines|/lines' -- apps/server/src/till-api.fiscal-sale-paths.test.ts`
+   prints nothing), so no protected filing-route pin changes. On the till, the field made required
+   on `TabLine` (`apps/till/src/api/client.ts:2266-2271`) gave `pnpm --filter @waitron/till typecheck`
+   48 errors in 34 files, each a typed fixture (Task 59a).
+
+8. **Configuration copies: the new column travels and is checked; `service_settings` leaves the
+   copy; the format moves to 8.** `kitchen_stations` is exported whole
+   (`packages/db/src/configuration-transfer.ts`, no `omit`), so the column travels with no code;
+   the import refuses a value outside the list before any row is written,
+   `setup.request_invalid { field: "kitchen_stations.changes_after_sending" }`, beside the bump-mode
+   check (`validateCoreConfiguration`, `:4-14`). `service_settings` leaves venue-service's
+   transfer list (`packages/venue-service/src/configuration-transfer.ts:714`). **Format 8**, by the
+   rule in `docs/developers/conventions-data.md:1605-1628` ("Retiring configuration tables also
+   retires their export format"): every format-7 export carries a `service_settings` key, which the
+   import would otherwise refuse as an unknown table; A757 slice 2, A841 slice 2 and PR 5 moved the
+   format for the same reason. A format-7 file is refused `setup.configuration_outdated`
+   (`packages/provisioning/src/configuration-transfer.ts:480-483`). The format-1 fixture
+   `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json` still names
+   `edit_sent_lines` and is left as it is (refused before any table is read; PR 7 Decision 6).
+
+9. **The UI: "Changes after sending", last in the station editor.** A `wt-combobox`
+   (`name="changesAfterSending"`, `search="never"`) labelled "Changes after sending" with "Not
+   allowed", "While held" and "While held or waiting", placed after "Print held groups in advance"
+   and its note (`packages/venue-service/src/dashboard/station-editor.ts:685-698`), before the
+   buttons (`:700`) — picture 10's order (A773), where it is the last field. **Words:** the label
+   is the pictures' (A756 04 and A773 10) and the Kitchen tab's heading
+   (`venue.kitchen_changes`, `strings.ts:524`); the three choices are the spec's three values in the
+   shortest form (A773 §7.4: "no changes; while held; while held or waiting"); picture 10's "Not
+   allowed (printer only)" drops "(printer only)" because the spec says the middle value also
+   suits a printer-only station. Spanish: label «Cambios tras el envío» (today's heading,
+   `strings.ts:1418`), choices «No permitidos», «Solo en espera», «En espera o sin empezar»
+   («en espera» as the till says held, `apps/till/src/i18n/strings.ts:2329`, `:2675`). Owner FYI,
+   not a blocker (Task 66). Keys `prep.changes_after_sending`, `.never`, `.held`,
+   `.held_or_waiting`, EN and ES, beside `prep.bump_mode*` (`strings.ts:311-313`, ES `:1200-1202`).
+   No hint. Save sends only what changed and keeps the A331 rule (`sendable`, `draftScopeFor`,
+   `saveActionState`, as PR 7's field). Add station gains no field (Decision 4).
+
+10. **The Kitchen tab: venue service's panel goes, so no one sees the tab; its key stays in the
+    list.** The panel (`packages/venue-service/src/dashboard/index.ts:140-157`, component
+    `service-settings-panel.ts`) is the tab's only panel since PR 7 (`git grep -n -E 'tab: "kitchen"' -- apps packages ':!*.test.ts'`
+    prints only `index.ts:143`). A tab shows only when a visible panel names it
+    (`#tabs`, `apps/dashboard/src/screens/venue-settings-screen.ts:56-58`), so with the panel gone
+    Venue settings shows Venue details alone, in every venue — the state PR 7 already shipped for a
+    venue without venue service (`dashboard-app.test.ts:1792`, "has no Kitchen tab when venue
+    service is disabled"). **An address naming the tab** (`/manage/venue-settings/view/kitchen`) opens
+    the first visible tab and is replaced, not pushed (`#restore`, `:61-70`), as PR 7 pinned for that
+    venue and as the retired Tables tab's address does (`dashboard-app.test.ts:1825`, "replaces the
+    retired Tables tab's address with the first visible tab"). Search lists only tabs with a panel
+    (`settingsTabs`, `dashboard-app.ts:2101`), so Kitchen leaves search too. `navigation.ts` needs no
+    change (no address word is listed for it, `git grep -n kitchen -- apps/dashboard/src/navigation.ts`
+    prints nothing). The guides name no Kitchen tab (`git grep -n -i 'kitchen tab' -- apps/server/src/guide`
+    prints nothing) and `apps/dashboard/src/help-guide.ts` links none.
+    **Owner question (built as the default meanwhile):** the key `kitchen` in
+    `VENUE_SETTINGS_TABS` (`venue-settings-screen.ts:11`) and its label stay, unused by any shipped
+    panel. Why the default: the page's tab machinery (switching, Back, leave protection while a
+    draft is open) is tested through a second tab — the screen's own suite
+    (`venue-settings-screen.test.ts`, nine cases, two of them `it.each`, mount panels on `kitchen`), its accessibility case
+    ("renders accessibly with two tabs"), `dashboard-app.settings-panels.test.ts` (test panels on
+    `kitchen` through `vi.mock`, `:36-60`) and twelve cases of
+    `dashboard-app.venue-settings-unsaved.test.ts` (`grep -n 'select(app, "kitchen")'`). Keeping the
+    key lets them all keep their checks, with test panels in place of the real one (Task 62a).
+    Removing it leaves Venue settings with one possible tab, and those cases lose their subject: a
+    rewrite or deletion of about 25 cases across those four files, which the 2026-10-05 rule makes
+    the owner's call. If the
+    owner says remove it, a follow-up deletes the key, its label and those cases, and decides whether
+    a one-tab page draws a tab strip at all.
+
+11. **Hand-kept lists and pins.**
+    - `apps/server/src/canvas-retirement-upgrade.test.ts`: the predecessor list (`:393-398`) gains
+      `"_station_changes_after_sending"` (Task 53); the no-holder case's retained rows (`:522-526`)
+      gain `delete retained.service_settings;` beside the PR 5 table deletes (Task 64b). Measured.
+    - `apps/server/src/station-order-migration.test.ts`: a `changes` journal lookup beside `bump`
+      (`:44-47`) and `|| when === changes.when` in the last step (`:243-246`) (Task 53). Measured.
+    - venue-service `kitchen-allergy.upgrade.test.ts`: its table list leaves out tables a later
+      migration drops (`const laterTableDrops = ["service_settings"]`, filtered where `tables` is
+      built, `:189-194`), and its `laterColumnDrops` entry for
+      `waitron_change_service_settings_update` (`:247-250`) goes (Task 64b). Measured.
+    - `scripts/schema-constraints.test.ts:789`: `"service_settings_singleton_ck"` leaves the list of
+      declared checks (Task 64b). A retired table's entries leave this list by precedent: A757 slice
+      2 (`eb16d3805`, `"table_service_statuses_tenant_label_key"`), A182-2 (`28e74463d`,
+      `"canvases_tenant_name_key"`), A506-5 (`15de79d24`) and A503 part 1 (`96f20188c`) each removed
+      theirs (`git show <sha> -- scripts/schema-constraints.test.ts`). The guard's checks are
+      unchanged; it is the one `scripts/` edit, named here and in the PR description.
+    - `packages/venue-service/src/classification.ts:40` and `classification.test.ts:70-79`; the two
+      live-query lists (`live-queries.ts:97`, `:239`) and their pin (`live-queries.test.ts:59`);
+      `migrations.test.ts` (`:50`, `:302`, and the two `service_settings` cases `:1142-1161`);
+      `schema/service.test.ts:191-197`; `service.test.ts:75` (the seat's method list) — Tasks 62b,
+      63 and 64b.
+    - `kitchen-stations.test.ts`'s bare-insert case gains a check of the new default (added).
+    - Not changed: `scripts/migration-upgrade.test.ts` (no hand list names either; the walk passed
+      untouched), `scripts/write-path-tables.json`, `station-delete.test.ts`,
+      `management-api.station-disable.test.ts`, the golden huella test and
+      `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
+
+12. **Error codes.** None added or retired: `ticket.already_fired` (Decision 5),
+    `management.request_invalid` and `setup.request_invalid` with a `field`, all registered.
+
+13. **Overlaps.** Unmerged branches touching this PR's files
+    (`git diff --name-only $(git merge-base main <b>) <b>` over them, 2026-10-24):
+    `feat/a696-startup-zone-validation` (`management-api.ts`, `till-api.ts`, `working-order.ts`,
+    provisioning's `configuration-transfer.ts`), `feat/a739-payment-window` (`till-api.ts`,
+    `working-order.ts`, the till's `client.ts`, `till-table-order-screen.ts`, `till-app.ts`, core
+    migrations) and `feat/a798-9-clock-restart` (the till's `client.ts`). Read, not run: a696's
+    `till-api.ts` hunks near the tab-lines read (`@@ -3910`, `@@ -3918`) add an admission check to
+    another route; none of the hunk headers is a function this plan edits. Whichever lands second
+    rebases; a739 regenerates its migrations.
+
+### PR 8 review focus
+
+1. **A dish at a "While held" station with a split-off extra at a "Not allowed" station**: Recall
+   of the held dish is refused `ticket.already_fired` and nothing is written; with the extra's
+   station at "While held", Recall goes through (Task 57).
+2. **A waiting dish at a "While held" station**: the till offers no Recall, and the route refuses
+   it; the same dish held is offered and taken (Tasks 57, 59b).
+3. **A dish no station makes**, sent with every station at "Not allowed": Recall is offered and
+   taken (Decision 1; the inverted `draft-recall.test.ts:1110`).
+4. **PATCH `changesAfterSending: null` or `"Held"`**: 400 `management.request_invalid { field:
+   "changesAfterSending" }`, nothing written (Task 54).
+5. **A format-7 configuration file**: refused `setup.configuration_outdated` before any write; an
+   imported station row with `changes_after_sending: "bogus"` refused before any write (Tasks 55,
+   64a).
+6. **Venue settings for a manager with venue service**: Venue details only; the address
+   `/manage/venue-settings/view/kitchen` is replaced by `/view/venue-details` (Task 62b).
+
+### Task 53: storage — the station's column, one core migration
+
+**Files:**
+- Create: `packages/shared/src/changes-after-sending.ts` (Decision 2: the list, the type, the guard
+  and `allowsChangeAfterSending`), `src/changes-after-sending.test.ts`; modify
+  `packages/shared/src/index.ts` (after the `bump-mode.js` export, `:214`)
+- Modify: `packages/db/src/schema/kitchen-stations.ts` (import `:1`; after `:33`)
+- Create (generated): `packages/db/drizzle/NNNN_station_changes_after_sending.sql`, its snapshot and
+  journal entry, by `pnpm --filter @waitron/db db:generate --name station_changes_after_sending` —
+  never numbered or edited by hand; on a collision reset `packages/db/drizzle` to `main` and
+  regenerate
+- Modify (Decision 11): `apps/server/src/canvas-retirement-upgrade.test.ts:393-398`,
+  `apps/server/src/station-order-migration.test.ts` (`:44-47`, `:243-246`)
+- Test: `packages/db/src/schema/kitchen-stations.test.ts`
+
+- [ ] **Step 1: Write the failing tests.**
+  - `changes-after-sending.test.ts`: `CHANGES_AFTER_SENDING` `toEqual(["never", "held",
+    "held-or-waiting"])`; `isChangesAfterSending` true for each, false for `"Held"`, `""`, `null`,
+    `1`; `allowsChangeAfterSending` over all six pairs: `never` false/false, `held` true when not
+    fired and false when fired, `held-or-waiting` true/true (shared is mutation-tested).
+  - `kitchen-stations.test.ts`: the bare-insert case (renamed "…, is done one item at a time and
+    allows changes while held or waiting") also reads `changesAfterSending` `"held-or-waiting"`.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/shared exec vitest run src/changes-after-sending.test.ts` and
+  `pnpm --filter @waitron/db exec vitest run src/schema/kitchen-stations.test.ts` — FAIL: the module
+  and the column do not exist.
+- [ ] **Step 3: Implement and generate.** Read the SQL: exactly Decision 3's one `ALTER TABLE … ADD`
+  line; a `__new_` table is a stop.
+- [ ] **Step 4: The two upgrade suites** of Decision 11 (the predecessor-list entry and the
+  `changes` lookup).
+- [ ] **Step 5: Run** (free memory first) Step 2's commands; the guards
+  `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts scripts/journal-monotonic.test.ts scripts/module-graph-honesty.test.ts scripts/column-vocabulary.test.ts`
+  (expected: one step more than on `main`, the same tables holding rows — 347 and 230 if `main` has
+  not moved; read them with `AI_AGENT` and `CLAUDECODE` unset);
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`;
+  `pnpm --filter @waitron/db exec vitest run src/schema src/classification.test.ts`;
+  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts`;
+  `pnpm --filter @waitron/composition exec vitest run` — PASS, each `Tests` count read.
+- [ ] **Step 6:** typecheck `@waitron/shared`, `@waitron/db`, `@waitron/server`; prettier; commit
+  `git commit -s -m "Each station can store its own choice of changes after sending (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed:** none; `kitchen-stations.test.ts` gains a check; the two upgrade suites
+change setup only.
+
+### Task 54: a station's save writes its own choice
+
+**Files:**
+- Modify: `apps/server/src/kitchen.ts` (`Station` `:28-44`, `listStations` `:125-148`,
+  `updateStation`'s patch type `:177`), `apps/server/src/management-api.ts`
+  (`parseChangesAfterSending` beside `:372-375`; the PATCH body and patch types `:1628`, `:1646`,
+  set after `:1679`)
+- Test: `apps/server/src/kitchen.test.ts`, `apps/server/src/management-api.test.ts`
+
+- [ ] **Step 1: Write the failing tests.**
+  - `kitchen.test.ts`: `"a new station allows changes while held or waiting"` (`createStation({ name })`;
+    `listStations` answers `changesAfterSending: "held-or-waiting"`); `"updateStation writes a
+    station's changes after sending and leaves the others"` (Bar `never`, Grill unchanged).
+  - `management-api.test.ts`, beside PR 7's bump-mode case: `"PATCH saves a station's changes after
+    sending and refuses any other value"` — `"held"` saved and listed; `"Held"`, `null`, `1`, `true`,
+    `"while-held"` each 400 `management.request_invalid { field: "changesAfterSending" }`, the row
+    still `held` after each; `{ name: "Renamed", changesAfterSending: "bogus" }` leaves the name.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/server exec vitest run src/kitchen.test.ts src/management-api.test.ts -t "changes after sending|held or waiting"`.
+- [ ] **Step 3: Implement.** The two whole-shape pins of Decision 6 gain
+  `changesAfterSending: "held-or-waiting"`, every other value unchanged.
+- [ ] **Step 4: Run** Step 2's files without `-t`, plus
+  `pnpm --filter @waitron/server exec vitest run src/device-api.test.ts src/till-api.station-today.test.ts src/configuration-transfer.test.ts src/configuration-import.test.ts src/station-delete.test.ts src/management-api.station-disable.test.ts src/station-order-migration.test.ts src/canvas-retirement-upgrade.test.ts`
+  — PASS (Decision 6 measured these with the read; any further whole-shape pin found gains the key
+  only — record each).
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "A station's save writes its own choice of changes after sending (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed:** a key added to two whole-shape pins, existing values unchanged (A773 §7.1).
+
+### Task 55: configuration copies check an imported choice
+
+**Files:** `packages/db/src/configuration-transfer.ts:4-14`; Test:
+`packages/db/src/configuration-transfer.test.ts` (beside PR 7's bump-mode cases `:95-115`) and
+`apps/server/src/configuration-transfer.test.ts` (beside `"transfers each station's bump mode"`,
+`:2432`).
+
+- [ ] **Step 1: Write the failing tests.** db: `"refuses a station's changes after sending a save
+  would refuse %j"` (`"bogus"`, `"Held"`, `null`, `1`, each `setup.request_invalid { field:
+  "kitchen_stations.changes_after_sending" }`), `"accepts an absent one"`, `"accepts each value"`
+  (over the list). server: `"transfers each station's changes after sending"` (Grill `never`, Cold
+  `held`; the exported rows carry the column and the imported stations read the same) and
+  `"refuses an imported changes after sending outside the three values before writing anything"`.
+- [ ] **Step 2: Run and watch the refusal cases fail** (the transfer case may already pass).
+  `pnpm --filter @waitron/db exec vitest run src/configuration-transfer.test.ts` and
+  `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts -t "changes after sending"`.
+- [ ] **Step 3: Implement** the check in `validateCoreConfiguration`.
+- [ ] **Step 4: Run** Step 2's db command, `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/configuration-import.test.ts`,
+  `pnpm --filter @waitron/provisioning exec vitest run`,
+  `pnpm exec vitest run scripts/id-columns-are-references.test.ts` — PASS.
+- [ ] **Step 5:** typecheck `@waitron/db`, `@waitron/server`; prettier; commit
+  `git commit -s -m "A configuration import refuses an unknown choice of changes after sending (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed:** none.
+
+### Task 56: test venues set their stations' choice through one helper
+
+Setup only, mechanical: every server test that turns the venue switch on or off sets the stations
+instead, writing both while the venue switch still decides, so each commit stays green (PR 6 Task
+32's pattern).
+
+**Files:**
+- Create: `apps/server/src/testing/changes-after-sending.ts`:
+  `setChangesAfterSending(tx: Transaction, value: ChangesAfterSending, stationIds?: readonly string[]): Promise<void>`
+  — writes `value` to every `kitchen_stations` row (or only `stationIds`) and, while the venue
+  switch exists and `stationIds` is absent, writes the venue switch through `writeEditSentLines`
+  (`never` → false, `held-or-waiting` → true, `held` → leaves it). One comment line: "Writes the
+  venue's switch too until A756 PR 8 Task 63."
+- Modify: every server test calling the venue writer —
+  `git grep -l -E 'writeEditSentLines\(' -- 'apps/server/src/*.test.ts'` (18 files on `d7d428e52`:
+  the eleven `bill-editing.*.test.ts`, `order-groups.test.ts`, `party-allergy.moves.test.ts`,
+  `party-allergy.submit.test.ts`, `station-move.test.ts`, `tabs.test.ts`, `till-api.tables.test.ts`;
+  count with the command). `writeEditSentLines(tx, true)` becomes
+  `setChangesAfterSending(tx, "held-or-waiting")`, `false` becomes `"never"`; a saved-and-restored
+  value (`bill-editing.commands.test.ts:564-576`, `party-allergy.moves.test.ts:214`, `:255`) restores
+  `"held-or-waiting"` (every case starts there). Not here: `till-api.tables.test.ts:470-484`, whose
+  subject is the read's `editSentLines` (Task 60a), and `draft-recall.test.ts:1110`, which writes
+  the table directly (Task 57).
+
+- [ ] **Step 1:** Write the helper and make the edits. Where a case creates a station after the
+  helper call, call it again after (or pass the new station's id) — setup.
+- [ ] **Step 2: Run** (free memory first) every touched file in one
+  `pnpm --filter @waitron/server exec vitest run <files>` — PASS, each count read; then
+  `git grep -n 'writeEditSentLines(' -- 'apps/server/src/*.test.ts'` prints only
+  `till-api.tables.test.ts`.
+- [ ] **Step 3:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "Test venues set their stations' changes after sending through one helper (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed:** none.
+
+### Task 57: Recall and changes to a sent dish follow each part's own station
+
+**Files:**
+- Create: `apps/server/src/changes-after-sending.ts` (Decision 5's `refuseChangesAfterSending`)
+- Modify: `apps/server/src/draft-recall.ts` (`:233-234` → after `:235`),
+  `apps/server/src/working-order.ts` (`recallLines` `:2645-2705` and its comment `:2650-2654`;
+  `applyLineEdits` `:5446-5455` and its comment `:5413-5414`), `apps/server/src/errors.ts:834-841`
+  (comment: "…and, when a station's choice of changes after sending refuses it, a recall
+  (`recallToDraft`, `recallLines`) or an edit (`applyLineEdits`) of a dish with work there.")
+- Test: `apps/server/src/changes-after-sending.test.ts` (new), `draft-recall.test.ts`,
+  `tabs.test.ts`, `bill-editing.commands.test.ts`
+
+- [ ] **Step 1: Write and change the tests first.**
+  - `changes-after-sending.test.ts` (one `useVenueDb`): with no records nothing is read and nothing
+    refused; a held record passes at `held` and `held-or-waiting` and is refused at `never`; a fired
+    record passes only at `held-or-waiting`; two records at two stations, one refusing → refused
+    `ticket.already_fired { workingOrderId }`; a record at an inactive station is judged by that
+    station's column.
+  - `draft-recall.test.ts`: `"the venue setting refuses Recall even when a sent dish has no
+    preparation record"` (`:1110`) → `"a sent dish no station makes can be recalled whatever the
+    stations allow"` — every station `never` (helper), the record deleted as now; Recall answers
+    the draft and the source is reserved (Decision 1; the check is inverted, recorded as changed).
+    New: `"a held dish at a While held station is recalled; a waiting one is refused, changing
+    nothing"`; `"a dish at a Not allowed station is refused even while held, changing nothing"`;
+    `"a split-off extra's station can refuse its dish's Recall"` (dish at `held-or-waiting`, extra at
+    a second station set `never`; `frozen` before and after equal; then the extra's station set
+    `held-or-waiting` and Recall goes through) — modelled on `:678`'s extra.
+  - `tabs.test.ts` "with changes to sent items switched off" (`:1777-1850`): the describe becomes
+    "when a station does not allow changes after sending"; `"refuses to recall a line that was sent
+    to a station"` and `"…refuses an edit of a sent line, changing nothing"` (`:2078`) keep their
+    checks at a `never` station; `"still recalls a held line that was never sent"` (`:1797`) →
+    `"a While held station still lets a held line be recalled"` (station `held`; same check) plus
+    new `"a Not allowed station refuses a held line's recall, changing nothing"`; `"recalls a sent
+    line once the setting is back on"` → `"…once its station allows it again"`; `"still voids a sent
+    line"` and `"still changes a no-preparation line"` keep their checks with every station `never`.
+  - `bill-editing.commands.test.ts:560` `"Recall checks the other editor before the venue's
+    sent-edit restriction"` → `"…before the station's"` (its check unchanged; the save/restore of
+    `readEditSentLines` goes, the helper sets `never` and `held-or-waiting`).
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/server exec vitest run src/changes-after-sending.test.ts src/draft-recall.test.ts src/tabs.test.ts -t "station|no station|split-off"`.
+- [ ] **Step 3: Implement.** The three readers call `refuseChangesAfterSending`; none reads
+  `VENUE_SERVICE.readEditSentLines` any more.
+- [ ] **Step 4: Run** (free memory first) the files of Task 56 plus `draft-recall.test.ts` and the
+  new file in one `pnpm --filter @waitron/server exec vitest run <files>` — PASS;
+  `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/module-seams.test.ts`;
+  `git grep -n readEditSentLines -- apps/server/src ':!*.test.ts'` prints only `till-api.ts`
+  (Task 60a).
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "Recall and changes to a sent dish follow each part's own station (A756 PR 8)"`,
+  the body naming the inverted `draft-recall.test.ts:1110` and the held-line change of Decision 5;
+  update the ledger.
+
+**Assertions changed** (A773 §3.10, §7.4; Decisions 1 and 5): `draft-recall.test.ts:1110` inverted;
+`tabs.test.ts:1797` moved to a `held` station; renamed cases in `tabs.test.ts` and
+`bill-editing.commands.test.ts:560` with their checks kept.
+
+### Task 58: the tab-lines read gives each line its station's choice
+
+**Files:**
+- Modify: `apps/server/src/working-order.ts` (`TabLine` `:3866-3917` gains
+  `changesAfterSending: ChangesAfterSending | null`; `readTabLines` `:3920-4021`: left join
+  `kitchenStations` on `ticketItems.stationId`, select and map beside `stationId`)
+- Test: `apps/server/src/till-api.tables.test.ts`
+
+- [ ] **Step 1: Write the failing test.** `till-api.tables.test.ts`, beside `:470`: `"each tab line
+  carries its own station's changes after sending, and a line with no kitchen work carries none"` —
+  a fired dish at Grill (`held`), a held dish at Bar (`never`), a no-preparation line; the read
+  answers `held`, `never` and `null`; then Grill set to `held-or-waiting` and the next read answers
+  it.
+- [ ] **Step 2: Run and watch it fail.**
+  `pnpm --filter @waitron/server exec vitest run src/till-api.tables.test.ts -t "carries its own station"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** (free memory first) the 19 suites of Decision 7 —
+  `git grep -l -E 'readTabLines|/lines`|/lines"' -- 'apps/server/src/*.test.ts' | sed 's#apps/server/##' | xargs pnpm --filter @waitron/server exec vitest run`
+  — PASS.
+- [ ] **Step 5:** typecheck `@waitron/server`; prettier; commit
+  `git commit -s -m "Each tab line carries its own station's changes after sending (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed:** none; the case is new.
+
+### Task 59a: the till's tab lines carry the choice (type and fixtures)
+
+Setup only, mechanical.
+
+**Files:**
+- Modify: `apps/till/src/api/client.ts` (`TabLine` after `stationId` `:2271`:
+  `changesAfterSending: ChangesAfterSending | null;` from `@waitron/shared`, with the one-line
+  comment "Its own kitchen record's station's choice; null with no record.")
+- Modify (fixtures, setup): every typed `TabLine` literal `tsc` names — measured (Decision 7): 48
+  errors in 34 files, among them `till-table-order-screen.test.ts` (6), `basket.a11y.test.ts` (3),
+  `till-table-order-screen.a11y.test.ts` (3), the `till-table-order-screen.*` suites and helpers,
+  `src/state/*.test.ts`, `till-app-*.test.ts` and `test/bill-pay-app.ts`. Each gains
+  `changesAfterSending: "held-or-waiting"` where the line has a `state`, else `null`; a literal
+  spreading another inherits it.
+
+- [ ] **Step 1:** Add the field; run `pnpm --filter @waitron/till typecheck` and fix each literal it
+  names until it passes.
+- [ ] **Step 2: Run** (free memory first) the touched suites in one
+  `pnpm --filter @waitron/till exec vitest run <files>` — PASS, each count read.
+- [ ] **Step 3:** prettier; commit
+  `git commit -s -m "The till's tab lines carry their station's changes after sending (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed:** none.
+
+### Task 59b: the till offers Recall by each line's own station
+
+**Files:**
+- Modify: `apps/till/src/screens/till-table-order-screen.ts` (`editSentLines` property `:1162`
+  goes; `#canRecall` `:2068-2083` per Decision 7), `apps/till/src/till-app.ts` (state `:2905`,
+  `:10669`, the bindings `:17863`, `:17997` go), `apps/till/src/i18n/codes.ts:593-596` (Decision 5's
+  wording)
+- Test: `till-table-order-screen.sent-actions.test.ts`, `till-table-order-screen.test.ts`,
+  `till-table-order-screen.sent-reorder.test.ts`, `till-app-table-service.test.ts`,
+  `till-app-counter-move-station.test.ts`, `till-app.test.ts`
+
+- [ ] **Step 1: Change the tests first.**
+  - `sent-actions.test.ts`: the `it.each` around `:240-268` keeps its `"setting"` row as
+    `"station"`: the line's `changesAfterSending` set to `never` (instead of `el.editSentLines =
+    false`), same check (no `recall-lines` event); its fixture at `:76` drops `editSentLines`
+    (setup). New: `"offers Recall on a held line at a While held station and not on a waiting one"`;
+    `"offers no Recall when a split-off extra's station does not allow it"`; `"offers Recall on a
+    sent line no station makes"` (all its rows `null`).
+  - `till-table-order-screen.test.ts:2677` and `:3345`, `sent-reorder.test.ts:89`,
+    `till-app-counter-move-station.test.ts:312`, `till-app-table-service.test.ts:1546`, `:1584`,
+    `:2494`, `till-app.test.ts:23468`: each `editSentLines: false` becomes `changesAfterSending:
+    "never"` on the lines it serves (setup where the case's subject is not Recall; where it is, the
+    check is kept and listed).
+  - `till-app-table-service.test.ts:2653`: the Spanish refusal text follows Decision 5.
+- [ ] **Step 2: Run and watch the new cases fail.**
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.sent-actions.test.ts -t "Recall"`.
+- [ ] **Step 3: Implement.** `git grep -n -E '\.editSentLines|editSentLines =' -- apps/till/src ':!*.test.ts'`
+  prints nothing.
+- [ ] **Step 4: Run** (free memory first) the files above plus
+  `src/screens/till-table-order-screen.sent-actions.a11y.test.ts` in one
+  `pnpm --filter @waitron/till exec vitest run <files>` — PASS.
+- [ ] **Step 5:** typecheck `@waitron/till`; prettier; commit
+  `git commit -s -m "The till offers Recall by each line's own station (A756 PR 8)"`, then update the
+  ledger.
+
+**Assertions changed** (A773 §3.10, §7.4): the `"setting"` row of `sent-actions.test.ts`'s Recall
+`it.each` now driven by the line's station; the Spanish refusal text at
+`till-app-table-service.test.ts:2653`. The rest is setup.
+
+### Task 60a: the server stops reading the venue switch
+
+**Files:**
+- Modify: `apps/server/src/till-api.ts:3916` (the read answers `lines` and `revision` only),
+  `packages/module/src/module.ts:1366-1367` (the seat's `readEditSentLines` goes),
+  `packages/venue-service/src/service.ts:92`, `:237`
+- Test: `apps/server/src/till-api.tables.test.ts:470-484`, `packages/venue-service/src/service.test.ts:75`
+
+- [ ] **Step 1: Change the tests first.** `till-api.tables.test.ts:470` (the read's
+  `editSentLines` follows the venue switch) → `"the tab-lines read carries no venue switch"`:
+  `not.toHaveProperty("editSentLines")` (inverted; the per-line case of Task 58 replaces it).
+  `service.test.ts:75` loses `"readEditSentLines"` from the seat's method list.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/server exec vitest run src/till-api.tables.test.ts` and
+  `pnpm --filter @waitron/venue-service exec vitest run src/service.test.ts`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** Step 2's commands, `pnpm --filter @waitron/composition exec vitest run`,
+  `pnpm exec vitest run scripts/module-seams.test.ts scripts/errors-reachable.test.ts`;
+  `git grep -n -E 'readEditSentLines|editSentLines' -- apps/server/src packages/module ':!*.test.ts'`
+  prints nothing — PASS.
+- [ ] **Step 5:** typecheck `@waitron/module`, `@waitron/venue-service`, `@waitron/server`;
+  prettier; commit `git commit -s -m "The server stops reading the venue's switch for changes after sending (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed:** `till-api.tables.test.ts:470` inverted; the seat list loses a name (A773 §7.4).
+
+### Task 60b: the till's tab-lines type stops naming the venue switch (type and fixtures)
+
+Setup only, mechanical.
+
+**Files:** `apps/till/src/api/client.ts:2252-2260` (`TabLines.editSentLines` and its comment go);
+every till test and helper naming it —
+`git grep -l editSentLines -- apps/till` after Task 59b (on `d7d428e52` the list also held
+`till-app-adjustments` (17), `till-app-bill-payments` (8), `till-app-drafts` (12),
+`till-app-open-table` (20), `till-app-table-service` (31) and 14 more files with 1–5 each). Each
+`editSentLines: true` in a `getTabLines` answer goes; `client.test.ts:2329-2337` keeps its check of
+the read with `{ lines, revision: 3 }`.
+
+- [ ] **Step 1:** Make the edits.
+- [ ] **Step 2: Run** (free memory first) every touched suite in one
+  `pnpm --filter @waitron/till exec vitest run <files>` — PASS, each count read;
+  `git grep -n editSentLines -- apps/till` prints nothing.
+- [ ] **Step 3:** typecheck `@waitron/till`; prettier; commit
+  `git commit -s -m "The till's tab-lines read no longer names the venue switch (A756 PR 8)"`, then
+  update the ledger.
+
+**Assertions changed:** none (`client.test.ts:2337` pins the answer it is given, now without the
+key — setup).
+
+### Task 61: the station editor sets a station's changes after sending
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/station-editor.ts` (imports `:22-29`;
+  `StationEditorStation` `:34-47`, `StationEditorSave` `:50-64`, `Draft` `:72-86`, `equal` `:110-120`,
+  the defaults `:305` and the draft from the station `:362`, `changed` `:434`, `sendable` `:461`, the
+  field after `:698`)
+- Modify: `routing-client.ts` (`PrepStation` `:42`; `updateStation` `:130`),
+  `prep-stations-screen.ts` (`:760` passes the field), `strings.ts` (Decision 9's four keys, EN and ES)
+- Test: `station-editor.test.ts`, `station-editor.a11y.test.ts`, `prep-stations-screen.test.ts`
+- Modify (fixtures, setup): every station fixture —
+  `git grep -l -E 'bumpMode: "(line|ticket)"' -- packages/venue-service/src/dashboard packages/venue-service/test`
+  plus `station-editor.a11y.test.ts`: each gains `changesAfterSending: "held-or-waiting"`.
+
+- [ ] **Step 1: Write the failing tests** in `station-editor.test.ts`, beside PR 7's bump-mode cases:
+  `"opens on the station's changes after sending, last before the buttons"` (a
+  `wt-combobox[name=changesAfterSending]` labelled "Changes after sending" with
+  `[["never","Not allowed"],["held","While held"],["held-or-waiting","While held or waiting"]]`,
+  value from the station, the held-work note its previous sibling); `"sends only a changed choice,
+  and nothing for a choice put back"`; `"reads changes after sending in Spanish"` («Cambios tras el
+  envío», «No permitidos», «Solo en espera», «En espera o sin empezar»). `station-editor.a11y.test.ts`'s
+  fixture gains `changesAfterSending: "held"`. `prep-stations-screen.test.ts`: PR 7's case that hands
+  the station's choices to the editor gains this one (opens on the station's value; choosing Not
+  allowed sends `{ changesAfterSending: "never" }`).
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/station-editor.test.ts src/dashboard/prep-stations-screen.test.ts`.
+- [ ] **Step 3: Implement**; sweep the fixtures.
+- [ ] **Step 4: Run** (free memory first) `pnpm --filter @waitron/venue-service exec vitest run src/dashboard`
+  — PASS; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts`.
+- [ ] **Step 5:** typecheck `@waitron/venue-service`; prettier; commit
+  `git commit -s -m "The station editor sets a station's changes after sending (A756 PR 8)"`, then
+  update the ledger.
+
+**Assertions changed:** the `prep-stations-screen.test.ts` case gains a key and a send (A773 §7.1);
+fixtures are setup.
+
+### Task 62a: Venue settings' tab checks use a test panel on Kitchen
+
+Setup only (PR 7 Task 48a's pattern): the suites that switch Venue settings' tabs through the real
+app get a test module's panel on `kitchen` while venue service's panel still exists, so they stay
+green before and after Task 62b.
+
+**Files:** `apps/dashboard/src/dashboard-app.venue-settings-unsaved.test.ts`
+- [ ] **Step 1:** Add a `vi.mock("@waitron/dashboard-modules", …)` that keeps the real
+  `DASHBOARD_MODULES` and appends a `kitchen-test` module whose one panel (`tab: "kitchen"`,
+  `requiresPermission: "venue.view"`) renders `<p data-test="kitchen-test">` (the helper shape of
+  `dashboard-app.settings-panels.test.ts:16-28`); the session's `modules` gain `"kitchen-test"` in
+  the default and every `getMe` override. The mount helper's venue-service branch (`:134-137`) waits
+  for `[data-test=kitchen-test]` instead of `[data-test=kitchen-changes]`, and the
+  `/management-api/venue-service/settings` answer (`:40`) goes once nothing asks for it. Every case
+  keeps its name and checks.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts`
+  (free memory first) — PASS, the count equal to `main`'s.
+- [ ] **Step 3:** prettier; commit
+  `git commit -s -m "Venue settings' tab checks use a test panel on Kitchen (A756 PR 8)"`, then
+  update the ledger.
+
+**Assertions changed:** none (setup: which panel the Kitchen tab holds).
+
+### Task 62b: venue service's Kitchen panel goes
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/index.ts` (`settingsPanels` `:140-157` and its
+  import), `client.ts` (`loadSettings`, `loadSettingsReadOnly`, `saveSettings` `:288-295`, `:390`;
+  `VenueServiceSettings`, `VenueServiceSettingsView` and the model's `settings` `:103`, `:112-115`),
+  `live-queries.ts:97` (the `settings` query), `strings.ts` (`venue.kitchen_changes`,
+  `venue.edit_sent_lines`, `venue.edit_sent_lines_hint`, EN `:524-527`, ES `:1418-1421`)
+- Delete: `service-settings-panel.ts`, `service-settings-panel.test.ts`,
+  `service-settings-panel.a11y.test.ts`, `service-settings-panel.exempt.test.ts`
+- Test: `packages/venue-service/src/dashboard/index.test.ts:22-35`, `client.test.ts:183-241`,
+  `apps/dashboard/src/dashboard-app.test.ts` (`:1744-1766`, `:1774-1790`, `:1825-1840`, `:1887-1908`,
+  `:2969-2990`)
+- Modify (fixtures, setup): the model fixtures that carry `settings: { editSentLines: true }` —
+  `git grep -l -E 'settings: \{ editSentLines' -- packages/venue-service apps/dashboard` (the
+  venue-service dashboard suites, `src/testing/department-zones-fixture.ts:110`,
+  `test/service-delete-test-helpers.ts:36`, `apps/dashboard/src/testing/department-receipt-app-fixture.ts:44`)
+  — the key goes.
+
+- [ ] **Step 1: Change the tests first.**
+  - `index.test.ts:22` `"adds a kitchen panel for venue service managers"` → `"adds no Venue
+    settings panel"`: `settingsPanels` is absent or empty.
+  - `client.test.ts:183-241`: the cases of the three settings methods are deleted with them.
+  - `dashboard-app.test.ts`: `:1744` (tabs `["venue-details", "kitchen"]`) → `["venue-details"]`
+    and renamed "…under one h1, with Venue details its only tab"; `:1774` `"Kitchen holds venue
+    service's panel alone"` → `"venue service adds no panel to Venue settings, and the Kitchen
+    address opens Venue details"` (the session gains `venue.view`; `location.pathname` is
+    `/manage/venue-settings/view/venue-details`; no `dashboard-venue-service-settings`);
+    `:1825` and `:1887` (the retired Tables and Adjustment reasons addresses): the session gains
+    `venue.view` and the expected address becomes `/view/venue-details` (the first visible tab is
+    now Venue details); `:2969` ("includes the venue-service settings panel for a supervisor as
+    read-only"): deleted —
+    its subject is the panel.
+- [ ] **Step 2: Run and watch the changed cases fail.**
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "Venue settings|Kitchen|address|supervisor"`
+  and `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/index.test.ts`.
+- [ ] **Step 3: Implement**; delete the four files; sweep the fixtures.
+- [ ] **Step 4: Run** (browser runs; free memory first)
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard`,
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.settings-panels.test.ts src/dashboard-app.venue-settings-unsaved.test.ts src/dashboard-app.a11y.test.ts src/screens/venue-settings-screen.test.ts`
+  — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/style-token-names.test.ts scripts/guide-links.test.ts`;
+  `git grep -n -E 'dashboard-venue-service-settings|kitchen-changes|venue\.edit_sent_lines|loadSettings|saveSettings\(' -- apps/dashboard packages/venue-service`
+  prints nothing.
+- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
+  `git commit -s -m "Venue service's Kitchen panel goes; Venue settings shows Venue details alone (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed** (A756 mock-up 01, "The tab goes"; A773 §7.4): `index.test.ts:22` inverted;
+the deleted panel suites and client cases; `dashboard-app.test.ts` `:1744`, `:1774` (inverted),
+`:1825` and `:1887` (expected address), `:2969` (deleted). Fixtures losing `settings` are setup.
+
+### Task 63: venue service stops storing and serving the venue switch
+
+**Files:**
+- Modify: `packages/venue-service/src/routes.ts` (the model's `settings` `:751`; `GET` and `PUT
+  /management-api/venue-service/settings` `:762-783`; the import `:38`),
+  `src/kitchen-notices.ts:316-330` (`readEditSentLines`, `writeEditSentLines` go),
+  `src/provisioning.ts:12`, `:182-186` (no `service_settings` insert; the report becomes "default
+  department and counter zone ready"), `src/dashboard/live-queries.ts:239` (the operations query's
+  `service_settings`), `apps/server/src/testing/changes-after-sending.ts` (stops writing the venue)
+- Test: `packages/venue-service/src/routes.test.ts` (`:2451-2519`; the clearing-switch case
+  `:2554-2575`), `kitchen-notices.test.ts:1482-1496`, `provisioning.test.ts:344-361` and `:260`,
+  `packages/provisioning/src/venue-apply.test.ts:257`, `hours.live.test.ts:132`,
+  `dashboard/live-queries.test.ts:59`
+
+- [ ] **Step 1: Change the tests first.**
+  - `routes.test.ts`: the describe "the venue's service settings" (`:2451`, four cases) becomes one
+    case, `"no longer serves the venue's switch for changes after sending"`: `GET` and `PUT
+    /management-api/venue-service/settings` answer 404 for a manager, and the operations model has no
+    `settings` key (PR 6's precedent, `:2521-2550`). The clearing-switch case (`:2554`) stops
+    reading `GET …/settings`' JSON (it is gone) and keeps its model and PUT checks.
+  - `kitchen-notices.test.ts:1482` (the describe "the edit-sent-lines setting", two cases): deleted
+    with the two functions.
+  - `provisioning.test.ts:344` `"seeds the service settings row …"` → `"writes no service settings
+    row"` — after the seed, `select count(*) from service_settings` is 0 (the table still exists
+    until Task 64b, which deletes this case's last check with it); `:260` and `venue-apply.test.ts:257`
+    expect the new report text.
+  - `hours.live.test.ts:132`: the unrelated write becomes another venue-service write Calendar
+    does not follow (for example a `kitchen_notices` insert); its checks stay (setup).
+  - `live-queries.test.ts:59`: `service_settings` leaves the operations list.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/routes.test.ts src/provisioning.test.ts src/dashboard/live-queries.test.ts -t "switch|service settings|operations"`.
+- [ ] **Step 3: Implement.** The helper's venue write and its comment go.
+- [ ] **Step 4: Run** (free memory first) `pnpm --filter @waitron/venue-service exec vitest run`,
+  `pnpm --filter @waitron/provisioning exec vitest run src/venue-apply.test.ts`, and the server
+  files of Task 56 — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/module-seams.test.ts scripts/errors-reachable.test.ts`;
+  `git grep -n -E 'EditSentLines|editSentLines|edit_sent_lines' -- apps packages ':!**/drizzle/**' ':!apps/server/src/testing/fixtures/*.json'`
+  prints only `packages/venue-service/src/schema/settings.ts` and `migrations.test.ts` (both Task
+  64b's).
+- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/provisioning`, `@waitron/server`;
+  prettier; commit `git commit -s -m "Venue service stops storing the venue's switch for changes after sending (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed** (A773 §7.4): the settings-route cases replaced by one "no longer served"
+case; the two read/write cases deleted; the provisioning case inverted and the report text in two
+places; the operations list loses an entry. `hours.live.test.ts` is setup.
+
+### Task 64a: configuration copies stop carrying `service_settings`, at format 8
+
+**Files:**
+- Modify: `packages/venue-service/src/configuration-transfer.ts:714`;
+  `packages/provisioning/src/configuration-transfer.ts` (`:136`, `:169` → 8; `:480` → `> 8`; `:483` →
+  `!== 8`)
+- Test: `apps/server/src/configuration-import.test.ts` (`:49` → 8; the `it.each` `:96-171` gains
+  `["A756 pre-station-changes export with the venue's switch", { version: 7, tables: { ...bundle.tables, service_settings: [{ id: 1, edit_sent_lines: 1 }] } }]`
+  and `["A756 pre-station-changes export without it", { version: 7 }]`, both
+  `setup.configuration_outdated`; `"future version"` → `{ version: 9 }`),
+  `apps/server/src/configuration-transfer.test.ts` (`:401`, `:4934` → 8),
+  `packages/provisioning/test/configuration-bundle.ts:5` → 8,
+  `packages/provisioning/src/configuration-transfer.boundaries.test.ts:51` → `{ version: 9 }`
+
+- [ ] **Step 1: Change the tests first** as listed, plus in `configuration-transfer.test.ts`
+  `"exports no service settings"` — the bundle's `tables` has no `service_settings` key.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/server exec vitest run src/configuration-import.test.ts src/configuration-transfer.test.ts`
+  and `pnpm --filter @waitron/provisioning exec vitest run`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** Step 2's commands — PASS; then
+  `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-command-import.test.ts`,
+  `pnpm exec vitest run scripts/id-columns-are-references.test.ts scripts/module-seams.test.ts`.
+- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/provisioning`, `@waitron/server`;
+  prettier; commit `git commit -s -m "Configuration copies stop carrying the venue's service settings and move to format 8 (A756 PR 8)"`,
+  the body saying a format-7 copy is now refused as outdated and why (Decision 8); update the ledger.
+
+**Assertions changed** (the format rule of `conventions-data.md:1605`): the format pins 7 → 8 and
+the future-version rows 8 → 9; two new outdated rows.
+
+### Task 64b: drop `service_settings`; one venue-service migration
+
+**Files:**
+- Delete: `packages/venue-service/src/schema/settings.ts`; modify `src/schema/index.ts:2`,
+  `src/classification.ts:40`
+- Create (generated): `packages/venue-service/drizzle/NNNN_retire_service_settings.sql`, snapshot and
+  journal, by `pnpm --filter @waitron/venue-service db:generate --name retire_service_settings` —
+  exactly ``DROP TABLE `service_settings`;`` (Decision 3); anything else is a stop
+- Modify (Decision 11): `scripts/schema-constraints.test.ts:789`,
+  `apps/server/src/canvas-retirement-upgrade.test.ts` (`:522-526`),
+  `packages/venue-service/src/kitchen-allergy.upgrade.test.ts` (`:189-194`, `:247-250`)
+- Test: `packages/venue-service/src/migrations.test.ts` (`:50`, `:302`, `:1142-1161`),
+  `classification.test.ts:70-79`, `schema/service.test.ts:21`, `:191-197`,
+  `backup-verification.test.ts:196`, `provisioning.test.ts` (Task 63's case),
+  `apps/server/src/draft-recall.test.ts` (`serviceSettings` import `:29`, if Task 57 left it)
+
+- [ ] **Step 1: Change the tests first.**
+  - `migrations.test.ts`: `service_settings` leaves the table list (`:50`) and the keys map
+    (`:302`); the describe at `:1141` becomes "the kitchen notices table refuses what its rules
+    forbid"; `"holds at most one settings row, and it is row 1"` is deleted (its table is gone);
+    `"the venue keeps no ticket grouping, held printing or MOVED slips of its own"` →
+    `"the venue keeps no service settings of its own"`: `service_settings` is not in
+    `sqlite_master` (a stricter form of the same subject).
+  - `classification.test.ts:70` → `"classifies the kitchen notices as replicated state"`, only
+    `["kitchen_notices", "state"]`.
+  - `schema/service.test.ts`: the `service_settings` entry and its import go.
+  - `backup-verification.test.ts:196`: the invented row goes into another venue-service table whose
+    insert needs no parent row the restored copy lacks (in the probe a `holiday_geographies` row
+    with a made-up location failed its foreign key); the case's two checks stay (setup).
+  - `provisioning.test.ts`: Task 63's `"writes no service settings row"` → `"leaves no service
+    settings table"` (the table is not in `sqlite_master` after migrate and seed).
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run src/migrations.test.ts src/classification.test.ts src/provisioning.test.ts`.
+- [ ] **Step 3: Implement and generate**; make Decision 11's three upgrade-suite edits and the list
+  entry.
+- [ ] **Step 4: Run** (free memory first) Decision 3's whole guard command (fourteen files) and
+  `scripts/migration-upgrade.test.ts` (expected: one more step than after Task 53 and one table
+  fewer — 348 and 229 if `main` has not moved), `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`,
+  `pnpm --filter @waitron/composition exec vitest run`, `pnpm --filter @waitron/migrations exec vitest run`,
+  `pnpm --filter @waitron/venue-service exec vitest run`,
+  `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts src/backup-verification-compatibility.test.ts src/printing-retirement-upgrade.test.ts src/recovery-backup-preview.older.test.ts src/draft-recall.test.ts`
+  — PASS, each count read; `git grep -n -E 'service_settings|serviceSettings' -- apps packages scripts ':!**/drizzle/**'`
+  prints only the format-1 JSON fixture, the two upgrade suites' entries, `migrations.test.ts`'s
+  absence check and `provisioning.test.ts`'s.
+- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/server`; prettier; commit
+  `git commit -s -m "Drop the venue's service settings table (A756 PR 8)"`, the body saying why
+  `scripts/schema-constraints.test.ts` loses one entry (Decision 11's precedent); update the ledger.
+
+**Assertions changed** (A773 §7.4; Decision 3): the `migrations.test.ts` cases (one deleted, one
+narrowed to the table's absence), `classification.test.ts:70`, `schema/service.test.ts`'s entry,
+the schema-constraints list entry; the upgrade suites and `backup-verification.test.ts` are setup.
+
+### Task 65: a look at the station editor, the table screen and Venue settings in real Chromium
+
+**Files:** throwaway tests in `packages/venue-service/src/dashboard/`, `apps/till/src/screens/` and
+`apps/dashboard/src/` (deleted, never committed); pictures and notes outside the worktree, in
+`/Users/clintongormley/waitron-campaign-c/a756-8-shots/` and
+`/Users/clintongormley/waitron-campaign-c/a756-8-look-report.md`, as PR 7's Task 51 did.
+
+- [ ] **Step 1:** Mount `prep-stations-screen` with `prep-stations-screen.test.ts`'s `api()` fixture
+  (its `bar` station at `held`). For EN and ES (`setLocale("es")`), light and dark, at
+  `page.viewport(1280, 900)` and `page.viewport(390, 900)`: Edit on `bar` as opened (Save quiet),
+  scrolled so Changes after sending shows under the held-work note; its list opened. Then mount the
+  till's `till-table-order-screen` as `sent-actions.test.ts` does, a held dish at a `held` station
+  and a waiting dish at a `held` station, each line window's More menu opened, light and dark, at
+  1280 and 390. Then `dashboard-app` on Venue settings with venue service and `venue.view`, both
+  widths, light and dark. Read and record `window.innerWidth` inside each test.
+- [ ] **Step 2:** Look at every picture: the new combobox lines up with the fields above it at both
+  widths, its label and longest choice («En espera o sin empezar», "While held or waiting") whole;
+  no sideways scroll (`document.documentElement.scrollWidth` equals the viewport width); Recall
+  shows in the held dish's More menu and not in the waiting one's; Venue settings shows Venue
+  details with no gap where Kitchen was; dark is readable. A defect found is fixed with a failing
+  test first, in the component's own test file, and committed.
+- [ ] **Step 3:** Delete the throwaway tests; `git status` shows them gone. Update the ledger with
+  the look report's path and any defect found.
+
+### Task 66: guides, design notes, audits and the backlog
+
+**Files:** `apps/server/src/guide/en/modifiers.md:107-112`, `:155-159`,
+`apps/server/src/guide/es/modifiers.md:119-124`, `:168-173`,
+`apps/server/src/guide/en/kitchen-service.md` and `es/kitchen-service.md` (the `{#service-lifetime}`
+paragraph that names each station's settings), `docs/developers/design-system.md` (`:2906`,
+`:4650-4655`, `:5198-5200`), `docs/developers/conventions-data.md:1622-1628`,
+`docs/backlog/kitchen.md` (`:148-151`, Open points, `:386-390`), `docs/backlog/dashboard.md:794-796`,
+`docs/backlog.md` (A756 `:1558-1560`),
+`docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md` (`kitchen_stations` row; `:172`),
+`docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md` (after `:263`),
+`docs/operations/a760-migration-squash-inventory.md` (`:328`; after `:384` and PR 7's line)
+
+- [ ] **Step 1: The guides.** EN `modifiers.md:108-109`: "Recall is available only on an unpaid bill,
+  while the dish's prep station allows changes after sending and the kitchen has not started the
+  dish." `:157-158`: "…if the kitchen has started such a line, or if its prep station's **Changes
+  after sending** does not allow it." ES `:120-122`: "Puedes retirarlo solo en una cuenta sin pagar,
+  mientras la estación del plato permita cambios tras el envío y la cocina no lo haya empezado."
+  `:171-172`: "…o si **Cambios tras el envío** de su estación no lo permite." `kitchen-service.md`
+  EN, after the sentence about held groups: "Each prep station also sets whether a dish already
+  sent to it can be recalled or changed, under **Changes after sending**: **Not allowed**, **While
+  held**, or **While held or waiting**. A dish the kitchen has started is never recalled. A dish no
+  station makes can always be recalled." ES: "Cada estación de preparación fija también si un plato
+  ya enviado a ella se puede retirar o cambiar, en **Cambios tras el envío**: **No permitidos**,
+  **Solo en espera** o **En espera o sin empezar**. Un plato que la cocina ha empezado nunca se
+  retira. Un plato que no prepara ninguna estación siempre se puede retirar." No heading changes.
+  Run `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`.
+- [ ] **Step 2: design-system.md.** `:2906` adds "and its changes after sending"; the editor
+  sentence (`:4650-4655`) ends "…"Print held groups in advance" with its note, then "Changes after
+  sending" (Not allowed, While held, or While held or waiting)."; `:5198-5200` ("Kitchen holds venue
+  service's panel alone, …") becomes "Venue settings has no Kitchen tab since A756 PR 8
+  (2026-10-24): its address opens Venue details." Every hit of
+  `git grep -n -i -E 'kitchen tab|changes after sending|edit_sent' docs/developers/design-system.md`
+  is updated.
+- [ ] **Step 3: conventions-data.md:1622-1628:** add "and A756 PR 8 (format 8, 2026-10-24, when it
+  dropped `service_settings`)"; the pinned format becomes 8.
+- [ ] **Step 4: Audits and inventories, dated pointers only.** Personal-data audit, `kitchen_stations`
+  row: "**2026-10-24 (A756 PR 8):** `changes_after_sending` added."; `:172` (`service_settings`):
+  "(table dropped 2026-10-24, A756 PR 8)" as PR 5's rows say it. Retention inventory, after `:263`:
+  "**2026-10-24:** `service_settings` was dropped (A756 PR 8, venue-service migration NNNN); it had
+  no keys in or out." A760 inventory: `:328` gains "(dropped 2026-10-24, A756 PR 8)"; after the PR 7
+  line: "**2026-10-24 (A756 PR 8):** core NNNN adds `kitchen_stations.changes_after_sending`;
+  venue-service NNNN drops `service_settings`. A squash writes the end state." (NNNN are Tasks 53
+  and 64b's generated numbers.)
+- [ ] **Step 5: The backlog.** `docs/backlog/kitchen.md`'s A756 detail: delete the PR 8 and
+  Kitchen-tab bullets (`:148-151`); add open points: "From PR 8 (owner question): the `kitchen` key
+  stays in `VENUE_SETTINGS_TABS` with no panel, so the page's tab checks keep a second tab; say if it
+  should go (about 25 cases then lose their subject) — plan PR 8 Decision 10." "From PR 8, owner
+  FYI: the field reads "Changes after sending" with "Not allowed", "While held" and "While held or
+  waiting"; picture 10's "(printer only)" was dropped because the middle value suits a printer-only
+  station too. The Spanish is «Cambios tras el envío», «No permitidos», «Solo en espera», «En espera
+  o sin empezar»; say if other words read better." "From PR 8, owner FYI: a dish no station makes
+  can always be recalled (A773-1 open point 4's answer A said so); a "Not allowed" station also
+  refuses changes to a held dish, which the venue switch allowed through line edits." Point 3's
+  receipt sentence (`:388-390`, "check that against the code when PR 8 is picked up") gains
+  "**2026-10-24 (A756 PR 8):** checked — a dish's own work is at one station, its split-off extras
+  can be at others, and every part must allow the change (plan PR 8 Decision 1)." If every A756
+  open point is then a question for the owner or a later item, move them to their own short entries
+  in the same area and delete A756 from `docs/backlog.md`; otherwise its line becomes "PRs 1–7 landed
+  (…); PR 8 is in review. Open points are in the detail." `docs/backlog/dashboard.md:794-796`: "(…;
+  2026-10-24: the Kitchen tab went with A756 PR 8.)"
+- [ ] **Step 6: Missed claims.**
+  `git grep -n -i -E 'edit_sent_lines|editSentLines|changes (to items already sent|after sending)|kitchen tab|service_settings|cambios tras el envío|ya enviados a cocina' -- docs/backlog.md docs/backlog docs/developers docs/operations apps/server/src/guide README.md 'packages/*/README.md'`
+  — each hit is rewritten here, is a dated pointer of Step 4 or 5, or is history in a dated plan or
+  spec (left alone). `pnpm exec prettier --file-info <file>` on each changed doc, and
+  `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
+- [ ] **Step 7: The PR description and the ledger** both name:
+  - **every changed test check**, from each task's "Assertions changed", and the setup moves of Tasks
+    56, 59a, 60b and 62a;
+  - **the one `scripts/` edit** (Decision 11) and its precedent;
+  - **the default and reset decision**: every station starts at "While held or waiting", the venue
+    switch is dropped, not copied, `service_settings` is dropped, and no venue reset is needed
+    (Decisions 3 and 4);
+  - **the rule** (Decisions 1 and 5): per part of the dish, all-or-nothing; no station means allowed;
+    "Not allowed" now refuses held dishes in all three paths;
+  - **the configuration format 8** and why (Decision 8);
+  - **the Kitchen tab** gone from view, its key kept as an owner question (Decision 10);
+  - **the wording** and the Spanish, as an owner FYI (Decision 9).
+- [ ] **Step 8: Commit** `git commit -s -m "Guides and backlog: each station sets its changes after sending (A756 PR 8)"`,
+  update the ledger to `Status: done` for PR 8's build, then `/finish-branch` with this plan's path
+  as its note.
+
 ---
 
 ## Parts that wait
@@ -4128,10 +5198,7 @@ below against `main` when each is planned.
 
 **PR 7 — Done on the screen on each station:** planned 2026-10-24, after PR 6 landed — see [PR 7](#pr-7--done-on-the-screen-on-each-station) above.
 
-**PR 8 — Changes after sending, three values, on each station. Waits for A773-1** (its Recall reads
-`edit_sent_lines` as the interim, A773 §3.10) and is listed as "A756/A773-2" in A773-1's plan
-coverage table. Check at pick-up that a dish is made at exactly one station (A9), so one station
-answers whether it may be recalled.
+**PR 8 — Changes after sending, three values, on each station:** planned 2026-10-24, after PR 7 landed — see [PR 8](#pr-8--changes-after-sending-three-values-on-each-station) above. The A9 check (whether one station answers for a dish) is its Decision 1.
 
 **A773-2 owns** "Waits for the pass" (the station field, the stations-table column, the missing-pass
 warning) and removing `locations.fire_control` with the Kitchen tab's Fire control buttons.
@@ -4245,3 +5312,28 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
   `management-api.ts` names the mode only as `getBumpMode`/`setBumpMode`/`BumpMode`, in its
   venue routes); `management-api.test.ts:2847` is renamed in Task 49a and listed as changed; Task
   46b's line numbers say where each case starts.
+- PR 8 (2026-10-24): every file:line in its section was re-read on `d7d428e52`. Run, not reasoned
+  about, in scratch copies: both generated migrations' SQL, the upgrade walk with a control on the
+  unchanged tree (348/229 against 346/230), the root schema guards (three failures, each traced to a
+  named edit, then those files green), `inmutabilidad`, composition, migrations, db schema and every
+  upgrade-style suite, the fixes to `canvas-retirement-upgrade`, `station-order-migration` and
+  `kitchen-allergy.upgrade`, the station-answer suites with the new read (two whole-shape pins), the
+  19 tab-line suites with the new per-line key (all green), the till's type change (48 fixture
+  errors), and the two A9 receipts (`kitchen-allergy.reads` "routed extra", `order-state-counts`
+  "extra is queued at another station"). Read, not run: the three gated paths' order of checks and
+  their all-or-nothing writes (Tasks 57's failing cases run them), the parked branches' hunk
+  headers, and that the till offers Recall only from `#canRecall` (`git grep` of the till). Every
+  file that names the venue switch
+  (`git grep -l -E 'edit_sent_lines|editSentLines|EditSentLines' -- apps packages ':!**/drizzle/**'`,
+  88 files on `d7d428e52`) is assigned: the server readers and their suites to Tasks 56, 57 and 60a;
+  the till's 27 files to Tasks 59b and 60b; venue-service's dashboard and its fixtures to Tasks 62b;
+  its server side and suites to Task 63 and 64b; and one left with a stated reason (the format-1 JSON
+  fixture, Decision 8). Tasks 53–66 (59, 60, 62 and 64 each split in two) each stay one package or
+  one layer, ordered so each commit stays green and each consumer moves before its source: the
+  server sends the per-line value (58) before the till's type requires it (59a); the till stops
+  reading the venue value (59b) before the server stops sending it (60a); tests set stations
+  through a helper that writes both (56) before the readers move (57) and before the venue writer
+  goes (63); the leave-check suite gets a test panel (62a) before the real one goes (62b); the
+  dashboard stops calling the settings routes (62b) before they go (63); and the table leaves the
+  copy (64a) before it is dropped (64b). Tasks 57 and 62b are the largest; their implementers follow
+  the handover rule if they run long.
