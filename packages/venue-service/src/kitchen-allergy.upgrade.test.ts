@@ -250,7 +250,17 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   const laterColumnAdds = new Map([
     [
       "waitron_change_departments_update",
-      ' or new."release_reminder_minutes" is not old."release_reminder_minutes"',
+      [
+        ' or new."release_reminder_minutes" is not old."release_reminder_minutes"',
+        ' or new."late_send_needs_manager" is not old."late_send_needs_manager"',
+      ],
+    ],
+    [
+      "waitron_change_working_line_contexts_update",
+      [
+        ' or new."late_period_name" is not old."late_period_name"',
+        ' or new."late_confirmed_by" is not old."late_confirmed_by"',
+      ],
     ],
   ]);
   expect(
@@ -264,8 +274,12 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
       .map(({ name, sql: text }) => {
         const added = laterColumnAdds.get(name);
         if (added === undefined) return { name, sql: text };
-        expect(text).toContain(added);
-        return { name, sql: text.replace(added, "") };
+        let stripped = text;
+        for (const clause of added) {
+          expect(stripped).toContain(clause);
+          stripped = stripped.replace(clause, "");
+        }
+        return { name, sql: stripped };
       }),
   ).toEqual(
     triggersBefore
