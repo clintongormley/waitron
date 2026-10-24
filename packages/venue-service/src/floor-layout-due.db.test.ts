@@ -19,7 +19,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { VENUE_SERVICE } from "./service.js";
 
 const suite = useVenueDb({
@@ -216,28 +215,6 @@ describe("which floor layout is due", () => {
       setName: "Late",
       occurrence: key(f.bar, FRIDAY, bar.evening, "17:00"),
       periodName: "Evening",
-    });
-  });
-
-  it("a stored period extension no longer moves the due run", async () => {
-    const f = await fixture();
-    await run((tx) =>
-      tx.insert(periodExtensions).values({
-        departmentId: f.restaurant,
-        businessDay: FRIDAY,
-        periodId: f.lunch,
-        startsAt: "15:00:00",
-        endsAt: "21:00:00",
-      }),
-    );
-
-    const layouts = await due(f, [f.zones.dining], at("16:00"));
-
-    expect(layouts.get(f.zones.dining)).toEqual({
-      setId: f.dinnerSet,
-      setName: "Dinner",
-      occurrence: key(f.restaurant, FRIDAY, f.dinner, "20:00"),
-      periodName: "Dinner",
     });
   });
 

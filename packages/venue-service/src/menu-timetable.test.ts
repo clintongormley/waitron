@@ -60,7 +60,6 @@ import {
   recordWorkingLineContexts,
 } from "./operations.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import {
   departmentDayRanges,
   departmentDays as departmentDayRows,
@@ -2003,19 +2002,6 @@ describe("department service periods", () => {
   const read = (v: ServiceVenue, date: string, time: string) =>
     scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(date, time)));
 
-  const extend = (
-    v: ServiceVenue,
-    periodId: string,
-    startsAt: string,
-    endsAt: string,
-    businessDay = FRIDAY,
-  ) =>
-    scoped((tx) =>
-      tx
-        .insert(periodExtensions)
-        .values({ departmentId: v.restaurant, businessDay, periodId, startsAt, endsAt }),
-    );
-
   it("keys the running period's occurrence as the floor layout rule does", async () => {
     const v = await serviceVenue();
     expect((await read(v, FRIDAY, "13:00")).periodOccurrenceKey).toBe(
@@ -2025,15 +2011,6 @@ describe("department service periods", () => {
         endsAt: "14:00",
       }),
     );
-  });
-
-  it("a stored period extension no longer moves the running period", async () => {
-    const v = await serviceVenue();
-    await extend(v, v.lunch, "14:00:00", "14:30:00");
-    expect(await read(v, FRIDAY, "14:15")).toMatchObject({
-      periodName: "Afternoon",
-      keepOpen: { periodName: "Afternoon", endsAt: "19:00" },
-    });
   });
 
   it("offers the running merged run or the run that ended last today", async () => {

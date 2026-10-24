@@ -46,7 +46,6 @@ import {
   keptOpenConflicts,
 } from "./business-day-schedule.js";
 import { inForceClock, settledClock } from "./service-day-context.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 
 const suite = useVenueDb({
@@ -2440,22 +2439,5 @@ describe("a keep-open for the night before the change", () => {
         ],
       },
     });
-  });
-
-  it("a period keep-open no longer blocks a start change", async () => {
-    const v = await fixture([]);
-    await withTransaction(suite.db, async (tx) => {
-      await tx.insert(periodExtensions).values({
-        departmentId: v.departmentId,
-        periodId: v.periodId,
-        businessDay: "2026-11-03",
-        startsAt: "22:00:00",
-        endsAt: "04:30:00",
-      });
-    });
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, v.cfg, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([]);
   });
 });

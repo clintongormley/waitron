@@ -31,7 +31,6 @@ import {
 import { routingCells, routingCellPeriods } from "./schema/routing.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import {
   departmentTransferDesks,
   departmentTransferDestinations,
@@ -607,26 +606,6 @@ it("lists and deletes a deleted department's service steps", async () => {
     });
     await clearServiceDeleteSettings(tx, f.cfg, [], f.department);
     expect(await tx.select().from(serviceSteps)).toEqual(kept);
-  });
-});
-
-it("a department delete preview counts no period_extensions while a row is stored", async () => {
-  await run(async (tx) => {
-    const f = await fixture(tx);
-    const [menu] = await tx.insert(catalogues).values({ name: "Published menu" }).returning();
-    const [period] = await tx
-      .insert(menuPeriods)
-      .values({ departmentId: f.department, name: "Dinner", menuId: menu!.id })
-      .returning();
-    await tx.insert(periodExtensions).values({
-      departmentId: f.department,
-      periodId: period!.id,
-      businessDay: "2026-10-12",
-      startsAt: "17:00:00",
-      endsAt: "18:00:00",
-    });
-    const impact = await readServiceDeleteSettings(tx, f.cfg, [], f.department);
-    expect(impact.map((item) => item.key)).not.toContain("period_extensions");
   });
 });
 

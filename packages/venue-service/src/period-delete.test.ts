@@ -28,7 +28,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment } from "./operations.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 import { menuPeriods } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import {
   departmentDayRanges,
@@ -413,13 +412,6 @@ describe("deleting a period", () => {
     await line(cocktailsCell, v.lunch, barra!.id);
     await line(cocktailsCell, v.afternoon, v.stationId);
     await line(cocktailsCell, v.dinner, v.stationId);
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
     return {
       ...v,
       cellNames: new Map([
@@ -434,7 +426,7 @@ describe("deleting a period", () => {
   }
   type DeleteVenue = Awaited<ReturnType<typeof deleteVenue>>;
 
-  /** The four places that name a period, and the restaurant's periods, read by value. */
+  /** The three places that name a period, and the restaurant's periods, read by value. */
   async function stored(v: DeleteVenue) {
     const seasonRanges = await db
       .select({
@@ -477,17 +469,6 @@ describe("deleting a period", () => {
       .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
       .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId))
       .where(eq(routingCells.locationId, v.locationId));
-    const extensions = await db
-      .select({
-        businessDay: periodExtensions.businessDay,
-        period: menuPeriods.name,
-        startsAt: periodExtensions.startsAt,
-        endsAt: periodExtensions.endsAt,
-      })
-      .from(periodExtensions)
-      .innerJoin(menuPeriods, eq(menuPeriods.id, periodExtensions.periodId))
-      .where(eq(periodExtensions.departmentId, v.restaurant))
-      .orderBy(asc(periodExtensions.businessDay));
     const periods = await db
       .select({ name: menuPeriods.name })
       .from(menuPeriods)
@@ -507,9 +488,6 @@ describe("deleting a period", () => {
             `${v.cellNames.get(row.cellId)} ${row.period} ${v.stationNames.get(row.stationId!)}`,
         )
         .sort(),
-      extensions: extensions.map(
-        (row) => `${row.businessDay} ${row.period} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
-      ),
       periods: periods.map((row) => row.name),
     };
   }

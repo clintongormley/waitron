@@ -27,7 +27,6 @@ import {
   replaceMenuWeek,
   saveMenuPeriod,
   setProfileServiceAccess,
-  periodExtensions,
   zoneExtensions,
   replaceZoneClosedWeek,
   VENUE_SERVICE_PERMISSIONS,
@@ -56,8 +55,6 @@ let deliCookie: string;
 const at = (time: string) => vi.setSystemTime(new Date(`2026-10-05T${time}:00+02:00`));
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const read = () => `/api/service-zones/${zone}/keep-open`;
-const rows = () =>
-  suite.db.select().from(periodExtensions).where(eq(periodExtensions.departmentId, department));
 const call = (method: string, path: string, body?: unknown, cookie = managerCookie) =>
   send(app, cookie, method, path, body);
 
@@ -178,7 +175,6 @@ describe("the till keeps a running period open today", () => {
       until: "14:30",
     });
     expect(answer.status).toBe(404);
-    expect(await rows()).toEqual([]);
   });
   it.each(["GET"])("refuses %s for a zone outside the profile department", async (method) => {
     const answer = await call(method, read(), undefined, deliCookie);

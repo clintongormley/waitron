@@ -27,7 +27,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { readLocationClock } from "@waitron/reporting";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -37,7 +36,6 @@ import { createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { menuPeriods } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import {
   departmentDayRanges,
@@ -46,7 +44,6 @@ import {
   specialDayDates,
 } from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
-import { serviceMomentAt } from "./service-day.js";
 import { saveSpecialDay } from "./special-days.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
@@ -155,14 +152,6 @@ async function routed() {
       departmentId: restaurant,
       stationId: station!.id,
     });
-    const today = serviceMomentAt(new Date(), await readLocationClock(tx, locationId))!.businessDay;
-    await tx.insert(periodExtensions).values({
-      departmentId: restaurant,
-      businessDay: today,
-      periodId: lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -178,7 +167,6 @@ async function routed() {
       afternoon,
       deliLunch,
       aniversario,
-      today,
       seasons: { summer: season("Summer"), autumn: season("Autumn") },
       manager: await person("manager"),
       supervisor: await person("supervisor"),

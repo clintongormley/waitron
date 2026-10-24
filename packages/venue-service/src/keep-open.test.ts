@@ -15,7 +15,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, listZoneOffers, menuState } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { VENUE_SERVICE } from "./service.js";
 import * as keep from "./keep-open.js";
@@ -211,29 +210,6 @@ describe("keeping a zone open today", () => {
     expect(
       (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("23:00")))).zone!.choices,
     ).toEqual(["23:45", "00:00"]);
-  });
-  it("a stored period extension no longer lets a zone stay open past its department's own end", async () => {
-    const f = await zoneFixture("01:00");
-    await run((tx) =>
-      tx.insert(periodExtensions).values({
-        departmentId: f.departmentId,
-        businessDay: "2026-10-09",
-        periodId: f.lunch,
-        startsAt: "01:00:00",
-        endsAt: "02:00:00",
-      }),
-    );
-    const instant = at("00:30", "2026-10-10");
-    expect(
-      (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, instant))).zone!.choices.at(-1),
-    ).toBe("01:00");
-    await expect(
-      run((tx) => keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "01:30" }, instant)),
-    ).rejects.toMatchObject({
-      code: "zone_extension.not_allowed",
-      params: { reason: "department_closed" },
-    });
-    expect(await zoneRows(f)).toEqual([]);
   });
   it("can reopen a zone already closed", async () => {
     const f = await zoneFixture("02:00");
