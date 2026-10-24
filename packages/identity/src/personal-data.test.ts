@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { DISABLED_IMPORT_PIN_PREFIX, IDENTITY_PERSONAL_DATA } from "./personal-data.js";
+import { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 import { persons } from "./schema/persons.js";
 import { SECRET_HASH_PREFIX } from "./secret-hash.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
@@ -495,7 +495,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       .insert(persons)
       .values({
         displayName: "Imported Person",
-        pinHash: `${DISABLED_IMPORT_PIN_PREFIX}${crypto.randomUUID()}`,
+        pinHash: `disabled-import:${crypto.randomUUID()}`,
         status: "suspended",
       })
       .returning({ id: persons.id });

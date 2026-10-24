@@ -9,7 +9,6 @@ import {
 } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
-import { DISABLED_IMPORT_PIN_PREFIX } from "@waitron/identity";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
@@ -734,7 +733,7 @@ export async function importConfigurationTables(
         if (column in row) row[column] = target.locationId;
       }
       if (declaration.name === "persons") {
-        row.pin_hash = `${DISABLED_IMPORT_PIN_PREFIX}${randomUUID()}`;
+        row.pin_hash = `disabled-import:${randomUUID()}`;
         row.password_hash = null;
         row.totp_secret = null;
         row.email_verified_at = null;

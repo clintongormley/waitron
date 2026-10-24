@@ -23,10 +23,6 @@ const truth = (condition: SQL) => sql<boolean>`${condition}`.mapWith((v: number)
  * is never read. */
 const isSet = (column: AnyColumn) => truth(sql`${column} is not null`);
 
-/** The start of the `pin_hash` the configuration import writes for an imported person: a value no
- * PIN matches. */
-export const DISABLED_IMPORT_PIN_PREFIX = "disabled-import:";
-
 const jsonFile = (name: string, value: unknown): PersonalDataFile => ({
   name,
   content: `${JSON.stringify(value, null, 2)}\n`,

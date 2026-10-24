@@ -136,7 +136,7 @@ export type { GoogleOidcClaim } from "./google-oidc.js";
 
 export { IDENTITY_CLASSIFICATION } from "./classification.js";
 export { IDENTITY_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
-export { DISABLED_IMPORT_PIN_PREFIX, IDENTITY_PERSONAL_DATA } from "./personal-data.js";
+export { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 
 // Side-effect only: keeps errors.ts's augmentation reachable from the public barrel
 // (scripts/errors-reachable.test.ts).
