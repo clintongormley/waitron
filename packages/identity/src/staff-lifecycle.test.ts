@@ -18,6 +18,9 @@ import {
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
 import type { PersonRoleValue } from "./permissions.js";
+import { recoveryCodes } from "./schema/recovery-codes.js";
+import { totpEnrollments } from "./schema/totp-enrollments.js";
+import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import {
   codeOf,
   openManagementSession,
@@ -543,6 +546,38 @@ describe("deactivatePerson refusals", () => {
     expect(await statusOf(personId)).toBe("active");
   });
 
+  it("refuses to let an admin deactivate themselves while another active admin remains", async () => {
+    const { token, personId } = await openManagementSession(suite.db, "admin");
+    await seedPerson(suite.db, "admin");
+    expect(
+      await codeOf(() =>
+        run((tx) => deactivatePerson(tx, { managementSessionId: token, personId })),
+      ),
+    ).toBe("person.self_deactivation");
+    expect(await statusOf(personId)).toBe("active");
+  });
+
+  it("deactivates another person whose id arrived in upper case", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    const target = await seedPerson(suite.db, "staff");
+    await seedSignInDetails(target, "upper-case@example.com");
+    await run((tx) =>
+      deactivatePerson(tx, { managementSessionId: token, personId: target.toUpperCase() }),
+    );
+    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+  });
+
+  it("refuses a staff actor with authorization.not_permitted, leaving the person active", async () => {
+    const { token } = await openManagementSession(suite.db, "staff");
+    const target = await seedPerson(suite.db, "staff");
+    expect(
+      await codeOf(() =>
+        run((tx) => deactivatePerson(tx, { managementSessionId: token, personId: target })),
+      ),
+    ).toBe("authorization.not_permitted");
+    expect(await statusOf(target)).toBe("active");
+  });
+
   it("refuses to deactivate the only active admin", async () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
@@ -561,7 +596,7 @@ describe("deactivatePerson refusals", () => {
     expect(await statusOf(admin)).toBe("suspended");
   });
 
-  it("does nothing to an account that is already inactive, its sessions included", async () => {
+  it("leaves an already inactive account inactive and its sessions as they were", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const { personId, tillSessionId } = await seedStaffWithSession("inactive@example.com");
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
@@ -843,5 +878,134 @@ describe("a colliding row that lands after the pre-check", () => {
       params: { displayName: "Racer" },
     });
     expect(await statusOf(target)).toBe("suspended");
+  });
+});
+
+const VERIFIED_AT = "2026-09-01T00:00:00.000Z";
+
+/** Gives a person every sign-in detail: the four columns and one row of each of the four tables. */
+async function seedSignInDetails(personId: string, email: string): Promise<void> {
+  await suite.db.execute(sql`update persons
+    set pin_hash = 'pin', password_hash = 'password', totp_secret = 'totp',
+        google_subject = ${`google-${personId}`}, email = ${email},
+        email_verified_at = ${VERIFIED_AT}
+    where id = ${personId}`);
+  await suite.db.insert(webauthnCredentials).values({
+    personId,
+    credentialId: `cred-${personId}`,
+    publicKey: "public-key",
+  });
+  await suite.db.insert(recoveryCodes).values({ personId, codeHash: "a".repeat(64) });
+  await suite.db.insert(totpEnrollments).values({
+    personId,
+    encryptedSecret: "enrolment",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+  await suite.db.insert(webauthnChallenges).values({ personId, challenge: "challenge" });
+}
+
+async function signInDetailsOf(personId: string): Promise<unknown> {
+  const columns = await suite.db.execute<Record<string, string | null>>(
+    sql`select status, pin_hash, password_hash, totp_secret, google_subject, email_verified_at
+        from persons where id = ${personId}`,
+  );
+  const counts = await suite.db.execute<Record<string, number>>(sql`select
+      (select count(*) from webauthn_credentials where person_id = ${personId}) as passkeys,
+      (select count(*) from recovery_codes where person_id = ${personId}) as recovery_codes,
+      (select count(*) from totp_enrollments where person_id = ${personId}) as totp_enrollments,
+      (select count(*) from webauthn_challenges where person_id = ${personId}) as challenges`);
+  return { ...columns.rows[0], ...counts.rows[0] };
+}
+
+function withNoSignInDetails(status: string, emailVerifiedAt: string | null): unknown {
+  return {
+    status,
+    pin_hash: null,
+    password_hash: null,
+    totp_secret: null,
+    google_subject: null,
+    email_verified_at: emailVerifiedAt,
+    passkeys: 0,
+    recovery_codes: 0,
+    totp_enrollments: 0,
+    challenges: 0,
+  };
+}
+
+function withEverySignInDetail(personId: string, status: string): unknown {
+  return {
+    status,
+    pin_hash: "pin",
+    password_hash: "password",
+    totp_secret: "totp",
+    google_subject: `google-${personId}`,
+    email_verified_at: VERIFIED_AT,
+    passkeys: 1,
+    recovery_codes: 1,
+    totp_enrollments: 1,
+    challenges: 1,
+  };
+}
+
+describe("disabling a person deletes their sign-in details", () => {
+  async function seedPair(
+    targetStatus: "active" | "suspended",
+  ): Promise<{ token: string; target: string; bystander: string }> {
+    const { token } = await openManagementSession(suite.db, "admin");
+    const target = await seedPerson(suite.db, "staff", targetStatus);
+    const bystander = await seedPerson(suite.db, "staff");
+    await seedSignInDetails(target, "target@example.com");
+    await seedSignInDetails(bystander, "bystander@example.com");
+    return { token, target, bystander };
+  }
+
+  const disable = {
+    "the Disable action": (token: string, personId: string) =>
+      run((tx) => deactivatePerson(tx, { managementSessionId: token, personId })),
+    "saving the edit form as inactive": (token: string, personId: string) =>
+      run((tx) =>
+        updatePersonDetails(
+          tx,
+          details(token, personId, { email: "target@example.com", status: "suspended" }),
+        ),
+      ),
+  };
+
+  for (const [name, act] of Object.entries(disable)) {
+    it(`${name} deletes an active person's sign-in details and nobody else's`, async () => {
+      const { token, target, bystander } = await seedPair("active");
+      await act(token, target);
+      expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+      expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
+    });
+  }
+
+  it("the Disable action deletes the sign-in details an already inactive person still holds", async () => {
+    const { token, target, bystander } = await seedPair("suspended");
+    await disable["the Disable action"](token, target);
+    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+    expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
+  });
+
+  it("saving an already inactive person's edit form keeps their sign-in details, because only the change into inactive or the Disable action deletes them", async () => {
+    const { token, target } = await seedPair("suspended");
+    await disable["saving the edit form as inactive"](token, target);
+    expect(await signInDetailsOf(target)).toEqual(withEverySignInDetail(target, "suspended"));
+  });
+
+  it("re-enabling deletes the sign-in details an inactive person still holds", async () => {
+    const { token, target, bystander } = await seedPair("suspended");
+    await run((tx) =>
+      reactivatePersonForInvitation(tx, { managementSessionId: token, personId: target }),
+    );
+    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("pending", null));
+    expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
+  });
+
+  it("reset login deletes every sign-in detail, the rows included", async () => {
+    const { token, target, bystander } = await seedPair("active");
+    await run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: target }));
+    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("pending", null));
+    expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
   });
 });

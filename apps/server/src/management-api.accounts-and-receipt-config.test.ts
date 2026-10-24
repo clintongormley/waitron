@@ -24,12 +24,19 @@ import { getPrintedReceipt } from "@waitron/layouts";
 import { contentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
+import {
+  encryptTotpSecret,
+  hashPassword,
+  hashPin,
+  persons,
+  webauthnCredentials,
+} from "@waitron/identity";
 import { mediaImages, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { WorkforceBackend } from "@waitron/workforce";
+import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import type { AccountEmailSender } from "./account-email.js";
@@ -2002,6 +2009,53 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const repeated = await reactivate();
     expect(await repeated.json()).toEqual({ invitationSent: false });
     expect(sent).toHaveLength(1);
+  });
+
+  it("deletes a deactivated person's PIN and passkey, and leaves their working-time entries as they were", async () => {
+    const { staffId } = await setupTenant();
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(webauthnCredentials).values({
+        personId: staffId,
+        credentialId: "clerk-credential",
+        publicKey: "clerk-public-key",
+      });
+      const event = {
+        nodeId: venueCfg!.nodeId,
+        locationId: venueCfg!.locationId,
+        personId: staffId,
+        offsetMinutes: 120,
+        origin: jobOrigin("dashboard"),
+      };
+      const workforce = new WorkforceBackend();
+      await workforce.clockIn(tx, { ...event, at: "2026-10-01T10:00:00Z" });
+      await workforce.clockOut(tx, { ...event, at: "2026-10-01T11:00:00Z" });
+    });
+    const timeEntries = async () =>
+      (
+        await suite.db.execute<Record<string, unknown>>(
+          sql`select * from time_entries where person_id = ${staffId} order by event_at, id`,
+        )
+      ).rows;
+    const entriesBefore = await timeEntries();
+    expect(entriesBefore).toHaveLength(2);
+    const app = mountApp();
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+
+    const deactivated = await app.request(`/management-api/staff/${staffId}/deactivate`, {
+      method: "POST",
+      headers: { cookie },
+    });
+
+    expect(deactivated.status).toBe(204);
+    const person = await suite.db.execute<{ status: string; pin_hash: string | null }>(
+      sql`select status, pin_hash from persons where id = ${staffId}`,
+    );
+    expect(person.rows[0]).toEqual({ status: "suspended", pin_hash: null });
+    const passkeys = await suite.db.execute<{ id: string }>(
+      sql`select id from webauthn_credentials where person_id = ${staffId}`,
+    );
+    expect(passkeys.rows).toEqual([]);
+    expect(await timeEntries()).toEqual(entriesBefore);
   });
 
   it("refuses deactivation and reactivation to a staff session and for a malformed id", async () => {

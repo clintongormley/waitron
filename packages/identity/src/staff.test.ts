@@ -12,14 +12,13 @@ import {
   MIN_PIN_LENGTH,
   asEmailTaken,
   createPerson,
+  deactivatePerson,
   listActiveStaff,
   listPersons,
-  reactivatePerson,
   resetPin,
   setEmail,
   setPassword,
   setRole,
-  suspendPerson,
 } from "./staff.js";
 import {
   codeOf,
@@ -441,94 +440,6 @@ describe("setPassword", () => {
   });
 });
 
-describe("suspendPerson / reactivatePerson", () => {
-  it.each(["manager", "admin"] as const)(
-    "prevents a %s from suspending themselves",
-    async (role) => {
-      const { token, personId } = await openManagementSession(suite.db, role);
-      expect(
-        await codeOf(() =>
-          run((tx) => suspendPerson(tx, { managementSessionId: token, personId })),
-        ),
-      ).toBe("person.self_deactivation");
-      expect((await personRow(personId)).status).toBe("active");
-    },
-  );
-
-  it("rejects self-deactivation with an uppercase account ID", async () => {
-    const { token, personId } = await openManagementSession(suite.db, "admin");
-    expect(
-      await codeOf(() =>
-        run((tx) =>
-          suspendPerson(tx, { managementSessionId: token, personId: personId.toUpperCase() }),
-        ),
-      ),
-    ).toBe("person.self_deactivation");
-    expect((await personRow(personId)).status).toBe("active");
-  });
-
-  // The case above exercises only the self-check; this one needs the UPDATE to fold the id's case.
-  it("suspends another person whose id arrived in upper case", async () => {
-    const { token } = await openManagementSession(suite.db, "admin");
-    const targetId = await seedPerson(suite.db, "staff");
-    await run((tx) =>
-      suspendPerson(tx, { managementSessionId: token, personId: targetId.toUpperCase() }),
-    );
-    expect((await personRow(targetId)).status).toBe("suspended");
-  });
-
-  it("suspend blocks login; reactivate restores it", async () => {
-    const deviceId = await seedSessionDevice(suite.db);
-    const { token } = await openManagementSession(suite.db, "admin");
-    const targetId = await seedPerson(suite.db, "staff"); // active, PIN "1234"
-
-    await run((tx) => loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" }));
-
-    await run((tx) => suspendPerson(tx, { managementSessionId: token, personId: targetId }));
-    const suspended = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" })),
-    );
-    expect(suspended).toBe("pin.invalid");
-
-    await run((tx) => reactivatePerson(tx, { managementSessionId: token, personId: targetId }));
-    const session = await run((tx) =>
-      loginWithPin(tx, { deviceId, personId: targetId, pin: "1234" }),
-    );
-    expect(session).toEqual({
-      id: expect.any(String),
-      token: expect.any(String),
-      personId: targetId,
-      deviceId,
-      role: "staff",
-      locale: null,
-    });
-  });
-
-  it("suspendPerson throws authorization.not_permitted for a staff actor, leaving status active", async () => {
-    const { token: staffSession } = await openManagementSession(suite.db, "staff");
-    const targetId = await seedPerson(suite.db, "staff"); // active
-
-    const code = await codeOf(() =>
-      run((tx) => suspendPerson(tx, { managementSessionId: staffSession, personId: targetId })),
-    );
-    expect(code).toBe("authorization.not_permitted");
-
-    expect((await personRow(targetId)).status).toBe("active");
-  });
-
-  it("reactivatePerson throws authorization.not_permitted for a staff actor, leaving status suspended", async () => {
-    const { token: staffSession } = await openManagementSession(suite.db, "staff");
-    // A SUSPENDED target so reactivate would be a real change.
-    const targetId = await seedPerson(suite.db, "staff", "suspended");
-
-    const code = await codeOf(() =>
-      run((tx) => reactivatePerson(tx, { managementSessionId: staffSession, personId: targetId })),
-    );
-    expect(code).toBe("authorization.not_permitted");
-    expect((await personRow(targetId)).status).toBe("suspended");
-  });
-});
-
 describe("listActiveStaff", () => {
   it("returns active persons' id + name, sorted, no secrets", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
@@ -561,7 +472,7 @@ describe("listActiveStaff", () => {
         email: "gone@x.com",
       }),
     );
-    await run((tx) => suspendPerson(tx, { managementSessionId: token, personId: gone.id }));
+    await run((tx) => deactivatePerson(tx, { managementSessionId: token, personId: gone.id }));
 
     const staff = await run((tx) => listActiveStaff(tx));
 

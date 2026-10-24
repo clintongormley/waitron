@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { openManagementSession, seedPerson } from "../test/fixtures.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { persons } from "./schema/persons.js";
+import { webauthnCredentials } from "./schema/webauthn.js";
 import {
   completeAccountAction,
   inspectAccountAction,
@@ -15,14 +16,12 @@ import {
   createPerson,
   deactivatePerson,
   invitePerson,
-  reactivatePerson,
   reactivatePersonForInvitation,
   resetPersonLogin,
   resetPin,
   setEmail,
   setPassword,
   setRole,
-  suspendPerson,
   updatePersonDetails,
 } from "./staff.js";
 
@@ -81,22 +80,6 @@ const changes: {
       reactivatePersonForInvitation(tx, { managementSessionId, personId }),
     field: "status",
     value: "pending",
-  },
-  {
-    name: "reactivation",
-    status: "suspended",
-    change: (tx, managementSessionId, personId) =>
-      reactivatePerson(tx, { managementSessionId, personId }),
-    field: "status",
-    value: "active",
-  },
-  {
-    name: "suspension",
-    status: "active",
-    change: (tx, managementSessionId, personId) =>
-      suspendPerson(tx, { managementSessionId, personId }),
-    field: "status",
-    value: "suspended",
   },
   {
     name: "deactivation",
@@ -307,6 +290,43 @@ describe("non-admin sign-in authority", () => {
       });
     },
   );
+  it("lets a manager edit an inactive admin's names without deleting their PIN or passkeys", async () => {
+    const actor = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "admin", "suspended");
+    await suite.db
+      .update(persons)
+      .set({ email: "unchanged@example.test" })
+      .where(eq(persons.id, target));
+    await suite.db
+      .insert(webauthnCredentials)
+      .values({ personId: target, credentialId: `cred-${target}`, publicKey: "public-key" });
+    const pinHash = (await row(target)).pinHash;
+    expect(pinHash).not.toBeNull();
+    await run((tx) =>
+      updatePersonDetails(tx, {
+        managementSessionId: actor.token,
+        personId: target,
+        displayName: "Changed name",
+        firstNames: "Changed",
+        lastNames: "Name",
+        telephone: null,
+        email: "unchanged@example.test",
+        role: "admin",
+        status: "suspended",
+      }),
+    );
+    expect(await row(target)).toMatchObject({
+      displayName: "Changed name",
+      status: "suspended",
+      pinHash,
+    });
+    expect(
+      await suite.db
+        .select({ id: webauthnCredentials.credentialId })
+        .from(webauthnCredentials)
+        .where(eq(webauthnCredentials.personId, target)),
+    ).toEqual([{ id: `cred-${target}` }]);
+  });
   it.each(["create", "invite"] as const)(
     "refuses a manager's attempt to %s a non-admin account",
     async (operation) => {

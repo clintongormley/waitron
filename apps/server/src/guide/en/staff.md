@@ -14,7 +14,8 @@ to roles and account status.
 As an admin, you can add a person and send their invitation, resend an invitation, reset their
 PIN or login, and disable or re-enable their account. Resetting a PIN clears it; the person
 chooses its replacement. Resetting a login clears their credentials and sends a new invitation.
-Managers do not see these actions.
+Disabling an account also deletes the person's PIN, password, passkeys, two-factor settings and
+Google link. Re-enabling it sends a new invitation. Managers do not see these actions.
 
 ## Your own account {#own-account}
 

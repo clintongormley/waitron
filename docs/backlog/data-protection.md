@@ -66,11 +66,9 @@ compliance”. This file holds their full text.
 
 [Design, revision 2](../superpowers/specs/2026-10-22-a980-data-protection-design.md) (2026-10-24)
 and its [build plan](../superpowers/plans/2026-10-24-a980-data-protection-build.md). The owner
-answered all ten questions on 2026-10-22 (design §8). Nothing is built. Slices, by the design's
-numbers (S5, S7 and S8 were dropped by the answers):
+answered all ten questions on 2026-10-22 (design §8). The open slices, by the design's numbers (S5, S7 and S8 were dropped
+by the answers):
 
-- **S4** — deactivating a person deletes their PIN, password, two-factor details, Google link,
-  passkeys and recovery codes. Still a live defect; build first.
 - **S2** — a staff member downloads their own data from their profile; an admin downloads another
   person's under a new admin-only permission, `personal_data.export`. Planned as S2a1, S2a2, S2b, S2c.
 - **S3** — an admin finds an invoice customer by tax number and downloads what the box holds.

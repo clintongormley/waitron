@@ -701,7 +701,7 @@ describe("passkey authentication", () => {
     );
   });
 
-  it("keeps a suspended person's passkey, so it still answers the generic refusal", async () => {
+  it("answers passkey.not_registered for a passkey that disabling the person removed", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const personId = await seedPerson(suite.db, "manager");
     await seedCredential(personId, "cred-abc", 0);
@@ -710,7 +710,7 @@ describe("passkey authentication", () => {
 
     const begun = await beginAuth();
     expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
-      "passkey.verification_failed",
+      "passkey.not_registered",
     );
   });
 

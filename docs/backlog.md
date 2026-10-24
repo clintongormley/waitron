@@ -6262,9 +6262,8 @@ _Formerly entries spread across the old sections._
   [Detail](backlog/data-protection.md#libvips-is-lgpl-30-or-later)
 
 - **A980 — data protection, Waitron's side.** Design revision 2 (2026-10-24) records the owner's
-  ten answers; eight small slices are planned, nothing is built. Build S4 (delete sign-in secrets at
-  deactivation, a live defect) first; S1 waits, while lane B builds it, for lane B's parked pull
-  requests (its own rule); S9 and S11 wait for the specialists.
+  ten answers; its small slices are planned. S1 waits, while lane B builds it, for lane B's parked pull requests
+  (its own rule); S9 and S11 wait for the specialists.
   [Detail](backlog/data-protection.md#a980--data-protection-waitrons-side)
 
 - **A privacy-notice page hosted by Waitron Cloud.** For a Cloud-connected venue, a page Cloud
@@ -6452,8 +6451,8 @@ awaits owner and relevant specialist approval under its own gates; the broader p
 remains open. **Scoped 2026-10-22 by A980:** the [data-protection design](superpowers/specs/2026-10-22-a980-data-protection-design.md)
 holds the data map, the controller and processor split and the builds-versus-venue list. Its
 revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
-[build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; nothing
-is built. The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
+[build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; S4 (sign-in
+details deleted at deactivation) is built. The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
 
 ---
 

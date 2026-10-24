@@ -762,8 +762,8 @@ as the form's bottom message on the dashboard and the setup wizard's Connect, "W
 the PIN is the only thing typed. A refused sign-in marks no field on any sign-in form, the setup
 wizard's Reset form included (`apps/setup/src/screens/reset-screen.ts`); there a field is marked
 only when its value is missing or malformed (owner, 2026-09-30, A153).
-Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey whose
-owner is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
+Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey row that
+still belongs to a person who is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
 `google.invalid` for a Google account linked to nobody or to a person who is not active
 (`loginWithGoogle`, `packages/identity/src/google-oidc.ts`). **One exception, owner-approved
 (2026-09-30, C101): a passkey Waitron holds no row for answers `passkey.not_registered`**, and the
@@ -771,13 +771,16 @@ dashboard asks the browser to forget it (`signalUnknownCredential`, `apps/dashbo
 and says so. The answer says only whether that credential id has a row, and it is given before any
 signature check, so the id plus a challenge, which anyone can fetch without signing in
 (`POST /management-api/passkey/auth/options`), is enough to ask. A credential row has no status of
-its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`) and suspension keeps
-it, so a suspended owner's passkey stays the generic answer. An admin's login reset and a reactivation do delete the person's
-passkeys (`resetPersonLogin`, `reactivatePersonForInvitation`, `packages/identity/src/staff.ts`),
-so after either, an old passkey answers `passkey.not_registered` like one the person removed.
-Guards: the unknown, wiped-install, login-reset and suspended cases in
+its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`), so a row that
+still belongs to a suspended person answers the generic refusal. Disabling a person (the Disable
+action, `deactivatePerson`, or changing their status to inactive in the edit form,
+`updatePersonDetails`), an admin's login reset and a reactivation delete the person's passkeys
+(`packages/identity/src/staff.ts`), so afterwards an old passkey answers `passkey.not_registered`
+like one the person removed.
+Guards: the unknown, wiped-install, login-reset, disabled and suspended-with-a-row cases in
 `packages/identity/src/passkey.test.ts` (the wiped-install case runs the same lookup as the unknown
-one, since the lookup never reads the user handle), and the unknown and suspended route cases in
+one, since the lookup never reads the user handle), the deletion cases in
+`packages/identity/src/staff-lifecycle.test.ts`, and the unknown and suspended route cases in
 `apps/server/src/management-api-passkey.test.ts`.
 Identity's password and PIN refusals carry the real cause for the server log only:
 `new AppError(code, {}, { reason })`, whose `reason` a route using `createErrorBoundary`
