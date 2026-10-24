@@ -650,6 +650,12 @@ check), each in the task named:
   `apps/server/src/clock-confirm.route.test.ts`, the `watchChecks` helper's steady clock now moves a
   minute before each check (it read 0 throughout), so "asks AEAT's time at every watch check while a
   confirmation is in force…" still sees two HEADs in two checks, unedited.
+- the clock-stop email's "What to do" (Task R11; lines at `ae6efe5b1` → after):
+  `apps/server/src/box-alert-email.test.ts:80` "writes both times, each in its own offset, in
+  English": the exact English text's last clause "which says whether payments can be restarted" →
+  "where an administrator can confirm the clock with their own phone; with the internet or two tills
+  switched on, the box does it by itself", the brief's own words; every other word and both times
+  unchanged. The Spanish case reads its text from `box-emails.ts` and is unedited.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
 and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed

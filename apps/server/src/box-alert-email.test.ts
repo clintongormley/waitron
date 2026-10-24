@@ -77,7 +77,7 @@ describe("boxEmailMessage for a clock stop", () => {
     expect(boxEmailMessage("clock.behind_chain", "en", "Corner Bistro", PARAMS)).toEqual({
       subject:
         "Payments stopped at Corner Bistro: the box's clock reads earlier than its last sale",
-      text: "The box's clock (14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): connect the box to the internet so it corrects itself, or call whoever installed it. • If you think the box's clock is right: look at the Box status page (in the dashboard, Settings → Box status), which says whether payments can be restarted.",
+      text: "The box's clock (14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): connect the box to the internet so it corrects itself, or call whoever installed it. • If you think the box's clock is right: look at the Box status page (in the dashboard, Settings → Box status), where an administrator can confirm the clock with their own phone; with the internet or two tills switched on, the box does it by itself.",
     });
   });
 
