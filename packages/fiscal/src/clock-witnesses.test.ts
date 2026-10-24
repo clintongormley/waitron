@@ -437,6 +437,18 @@ describe("the group of agreeing devices", () => {
     );
   });
 
+  it("leaves out a device that disagrees with the box even when it is within a minute of one that agrees", () => {
+    expect(agreeingDeviceGroup([device("a", 30_000), device("near", 61_000)])).toEqual([]);
+  });
+
+  it("drops a reading it cannot read, so a valid one from the same device still counts", () => {
+    const unreadable = { ...device("a", 0, 10_000), witnessAt: "not a time" };
+    expect(ids(agreeingDeviceGroup([unreadable, device("a", 0), device("b", 0)]))).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
   it("counts devices at one address once", () => {
     expect(
       agreeingDeviceGroup([at("10.0.0.5", device("a", 0)), at("10.0.0.5", device("b", 0, 1_000))]),
