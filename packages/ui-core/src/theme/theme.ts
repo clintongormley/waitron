@@ -7,6 +7,7 @@ import {
   type TextScale,
   type ThemeColour,
   THEME_COLOURS,
+  fontSizes,
   handTokens,
 } from "./tokens.js";
 
@@ -98,9 +99,10 @@ export function deriveThemeFrom(defaults: WaitronDefaults, choices: ThemeChoices
     const [light, dark] = MODES.map((mode) =>
       settleMode(memo, defaults, normalised, mode, handTokens(normalised.handSet[mode])),
     ) as [ModeResult, ModeResult];
+    const sizes = fontSizes(normalised.textScale, defaults);
     return {
-      light: { ...light.tokens },
-      dark: { ...dark.tokens },
+      light: { ...light.tokens, ...sizes },
+      dark: { ...dark.tokens, ...sizes },
       warnings: [
         ...warningsFor(memo, defaults, normalised, "light", light),
         ...warningsFor(memo, defaults, normalised, "dark", dark),

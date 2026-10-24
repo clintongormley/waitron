@@ -108,8 +108,8 @@ even when data-theme is set` for the regression test.
 
 ## Retheming a deployment
 
-A venue changes its look on Settings → Appearance, which stores a theme and writes the 22 colours
-and three radii of `THEME_TOKENS` (`packages/ui-core/src/theme/tokens.ts`) from the venue's
+A venue changes its look on Settings → Appearance, which stores a theme and writes the 22 colours,
+three radii and four text sizes of `THEME_TOKENS` (`packages/ui-core/src/theme/tokens.ts`) from the venue's
 choices, warning about hard-to-read colours rather than refusing them. The override described
 below is for a deployment's own stylesheet. A venue theme's sheet, built from worked-out values
 only, outranks the token layer the same way.
@@ -583,8 +583,10 @@ line at rest and `--wt-field-line-width-active` (2px) the focused or invalid one
 `--wt-dropdown-row-height` (48px) is the least height of a row in `wt-combobox`'s open list.
 
 The type scale is 12px, 14px, 18px and 22px (`--wt-font-size-sm|md|lg|xl`), in each device's own
-system font (A179, 2026-10-01 — before it the scale was 13, 15, 19 and 24px). The only font file
-any app bundles is Google Sans Medium, which the dashboard uses on its Google sign-in button alone
+system font (A179, 2026-10-01 — before it the scale was 13, 15, 19 and 24px). A venue's theme
+can scale all four together, from 100% to 130% in 5% steps, rounded to whole pixels (`fontSizes`,
+`packages/ui-core/src/theme/tokens.ts`); spacing, the tap minimum and every other token stay as
+they are. The only font file any app bundles is Google Sans Medium, which the dashboard uses on its Google sign-in button alone
 (A228; see the login section). Body text is `--wt-font-size-md`: `baseStyles` sets it on the host of each component
 that includes it, the dashboard, setup and till shells among them, and each of those apps'
 `index.html` sets it on `<body>` for anything drawn outside the app's own element. A size in `rem`

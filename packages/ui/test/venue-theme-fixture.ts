@@ -21,3 +21,7 @@ export const FIXTURE_ANSWER: { hash: string; css: string; logo: null } = {
 
 export const bg = (): string =>
   getComputedStyle(document.documentElement).getPropertyValue(BG).trim();
+
+/** Waitron's look at 130% text; a test that adopts it on `document` removes it afterwards. */
+export const TEXT_130_SHEET: CSSStyleSheet = new CSSStyleSheet();
+TEXT_130_SHEET.replaceSync(themeSheet(deriveTheme({ ...WAITRON_CHOICES, textScale: 130 })));

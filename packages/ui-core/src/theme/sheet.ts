@@ -2,7 +2,7 @@ import type { DerivedTheme } from "./theme.js";
 import { THEME_TOKENS } from "./tokens.js";
 
 const COLOUR_VALUE = /^#[0-9a-f]{6}$/;
-const RADIUS_VALUE = /^\d+px$/;
+const PIXEL_VALUE = /^\d+px$/;
 
 // A missing token fails its shape check, so this refuses any key set but exactly THEME_TOKENS.
 function declarations(version: Readonly<Record<string, string>>, indent: string): string {
@@ -10,7 +10,7 @@ function declarations(version: Readonly<Record<string, string>>, indent: string)
   if (extra !== undefined) throw new RangeError(`not a theme token: ${extra}`);
   return THEME_TOKENS.map((name) => {
     const value = version[name]!;
-    const shape = name.startsWith("--wt-color-") ? COLOUR_VALUE : RADIUS_VALUE;
+    const shape = name.startsWith("--wt-color-") ? COLOUR_VALUE : PIXEL_VALUE;
     if (!shape.test(value)) throw new RangeError(`not a derived value for ${name}`);
     return `${indent}${name}: ${value};\n`;
   }).join("");

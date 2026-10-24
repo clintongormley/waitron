@@ -158,6 +158,10 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       "--wt-radius-sm": "8px",
       "--wt-radius-md": "14px",
       "--wt-radius-lg": "24px",
+      "--wt-font-size-sm": "12px",
+      "--wt-font-size-md": "14px",
+      "--wt-font-size-lg": "18px",
+      "--wt-font-size-xl": "22px",
     });
     expect(theme.dark).toEqual({
       [P("bg")]: "#0b110d",
@@ -185,7 +189,37 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       "--wt-radius-sm": "8px",
       "--wt-radius-md": "14px",
       "--wt-radius-lg": "24px",
+      "--wt-font-size-sm": "12px",
+      "--wt-font-size-md": "14px",
+      "--wt-font-size-lg": "18px",
+      "--wt-font-size-xl": "22px",
     });
+  });
+
+  test("a text size moves the four sizes and nothing else", () => {
+    const standard = deriveTheme(DARK_GREEN);
+    const larger = deriveTheme({ ...DARK_GREEN, textScale: 130 });
+    const sizes = {
+      "--wt-font-size-sm": "16px",
+      "--wt-font-size-md": "18px",
+      "--wt-font-size-lg": "23px",
+      "--wt-font-size-xl": "29px",
+    };
+    for (const mode of MODES) {
+      expect(larger[mode]).toEqual({ ...standard[mode], ...sizes });
+      expect(THEME_TOKENS.filter((token) => larger[mode][token] !== standard[mode][token])).toEqual(
+        Object.keys(sizes),
+      );
+    }
+    expect(larger.warnings).toEqual(standard.warnings);
+    expect(larger.tintStrength).toEqual(standard.tintStrength);
+  });
+
+  test("a remembered settle does not carry another text size", () => {
+    expect(deriveTheme({ ...LEMON, textScale: 130 }).light["--wt-font-size-md"]).toBe("18px");
+    const again = deriveTheme(LEMON);
+    expect(again.light["--wt-font-size-md"]).toBe("14px");
+    expect(again.dark["--wt-font-size-md"]).toBe("14px");
   });
 
   test("an uppercase brand colour gives the same theme as the lowercase one", () => {

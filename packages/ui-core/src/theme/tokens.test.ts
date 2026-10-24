@@ -2,10 +2,13 @@ import { describe, expect, test } from "vitest";
 import {
   BRAND_FAMILY,
   THEME_COLOURS,
+  THEME_FONT_SIZES,
   THEME_RADII,
   THEME_TOKENS,
+  type TextScale,
   colourToken,
   cornerRadii,
+  fontSizes,
 } from "./tokens.js";
 import { WAITRON_CHOICES } from "./theme.js";
 import { deriveTheme, WAITRON_DEFAULTS } from "./waitron.js";
@@ -31,6 +34,7 @@ describe("the token list a theme writes", () => {
       expect(WAITRON_DEFAULTS.dark, key).toHaveProperty([colourToken(key)]);
     }
     for (const radius of THEME_RADII) expect(WAITRON_DEFAULTS.structure).toHaveProperty([radius]);
+    for (const size of THEME_FONT_SIZES) expect(WAITRON_DEFAULTS.structure).toHaveProperty([size]);
   });
 
   test("the scrim and every meaning colour stay outside", () => {
@@ -41,7 +45,26 @@ describe("the token list a theme writes", () => {
         expect(MEANING.test(name.slice(PREFIX.length)), name).toBe(false);
     }
     const structure = THEME_TOKENS.filter((name) => name in WAITRON_DEFAULTS.structure);
-    expect(structure).toEqual(["--wt-radius-sm", "--wt-radius-md", "--wt-radius-lg"]);
+    expect(structure).toEqual([
+      "--wt-radius-sm",
+      "--wt-radius-md",
+      "--wt-radius-lg",
+      "--wt-font-size-sm",
+      "--wt-font-size-md",
+      "--wt-font-size-lg",
+      "--wt-font-size-xl",
+    ]);
+  });
+
+  test("the theme never writes the code typeface or Google's type", () => {
+    for (const name of [
+      "--wt-font-family-mono",
+      "--wt-font-family-google",
+      "--wt-google-button-line-height",
+      "--wt-google-button-font-size",
+      "--wt-google-button-font-weight",
+    ])
+      expect(THEME_TOKENS).not.toContain(name);
   });
 
   test("the logo plate is white in both modes and no theme writes it", () => {
@@ -55,9 +78,19 @@ describe("the token list a theme writes", () => {
     expect(theme.dark).not.toHaveProperty(["--wt-color-logo-plate"]);
   });
 
-  test("the list is the colour tokens in order, then the three radii", () => {
+  test("the list is the colour tokens in order, then the three radii, then the four sizes", () => {
     expect(colourToken("bg")).toBe("--wt-color-bg");
-    expect(THEME_TOKENS).toEqual([...THEME_COLOURS.map(colourToken), ...THEME_RADII]);
+    expect(THEME_FONT_SIZES).toEqual([
+      "--wt-font-size-sm",
+      "--wt-font-size-md",
+      "--wt-font-size-lg",
+      "--wt-font-size-xl",
+    ]);
+    expect(THEME_TOKENS).toEqual([
+      ...THEME_COLOURS.map(colourToken),
+      ...THEME_RADII,
+      ...THEME_FONT_SIZES,
+    ]);
     expect(THEME_COLOURS[0]).toBe("bg");
     expect(THEME_COLOURS[21]).toBe("stepper-button");
   });
@@ -106,5 +139,48 @@ describe("corner radii", () => {
       "--wt-radius-md": "14px",
       "--wt-radius-lg": "24px",
     });
+  });
+});
+
+describe("text sizes", () => {
+  const sizes = (sm: number, md: number, lg: number, xl: number) => ({
+    "--wt-font-size-sm": `${sm}px`,
+    "--wt-font-size-md": `${md}px`,
+    "--wt-font-size-lg": `${lg}px`,
+    "--wt-font-size-xl": `${xl}px`,
+  });
+
+  test.each<[TextScale, Record<string, string>]>([
+    [100, sizes(12, 14, 18, 22)],
+    [105, sizes(13, 15, 19, 23)],
+    [110, sizes(13, 15, 20, 24)],
+    [115, sizes(14, 16, 21, 25)],
+    [120, sizes(14, 17, 22, 26)],
+    [125, sizes(15, 18, 23, 28)],
+    [130, sizes(16, 18, 23, 29)],
+  ])("at %i%% Waitron's sizes round half up to whole pixels", (step, expected) => {
+    expect(fontSizes(step, WAITRON_DEFAULTS)).toEqual(expected);
+  });
+
+  test("follows the defaults it is given", () => {
+    const defaults = { ...WAITRON_DEFAULTS, structure: sizes(13, 15, 19, 24) };
+    expect(fontSizes(115, defaults)).toEqual(sizes(15, 17, 22, 28));
+  });
+
+  test("refuses a default that is not whole pixels", () => {
+    for (const value of ["14.5px", "1rem", "x14px", "14px;", "14"]) {
+      const defaults = {
+        ...WAITRON_DEFAULTS,
+        structure: { ...sizes(12, 14, 18, 22), "--wt-font-size-md": value },
+      };
+      expect(() => fontSizes(100, defaults), value).toThrow(
+        new RangeError("not a whole-pixel size: --wt-font-size-md"),
+      );
+    }
+    const withoutLarge: Record<string, string> = sizes(12, 14, 18, 22);
+    delete withoutLarge["--wt-font-size-lg"];
+    expect(() => fontSizes(100, { ...WAITRON_DEFAULTS, structure: withoutLarge })).toThrow(
+      new RangeError("not a whole-pixel size: --wt-font-size-lg"),
+    );
   });
 });

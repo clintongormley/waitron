@@ -50,7 +50,18 @@ export const isTextScale = (value: unknown): value is TextScale =>
 
 export const THEME_RADII = ["--wt-radius-sm", "--wt-radius-md", "--wt-radius-lg"] as const;
 
-export const THEME_TOKENS: readonly string[] = [...THEME_COLOUR_TOKENS, ...THEME_RADII];
+export const THEME_FONT_SIZES = [
+  "--wt-font-size-sm",
+  "--wt-font-size-md",
+  "--wt-font-size-lg",
+  "--wt-font-size-xl",
+] as const;
+
+export const THEME_TOKENS: readonly string[] = [
+  ...THEME_COLOUR_TOKENS,
+  ...THEME_RADII,
+  ...THEME_FONT_SIZES,
+];
 
 export const BRAND_FAMILY: readonly ThemeColour[] = [
   "primary",
@@ -80,5 +91,16 @@ export function cornerRadii(corners: Corners, defaults: WaitronDefaults): Record
       radius,
       corners === "standard" ? defaults.structure[radius]! : FIXED_CORNERS[corners][index]!,
     ]),
+  );
+}
+
+/** Waitron's four sizes times `textScale`, rounded half up to whole pixels in integer arithmetic. */
+export function fontSizes(textScale: TextScale, defaults: WaitronDefaults): Record<string, string> {
+  return Object.fromEntries(
+    THEME_FONT_SIZES.map((name) => {
+      const match = /^(\d+)px$/.exec(String(defaults.structure[name]));
+      if (match === null) throw new RangeError(`not a whole-pixel size: ${name}`);
+      return [name, `${Math.floor((Number(match[1]) * textScale + 50) / 100)}px`];
+    }),
   );
 }
