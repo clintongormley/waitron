@@ -3574,10 +3574,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#two-concurrent-passes-over-listattempting-packagespaymentssrcstorets-its-one-caller-is-the-sumup-providers-resolvepending-do-not-both-succeed)
 
 - **Loose ends left by A633.**
-  - `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
-    that no source file opens a bare `.transaction(`.
-  - `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
-    although the normal suite reaches it (CLAUDE.md §2).
+  [Detail](backlog/payments.md#loose-ends-left-by-a633)
 
 - **The Stripe webhook endpoint still has to be repointed by hand, at Stripe** — left behind by the
   tenant-column removal (#378, 2026-09-16). **Next action:** change it in the Stripe dashboard
@@ -3698,18 +3695,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#on-a-venue-with-no-fiscal-module-a-handheld-shows-the-ticket-view-after-a-presented-bill-is-paid-not-the-paid-screen)
 
 - **Loose ends left by W102 (NFC and equipment labels).**
-  - **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
-    `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning
-    and a return from locking the phone. Simulated readers do not verify the phone.
-    [Detail](backlog/payments.md#check-nfc-pick-up-on-the-boxs-address)
-  - **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
-    Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable
-    one. Simulated writers do not verify the phone.
-    [Detail](backlog/payments.md#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
-  - **Check equipment labels on a physical venue printer.** Print a portable printer's label on
-    itself and a reader's label on another active printer, scan the paper and check the name and
-    code. Confirm neither print opens the drawer. Paper output remains unverified.
-    [Detail](backlog/payments.md#check-equipment-labels-on-a-physical-venue-printer)
+  [Detail](backlog/payments.md#loose-ends-left-by-w102-nfc-and-equipment-labels)
 
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
   BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the

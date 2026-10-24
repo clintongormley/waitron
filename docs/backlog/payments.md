@@ -431,6 +431,30 @@ Not yet checked: the payment API's
 the same column. Left open by the table actions plan.
 [Detail](till.md#tables-parties-and-bills--the-tills-table-actions)
 
+## Loose ends left by A633
+
+- **Loose ends left by A633.**
+  - `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
+    that no source file opens a bare `.transaction(`.
+  - `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
+    although the normal suite reaches it (CLAUDE.md §2).
+
+## Loose ends left by W102 (NFC and equipment labels)
+
+- **Loose ends left by W102 (NFC and equipment labels).**
+  - **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
+    `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning
+    and a return from locking the phone. Simulated readers do not verify the phone.
+    [Detail](#check-nfc-pick-up-on-the-boxs-address)
+  - **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
+    Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable
+    one. Simulated writers do not verify the phone.
+    [Detail](#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
+  - **Check equipment labels on a physical venue printer.** Print a portable printer's label on
+    itself and a reader's label on another active printer, scan the paper and check the name and
+    code. Confirm neither print opens the drawer. Paper output remains unverified.
+    [Detail](#check-equipment-labels-on-a-physical-venue-printer)
+
 <a id="slice-2--the-handheld-nfcqr-link"></a>
 
 ## Decisions and deliberate limits
