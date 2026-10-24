@@ -1486,6 +1486,10 @@ available until this item lands. Do not expose retained business records without
 Internal archive and bucket recovery prepares and selects a separate target. It retains the
 approved public history outside the backup secrets and republishes it after placement, so another
 backup keeps that history. Unknown files at either target root refuse placement. The repair API
-and page remain disabled; Cloud placement, new proof after restart, exact interrupted completion, listener/page
-qualification and whole-branch review remain open. The plan is
+and page remain disabled. The internal archive and bucket restart path requires new named-node
+proof and exact module commitment, then replays the same operation without replacing counters
+advanced after proof. Encrypted publication material retains the original secret entries without
+saving the node proof. Uncommitted or unreadable targets remain retained and refused. Recovery of
+uncommitted work after restart, Cloud placement, listener/page qualification and whole-branch review
+remain open. The plan is
 `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.

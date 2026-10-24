@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdtemp, readdir, rm } from "node:fs/promises";
+import { copyFile, lstat, mkdtemp, readdir, rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,7 +8,9 @@ import { isDeepStrictEqual } from "node:util";
 import {
   openVenueDatabase,
   readBreakGlassVerifier,
+  readBreakGlassKeyName,
   withTransaction,
+  lockVenueDatabase,
   type Database,
 } from "@waitron/db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
@@ -24,7 +26,7 @@ import {
   type FirstSetupRoots,
   createFirstSetupBackupWorkspace,
 } from "@waitron/provisioning";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
@@ -40,6 +42,11 @@ import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import { readFirstSetupBackupHistory } from "./first-setup-backup-history.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import {
+  persistBackupRepairPublication,
+  readBackupRepairPublication,
+  openBackupRepairPublication,
+} from "./first-setup-backup-publication.js";
 import "./errors.js";
 
 export interface BackupRepairOptions extends FirstSetupRoots {
@@ -57,11 +64,17 @@ export interface BackupRepairOpenRequest {
   context: { oldBoxGone: boolean; soleRecovery: boolean };
   recoveryId?: string;
 }
+export type BackupRepairResumeRequest = Omit<BackupRepairOpenRequest, "source" | "recoveryId"> & {
+  recoveryId: string;
+};
 export interface BackupRepairSession {
   sessionId: string;
   recoveryId: string;
   preview: RecoveryBackupPreview;
   binding: OperationBinding;
+}
+export interface BackupRepairResumeSession extends BackupRepairSession {
+  input: unknown;
 }
 const UNUSED_MS = 15 * 60_000;
 type Selected = Awaited<ReturnType<typeof openFirstSetupBackupSource>>;
@@ -97,7 +110,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     session: BackupRepairSession;
     usedAt: number;
     discard(): Promise<void>;
-    request: BackupRepairOpenRequest;
+    request: BackupRepairOpenRequest | BackupRepairResumeRequest;
+    resumed?: boolean;
+    publicationDigest?: string;
+    rebuildSource?: "archive" | "stream";
     selected: Selected;
     originalsDigest: string;
     sourceDigest: string;
@@ -156,7 +172,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       (await verifier(entry.selected)) !== entry.provedVerifier
     )
       conflict();
-    if (entry.preparation !== undefined) {
+    if (
+      entry.publicationDigest !== undefined &&
+      (await readBackupRepairPublication(entry.record!)).digest !== entry.publicationDigest
+    )
+      conflict();
+    if (entry.preparation !== undefined || entry.resumed) {
       const latest = (await options.workspace.read()).at(-1);
       if (
         latest === undefined ||
@@ -177,7 +198,20 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     touch(entry);
     return entry;
   };
-  const evidence = async (entry: Entry, allowMissing: boolean, restoreTarget = false) => {
+  const existingTarget = async (record: NonNullable<Entry["record"]>) => {
+    for (const directory of Object.values(record.target.target))
+      if ((await canonicalFirstSetupDirectory(directory)) !== directory) conflict();
+    const info = await lstat(join(record.target.target.venueDir, "venue.db")).catch(() =>
+      conflict(),
+    );
+    if (!info.isFile() || info.isSymbolicLink()) conflict();
+  };
+  const evidence = async (
+    entry: Entry,
+    allowMissing: boolean,
+    restoreTarget = false,
+    checkTarget = true,
+  ) => {
     const stateDir = entry.record!.target.target.stateDir;
     const retainedPath = join(dirname(dirname(stateDir)), "retained-evidence.json");
     const retained = await readDurableHostJson(retainedPath, 1024 * 1024);
@@ -189,6 +223,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     if (retained === null && allowMissing)
       await writeDurableHostJson(retainedPath, entry.evidence, 1024 * 1024);
     else if (!isDeepStrictEqual(retained, entry.evidence)) conflict();
+    if (!checkTarget) return;
     for (const [name, value] of Object.entries(entry.evidence!)) {
       const path = join(stateDir, "module-evidence", entry.session.binding.module, `${name}.json`);
       const current = await readDurableHostJson(path, 1024 * 1024);
@@ -273,9 +308,17 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       await readRecoveryCopyPreview(copy, entry.selected.sourceId, options.sources);
       entry.working = directory;
     }
+    return buildPreparation(entry);
+  };
+  const buildPreparation = (entry: Entry) => {
+    const module = options.host.modules.find(
+      (module) => module.name === entry.session.binding.module,
+    );
+    if (module?.operations?.readRecoveryState === undefined)
+      throw new AppError("module.operation_invalid", { module: entry.session.binding.module });
     const { node } = readArtifactIdentity(entry.selected.copy.secretEntries);
     entry.preparation = createSelectedRecoveryPreparation({
-      ...entry.record.target.target,
+      ...entry.record!.target.target,
       coordinator: options.host.coordinator,
       currentHold: () => scopes.getStore()?.hold,
       modules: options.modules,
@@ -413,11 +456,172 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         if (owned) await discard();
       }
     },
+    async resume(
+      supplied: BackupRepairResumeRequest,
+      _client: OperationClient,
+    ): Promise<BackupRepairResumeSession> {
+      void _client;
+      const request = structuredClone(supplied);
+      if (disposed) ownerRequired();
+      if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
+        throw new AppError("module.operation_invalid", { module: "core" });
+      const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
+      let owned = true;
+      const discard = () => rm(scratch, { recursive: true, force: true });
+      try {
+        const before = await turn(async () => {
+          if (disposed) ownerRequired();
+          const record = (await options.workspace.read()).at(-1);
+          if (
+            record === undefined ||
+            record.target.recoveryId !== request.recoveryId ||
+            !["placement-started", "restored"].includes(record.phase) ||
+            !isDeepStrictEqual(await observation(), request.observation) ||
+            !isDeepStrictEqual(request.observation, {
+              inspectionId: record.observation.inspectionId,
+              revision: record.observation.revision,
+              ownerGeneration: record.observation.ownerGeneration,
+            })
+          )
+            conflict();
+          const material = await readBackupRepairPublication(record);
+          await existingTarget(record);
+          const lock = await lockVenueDatabase(record.target.target.venueDir);
+          try {
+            const target = await openVenueDatabase(record.target.target.venueDir);
+            try {
+              await target.venue.archiveTo(join(scratch, "venue.db"));
+            } finally {
+              await target.close();
+            }
+          } finally {
+            lock.release();
+          }
+          return { record, material, generation: ++generation };
+        });
+        const selected = await openBackupRepairPublication(
+          before.record,
+          before.material.ciphertext,
+          request.nodeRecoverySecret,
+          join(scratch, "venue.db"),
+          {
+            ...options.sources,
+            environment: options.environment,
+            stateDir: join(scratch, "state"),
+            stagingDir: join(scratch, "staging"),
+          },
+        );
+        const { node } = readArtifactIdentity(selected.copy.secretEntries);
+        const assertCommitted = options.modules.find(
+          (module) => module.name === before.record.binding.module,
+        )?.backup?.assertRestoreCommitted;
+        if (assertCommitted === undefined)
+          throw new AppError("module.operation_invalid", { module: before.record.binding.module });
+        const source = { copy: selected.copy, sourceId: before.record.sourceId };
+        const proved = await authenticatedFirstSetupBackupPreview(
+          source,
+          before.record.binding,
+          request.nodeRecoverySecret,
+          options.sources,
+        );
+        if (
+          proved.nodeRecoveryKeyName !== selected.preview.nodeRecoveryKeyName ||
+          proved.nodeId !== selected.preview.nodeId ||
+          !isDeepStrictEqual(proved.taxpayer, selected.preview.taxpayer)
+        )
+          conflict();
+        const database = await openVenueDatabase(scratch);
+        try {
+          await withTransaction(database.venue, (tx) =>
+            assertCommitted(tx, node, before.record.binding),
+          );
+        } finally {
+          await database.close();
+        }
+        const sourceDigest = await fingerprint(source);
+        const provedVerifier = await verifier(source);
+        const publicEvidence = await readDurableHostJson(
+          join(dirname(dirname(before.record.target.target.stateDir)), "retained-evidence.json"),
+          1024 * 1024,
+        );
+        if (
+          publicEvidence === null ||
+          createHash("sha256").update(JSON.stringify(publicEvidence)).digest("hex") !==
+            before.record.retainedEvidenceDigest
+        )
+          conflict();
+        return await turn(async () => {
+          if (disposed) ownerRequired();
+          if (
+            generation !== before.generation ||
+            !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record) ||
+            !isDeepStrictEqual(await observation(), request.observation) ||
+            (await readBackupRepairPublication(before.record)).digest !== before.material.digest
+          )
+            conflict();
+          await existingTarget(before.record);
+          const target = await openVenueDatabase(before.record.target.target.venueDir);
+          try {
+            if ((await readBreakGlassVerifier(target.venue, node.nodeId)) !== provedVerifier)
+              conflict();
+            await withTransaction(target.venue, (tx) =>
+              assertCommitted(tx, node, before.record.binding),
+            );
+          } finally {
+            await target.close();
+          }
+          await drop();
+          const { version, sequence, previousRecordDigest, recordedAt, ...record } = before.record;
+          void version;
+          void sequence;
+          void previousRecordDigest;
+          void recordedAt;
+          const session = {
+            sessionId: randomBytes(32).toString("hex"),
+            recoveryId: request.recoveryId,
+            preview: selected.preview,
+            binding: record.binding,
+            input: structuredClone(record.input),
+          };
+          const entry: Entry = {
+            session,
+            usedAt: performance.now(),
+            request,
+            selected: source,
+            originalsDigest: record.observation.originalsDigest,
+            sourceDigest,
+            provedVerifier,
+            discard,
+            working: scratch,
+            record,
+            evidence: publicEvidence as Record<string, unknown>,
+            resumed: true,
+            rebuildSource: selected.kind,
+            publicationDigest: before.material.digest,
+          };
+          active = entry;
+          buildPreparation(entry);
+          await recheck(entry);
+          touch(entry);
+          owned = false;
+          return structuredClone(session);
+        });
+      } catch (error) {
+        if (isAppError(error)) throw error;
+        throw new AppError("setup.attempt_uncertain", {});
+      } finally {
+        if (owned) await discard();
+      }
+    },
     prepare(sessionId: string, supplied: unknown, client: OperationClient): Promise<unknown> {
       const proposal = structuredClone(supplied);
       return turn(async (hold) => {
         const entry = await admitted(sessionId);
-        if (entry.record !== undefined && entry.record.phase !== "prepared") conflict();
+        if (
+          entry.publicationDigest !== undefined ||
+          (entry.record !== undefined && entry.record.phase !== "prepared")
+        )
+          conflict();
         const service = await preparation(entry);
         const store = await openVenueDatabase(entry.working!);
         try {
@@ -450,44 +654,85 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         const entry = await admitted(sessionId);
         if (
           entry.preparation === undefined ||
-          entry.record?.phase !== "prepared" ||
+          entry.record === undefined ||
+          (entry.resumed
+            ? !["placement-started", "restored"].includes(entry.record.phase)
+            : entry.record.phase !== "prepared") ||
           entry.record.input === null ||
           !isDeepStrictEqual(entry.record.input, input)
         )
           conflict();
-        if (entry.request.source.kind === "cloud") throw new AppError("setup.not_ready", {});
+        if ("source" in entry.request && entry.request.source.kind === "cloud")
+          throw new AppError("setup.not_ready", {});
         const assertCommitted = options.modules.find(
           (module) => module.name === entry.session.binding.module,
         )?.backup?.assertRestoreCommitted;
         if (assertCommitted === undefined)
           throw new AppError("module.operation_invalid", { module: entry.session.binding.module });
-        await evidence(entry, false);
+        await evidence(entry, false, false, !entry.resumed);
         const target = entry.record.target.target;
-        const allowed = new Set([
-          "venue.lock",
-          "venue.lock-journal",
-          "venue.holder.json",
-          "venue.holder.json.partial",
-          "first-setup-resolutions",
-        ]);
-        if ((await readdir(target.venueDir)).some((name) => !allowed.has(name))) conflict();
-        const allowedState = new Set([
-          "module-preparation-state.json",
-          "module-evidence",
-          "first-setup-resolutions",
-        ]);
-        if ((await readdir(target.stateDir)).some((name) => !allowedState.has(name))) conflict();
-        await refuseIfArchiveSourceLive({
-          validated: entry.selected.copy,
-          stateDir: target.stateDir,
-          oldBoxGone: entry.request.context.oldBoxGone,
-          now: options.sources.bucket.now,
-          openStore: options.sources.bucket.openStore,
-        });
-        await recheck(entry);
-        const started = { ...entry.record, phase: "placement-started" as const };
-        await options.workspace.append(started);
-        entry.record = started;
+        if (!entry.resumed) {
+          const allowed = new Set([
+            "venue.lock",
+            "venue.lock-journal",
+            "venue.holder.json",
+            "venue.holder.json.partial",
+            "first-setup-resolutions",
+          ]);
+          if ((await readdir(target.venueDir)).some((name) => !allowed.has(name))) conflict();
+          const allowedState = new Set([
+            "module-preparation-state.json",
+            "module-evidence",
+            "first-setup-resolutions",
+          ]);
+          if ((await readdir(target.stateDir)).some((name) => !allowedState.has(name))) conflict();
+          await refuseIfArchiveSourceLive({
+            validated: entry.selected.copy,
+            stateDir: target.stateDir,
+            oldBoxGone: entry.request.context.oldBoxGone,
+            now: options.sources.bucket.now,
+            openStore: options.sources.bucket.openStore,
+          });
+          await recheck(entry);
+          entry.rebuildSource =
+            "source" in entry.request && entry.request.source.kind === "bucket"
+              ? "stream"
+              : "archive";
+          const material = await persistBackupRepairPublication(
+            entry.record,
+            entry.selected.copy,
+            entry.session.preview,
+            entry.request.nodeRecoverySecret,
+            entry.rebuildSource,
+          );
+          entry.publicationDigest = material.digest;
+          await recheck(entry);
+          const started = { ...entry.record, phase: "placement-started" as const };
+          await options.workspace.append(started);
+          entry.record = started;
+        } else {
+          await existingTarget(entry.record);
+          const current = await openVenueDatabase(target.venueDir);
+          try {
+            if (
+              (await readBreakGlassVerifier(current.venue, entry.session.binding.targetNodeId)) !==
+                entry.provedVerifier ||
+              (await readBreakGlassKeyName(current.venue, entry.session.binding.targetNodeId)) !==
+                entry.session.preview.nodeRecoveryKeyName
+            )
+              conflict();
+            await withTransaction(current.venue, (tx) =>
+              assertCommitted(
+                tx,
+                readArtifactIdentity(entry.selected.copy.secretEntries).node,
+                entry.session.binding,
+              ),
+            );
+          } finally {
+            await current.close();
+          }
+          await evidence(entry, false, true);
+        }
         const store = await openVenueDatabase(entry.working!);
         try {
           await scopes.run({ hold, db: store.venue }, async () => {
@@ -498,8 +743,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               migrationsRoot: options.sources.migrationsRoot,
               environment: options.environment,
               log: options.log,
-              rebuildSource: entry.request.source.kind === "bucket" ? "stream" : "archive",
-              withModuleOperations: entry.preparation!.runner(input, { refresh: true }),
+              rebuildSource: entry.rebuildSource,
+              withModuleOperations: entry.preparation!.runner(
+                input,
+                entry.resumed ? undefined : { refresh: true },
+              ),
+              ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
             });
           });
         } finally {
@@ -520,7 +769,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         await recheck(entry);
         // Core publishes backup secrets after activation; carry-forward must follow that publication.
         await evidence(entry, false, true);
-        const restored = await options.workspace.append({ ...entry.record, phase: "restored" });
+        const restored =
+          entry.record.phase === "restored"
+            ? (await options.workspace.read()).at(-1)!
+            : await options.workspace.append({ ...entry.record, phase: "restored" });
         entry.record = { ...entry.record, phase: "restored" };
         await options.workspace.select(restored);
         await drop();
