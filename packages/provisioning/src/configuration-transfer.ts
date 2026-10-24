@@ -53,7 +53,6 @@ export interface PreparedVenue {
     province: string | null;
     timeZone: string;
     dayCutover: string;
-    bumpMode: string;
     fireControl: string;
     catalogueId: string | null;
   };
@@ -92,7 +91,7 @@ export async function buildConfigurationBundle(
       l.operation_description as "operationDescription", l.fiscal_territory as "fiscalTerritory",
       l.address_line1 as "addressLine1", l.address_line2 as "addressLine2",
       l.postal_code as "postalCode", l.city, l.province, l.time_zone as "timeZone",
-      l.day_cutover as "dayCutover", l.bump_mode as "bumpMode",
+      l.day_cutover as "dayCutover",
       l.fire_control as "fireControl", l.catalogue_id as "catalogueId",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
@@ -160,7 +159,6 @@ export async function applyPreparedLocation(
   // The receipt languages and operation description stay as the provision request wrote them.
   await tx.execute(sql`
     update locations set
-      bump_mode = ${location.bumpMode},
       fire_control = ${location.fireControl},
       catalogue_id = ${location.catalogueId}
     where id = ${target.locationId}
@@ -522,7 +520,6 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     "fiscalTerritory",
     "timeZone",
     "dayCutover",
-    "bumpMode",
     "fireControl",
   ];
   if (

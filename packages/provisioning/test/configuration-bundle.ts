@@ -26,7 +26,6 @@ export function configurationBundle(): ConfigurationBundle {
         province: null,
         timeZone: "Europe/London",
         dayCutover: "06:00:00",
-        bumpMode: "line",
         fireControl: "waiter",
         catalogueId: null,
       },
