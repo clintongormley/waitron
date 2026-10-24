@@ -1062,6 +1062,53 @@ describe("image-upload as a venue logo, sized and laid out", () => {
     },
   );
 
+  it.each([
+    ["en-GB", "", 260],
+    ["en-GB", "", 230],
+    ["en-GB", "appearance.logo_dark_add", 260],
+    ["en-GB", "appearance.logo_dark_add", 230],
+    ["es-ES", "", 260],
+    ["es-ES", "", 230],
+    ["es-ES", "appearance.logo_dark_add", 260],
+    ["es-ES", "appearance.logo_dark_add", 230],
+  ] as const)(
+    "on a 390 px screen, in %s, labelled %j, keeps the empty add button and its words inside a %i px column",
+    async (locale, label, column) => {
+      setLocale(locale);
+      await atViewport(390, async () => {
+        const { el, host } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+          api: stubApi(),
+          venueLogo: true,
+          addLabel: label ? t(label) : "",
+        });
+        host.style.width = `${column}px`;
+        const button = el.shadowRoot!.querySelector<HTMLElement>("button[data-test=choose-image]")!;
+        const words = button.querySelector<HTMLElement>(".add > span")!;
+        const hostBox = host.getBoundingClientRect();
+        const buttonBox = button.getBoundingClientRect();
+        const wordsBox = words.getBoundingClientRect();
+        expect(buttonBox.left).toBeGreaterThanOrEqual(hostBox.left - 0.5);
+        expect(buttonBox.right).toBeLessThanOrEqual(hostBox.right + 0.5);
+        expect(wordsBox.left).toBeGreaterThanOrEqual(buttonBox.left);
+        expect(wordsBox.right).toBeLessThanOrEqual(buttonBox.right);
+        expect(wordsBox.top).toBeGreaterThanOrEqual(buttonBox.top);
+        expect(wordsBox.bottom).toBeLessThanOrEqual(buttonBox.bottom);
+      });
+    },
+  );
+
+  it("on a wide screen, keeps the empty add button 256 px wide inside its padding", async () => {
+    setLocale("en-GB");
+    await atViewport(1280, async () => {
+      const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+        api: stubApi(),
+        venueLogo: true,
+      });
+      const add = el.shadowRoot!.querySelector<HTMLElement>("button[data-test=choose-image] .add")!;
+      expect(add.getBoundingClientRect().width).toBe(256);
+    });
+  });
+
   it("on a wide screen, draws a wide logo's plate about 212 × 84, as the editor's mock-up does", async () => {
     setLocale("en-GB");
     await atViewport(1280, async () => {

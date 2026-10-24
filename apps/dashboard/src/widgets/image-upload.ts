@@ -153,8 +153,13 @@ export class ImageUpload extends LitElement {
         align-items: center;
         gap: var(--wt-space-3);
       }
+      :host([venue-logo]) .logo.empty {
+        grid-template-columns: minmax(0, calc(var(--wt-space-6) * 8));
+        min-inline-size: 0;
+        max-inline-size: 100%;
+      }
       :host([venue-logo]) .logo .add {
-        inline-size: calc(var(--wt-space-6) * 8);
+        inline-size: 100%;
         block-size: calc(var(--wt-space-6) * 3);
       }
       .row {
