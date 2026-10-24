@@ -88,7 +88,7 @@ by the answers):
 - **S10** — check that logged errors carry no names or email addresses; mask them if they do.
 - **S1** — a dashboard setting for the address of the venue's own privacy-notice page, replacing an
   environment setting a box cannot set. Adds a migration, so while lane B builds it, it waits for
-  lane B's parked pull requests (#2025, #2030) to close: lane B's own rule, and neither carries a
+  lane B's parked pull request (#2025) to close: lane B's own rule; it carries no
   migration.
 - **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
 - **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
