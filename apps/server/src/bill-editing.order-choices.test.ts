@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   saveDraft,
@@ -297,7 +297,7 @@ for (const op of operations)
 it("Place refuses a reserved recalled source before kitchen or status writes", async () => {
   const p = await fixture();
   await inTx(venue, async (tx) => {
-    await writeEditSentLines(tx, true);
+    await setChangesAfterSending(tx, "held-or-waiting");
     await fireAll(tx, venue.cfg, p.id);
     const [line] = await tx
       .select()

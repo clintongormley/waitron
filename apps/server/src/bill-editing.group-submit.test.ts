@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parties, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
 import { placeGroups, submitGroups, type SubmitGroupsInput } from "./order-groups.js";
@@ -275,7 +275,7 @@ describe("submitted groups retain original ownership observations", () => {
       .where(eq(workingOrderLines.workingOrderId, p.tabId));
     const recallAsk = await command(p);
     await inTx(venue, async (tx) => {
-      await writeEditSentLines(tx, true);
+      await setChangesAfterSending(tx, "held-or-waiting");
       await recallToDraft(tx, venue.cfg, p.partyId, source!.id, recallAsk);
     });
     const current = await edit(p.tabId),

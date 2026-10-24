@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parties, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -146,7 +146,7 @@ async function run(
 async function recall(p: Fixture) {
   const args = { ...(await command(p)), expectedEdit: await edit(p.tabId) };
   return inTx(venue, async (tx) => {
-    await writeEditSentLines(tx, true);
+    await setChangesAfterSending(tx, "held-or-waiting");
     return recallToDraft(tx, venue.cfg, p.partyId, p.line.id, args);
   });
 }

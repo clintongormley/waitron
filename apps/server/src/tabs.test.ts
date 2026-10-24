@@ -29,7 +29,8 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, listStationNotices, writeEditSentLines } from "@waitron/venue-service";
+import { departments, listStationNotices } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -1778,7 +1779,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 describe("with changes to sent items switched off", () => {
   it("refuses to recall a line that was sent to a station, and changes nothing", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
@@ -1796,7 +1797,7 @@ describe("with changes to sent items switched off", () => {
 
   it("still recalls a held line that was never sent", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
@@ -1807,7 +1808,7 @@ describe("with changes to sent items switched off", () => {
 
   it("still voids a sent line: the notice is recorded and the line leaves the bill", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
@@ -1824,12 +1825,12 @@ describe("with changes to sent items switched off", () => {
 
   it("recalls a sent line once the setting is back on", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
-    await asApp(cfg, (tx) => writeEditSentLines(tx, true));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
 
     await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
 
@@ -1840,7 +1841,7 @@ describe("with changes to sent items switched off", () => {
   it("still changes a no-preparation line that was released, which has no ticket item", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
     await routeToNoPreparation(cfg, aguaId);
-    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
@@ -2077,7 +2078,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("with changes to sent items switched off, refuses an edit of a sent line, changing nothing", async () => {
     const { cfg, tabId, ticket, lineId, cafeOffer } = await tabWithFiredCafe();
-    await asApp(cfg, (tx) => writeEditSentLines(tx, false));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const before = await linesOf(tabId);
 
     await expect(

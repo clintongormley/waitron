@@ -21,7 +21,7 @@ import {
 import { joinTables, splitTable } from "./table-actions.js";
 import { moveBill } from "./move-bill.js";
 import { mergeBills } from "./bill-actions.js";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { recallToDraft } from "./draft-recall.js";
 
@@ -517,7 +517,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
     const p = await party(),
       from = await otherBill(p.partyId);
     await inTx(venue, async (tx) => {
-      await writeEditSentLines(tx, true);
+      await setChangesAfterSending(tx, "held-or-waiting");
       await submitGroups(tx, venue.cfg, p.partyId, {
         allergy: { party: { answer: "none", guests: [] }, ticks: [] },
         expectedPartyRevision: p.revision,

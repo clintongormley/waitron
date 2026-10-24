@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraft, type BillEditExpected, type BillEditState } from "./order-drafts.js";
@@ -195,7 +195,7 @@ for (const op of operations)
     it("refuses a reserved recalled family even for its current editor", async () => {
       const p = await fixture();
       await inTx(venue, async (tx) => {
-        await writeEditSentLines(tx, true);
+        await setChangesAfterSending(tx, "held-or-waiting");
         await fireAll(tx, venue.cfg, p.id);
         const party = await partyRevisionOfOrder(tx, p.id);
         await recallToDraft(tx, venue.cfg, p.partyId, p.line.id, {
@@ -325,7 +325,7 @@ describe("make-at protects recalled source families", () => {
         await tx
           .insert(workingOrderLines)
           .values({ ...p.line, id: extraId, lineNo: 2, parentLineId: p.line.id });
-        await writeEditSentLines(tx, true);
+        await setChangesAfterSending(tx, "held-or-waiting");
         await fireAll(tx, venue.cfg, p.id);
         const party = await partyRevisionOfOrder(tx, p.id);
         await recallToDraft(tx, venue.cfg, p.partyId, p.line.id, {

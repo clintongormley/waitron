@@ -18,7 +18,7 @@ import {
   type BillEditState,
 } from "./order-drafts.js";
 import { combineParties, joinTables, moveGuests } from "./table-actions.js";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { recallToDraft } from "./draft-recall.js";
 
@@ -468,7 +468,7 @@ describe("table composition compares every affected bill before moving anything"
       const from = await party(),
         into = await party();
       await inTx(venue, async (tx) => {
-        await writeEditSentLines(tx, true);
+        await setChangesAfterSending(tx, "held-or-waiting");
         await VENUE_SERVICE.writePartyAllergy(
           tx,
           from.partyId,

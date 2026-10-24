@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { parkOrder, advanceTicketItem } from "./working-order.js";
@@ -278,7 +278,7 @@ for (const op of ["apply", "cancel", "cancel-keep"] as const)
 
 async function recall(p: Fixture) {
   return inTx(venue, async (tx) => {
-    await writeEditSentLines(tx, true);
+    await setChangesAfterSending(tx, "held-or-waiting");
     return recallToDraft(tx, venue.cfg, p.partyId, p.parent.id, {
       operatorId: venue.staffId,
       expectedEdit: await readBillEditState(tx, p.billId),

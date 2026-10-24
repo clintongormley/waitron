@@ -8,15 +8,14 @@ import {
   savePartyAllergy,
   setAllergyLineTicks,
   writePartyAllergy,
-  writeEditSentLines,
 } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import { recallToDraft } from "./draft-recall.js";
 import { splitDraft } from "./order-drafts.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readPartyAllergyView } from "./party-allergy.js";
-import { VENUE_SERVICE } from "./modules.js";
 import { randomUUID } from "node:crypto";
 import {
   OPERATOR,
@@ -209,9 +208,8 @@ it("splitting one of two recalled dishes keeps both source assignments and their
       })),
     ),
   );
-  const oldSetting = await inTx(v, (tx) => VENUE_SERVICE.readEditSentLines(tx));
   try {
-    await inTx(v, (tx) => writeEditSentLines(tx, true));
+    await inTx(v, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
     let recalled;
     for (const line of [first, second]) {
       const command = await commandFor(v, a.partyId);
@@ -252,7 +250,7 @@ it("splitting one of two recalled dishes keeps both source assignments and their
       ]),
     );
   } finally {
-    await inTx(v, (tx) => writeEditSentLines(tx, oldSetting));
+    await inTx(v, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
   }
 });
 
