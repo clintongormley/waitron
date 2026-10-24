@@ -11,15 +11,15 @@ drawings and the dark colour tokens, so the geometry exists in exactly one place
 redrawing the mark is one edit plus one command. The derived files are committed, so run the command
 whenever you change a source drawing or a dark token.
 
-| File                          | Kind    | Read by                                                                                             |
-| ----------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
-| `waitron-mark.svg`            | source  | The waiter alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.   |
-| `waitron-wordmark.svg`        | source  | The word alone, ink.                                                                                |
-| `waitron-lockup.svg`          | derived | Mark at the word's cap height, then the word. The logo.                                             |
-| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (the dashboard's banner).   |
-| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot. |
-| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.   |
-| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                      |
+| File                          | Kind    | Read by                                                                                                                                                                                    |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `waitron-mark.svg`            | source  | The waiter alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.                                                                                          |
+| `waitron-wordmark.svg`        | source  | The word alone, ink.                                                                                                                                                                       |
+| `waitron-lockup.svg`          | derived | Mark at the word's cap height, then the word. The logo.                                                                                                                                    |
+| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (the dashboard's banner and the Look card preview's dark panel; addresses in `packages/ui/src/waitron-lockup.ts`). |
+| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot.                                                                                        |
+| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.                                                                                          |
+| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                                                                                                             |
 
 `public/` is what the apps serve: `apps/{till,dashboard,setup}/vite.config.ts` each point `publicDir`
 at it, so there is one copy rather than three. Vite prefixes the URLs with each app's `base` at build

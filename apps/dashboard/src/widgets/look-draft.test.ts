@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import {
   anyHandSet,
@@ -11,12 +12,15 @@ import {
   resetAllHand,
   sameDraft,
   setBackground,
+  setLogo,
   setCorners,
   setHand,
   typeCode,
   typeHandCode,
   useWorkedOut,
   waitronLook,
+  withDarkLogo,
+  withLightLogo,
 } from "./look-draft.js";
 
 const LUCIA: ThemeChoices = {
@@ -284,5 +288,53 @@ describe("the Look card's draft colours set by hand", () => {
     }
     const back = pickBrand(pickBrand(typed, "#b12525", opened), "#1e5b3a", opened);
     expect(sameDraft(back, opened)).toBe(false);
+  });
+});
+
+describe("the Look card draft's logo", () => {
+  const L = mediaTestReference("a.png");
+  const D = mediaTestReference("d.png");
+  const E = mediaTestReference("e.png");
+
+  it("sets a light logo, keeps the dark one when the light one changes, and clears both", () => {
+    expect(withLightLogo(null, L)).toStrictEqual({ light: L });
+    expect(withLightLogo({ light: L, dark: D }, E)).toStrictEqual({ light: E, dark: D });
+    expect(withLightLogo({ light: L, dark: D }, null)).toBeNull();
+  });
+
+  it("sets a dark logo only beside a light one, and clears it with no dark key left", () => {
+    expect(withDarkLogo({ light: L }, D)).toStrictEqual({ light: L, dark: D });
+    expect(withDarkLogo({ light: L, dark: D }, null)).toStrictEqual({ light: L });
+    expect(withDarkLogo(null, D)).toBeNull();
+  });
+
+  it("counts a different logo as a change, and an absent dark logo as no dark logo", () => {
+    const base = waitronLook();
+    const pairs = [
+      [null, { light: L }],
+      [{ light: L }, { light: E }],
+      [{ light: L }, { light: L, dark: D }],
+    ] as const;
+    for (const [a, b] of pairs) {
+      expect(sameDraft(setLogo(base, a), setLogo(base, b))).toBe(false);
+      expect(sameDraft(setLogo(base, b), setLogo(base, a))).toBe(false);
+    }
+    expect(
+      sameDraft(setLogo(base, { light: L }), setLogo(base, { light: L, dark: undefined })),
+    ).toBe(true);
+    expect(
+      sameDraft(setLogo(base, { light: L, dark: D }), setLogo(base, { light: L, dark: D })),
+    ).toBe(true);
+  });
+
+  it("puts the logo in the draft's choices and keeps the rest", () => {
+    const draft = setLogo(waitronLook(), { light: L });
+    expect(draft.choices).toStrictEqual({ ...WAITRON_CHOICES, logo: { light: L } });
+    expect(draft.code).toBe("");
+  });
+
+  it("is no longer Waitron's look once a logo is set", () => {
+    expect(isWaitronLook(setLogo(waitronLook(), { light: L }))).toBe(false);
+    expect(isWaitronLook(waitronLook())).toBe(true);
   });
 });

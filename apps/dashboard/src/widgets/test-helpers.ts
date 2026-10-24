@@ -1,6 +1,6 @@
 import axe from "axe-core";
 import { commands, page } from "vitest/browser";
-import { beforeEach, expect, vi } from "vitest";
+import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
@@ -479,4 +479,44 @@ export function computedColour(root: ShadowRoot, value: string): string {
   const colour = getComputedStyle(probe).color;
   probe.remove();
   return colour;
+}
+
+type LogoShape = "source" | "square" | "till" | "display";
+const LOGO_SHAPES: readonly LogoShape[] = ["source", "square", "till", "display"];
+
+/**
+ * The address the test reply gives `reference`'s `shape` rendition: a 400x100 image the test server
+ * serves from apps/dashboard, a query apart for each reference and shape. The presentation route
+ * only answers addresses under /media/; the browser drops the "..", so the image really loads.
+ */
+export function servedLogo(reference: string, shape: LogoShape): string {
+  return `/media/../test/images/wide-logo.svg?${reference.slice(0, 16)}-${shape}`;
+}
+
+/** Answers the image presentation route for `references` with `servedLogo`'s addresses. */
+export function serveLogos(references: readonly string[]): void {
+  beforeEach(() => {
+    const original = globalThis.fetch.bind(globalThis);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
+      const url = new URL(String(input), location.origin);
+      if (url.pathname !== "/media/presentations") return original(input, options);
+      const asked = (url.searchParams.get("references") ?? "").split(",");
+      const images = Object.fromEntries(
+        asked
+          .filter((reference) => references.includes(reference))
+          .map((reference) => [
+            reference,
+            {
+              id: reference,
+              revision: 1,
+              ...Object.fromEntries(
+                LOGO_SHAPES.map((shape) => [shape, servedLogo(reference, shape)]),
+              ),
+            },
+          ]),
+      );
+      return new Response(JSON.stringify({ images }));
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
 }

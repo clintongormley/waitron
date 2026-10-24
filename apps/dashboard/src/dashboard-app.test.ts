@@ -3244,6 +3244,26 @@ describe("dashboard-app", () => {
     expect(face!.canEdit).toBe(canEdit);
   });
 
+  it("hands the Appearance page the tenant's legal name, as the banner shows it", async () => {
+    history.replaceState(null, "", "/manage/appearance");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          permissions: ["venue.view"],
+          venueName: "BAR LUCÍA S.L.",
+        }),
+        listStaff: vi.fn().mockResolvedValue([]),
+        listThemes: themesStub(),
+      }),
+    });
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { legalName?: string }>(
+      "dashboard-appearance-screen",
+    );
+    expect(face!.legalName).toBe("BAR LUCÍA S.L.");
+  });
+
   it.each([
     ["supervisor", []],
     ["manager", ["booking.manage"]],

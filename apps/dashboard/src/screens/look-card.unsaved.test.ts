@@ -2,11 +2,13 @@ import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import type { ImageUpload } from "../widgets/image-upload.js";
 import "./look-card.js";
 
 class LookLeaveApp extends LitElement {
@@ -361,6 +363,50 @@ describe("leaving with Advanced", () => {
     await userEvent.click(q(card, "[data-test=pick-dark]")!);
     await settle(card);
     expect(disclosure(card).open).toBe(true);
+    expect(save(card).disabled).toBe(true);
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+  });
+});
+
+describe("the logo in an unsaved draft", () => {
+  useMediaPresentations();
+  const L = mediaTestReference("lucia.png");
+  const field = (card: Card) =>
+    q(card, "dashboard-theme-logo-field") as HTMLElementTagNameMap["dashboard-theme-logo-field"];
+  async function pickMain(card: Card, image: string | null) {
+    const upload = field(card).shadowRoot!.querySelector<ImageUpload>(
+      'dashboard-image-upload[name="logo.light"]',
+    )!;
+    upload.dispatchEvent(
+      new CustomEvent("image-changed", { detail: { image }, bubbles: true, composed: true }),
+    );
+    await card.updateComplete;
+  }
+
+  it("a picked logo asks before leaving, and Discard drops it", async () => {
+    const { app, card, saveTheme } = await mount();
+    await pickMain(card, L);
+    expect(field(card).logo).toEqual({ light: L });
+    expect(unload()).toBe(true);
+    const request = leave(app);
+    await choose(app, "discard");
+    expect(await request).toBe("proceeded");
+    await expect.poll(() => editing(card)).toBe(false);
+    await userEvent.click(q(card, "[data-test=edit]")!);
+    await card.updateComplete;
+    expect(field(card).logo).toBeNull();
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(unload()).toBe(false);
+  });
+
+  it("putting the opened logo back counts as unchanged", async () => {
+    const { app, card } = await mount({ ...lucia, choices: { ...LUCIA, logo: { light: L } } });
+    expect(field(card).logo).toEqual({ light: L });
+    await pickMain(card, null);
+    expect(save(card).disabled).toBe(false);
+    expect(unload()).toBe(true);
+    await pickMain(card, L);
     expect(save(card).disabled).toBe(true);
     expect(unload()).toBe(false);
     expect(await leave(app)).toBe("proceeded");

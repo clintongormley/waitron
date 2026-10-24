@@ -7,6 +7,7 @@ import {
   type Mode,
   type ThemeChoices,
   type ThemeColour,
+  type ThemeLogo,
 } from "@waitron/ui-core/theme";
 
 export type HandField = `handSet.${Mode}.${ThemeColour}`;
@@ -55,6 +56,11 @@ function invalidHand(draft: LookDraft, mode: Mode, key: ThemeColour): string | u
   return CODE.test(typed) ? undefined : typed;
 }
 
+function sameLogo(a: ThemeLogo | null, b: ThemeLogo | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.light === b.light && a.dark === b.dark;
+}
+
 export function sameDraft(a: LookDraft, b: LookDraft): boolean {
   const x = a.choices;
   const y = b.choices;
@@ -68,7 +74,8 @@ export function sameDraft(a: LookDraft, b: LookDraft): boolean {
         sameHand(x.handSet[mode], y.handSet[mode]) &&
         THEME_COLOURS.every((key) => invalidHand(a, mode, key) === invalidHand(b, mode, key)),
     ) &&
-    codeKey(a.code) === codeKey(b.code)
+    codeKey(a.code) === codeKey(b.code) &&
+    sameLogo(x.logo, y.logo)
   );
 }
 
@@ -202,4 +209,19 @@ export function waitronLook(): LookDraft {
 
 export function isWaitronLook(draft: LookDraft): boolean {
   return sameDraft(draft, waitronLook());
+}
+
+export function withLightLogo(logo: ThemeLogo | null, name: string | null): ThemeLogo | null {
+  if (name === null) return null;
+  return logo?.dark === undefined ? { light: name } : { light: name, dark: logo.dark };
+}
+
+/** A dark logo stands only beside a light one. */
+export function withDarkLogo(logo: ThemeLogo | null, name: string | null): ThemeLogo | null {
+  if (logo === null) return null;
+  return name === null ? { light: logo.light } : { light: logo.light, dark: name };
+}
+
+export function setLogo(draft: LookDraft, logo: ThemeLogo | null): LookDraft {
+  return { ...draft, choices: { ...draft.choices, logo } };
 }

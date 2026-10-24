@@ -7,18 +7,19 @@ import {
   colourToken,
   cornerRadii,
 } from "./tokens.js";
-import { WAITRON_DEFAULTS } from "./waitron.js";
+import { WAITRON_CHOICES } from "./theme.js";
+import { deriveTheme, WAITRON_DEFAULTS } from "./waitron.js";
 
 const MEANING =
   /^(on-)?(station-|palette-|table-|tab-|day-|danger|success|warning|google-|highlight)/;
 const PREFIX = "--wt-color-";
 
 describe("the token list a theme writes", () => {
-  test("the theme writes exactly the colours that carry no meaning, less the scrim", () => {
+  test("the theme writes exactly the colours that carry no meaning, less the scrim and the logo plate", () => {
     const neutral = Object.keys(WAITRON_DEFAULTS.light)
       .filter((name) => name.startsWith(PREFIX))
       .map((name) => name.slice(PREFIX.length))
-      .filter((key) => !MEANING.test(key) && key !== "scrim");
+      .filter((key) => !MEANING.test(key) && key !== "scrim" && key !== "logo-plate");
     expect(new Set(THEME_COLOURS)).toEqual(new Set(neutral));
     expect(THEME_COLOURS).toHaveLength(22);
     expect(new Set(THEME_COLOURS).size).toBe(THEME_COLOURS.length);
@@ -34,12 +35,24 @@ describe("the token list a theme writes", () => {
 
   test("the scrim and every meaning colour stay outside", () => {
     expect(THEME_TOKENS).not.toContain("--wt-color-scrim");
+    expect(THEME_TOKENS).not.toContain("--wt-color-logo-plate");
     for (const name of THEME_TOKENS) {
       if (name.startsWith(PREFIX))
         expect(MEANING.test(name.slice(PREFIX.length)), name).toBe(false);
     }
     const structure = THEME_TOKENS.filter((name) => name in WAITRON_DEFAULTS.structure);
     expect(structure).toEqual(["--wt-radius-sm", "--wt-radius-md", "--wt-radius-lg"]);
+  });
+
+  test("the logo plate is white in both modes and no theme writes it", () => {
+    expect(WAITRON_DEFAULTS.light["--wt-color-logo-plate"]).toBe("#ffffff");
+    expect(WAITRON_DEFAULTS.dark["--wt-color-logo-plate"]).toBe("#ffffff");
+    const theme = deriveTheme({
+      ...WAITRON_CHOICES,
+      handSet: { light: { surface: "#0000ff" }, dark: { surface: "#0000ff" } },
+    });
+    expect(theme.light).not.toHaveProperty(["--wt-color-logo-plate"]);
+    expect(theme.dark).not.toHaveProperty(["--wt-color-logo-plate"]);
   });
 
   test("the list is the colour tokens in order, then the three radii", () => {

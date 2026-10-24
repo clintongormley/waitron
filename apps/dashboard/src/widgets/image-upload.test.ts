@@ -8,6 +8,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ImageUpload, type ImageUploader } from "./image-upload.js";
 import { focusFirstInvalid, setContentLanguages } from "@waitron/ui";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es-ES"));
@@ -18,6 +19,14 @@ async function open(el: ImageUpload): Promise<HTMLElement> {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
   await el.updateComplete;
   return el.shadowRoot!.querySelector("media-image-picker")!;
+}
+function png(width: number, height: number): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d")!;
+  context.fillRect(0, 0, width, height);
+  return canvas.toDataURL("image/png");
 }
 function select(picker: HTMLElement, filename = mediaTestReference("abc123.png")): void {
   picker.dispatchEvent(
@@ -559,14 +568,6 @@ describe("image-upload as a receipt logo", () => {
   const remove = (el: ImageUpload) =>
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=remove-image]");
   const picture = (el: ImageUpload) => choose(el).querySelector<HTMLImageElement>("img")!;
-  function png(width: number, height: number): string {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d")!;
-    context.fillRect(0, 0, width, height);
-    return canvas.toDataURL("image/png");
-  }
   const cssPx = (dots: number) => (dots / dpiValue("203dpi")) * 96;
 
   it.each([
@@ -757,6 +758,404 @@ describe("image-upload as a receipt logo", () => {
   });
 });
 
+describe("image-upload as a venue logo", () => {
+  async function venueLogo(props: Partial<ImageUpload> = {}, theme?: "light" | "dark") {
+    return mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      {
+        api: stubApi(),
+        venueLogo: true,
+        replaceName: "Replace the logo",
+        removeName: "Remove the logo",
+        ...props,
+      },
+      theme,
+    );
+  }
+  type Button = HTMLElementTagNameMap["wt-button"];
+  const add = (el: ImageUpload) =>
+    el.shadowRoot!.querySelector<HTMLButtonElement>("button[data-test=choose-image]");
+  const replace = (el: ImageUpload) =>
+    el.shadowRoot!.querySelector<Button>("wt-button[data-test=replace-image]");
+  const remove = (el: ImageUpload) =>
+    el.shadowRoot!.querySelector<Button>("wt-button[data-test=remove-image]");
+  const inner = (button: Button) => button.shadowRoot!.querySelector("button")!;
+  const plate = (el: ImageUpload) => el.shadowRoot!.querySelector<HTMLElement>(".plate");
+
+  it("reflects its mode as the venue-logo attribute", async () => {
+    const { el } = await venueLogo();
+    expect(el.hasAttribute("venue-logo")).toBe(true);
+    expect(el.hasAttribute("logo")).toBe(false);
+  });
+
+  it("leaves Replace and Remove named by their text when given no names", async () => {
+    setLocale("en-GB");
+    const { el } = await venueLogo({
+      image: mediaTestReference("own.png"),
+      replaceName: "",
+      removeName: "",
+    });
+    await expect.element(page.elementLocator(inner(replace(el)!))).toHaveAccessibleName("Replace");
+    await expect.element(page.elementLocator(inner(remove(el)!))).toHaveAccessibleName("Remove");
+  });
+
+  it.each([
+    ["en-GB", "", "Add a logo"],
+    ["es-ES", "", es["image.add_logo"]],
+    ["en-GB", "Add a dark-screen logo", "Add a dark-screen logo"],
+  ] as const)(
+    "without an image, in %s with the label %j, is one dashed button reading + %s",
+    async (locale, addLabel, name) => {
+      setLocale(locale);
+      const { el } = await venueLogo({ addLabel });
+      if (addLabel === "") expect(name).toBe(t("image.add_logo"));
+      expect(el.shadowRoot!.querySelectorAll("button, wt-button")).toHaveLength(1);
+      expect(add(el)!.classList.contains("logo")).toBe(true);
+      expect(add(el)!.classList.contains("empty")).toBe(true);
+      expect(plate(el)).toBeNull();
+      expect(add(el)!.textContent!.replace(/\s+/g, " ").trim()).toBe(`+ ${name}`);
+      await expect.element(page.elementLocator(add(el)!)).toHaveAccessibleName(name);
+      expect(getComputedStyle(add(el)!).borderTopStyle).toBe("dashed");
+      await userEvent.click(page.elementLocator(add(el)!));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+    },
+  );
+
+  it.each([
+    ["en-GB", "Replace", "Remove"],
+    ["es-ES", es["image.replace_logo"], es["image.remove_logo"]],
+  ] as const)(
+    "with an image, in %s, draws it on the plate with %s and %s beside it",
+    async (locale, replaceText, removeText) => {
+      setLocale(locale);
+      expect(replaceText).toBe(t("image.replace_logo"));
+      expect(removeText).toBe(t("image.remove_logo"));
+      const api = stubApi();
+      const { el } = await venueLogo({ api, image: mediaTestReference("own.png") }, "dark");
+      expect(add(el)).toBeNull();
+      const img = plate(el)!.querySelector<HTMLImageElement>("img")!;
+      await vi.waitFor(() =>
+        expect(img.getAttribute("src")).toBe(
+          `/media/renditions/v1/${mediaTestReference("own.png")}/display/7500-2500-200.webp`,
+        ),
+      );
+      expect(img.alt).toBe("");
+      expect(getComputedStyle(plate(el)!).backgroundColor).toBe("rgb(255, 255, 255)");
+      expect(getComputedStyle(img).objectFit).toBe("contain");
+      for (const [button, text, name] of [
+        [replace(el)!, replaceText, "Replace the logo"],
+        [remove(el)!, removeText, "Remove the logo"],
+      ] as const) {
+        expect(button.textContent!.trim()).toBe(text);
+        expect(button.variant).toBe("secondary");
+        await expect.element(page.elementLocator(inner(button))).toHaveAccessibleName(name);
+      }
+      await userEvent.click(page.elementLocator(inner(replace(el)!)));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-modal [data-test=remove-image]")).toBeNull();
+      expect(api.imageLibraryRequest).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "on a %s dashboard, edges the plate with the border colour and stacks Replace above Remove beside it",
+    async (theme) => {
+      const { el } = await venueLogo({ image: mediaTestReference("own.png") }, theme);
+      const style = getComputedStyle(plate(el)!);
+      expect(style.borderTopStyle).toBe("solid");
+      expect(style.borderTopWidth).toBe("1px");
+      const probe = document.createElement("span");
+      probe.style.color = "var(--wt-color-border)";
+      el.shadowRoot!.append(probe);
+      expect(style.borderTopColor).toBe(getComputedStyle(probe).color);
+      probe.remove();
+      const plateBox = plate(el)!.getBoundingClientRect();
+      const replaceBox = replace(el)!.getBoundingClientRect();
+      const removeBox = remove(el)!.getBoundingClientRect();
+      expect(replaceBox.left).toBeGreaterThanOrEqual(plateBox.right);
+      expect(removeBox.left).toBe(replaceBox.left);
+      expect(removeBox.top).toBeGreaterThanOrEqual(replaceBox.bottom);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "on a %s dashboard, invalid edges the plate in the danger colour, and valid does not",
+    async (theme) => {
+      const { el } = await venueLogo(
+        { image: mediaTestReference("own.png"), invalid: true },
+        theme,
+      );
+      const probe = document.createElement("span");
+      probe.style.color = "var(--wt-color-danger)";
+      el.shadowRoot!.append(probe);
+      const danger = getComputedStyle(probe).color;
+      probe.remove();
+      const edges = () => {
+        const style = getComputedStyle(plate(el)!);
+        return [
+          style.borderTopColor,
+          style.borderRightColor,
+          style.borderBottomColor,
+          style.borderLeftColor,
+        ];
+      };
+      expect(edges()).toEqual([danger, danger, danger, danger]);
+      el.invalid = false;
+      await el.updateComplete;
+      expect(edges()).not.toContain(danger);
+    },
+  );
+
+  it("a name the library no longer resolves draws an empty plate, and Replace still opens the picker", async () => {
+    const gone = mediaTestReference("gone.png");
+    vi.mocked(fetch).mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ images: {} }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    const { el } = await venueLogo({ image: gone });
+    await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+    const img = plate(el)!.querySelector("img")!;
+    expect(img.hasAttribute("src")).toBe(false);
+    await userEvent.click(page.elementLocator(inner(replace(el)!)));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+  });
+
+  it("Remove sends image-changed with null and focuses the add button", async () => {
+    const api = stubApi();
+    const { el } = await venueLogo({ api, image: mediaTestReference("own.png") });
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    await userEvent.click(page.elementLocator(inner(remove(el)!)));
+    await el.updateComplete;
+    expect(changed.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { image: null },
+    ]);
+    expect(api.imageLibraryRequest).not.toHaveBeenCalled();
+    expect(remove(el)).toBeNull();
+    expect(plate(el)).toBeNull();
+    expect(add(el)).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(add(el));
+  });
+
+  it("a pick replaces the image and focuses Replace", async () => {
+    const { el } = await venueLogo({ image: mediaTestReference("own.png") });
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    await userEvent.click(page.elementLocator(inner(replace(el)!)));
+    await el.updateComplete;
+    select(
+      el.shadowRoot!.querySelector<HTMLElement>("media-image-picker")!,
+      mediaTestReference("new.png"),
+    );
+    await el.updateComplete;
+    expect(changed.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { image: mediaTestReference("new.png") },
+    ]);
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    await vi.waitFor(() =>
+      expect(plate(el)!.querySelector("img")!.getAttribute("src")).toBe(
+        `/media/renditions/v1/${mediaTestReference("new.png")}/display/7500-2500-200.webp`,
+      ),
+    );
+    expect(replace(el)).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(replace(el));
+  });
+
+  it.each([
+    ["Replace, with an image", mediaTestReference("own.png")],
+    ["the add button, with none", null],
+  ] as const)("cancelling the picker focuses %s", async (_, image) => {
+    const { el } = await venueLogo({ image });
+    el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-test=replace-image], [data-test=choose-image]",
+    )!.click();
+    await el.updateComplete;
+    await userEvent.click(
+      page.elementLocator(
+        el.shadowRoot!.querySelector('wt-form-actions wt-button[slot="cancel"]')!,
+      ),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    const focused = image ? replace(el) : add(el);
+    expect(focused).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(focused);
+  });
+
+  it("invalid marks the drawn button, where focusFirstInvalid lands", async () => {
+    const empty = await venueLogo({ invalid: true });
+    expect(add(empty.el)!.getAttribute("aria-invalid")).toBe("true");
+    expect(await focusFirstInvalid(empty.el.shadowRoot!)).toBe(add(empty.el));
+    empty.el.invalid = false;
+    await empty.el.updateComplete;
+    expect(add(empty.el)!.hasAttribute("aria-invalid")).toBe(false);
+
+    const filled = await venueLogo({ invalid: true, image: mediaTestReference("own.png") });
+    await replace(filled.el)!.updateComplete;
+    expect(inner(replace(filled.el)!).getAttribute("aria-invalid")).toBe("true");
+    expect(inner(remove(filled.el)!).hasAttribute("aria-invalid")).toBe(false);
+    expect(await focusFirstInvalid(filled.el.shadowRoot!)).toBe(replace(filled.el));
+    filled.el.invalid = false;
+    await filled.el.updateComplete;
+    await replace(filled.el)!.updateComplete;
+    expect(inner(replace(filled.el)!).hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("disabled disables all three, and closes a library left open", async () => {
+    const { el } = await venueLogo({ image: mediaTestReference("own.png") });
+    await userEvent.click(page.elementLocator(inner(replace(el)!)));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+    el.disabled = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    expect(replace(el)!.disabled).toBe(true);
+    expect(remove(el)!.disabled).toBe(true);
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    remove(el)!.click();
+    replace(el)!.click();
+    await el.updateComplete;
+    expect(changed).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    el.image = null;
+    await el.updateComplete;
+    expect(add(el)!.disabled).toBe(true);
+    add(el)!.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  });
+});
+
+describe("image-upload as a venue logo, sized and laid out", () => {
+  const plate = (el: ImageUpload) => el.shadowRoot!.querySelector<HTMLElement>(".plate")!;
+  const stack = (el: ImageUpload) => el.shadowRoot!.querySelector<HTMLElement>(".stack")!;
+
+  async function atViewport(width: number, run: () => Promise<void>): Promise<void> {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(width, 900);
+    try {
+      await run();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  }
+
+  /** A 4:1 logo, loaded before anything is measured: the plate is sized by it. */
+  async function wideLogo(hostWidth?: number) {
+    const mounted = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      venueLogo: true,
+      image: mediaTestReference("own.png"),
+    });
+    if (hostWidth !== undefined) mounted.host.style.width = `${hostWidth}px`;
+    const img = plate(mounted.el).querySelector<HTMLImageElement>("img")!;
+    await vi.waitFor(() => expect(img.getAttribute("src")).toContain("/display/"));
+    const loaded = new Promise((resolve) => img.addEventListener("load", resolve, { once: true }));
+    img.src = png(1200, 300);
+    await loaded;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    return { ...mounted, img };
+  }
+
+  // 260 px is the field's measured width in the editor on a 390 px screen.
+  it.each([
+    ["en-GB", 390],
+    ["en-GB", 260],
+    ["es-ES", 390],
+    ["es-ES", 260],
+  ] as const)(
+    "on a 390 px screen, in %s, in a %i px column, keeps Replace and Remove beside a wide logo",
+    async (locale, column) => {
+      setLocale(locale);
+      await atViewport(390, async () => {
+        const { el, host, img } = await wideLogo(column);
+        const plateBox = plate(el).getBoundingClientRect();
+        const stackBox = stack(el).getBoundingClientRect();
+        const hostBox = host.getBoundingClientRect();
+        expect(stackBox.left).toBeGreaterThanOrEqual(plateBox.right);
+        expect(stackBox.top).toBeLessThan(plateBox.bottom);
+        expect(stackBox.bottom).toBeGreaterThan(plateBox.top);
+        expect(stackBox.right).toBeLessThanOrEqual(hostBox.right + 0.5);
+        const imgBox = img.getBoundingClientRect();
+        expect(imgBox.left).toBeGreaterThanOrEqual(plateBox.left);
+        expect(imgBox.right).toBeLessThanOrEqual(plateBox.right);
+        expect(getComputedStyle(img).objectFit).toBe("contain");
+      });
+    },
+  );
+
+  it.each([
+    ["en-GB", "", 260],
+    ["en-GB", "", 230],
+    ["en-GB", "appearance.logo_dark_add", 260],
+    ["en-GB", "appearance.logo_dark_add", 230],
+    ["es-ES", "", 260],
+    ["es-ES", "", 230],
+    ["es-ES", "appearance.logo_dark_add", 260],
+    ["es-ES", "appearance.logo_dark_add", 230],
+  ] as const)(
+    "on a 390 px screen, in %s, labelled %j, keeps the empty add button and its words inside a %i px column",
+    async (locale, label, column) => {
+      setLocale(locale);
+      await atViewport(390, async () => {
+        const { el, host } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+          api: stubApi(),
+          venueLogo: true,
+          addLabel: label ? t(label) : "",
+        });
+        host.style.width = `${column}px`;
+        const button = el.shadowRoot!.querySelector<HTMLElement>("button[data-test=choose-image]")!;
+        const words = button.querySelector<HTMLElement>(".add > span")!;
+        const hostBox = host.getBoundingClientRect();
+        const buttonBox = button.getBoundingClientRect();
+        const wordsBox = words.getBoundingClientRect();
+        expect(buttonBox.left).toBeGreaterThanOrEqual(hostBox.left - 0.5);
+        expect(buttonBox.right).toBeLessThanOrEqual(hostBox.right + 0.5);
+        expect(wordsBox.left).toBeGreaterThanOrEqual(buttonBox.left);
+        expect(wordsBox.right).toBeLessThanOrEqual(buttonBox.right);
+        expect(wordsBox.top).toBeGreaterThanOrEqual(buttonBox.top);
+        expect(wordsBox.bottom).toBeLessThanOrEqual(buttonBox.bottom);
+      });
+    },
+  );
+
+  it("on a wide screen, keeps the empty add button 256 px wide inside its padding", async () => {
+    setLocale("en-GB");
+    await atViewport(1280, async () => {
+      const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+        api: stubApi(),
+        venueLogo: true,
+      });
+      const add = el.shadowRoot!.querySelector<HTMLElement>("button[data-test=choose-image] .add")!;
+      expect(add.getBoundingClientRect().width).toBe(256);
+    });
+  });
+
+  it("on a wide screen, draws a wide logo's plate about 212 × 84, as the editor's mock-up does", async () => {
+    setLocale("en-GB");
+    await atViewport(1280, async () => {
+      const { el, img } = await wideLogo();
+      const box = plate(el).getBoundingClientRect();
+      expect(box.width).toBeGreaterThanOrEqual(196);
+      expect(box.width).toBeLessThanOrEqual(224);
+      expect(box.height).toBeGreaterThanOrEqual(76);
+      expect(box.height).toBeLessThanOrEqual(92);
+      const imgBox = img.getBoundingClientRect();
+      const scale = Math.min(imgBox.width / img.naturalWidth, imgBox.height / img.naturalHeight);
+      // The whole logo is drawn, filling the box's width: none of it is cut off.
+      expect(Math.abs(img.naturalWidth * scale - imgBox.width)).toBeLessThan(1);
+      expect(getComputedStyle(img).objectFit).toBe("contain");
+      expect(stack(el).getBoundingClientRect().left).toBeGreaterThanOrEqual(box.right);
+    });
+  });
+});
+
 it("A651 chooses the full-size photo through the real nested picker and closes the outer window", async () => {
   await import("@waitron/dashboard-modules");
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
@@ -808,9 +1207,10 @@ it.each([
   { thumbnail: false, logo: false, shape: "square" },
   { thumbnail: true, logo: false, shape: "square" },
   { thumbnail: false, logo: true, shape: "display" },
+  { thumbnail: false, logo: false, venueLogo: true, shape: "display" },
 ])(
   "refreshes a mounted $shape image without changing its stored selection",
-  async ({ thumbnail, logo, shape }) => {
+  async ({ thumbnail, logo, venueLogo = false, shape }) => {
     const reference = mediaTestReference("parent.png");
     const replacement = mediaTestReference("replacement.webp");
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
@@ -818,6 +1218,7 @@ it.each([
       image: reference,
       thumbnail,
       logo,
+      venueLogo,
     });
     const changed = vi.fn();
     el.addEventListener("image-changed", changed);

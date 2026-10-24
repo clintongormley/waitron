@@ -83,6 +83,7 @@ describe("the user guides", () => {
     expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
       "look",
       "edit",
+      "logo",
       "advanced",
       "hard-to-read",
       "save",

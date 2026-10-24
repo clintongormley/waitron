@@ -9,6 +9,11 @@ cambiarlo y ver el resultado antes de que lo vea nadie más.
 Abre **Ajustes** y después **Apariencia**. La tarjeta **Aspecto** muestra el **Tema en uso** y las
 elecciones que lo forman:
 
+- **Logotipo**: **Ninguno**, o el logotipo del tema seguido de cómo lo muestran las pantallas
+  oscuras: «Pantallas oscuras: versión propia» cuando el tema tiene una versión para pantallas
+  oscuras, o «Pantallas oscuras: sobre una placa clara» cuando no la tiene. La imagen sigue el
+  propio ajuste de **Tema** de este panel, así que un panel oscuro muestra el logotipo como lo
+  mostrarán las pantallas oscuras.
 - **Color de marca**: el color de los botones principales y de los elementos seleccionados.
   **De Waitron** significa que el tema conserva el color propio de Waitron. Un color que no es una
   de las muestras aparece como **Personalizado** con su código. Si se eligió un tono legible en
@@ -45,7 +50,8 @@ Una línea en la parte superior del editor dice qué hace guardar. Si editas el 
 cualquier otro tema, dice «No está en uso. Al guardar no cambia ninguna pantalla hasta que lo
 uses.», y el título de la tarjeta nombra el tema, o dice **Añadir tema**.
 
-El editor abre las tres elecciones del tema en el mismo sitio:
+El editor se abre con el **Logotipo** del tema en primer lugar, como explica «Añade tu logotipo»,
+más abajo, y después las tres elecciones del tema:
 
 - **Color de marca**: elige **De Waitron**, una de las muestras, o **Personalizado** para escoger
   cualquier color. También puedes escribir un código como `#1e5b3a` en la casilla junto a
@@ -62,19 +68,48 @@ marca**, a su lado, quita ese color, de modo que las pantallas oscuras vuelven a
 botones a partir del color de marca.
 
 Al lado o debajo de las elecciones, la **Vista previa** pinta una pequeña muestra del panel con el
-aspecto que estás preparando: una **Versión clara** y una **Versión oscura**, cada una con un
-elemento del menú seleccionado, un campo, los botones Guardar y Cancelar, un interruptor, un enlace
-y una elección entre Claro y Oscuro. Es una imagen, así que sus botones no hacen nada. El editor se
+aspecto que estás preparando: una **Versión clara** y una **Versión oscura**, cada una encabezada
+por una franja con el logotipo y la razón social del local, y después un elemento del menú
+seleccionado, un campo, los botones Guardar y Cancelar, un interruptor, un enlace y una elección
+entre Claro y Oscuro. Es una imagen, así que sus botones no hacen nada. El editor se
 organiza según el ancho de la tarjeta, no el de la ventana. En una tarjeta ancha la vista previa
 queda al lado de las elecciones, y en una estrecha, debajo. Cuando la vista previa tiene espacio,
 las dos versiones quedan una al lado de la otra; si no, la versión clara queda encima de la oscura.
 
 Nada más en la página, ni ninguna otra pantalla, cambia hasta que guardas. **Usar el aspecto de
-Waitron** devuelve todas las elecciones a las de Waitron: el color de marca de Waitron, Neutro,
-esquinas Estándar y ningún color fijado a mano. No guarda nada por sí solo, y aparece desactivado
-mientras las elecciones ya son el aspecto de Waitron. **Cancelar** cierra el editor sin guardar.
-Si has cambiado algo, Cancelar, salir de la página y abrir otro tema desde la tarjeta Temas te lo
-preguntan antes.
+Waitron** quita el logotipo y devuelve todas las elecciones a las de Waitron: el color de marca de
+Waitron, Neutro, esquinas Estándar y ningún color fijado a mano. No guarda nada por sí solo, y
+aparece desactivado mientras no hay logotipo y las elecciones ya son el aspecto de Waitron. **Cancelar** cierra el
+editor sin guardar. Si has cambiado algo, Cancelar, salir de la página y abrir otro tema desde la
+tarjeta Temas te lo preguntan antes.
+
+## Añade tu logotipo {#logo}
+
+Sin logotipo, el campo **Logotipo** muestra **+ Añadir un logotipo**, que abre la biblioteca de
+imágenes: sube allí una imagen o busca una que ya esté allí, y elige **Usar imagen** en ella. Un
+logotipo es un archivo PNG, JPEG o WebP, como todas las imágenes de la biblioteca; un archivo SVG se
+rechaza. La pista bajo el campo dice «PNG, JPEG o WebP. Queda mejor con fondo transparente y al
+menos 200 píxeles de alto.»
+
+Con un logotipo, el campo muestra la imagen sobre una placa blanca, con **Sustituir** encima de
+**Quitar** a su lado. Sustituir abre la biblioteca de imágenes para elegir otra imagen. Quitar
+retira el logotipo del tema, junto con su versión para pantallas oscuras. La propia imagen sigue en
+la biblioteca de imágenes.
+
+Cuando hay un logotipo, **Para pantallas oscuras (opcional)** ofrece **+ Añadir una versión para
+pantallas oscuras**: una segunda imagen, como un dibujo claro de tu logotipo, que las pantallas
+oscuras muestran en lugar de la principal. Hasta que añadas una, la pista dice «Sin ella, las
+pantallas oscuras muestran tu logotipo sobre una placa clara.» La versión para pantallas oscuras
+tiene sus propios Sustituir y Quitar.
+
+La vista previa muestra el logotipo en la franja superior de cada versión, seguido de la razón
+social del local: el logotipo principal en la versión clara y, en la versión oscura, la versión para
+pantallas oscuras o el logotipo principal sobre su placa clara. Sin logotipo, la franja muestra el
+logotipo propio de Waitron.
+
+**Guardar** y **Cancelar** tratan el logotipo igual que las demás elecciones. El logotipo se guarda
+con el tema. Mostrarlo en la franja superior del panel, en las cajas y en las pantallas de inicio de sesión
+llegará en una actualización posterior.
 
 ## Fija colores a mano {#advanced}
 

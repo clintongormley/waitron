@@ -2113,18 +2113,38 @@ it("keeps a live department receipt usage linked to its editor", async () => {
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 
-it("shows a theme's logo use as its name, with no link, and blocks the delete", async () => {
+it("shows a theme's logo use as 'Logo of theme {name}', linking to the Appearance page, and blocks the delete", async () => {
+  onTestFinished(() => setLocale("en-GB"));
   const client = api();
   client.getImage.mockResolvedValue({
-    image: { ...image, usageCount: 1 },
-    uses: [{ kind: "theme_logo", id: "t1", name: "Bar Lucía" }] as ImageUsage[],
+    image: { ...image, usageCount: 2 },
+    uses: [
+      { kind: "theme_logo", id: "t1", name: "Bar Lucía" },
+      { kind: "theme_logo", id: "t2", name: "a&b/<c>" },
+    ] as ImageUsage[],
   });
   await mount(client);
   click("[data-test=delete-one]");
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(1));
-  const entry = el.shadowRoot!.querySelector("wt-modal li")!;
-  expect(entry.textContent?.trim()).toBe("Bar Lucía");
-  expect(entry.querySelector("a")).toBeNull();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(2));
+  const entries = () => [...el.shadowRoot!.querySelectorAll("wt-modal li")];
+  expect(entries().map((li) => li.textContent?.trim())).toEqual([
+    "Logo of theme Bar Lucía",
+    "Logo of theme a&b/<c>",
+  ]);
+  for (const li of entries()) {
+    expect(li.querySelector("a")!.getAttribute("href")).toBe("/manage/appearance");
+    expect(li.querySelector("a")!.textContent?.trim()).toBe(li.textContent?.trim());
+  }
+  expect(entries()[1]!.querySelector("c")).toBeNull();
+  setLocale("es-ES");
+  await vi.waitFor(() =>
+    expect(entries()[0]!.textContent?.trim()).toBe(
+      ES["image.theme_logo"].replace("{name}", "Bar Lucía"),
+    ),
+  );
+  expect(entries()[0]!.textContent?.trim()).toBe(
+    ES["image.theme_logo"].replace("{name}", "Bar Lucía"),
+  );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   expect(client.deleteImage).not.toHaveBeenCalled();
 });
