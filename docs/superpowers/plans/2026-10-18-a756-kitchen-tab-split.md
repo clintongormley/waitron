@@ -4366,6 +4366,10 @@ panel left and no one sees it (A756 mock-up 01: "The tab goes").
    and its station does not allow changes once sent. You can cancel it", ES "Este plato ya ha ido a
    cocina y su estación no permite cambios después de enviarlo. Puedes cancelarlo". One check pins
    the Spanish (`apps/till/src/till-app-table-service.test.ts:2653`, Task 59b).
+   **2026-10-24 (finish-branch review):** the message drops its cause — EN "This item has already
+   gone to the kitchen and cannot be changed. You can cancel it", ES "Este plato ya ha ido a cocina
+   y no se puede cambiar. Puedes cancelarlo"; the `order-groups.test.ts` case is now "fires a held
+   dish at a Not allowed station".
 
 6. **Validation at the station routes.** PATCH `/management-api/stations/:id` accepts
    `changesAfterSending`, one of the three values, checked by a `parseChangesAfterSending` beside
