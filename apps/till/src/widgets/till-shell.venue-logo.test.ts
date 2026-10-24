@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
   applyTokens,
@@ -97,6 +97,12 @@ function natural(el: TillShell): number {
   const width = h.getBoundingClientRect().width;
   h.style.width = "";
   return width;
+}
+
+function nextLogoError(el: TillShell): Promise<void> {
+  return new Promise((resolve) => {
+    el.addEventListener("wt-logo-error", () => resolve(), { once: true });
+  });
 }
 
 async function atViewport(width: number, run: () => Promise<void>): Promise<void> {
@@ -350,6 +356,126 @@ describe("the bar refits when the logo changes", () => {
       expect(steps(el)).toBeGreaterThan(0);
       expect(wraps(el)).toBe(false);
     });
+  });
+
+  it("a logo that fails while it fits beside the word is tried again inside its box", async () => {
+    await atViewport(1280, async () => {
+      const el = await narrowLogoBar();
+      el.style.width = "1280px";
+      await settle(el);
+      const image = logoOf(el)!.shadowRoot!.querySelector("img")!;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        image.dispatchEvent(new Event("error"));
+        await settle(el);
+        expect(steps(el)).toBe(0);
+        expect(logoOf(el)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(60_001);
+      } finally {
+        vi.useRealTimers();
+      }
+      await expect.poll(() => currentVenueLogo()).toMatchObject({ failed: false });
+      expect(logoOf(el)!.shadowRoot!.querySelector("img")!.naturalWidth).toBeGreaterThan(0);
+    });
+  });
+
+  it("a logo that fails where only the logo fits is tried again after 60 s and drawn once it loads", async () => {
+    await atViewport(1280, async () => {
+      const el = await narrowLogoBar();
+      const image = logoOf(el)!.shadowRoot!.querySelector("img")!;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        image.dispatchEvent(new Event("error"));
+        await settle(el);
+        expect(steps(el)).toBeGreaterThan(0);
+        expect(logoOf(el)).toBeNull();
+        await vi.advanceTimersByTimeAsync(60_001);
+        await settle(el);
+        expect(logoOf(el), "the narrow image should be retried and fit again").not.toBeNull();
+        expect(currentVenueLogo()).toMatchObject({ failed: false });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("while a logo only it fits keeps failing, the bar asks for it once every 60 s", async () => {
+    await atViewport(1280, async () => {
+      const el = await narrowLogoBar();
+      const address = "/no-such-narrow-logo.png";
+      const requests = () =>
+        performance.getEntriesByName(new URL(address, location.href).href).length;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        let failed = nextLogoError(el);
+        applyVenueTheme(withLogo(address, null, "broken"));
+        await failed;
+        await settle(el);
+        expect(requests()).toBe(1);
+        for (const attempt of [2, 3]) {
+          expect(steps(el)).toBeGreaterThan(0);
+          expect(logoOf(el)).toBeNull();
+          await vi.advanceTimersByTimeAsync(59_000);
+          await settle(el);
+          expect(requests()).toBe(attempt - 1);
+          expect(logoOf(el)).toBeNull();
+          failed = nextLogoError(el);
+          await vi.advanceTimersByTimeAsync(1_001);
+          await failed;
+          await settle(el);
+          expect(requests()).toBe(attempt);
+        }
+        expect(steps(el)).toBeGreaterThan(0);
+        expect(logoOf(el)).toBeNull();
+        expect(wraps(el)).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("a bar off the page keeps no timer for a failed logo it hides, and starts one on its return", async () => {
+    await atViewport(1280, async () => {
+      const el = await narrowLogoBar();
+      const image = logoOf(el)!.shadowRoot!.querySelector("img")!;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        image.dispatchEvent(new Event("error"));
+        await settle(el);
+        expect(logoOf(el)).toBeNull();
+        expect(vi.getTimerCount()).toBe(1);
+        const parent = el.parentElement!;
+        el.remove();
+        expect(vi.getTimerCount()).toBe(0);
+        parent.append(el);
+        expect(vi.getTimerCount()).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("a counter till and a handheld at phone width keep no timer for a failed logo", async () => {
+    const answer = withLogo(LIGHT);
+    startFrom(answer);
+    reportVenueLogoFailure(answer.logo);
+    for (const [width, props] of [
+      [1280, { formFactor: "till" }],
+      [390, {}],
+    ] as const) {
+      await atViewport(width, async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const { el } = await mount(props);
+          await settle(el);
+          expect(el.shadowRoot!.querySelector("wt-venue-logo")).toBeNull();
+          expect(vi.getTimerCount()).toBe(0);
+        } finally {
+          vi.useRealTimers();
+          cleanupWidgets();
+        }
+      });
+    }
   });
 
   it("a failing logo refits the bar", async () => {

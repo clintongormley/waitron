@@ -3,6 +3,7 @@ import { customElement, property, queryAssignedElements, state } from "lit/decor
 import {
   THEME_SELECTED_EVENT,
   ThemeChoiceController,
+  VENUE_LOGO_RETRY_MS,
   VenueLogoController,
   baseStyles,
   currentThemeChoice,
@@ -107,8 +108,10 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
-    // No step back: the bar draws its logo only while no step is taken.
+    // No step back: the bar draws its logo only while no step is taken. An error is heard here
+    // because a box failing a logo already reported failed changes no state that would refit.
     this.addEventListener("wt-logo-load", () => void this.#fit());
+    this.addEventListener("wt-logo-error", () => void this.#fit());
     this.addEventListener("wt-guide-open", (event) =>
       this.#onGuideOpen(event as CustomEvent<{ href: string }>),
     );
@@ -441,7 +444,10 @@ export class TillShell extends LitElement {
     this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
     this.phone = this.#phoneWidth.matches;
     this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
-    if (this.hasUpdated && this.formFactor !== "till") this.#observe();
+    if (this.hasUpdated && this.formFactor !== "till") {
+      this.#observe();
+      this.#retryHiddenLogo();
+    }
   }
 
   override disconnectedCallback(): void {
@@ -452,6 +458,7 @@ export class TillShell extends LitElement {
     this.#observer = undefined;
     this.#observedChooser = undefined;
     this.#run += 1;
+    this.#stopLogoRetry();
   }
 
   /** With More closed and above phone width: 0, everything on the bar; 1, the brand mark (the venue's
@@ -470,6 +477,7 @@ export class TillShell extends LitElement {
   #drawnLogo?: string;
   #fittedWidth = 0;
   #fittedLocale?: string;
+  #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
   #observedChooser?: Element;
   #watchedPopup?: Element;
@@ -550,6 +558,34 @@ export class TillShell extends LitElement {
     } else if (changed.has("transferCount")) {
       void this.#fit();
     }
+    this.#retryHiddenLogo();
+  }
+
+  /** A failed logo's box retries only while it is on the page, so while a step hides it the bar
+   * steps back once every `VENUE_LOGO_RETRY_MS`: the box drawn again asks for the image at once,
+   * and the fit takes the step again if it fails. */
+  #retryHiddenLogo(): void {
+    const state = this.#venueLogo.state;
+    const hidden =
+      this.isConnected &&
+      !this.phone &&
+      state.kind === "logo" &&
+      state.failed &&
+      this.renderRoot.querySelector(".head") !== null &&
+      this.renderRoot.querySelector(".head > wt-venue-logo") === null;
+    if (!hidden) this.#stopLogoRetry();
+    else if (this.#logoRetry === undefined) {
+      this.#logoRetry = setTimeout(() => {
+        this.#logoRetry = undefined;
+        this.#stepBackOwed = true;
+        void this.#fit();
+      }, VENUE_LOGO_RETRY_MS);
+    }
+  }
+
+  #stopLogoRetry(): void {
+    clearTimeout(this.#logoRetry);
+    this.#logoRetry = undefined;
   }
 
   /** Observes the host, not the header: its width comes from its container, so a fit does not
