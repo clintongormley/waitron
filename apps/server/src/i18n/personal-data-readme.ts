@@ -70,7 +70,7 @@ export const PERSONAL_DATA_README: Record<"en" | "es", ReadmeWords> = {
     rightsHeading: "Your rights",
     rights:
       "You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so, and why, within that first month. You may also complain to a data-protection authority.",
-    ask: "To ask, contact {venue}.",
+    ask: "Contact {venue} to ask.",
     notice: "Its privacy notice: {url}",
     unnamedVenue: "the venue",
   },
@@ -119,7 +119,7 @@ export const PERSONAL_DATA_README: Record<"en" | "es", ReadmeWords> = {
     rightsHeading: "Tus derechos",
     rights:
       "Puedes pedir al local que corrija o borre tus datos, que limite su uso o que te dé otra copia en un formato que puedas llevar a otro servicio, y puedes oponerte a su uso. Debe responder en el plazo de un mes; si necesita más tiempo, hasta dos meses más, debe decírtelo, y por qué, dentro de ese primer mes. También puedes reclamar ante una autoridad de protección de datos.",
-    ask: "Para pedirlo, contacta con {venue}.",
+    ask: "Contacta con {venue} para pedirlo.",
     notice: "Su aviso de privacidad: {url}",
     unnamedVenue: "el local",
   },

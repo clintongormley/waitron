@@ -40,9 +40,8 @@ const RIGHTS = `Your rights
 You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so, and why, within that first month. You may also complain to a data-protection authority.`;
 const HEAD = `Your data held by Bar Ejemplo S.L.
 Prepared for Marta López on 2026-10-05.`;
-// The ask sentence ends in its own full stop, so a legal name ending in one prints two.
 const ASK =
-  "To ask, contact Bar Ejemplo S.L.. Its privacy notice: https://barejemplo.example/privacy";
+  "Contact Bar Ejemplo S.L. to ask. Its privacy notice: https://barejemplo.example/privacy";
 
 describe("personalDataReadme", () => {
   it("writes every section in English", () => {
@@ -107,6 +106,16 @@ ${ASK}
     expect(profile.kept).toHaveLength(1);
     expect(signIn.kept).toHaveLength(3);
     expect(personalDataReadme({ ...base, language: "es" })).toBe(`${lines.join("\n")}\n`);
+  });
+
+  it("never prints a double full stop after a legal name ending in one", () => {
+    for (const language of ["en", "es"] as const) {
+      const lines = personalDataReadme({ ...base, language }).split("\n");
+      expect(
+        lines.filter((line) => line.includes("..")),
+        language,
+      ).toEqual([]);
+    }
   });
 
   it("leaves out the files block and every file's lines when there are no files", () => {
@@ -204,7 +213,7 @@ How long it is kept
 ${DECIDES}
 
 ${RIGHTS}
-To ask, contact the venue.
+Contact the venue to ask.
 `);
   });
 
@@ -214,7 +223,7 @@ To ask, contact the venue.
       true,
     );
     expect(text).toContain(
-      "\nTo ask, contact $& Bar. Its privacy notice: https://barejemplo.example/privacy\n",
+      "\nContact $& Bar to ask. Its privacy notice: https://barejemplo.example/privacy\n",
     );
   });
 
