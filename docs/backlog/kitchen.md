@@ -142,8 +142,8 @@ were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owne
 What is left. The starting decisions are in the plan,
 `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` → "Parts that wait".
 
-2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
-under Open points is due. PR 5 (late flags on each station) landed on 2026-10-23 (#2023).
+2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable. PR 5 (late flags on
+each station) landed on 2026-10-23 (#2023).
 
 - **PR 8 — changes after sending, three values, on each station.**
 - **The Kitchen tab goes** with PR 8, which moves its last setting, Changes after sending (venue
