@@ -5,17 +5,10 @@ import type { BusinessDayClock, LocationId } from "@waitron/shared";
 import { readLocationClock } from "@waitron/reporting";
 import { momentAt, resolveDepartmentsDays, serviceDayOf, type DayPlan } from "./day-resolver.js";
 import { serviceRuns } from "./menu-timetable.js";
-import { wireTime } from "./operations.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
-import {
-  rangeSpanInDay,
-  withExtension,
-  type ServiceMoment,
-  type ServiceRange,
-} from "./service-day.js";
+import { rangeSpanInDay, type ServiceMoment, type ServiceRange } from "./service-day.js";
 import { serviceDayContext, type ServiceDayContext } from "./service-day-context.js";
 
 export interface RecordedRun {
@@ -23,11 +16,7 @@ export interface RecordedRun {
   startsAt: string;
 }
 
-/** `runs` is `serviceRuns(withExtension(painted, extension, cutover))`: a keep open joins the
- *  range it extends into one run. */
 export interface DueDay {
-  painted: readonly ServiceRange[];
-  extension: ServiceRange | null;
   runs: readonly ServiceRange[];
 }
 
@@ -63,29 +52,10 @@ export function recordedRun(
     : null;
 }
 
-/** A missing start still matches only the run `withExtension` made by cutting the recorded
- *  painted range at today's keep open's end; anything else is gone. */
-export function matchRecorded(
-  day: DueDay,
-  recorded: RecordedRun,
-  context: ServiceDayContext,
-): ServiceRange | null {
-  const same = day.runs.find(
-    (run) => run.periodId === recorded.periodId && run.startsAt === recorded.startsAt,
-  );
-  if (same !== undefined) return same;
-  const { extension } = day;
-  if (extension === null) return null;
-  const kept = rangeSpanInDay(extension, context);
-  const cut = day.painted.find(
-    (range) => range.periodId === recorded.periodId && range.startsAt === recorded.startsAt,
-  );
-  if (cut === undefined) return null;
-  const span = rangeSpanInDay(cut, context);
-  if (span.start < kept.start || span.start >= kept.end || span.end <= kept.end) return null;
+export function matchRecorded(day: DueDay, recorded: RecordedRun): ServiceRange | null {
   return (
     day.runs.find(
-      (run) => run.periodId === recorded.periodId && run.startsAt === extension.endsAt,
+      (run) => run.periodId === recorded.periodId && run.startsAt === recorded.startsAt,
     ) ?? null
   );
 }
@@ -99,7 +69,7 @@ export function dueRun(input: {
   recorded: RecordedRun | null;
 }): ServiceRange | null {
   const { day, minute, context, recorded } = input;
-  const matched = recorded === null ? null : matchRecorded(day, recorded, context);
+  const matched = recorded === null ? null : matchRecorded(day, recorded);
   const floor = matched === null ? -Infinity : rangeSpanInDay(matched, context).start;
   const runs = day.runs
     .map((run) => ({ run, span: rangeSpanInDay(run, context) }))
@@ -244,8 +214,8 @@ export async function dueFloorLayouts(
   return result;
 }
 
-/** Each department's painted day, keep open and runs on `moment`'s business day, read with a
- *  number of statements independent of how many departments there are. */
+/** Each department's runs on `moment`'s business day, read with a number of statements
+ *  independent of how many departments there are. */
 async function dueDays(
   tx: Transaction,
   cfg: { locationId: LocationId },
@@ -257,37 +227,10 @@ async function dueDays(
   const { businessDay } = moment;
   const context = serviceDayContext(clock, businessDay);
   const resolved = await resolveDepartmentsDays(tx, cfg, departmentIds, [businessDay], clock, plan);
-  const extensions = await tx
-    .select({
-      departmentId: periodExtensions.departmentId,
-      periodId: periodExtensions.periodId,
-      startsAt: periodExtensions.startsAt,
-      endsAt: periodExtensions.endsAt,
-    })
-    .from(periodExtensions)
-    .where(
-      and(
-        inArray(periodExtensions.departmentId, [...departmentIds]),
-        eq(periodExtensions.businessDay, businessDay),
-      ),
-    );
   const days = new Map<string, DueDay>();
-  for (const departmentId of departmentIds) {
-    const painted = resolved.get(departmentId)!.get(businessDay)!.ranges;
-    const row = extensions.find((entry) => entry.departmentId === departmentId);
-    const extension =
-      row === undefined
-        ? null
-        : {
-            periodId: row.periodId,
-            startsAt: wireTime(row.startsAt),
-            endsAt: wireTime(row.endsAt),
-          };
+  for (const departmentId of departmentIds)
     days.set(departmentId, {
-      painted,
-      extension,
-      runs: serviceRuns(withExtension(painted, extension, context.dayCutover)),
+      runs: serviceRuns(resolved.get(departmentId)!.get(businessDay)!.ranges),
     });
-  }
   return { moment, context, days };
 }
