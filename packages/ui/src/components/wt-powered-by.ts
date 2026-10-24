@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { ColorSchemeController } from "../color-scheme.js";
@@ -32,8 +32,7 @@ export class WtPoweredBy extends LitElement {
   readonly #scheme = new ColorSchemeController(this);
 
   override render() {
-    return html`<span part="label">${this.label}</span
-      ><img
+    return html`${this.label ? html`<span part="label">${this.label}</span>` : nothing}<img
         part="lockup"
         src=${this.#scheme.dark ? WAITRON_LOCKUP_DARK_URL : WAITRON_LOCKUP_URL}
         alt="Waitron"

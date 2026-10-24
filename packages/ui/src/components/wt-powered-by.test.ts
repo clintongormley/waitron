@@ -64,9 +64,22 @@ describe("wt-powered-by", () => {
     expect(label(el).textContent).toBe("Con la tecnología de");
   });
 
-  it("draws no words without a label", async () => {
+  it("draws no label part without a label, and centres the lockup alone", async () => {
     const el = (await mountThemed(`<wt-powered-by></wt-powered-by>`, "light")) as WtPoweredBy;
-    expect(label(el).textContent).toBe("");
+    expect(el.shadowRoot!.querySelector("[part=label]")).toBeNull();
+    const image = lockup(el);
+    await vi.waitFor(() => expect(image.complete && image.naturalWidth > 0).toBe(true));
+    const host = el.getBoundingClientRect();
+    const box = image.getBoundingClientRect();
+    expect(Math.abs(box.left + box.width / 2 - (host.left + host.width / 2))).toBeLessThan(0.5);
+  });
+
+  it("sizes the lockup at twice --wt-space-6", async () => {
+    const el = await poweredBy("light");
+    el.style.setProperty("--wt-space-6", "50px");
+    const image = lockup(el);
+    await vi.waitFor(() => expect(image.complete && image.naturalWidth > 0).toBe(true));
+    expect(image.getBoundingClientRect().width).toBe(100);
   });
 
   it("has no link", async () => {
