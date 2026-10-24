@@ -19,9 +19,8 @@ import { catalogues } from "./catalogue.js";
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
 
 /**
- * The per-venue KDS bump mode. `line` (default): each line bumped on its own. `ticket`: the display
- * additionally offers a whole-ticket bump that advances every one of an order's lines at a station
- * together. Governs ONLY that display convenience — the per-line state is always the truth.
+ * Read by nothing: each station has its own `bump_mode`. Dropping this column rebuilds
+ * `locations`, so A760's squash removes it.
  */
 export const bumpMode = enumType(["line", "ticket"]);
 
