@@ -187,10 +187,10 @@ Elige **Reemplazar foto** para seleccionar otro archivo JPEG, PNG o WebP. Su nom
 aparece en la ventana, y todos los nombres traducidos se quedan como los dejaste. Al reemplazarla se
 restablece el encuadre, porque el plato nuevo puede estar en otro sitio; vuelve a usar Ajustar
 encuadre antes de Guardar si hace falta. Los productos, las variantes, las secciones, las carpetas,
-los logotipos elegidos para los tickets y las cartas publicadas o en cola siguen usando esta entrada
-de la biblioteca y muestran su imagen actual. Las demás pantallas abiertas la recogen al actualizarse
-con éxito. Una presentación de ticket o un trabajo de impresión ya generado conserva su imagen
-anterior.
+los logotipos elegidos para los tickets, los logotipos de los temas y las cartas publicadas o en
+cola siguen usando esta entrada de la biblioteca y muestran su imagen actual. Las demás pantallas
+abiertas la recogen al actualizarse con éxito. Una presentación de ticket o un trabajo de impresión
+ya generado conserva su imagen anterior.
 
 Si otra persona guarda la foto mientras la editas, al guardar se te pide que vuelvas a cargarla en
 lugar de sobrescribir sus cambios. **Descartar cambios y volver a cargar la foto** lee su versión.
@@ -238,3 +238,8 @@ Un logotipo de ticket guardado también mantiene en uso una fotografía. La bibl
 como **Logotipo del recibo de <departamento>**, y su enlace abre la pestaña **Recibos** del
 departamento: elige **Quitar** junto al logotipo y guarda. Un departamento que ya no está activo
 aparece con **(Departamento eliminado)** tras su nombre y sin enlace.
+
+El logotipo de un tema también mantiene en uso una fotografía, esté o no en uso el tema. La
+biblioteca muestra ese uso como **Logotipo del tema <tema>**, tanto si la fotografía es el logotipo
+del tema como si es su versión para pantallas oscuras, y su enlace abre **Apariencia**: edita ese
+tema, elige **Quitar** junto a la imagen y guarda.

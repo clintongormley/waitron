@@ -4033,7 +4033,10 @@ Settings → Appearance holds two cards: Look (`apps/dashboard/src/screens/look-
 slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 (`apps/dashboard/src/screens/themes-card.ts`, A841 slice 13). The Look card:
 
-- **Saved, its rows are** Theme in use, Brand colour (a chip and the value, "Custom · " before a
+- **Saved, its rows are** Theme in use, Logo (A841 slice 8, D11: "None", or the image in a
+  `wt-venue-logo` `size="banner"` box with alt `""`, then "Dark screens: own version" or "Dark
+  screens: on a light plate" in `--wt-color-text-muted`; the box follows the page's own Theme
+  setting, so a dark dashboard draws the plate), Brand colour (a chip and the value, "Custom · " before a
   colour that is not a swatch, then for each kind of screen, light before dark, " · {light
   screens / dark screens}" with a chip and either its Main buttons colour set by hand followed by
   ", set by hand" or the shade of its taken fix — A841 slice 6, D14; a kind of screen cannot hold
@@ -4050,6 +4053,16 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   Saving changes no screen until you use it." For Waitron's theme and a new theme, Save opens the
   name dialog (switch on for Waitron's theme in use, off for a new one), since Waitron's theme is
   never stored into. Save stays quiet and disabled until the draft changes in all three.
+- **The Logo field comes first in the editor** (`apps/dashboard/src/widgets/theme-logo-field.ts`,
+  A841 slice 8, D7), before Brand colour. It reuses the department Receipt tab's picker,
+  `dashboard-image-upload`, in its `venue-logo` mode: with no image, one dashed "+ Add a logo"
+  button; with one, the picture on `--wt-color-logo-plate` (not a button), then Replace above
+  Remove, each a `secondary` `wt-button`. Its hint is "PNG, JPEG or WebP. A see-through background,
+  at least 200 pixels tall, looks best." Once there is a main image, a second picker under "For
+  dark screens (optional)" offers "+ Add a version for dark screens", with the hint "Without one,
+  dark screens show your logo on a light plate." until one is picked. Remove on the main image
+  clears both. A `theme.invalid` naming `logo.light` or `logo.dark` shows under that picker, marks
+  it invalid and puts the form's one message at the bottom (D9); a logo change clears it.
 - **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
   before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
   it is disabled only while a request is being sent, or after a save attempt while the brand colour's
@@ -4083,6 +4096,11 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   never reaches the page itself; the page repaints after a save of the theme in use, a theme
   created with its switch on, a switch, and any delete whose answer has Waitron's theme in use
   (including one that changed nothing, because Waitron's theme was already in use).
+- **Each preview panel opens with a banner strip** (A841 slice 8, D10): the draft's logo in a
+  `wt-venue-logo` `size="bar"` box (the light image in the light panel; the dark image, or the light
+  one on its plate, in the dark panel), or with no logo Waitron's lockup in that panel's drawing,
+  then the tenant's legal name in bold, which may wrap. A border runs under the strip from edge to
+  edge of the panel.
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
   error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all

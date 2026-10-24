@@ -182,8 +182,8 @@ together, or Cancel to discard the outer draft.
 Choose **Replace photo** to select another JPEG, PNG or WebP file. Its file name appears in the
 window, while every translated name stays as you left it. Replacement resets the framing because
 the new dish may be in a different place; use Adjust framing again before Save if needed.
-Products, variants, sections, folders, receipt-logo choices and published or queued menus keep
-using this library entry and show its current picture. Other open screens pick it up on a
+Products, variants, sections, folders, receipt-logo choices, theme logos and published or queued
+menus keep using this library entry and show its current picture. Other open screens pick it up on a
 successful refresh. A receipt presentation or print job already produced keeps its earlier picture.
 
 If someone else saves the photo while you edit, your Save asks you to reload instead of
@@ -230,3 +230,8 @@ A saved receipt logo also keeps a photograph in use. The library lists that use 
 **<department> receipt logo**, and its link opens the department's **Receipts** tab:
 choose **Remove** beside the logo, and save. A department that is no longer active is listed
 with **(Deleted department)** after its name and no link.
+
+A theme's logo keeps a photograph in use too, whether or not the theme is in use. The library lists
+that use as **Logo of theme <theme>**, whether the photograph is the theme's logo or its version
+for dark screens, and its link opens **Appearance**: edit that theme, choose **Remove** beside the
+picture, and save.

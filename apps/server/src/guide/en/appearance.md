@@ -9,6 +9,10 @@ see the result before anyone else does.
 Open **Settings**, then **Appearance**. The **Look** card shows the **Theme in use** and the
 choices it is made of:
 
+- **Logo**: **None**, or the theme's logo followed by how dark screens show it: "Dark screens: own
+  version" when the theme has a version for dark screens, or "Dark screens: on a light plate" when
+  it does not. The picture follows this dashboard's own **Theme** setting, so a dark dashboard shows
+  the logo the way dark screens will.
 - **Brand colour**: the colour of the main buttons and of selected items. **Waitron's** means the
   theme keeps Waitron's own colour. A colour that is not one of the swatches shows as **Custom**
   with its code. Where a readable shade was taken in place of the colour, the row names it too,
@@ -44,7 +48,8 @@ in use:" with the theme's name, and "Saving changes every screen." Editing any o
 reads "Not in use. Saving changes no screen until you use it.", and the card's heading names the
 theme, or reads **Add theme**.
 
-The editor opens the theme's three choices in place:
+The editor opens with the theme's **Logo** first, as "Add your logo" below describes, then the
+theme's three choices:
 
 - **Brand colour**: pick **Waitron's**, one of the swatches, or **Custom** to choose any colour.
   You can also type a code such as `#1e5b3a` into the box beside **Custom**. A code must be `#`
@@ -59,18 +64,42 @@ dark screens: #5fa77a, set by hand", and **Use the brand colour** beside it take
 again, so dark screens work their buttons out from the brand colour once more.
 
 Beside or below the choices, the **Preview** paints a small sample of the dashboard in the look you
-are building: a **Light version** and a **Dark version**, each with a selected menu item, a field,
-Save and Cancel buttons, a switch, a link and a Light and Dark choice. It is a picture, so its
-buttons do nothing. The editor arranges itself by the width of the card rather than of the window.
-On a wide card the preview sits beside the choices, and on a narrow one below them. When the
-preview has room, the two versions sit side by side; otherwise the light version sits above the
-dark one.
+are building: a **Light version** and a **Dark version**, each headed by a strip with the logo and
+the venue's legal name, then a selected menu item, a field, Save and Cancel buttons, a switch, a
+link and a Light and Dark choice. It is a picture, so its buttons do nothing. The editor arranges
+itself by the width of the card rather than of the window. On a wide card the preview sits beside
+the choices, and on a narrow one below them. When the preview has room, the two versions sit side
+by side; otherwise the light version sits above the dark one.
 
-Nothing else on the page, and no other screen, changes until you save. **Use Waitron's look** sets
-every choice back to Waitron's: Waitron's brand colour, Neutral, Standard corners, and no colours
-set by hand. It saves nothing by itself, and it is greyed out while the choices already are
-Waitron's look. **Cancel** closes the editor without saving. If you have changed something, Cancel,
-leaving the page, and opening another theme from the Themes card ask you first.
+Nothing else on the page, and no other screen, changes until you save. **Use Waitron's look**
+removes the logo and sets every choice back to Waitron's: Waitron's brand colour, Neutral, Standard
+corners, and no colours set by hand. It saves nothing by itself, and it is greyed out while the
+choices already are Waitron's look. **Cancel** closes the editor without saving. If you have
+changed something, Cancel, leaving the page, and opening another theme from the Themes card ask you
+first.
+
+## Add your logo {#logo}
+
+With no logo, the **Logo** field shows **+ Add a logo**, which opens the image library: upload a
+picture there or find one already in it, then choose **Use image** on it. A logo is a PNG, JPEG or
+WebP file, like every picture in the library; an SVG file is refused. The hint under the field reads
+"PNG, JPEG or WebP. A see-through background, at least 200 pixels tall, looks best."
+
+With a logo, the field shows the picture on a white plate, with **Replace** above **Remove** beside
+it. Replace opens the image library to choose another picture. Remove takes the logo off the theme,
+together with its version for dark screens. The picture itself stays in the image library.
+
+Once there is a logo, **For dark screens (optional)** offers **+ Add a version for dark screens**: a
+second picture, such as a light drawing of your logo, which dark screens show instead of the main
+one. Until you add one, the hint reads "Without one, dark screens show your logo on a light plate."
+The version for dark screens has its own Replace and Remove.
+
+The preview shows the logo in the strip at the top of each version, followed by the venue's legal
+name: the main logo on the light version, and on the dark version the version for dark screens, or
+the main logo on its light plate. With no logo, the strip shows Waitron's own logo.
+
+**Save** and **Cancel** treat the logo as they do the other choices. The logo is saved with the
+theme. Showing it on the dashboard and the tills comes in a later update.
 
 ## Set colours by hand {#advanced}
 
