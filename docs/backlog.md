@@ -4705,10 +4705,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   mainland Spanish time, the bell can say the clock is before that day where the till does not.
   Left open by A798-B slice 9 (#2025).
 
-- **The box sends AEAT's QR host a HEAD at most once a minute while its clock reads more than a
-  minute behind the latest sale — during a stop, and under a confirmation that lifted it — or while
-  a clock check whose stop has ended waits for its witness**, on a primary that files records; not
-  while the clock reads a date before 28-10-2024. Left open by A798-B slice 9 (#2025).
+- **The box sends AEAT's QR host a HEAD once a minute by its steady clock (on every look when that
+  clock cannot be read or went backwards) while the Veri\*Factu module reports the box's clock
+  behind the latest sale — during a stop, and under a confirmation that lifted it — or while a
+  clock check whose stop has ended waits for its witness**, on a primary that files records. The
+  module reports no stop while the clock reads a date before 28-10-2024, so no HEAD is sent then.
+  Left open by A798-B slice 9 (#2025).
 
 - **The clock watch's suspend-aware clock has not been run on Linux.** It reads `/proc/uptime` so
   that a box waking from sleep is not taken for a clock jumping forward; the tests replace the file,
@@ -5098,6 +5100,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   scrypt: at least once at each of preview, staging and the next start. Deriving it once would save CPU on the box;
   it is a behaviour change on the restore path and needs its own tests. Left open by A938.
   [Detail](backlog/box.md#a-restore-from-a-backup-file-derives-the-archives-key-at-least-three-times)
+
+- **The Box status page reads the wrongly-dated-sales alerts' params through a cast**, keeping its
+  own copy of a shape the Veri\*Factu module writes; a fiscal seat method answering the typed list
+  would remove it. Left open by A798-B slice 9 (#2025).
+  [Detail](backlog/box.md#the-box-status-page-reads-the-wrongly-dated-sales-alerts-params-through-a-cast)
 
 ### Replication, failover and the cloud
 

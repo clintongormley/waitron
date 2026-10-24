@@ -247,6 +247,7 @@ describe("every clock email", () => {
     unconfirmed: false,
   };
   const EMAILS = [
+    ["clock.unusable", STOP],
     ["clock.behind_chain", STOP],
     ...(["authority", "devices", "admin", "someone else"] as const).map(
       (confirmedBy) =>

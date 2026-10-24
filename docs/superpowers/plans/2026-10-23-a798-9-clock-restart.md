@@ -648,7 +648,7 @@ check), each in the task named:
   expecting two HEADs; `:380` "still reads the stop and asks AEAT on every check while a record
   keeps failing" → "still reads the stop on every check, and asks AEAT once a minute, while a record
   keeps failing", its second tick at `:384` advancing the steady clock 60 s, every count unchanged;
-  `:469` "keeps at most a day of unrecorded disproofs…" → "keeps at most 1 440 unrecorded
+  `:467` (`:469` after) "keeps at most a day of unrecorded disproofs…" → "keeps at most 1 440 unrecorded
   disproofs…", its assertion unchanged: the cap counts disproofs, not looks (forward jumps, and
   AEAT's disagreements from the watch's own asks and from AEAT's replies to filings), so it
   names no span of time. Fixtures only, no assertion changed, in `c0c6da41e`: the
@@ -1442,9 +1442,10 @@ one line each of `packages/fiscal/reports/mutation/index.html` and
   9c named as open, outlines); and these follow-up entries — "Two devices can fake a restart's proof"
   (`:4627`) → FYI 12's wording; "Two restarts whose named records belong to one sale share a bell
   alert" (`:4631`) → FYI 11; "The box sends AEAT's QR host a HEAD at every clock-watch check"
-  (`:4640`) → at most once a minute while the box's reading is more than a minute behind the
-  latest sale (during a stop, and under a confirmation that lifted it) or while a check waits for
-  its witness; "An AEAT disagreement blocks a restart…" (`:4650`) → FYI 6;
+  (`:4640`) → once a minute by the steady clock (every look when it cannot be read or went
+  backwards) while the module reports the box's clock behind the latest sale (during a stop, and
+  under a confirmation that lifted it; never at a date before 28-10-2024, where it reports no
+  stop) or while a check waits for its witness; "An AEAT disagreement blocks a restart…" (`:4650`) → FYI 6;
   "A restart under which no sale was recorded raises no 'disproved' alert" (`:4654`) and "After a
   'disproved' alert, the restart still covers…" (`:4657`) → "confirmation" for "restart"; "A
   malformed restart row covers nothing, for ever … refused `stepped_back`" (`:4662`) → a malformed

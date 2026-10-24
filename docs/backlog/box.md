@@ -1239,7 +1239,9 @@ See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verif
 
 `readMisdatedOpen` (`apps/server/src/box-health.ts`) finds the open `clock.records_misdated` alerts
 by their code name and reads each alert's params as `MisdatedOpen` behind an `as unknown as` cast,
-so the server keeps its own copy of a shape the Veri\*Factu module writes, and nothing checks the
-two agree. A fiscal seat method (for example `openMisdated(tx)`) answering the typed list would
-remove the copy. Naming a code as a string in `apps/server` is house practice
-(`apps/server/src/payments-api.ts`'s status map), so the code name alone is not the problem.
+so the server keeps its own copy of a shape the Veri\*Factu module writes. The compiler does not
+check the two agree; only the field checks in `apps/server/src/clock-confirm.route.test.ts`, where
+the real module writes the alert, do. A fiscal seat method (for example `openMisdated(tx)`)
+answering the typed list would remove the copy. Naming a code as a string in `apps/server` is house
+practice (`apps/server/src/payments-api.ts`'s status map), so the code name alone is not the
+problem.

@@ -31,12 +31,11 @@ const JUMP_MS = 60_000;
 const PENDING_MAX = 1_440;
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
- * last finished, on the primary only. While the box's reading is more than a minute behind the
- * latest record (a stop, or a stop a confirmation lifted), each check offers the seat a clock check
- * to open, confirms the clock when the witnesses are ready, and asks AEAT's time when an ask is
- * due; while a check waits after its stop ended by itself, each check does the same ask and offers
- * the seat the witnesses to close it. `stop` resolves once a check in flight has finished; nothing is read,
- * asked or written after it. */
+ * last finished, on the primary only. While the seat answers a clock stop state, each check offers
+ * the seat a clock check to open, confirms the clock when the witnesses are ready, and asks AEAT's
+ * time when an ask is due; while the seat answers a waiting check, each check does the same ask and
+ * offers the seat the witnesses to close it. `stop` resolves once a check in flight has finished;
+ * nothing is read, asked or written after it. */
 export function startClockWatch(deps: {
   backend: Pick<
     FiscalBackend,
