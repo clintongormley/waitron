@@ -399,28 +399,33 @@ describe("freeSpaceAtStart", () => {
     const stagedCopy = () => join(restoreStaging(), "staged-recovery", "upload-1", "venue.db");
     const download = () => join(restoreStaging(), "archive-download-x", "part");
 
-    it.each([100, 5000])(
-      "deletes the staged folder whole and leaves the rest of restore staging (%i bytes free)",
-      async (free) => {
-        await touch(stagedCopy());
-        await touch(join(restoreStaging(), "staged-recovery", "upload-2", "manifest.json"));
-        await touch(download());
-        const { deps: d, log } = deps({ free });
-        await freeSpaceAtStart(d);
-        expect(existsSync(join(restoreStaging(), "staged-recovery"))).toBe(false);
-        expect(existsSync(download())).toBe(true);
-        if (free >= 1000)
-          expect(log.mock.calls).toEqual([
-            ["info", "storage.start_leftovers_deleted", { deleted: 1 }],
-          ]);
-        else
-          expect(log).toHaveBeenCalledWith(
-            "warn",
-            "storage.start_space_low",
-            expect.objectContaining({ deleted: 1 }),
-          );
-      },
-    );
+    async function stagedCopiesBesideADownload(): Promise<void> {
+      await touch(stagedCopy());
+      await touch(join(restoreStaging(), "staged-recovery", "upload-2", "manifest.json"));
+      await touch(download());
+    }
+
+    it("deletes the staged folder whole and leaves the rest of restore staging, with room", async () => {
+      await stagedCopiesBesideADownload();
+      const { deps: d, log } = deps({ free: 5000 });
+      await freeSpaceAtStart(d);
+      expect(existsSync(join(restoreStaging(), "staged-recovery"))).toBe(false);
+      expect(existsSync(download())).toBe(true);
+      expect(log.mock.calls).toEqual([["info", "storage.start_leftovers_deleted", { deleted: 1 }]]);
+    });
+
+    it("deletes the staged folder whole and leaves the rest of restore staging, below the floor", async () => {
+      await stagedCopiesBesideADownload();
+      const { deps: d, log } = deps({ free: 100 });
+      await freeSpaceAtStart(d);
+      expect(existsSync(join(restoreStaging(), "staged-recovery"))).toBe(false);
+      expect(existsSync(download())).toBe(true);
+      expect(log).toHaveBeenCalledWith(
+        "warn",
+        "storage.start_space_low",
+        expect.objectContaining({ deleted: 1 }),
+      );
+    });
 
     it("counts the staged folder beside backup staging", async () => {
       await touch(stagedCopy());

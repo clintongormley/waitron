@@ -141,8 +141,8 @@ function entryDeps(stateDir: string, over: Partial<Parameters<typeof runEntry>[0
     readRecoveryState,
     writeRecoveryState,
     // Proof the database is usable: a table created and a row written.
-    startServer: vi.fn<StartServer>(async () => {
-      const store = await openVenueDatabase(venueDir);
+    startServer: vi.fn<StartServer>(async (env) => {
+      const store = await openVenueDatabase(env.WAITRON_VENUE_DIR ?? venueDir);
       try {
         store.venue.run(sql`create table if not exists start_probe (id integer primary key)`);
         store.venue.run(sql`insert into start_probe default values`);
@@ -498,22 +498,11 @@ describe("a start on a real full disk", () => {
     mkdirSync(roots.stateDir, { recursive: true });
     mkdirSync(roots.venueDir);
     await writeRecoveryState(roots.stateDir, FRESH);
-    // The server's own proof the database is usable, in the folder it was handed.
-    const startServer = vi.fn<StartServer>(async (env) => {
-      const store = await openVenueDatabase(env.WAITRON_VENUE_DIR!);
-      try {
-        store.venue.run(sql`create table if not exists start_probe (id integer primary key)`);
-        store.venue.run(sql`insert into start_probe default values`);
-      } finally {
-        await store.close();
-      }
-      return { close: () => Promise.resolve() };
-    });
     workspace.roots = roots;
     try {
-      const room = entryDeps(anchor, { startServer });
+      const room = entryDeps(anchor);
       await runEntry(room);
-      expect(startServer).toHaveBeenCalledTimes(1);
+      expect(room.startServer).toHaveBeenCalledTimes(1);
       const staged = join(roots.stateDir, "restore-staging", "staged-recovery");
       mkdirSync(join(staged, "upload-1"), { recursive: true });
       writeFileSync(join(staged, "upload-1", "venue.db"), Buffer.alloc(4 * 1024 * 1024, 67));
@@ -528,12 +517,11 @@ describe("a start on a real full disk", () => {
       small.fill();
       expect(small.free()).toBeLessThan(65_536);
 
-      startServer.mockClear();
-      const d = entryDeps(anchor, { startServer });
+      const d = entryDeps(anchor);
       await runEntry(d);
       expect(d.serveRecovery).not.toHaveBeenCalled();
-      expect(startServer).toHaveBeenCalledTimes(1);
-      expect(startServer.mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
+      expect(d.startServer).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(d.startServer).mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
       expect(() => statSync(staged)).toThrow();
       expect(() => statSync(dump)).toThrow();
     } finally {

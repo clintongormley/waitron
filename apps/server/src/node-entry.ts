@@ -298,16 +298,19 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
 
   const now = deps.now ?? (() => new Date());
   const floor = deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR;
-  const space = await freeSpaceAtStart({
-    stateDir: deps.stateDir,
-    venueDir: deps.venueDir,
-    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+  const cleanUp = {
     floor,
     now,
     statfs: deps.statfs,
     lockVenue: deps.lockVenue ?? lockVenueDatabase,
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
+  };
+  const space = await freeSpaceAtStart({
+    ...cleanUp,
+    stateDir: deps.stateDir,
+    venueDir: deps.venueDir,
+    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
   });
 
   const admission = await resolveFirstSetupEntry(
@@ -353,15 +356,10 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   if (moved) {
     // The logs folder is the given folders' (`resolveLogDir` in `bootThisProcess`), cleaned above.
     await freeSpaceAtStart({
+      ...cleanUp,
       stateDir: rooted.stateDir,
       venueDir: rooted.venueDir,
       logDir: null,
-      floor,
-      now,
-      statfs: deps.statfs,
-      lockVenue: deps.lockVenue ?? lockVenueDatabase,
-      readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
-      log: deps.log,
     });
     const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
     belowFloor = (lowest ?? floor) < floor;
