@@ -46,6 +46,8 @@ export function parseLateSend(value: unknown): ParsedLateSend | undefined {
 /**
  * Runs `run` with the request's confirmation. A manager's PIN in it is checked before `run` opens
  * its write transaction, in turn with other override attempts for the same person on this device.
+ * A wrong PIN that no confirmation went on to verify is still counted against the wrong-PIN limit,
+ * so a send that needs no manager cannot be used to have the box check PINs without limit.
  */
 export async function withLateSendCheck<T>(
   db: Database,
@@ -59,24 +61,30 @@ export async function withLateSendCheck<T>(
   const authz = { sessionId: session.sessionId, permission: PERMISSION };
   const attempts = overridePinAttempts(pinThrottle, session.deviceId);
   const toCheck = await overrideToCheck(db, authz, override);
-  return withPinCheckAhead(db, toCheck, attempts, (checked) => {
+  return withPinCheckAhead(db, toCheck, attempts, async (checked) => {
     let confirmed: { needsManager: boolean; by: Promise<string> } | undefined;
-    return run({
-      menuIds: new Set(parsed.menuIds),
-      confirm(tx, needsManager) {
-        confirmed ??= {
-          needsManager,
-          by: needsManager
-            ? authorize(tx, { ...authz, override: withCheck(override, checked) }, attempts).then(
-                (authorization) => authorization.authorizedBy,
-              )
-            : Promise.resolve(session.personId),
-        };
-        if (confirmed.needsManager !== needsManager) {
-          throw new Error("a late-send confirmation was asked with a different setting");
-        }
-        return confirmed.by;
-      },
-    });
+    try {
+      return await run({
+        menuIds: new Set(parsed.menuIds),
+        confirm(tx, needsManager) {
+          confirmed ??= {
+            needsManager,
+            by: needsManager
+              ? authorize(tx, { ...authz, override: withCheck(override, checked) }, attempts).then(
+                  (authorization) => authorization.authorizedBy,
+                )
+              : Promise.resolve(session.personId),
+          };
+          if (confirmed.needsManager !== needsManager) {
+            throw new Error("a late-send confirmation was asked with a different setting");
+          }
+          return confirmed.by;
+        },
+      });
+    } finally {
+      if (checked?.matches === false && confirmed?.needsManager !== true) {
+        attempts.throttle.recordFailure(attempts.slot, toCheck!.personId);
+      }
+    }
   });
 }

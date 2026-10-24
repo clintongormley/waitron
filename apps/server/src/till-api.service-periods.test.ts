@@ -1354,9 +1354,8 @@ describe("a dish whose period ended earlier today", () => {
       ]);
     });
 
-    it("does not count a wrong manager PIN sent when nothing is late", async () => {
+    it("counts a wrong manager PIN sent when nothing is late, while still parking the order", async () => {
       const { v, manager } = await managerVenue("19:00");
-      // The PIN is checked before the write, but only a late dish asks for it, so none counts.
       for (let i = 0; i < 4; i++) {
         const held = await parkWith(v, v.toast.almuerzo, {
           lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "9999" } },
@@ -1370,18 +1369,32 @@ describe("a dish whose period ended earlier today", () => {
       const late = await parkWith(v, v.toast.almuerzo, {
         lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "1234" } },
       });
-      expect(late.status).toBe(200);
-      expect(await marksOf(late.id)).toEqual([
-        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: manager },
-      ]);
+      expect(late.status).toBe(429);
+      expect(late.body).toMatchObject({ error: { code: "pin.throttled" } });
+      expect(await orderRows(late.id)).toEqual([]);
     });
   });
 
   describe("a held order's save", () => {
     /** A Lunch Tostada parked at 13:50, then at 14:05 the save of `lines` beside the stored one. */
-    const saveAfterLunch = async (storedQuantity: string, confirmed: boolean) => {
+    const saveAfterLunch = async (
+      storedQuantity: string,
+      confirmed: boolean,
+      managerPin?: string,
+    ) => {
       at(mondayAt("13:50"));
       const v = await mealVenue();
+      let override: { personId: string; pin: string } | undefined;
+      if (managerPin !== undefined) {
+        await withTransaction(suite.db, (tx) =>
+          updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
+        );
+        const [manager] = await suite.db
+          .select({ id: persons.id })
+          .from(persons)
+          .where(eq(persons.displayName, "Administradora"));
+        override = { personId: manager!.id, pin: managerPin };
+      }
       const held = await park(v, v.diningZone, v.toast.almuerzo);
       expect(held.status).toBe(200);
       const before = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
@@ -1400,9 +1413,16 @@ describe("a dish whose period ended earlier today", () => {
           },
           { menuItemId: v.toast.almuerzo, quantity: "1" },
         ],
-        ...(confirmed ? { lateSend: { menuIds: [v.menus.Almuerzo] } } : {}),
+        ...(confirmed ? { lateSend: { menuIds: [v.menus.Almuerzo], override } } : {}),
       });
-      return { v, held, before, saved, storedLineId: order.lines[0]!.workingOrderLineId };
+      return {
+        v,
+        held,
+        before,
+        saved,
+        storedLineId: order.lines[0]!.workingOrderLineId,
+        manager: override?.personId,
+      };
     };
     const lineMarks = (workingOrderId: string) =>
       suite.db
@@ -1434,6 +1454,23 @@ describe("a dish whose period ended earlier today", () => {
         quantity: 1000,
         latePeriodName: "Lunch",
         lateConfirmedBy: v.personId,
+      });
+    });
+
+    it("at 14:05 with a fresh Lunch dish, where the restaurant asks for a manager, marks the new line confirmed by the manager whose PIN was sent", async () => {
+      const { v, held, saved, storedLineId, manager } = await saveAfterLunch("1", true, "1234");
+      expect(saved.status).toBe(200);
+      expect(manager).not.toBe(v.personId);
+      const rows = await lineMarks(held.id);
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.id === storedLineId)).toMatchObject({
+        latePeriodName: null,
+        lateConfirmedBy: null,
+      });
+      expect(rows.find((row) => row.id !== storedLineId)).toMatchObject({
+        quantity: 1000,
+        latePeriodName: "Lunch",
+        lateConfirmedBy: manager,
       });
     });
 

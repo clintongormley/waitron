@@ -211,22 +211,83 @@ describe("withLateSendCheck", () => {
     });
   });
 
-  it("lets a send through with a wrong override PIN when no manager is needed", async () => {
+  /** Confirms with `override` from a staff session, noting each wrong-PIN failure recorded. */
+  async function countedFailures(
+    pin: string,
+    needsManager: boolean | undefined,
+  ): Promise<{
+    outcome: unknown;
+    failures: unknown[][];
+    slot: string;
+    manager: string;
+    staff: string;
+  }> {
+    const session = await sessionOf("staff");
+    const manager = await seedPerson(suite.db, "manager");
+    const throttle = createPinThrottle();
+    const failures = vi.spyOn(throttle, "recordFailure");
+    const outcome = await withLateSendCheck(
+      suite.db,
+      session,
+      throttle,
+      { menuIds: [MENU], override: { personId: manager, pin } },
+      (late) =>
+        needsManager === undefined
+          ? Promise.resolve("nothing late")
+          : withTransaction(suite.db, (tx) => late!.confirm(tx, needsManager)),
+    ).catch((error: { code: string }) => error.code);
+    return {
+      outcome,
+      failures: failures.mock.calls,
+      slot: `override:${session.deviceId}`,
+      manager,
+      staff: session.personId,
+    };
+  }
+
+  it("lets a send through with a wrong override PIN when no manager is needed, counting it once", async () => {
+    const { outcome, failures, slot, manager, staff } = await countedFailures("9999", false);
+
+    expect(outcome).toBe(staff);
+    expect(failures).toEqual([[slot, manager]]);
+  });
+
+  it("counts a wrong override PIN once when nothing late asks for a confirmation", async () => {
+    const { outcome, failures, slot, manager } = await countedFailures("9999", undefined);
+
+    expect(outcome).toBe("nothing late");
+    expect(failures).toEqual([[slot, manager]]);
+  });
+
+  it("counts no failure for a right override PIN when no manager is needed", async () => {
+    const { failures } = await countedFailures("1234", false);
+
+    expect(failures).toEqual([]);
+  });
+
+  it("counts a wrong manager's PIN exactly once when a manager is needed", async () => {
+    const { outcome, failures, slot, manager } = await countedFailures("9999", true);
+
+    expect(outcome).toBe("pin.invalid");
+    expect(failures).toEqual([[slot, manager]]);
+  });
+
+  it("counts a failure even when the send itself fails before any confirmation", async () => {
     const session = await sessionOf("staff");
     const manager = await seedPerson(suite.db, "manager");
     const throttle = createPinThrottle();
     const failures = vi.spyOn(throttle, "recordFailure");
 
-    const by = await withLateSendCheck(
+    const outcome = await withLateSendCheck(
       suite.db,
       session,
       throttle,
       { menuIds: [MENU], override: { personId: manager, pin: "9999" } },
-      (late) => withTransaction(suite.db, (tx) => late!.confirm(tx, false)),
-    );
+      () => Promise.reject(new Error("the send failed")),
+    ).catch((error: Error) => error.message);
 
-    expect(by).toBe(session.personId);
-    expect(failures).not.toHaveBeenCalled();
+    expect(outcome).toBe("the send failed");
+    expect(failures.mock.calls).toEqual([[`override:${session.deviceId}`, manager]]);
   });
 
   it("refuses an override from staff, whose PIN is right, as authorization.not_permitted", async () => {
