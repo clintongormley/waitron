@@ -1554,7 +1554,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).**
-  PRs 1–5 landed (#1852, #1854, #1858, #2020, #2023); PR 6 is in review; PRs 7–8 are buildable. Open points are in the detail.
+  PRs 1–6 landed (#1852, #1854, #1858, #2020, #2023, #2031); PR 7 is in review; PR 8 is buildable. Open points are in the detail.
   [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17).**
@@ -2000,10 +2000,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`) and
   `apps/till/src/screens/till-table-order-screen.ts` (`#sentDetails` and `#sentLineDialog`).
 
-- **A785. A kitchen screen in device mode keeps its start-up settings until reload (left open by
-  A768, 2026-10-17).** Its bump mode never refreshes: the menu-state poll that
-  carries the setup revision starts only when someone signs in, and a kitchen screen in device mode
-  has nobody signed in. Its station queue read could name the revision, as `/api/menu-state` does.
+- **A785. A kitchen screen in device mode keeps the theme it started with until reload (left open
+  by A768, 2026-10-17).** Nobody signs in on it, so it runs no menu-state poll and never sees the
+  setup revision move when the theme in use changes. Its station queue read could name the
+  revision, as `/api/menu-state` does. (A756 PR 7, 2026-10-24, moved the bump mode onto each queue
+  order, so that refreshes.)
 
 - **A786. A seated table with no main bill reads its bills before its lines (left open by A768,
   2026-10-17).** The lines read needs the bill `billToOpen` picks, so opening such a table sends

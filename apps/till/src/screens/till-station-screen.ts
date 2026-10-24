@@ -24,7 +24,7 @@ import "../widgets/station-queue.js";
 import "../widgets/station-today.js";
 import "../widgets/station-choice-dialog.js";
 import { TABLE_REQUEST_LIMIT_MS, limited, resendUnanswered } from "../state/draft-sync.js";
-import type { BumpMode, MergedQueueGroup } from "../widgets/station-queue.js";
+import type { MergedQueueGroup } from "../widgets/station-queue.js";
 import type {
   BillEditExpected,
   DeviceStationScreen,
@@ -204,7 +204,6 @@ export class TillStationScreen extends LitElement {
 
   @property({ attribute: false }) api!: TillApi;
   @property({ attribute: false }) operatorSession = 0;
-  @property() bumpMode: BumpMode = "line";
   /**
    * An always-on ENROLLED display: no login, its kitchen screen's stations, no picker and no
    * Back-to-counter. A 401 on its probe emits `device-unauthorized` so the app re-boots through the
@@ -916,7 +915,6 @@ export class TillStationScreen extends LitElement {
         .notices=${drawn.flatMap((station) => station.notices)}
         .stationNames=${new Map(drawn.map((station) => [station.id, station.name]))}
         .view=${this.view}
-        .bumpMode=${this.bumpMode}
         .advanceOnly=${true}
         .canMove=${this.#canMove()}
       ></till-station-queue>`;
@@ -1109,7 +1107,6 @@ export class TillStationScreen extends LitElement {
         .groups=${station.queue}
         .notices=${station.notices}
         .view=${this.view}
-        .bumpMode=${this.bumpMode}
         .stationId=${station.id}
         .advanceOnly=${advanceOnly}
         .showReprint=${!advanceOnly}

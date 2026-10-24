@@ -308,6 +308,9 @@ const en = {
   "prep.ticket_grouping.combined": "One line: 3 x Burger",
   "prep.ticket_grouping.separate": "A line each: 1 x Burger, three times",
   "prep.ticket_grouping_hint": "Applies to new kitchen tickets and to reprints.",
+  "prep.bump_mode": "Done on the screen",
+  "prep.bump_mode.line": "One item at a time",
+  "prep.bump_mode.ticket": "Whole ticket at once",
   "prep.print_held_work": "Print held groups in advance",
   "prep.print_held_work_hint":
     "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.",
@@ -1194,6 +1197,9 @@ const es: Record<keyof typeof en, string> = {
   "prep.ticket_grouping.combined": "Una línea: 3 x Hamburguesa",
   "prep.ticket_grouping.separate": "Una por plato: 1 x Hamburguesa, tres veces",
   "prep.ticket_grouping_hint": "Se aplica a las comandas de cocina nuevas y a las reimpresiones.",
+  "prep.bump_mode": "Marcado en la pantalla",
+  "prep.bump_mode.line": "Un plato cada vez",
+  "prep.bump_mode.ticket": "Toda la comanda a la vez",
   "prep.print_held_work": "Imprimir por adelantado los grupos en espera",
   "prep.print_held_work_hint":
     "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",

@@ -232,7 +232,6 @@ const till = {
   nif: "B12345678",
   orderFlow: "prepay" as const,
   receiptPrintMode: "auto" as const,
-  bumpMode: "line" as const,
   fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
@@ -13302,22 +13301,6 @@ describe("till-app", () => {
       await flush(el);
       expect(counter(el)).not.toBeNull();
       expect(counter(el)!.store.lines).toHaveLength(1);
-    });
-
-    it("threads the venue bump_mode from boot to the station screen (a ticket-mode venue gets whole-ticket bump)", async () => {
-      // The default `till` fixture is `line`; a venue configured `ticket` must reach the station
-      // screen's `.bumpMode` so its whole-ticket affordance turns on — proving #boot reads
-      // `TillInfo.bumpMode` rather than leaving the hardcoded `line` default.
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, bumpMode: "ticket" }),
-      });
-      const c = await toCounter(el);
-      emit(c, "show-station");
-      await flush(el);
-      const screen = el.shadowRoot!.querySelector("till-station-screen") as unknown as {
-        bumpMode: string;
-      };
-      expect(screen.bumpMode).toBe("ticket");
     });
 
     it("A773 waiter authority: boot leaves the retired control out of the station screen", async () => {

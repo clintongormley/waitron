@@ -1,4 +1,5 @@
 import type {
+  BumpMode,
   DeleteImpact,
   StationColour,
   StationThresholds,
@@ -38,6 +39,7 @@ export interface PrepStation {
   printMovedSlips: boolean;
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
+  bumpMode: BumpMode;
   colour: StationColour;
 }
 export interface PrepStationsView {
@@ -125,7 +127,7 @@ export class PrepStationsApi {
       Pick<StationInput, "name" | "colour"> &
         Pick<
           PrepStation,
-          "showsRestOfOrder" | "printMovedSlips" | "ticketGrouping" | "printHeldWork"
+          "showsRestOfOrder" | "printMovedSlips" | "ticketGrouping" | "printHeldWork" | "bumpMode"
         > &
         StationThresholds & {
           /** Needs `printer.manage` as well, and an active station. */

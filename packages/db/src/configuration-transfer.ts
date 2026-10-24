@@ -1,4 +1,4 @@
-import { AppError, isStationColour, isTicketGrouping } from "@waitron/shared";
+import { AppError, isBumpMode, isStationColour, isTicketGrouping } from "@waitron/shared";
 import "./errors.js";
 
 export function validateCoreConfiguration(
@@ -9,6 +9,8 @@ export function validateCoreConfiguration(
       throw new AppError("setup.request_invalid", { field: "kitchen_stations.colour" });
     if (row.ticket_grouping !== undefined && !isTicketGrouping(row.ticket_grouping))
       throw new AppError("setup.request_invalid", { field: "kitchen_stations.ticket_grouping" });
+    if (row.bump_mode !== undefined && !isBumpMode(row.bump_mode))
+      throw new AppError("setup.request_invalid", { field: "kitchen_stations.bump_mode" });
   }
   for (const table of ["kitchen_courses", "kitchen_stations", "floor_zones"])
     for (const row of tables[table] ?? [])

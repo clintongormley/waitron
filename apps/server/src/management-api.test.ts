@@ -274,15 +274,12 @@ async function req(path: string, init: RequestInit, cookie?: string): Promise<Re
   });
 }
 
-it("lets a supervisor read Kitchen settings while refusing edits", async () => {
-  for (const path of ["/bump-mode", "/courses"]) {
+it("lets a supervisor read courses while refusing edits", async () => {
+  for (const path of ["/courses"]) {
     const response = await req(path, { method: "GET" }, supervisorCookie);
     expect(response.status, path).toBe(200);
   }
-  for (const [path, method, body] of [
-    ["/bump-mode", "PUT", { mode: "ticket" }],
-    ["/courses", "POST", { name: unique("Denied") }],
-  ] as const) {
+  for (const [path, method, body] of [["/courses", "POST", { name: unique("Denied") }]] as const) {
     const response = await req(path, { method, body: JSON.stringify(body) }, supervisorCookie);
     expect(response.status, path).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
@@ -1787,6 +1784,50 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }
   });
 
+  it("PATCH saves a station's bump mode and refuses any other value", async () => {
+    const name = unique("Bump mode");
+    const id = await createStation(name);
+    const saved = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ bumpMode: "ticket" }) },
+      managerCookie,
+    );
+    expect(saved.status).toBe(204);
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      bumpMode: "ticket",
+    });
+    for (const bumpMode of ["Ticket", null, 1, true]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ bumpMode }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "bumpMode" },
+        },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        bumpMode: "ticket",
+      });
+    }
+    const refused = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ name: "Renamed", bumpMode: "bogus" }) },
+      managerCookie,
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "bumpMode" } },
+    });
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      name,
+      bumpMode: "ticket",
+    });
+  });
+
   it("PATCH saves a station's held printing and refuses a non-boolean", async () => {
     const id = await createStation(unique("Held printing"));
     for (const printHeldWork of [true, false, true]) {
@@ -1944,55 +1985,22 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(malformed.status).toBe(404);
   });
 
-  it("PUT /bump-mode sets the venue's whole-ticket bump mode; a bad value → 400", async () => {
-    const set = await req(
+  it("the retired venue bump mode routes answer 404 and change no location row", async () => {
+    const before = await suite.db
+      .select()
+      .from(locations)
+      .where(eq(locations.id, venue.locationId));
+    const read = await req("/bump-mode", { method: "GET" }, managerCookie);
+    expect(read.status).toBe(404);
+    const write = await req(
       "/bump-mode",
       { method: "PUT", body: JSON.stringify({ mode: "ticket" }) },
       managerCookie,
     );
-    expect(set.status).toBe(204);
-    const row = await suite.db.execute<{ bump_mode: string }>(
-      sql`select bump_mode from locations where id = ${venue.locationId}`,
-    );
-    expect(row.rows[0]!.bump_mode).toBe("ticket");
-    // Reset to the default so a later assertion on the shared venue is unaffected.
-    await req(
-      "/bump-mode",
-      { method: "PUT", body: JSON.stringify({ mode: "line" }) },
-      managerCookie,
-    );
-
-    const bad = await req(
-      "/bump-mode",
-      { method: "PUT", body: JSON.stringify({ mode: "banana" }) },
-      managerCookie,
-    );
-    expect(bad.status).toBe(400);
-    expect(await bad.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "mode" } },
-    });
-  });
-
-  it("GET /bump-mode reads the stored mode after a manager changes it", async () => {
-    const initial = await req("/bump-mode", { method: "GET" }, managerCookie);
-    expect(initial.status).toBe(200);
-    expect(await initial.json()).toEqual({ mode: "line" });
-    await req(
-      "/bump-mode",
-      { method: "PUT", body: JSON.stringify({ mode: "ticket" }) },
-      managerCookie,
-    );
-    try {
-      const after = await req("/bump-mode", { method: "GET" }, managerCookie);
-      expect(after.status).toBe(200);
-      expect(await after.json()).toEqual({ mode: "ticket" });
-    } finally {
-      await req(
-        "/bump-mode",
-        { method: "PUT", body: JSON.stringify({ mode: "line" }) },
-        managerCookie,
-      );
-    }
+    expect(write.status).toBe(404);
+    expect(
+      await suite.db.select().from(locations).where(eq(locations.id, venue.locationId)),
+    ).toEqual(before);
   });
 
   it("lets a manager read both station output lists", async () => {
@@ -2019,8 +2027,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       ),
       req(`/stations/${someId}`, { method: "DELETE" }, staffCookie),
       req(`/stations/${someId}/default`, { method: "POST" }, staffCookie),
-      req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, staffCookie),
-      req("/bump-mode", { method: "GET" }, staffCookie),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(403);
@@ -2041,8 +2047,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       ),
       req(`/stations/${someId}`, { method: "DELETE" }, undefined),
       req(`/stations/${someId}/default`, { method: "POST" }, undefined),
-      req("/bump-mode", { method: "PUT", body: JSON.stringify({ mode: "line" }) }, undefined),
-      req("/bump-mode", { method: "GET" }, undefined),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(401);
@@ -2845,7 +2849,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   });
 
   it.each(["waiter", "kitchen", "expo"])(
-    "retired fire-control routes leave the stored %s value and bump mode unchanged",
+    "retired fire-control routes leave the stored %s value and the venue row unchanged",
     async (mode) => {
       const [original] = await suite.db
         .select()
@@ -2875,9 +2879,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
             .where(eq(locations.id, venue.locationId));
           expect(after).toEqual(before);
         }
-        const bump = await req("/bump-mode", { method: "GET" }, managerCookie);
-        expect(bump.status).toBe(200);
-        expect(await bump.json()).toEqual({ mode: before!.bumpMode });
       } finally {
         await suite.db
           .update(locations)

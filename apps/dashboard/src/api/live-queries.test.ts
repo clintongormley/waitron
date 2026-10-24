@@ -203,7 +203,6 @@ it.each([
   ["getReceiptLanguage", [], "locations"],
   ["getVenueDefaults", [], "locations"],
   ["getVenueDefaults", [], "catalogue_settings"],
-  ["getBumpMode", [], "locations"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_tables"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_table_parts"],

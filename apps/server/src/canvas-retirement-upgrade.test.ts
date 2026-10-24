@@ -386,15 +386,15 @@ it("refuses the populated predecessor for reset and retains every row after roll
   const root = mkdtempSync(join(tmpdir(), "waitron-retire-canvases-"));
   scratch.push(root);
   const venue = join(root, "venue");
-  // The fill uses today's seating and period code, which needs the floor plan sets migration and
-  // the reset rows' taken-off column; the refusal at the canvas retirement rolls the whole run back
-  // before they would apply again.
+  // The fill uses today's code, which writes tables and columns these later migrations add; the
+  // refusal at the canvas retirement rolls the whole run back before they would apply again.
   await applyMigrations(
     venue,
     predecessor(root, [
       "_floor_plan_sets",
       "_floor_reset_tables_taken_off",
       "_station_printing_choices",
+      "_station_bump_mode",
     ]),
   );
   let before: Record<string, unknown[]>;

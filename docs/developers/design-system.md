@@ -2903,7 +2903,7 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor and the routing cell editor.
-Rest-of-order, MOVED slips, identical dishes, held printing and a station's three late-flag minutes are edited in the station editor. Routing
+Rest-of-order, MOVED slips, identical dishes, held printing, a station's three late-flag minutes and its bump mode are edited in the station editor. Routing
 Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
@@ -4648,7 +4648,8 @@ variant reads "Product (Variant)" beside its product. A product's own choice, an
 moves nothing, saves at once. A cell with a saved choice of its own, other than the default cell, offers
 Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the three
-late-flag fields in one row under "Late flags (minutes)", "Also list the order's dishes from other
+late-flag fields in one row under "Late flags (minutes)", "Done on the screen" (One item at
+a time or Whole ticket at once), "Also list the order's dishes from other
 stations" with "On this station's tickets and kitchen screen", "Print a slip when sent dishes
 move table", then "Identical dishes on a kitchen ticket" and "Print held groups in advance" with its
 note. The slip choices are "Print" and "Don't print".
@@ -5194,7 +5195,9 @@ Defaults — and, with the Veri\*Factu module, a fifth: the AEAT certificate, wh
 `fiscal.view` to read and `system.manage` to install or replace. The other four cards need
 `venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
 receipt language and the "VAT class for new products" default — is shown with `venue.view`, and is
-editable with `venue.configure` and read-only without it. Voids and comps
+editable with `venue.configure` and read-only without it. Kitchen holds venue service's panel
+alone, Changes after sending, shown with `venue.view` and editable with `venue_service.manage`;
+without venue service there is no Kitchen tab (A756 PR 7, 2026-10-24). Voids and comps
 (`/manage/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:

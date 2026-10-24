@@ -34,7 +34,7 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import type { ContentLanguages, JoinSide } from "@waitron/shared";
+import type { BumpMode, ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
   AttendanceCommand,
@@ -170,11 +170,6 @@ export interface TillInfo {
   receiptLanguages: string[];
   venueName: string;
   nif: string;
-  /**
-   * The KDS bump mode: `line` (per-line bump only, the source of truth) or `ticket` (the display also
-   * offers a whole-ticket bump).
-   */
-  bumpMode: "line" | "ticket";
   /** The venue's ACTIVE kitchen courses, by `displayOrder`; `[]` for a venue with none. */
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
@@ -1664,6 +1659,8 @@ export interface StationQueueGroup {
    *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
    *  (`classifyBand`, `@waitron/shared`). */
   thresholds: StationThresholds;
+  /** This order's own station's choice; a merged queue mixes stations. */
+  bumpMode: BumpMode;
 }
 
 /**

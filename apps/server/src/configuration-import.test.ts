@@ -67,7 +67,6 @@ const bundle: ConfigurationBundle = {
       province: "Madrid",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
-      bumpMode: "line",
       fireControl: "waiter",
       catalogueId: null,
     },
@@ -910,6 +909,31 @@ describe("routing cells in a staged import", () => {
     await expect(result).rejects.toMatchObject({
       code: "setup.request_invalid",
       params: { field: "module:venue-service" },
+    });
+    expect(await readdir(stateDir)).toEqual([]);
+  });
+
+  it("refuses a bundle exported before station bump modes by its core version, before any write", async () => {
+    const { bundle, versions } = await exported();
+    const journal = JSON.parse(
+      await readFile(
+        new URL("../../../packages/db/drizzle/meta/_journal.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { entries: { tag: string }[] };
+    const stationBumpMode = journal.entries.findIndex((entry) =>
+      entry.tag.endsWith("_station_bump_mode"),
+    );
+    expect(stationBumpMode).toBeGreaterThan(0);
+    expect(versions.core).toBe(journal.entries.length);
+    const older: ConfigurationBundle = {
+      ...bundle,
+      modules: { ...bundle.modules, core: stationBumpMode },
+    };
+    const { stateDir, result } = await staged(older, versions);
+    await expect(result).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "module:core" },
     });
     expect(await readdir(stateDir)).toEqual([]);
   });

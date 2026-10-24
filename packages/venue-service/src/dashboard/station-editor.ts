@@ -20,9 +20,12 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { codeOf } from "@waitron/dashboard-kit";
 import {
+  BUMP_MODES,
+  isBumpMode,
   isStationColour,
   isTicketGrouping,
   TICKET_GROUPINGS,
+  type BumpMode,
   type StationColour,
   type StationThresholds,
   type TicketGrouping,
@@ -40,6 +43,7 @@ export type StationEditorStation = {
   printMovedSlips: boolean;
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
+  bumpMode: BumpMode;
   printerIds: readonly string[];
 } & StationThresholds;
 export interface StationEditorPrinter {
@@ -56,6 +60,7 @@ export type StationEditorSave = {
   printMovedSlips?: boolean;
   ticketGrouping?: TicketGrouping;
   printHeldWork?: boolean;
+  bumpMode?: BumpMode;
 } & Partial<StationThresholds>;
 
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
@@ -77,6 +82,7 @@ type Draft = {
   printMovedSlips: boolean;
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
+  bumpMode: BumpMode;
 } & { [K in TimingField]: string };
 export type StationRefusal = { code: string; params?: Record<string, unknown> };
 type Refusal = StationRefusal;
@@ -110,6 +116,7 @@ const equal = (a: Draft, b: Draft) =>
   a.printMovedSlips === b.printMovedSlips &&
   a.ticketGrouping === b.ticketGrouping &&
   a.printHeldWork === b.printHeldWork &&
+  a.bumpMode === b.bumpMode &&
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
@@ -214,6 +221,10 @@ function groupingOptions() {
   return TICKET_GROUPINGS.map((value) => ({ value, label: t(`prep.ticket_grouping.${value}`) }));
 }
 
+function bumpOptions() {
+  return BUMP_MODES.map((value) => ({ value, label: t(`prep.bump_mode.${value}`) }));
+}
+
 function timingDraft(station: StationThresholds) {
   return Object.fromEntries(TIMING_FIELDS.map((field) => [field, String(station[field])])) as {
     [K in TimingField]: string;
@@ -291,6 +302,7 @@ export class StationEditor extends LitElement {
     printMovedSlips: true,
     ticketGrouping: "combined",
     printHeldWork: false,
+    bumpMode: "line",
     warmAfterMinutes: "",
     overdueAfterMinutes: "",
     forgottenAfterMinutes: "",
@@ -347,6 +359,7 @@ export class StationEditor extends LitElement {
         printMovedSlips: station.printMovedSlips,
         ticketGrouping: station.ticketGrouping,
         printHeldWork: station.printHeldWork,
+        bumpMode: station.bumpMode,
         ...timingDraft(station),
       };
       this.baseline = copy(this.draft);
@@ -418,7 +431,7 @@ export class StationEditor extends LitElement {
 
   private changed(
     draft: Draft,
-    field: Field | "rest" | "printMovedSlips" | "ticketGrouping" | "printHeldWork",
+    field: Field | "rest" | "printMovedSlips" | "ticketGrouping" | "printHeldWork" | "bumpMode",
   ) {
     this.draft = draft;
     this.printerDropped = false;
@@ -445,6 +458,7 @@ export class StationEditor extends LitElement {
         ? { ticketGrouping: draft.ticketGrouping }
         : {}),
       ...(draft.printHeldWork !== base.printHeldWork ? { printHeldWork: draft.printHeldWork } : {}),
+      ...(draft.bumpMode !== base.bumpMode ? { bumpMode: draft.bumpMode } : {}),
       ...Object.fromEntries(
         TIMING_FIELDS.filter((field) => timingText(draft[field]) !== timingText(base[field])).map(
           (field) => [field, Number(draft[field].trim())],
@@ -611,6 +625,19 @@ export class StationEditor extends LitElement {
               )}
             </div>
           </fieldset>
+          <wt-combobox
+            name="bumpMode"
+            label=${t("prep.bump_mode")}
+            search="never"
+            .value=${this.draft.bumpMode}
+            .options=${bumpOptions()}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (current() && isBumpMode(value))
+                this.changed({ ...this.draft, bumpMode: value }, "bumpMode");
+            }}
+          ></wt-combobox>
           <wt-switch
             name="showsRestOfOrder"
             label=${t("prep.shows_rest_of_order")}

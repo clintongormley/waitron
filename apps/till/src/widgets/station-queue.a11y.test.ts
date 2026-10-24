@@ -25,6 +25,7 @@ const groups: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed", // awaiting the fiscal collect — no handover button
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,
@@ -77,6 +78,7 @@ const groups: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:05:00.000Z",
     status: "settled", // a Mode-P pickup — its rail card carries the collect button (a11y-checked here)
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,
@@ -103,6 +105,7 @@ const coursedGroups: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     items: [
       {
         allergy: null,
@@ -147,6 +150,7 @@ const modifierGroups: StationQueueGroup[] = [
     label: null,
     queuedAt: "2026-08-17T10:00:00.000Z",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     status: "placed",
     items: [
       {
@@ -175,6 +179,7 @@ const customisationGroups: StationQueueGroup[] = [
     label: null,
     queuedAt: "2026-08-17T10:00:00.000Z",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     status: "placed",
     items: [
       {
@@ -200,6 +205,7 @@ const allergenGroups: StationQueueGroup[] = [
     label: null,
     queuedAt: "2026-08-17T10:00:00.000Z",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     status: "placed",
     items: [
       {
@@ -236,6 +242,7 @@ const dietGroups: StationQueueGroup[] = [
     label: null,
     queuedAt: "2026-08-17T10:00:00.000Z",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     status: "placed",
     items: [
       {
@@ -334,6 +341,7 @@ const partyGroups: StationQueueGroup[] = [
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "open",
     thresholds: DEFAULT_THRESHOLDS,
+    bumpMode: "line",
     party: { id: "v-4", revision: 12 },
     printProblem: true,
     items: [
@@ -468,7 +476,11 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   it("whole-ticket bump mode has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups, stationId: "st-1", view: "rail", bumpMode: "ticket" },
+      {
+        groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })),
+        stationId: "st-1",
+        view: "rail",
+      },
       theme,
     );
     await expectNoA11yViolations(host);

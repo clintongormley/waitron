@@ -628,7 +628,6 @@ describe("TillApi", () => {
       nif: "B12345678",
       orderFlow: "prepay",
       receiptPrintMode: "on_request",
-      bumpMode: "line",
       fireControl: "waiter",
       cardProvider: "none",
       tipsEnabled: false,
@@ -3341,6 +3340,7 @@ describe("TillApi", () => {
                 overdueAfterMinutes: 10,
                 forgottenAfterMinutes: 15,
               },
+              bumpMode: "line",
               items: [
                 {
                   allergy: null,

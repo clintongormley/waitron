@@ -294,7 +294,6 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
 import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
-import type { BumpMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
   AdjustmentCommand,
@@ -2948,8 +2947,6 @@ export class TillApp extends LitElement {
   } | null = null;
   /** The default station's queue. Prepay enqueues nothing automatically, so a prepay till never fetches it. */
   @state() private stationQueue: StationQueueGroup[] = [];
-  /** Defaults to per-line, which is always correct, until boot answers. */
-  @state() private bumpMode: BumpMode = "line";
   @state() private courses: TillCourse[] = [];
   /** The ticket's lines come from this filed result, never the client basket. */
   @state() private result?: TillSaleResult;
@@ -9560,7 +9557,6 @@ export class TillApp extends LitElement {
     this.receiptLanguages = till.receiptLanguages ?? [];
     this.onboardingIntent = till.onboardingIntent;
     this.issuer = { venueName: till.venueName, nif: till.nif };
-    this.bumpMode = till.bumpMode;
     this.courses = till.courses;
     this.cardProvider = till.cardProvider;
     this.tipsEnabled = till.tipsEnabled;
@@ -17874,7 +17870,6 @@ export class TillApp extends LitElement {
           .operatorSession=${this.#operatorSession}
           embedded
           .api=${this.api}
-          .bumpMode=${this.bumpMode}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}
@@ -18078,7 +18073,6 @@ export class TillApp extends LitElement {
           .api=${this.api}
           .canMoveStation=${this.capabilities.includes("take-orders")}
           .canEditKitchenNote=${this.capabilities.includes("take-orders")}
-          .bumpMode=${this.bumpMode}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
           .deviceId=${this.deviceId}

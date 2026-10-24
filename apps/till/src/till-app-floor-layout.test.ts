@@ -71,7 +71,6 @@ async function mount(over: Record<string, unknown>) {
       venueName: "Restaurant",
       nif: "B12345678",
       orderFlow: "prepay",
-      bumpMode: "line",
       fireControl: "waiter",
       courses: [],
       cardProvider: "none",

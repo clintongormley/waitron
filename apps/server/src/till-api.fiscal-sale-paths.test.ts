@@ -1802,6 +1802,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     }[];
     expect(groups1).toEqual([
       {
+        bumpMode: "line",
         kitchenNote: null,
         orderId: workingOrderId,
         orderNumber: expect.any(Number),

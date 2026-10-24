@@ -20,6 +20,7 @@ class StationEditorLeaveApp extends LitElement {
           printMovedSlips: true,
           ticketGrouping: "combined",
           printHeldWork: false,
+          bumpMode: "line",
           printerIds: ["epson"],
           warmAfterMinutes: 3,
           overdueAfterMinutes: 5,
@@ -266,6 +267,24 @@ it("a changed ticket grouping asks before closing, and choosing back the opened 
   await choose("keep");
   expect(await close).toBe(false);
   await pickGrouping("combined");
+  expect(unload()).toBe(false);
+  expect(await modal(el).requestClose("cancel")).toBe(true);
+});
+
+it("a changed bump mode asks before closing, and choosing back the opened one does not", async () => {
+  const el = await mount();
+  const pickBumpMode = async (value: string) => {
+    el.shadowRoot!.querySelector("wt-combobox[name=bumpMode]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+    await el.updateComplete;
+  };
+  await pickBumpMode("ticket");
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await pickBumpMode("line");
   expect(unload()).toBe(false);
   expect(await modal(el).requestClose("cancel")).toBe(true);
 });

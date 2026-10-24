@@ -83,7 +83,6 @@ import "./screens/venue-details-panel.js";
 import "./screens/venue-defaults-panel.js";
 import "./screens/appearance-screen.js";
 import "./screens/content-languages-screen.js";
-import "./screens/kitchen-screen.js";
 import { VENUE_SETTINGS_TABS, TAB_LABELS } from "./screens/venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsTab } from "./screens/venue-settings-screen.js";
 import "./screens/approvals-screen.js";
@@ -327,15 +326,6 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
         .api=${api}
         .readOnly=${!canConfigure}
       ></dashboard-venue-defaults-panel>`,
-  },
-  {
-    key: "kitchen",
-    tab: "kitchen",
-    render: (api, canConfigure) =>
-      html`<dashboard-kitchen-screen
-        .api=${api}
-        .readOnly=${!canConfigure}
-      ></dashboard-kitchen-screen>`,
   },
 ];
 

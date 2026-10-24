@@ -41,6 +41,7 @@ const STATIONS: PrepStation[] = [
   printMovedSlips: true,
   ticketGrouping: "combined",
   printHeldWork: false,
+  bumpMode: "line",
   showsRestOfOrder: false,
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,

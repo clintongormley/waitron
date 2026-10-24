@@ -1360,9 +1360,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
-      // The venue's KDS whole-ticket bump mode (KDS-1 §2e), read from the location — the seeded
-      // location never set it, so the column default `line` reaches the wire (per-line bump only).
-      bumpMode: "line",
       // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
@@ -1583,10 +1580,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till echoes a non-default bump_mode from the location, proving it reads the column", async () => {
-    // The default `line` above would pass even if the route hardcoded it, so drive the location's
-    // `bump_mode` to `ticket` and prove the boot read reflects it. Restored in `finally` so the shared
-    // location stays `line` for the order-independent default assertion above (CLAUDE.md §4).
+  it("GET /api/till carries no bump mode, whatever the venue's column holds", async () => {
     await suite.db.execute(
       sql`update locations set bump_mode = 'ticket' where id = ${cfg.locationId}`,
     );
@@ -1597,7 +1591,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const res = await app.request("/api/till");
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toMatchObject({ bumpMode: "ticket" });
+      expect(body).not.toHaveProperty("bumpMode");
     } finally {
       await suite.db.execute(
         sql`update locations set bump_mode = 'line' where id = ${cfg.locationId}`,
@@ -1618,7 +1612,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body).not.toHaveProperty("fireControl");
-        expect(body).toMatchObject({ bumpMode: "line" });
       }
     } finally {
       await suite.db.execute(

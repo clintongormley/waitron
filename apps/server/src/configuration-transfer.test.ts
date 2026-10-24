@@ -419,7 +419,6 @@ const bundle: ConfigurationBundle = {
       province: "Madrid",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
-      bumpMode: "line",
       fireControl: "waiter",
       catalogueId: null,
     },
@@ -486,6 +485,22 @@ describe("configuration transfer archive", () => {
       ).venue,
     ).toMatchObject(bundle.venue);
   });
+
+  it.each([7, null])(
+    "accepts a bundle that still carries a venue bump mode, whatever its value, as it no longer checks it (%s)",
+    (leftover) => {
+      const older = {
+        ...bundle,
+        venue: { ...bundle.venue, location: { ...bundle.venue.location, bumpMode: leftover } },
+      };
+      expect(
+        decodeConfigurationBundle(
+          encodeConfigurationBundle(older, "a strong passphrase"),
+          "a strong passphrase",
+        ).venue,
+      ).toMatchObject(bundle.venue);
+    },
+  );
 
   it("rejects a short passphrase before creating an artifact", () => {
     expect(() => encodeConfigurationBundle(bundle, "short")).toThrowError(
@@ -2399,6 +2414,127 @@ it("refuses an imported ticket grouping outside the two values before writing an
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
     params: { field: "kitchen_stations.ticket_grouping" },
+  });
+  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+    { n: 0 },
+  ]);
+  expect(
+    (await targetSuite.db.execute(sql`select count(*) as n from kitchen_stations`)).rows,
+  ).toEqual([{ n: 0 }]);
+  expect(
+    await targetSuite.db
+      .select({ name: kitchenStations.name })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, String(station.name))),
+  ).toEqual([]);
+});
+
+it("transfers each station's bump mode", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values([
+      { locationId: source.locationId, name: "Grill", bumpMode: "ticket" },
+      { locationId: source.locationId, name: "Cold", bumpMode: "line" },
+    ]),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_stations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "Grill", bump_mode: "ticket" }),
+      expect.objectContaining({ name: "Cold", bump_mode: "line" }),
+    ]),
+  );
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ name: kitchenStations.name, bumpMode: kitchenStations.bumpMode })
+    .from(kitchenStations)
+    .where(inArray(kitchenStations.name, ["Grill", "Cold"]))
+    .orderBy(kitchenStations.name);
+  expect(imported).toEqual([
+    { name: "Cold", bumpMode: "line" },
+    { name: "Grill", bumpMode: "ticket" },
+  ]);
+});
+
+it.each(["ticket", "line"] as const)(
+  "exports no venue bump mode, and an import leaves the target's column alone (target %s)",
+  async (targetMode) => {
+    const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db.execute(
+      sql`update locations set bump_mode = 'ticket' where id = ${source.locationId}`,
+    );
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-23T12:00:00Z"),
+      versions,
+    );
+    expect(transferred.venue.location).not.toHaveProperty("bumpMode");
+    const target = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: async (tx, result) => {
+        await tx.execute(
+          sql`update locations set bump_mode = ${targetMode} where id = ${result.locationId}`,
+        );
+        await importConfigurationTables(tx, transferred, result, ALL_MODULES, versions);
+      },
+    });
+    expect(
+      (
+        await targetSuite.db.execute(
+          sql`select bump_mode as "bumpMode" from locations where id = ${target.locationId}`,
+        )
+      ).rows,
+    ).toEqual([{ bumpMode: targetMode }]);
+  },
+);
+
+it("refuses an imported bump mode outside the two values before writing anything", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  const station = transferred.tables.kitchen_stations![0]!;
+  station.bump_mode = "bogus";
+  await expect(
+    applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "kitchen_stations.bump_mode" },
   });
   expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
     { n: 0 },

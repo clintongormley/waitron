@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
+import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 
 import type { DashboardApp } from "./dashboard-app.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
@@ -355,9 +356,24 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
 
   it("the Venue settings page renders accessibly with a single, well-ordered heading", async () => {
     const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role: "manager",
+        locale: null,
+        venueLocale: "es-ES",
+        sessionDefault: "es-ES",
+        venueName: "Deli Test SL",
+        permissions: ["venue.view"],
+        modules: [],
+      }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
+      getVenueDefaults: vi.fn().mockResolvedValue({
+        receiptLanguage: "es-ES",
+        receiptLanguageChoices: ["es-ES"],
+        fixedReceiptLanguage: null,
+        defaultProductVatClass: "general",
+      }),
       listStaff: vi.fn().mockResolvedValue(people),
-      getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-      getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
       listCourses: vi.fn().mockResolvedValue([]),
     });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);

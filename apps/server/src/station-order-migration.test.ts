@@ -41,6 +41,10 @@ const printing = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ t
   tag.endsWith("_station_printing_choices"),
 );
 if (printing === undefined) throw new Error("the station printing choices migration is missing");
+const bump = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+  tag.endsWith("_station_bump_mode"),
+);
+if (bump === undefined) throw new Error("the station bump mode migration is missing");
 
 // Every set cut at the same moment, so no set references a table a later core migration made.
 function setsAsOf(name: string, keep: (when: number) => boolean): VenueMigrationOptions[] {
@@ -236,7 +240,10 @@ it("A725 drops only station order with populated cascading and restrictive child
   expect(db.all(sql`pragma integrity_check`)).toEqual([{ integrity_check: "ok" }]);
   await applyMigrations(
     dirname(file!.file),
-    setsAsOf("printing", (when) => when <= retirement.when || when === printing.when),
+    setsAsOf(
+      "printing",
+      (when) => when <= retirement.when || when === printing.when || when === bump.when,
+    ),
   );
   expect((await listStations(db, cfg)).map(({ name }) => name)).toEqual(["Alpha", "Bar", "Zulu"]);
 });

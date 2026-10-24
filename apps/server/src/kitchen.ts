@@ -9,7 +9,7 @@ import {
   kitchenStations,
   nextStationColour,
 } from "@waitron/db";
-import type { StationColour, TicketGrouping } from "@waitron/shared";
+import type { BumpMode, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
@@ -37,6 +37,7 @@ export interface Station {
   colour: StationColour;
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
+  bumpMode: BumpMode;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -133,6 +134,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       colour: kitchenStations.colour,
       ticketGrouping: kitchenStations.ticketGrouping,
       printHeldWork: kitchenStations.printHeldWork,
+      bumpMode: kitchenStations.bumpMode,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -172,6 +174,7 @@ export async function updateStation(
     colour?: StationColour;
     ticketGrouping?: TicketGrouping;
     printHeldWork?: boolean;
+    bumpMode?: BumpMode;
     printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {
@@ -220,21 +223,6 @@ export async function setDefaultStation(
   await requireLiveStation(tx, cfg, id);
   await clearDefault(tx, cfg);
   await tx.update(kitchenStations).set({ isDefault: true }).where(eq(kitchenStations.id, id));
-}
-
-/** `line` = per-line bump only; `ticket` = the station display also offers a whole-ticket bump.
- *  The per-line ticket-item state is always the source of truth. */
-export type BumpMode = "line" | "ticket";
-
-export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMode): Promise<void> {
-  await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
-}
-
-export async function getBumpMode(tx: Transaction, cfg: TillConfig): Promise<BumpMode> {
-  const { rows } = await tx.execute<{ bump_mode: BumpMode }>(
-    sql`select bump_mode from locations where id = ${cfg.locationId}`,
-  );
-  return rows[0]!.bump_mode;
 }
 
 // ── Kitchen courses ──────────────────────────────────────────────────────────────────────────────

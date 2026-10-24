@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
@@ -11,11 +12,20 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import type { FiscalBackend } from "@waitron/fiscal";
+import { loginWithPin, persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { listStationQueue } from "./working-order.js";
-import { dashboardOrderAt } from "./testing/session-device.js";
+import { updateStation } from "./kitchen.js";
+import { mountTillApi } from "./till-api.js";
+import { systemClock } from "./till-backend.js";
+import { SESSION_COOKIE } from "./till-session.js";
+import type { TillConfig } from "./till-config.js";
+import "./errors.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { dashboardOrderAt, seedSessionDevice } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -248,5 +258,106 @@ describe("station queue rest of the order", () => {
         held: false,
       },
     ]);
+  });
+});
+
+describe("station queue bump mode", () => {
+  it("each order in a station's queue carries that station's bump mode", async () => {
+    const db = suite.db;
+    await seedTenant(db);
+    const locationId = randomUUID();
+    await db.insert(locations).values({
+      id: locationId,
+      name: "Bar",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Dine-in sale",
+    });
+    const nodeId = await seedNode(db, brandLocationId(locationId));
+    const cfg: TillConfig = {
+      nodeId: brandNodeId(nodeId),
+      locationId: brandLocationId(locationId),
+      locale: LOCALE,
+      invoiceLocales: [LOCALE],
+      tipsEnabled: false,
+      simplifiedInvoiceLimit: null,
+    };
+    const stations = await db
+      .insert(kitchenStations)
+      .values([
+        { locationId, name: "Grill", isDefault: true, bumpMode: "ticket" },
+        { locationId, name: "Bar", bumpMode: "line" },
+      ])
+      .returning({ id: kitchenStations.id, name: kitchenStations.name });
+    const grillId = stations.find((row) => row.name === "Grill")!.id;
+    const barId = stations.find((row) => row.name === "Bar")!.id;
+    const orderId = randomUUID();
+    await db.insert(workingOrders).values({
+      id: orderId,
+      ...dashboardOrderAt(locationId),
+      nodeId,
+      orderNumber: 1,
+      status: "open",
+    });
+    for (const [lineNo, stationId] of [
+      [1, grillId],
+      [2, barId],
+    ] as const) {
+      const lineId = randomUUID();
+      await db.insert(workingOrderLines).values({
+        id: lineId,
+        workingOrderId: orderId,
+        lineNo,
+        name: `Staff ${lineNo}`,
+        kitchenName: `Kitchen ${lineNo}`,
+        descriptions: { [LOCALE]: `Customer ${lineNo}` },
+        quantity: 1000,
+        unitPriceGross: 121,
+        vatClass: "general",
+        lineTotal: 121,
+      });
+      await db.insert(ticketItems).values({
+        nodeId,
+        workingOrderId: orderId,
+        workingOrderLineId: lineId,
+        stationId,
+        state: "queued",
+        firedAt: nowIso(),
+      });
+    }
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db,
+        backend: {} as FiscalBackend,
+        clock: systemClock(),
+        cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+      },
+      () => {},
+    );
+    const [cook] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
+      .returning();
+    const deviceId = await seedSessionDevice(db, cfg);
+    const { token } = await withTransaction(db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: cook!.id, pin: "5555" }),
+    );
+    const bumpModes = async (stationId: string) => {
+      const res = await app.request(`/api/stations/${stationId}/queue`, {
+        headers: { cookie: `${SESSION_COOKIE}=${token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { items: { orderId: string; bumpMode: string }[] };
+      return body.items.map((group) => [group.orderId, group.bumpMode]);
+    };
+
+    expect(await bumpModes(grillId)).toEqual([[orderId, "ticket"]]);
+    expect(await bumpModes(barId)).toEqual([[orderId, "line"]]);
+
+    await withTransaction(db, (tx) => updateStation(tx, cfg, barId, { bumpMode: "ticket" }));
+    expect(await bumpModes(barId)).toEqual([[orderId, "ticket"]]);
   });
 });

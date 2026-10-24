@@ -103,6 +103,7 @@ import type { GetColumnData, SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   AppError,
+  type BumpMode,
   centsToDecimal,
   classifyBand,
   compareDecimal,
@@ -7302,6 +7303,7 @@ export interface StationQueueGroup {
   /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
   elsewhere?: ElsewhereItem[];
   thresholds: StationThresholds;
+  bumpMode: BumpMode;
 }
 
 /**
@@ -7545,6 +7547,7 @@ export async function listStationQueues(
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
+      bumpMode: kitchenStations.bumpMode,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
@@ -7653,6 +7656,7 @@ export async function listStationQueues(
             : undefined,
         ),
         thresholds,
+        bumpMode: row.bumpMode,
       };
       groups.set(row.orderId, group);
     }

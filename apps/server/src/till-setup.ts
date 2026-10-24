@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
-import { locations, readTenant, type Transaction } from "@waitron/db";
+import { readTenant, type Transaction } from "@waitron/db";
 import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
 import { cardReaders, DEMO_READER_ID, resolveDeviceReaderId } from "@waitron/payments";
@@ -34,12 +34,6 @@ export type TillSetupRead = Awaited<ReturnType<typeof readTillSetup>>;
 
 async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: DeviceBinding | null) {
   const taxpayer = await readTenant(tx);
-  const [loc] = await tx
-    .select({
-      bumpMode: locations.bumpMode,
-    })
-    .from(locations)
-    .where(eq(locations.id, deps.cfg.locationId));
   const courses = (await listCourses(tx, deps.cfg)).map((course) => ({
     id: course.id,
     name: course.name,
@@ -79,9 +73,9 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     locationId: deps.cfg.locationId,
   });
   /* v8 ignore start */
-  if (taxpayer === null || loc === undefined) {
-    // Unreachable once provisioned: the taxpayer row and the till's own location both exist.
-    throw new Error(`readTillSetup: no taxpayer/location row for ${deps.cfg.locationId}`);
+  if (taxpayer === null) {
+    // Unreachable once provisioned: the taxpayer row exists.
+    throw new Error(`readTillSetup: no taxpayer row for ${deps.cfg.locationId}`);
   }
   /* v8 ignore stop */
   const simulator = deps.cardProvider?.provider === "simulator";
@@ -95,7 +89,6 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     onboardingIntent: deps.onboardingIntent,
     venueName: taxpayer.legalName,
     nif: taxpayer.taxId,
-    bumpMode: loc.bumpMode,
     courses,
     cardProvider: (simulator
       ? "simulator"

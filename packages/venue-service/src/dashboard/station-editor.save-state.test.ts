@@ -21,6 +21,7 @@ async function mount(printerIds = ["epson"]) {
     printMovedSlips: true,
     ticketGrouping: "combined",
     printHeldWork: false,
+    bumpMode: "line",
     printerIds,
     warmAfterMinutes: 3,
     overdueAfterMinutes: 5,

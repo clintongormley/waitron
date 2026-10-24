@@ -94,7 +94,6 @@ async function mount(
       venueName: "Restaurant",
       nif: "B12345678",
       orderFlow: "prepay",
-      bumpMode: "line",
       fireControl: "waiter",
       courses: [],
       cardProvider: "none",

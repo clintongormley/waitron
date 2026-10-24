@@ -213,7 +213,6 @@ function till(formFactor: FormFactor) {
     nif: "B12345678",
     orderFlow: "prepay" as const,
     receiptPrintMode: "auto" as const,
-    bumpMode: "line" as const,
     fireControl: "waiter" as const,
     courses,
     cardProvider: "none" as const,
@@ -373,7 +372,7 @@ async function mountWithRouter(): Promise<{ el: TillApp; switchServer: () => Pro
   return { el, switchServer };
 }
 
-const venue = (el: TillApp) => el as unknown as { courses: { id: string }[]; bumpMode: string };
+const venue = (el: TillApp) => el as unknown as { courses: { id: string }[] };
 
 const courseIds = (list: { id: string }[]) => list.map((each) => each.id);
 
@@ -456,7 +455,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
   });
 
-  it("A773 waiter authority: refresh keeps bump mode and drops the retired station control", async () => {
+  it("A773 waiter authority: refresh drops the retired station control", async () => {
     const stationTill = {
       ...till(drillFormFactor),
       onboardingIntent: "prepare" as const,
@@ -472,16 +471,15 @@ describe("A768 the till follows the venue's setup revision", () => {
     emit(shell(el), "show-station");
     await flush(el);
     const station = () => el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen")!;
-    expect(station().bumpMode).toBe("line");
+    const reads = api.getTill.mock.calls.length;
     api.getTill.mockResolvedValue({
       ...stationTill,
-      bumpMode: "ticket",
       fireControl: "kitchen",
       setupRevision: "s2",
     });
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
     await poll(el);
-    expect(station().bumpMode).toBe("ticket");
+    expect(api.getTill.mock.calls.length).toBe(reads + 1);
     expect("fireControl" in station()).toBe(false);
   });
 
@@ -498,12 +496,10 @@ describe("A768 the till follows the venue's setup revision", () => {
     answerLate({
       ...till(drillFormFactor),
       courses: [{ id: "late", name: "Late", displayOrder: 0 }],
-      bumpMode: "ticket",
       setupRevision: "s2",
     });
     await flush(el);
     expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
-    expect(venue(el).bumpMode).toBe("line");
   });
 
   it("a profile switch takes the venue's new courses too", async () => {

@@ -142,13 +142,12 @@ were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owne
 What is left. The starting decisions are in the plan,
 `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` → "Parts that wait".
 
-2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
-under Open points is due. PR 5 (late flags on each station) landed on 2026-10-23 (#2023).
+2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable. PR 5 (late flags on
+each station) landed on 2026-10-23 (#2023).
 
-- **PR 7 — done on the screen on each station.**
 - **PR 8 — changes after sending, three values, on each station.**
-- **The Kitchen tab goes** in whichever change removes its last control: after PRs 4–8 only fire
-  control is left, which A773-2 removes with `locations.fire_control`.
+- **The Kitchen tab goes** with PR 8, which moves its last setting, Changes after sending (venue
+  service's panel); PR 7 removed its core panel.
 
 The Courses page's "Held until fired" column comes with A773-1 Task 1, which adds it to the shared
 course list widget; nothing is left for A756 there.
@@ -157,8 +156,7 @@ Open points:
 
 - From #1852: the Transfers panel's heading is an `h2`, the dialog title's level, beside Service's
   `h3` sections — an existing accessibility check selects `h2`.
-- From #1854: once A773-1 lands, rename the two `kitchen-screen.a11y.test.ts` cases that still name
-  a course list. On the Courses page the row dividers stop short of the card's sides (mock-up 02
+- From #1854: on the Courses page the row dividers stop short of the card's sides (mock-up 02
   runs them to the edge; needs `course-list.ts` styles), and an error under the list would sit on
   the card's bottom border (read from the code, not seen).
 - From PR 4: offer “At once” (0 minutes) in each department's reminder, as A773 §3.4 decided
@@ -226,6 +224,13 @@ Open points:
   They pass in CI; nobody has checked whether what they assert still depends on HOLD paper
   reaching a station. `line-service-projections.test.ts` failed for this reason and now records
   its stations.
+- From PR 7: the station editor labels the bump mode "Done on the screen", "One item at a time"
+  and "Whole ticket at once" (pictures 04 and 10); the Kitchen tab said "Bump mode", "Per item"
+  and "Whole ticket". Owner FYI, not a blocker: the Spanish is new and built as «Marcado en la
+  pantalla», «Un plato cada vez», «Toda la comanda a la vez» (the coordinator's choice of
+  2026-10-24), and the kitchen screen marks such an order «Toda la comanda» ("Whole ticket");
+  say if other words read better.
+- From PR 7: Add station sets no bump mode; a new station starts at one item at a time.
 
 ## A long word in a routing-grid row name still splits at 390 px
 

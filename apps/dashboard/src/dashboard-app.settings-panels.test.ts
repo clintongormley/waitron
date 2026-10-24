@@ -10,7 +10,7 @@ import "./dashboard-app.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import type { DashboardApp } from "./dashboard-app.js";
 
-// "widgets" adds kitchen panels this session may see and a venue-details panel it may not;
+// "widgets" adds kitchen panels this session may see and venue-details panels it may not;
 // "gadgets" is not enabled for the venue and adds a venue-details panel too. The core panels on
 // that tab need venue.view, which this session lacks, so with both left out the tab is absent.
 function panelModule(module: string, panels: DashboardContribution["settingsPanels"]) {
@@ -49,6 +49,20 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
         tab: "kitchen",
         order: -1,
         requiresPermission: "test.use",
+        create: shown("early"),
+      },
+      {
+        id: "widgets-details-late",
+        tab: "venue-details",
+        order: 5,
+        requiresPermission: "test.details",
+        create: shown("late"),
+      },
+      {
+        id: "widgets-details-early",
+        tab: "venue-details",
+        order: -1,
+        requiresPermission: "test.details",
         create: shown("early"),
       },
       {
@@ -106,8 +120,6 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
       defaultProductVatClass: "reduced",
     }),
     listCourses: vi.fn().mockResolvedValue([]),
-    getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-    getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
   } as unknown as DashboardApi;
 }
 
@@ -135,13 +147,18 @@ const tabKeys = (el: DashboardApp) =>
     ...page(el).shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
   ].map((tab) => tab.getAttribute("data-key"));
 
-it("puts a module's panels on their tab by their stated order, the core panel counting as 0", async () => {
-  const el = await mount("/manage/venue-settings/view/kitchen");
-  const kitchen = page(el).shadowRoot!.querySelector('[slot="kitchen"]')!;
-  const children = [...kitchen.children].map((child) =>
-    child.tagName === "DASHBOARD-KITCHEN-SCREEN" ? "core" : (child as HTMLElement).dataset.test,
+it("puts a module's panels on their tab by their stated order, the core panels counting as 0", async () => {
+  const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
+    "test.use",
+    "test.details",
+    "venue.view",
+  ]);
+  const details = page(el).shadowRoot!.querySelector('[slot="venue-details"]')!;
+  const core = ["DASHBOARD-VENUE-DETAILS-PANEL", "DASHBOARD-VENUE-DEFAULTS-PANEL"];
+  const children = [...details.children].map((child) =>
+    core.includes(child.tagName) ? "core" : (child as HTMLElement).dataset.test,
   );
-  expect(children).toEqual(["panel-early", "core", "panel-late"]);
+  expect(children).toEqual(["panel-early", "core", "core", "panel-late"]);
 });
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
@@ -182,7 +199,7 @@ it("refuses to start when a module repeats a core panel's id", async () => {
   list.length = 0;
   list.push(
     panelModule("widgets", [
-      { id: "kitchen", tab: "kitchen", requiresPermission: "test.use", create: shown("dup") },
+      { id: "defaults", tab: "kitchen", requiresPermission: "test.use", create: shown("dup") },
     ]),
   );
   try {

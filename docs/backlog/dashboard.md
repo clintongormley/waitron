@@ -513,7 +513,7 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
    `kitchen-screen.ts`, `service-status-screen.ts`. **2026-10-19:** A757 slice 2 deleted
-   `service-status-screen.ts`.
+   `service-status-screen.ts`. **2026-10-24:** A756 PR 7 deleted `kitchen-screen.ts`.
 7. **Workforce** — `my-schedule-screen.ts`, `planned-actual-screen.ts`,
    `approvals-screen.ts`.
 8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
