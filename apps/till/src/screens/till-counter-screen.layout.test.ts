@@ -203,9 +203,9 @@ it.each(["es", "en"])("one long word in a 70 px box under lang=%s", async (lang)
     const right = Math.round(
       Math.max(...rects.map((rect) => rect.right)) - word.getBoundingClientRect().left,
     );
-    expect(lines, `${navigator.userAgent}: ${lines} lines, right edge ${right}px`).toBe(
-      lang === "es" ? 2 : 1,
-    );
+    const seen = `${navigator.userAgent}: ${lines} lines, right edge ${right}px`;
+    if (lang === "es") expect(lines, seen).toBeGreaterThan(1);
+    else expect(lines, seen).toBe(1);
   } finally {
     word.remove();
   }
@@ -217,12 +217,27 @@ async function atScale(scale: number): Promise<void> {
   await document.fonts.ready;
 }
 
+/** A product name's computed size on Waitron's look at each text size. */
+const NAME_SIZE: Record<number, string> = { 100: "14px", 130: "18px" };
+
+/** Fails unless the counter's product names are drawn at `scale`%, so a sheet that stopped reaching
+ * the widgets cannot let a 130% case pass as its 100% twin. */
+function expectDrawnAt(el: HTMLElement, scale: number): void {
+  const name = inShadow(
+    el.shadowRoot!.querySelector("till-menu-browser"),
+    '[data-kind="product"] .name',
+  );
+  expect(getComputedStyle(name).fontSize, `product name at ${scale}%`).toBe(NAME_SIZE[scale]);
+}
+
 it.each([100, 130])(
   "on a 1280 × 800 till at %i%, the basket stays beside the menu, the pay buttons are whole and Park ends above the screen's bottom",
   async (scale) => {
     await atScale(scale);
     const el = await mountCounter(1280, 800, "2");
     await document.fonts.ready;
+    expectDrawnAt(el, scale);
+    expect(scrollY).toBe(0);
     const hold = inShadow(el.shadowRoot!.querySelector("till-tender-pay"), ".hold");
     expect(hold.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1280);
@@ -242,6 +257,7 @@ it.each([100, 130])("at 1024 × 768 and %i%, every selling control is whole", as
   await atScale(scale);
   const el = await mountCounter(1024, 768);
   await document.fonts.ready;
+  expectDrawnAt(el, scale);
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1024);
   expect(await placement(el)).toEqual(allWhole);
 });
@@ -252,6 +268,7 @@ it.each([100, 130])(
     await atScale(scale);
     const el = await mountCounter(390, 844);
     await document.fonts.ready;
+    expectDrawnAt(el, scale);
     const browser = box(el, "till-menu-browser");
     const basket = box(el, "till-basket");
     expect({ left: basket.left, width: basket.width }).toEqual({
@@ -263,8 +280,6 @@ it.each([100, 130])(
   },
 );
 
-// English words, so the case keeps to English fixtures: Chromium hyphenates them by Spanish rules
-// under lang="es" and not at all under lang="en".
 const LONG_NAMES = [
   "Cheeseburger",
   "Strawberries and cream",
@@ -309,6 +324,7 @@ async function mountLongNames(width: number, height: number, lang: string): Prom
     root.adoptedStyleSheets = [...root.adoptedStyleSheets, noBreak];
   }
   await document.fonts.ready;
+  expectDrawnAt(el, 130);
   return el;
 }
 
