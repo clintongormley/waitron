@@ -561,14 +561,17 @@ export class TillShell extends LitElement {
     this.#retryHiddenLogo();
   }
 
-  /** A failed logo's box retries only while it is on the page, so while a step hides it the bar
-   * steps back once every `VENUE_LOGO_RETRY_MS`: the box drawn again asks for the image at once,
-   * and the fit takes the step again if it fails. */
+  /** A failed logo's box retries only while it is on the page, so while the bar leaves the logo out
+   * with at most one step taken it owes a step-back every `VENUE_LOGO_RETRY_MS`: at step 0 the box is
+   * drawn again and asks for the image at once, and if that fails the fit takes step 1 again. Further
+   * steps start no timer: the logo would not be drawn there even once loaded, and widening steps
+   * back on its own. */
   #retryHiddenLogo(): void {
     const state = this.#venueLogo.state;
     const hidden =
       this.isConnected &&
       !this.phone &&
+      this.steps <= 1 &&
       state.kind === "logo" &&
       state.failed &&
       this.renderRoot.querySelector(".head") !== null &&

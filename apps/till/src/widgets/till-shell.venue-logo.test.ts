@@ -389,9 +389,13 @@ describe("the bar refits when the logo changes", () => {
         await settle(el);
         expect(steps(el)).toBeGreaterThan(0);
         expect(logoOf(el)).toBeNull();
+        const loads = nextLogoLoad();
         await vi.advanceTimersByTimeAsync(60_001);
+        await loads;
         await settle(el);
         expect(logoOf(el), "the narrow image should be retried and fit again").not.toBeNull();
+        expect(steps(el)).toBe(0);
+        expect(wraps(el)).toBe(false);
         expect(currentVenueLogo()).toMatchObject({ failed: false });
       } finally {
         vi.useRealTimers();
@@ -405,13 +409,18 @@ describe("the bar refits when the logo changes", () => {
       const address = "/no-such-narrow-logo.png";
       const requests = () =>
         performance.getEntriesByName(new URL(address, location.href).href).length;
+      // vi.waitFor advances faked timers on each check, which would bring a retry forward.
+      const requestsReach = async (count: number) => {
+        for (let i = 0; i < 300 && requests() < count; i++) await frame();
+        expect(requests()).toBe(count);
+      };
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       try {
         let failed = nextLogoError(el);
         applyVenueTheme(withLogo(address, null, "broken"));
         await failed;
         await settle(el);
-        expect(requests()).toBe(1);
+        await requestsReach(1);
         for (const attempt of [2, 3]) {
           expect(steps(el)).toBeGreaterThan(0);
           expect(logoOf(el)).toBeNull();
@@ -423,7 +432,7 @@ describe("the bar refits when the logo changes", () => {
           await vi.advanceTimersByTimeAsync(1_001);
           await failed;
           await settle(el);
-          expect(requests()).toBe(attempt);
+          await requestsReach(attempt);
         }
         expect(steps(el)).toBeGreaterThan(0);
         expect(logoOf(el)).toBeNull();
@@ -449,6 +458,37 @@ describe("the bar refits when the logo changes", () => {
         expect(vi.getTimerCount()).toBe(0);
         parent.append(el);
         expect(vi.getTimerCount()).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("a bar that has moved an item into More keeps no timer for a failed logo, and widening brings it back", async () => {
+    startFrom(withLogo(LIGHT));
+    await atViewport(1280, async () => {
+      const loads = nextLogoLoad();
+      const { el } = await mount();
+      await loads;
+      await settle(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        logoOf(el)!.shadowRoot!.querySelector("img")!.dispatchEvent(new Event("error"));
+        await settle(el);
+        expect(currentVenueLogo()).toMatchObject({ failed: true });
+        el.style.width = `${Math.round(natural(el) * 0.6)}px`;
+        for (let i = 0; i < 300 && steps(el) < 2; i++) await frame();
+        await settle(el);
+        expect(steps(el)).toBeGreaterThanOrEqual(2);
+        expect(logoOf(el)).toBeNull();
+        expect(vi.getTimerCount()).toBe(0);
+        const back = nextLogoLoad();
+        el.style.width = "";
+        await back;
+        await settle(el);
+        expect(steps(el)).toBe(0);
+        expect(logoOf(el)).not.toBeNull();
+        expect(currentVenueLogo()).toMatchObject({ failed: false });
       } finally {
         vi.useRealTimers();
       }

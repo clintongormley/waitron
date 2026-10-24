@@ -5298,9 +5298,13 @@ Find a bill opens Bills and Transactions. Its Back returns to Counter without re
 a transaction receipt keeps the page's tab, query and server page for its own Back action.
 
 A handheld keeps the adaptive bar. On a phone it puts secondary actions in More; wider, it moves
-items there only as needed. Find a bill stays in More. Its action priority remains Pass, Kitchen,
-My schedule, Profile, Equipment and Transfers. Zones on this device stays in More, like Find a
-bill, between Profile and Equipment. The tabs stay on the bar while items return as room
+items there only as needed. The brand mark (the venue's logo, `size="bar"`, with the word "Waitron"
+as its fallback; the word alone with no logo) is the first thing to leave, and is never drawn at
+phone width. While the logo has failed and the bar leaves it out at its first step, the bar steps
+back every `VENUE_LOGO_RETRY_MS` so the box can ask for the image again. Find a bill stays in More.
+Its action priority remains Pass, Kitchen, My schedule, Profile, Equipment and Transfers.
+Zones on this device stays in More, like Find a bill, between Profile and Equipment. The tabs
+stay on the bar while items return as room
 becomes available, and so does the language chooser above phone width; at phone width it moves to
 the end of More when the bar does not fit (see the language chooser paragraph above). Opening More holds its contents steady until it closes.
 
