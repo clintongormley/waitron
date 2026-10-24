@@ -301,6 +301,16 @@ test("the hint paints from the muted text and small size tokens", async () => {
   expect(getComputedStyle(hint).marginTop).toBe("0px");
 });
 
+test("the label paints from the muted text and small size tokens, as the other fields' labels do", async () => {
+  const el = await mountSlider();
+  const label = el.shadowRoot!.querySelector('[part="label"]')!;
+  expect(getComputedStyle(label).fontSize).toBe("12px");
+  host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  expect(getComputedStyle(label).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(label).fontSize).toBe("11px");
+});
+
 test("without a hint or a format it draws as before", async () => {
   const el = await mountSlider();
   expect(el.shadowRoot!.querySelector('[part="hint"]')).toBeNull();
@@ -605,6 +615,6 @@ describe("step marks", () => {
     expect(marksOf(el)).toHaveLength(0);
     const label = partOf(el, "label").getBoundingClientRect();
     const value = partOf(el, "value").getBoundingClientRect();
-    expect(Math.abs(label.top - value.top)).toBeLessThanOrEqual(1);
+    expect([value.top < label.bottom, label.top < value.bottom]).toEqual([true, true]);
   });
 });

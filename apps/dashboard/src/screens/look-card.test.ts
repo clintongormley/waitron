@@ -1698,6 +1698,22 @@ describe("the Text size slider", () => {
     expect(sizesLine(el)).toBe(sizes(12, 14, 18, 22));
   });
 
+  it("draws its label at the size and colour of Background's and Corners' labels", async () => {
+    const { el } = await mountEditing(inUse(lucia));
+    const drawn = (label: Element) => {
+      const style = getComputedStyle(label);
+      return [style.fontSize, style.color];
+    };
+    const ours = drawn(slider(el).shadowRoot!.querySelector("[part=label]")!);
+    expect(ours[0]).toBe("12px");
+    for (const name of ["background", "corners"]) {
+      expect([name, ...drawn(segmented(el, name).shadowRoot!.querySelector(".label")!)]).toEqual([
+        name,
+        ...ours,
+      ]);
+    }
+  });
+
   it("moving it changes the draft, the line of sizes and the preview, and nothing else", async () => {
     setLocale("en-GB");
     const { el } = await mountEditing(inUse(lucia));
@@ -1709,7 +1725,8 @@ describe("the Text size slider", () => {
     expect(preview(el).theme.light["--wt-font-size-md"]).toBe("17px");
     expect(preview(el).theme.dark["--wt-font-size-md"]).toBe("17px");
     const label = slider(el).shadowRoot!.querySelector("[part=label]")!;
-    expect(getComputedStyle(label).fontSize).toBe("14px");
+    expect(getComputedStyle(label).fontSize).toBe("12px");
+    expect(getComputedStyle(el).getPropertyValue("--wt-font-size-sm").trim()).toBe("12px");
     expect(getComputedStyle(el).getPropertyValue("--wt-font-size-md").trim()).toBe("14px");
     expect(button(el, "save").disabled).toBe(false);
     expect(button(el, "save").variant).toBe("primary");

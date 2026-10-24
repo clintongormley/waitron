@@ -45,6 +45,10 @@ export class WtSlider extends LitElement {
         height: var(--wt-space-2);
         background-color: var(--wt-color-text-muted);
       }
+      [part="label"] {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       [part="value"] {
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
