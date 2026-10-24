@@ -6,7 +6,8 @@ import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 
 import type { DashboardApp } from "./dashboard-app.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
-import type { WtToast } from "@waitron/ui";
+import type { WtToast, WtVenueLogo } from "@waitron/ui";
+import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 import type { WtInput } from "@waitron/ui";
@@ -171,6 +172,43 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       await expectNoA11yViolations(host);
     },
   );
+
+  it.each([
+    ["signed in", true],
+    ["signed out", false],
+  ] as const)("the banner with a venue logo renders accessibly %s", async (_state, signedIn) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 120;
+    canvas.height = 40;
+    canvas.getContext("2d")!.fillRect(0, 0, 120, 40);
+    localStorage.setItem(
+      VENUE_THEME_STORAGE_KEY,
+      JSON.stringify({ hash: "logo", css: "", logo: { light: canvas.toDataURL(), dark: null } }),
+    );
+    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    try {
+      const api = signedIn
+        ? stubApi()
+        : stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) });
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+      await flush(el);
+      const logo = el.shadowRoot!.querySelector<WtVenueLogo>("wt-venue-logo")!;
+      await vi.waitFor(() =>
+        expect(logo.shadowRoot!.querySelector("img")?.naturalWidth).toBeGreaterThan(0),
+      );
+      await expectNoA11yViolations(host);
+    } finally {
+      // Back to Waitron's look with the stub's own hash, so the later cases' answers store nothing.
+      localStorage.setItem(
+        VENUE_THEME_STORAGE_KEY,
+        JSON.stringify({ hash: "waitron", css: "", logo: null }),
+      );
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+    }
+  });
 
   it("the staff self-service screen renders accessibly with a single, well-ordered heading", async () => {
     const api = stubApi({
