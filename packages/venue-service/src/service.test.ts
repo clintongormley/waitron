@@ -72,7 +72,6 @@ describe("VENUE_SERVICE", () => {
       "readDeviceKitchenScreens",
       "readDeviceZoneSelection",
       "readDevicesKitchenScreens",
-      "readEditSentLines",
       "readFloorPlanSets",
       "readIncomingDepartmentTransfer",
       "readKeepOpen",

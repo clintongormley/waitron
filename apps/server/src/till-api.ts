@@ -3913,7 +3913,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return {
           lines: await readTabLines(tx, deps.cfg, id),
           revision: await readOrderRevision(tx, id),
-          editSentLines: await VENUE_SERVICE.readEditSentLines(tx),
         };
       });
       return c.json(tab);
