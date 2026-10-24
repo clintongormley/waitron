@@ -101,7 +101,9 @@ zones assigned to it.
 
 You choose when to request cooking from the till; there is no venue-wide firing mode. Each prep
 station sets whether its kitchen screen moves preparation on one item at a time or a whole
-ticket at once, under **Done on the screen** when you edit it in **Prep stations**. Each prep station sets
+ticket at once, under **Done on the screen** when you edit it in **Prep stations**. On the kitchen
+screen, an order at a whole-ticket station shows **Whole ticket** while a tap can still move it on.
+Each prep station sets
 its own late flags when you add it with **Add station**, and under **Late flags (minutes)** when you
 edit it in **Prep stations**. Each prep station also sets how identical dishes print on its tickets
 and whether it prints held groups in advance, under **Identical dishes on a kitchen ticket** and

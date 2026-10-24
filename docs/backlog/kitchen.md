@@ -228,11 +228,9 @@ Open points:
   and "Whole ticket at once" (pictures 04 and 10); the Kitchen tab said "Bump mode", "Per item"
   and "Whole ticket". Owner FYI, not a blocker: the Spanish is new and built as «Marcado en la
   pantalla», «Un plato cada vez», «Toda la comanda a la vez» (the coordinator's choice of
-  2026-10-24); say if other words read better.
+  2026-10-24), and the kitchen screen marks such an order «Toda la comanda» ("Whole ticket");
+  say if other words read better.
 - From PR 7: Add station sets no bump mode; a new station starts at one item at a time.
-- From PR 7: on a merged kitchen screen nothing visible says which order bumps as a whole ticket
-  and which one dish at a time — the "Advance ticket" label is read out but not shown; before PR 7
-  every card on one screen behaved alike.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
