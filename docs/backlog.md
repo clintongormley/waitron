@@ -1615,6 +1615,22 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   value suits a printer-only station too. Spanish «Cambios tras el envío», «No permitidos», «Solo
   en espera», «En espera o sin empezar». Say if other words read better (A756 PR 8).
 
+- **A1079. Owner question: should a supervisor see each station's "Changes after sending"?** The
+  Kitchen tab let a supervisor read it (owner, 2026-10-04); since #2044 it lives only in the station
+  editor, which needs `venue_service.manage`. Decide whether a supervisor gets a read-only view
+  ([decision note](backlog/dashboard.md)). Left open by A756 PR 8.
+
+- **A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a
+  "Not allowed" station.** Within one dish `ticket.already_started` is checked first, but across a
+  save the answer can be `ticket.already_fired` (found by #2044's second Codex review, not called a
+  bug). Decide whether "started first" should hold across the whole save
+  ([rule](backlog/kitchen.md#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
+
+- **A1081. Owner FYI: the till's words for `ticket.already_fired`.** Since #2044 they no longer
+  blame the station, because the server sends that code in other cases too: "This item has already
+  gone to the kitchen and cannot be changed. You can cancel it" («Este plato ya ha ido a cocina y no
+  se puede cambiar. Puedes cancelarlo»). Say if other words read better.
+
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17).**
   [Detail](backlog/kitchen.md#a807-one-slip-per-printer-and-one-notice-per-station-for-a-whole-order-kitchen-note-change-owner-2026-10-17)
 
