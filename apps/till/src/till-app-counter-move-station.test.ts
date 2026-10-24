@@ -253,6 +253,7 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 const sentDish = (id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine => ({
+  changesAfterSending: "held-or-waiting",
   id,
   lineNo,
   stationId: "kitchen",

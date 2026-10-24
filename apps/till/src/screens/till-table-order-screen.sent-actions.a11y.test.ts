@@ -17,6 +17,7 @@ afterEach(async () => {
 });
 
 const line: TabLine = {
+  changesAfterSending: "held-or-waiting",
   id: "l-flan",
   name: "Flan",
   lineNo: 1,

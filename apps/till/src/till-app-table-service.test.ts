@@ -97,6 +97,7 @@ const openTable: TableState = {
 const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([openTable]) });
 
 const tabLine: TabLine = {
+  changesAfterSending: "held-or-waiting",
   stationId: null,
   movable: false,
   id: "line-1",
@@ -1446,6 +1447,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     return offers;
   })();
   const burgerLine: TabLine = {
+    changesAfterSending: "held-or-waiting",
     stationId: null,
     movable: false,
     id: "line-5",

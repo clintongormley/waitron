@@ -6586,6 +6586,7 @@ describe("recalled draft source splitting", () => {
 
   function reference(id = "source-7", netAmount = "17.25", quantity = "2"): SourceLine {
     const line: SourceLine["source"]["line"] = {
+      changesAfterSending: null,
       id,
       name: "Recorded steak",
       productId: "retired-steak",
@@ -10573,6 +10574,7 @@ describe("native app phone Review with mixed dish families", () => {
             afterGroupId: null,
           });
           const source: import("./api/client.js").TabLine = {
+            changesAfterSending: null,
             id: "review-source",
             name: "Recorded dish",
             lineNo: 1,

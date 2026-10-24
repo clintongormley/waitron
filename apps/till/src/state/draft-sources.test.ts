@@ -12,6 +12,7 @@ import { lineGross } from "./order-line.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 
 const parent = (): TabLine => ({
+  changesAfterSending: null,
   id: "sent-dish",
   name: "Recorded double burger",
   productId: "variant-retired",

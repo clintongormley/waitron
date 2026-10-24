@@ -178,6 +178,7 @@ it("Not served cannot confirm a quantity after its bill is paid", async () => {
 
 function heldLine(over: Partial<TabLine> = {}): TabLine {
   return {
+    changesAfterSending: "held-or-waiting",
     id: "l-flan",
     name: "Flan",
     lineNo: 1,

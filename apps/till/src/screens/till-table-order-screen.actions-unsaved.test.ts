@@ -36,6 +36,7 @@ const bills: PartyBill[] = ["main", "other"].map((workingOrderId) => ({
   receiptAvailable: false,
 }));
 const lines: TabLine[] = [1, 2].map((lineNo) => ({
+  changesAfterSending: null,
   id: `line-${lineNo}`,
   name: lineNo === 1 ? "Staff Beer" : "Staff Wine",
   lineNo,

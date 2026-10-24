@@ -701,6 +701,7 @@ describe("bill-scoped saved work and retained local candidates", () => {
           extras: [],
           netAmount: "4.00",
           line: {
+            changesAfterSending: null,
             id: "recorded",
             lineNo: 1,
             parentLineNo: null,
@@ -767,6 +768,7 @@ describe("bill-scoped saved work and retained local candidates", () => {
         extras: [],
         netAmount: "4.00",
         line: {
+          changesAfterSending: null,
           id: "recorded",
           lineNo: 1,
           parentLineNo: null,

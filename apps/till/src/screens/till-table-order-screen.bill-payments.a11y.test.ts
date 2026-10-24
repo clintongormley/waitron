@@ -42,6 +42,7 @@ const bill: PartyBill = {
 
 function line(over: Partial<TabLine>): TabLine {
   return {
+    changesAfterSending: null,
     stationId: null,
     movable: false,
     id: `line-${over.lineNo}`,

@@ -81,6 +81,7 @@ const product = (id: string, name: string, unitPrice: string): TillProduct => ({
 });
 
 const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLine => ({
+  changesAfterSending: null,
   stationId: null,
   movable: false,
   productId: null,

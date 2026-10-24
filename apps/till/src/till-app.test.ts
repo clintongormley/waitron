@@ -8974,6 +8974,7 @@ describe("till-app", () => {
 
     describe("table-order screen (FP-1)", () => {
       const tabLine: TabLine = {
+        changesAfterSending: "held-or-waiting",
         stationId: null,
         movable: false,
         id: "line-1",

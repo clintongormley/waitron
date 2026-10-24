@@ -2285,6 +2285,7 @@ describe("TillApi", () => {
     // ticket item (`state: null`), naming its parent dish by `parentLineNo` and its list by `listId`.
     const lines: TabLine[] = [
       {
+        changesAfterSending: "held-or-waiting",
         stationId: null,
         movable: false,
         id: "line-1",
@@ -2304,6 +2305,7 @@ describe("TillApi", () => {
         groupId: "g1",
       },
       {
+        changesAfterSending: null,
         stationId: null,
         movable: false,
         id: "line-2",

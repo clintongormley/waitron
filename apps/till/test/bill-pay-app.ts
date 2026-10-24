@@ -129,6 +129,7 @@ export function billOf(over: Partial<PartyBill> = {}): PartyBill {
 
 export function line(over: Partial<TabLine>): TabLine {
   return {
+    changesAfterSending: "held-or-waiting",
     stationId: null,
     movable: false,
     id: `line-${over.lineNo}`,

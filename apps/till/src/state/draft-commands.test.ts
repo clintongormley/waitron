@@ -36,6 +36,7 @@ const source = (): RecalledDraftLine => ({
   afterGroupId: null,
   source: {
     line: {
+      changesAfterSending: null,
       id: "recorded-7",
       lineNo: 7,
       parentLineNo: null,

@@ -586,6 +586,7 @@ describe("Current orders and Sent service", () => {
   it("without Current orders, keeps this bill's rows read-only in Sent", async () => {
     const lines: TabLine[] = [
       {
+        changesAfterSending: "held-or-waiting",
         stationId: null,
         movable: false,
         id: "l-beer",

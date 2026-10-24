@@ -83,6 +83,7 @@ const courses = [
 // Two café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both have
 // a null course fired immediately, so they surface no waiter-fire action by default.
 const pendingLine: TabLine = {
+  changesAfterSending: "held-or-waiting",
   stationId: null,
   movable: false,
   id: "line-1",
@@ -103,6 +104,7 @@ const pendingLine: TabLine = {
   parentProductId: null,
 };
 const servedLine: TabLine = {
+  changesAfterSending: "held-or-waiting",
   stationId: null,
   movable: false,
   id: "line-2",
@@ -1532,6 +1534,7 @@ describe("till-table-order-screen", () => {
   // Held still means the round-send already inserted its ticket item (fireLines does this for every
   // parent line, fired or held), so `state` is the fresh-insert "queued", not null.
   const heldLine: TabLine = {
+    changesAfterSending: "held-or-waiting",
     stationId: null,
     movable: false,
     id: "line-3",
@@ -1563,6 +1566,7 @@ describe("till-table-order-screen", () => {
       over: Partial<TabLine> = {},
     ): TabLine {
       return {
+        changesAfterSending: "held-or-waiting",
         stationId: null,
         movable: false,
         id,
@@ -2627,6 +2631,7 @@ describe("till-table-order-screen", () => {
     // editable course picker, if the child guard were absent. A fixture with `productId: null` would
     // pass against a screen that still read a null product as "child", so it carries one on purpose.
     const childLine: TabLine = {
+      changesAfterSending: null,
       stationId: null,
       movable: false,
       id: "line-2",
@@ -3074,6 +3079,7 @@ describe("till-table-order-screen", () => {
       items: [extraItem("p-cheese", "Queso", false), extraItem("p-bacon", "Bacon", true)],
     };
     const burgerLine: TabLine = {
+      changesAfterSending: "held-or-waiting",
       stationId: null,
       movable: false,
       id: "line-5",

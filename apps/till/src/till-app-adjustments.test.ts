@@ -108,6 +108,7 @@ const bill: PartyBill = {
 };
 
 const wine: TabLine = {
+  changesAfterSending: "held-or-waiting",
   stationId: null,
   movable: false,
   id: "line-1",

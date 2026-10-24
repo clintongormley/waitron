@@ -87,6 +87,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       sentAt: null,
       firedAt: null,
       state: null,
+      changesAfterSending: null,
       groupId: null,
       note: null,
       listId: null,
@@ -105,6 +106,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
           lineNo: 1,
           sentAt: "2026-09-30T09:00:00.000Z",
           state: "queued",
+          changesAfterSending: "held-or-waiting",
         },
         {
           stationId: null,

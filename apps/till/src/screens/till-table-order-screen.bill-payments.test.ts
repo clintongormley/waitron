@@ -53,6 +53,7 @@ const partlyPaid: PartyBill = { ...untouched, outstanding: "39.00", hasPayments:
 
 function line(over: Partial<TabLine>): TabLine {
   return {
+    changesAfterSending: null,
     stationId: null,
     movable: false,
     id: `line-${over.lineNo}`,

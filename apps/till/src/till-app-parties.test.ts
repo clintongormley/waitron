@@ -153,6 +153,7 @@ const checkBill: PartyBill = {
 };
 
 const tabLine: TabLine = {
+  changesAfterSending: null,
   stationId: null,
   movable: false,
   id: "line-1",

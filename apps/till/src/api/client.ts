@@ -34,7 +34,7 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import type { BumpMode, ContentLanguages, JoinSide } from "@waitron/shared";
+import type { BumpMode, ChangesAfterSending, ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
   AttendanceCommand,
@@ -2269,6 +2269,8 @@ export interface TabLine {
    * {@link OrderGroup.lineIds}; a child extras row never is. */
   id: string;
   stationId: string | null;
+  /** Its own kitchen record's station's choice; null with no record. */
+  changesAfterSending: ChangesAfterSending | null;
   movable: boolean;
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live catalogue name. */

@@ -39,6 +39,7 @@ const bill: PartyBill = {
 };
 
 const base: Omit<TabLine, "id" | "lineNo" | "name" | "unitPriceGross"> = {
+  changesAfterSending: "held-or-waiting",
   stationId: null,
   movable: false,
   groupId: null,

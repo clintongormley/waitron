@@ -9,6 +9,7 @@ import type { OrderLine } from "../state/working-order.js";
 
 const source: NonNullable<OrderLine["source"]> = {
   line: {
+    changesAfterSending: null,
     id: "sent-beer",
     name: "Recorded beer",
     productId: "beer",
