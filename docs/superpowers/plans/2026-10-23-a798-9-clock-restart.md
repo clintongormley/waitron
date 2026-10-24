@@ -520,6 +520,12 @@ check), each in the task named:
   old `offer` (Task R10);
 - `packages/fiscal-verifactu/src/backup-verification-history.test.ts`: two new "rejects internally
   damaged" rows, nothing changed (Task R1b).
+- a lift's row now stores `proof.closing` and records `clock.records_misdated` (Task R4b, R5; lines
+  at `093d4abc4` → after): `clock-confirmation.test.ts:230` (two devices) and `:618` (an
+  administrator) — the whole-row `proof` gains `closing` (`partial: true`, the test's boot has no
+  id), every other key unchanged → `:230-243` and `:632-638`; `clock-stop-incidents.test.ts:255`
+  "control: the same confirmation with proof records it" — `before + 1` → `before + 2` at `:256`,
+  plus one restarted and one misdated alert by code.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
 and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed

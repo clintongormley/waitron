@@ -252,7 +252,10 @@ describe("a lift's alert", () => {
     await sale(T);
     const before = count("incidents");
     await lift(R, twoDevices(R));
-    expect(count("incidents")).toBe(before + 1);
+    // Beside it, the wrongly dated sale's alert.
+    expect(count("incidents")).toBe(before + 2);
+    expect(incidents(RESTARTED)).toHaveLength(1);
+    expect(incidents("clock.records_misdated")).toHaveLength(1);
   });
 
   it("is not recorded again while the lift covers", async () => {
