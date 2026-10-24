@@ -11,10 +11,19 @@ export function deviceZoneNavigation(
   home: "counter" | "floor" | null;
 } {
   const selected = selection.zones.filter((zone) => selection.selectedZoneIds.includes(zone.id));
-  const visible =
-    formFactor === "kds"
-      ? []
-      : selected.filter((zone) => formFactor === "till" || zone.serviceMode === "table_tab");
+  if (formFactor === "phone-portrait" || formFactor === "tablet-landscape") {
+    const floorZoneIds = selected.map((zone) => zone.id);
+    const start = selection.saved
+      ? floorZoneIds.find((id) => id === selection.startingZoneId)
+      : undefined;
+    return {
+      counterZoneIds: [],
+      floorZoneIds,
+      startingZoneId: start ?? null,
+      home: floorZoneIds.length === 0 ? null : "floor",
+    };
+  }
+  const visible = formFactor === "kds" ? [] : selected;
   const counterZoneIds = visible
     .filter((zone) => zone.serviceMode !== "table_tab")
     .map((zone) => zone.id);
