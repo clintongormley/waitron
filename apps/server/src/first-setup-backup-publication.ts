@@ -11,6 +11,7 @@ import { encryptArtifactAsync, decryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { validateDatabaseEntries, type ValidatedArtifact, type ValidationDeps } from "./restore.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
+import type { SavedCloudRecoveryState } from "./cloud-recovery-v2.js";
 import "./errors.js";
 
 type RecordInput = Omit<
@@ -59,9 +60,16 @@ export async function persistBackupRepairPublication(
   copy: ValidatedArtifact,
   preview: RecoveryBackupPreview,
   secret: string,
-  kind: "archive" | "stream",
+  kind: "archive" | "stream" | "cloud",
+  cloudState?: SavedCloudRecoveryState,
 ) {
-  const metadata = { version: 1, binding: binding(record), preview, kind };
+  const metadata = {
+    version: 1,
+    binding: binding(record),
+    preview,
+    kind,
+    ...(cloudState === undefined ? {} : { cloudState }),
+  };
   const bytes = packArchive([
     { name: META, bytes: Buffer.from(JSON.stringify(metadata)) },
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(copy.manifest)) },
@@ -109,20 +117,30 @@ export async function openBackupRepairPublication(
     typeof metadataValue !== "object" ||
     metadataValue === null ||
     Array.isArray(metadataValue) ||
-    Object.keys(metadataValue).length !== 4 ||
+    Object.keys(metadataValue).length !==
+      ("kind" in metadataValue && metadataValue.kind === "cloud" ? 5 : 4) ||
     !("version" in metadataValue) ||
     metadataValue.version !== 1 ||
     !("binding" in metadataValue) ||
     !isDeepStrictEqual(metadataValue.binding, binding(record)) ||
     !("kind" in metadataValue) ||
-    !["archive", "stream"].includes(String(metadataValue.kind)) ||
+    !["archive", "stream", "cloud"].includes(String(metadataValue.kind)) ||
+    (metadataValue.kind === "cloud" &&
+      (!("cloudState" in metadataValue) ||
+        typeof metadataValue.cloudState !== "object" ||
+        metadataValue.cloudState === null ||
+        Array.isArray(metadataValue.cloudState))) ||
     !("preview" in metadataValue) ||
     typeof metadataValue.preview !== "object" ||
     metadataValue.preview === null ||
     Array.isArray(metadataValue.preview)
   )
     conflict();
-  const value = metadataValue as { preview: RecoveryBackupPreview; kind: "archive" | "stream" };
+  const value = metadataValue as {
+    preview: RecoveryBackupPreview;
+    kind: "archive" | "stream" | "cloud";
+    cloudState?: SavedCloudRecoveryState;
+  };
   const copy = await validateDatabaseEntries(
     entries.filter((entry) => entry.name !== META),
     databasePath,
@@ -138,5 +156,6 @@ export async function openBackupRepairPublication(
     copy: { ...copy, sourceId: record.activationSourceId },
     preview: value.preview,
     kind: value.kind,
+    ...(value.cloudState === undefined ? {} : { cloudState: value.cloudState }),
   };
 }

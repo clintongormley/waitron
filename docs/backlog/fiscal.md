@@ -1493,6 +1493,18 @@ saving the node proof. A prepared operation without a target database can reopen
 or signed bucket generation with fresh named-node proof. It keeps the saved event and target,
 checks clocks again and preserves any sealed selection. This also covers a placement-started
 record whose target folders contain no database or unrecognised top-level file. A database or
-unrecognised top-level file is retained and refuses this path. Cloud placement, listener/page qualification and whole-branch review
-remain open. The plan is
+unrecognised top-level file is retained and refuses this path.
+
+Internal Cloud placement uses the existing checked restore wrapper with the original approved
+request and matching destination state. Its private approval moves into the operation after the
+journal is written. A restart after local commitment needs fresh named-node proof and the exact
+saved Cloud and module result before replay; it does not download again. The source’s `backup.env`
+is excluded from both placement and sealed replay material. A failed provider acknowledgement
+leaves the local selection complete and its Cloud state pending. If the first approval-state
+transfer was interrupted before input selection or sealed publication, new approval can serve the
+same journal, event and target; the selected source and node key are checked again. A newer
+approval rejects an earlier proof still downloading. An expired approval may renew before
+publication while the saved input, event and target remain unchanged; renewal also rejects an
+older proof returning after its key check. Sealed publication blocks approval replacement.
+Listener/page qualification and whole-branch review remain open. The plan is
 `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.

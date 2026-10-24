@@ -96,6 +96,24 @@ No required edit to Lane A's `restore.ts`, `restore-request.ts`, `recovery-prepa
 
 **Execution checkpoint, 24 October 2026:** Task 1 is committed at `d0bc15a952f187d4c849c8734dc66024ea463f21`. Task 2's source/proof, Cloud reconciliation, memory-only sessions, isolated preparation and fresh archive/bucket placement are implemented internally. An operation-local copy of projected public history remains bound to the journal digest and is republished after core secret placement. Exact module commit verification precedes restored/selection. Unknown files at either target root and further preparation after placement starts are refused. Tests retain a populated original database byte for byte and cover interruptions before the restored record and before selection; a restarted service rejects the old session. The internal archive/bucket service now seals publication entries to the exact source/event/input/target and public-evidence digest under the named node recovery key. A separate `resume` operation authenticates a private consistent target copy, checks the module's exact committed event, then admits a new memory-only session. Replay preserves counters advanced after proof and republishes secrets through unchanged core. Source reauthentication now reopens a prepared operation, including a placement-started record with no target database or unrecognised top-level files. It keeps the recovery ID, event, target and sealed input, reconstructs the same public evidence and requires fresh clock readings before placement. Partial databases and changed or unrecognised top-level target files remain retained and refused. Cloud placement, routes and the page remain open. No repair API or page is enabled; package-wide CI and whole-branch review have not run.
 
+**Cloud implementation checkpoint, 24 October 2026:** checked Cloud placement and committed-target
+restart now exist internally. `BackupRepairOptions.cloud?: Omit<CloudRecoveryOptions, "stateDir">`
+configures private clients; it never supplies a retained original state directory. Pre-proof
+approvals live in owned temporary directories. After authenticated preparation writes the V2
+journal, the service copies the approval into that operation's private `cloud` directory and
+constructs the client there. If this transfer was interrupted before an input or publication was
+sealed, fresh approval may recover the same journal; exact source and named-node proof remain
+required. This does not reset its event or target. Other missing or changed approval state refuses.
+A new approval invalidates an older in-flight proof. The encrypted publication seals the Cloud
+identity and omits the source’s `backup.env`. Fresh placement calls `restoreFromArtifact` with the
+original checked request and matching target state. Restart reauthenticates the committed target
+and checks the sealed Cloud identity, origin and current runtime. Client reconciliation checks run
+before resumed secret publication; acknowledgement runs separately after local selection. A
+refused acknowledgement leaves `restored` pending. Before publication, an expired existing
+approval may renew without changing the journal input, event or target, and invalidates any older
+in-flight proof. Sealed publication blocks approval replacement. Public API/page/boot integration,
+whole-branch review and package-wide CI remain open; this checkpoint enables no repair entry.
+
 **History-reader checkpoint, 24 October 2026:** `readFirstSetupBackupHistory` collects retained database history through private database/WAL/journal/SHM copies, together with the existing module projection of preparation and document history. Its 19 cases cover original-byte preservation, WAL-only rows, ordinary V1 workspace retention, stale evidence, invalid files, domain refusals and scratch cleanup. A real module-selection case refuses a later retained name and accepts a later clock. Eleven installed omission controls fail assertions and pass after restoration. The seven focused server suites pass 168 cases; the two protected fiscal suites pass 20 unchanged cases. Source-only coverage meets the unchanged thresholds; this is not package-wide CI or full Task 2 qualification. Integration with the authenticated service, complete current/retired attempt admission and durable target evidence carry-forward remain open before preparation or placement can be enabled.
 
 **Interfaces — consume Task 1 and existing signatures:**
@@ -133,6 +151,15 @@ No required edit to Lane A's `restore.ts`, `restore-request.ts`, `recovery-prepa
 - [ ] Check V2 discovery before the existing V1 entry decision. Pending or invalid V2 state remains repair-only; absent delegates unchanged; selected roots undergo the new exclusion and strict normal target checks. Update direct and supervised callers to carry these roots explicitly even though the V1 binding is null. Add `assertFirstSetupBackupBootTarget` before the first database open in raw `bootServer`. Keep A733 connection bootstrap ahead of all secret-bearing routes in every mode. Never clear `recovery.json` or bypass its lock/level handling as part of selecting a workspace.
 - [ ] Add HTTP, spoofed HTTPS/forwarded headers, cross-origin, stale session, expiry, replay and concurrent-tab tests. Race `/commit` against `/open`, normal empty start-again and a second commit using controlled barriers, not sleeps; no stale target may become selected, and a losing interrupted operation stays repair-only with its evidence retained. Alter source/verifier or V1 workspace selection after derivation but before lock acquisition to prove the under-lock recheck.
 - [ ] **GREEN:** rerun new suites and `pnpm --filter @waitron/server exec vitest run src/first-setup-entry.test.ts src/first-setup-resolution.bootstrap.test.ts src/first-setup-resolution.route.test.ts src/module-operation-host-routing.test.ts src/node-entry.test.ts`. Real listener cases must fetch both HTTPS API and HTTP bootstrap in the three modes, use `freePorts(n)` once per case, close only owned listeners, and write fixture DBs only while their server is stopped. Parent commits with `-s`.
+
+**Restart interface clarification from Task 2:** mount `POST /resume` beneath the same backup
+prefix for `BackupRepairResumeRequest`, with the same TLS, origin, exact-field and 131072-byte JSON
+checks. It takes `observation`, `recoveryId`, `nodeRecoverySecret` and the two confirmations in
+`context`; it takes no source credentials or client-supplied paths. Return the authenticated
+`BackupRepairResumeSession`, including its exact saved input. The repair browser session and
+`SetupApi` need corresponding `resume` / `resumeFirstSetupBackup` methods. Prepared-source reopen
+continues through multipart `/open` with `recoveryId`; committed-target completion uses `/resume`.
+These routes and browser methods remain unimplemented at this checkpoint.
 
 ## Task 4: Guided page, documentation twins and final qualification
 

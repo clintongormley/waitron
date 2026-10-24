@@ -29,6 +29,7 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
+import { createCloudRecoveryClient, type CloudRecoveryOptions } from "./cloud-recovery.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import {
   authenticatedFirstSetupBackupPreview,
@@ -37,7 +38,14 @@ import {
   type BackupRepairSourceDeps,
 } from "./first-setup-backup-source.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
-import { readArtifactIdentity, writeValidated } from "./restore.js";
+import { readArtifactIdentity, writeValidated, restoreFromArtifact } from "./restore.js";
+import {
+  readCloudRecoveryState,
+  readSnapshotRecoveryBinding,
+  assertSnapshotRecoveryTarget,
+  type SavedCloudRecoveryState,
+} from "./cloud-recovery-v2.js";
+import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import { readFirstSetupBackupHistory } from "./first-setup-backup-history.js";
@@ -56,6 +64,7 @@ export interface BackupRepairOptions extends FirstSetupRoots {
   sources: BackupRepairSourceDeps;
   workspace: ReturnType<typeof createFirstSetupBackupWorkspace>;
   log: Logger;
+  cloud?: Omit<CloudRecoveryOptions, "stateDir">;
 }
 export interface BackupRepairOpenRequest {
   observation: Omit<BackupRepairObservation, "originalsDigest">;
@@ -79,6 +88,11 @@ export interface BackupRepairResumeSession extends BackupRepairSession {
 }
 const UNUSED_MS = 15 * 60_000;
 type Selected = Awaited<ReturnType<typeof openFirstSetupBackupSource>>;
+function cloudIdentity(state: SavedCloudRecoveryState) {
+  const { phase, ...identity } = state;
+  void phase;
+  return identity;
+}
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
 }
@@ -116,6 +130,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     sourceReopened?: boolean;
     publicationDigest?: string;
     rebuildSource?: "archive" | "stream";
+    cloudState?: SavedCloudRecoveryState;
     selected: Selected;
     originalsDigest: string;
     sourceDigest: string;
@@ -129,6 +144,58 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     evidence?: Record<string, unknown>;
   };
   let active: Entry | undefined;
+  let pendingCloudId: string | undefined;
+  const cloudScratch: string[] = [];
+  const clouds = new Map<
+    string,
+    { client: ReturnType<typeof createCloudRecoveryClient>; stateDir: string }
+  >();
+  const cloudFor = async (id: string) => {
+    if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
+    let cloud = clouds.get(id);
+    if (cloud === undefined) {
+      const anchor = await firstSetupAnchorFor(options);
+      const stateDir = join(
+        anchor.stateDir,
+        "first-setup-resolutions",
+        "backup-recovery",
+        id,
+        "cloud",
+      );
+      cloud = { stateDir, client: createCloudRecoveryClient({ ...options.cloud, stateDir }) };
+      clouds.set(id, cloud);
+    }
+    return cloud;
+  };
+  const saveCloud = async (entry: Entry, destination: string) => {
+    const cloud = await cloudFor(entry.session.recoveryId);
+    const state = await readCloudRecoveryState(cloud.stateDir);
+    if (state === undefined || !isDeepStrictEqual(state, entry.cloudState)) conflict();
+    const previous = await readCloudRecoveryState(destination);
+    if (previous !== undefined && !isDeepStrictEqual(cloudIdentity(previous), cloudIdentity(state)))
+      conflict();
+    await writeDurableHostJson(join(destination, "cloud-recovery.json"), state, 65536);
+  };
+  const admitCloud = async (entry: Entry) => {
+    const state = entry.cloudState;
+    if (state === undefined) return;
+    const targetState = await readCloudRecoveryState(entry.record!.target.target.stateDir);
+    if (
+      targetState === undefined ||
+      !isDeepStrictEqual(cloudIdentity(state), cloudIdentity(targetState))
+    )
+      conflict();
+    if (state.version === 2) {
+      if (state.snapshotVerification?.archiveSha256 !== entry.record!.activationSourceId)
+        conflict();
+      const snapshot = await readSnapshotRecoveryBinding(entry.record!.target.target.stateDir, {
+        managedCloud: { requestId: state.requestId, pointId: state.pointId! },
+        snapshotVerification: state.snapshotVerification,
+      });
+      if (snapshot?.publicKey !== state.publicKey) conflict();
+      assertSnapshotRecoveryTarget(snapshot.verification, currentBackupVerificationTarget());
+    }
+  };
   const scopes = new AsyncLocalStorage<{ hold: FirstSetupHold; db: Database; placing?: true }>();
   let expiry: NodeJS.Timeout | undefined;
   const drop = async () => {
@@ -192,6 +259,14 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       )
         conflict();
     }
+    if (
+      entry.cloudState !== undefined &&
+      !isDeepStrictEqual(
+        await readCloudRecoveryState((await cloudFor(entry.session.recoveryId)).stateDir),
+        entry.cloudState,
+      )
+    )
+      conflict();
   };
   const admitted = async (sessionId: string) => {
     if (active === undefined || active.session.sessionId !== sessionId) ownerRequired();
@@ -208,7 +283,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     );
     if (!info.isFile() || info.isSymbolicLink()) conflict();
   };
-  const emptyTarget = async (record: NonNullable<Entry["record"]>) => {
+  const emptyTarget = async (
+    record: NonNullable<Entry["record"]>,
+    cloud?: SavedCloudRecoveryState,
+  ) => {
     for (const directory of Object.values(record.target.target))
       if ((await canonicalFirstSetupDirectory(directory)) !== directory) conflict();
     const allowedVenue = new Set([
@@ -225,6 +303,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       "module-evidence",
       "first-setup-resolutions",
     ]);
+    if (cloud !== undefined) {
+      const current = await readCloudRecoveryState(record.target.target.stateDir);
+      if (current !== undefined && !isDeepStrictEqual(cloudIdentity(current), cloudIdentity(cloud)))
+        conflict();
+      allowedState.add("cloud-recovery.json");
+    }
     if ((await readdir(record.target.target.stateDir)).some((name) => !allowedState.has(name)))
       conflict();
   };
@@ -320,6 +404,14 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     entry.evidence = documents;
     await recheck(entry);
     await options.workspace.append(entry.record);
+    if (entry.cloudState !== undefined) {
+      const cloudDir = join(dirname(dirname(entry.record.target.target.stateDir)), "cloud");
+      await saveCloud(entry, cloudDir);
+      clouds.set(entry.session.recoveryId, {
+        stateDir: cloudDir,
+        client: createCloudRecoveryClient({ ...options.cloud!, stateDir: cloudDir }),
+      });
+    }
     await evidence(entry, true);
     if (entry.working === undefined) {
       const directory = await mkdtemp(
@@ -352,7 +444,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       readRecoveryFacts: async (binding, db) => {
         await recheck(entry);
         if (entry.sourceReopened && scopes.getStore()?.placing !== true)
-          await emptyTarget(entry.record!);
+          await emptyTarget(entry.record!, entry.cloudState);
         await evidence(entry, false);
         const current = await module.operations!.readRecoveryState!(db, node, binding);
         return {
@@ -376,6 +468,65 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     return entry.preparation;
   };
   return {
+    cloudStart() {
+      return turn(async () => {
+        if (disposed) ownerRequired();
+        if (active !== undefined) conflict();
+        const record = (await options.workspace.read()).at(-1);
+        if (record !== undefined) {
+          const directory = dirname(dirname(record.target.target.stateDir));
+          if (
+            record.phase !== "prepared" ||
+            record.input !== null ||
+            (await readCloudRecoveryState(join(directory, "cloud"))) !== undefined ||
+            (await readDurableHostJson(join(directory, "publication.json"), 32 * 1024 * 1024)) !==
+              null
+          )
+            conflict();
+          pendingCloudId = record.target.recoveryId;
+          clouds.delete(pendingCloudId);
+        }
+        pendingCloudId ??= randomUUID();
+        if (!clouds.has(pendingCloudId)) {
+          if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
+          const stateDir = await mkdtemp(join(tmpdir(), "waitron-repair-cloud-"));
+          cloudScratch.push(stateDir);
+          clouds.set(pendingCloudId, {
+            stateDir,
+            client: createCloudRecoveryClient({ ...options.cloud, stateDir }),
+          });
+        }
+        generation++;
+        return (await cloudFor(pendingCloudId)).client.start();
+      });
+    },
+    cloudStatus() {
+      return turn(async () => {
+        if (disposed) ownerRequired();
+        if (active !== undefined) conflict();
+        pendingCloudId ??= (await options.workspace.read()).at(-1)?.target.recoveryId;
+        if (pendingCloudId === undefined) conflict();
+        return (await cloudFor(pendingCloudId)).client.status();
+      });
+    },
+    cloudStartAgain() {
+      return turn(async () => {
+        if (disposed) ownerRequired();
+        if (active !== undefined || pendingCloudId === undefined) conflict();
+        const record = (await options.workspace.read()).at(-1);
+        if (
+          record !== undefined &&
+          (record.phase !== "prepared" ||
+            (await readDurableHostJson(
+              join(dirname(dirname(record.target.target.stateDir)), "publication.json"),
+              32 * 1024 * 1024,
+            )) !== null)
+        )
+          conflict();
+        generation++;
+        return (await cloudFor(pendingCloudId)).client.startAgain();
+      });
+    },
     async open(
       supplied: BackupRepairOpenRequest,
       _client: OperationClient,
@@ -390,7 +541,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         });
       if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
         throw new AppError("module.operation_invalid", { module: "core" });
-      const recoveryId = request.recoveryId ?? randomUUID();
+      const recoveryId =
+        request.recoveryId ??
+        (request.source.kind === "cloud" ? pendingCloudId : undefined) ??
+        randomUUID();
       const before = await turn(async () => {
         if (disposed) ownerRequired();
         if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
@@ -429,6 +583,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           request.source,
           {
             ...options.sources,
+            ...(request.source.kind === "cloud"
+              ? {
+                  cloudRecovery:
+                    options.cloud === undefined ? undefined : (await cloudFor(recoveryId)).client,
+                }
+              : {}),
             stateDir: scratch,
             stagingDir: join(scratch, "staging"),
           },
@@ -494,6 +654,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             originalsDigest: before.digest,
             sourceDigest,
             provedVerifier,
+            ...(request.source.kind === "cloud"
+              ? {
+                  cloudState: await readCloudRecoveryState((await cloudFor(recoveryId)).stateDir),
+                }
+              : {}),
           };
           active = entry;
           try {
@@ -506,7 +671,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               void recordedAt;
               entry.record = record;
               entry.sourceReopened = true;
-              await emptyTarget(record);
+              await emptyTarget(record, entry.cloudState);
               await preparation(entry);
               const path = join(
                 dirname(dirname(record.target.target.stateDir)),
@@ -619,6 +784,28 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         if (assertCommitted === undefined)
           throw new AppError("module.operation_invalid", { module: before.record.binding.module });
         const source = { copy: selected.copy, sourceId: before.record.sourceId };
+        if (selected.kind === "cloud") {
+          const cloud = await cloudFor(request.recoveryId);
+          const binding = await cloud.client.binding();
+          if (
+            !isDeepStrictEqual(binding, {
+              requestId: selected.cloudState?.requestId,
+              pointId: selected.cloudState?.pointId,
+            })
+          )
+            conflict();
+        }
+        const cloudState =
+          selected.kind === "cloud"
+            ? await readCloudRecoveryState((await cloudFor(request.recoveryId)).stateDir)
+            : undefined;
+        if (
+          selected.kind === "cloud" &&
+          (cloudState === undefined ||
+            selected.cloudState === undefined ||
+            !isDeepStrictEqual(cloudIdentity(cloudState), cloudIdentity(selected.cloudState)))
+        )
+          conflict();
         const proved = await authenticatedFirstSetupBackupPreview(
           source,
           before.record.binding,
@@ -697,10 +884,12 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             record,
             evidence: publicEvidence as Record<string, unknown>,
             resumed: true,
-            rebuildSource: selected.kind,
+            rebuildSource: selected.kind === "cloud" ? "archive" : selected.kind,
+            ...(cloudState === undefined ? {} : { cloudState }),
             publicationDigest: before.material.digest,
           };
           active = entry;
+          await admitCloud(entry);
           buildPreparation(entry);
           await recheck(entry);
           touch(entry);
@@ -771,8 +960,6 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           !isDeepStrictEqual(entry.record.input, input)
         )
           conflict();
-        if ("source" in entry.request && entry.request.source.kind === "cloud")
-          throw new AppError("setup.not_ready", {});
         const assertCommitted = options.modules.find(
           (module) => module.name === entry.session.binding.module,
         )?.backup?.assertRestoreCommitted;
@@ -781,7 +968,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         await evidence(entry, false, false, !entry.resumed);
         const target = entry.record.target.target;
         if (!entry.resumed) {
-          await emptyTarget(entry.record);
+          await emptyTarget(entry.record, entry.cloudState);
           await refuseIfArchiveSourceLive({
             validated: entry.selected.copy,
             stateDir: target.stateDir,
@@ -796,10 +983,18 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               : "archive";
           const material = await persistBackupRepairPublication(
             entry.record,
-            entry.selected.copy,
+            entry.cloudState === undefined
+              ? entry.selected.copy
+              : {
+                  ...entry.selected.copy,
+                  secretEntries: entry.selected.copy.secretEntries.filter(
+                    (item) => item.name !== "secrets/backup.env",
+                  ),
+                },
             entry.session.preview,
             entry.request.nodeRecoverySecret,
-            entry.rebuildSource,
+            entry.cloudState === undefined ? entry.rebuildSource : "cloud",
+            entry.cloudState,
           );
           entry.publicationDigest = material.digest;
           await recheck(entry);
@@ -809,6 +1004,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             entry.record = started;
           }
         } else {
+          await admitCloud(entry);
           await existingTarget(entry.record);
           const current = await openVenueDatabase(target.venueDir);
           try {
@@ -829,7 +1025,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           } finally {
             await current.close();
           }
-          await evidence(entry, false, true);
+          if (entry.cloudState === undefined) await evidence(entry, false, true);
         }
         const store = await openVenueDatabase(entry.working!);
         try {
@@ -840,10 +1036,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             );
             const check = runner.checkBeforePlacement;
             runner.checkBeforePlacement = async (context) => {
-              if (!entry.resumed) await emptyTarget(entry.record!);
+              if (!entry.resumed) await emptyTarget(entry.record!, entry.cloudState);
               await check?.(context);
             };
-            await writeValidated(entry.selected.copy, {
+            const placement = {
               ...target,
               stagingDir: dirname(entry.selected.copy.databasePath),
               modules: options.modules,
@@ -853,7 +1049,57 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               rebuildSource: entry.rebuildSource,
               withModuleOperations: runner,
               ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
-            });
+            };
+            if (entry.cloudState !== undefined && !entry.resumed) {
+              const cloud = await cloudFor(entry.session.recoveryId);
+              await cloud.client.restore(async (request) => {
+                if (!isDeepStrictEqual(request, entry.selected.cloudRequest)) conflict();
+                await recheck(entry);
+                await saveCloud(entry, target.stateDir);
+                const checkTarget = runner.checkBeforePlacement;
+                runner.checkBeforePlacement = async (context) => {
+                  await saveCloud(entry, target.stateDir);
+                  await checkTarget?.(context);
+                };
+                await restoreFromArtifact({
+                  ...placement,
+                  ...request,
+                  snapshotRequestKey: entry.cloudState!.publicKey,
+                });
+              }, entry.cloudState.pointId!);
+              entry.cloudState = { ...entry.cloudState, phase: "staged" };
+            } else if (entry.cloudState === undefined)
+              await writeValidated(entry.selected.copy, placement);
+            if (entry.cloudState !== undefined) {
+              const cloud = await cloudFor(entry.session.recoveryId);
+              await cloud.client.reconcileRestored(
+                { requestId: entry.cloudState.requestId, pointId: entry.cloudState.pointId! },
+                async () => {
+                  await admitCloud(entry);
+                  if (entry.resumed) {
+                    await evidence(entry, false, true);
+                    await writeValidated(entry.selected.copy, placement);
+                  }
+                  const db = await openVenueDatabase(target.venueDir);
+                  try {
+                    await withTransaction(db.venue, (tx) =>
+                      assertCommitted(
+                        tx,
+                        readArtifactIdentity(entry.selected.copy.secretEntries).node,
+                        entry.session.binding,
+                      ),
+                    );
+                  } finally {
+                    await db.close();
+                  }
+                },
+              );
+              entry.cloudState = {
+                ...entry.cloudState,
+                phase: entry.cloudState.phase === "reported" ? "reported" : "restored",
+              };
+              await saveCloud(entry, target.stateDir);
+            }
           });
         } finally {
           await store.close();
@@ -879,7 +1125,19 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             : await options.workspace.append({ ...entry.record, phase: "restored" });
         entry.record = { ...entry.record, phase: "restored" };
         await options.workspace.select(restored);
+        if (entry.cloudState !== undefined) {
+          const cloud = await cloudFor(entry.session.recoveryId);
+          try {
+            await cloud.client.reportRestored();
+            entry.cloudState = { ...entry.cloudState, phase: "reported" };
+            await saveCloud(entry, target.stateDir);
+          } catch {
+            options.log("warn", "cloud.recovery_report_pending", {});
+          }
+        }
         await drop();
+        for (const directory of cloudScratch.splice(0))
+          await rm(directory, { recursive: true, force: true });
       });
     },
     close(sessionId: string): Promise<void> {
@@ -897,6 +1155,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         disposed = true;
         generation++;
         await drop();
+        for (const directory of cloudScratch.splice(0))
+          await rm(directory, { recursive: true, force: true });
       });
     },
   };
