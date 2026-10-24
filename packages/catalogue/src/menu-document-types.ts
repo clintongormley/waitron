@@ -402,7 +402,6 @@ export interface MenuState {
       periodName: string;
       endsAt: string;
       running: boolean;
-      extendedUntil: string | null;
     } | null;
   };
   menus: { menuId: string; versionId: string; orderable: boolean; sendable: boolean }[];

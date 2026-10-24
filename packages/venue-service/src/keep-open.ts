@@ -17,7 +17,6 @@ import {
   minuteOfServiceDay,
   rangeSpan,
   rangeSpanInDay,
-  withExtension,
 } from "./service-day.js";
 import "./errors.js";
 
@@ -50,8 +49,7 @@ async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at:
       ? undefined
       : c.ranges.find((range) => rangeSpanInDay(range, c.dayContext).end > c.moment!.minute);
   const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock, prepared.plan);
-  const openRanges =
-    day.ranges.length === 0 ? [] : withExtension(day.ranges, day.extension, c.cutover);
+  const openRanges = day.ranges;
   const extended =
     c.moment === null || closure === undefined
       ? null

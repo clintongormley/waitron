@@ -212,7 +212,7 @@ describe("keeping a zone open today", () => {
       (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("23:00")))).zone!.choices,
     ).toEqual(["23:45", "00:00"]);
   });
-  it("uses the department extension and can reopen a zone already closed", async () => {
+  it("a stored period extension no longer lets a zone stay open past its department's own end", async () => {
     const f = await zoneFixture("01:00");
     await run((tx) =>
       tx.insert(periodExtensions).values({
@@ -223,6 +223,20 @@ describe("keeping a zone open today", () => {
         endsAt: "02:00:00",
       }),
     );
+    const instant = at("00:30", "2026-10-10");
+    expect(
+      (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, instant))).zone!.choices.at(-1),
+    ).toBe("01:00");
+    await expect(
+      run((tx) => keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "01:30" }, instant)),
+    ).rejects.toMatchObject({
+      code: "zone_extension.not_allowed",
+      params: { reason: "department_closed" },
+    });
+    expect(await zoneRows(f)).toEqual([]);
+  });
+  it("can reopen a zone already closed", async () => {
+    const f = await zoneFixture("02:00");
     await run((tx) =>
       keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "01:30" }, at("00:30", "2026-10-10")),
     );

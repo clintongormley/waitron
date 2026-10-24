@@ -38,7 +38,6 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                   periodName: name,
                   endsAt: "14:00",
                   running: state !== "closed",
-                  extendedUntil: null,
                 };
                 const store = new WorkingOrderStore();
                 store.addProduct(coffee, "2");

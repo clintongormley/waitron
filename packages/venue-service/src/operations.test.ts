@@ -1120,7 +1120,6 @@ describe("venue service routing", () => {
             periodName: "Always",
             endsAt: "06:00",
             running: true,
-            extendedUntil: null,
           },
         },
         menus: [{ id: menu.id, name: "Terrace", isDefault: true, versionId }],
@@ -2616,7 +2615,6 @@ describe("zone offers from the published menus", () => {
             periodName: "Always",
             endsAt: "06:00",
             running: true,
-            extendedUntil: null,
           },
         },
         menus: [],
@@ -2718,7 +2716,6 @@ describe("zone offers from the published menus", () => {
             periodName: "Always",
             endsAt: "06:00",
             running: true,
-            extendedUntil: null,
           },
         },
         menus: [],
@@ -2814,7 +2811,6 @@ describe("zone offers from the published menus", () => {
             periodName: "Always",
             endsAt: "06:00",
             running: true,
-            extendedUntil: null,
           },
         },
         menus,
@@ -2868,7 +2864,7 @@ describe("zone offers from the published menus", () => {
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       const { menus: served, unavailable } = await menuState(tx, venue.cfg, venue.diningZone);
-      expect(prepared).toHaveBeenCalledTimes(16);
+      expect(prepared).toHaveBeenCalledTimes(15);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),

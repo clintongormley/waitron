@@ -168,7 +168,6 @@ for (const kind of ["counter", "table"] as const)
                 periodId: "night",
                 periodName: "Late service",
                 endsAt: "02:00",
-                extendedUntil: null,
                 running: true,
               },
             },

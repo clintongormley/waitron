@@ -2208,7 +2208,6 @@ describe("keep-open changes refresh the order screen", () => {
       periodName: "Lunch",
       endsAt: "14:00",
       running: true,
-      extendedUntil: null,
     },
   };
   const laterService = {

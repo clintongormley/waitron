@@ -160,7 +160,6 @@ for (const kind of ["counter", "table"] as const) {
           periodName: "Late service",
           endsAt: "02:00",
           running: true,
-          extendedUntil: null,
         },
       },
       zoneName: "Garden",

@@ -32,13 +32,12 @@ for (const locale of ["en", "es"] as const)
                   extendedUntil: state === "extended" ? "22:30" : null,
                   dayEndsAt: "05:00",
                   choices: ["22:45", "23:00"],
-                  next: null,
                 };
                 const api = new TillApi(
                   "",
                   vi.fn(
                     async () =>
-                      new Response(JSON.stringify({ period: null, zone }), {
+                      new Response(JSON.stringify({ zone }), {
                         headers: { "content-type": "application/json" },
                       }),
                   ),

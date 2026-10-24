@@ -26,8 +26,8 @@ describe("zone accessibility", () => {
                       ? [{ personId: "ana", displayName: "Ana" }]
                       : {
                           zone: {
-                            id: "lunch",
-                            name: "Comida",
+                            id: "z",
+                            name: "Terraza",
                             endsAt: "14:00",
                             running: true,
                             extendedUntil: null,

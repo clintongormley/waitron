@@ -12,7 +12,6 @@ const subject = {
   periodName: "Lunch",
   endsAt: "14:00",
   running: true,
-  extendedUntil: null,
 };
 let locale: string;
 beforeEach(() => {

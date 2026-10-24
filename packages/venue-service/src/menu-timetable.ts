@@ -19,7 +19,6 @@ import {
   rangeSpan,
   rangeSpanInDay,
   serviceMomentAt,
-  withExtension,
   type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
@@ -32,12 +31,11 @@ import type {
   MenuSlot,
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
-import { assertDepartment, resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
+import { assertDepartment, resolveZoneContext, type VenueScope } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { readZoneClosedTimes } from "./zone-closed-times.js";
 import { resolveDepartmentDays, type DayPlan } from "./day-resolver.js";
 import {
@@ -179,7 +177,7 @@ export async function departmentDay(
     .from(menuPeriodStaffMenus)
     .where(eq(menuPeriodStaffMenus.departmentId, departmentId))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
-  if (moment === null) return { periods, staff, ranges: [], previousRanges: [], extension: null };
+  if (moment === null) return { periods, staff, ranges: [], previousRanges: [] };
   const yesterday = addDays(moment.businessDay, -1);
   const days = await resolveDepartmentDays(
     tx,
@@ -189,33 +187,11 @@ export async function departmentDay(
     clock,
     plan,
   );
-  const [row] = await tx
-    .select({
-      periodId: periodExtensions.periodId,
-      startsAt: periodExtensions.startsAt,
-      endsAt: periodExtensions.endsAt,
-    })
-    .from(periodExtensions)
-    .where(
-      and(
-        eq(periodExtensions.departmentId, departmentId),
-        eq(periodExtensions.businessDay, moment.businessDay),
-      ),
-    );
-  const extension =
-    row === undefined
-      ? null
-      : {
-          periodId: row.periodId,
-          startsAt: wireTime(row.startsAt),
-          endsAt: wireTime(row.endsAt),
-        };
   return {
     periods,
     staff,
     ranges: days.get(moment.businessDay)!.ranges,
     previousRanges: days.get(yesterday)!.ranges,
-    extension,
   };
 }
 
@@ -230,14 +206,13 @@ export function serviceRuns(ranges: readonly ServiceRange[]): ServiceRange[] {
   return runs;
 }
 
-export function keepOpenSubject(
+function keepOpenSubject(
   ranges: readonly ServiceRange[],
   day: Awaited<ReturnType<typeof departmentDay>>,
-  moment: ServiceMoment | null,
+  moment: ServiceMoment,
   cutover: string,
-  context?: ServiceDayContext,
+  context: ServiceDayContext,
 ): DepartmentService["keepOpen"] {
-  if (moment === null) return null;
   const runs = serviceRuns(ranges);
   const running = rangeInForce(runs, moment.minute, cutover, context);
   const run =
@@ -245,23 +220,14 @@ export function keepOpenSubject(
     runs
       .slice()
       .reverse()
-      .find(
-        (range) =>
-          (context === undefined ? rangeSpan(range, cutover) : rangeSpanInDay(range, context))
-            .end <= moment.minute,
-      );
+      .find((range) => rangeSpanInDay(range, context).end <= moment.minute);
   if (run === undefined) return null;
   const period = day.periods.find((entry) => entry.id === run.periodId)!;
-  const extended = day.extension;
   return {
     periodId: period.id,
     periodName: period.name,
     endsAt: run.endsAt,
     running: running !== null,
-    extendedUntil:
-      extended !== null && extended.periodId === run.periodId && extended.endsAt === run.endsAt
-        ? extended.endsAt
-        : null,
   };
 }
 
@@ -303,7 +269,7 @@ export async function resolveDepartmentService(
     };
 
   const context = serviceDayContext(clock, moment.businessDay);
-  const ranges = withExtension(day.ranges, day.extension, context.dayCutover);
+  const ranges = day.ranges;
   const runs = serviceRuns(ranges);
   const running = rangeInForce(runs, moment.minute, context.dayCutover, context);
   const period =

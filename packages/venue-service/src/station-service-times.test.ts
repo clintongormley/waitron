@@ -450,7 +450,7 @@ it("a repeating special day uses its occurrence, with an unpainted department st
       ],
     });
   }));
-it("keeps cross-midnight service ranges and ignores today's kept-open period", async () =>
+it("keeps cross-midnight service ranges", async () =>
   tx(async (db) => {
     const f = await fixture(db);
     await replaceMenuWeek(
@@ -461,14 +461,6 @@ it("keeps cross-midnight service ranges and ignores today's kept-open period", a
       at,
       0,
     );
-    const { periodExtensions } = await import("./schema/period-extensions.js");
-    await db.insert(periodExtensions).values({
-      departmentId: f.department,
-      businessDay: day,
-      periodId: f.lunch,
-      startsAt: "22:00:00",
-      endsAt: "03:00:00",
-    });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
       planned(f, [{ periodId: f.lunch, startsAt: "22:00", endsAt: "02:00" }]),
     );

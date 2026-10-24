@@ -1578,8 +1578,7 @@ function keepOpenMoved(
     next?.periodId !== current?.periodId ||
     next?.periodName !== current?.periodName ||
     next?.endsAt !== current?.endsAt ||
-    next?.running !== current?.running ||
-    next?.extendedUntil !== current?.extendedUntil
+    next?.running !== current?.running
   );
 }
 

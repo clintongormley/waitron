@@ -401,7 +401,6 @@ export interface ZoneMenuState {
       readonly periodName: string;
       readonly endsAt: string;
       readonly running: boolean;
-      readonly extendedUntil: string | null;
     } | null;
   };
   readonly menus: readonly {
