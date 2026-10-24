@@ -131,21 +131,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   golden huella test and the `inmutabilidad` suite pass unedited. Not reached by any package's pull
   request: `bench/` (about 2,300 comment lines) and the root `vitest.config.ts` and
   `eslint.config.js`; in `scripts/`, the `.sh` files and `write-path-tables.json` are outside the
-  checker and were left. Landed so far: `workforce` (#555), `payments` (#558), `identity` (#559),
-  `provisioning` (#561), `fiscal-verifactu` (#562), `apps/setup` (#567), `packages/store` (#568),
-  `packages/payments-stripe` (#570), `packages/printing` (#572), `packages/bookings` (#574),
-  `packages/credentials` (#577), `packages/shared` (#579), `packages/scheduler` (#581),
-  `packages/db/src/schema` (#585), the rest of `packages/db` (#589), `packages/fiscal` (#592),
-  `packages/payments-sumup` with `packages/migrations` (#597), `packages/core` (#598), the small
-  packages as one pull request (#600: `apps/print-agent`, `print-agent`, `server-kit`, `tunnel`,
-  `membership`, `sync-enrolment`, `workforce-es`, `purchasing`, `recipes`, `fiscal-none`,
-  `composition`, `diagnostics`, `dashboard-modules`, the `country*` packages, `ui-core` and
-  `dashboard-kit`), `packages/reporting` (#601; the generated `src/dr303-layout.ts` untouched),
-  `scripts/` (#602), `packages/catalogue` (#603), `packages/ui` (#604), `packages/module` (#606),
-  `packages/media` (#609), `packages/venue-service` (#611), `apps/dashboard` (#607, #610, #612),
-  `apps/till` (#614, #616, #618, #621) and `apps/server` in parts (#613, #615, #617, #620, #622,
-  #623, #624, #625, #629, #653, #656, #657, #658). A pruning pull request cannot carry this file (the
-  checker refuses it), so each one's line lands here as a docs-only push after the merge.
+  checker and were left.
 
 ## `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same condition by construction"
 
@@ -625,6 +611,104 @@ On go-live day, make these changes together (owner, 2026-10-21 about 15:35–15:
 Keep the current `CLAUDE.md` rule, planning files and ignore settings until go-live day.
 The separate [A760 procedure](../operations/a760-migration-squash.md) retains its own freeze,
 reset and operator gates; this entry does not start that job.
+
+## A760. Squash every migration set before go-live
+
+- **A760. Squash every migration set before go-live.** The [operator procedure](../operations/a760-migration-squash.md)
+  and [inventory](../operations/a760-migration-squash-inventory.md) are approved
+  (owner, 2026-10-16), including fiscal SQL/meta and the named history-harness changes.
+  The watcher starts the sole job after big work and migration branches drain, with the full
+  Waitron/Cloud mutation freeze and named reset/operator roster recorded. Reset the laptop
+  dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
+  off/quarantined, image pinned, for the owner to reset on return after 2 November.
+
+## Station deletion's draft-location filter needs a discriminating test
+
+- **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's
+  second run-it review, deleting the `working_orders` location `exists` clause in
+  `apps/server/src/station-delete.ts` left all 47 station-delete and management-delete cases
+  passing. Add a second-location draft case that fails without the clause, or establish by running
+  the real writers that it is redundant before removing it. Its necessity remains unverified.
+
+## Loose ends left by A435's printer, reader and device delete (steps 2 to 4)
+
+- **Loose ends left by A435's printer, reader and device delete (steps 2 to 4).**
+  - The till's status for an original whose printer was deleted uses the error code's sentence
+    ("…this job will not be retried."), where its neighbours speak of "the original". Owner to
+    choose the wording.
+  - The Spanish for `printer.deleted` breaks its twin's pattern: "por lo que no se volverá a
+    intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
+    intentar".
+  - Shorter printer-delete copy was offered to the owner during the build: for the till's
+    deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
+    shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
+    detiene"), and one dialog line per inherited default.
+  - `refuseDeletedPrinters` lives in `@waitron/layouts` though `@waitron/printing` holds the
+    printer functions and `printer.not_found`'s registry.
+  - `deletePrinter` writes the device choices, profile lists and holders that layouts owns; one
+    layouts function could clear them.
+  - Several printer queries that already require an active printer or a live job also filter
+    `deleted_at`; one test pinning "deleted means switched off with no live jobs" could replace
+    the copies.
+  - The devices and payments screens copy the printers screen's delete-dialog logic
+    (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
+    Pull it into one shared piece, with the `names` helper that `printer-delete-copy.ts`,
+    `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the `line` helper the
+    first two share. Left open by A435 step 4 (#1519) and step 3.
+
+## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
+
+- **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).**
+  - "A device that is not deleted" is written by hand as `isNull(devices.deletedAt)` in several
+    files; one named check would keep a new query from forgetting it. Step 4 (#1519).
+  - A Stripe reader's delete confirmation does not say the reader stays registered at Stripe, which
+    a SumUp reader's does while SumUp is not connected. Step 3b.
+  - The till names a reader deleted elsewhere with `reader.not_found`'s general sentence ("This
+    device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted printer
+    has its own "That printer no longer exists". Owner to choose whether readers get one too. Step 3
+    (#1520), whose plan kept the existing sentence.
+
+## Loose ends left by A394-3 (#1447)
+
+- **Loose ends left by A394-3 (#1447).**
+  - `GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an
+    unknown location.
+  - A malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22,
+    while the course route answers 404.
+  - The two location routes' body menu id keeps 404 until A394-11.
+  - Workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's
+    PATH location answers `location.not_found`. If workforce moves to the new code, declare it in
+    `packages/db/src/errors.ts`.
+
+## Loose ends left by A483 (#1544)
+
+- **Loose ends left by A483 (#1544).** OPEN.
+  - **A switched-off module's append-only tables are neither re-protected nor checked.** A start
+    migrates, re-protects and checks only the modules switched on.
+    [Detail](architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
+  - **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
+    `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
+    `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses
+    Retry. **Next action:** decide whether Waitron ships that as an operator command.
+  - **The append-only check does not read `PRAGMA recursive_triggers`.** With the pragma off,
+    `INSERT OR REPLACE` rewrites an append-only row without touching a trigger (measured,
+    `docs/developers/conventions-data.md`); `apps/server/src/append-only-watch.ts` reads only the
+    triggers' stored text. Whether anything on a running server can turn the pragma off is
+    unmeasured.
+
+## Loose ends left by the tenant-column removal (#378, 2026-09-16)
+
+- **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
+  - **These index and key names still read `tenant`, and the columns they name are gone.** This is
+    its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in
+    production error translation, so renaming them changes behaviour and wants its own failing
+    tests first.
+    [Detail](architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
+  - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved
+    for facts about the process itself.** **Next action:** choose a prefix (`credentials.missing`
+    is the nearest sibling) and rename it in one change, checking the prefix matchers
+    `docs/developers/conventions-data.md` lists.
+    [Detail](architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
 
 ## Decisions and deliberate limits
 
