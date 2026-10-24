@@ -1929,6 +1929,7 @@ async function bootServer(
           filing: () => ({ enabled: filesRecords() }),
         },
         clockWitnesses,
+        requestFromBox: seams.requestFromBox,
       },
       log,
     );

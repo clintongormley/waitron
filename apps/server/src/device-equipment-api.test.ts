@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, type networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -54,6 +54,7 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { deletePrinter } from "./printer-delete.js";
+import { requestFromBox } from "./request-from-box.js";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
@@ -1744,7 +1745,7 @@ describe("GET /api/device/equipment's notices", () => {
 describe("the device's clock on the equipment read", () => {
   type Noted = Parameters<ClockWitnessStore["noteDevice"]>;
 
-  function clockApp() {
+  function clockApp(requestFromBox: DeviceApiDeps["requestFromBox"] = () => false) {
     const noted: Noted[] = [];
     let wall = 1_792_000_000_000;
     let mono = 5_000;
@@ -1758,23 +1759,67 @@ describe("the device's clock on the equipment read", () => {
         pairingMode: createPairingMode(),
         clockWitnesses: { noteDevice: (...args) => void noted.push(args) },
         clock: { wall: () => (wall += 1_000), monotonic: () => (mono += 7) },
+        requestFromBox,
       },
       quiet,
     );
     return { app, noted };
   }
 
-  const read = (app: Hono, headers: Record<string, string>) =>
-    app.request("/api/device/equipment", { headers });
+  const read = (app: Hono, headers: Record<string, string>, remoteAddress?: string) =>
+    app.request(
+      "/api/device/equipment",
+      { headers },
+      remoteAddress === undefined ? undefined : { incoming: { socket: { remoteAddress } } },
+    );
 
-  it("notes the device's id, its clock and the box's first readings when the request arrived", async () => {
+  it("notes the device's id, its address, its clock and the box's first readings when the request arrived", async () => {
     const { app, noted } = clockApp();
-    const res = await read(app, {
-      cookie: venue.cookie,
-      "x-waitron-device-clock": "1792000060000",
-    });
+    const res = await read(
+      app,
+      { cookie: venue.cookie, "x-waitron-device-clock": "1792000060000" },
+      "192.168.10.31",
+    );
     expect(res.status).toBe(200);
     expect(noted).toEqual([[a, 1_792_000_060_000, { wallMs: 1_792_000_001_000, monoMs: 5_007 }]]);
+  });
+
+  it("notes nothing from a till or browser on the box itself, and still answers the equipment", async () => {
+    const { app, noted } = clockApp(() => true);
+    const res = await read(
+      app,
+      { cookie: venue.cookie, "x-waitron-device-clock": "1792000060000" },
+      "192.168.10.31",
+    );
+    expect(res.status).toBe(200);
+    expect(noted).toEqual([]);
+  });
+
+  describe("through the box's real check of where a request came from", () => {
+    const interfaces = (() => ({
+      eth0: [{ address: "192.168.10.20", family: "IPv4", internal: false }],
+      lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }],
+    })) as unknown as typeof networkInterfaces;
+    const realCheck = (c: Context) => requestFromBox(c, { interfaces });
+    const headers = () => ({ cookie: venue.cookie, "x-waitron-device-clock": "1792000060000" });
+
+    it("notes nothing from the box's own address", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers(), "192.168.10.20")).status).toBe(200);
+      expect(noted).toEqual([]);
+    });
+
+    it("notes nothing from a request with no connection to read", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers())).status).toBe(200);
+      expect(noted).toEqual([]);
+    });
+
+    it("notes once, with its address, a device elsewhere on the network", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers(), "192.168.10.31")).status).toBe(200);
+      expect(noted).toEqual([[a, "192.168.10.31", 1_792_000_060_000, expect.anything()]]);
+    });
   });
 
   it("reads the box's clocks before waiting for the write lock the device's sighting needs", async () => {
@@ -1795,6 +1840,7 @@ describe("the device's clock on the equipment read", () => {
           wall: () => (wallCalls++, locked ? 1_792_000_000_000 : 1_792_000_090_000),
           monotonic: () => 5_000,
         },
+        requestFromBox: () => false,
       },
       quiet,
     );

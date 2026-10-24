@@ -25,8 +25,11 @@ describe("clock.disagrees", () => {
 
   it("warns when two fresh devices agree the box's clock is two hours off", async () => {
     const store = storeAt(BOX_MS + 10_000, 10_000);
-    store.noteDevice("till-a", BOX_MS + 2 * HOUR_MS, { wallMs: BOX_MS, monoMs: 0 });
-    store.noteDevice("till-b", BOX_MS + 5_000 + 2 * HOUR_MS + 20_000, {
+    store.noteDevice("till-a", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
+    store.noteDevice("till-b", "192.168.10.32", BOX_MS + 5_000 + 2 * HOUR_MS + 20_000, {
       wallMs: BOX_MS + 5_000,
       monoMs: 5_000,
     });
@@ -49,21 +52,52 @@ describe("clock.disagrees", () => {
 
   it("says nothing with only one device off", async () => {
     const store = storeAt(BOX_MS, 0);
-    store.noteDevice("till-a", BOX_MS + 2 * HOUR_MS, { wallMs: BOX_MS, monoMs: 0 });
+    store.noteDevice("till-a", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
     expect(await readAlerts(store, new Date(BOX_MS))).toEqual([]);
   });
 
   it("says nothing when two devices are within a minute of the box", async () => {
     const store = storeAt(BOX_MS, 0);
-    store.noteDevice("till-a", BOX_MS + 59_000, { wallMs: BOX_MS, monoMs: 0 });
-    store.noteDevice("till-b", BOX_MS - 59_000, { wallMs: BOX_MS, monoMs: 0 });
+    store.noteDevice("till-a", "192.168.10.31", BOX_MS + 59_000, { wallMs: BOX_MS, monoMs: 0 });
+    store.noteDevice("till-b", "192.168.10.32", BOX_MS - 59_000, { wallMs: BOX_MS, monoMs: 0 });
     expect(await readAlerts(store, new Date(BOX_MS))).toEqual([]);
   });
 
   it("says nothing once the two readings are more than five minutes old", async () => {
     const store = storeAt(BOX_MS + 300_001, 300_001);
-    store.noteDevice("till-a", BOX_MS + 2 * HOUR_MS, { wallMs: BOX_MS, monoMs: 0 });
-    store.noteDevice("till-b", BOX_MS + 2 * HOUR_MS, { wallMs: BOX_MS, monoMs: 0 });
+    store.noteDevice("till-a", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
+    store.noteDevice("till-b", "192.168.10.32", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
     expect(await readAlerts(store, new Date(BOX_MS + 300_001))).toEqual([]);
+  });
+
+  it("says nothing when the two devices that are off share one address", async () => {
+    const store = storeAt(BOX_MS, 0);
+    store.noteDevice("till-a", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
+    store.noteDevice("till-b", "192.168.10.31", BOX_MS + 2 * HOUR_MS, {
+      wallMs: BOX_MS,
+      monoMs: 0,
+    });
+    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([]);
+  });
+
+  it("counts two devices whose address reads empty as two", async () => {
+    const store = storeAt(BOX_MS, 0);
+    store.noteDevice("till-a", "", BOX_MS + 2 * HOUR_MS, { wallMs: BOX_MS, monoMs: 0 });
+    store.noteDevice("till-b", "", BOX_MS + 2 * HOUR_MS, { wallMs: BOX_MS, monoMs: 0 });
+    expect(await readAlerts(store, new Date(BOX_MS))).toEqual([
+      expect.objectContaining({ params: expect.objectContaining({ count: 2 }) }),
+    ]);
   });
 });

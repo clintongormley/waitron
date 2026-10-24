@@ -13,8 +13,15 @@ export interface BoxClockReading {
 }
 
 export interface ClockWitnessStore {
-  /** `arrived`: the box's clocks when the request arrived. */
-  noteDevice(deviceId: string, deviceMs: number, arrived: BoxClockReading): void;
+  /** `address`: the network address the reading came from; an empty one counts as none, so it
+   * does not merge unrelated devices into one witness. `arrived`: the box's clocks when the
+   * request arrived. */
+  noteDevice(
+    deviceId: string,
+    address: string | undefined,
+    deviceMs: number,
+    arrived: BoxClockReading,
+  ): void;
   noteAuthority(sample: AuthorityTimeSample): void;
   /** Every fresh reading (at most five minutes old by the steady clock, with no step of the wall
    * clock since), agreeing or not, and every AEAT disagreement noted since the last `endStop()`,
@@ -54,7 +61,7 @@ export function createClockWitnessStore(
   }
 
   return {
-    noteDevice(deviceId, deviceMs, arrived) {
+    noteDevice(deviceId, address, deviceMs, arrived) {
       if (!Number.isSafeInteger(deviceMs) || !writable(deviceMs) || !writable(arrived.wallMs))
         return;
       const seen = devices.get(deviceId);
@@ -63,6 +70,7 @@ export function createClockWitnessStore(
         witness: {
           kind: "device",
           id: deviceId,
+          ...(address === undefined || address === "" ? {} : { address }),
           boxAt: new Date(arrived.wallMs).toISOString(),
           witnessAt: new Date(deviceMs).toISOString(),
           uncertaintyMs: 0,

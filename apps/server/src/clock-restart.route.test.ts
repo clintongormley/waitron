@@ -247,7 +247,7 @@ async function stoppedBox(gapMs: number, backend: FiscalBackend = venue.backend)
 
 /** A device whose clock read `offsetMs` from the box's, noted at the box's reading. */
 function noteDevice(stop: Stop, offsetMs: number): void {
-  stop.witnesses.noteDevice(randomUUID(), stop.behind + offsetMs, {
+  stop.witnesses.noteDevice(randomUUID(), undefined, stop.behind + offsetMs, {
     wallMs: stop.behind,
     monoMs: 0,
   });
