@@ -1722,6 +1722,7 @@ export interface BoxHealth {
   }[];
   noticesUnavailable: string[];
   filing: boolean;
+  outbox: { lastAcceptedAt: string | null; waiting: number; awaitingCertificate: boolean } | null;
   stream: StreamStatusView;
   clock: {
     authority:
@@ -1743,6 +1744,11 @@ export interface BoxHealth {
     lowSince: string | null;
     reclaimable: { bytes: number; backupRunning: boolean };
   };
+}
+
+/** LOCAL copy of the Retry now route's answer (`packages/fiscal-verifactu/src/routes.ts`). */
+export interface FiscalRetryView {
+  waiting: number;
 }
 
 /** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
@@ -4164,6 +4170,10 @@ export class DashboardApi {
       `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/handled`,
       "POST",
     );
+  }
+
+  retryFiscalSubmissions(): Promise<FiscalRetryView> {
+    return this.#request<FiscalRetryView>("/management-api/fiscal-outbox/retry", "POST", {});
   }
 
   getBoxHealth(): Promise<BoxHealth> {

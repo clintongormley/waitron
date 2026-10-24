@@ -5,6 +5,7 @@ export const GUIDE_LINKS = {
   "products.course": { page: "products", section: "course" },
   "products.variants": { page: "products", section: "variants" },
   "box-status.free-space": { page: "box-status", section: "free-space" },
+  "box-status.retry-now": { page: "box-status", section: "retry-now" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;

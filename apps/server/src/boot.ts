@@ -155,6 +155,7 @@ import {
   type HealthState,
 } from "./health.js";
 import { runLoop, realSleep } from "./loop.js";
+import { createLoopWaker } from "./loop-wake.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
@@ -2011,6 +2012,7 @@ async function bootServer(
   );
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
+  const drainWaker = createLoopWaker({ minTickMs: config.minTickMs });
   // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
   // over the full `till` here, so `nodeId` never enters a module's cfg.
   const routeCtx: ModuleRouteContext = {
@@ -2024,6 +2026,11 @@ async function bootServer(
     maxUploadBytes: MAX_UPLOAD_BYTES,
     renderReceiptLogo: drawLogoRasters,
     core: moduleCoreServices(till, tableRemovals),
+    fiscalDrain: {
+      filing: filesRecords,
+      awaitingCertificate: () => awaitingFiscalCert.current,
+      wake: drainWaker.wake,
+    },
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
@@ -2313,6 +2320,7 @@ async function bootServer(
     setsToMigrate,
   );
   const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
+  const fiscalOutbox = enabledFiscal.outbox;
   mountBoxHealthApi(
     app,
     {
@@ -2327,6 +2335,14 @@ async function bootServer(
             log: pageNoticeLog,
           },
           stream: () => streamHost.status(),
+          ...(fiscalOutbox === undefined
+            ? {}
+            : {
+                outbox: {
+                  read: (tx) => fiscalOutbox.read(tx),
+                  awaitingCertificate: () => awaitingFiscalCert.current,
+                },
+              }),
           authorityClock: authorityClock.read,
           timeHealth: () => timeHealthCache.get("sync", () => checkTimeHealth()),
           disk: diskFull,
@@ -2714,7 +2730,7 @@ async function bootServer(
         ),
     ),
     now,
-    sleep: realSleep,
+    sleep: drainWaker.sleep,
     signal: controller.signal,
     minTickMs: config.minTickMs,
     maxTickMs: config.maxTickMs,

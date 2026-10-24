@@ -90,6 +90,10 @@ export interface ModuleRouteContext {
   maxUploadBytes?: number;
   renderReceiptLogo?: (bytes: Uint8Array) => Promise<ReceiptLogoRasters>;
   core: CoreServices;
+  /** The host's fiscal submission loop: whether this box files records now, whether its last pass
+   * with work was skipped for a missing tax-agency certificate, and a wake that ends the loop's
+   * sleep. Absent on a host that runs no submission loop. */
+  fiscalDrain?: { filing(): boolean; awaitingCertificate(): boolean; wake(): void };
 }
 
 /** Boot mounts every ENABLED module's routes in one generic loop; a disabled module mounts nothing. */

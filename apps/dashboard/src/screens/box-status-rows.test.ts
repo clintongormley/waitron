@@ -21,6 +21,7 @@ function quietHealth(overrides: Partial<BoxHealth> = {}): BoxHealth {
     notices: [],
     noticesUnavailable: [],
     filing: true,
+    outbox: null,
     stream: {
       state: "streaming",
       generation: "g1",

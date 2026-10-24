@@ -34,8 +34,9 @@ alerts**.
 When nothing is wrong, each row says:
 
 - **Sales**: **Recorded normally**, and when the last sale was made.
-- **Tax agency**: **Sent normally**. A box that does not send records to the tax agency says so
-  instead.
+- **Tax agency**: **Sent normally**, and when the box last had records accepted by the tax agency
+  (the time, by the box's own clock, that the box began that round of sending). A box that does not
+  send records to the tax agency says so instead.
 - **Bucket copy**: **Up to date**, and when the last upload was confirmed. It says **Not set up**
   when no copy is set up, and how many minutes behind the copy is when it falls behind.
 - **Printers**: **No problems reported**, and the names of the printers set up.
@@ -56,6 +57,26 @@ out.
 If the alerts could not be read, the page still shows every row and says that a part may look
 fine when it is not. If some checks could not be made, the page says it may not show every
 problem.
+
+## Try the waiting records again {#retry-now}
+
+On a box that sends records to the tax agency, the **Tax agency** row has a **Retry now** button.
+After a failed send, the box pauses before it tries the waiting records again. **Retry now** tries
+them again without waiting out that pause. It can be pressed only while the row says records are
+not yet sent.
+
+After you press it, the row says how many records will be tried again. They may not go straight
+away: the tax agency asks for a wait between two sends, and the records are tried when it allows
+the next send, except that a full batch of 1,000 records may go at once. If the box still cannot
+reach the tax agency, they wait again.
+
+While the box has no certificate for the tax agency, nothing is sent, so **Retry now** cannot be
+pressed and the row says why. Install the certificate in **Venue settings**. The box tries again
+within five minutes, and after that the button can be pressed while records are still not sent.
+
+Records stopped after the tax agency refused several records in a row for the same reason are not
+released by **Retry now**. The box keeps trying the first of them every hour, and the bell's alert
+says why they stopped.
 
 ## Free space on the box {#free-space}
 

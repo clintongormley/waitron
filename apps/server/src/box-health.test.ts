@@ -101,6 +101,7 @@ describe("collectBoxHealth", () => {
       notices: [],
       noticesUnavailable: [],
       filing: false,
+      outbox: null,
       stream: { state: "off" },
       clock: {
         authority: { state: "ok", driftSeconds: 2, measuredAt: "2026-10-22T09:00:00Z" },

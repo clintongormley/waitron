@@ -69,6 +69,7 @@ describe("the user guides", () => {
     expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
       "open",
       "rows",
+      "retry-now",
       "free-space",
       "out-of-space",
       "clock-behind",

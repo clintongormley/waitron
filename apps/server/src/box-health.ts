@@ -14,6 +14,10 @@ import {
   type StaffNoticeLog,
 } from "./staff-notices.js";
 import type { AuthorityClockStatus, TimeHealth } from "./time-health.js";
+import type { FiscalOutboxState } from "@waitron/fiscal";
+import type { Transaction } from "@waitron/db";
+import { codeOf } from "@waitron/server-kit";
+import { sql } from "drizzle-orm";
 
 export interface BoxHealth {
   /** The box's clock when the read was made. */
@@ -23,6 +27,8 @@ export interface BoxHealth {
   noticesUnavailable: string[];
   /** Whether this box files records with the tax agency. */
   filing: boolean;
+  /** Null when the box does not file, the seat has no outbox, or its read failed. */
+  outbox: (FiscalOutboxState & { awaitingCertificate: boolean }) | null;
   stream: StreamView;
   clock: { authority: AuthorityClockStatus; sync: TimeHealth };
   printers: { id: string; name: string }[];
@@ -46,6 +52,11 @@ export interface BoxHealthReaders {
     log: StaffNoticeLog;
   };
   stream: () => StreamView;
+  /** Absent when the fiscal seat has no outbox. `read` must only select. */
+  outbox?: {
+    read: (tx: Transaction) => Promise<FiscalOutboxState>;
+    awaitingCertificate: () => boolean;
+  };
   authorityClock: () => AuthorityClockStatus;
   timeHealth: () => Promise<TimeHealth>;
   disk: Pick<DiskFullState, "since">;
@@ -59,6 +70,8 @@ export interface BoxHealthReaders {
   paymentsEnabled: boolean;
   canFree: () => boolean;
 }
+
+const OUTBOX_WROTE = new Error("the fiscal outbox read changed rows");
 
 export async function collectBoxHealth(
   db: Database,
@@ -104,7 +117,33 @@ export async function collectBoxHealth(
     })),
     { reading: readers.notices.clock.now(), log: noticeLog.log },
   );
-  noticeRead.settle(read.unavailable);
+
+  const noticesUnavailable = [...read.unavailable];
+  let outbox: BoxHealth["outbox"] = null;
+  const outboxReader = readers.outbox;
+  const readsOutbox = filing && outboxReader !== undefined;
+  if (readsOutbox) {
+    const changes = () => db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
+    try {
+      // Thrown inside the turn, so whatever a writing read changed goes with it.
+      const state = await db.withWriteLock(async () => {
+        const before = changes();
+        const answer = await outboxReader.read(db);
+        if (changes() !== before) throw OUTBOX_WROTE;
+        return answer;
+      });
+      outbox = { ...state, awaitingCertificate: outboxReader.awaitingCertificate() };
+    } catch (error) {
+      const errorCode = error === OUTBOX_WROTE ? "box_health.outbox_wrote" : codeOf(error);
+      noticeLog.log("error", "staff_notice.source_unavailable", {
+        owner: "fiscal-outbox",
+        errorCode,
+      });
+      noticesUnavailable.push("fiscal-outbox");
+    }
+  }
+  // An outbox this read did not try stays failing until a read that tries it succeeds.
+  noticeRead.settle(readsOutbox ? noticesUnavailable : [...noticesUnavailable, "fiscal-outbox"]);
 
   const [usage, free, reclaimable, sync] = await Promise.all([
     readers.usage(),
@@ -117,8 +156,9 @@ export async function collectBoxHealth(
     at,
     sales: { lastAt: rows.lastAt },
     notices: read.notices,
-    noticesUnavailable: read.unavailable,
+    noticesUnavailable,
     filing,
+    outbox,
     stream: readers.stream(),
     clock: { authority: readers.authorityClock(), sync },
     printers: rows.printers,

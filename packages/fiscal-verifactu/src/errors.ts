@@ -339,10 +339,13 @@ declare module "@waitron/shared" {
     "fiscal.certificate_expired": { date: string };
 
     /**
-     * An ongoing-alert code raised by `apps/server/src/alert-sources.ts`, not by this package; it
-     * lives here because it names the fiscal concept. No params: a plain on/off fact.
+     * Raised as an ongoing alert by `apps/server/src/alert-sources.ts`, and thrown by the Retry now
+     * route (./routes.ts) while the box waits for its certificate. No params: a plain on/off fact.
      */
     "fiscal.awaiting_certificate": Record<string, never>;
+
+    /** Thrown by the Retry now route (./routes.ts) on a box that does not file records now. */
+    "fiscal.not_filing": Record<string, never>;
 
     /** `installCertificate` (./certificate-install.ts): another install changed the vault after the
      * dialog read the card. */

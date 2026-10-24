@@ -5,7 +5,7 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import type { AlertView, BoxHealth, DashboardApi } from "../api/client.js";
+import type { AlertView, BoxHealth, DashboardApi, FiscalRetryView } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -102,6 +102,11 @@ export class BoxStatusScreen extends LitElement {
       .aside {
         color: var(--wt-color-text-muted);
       }
+      .refusal {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
       .actions {
         grid-area: actions;
         display: flex;
@@ -126,10 +131,17 @@ export class BoxStatusScreen extends LitElement {
           margin-top: var(--wt-space-1);
         }
       }
-      .free {
+      .free,
+      .retry {
+        position: relative;
         display: flex;
         gap: var(--wt-space-1);
         align-items: center;
+      }
+      /* Room for the half of its help badge that hangs past its end, help on or off, so the
+         badge never covers a Go to after it and turning help on moves nothing. */
+      .retry:not(:last-child) {
+        margin-inline-end: max(0px, calc(var(--wt-help-badge-target) / 2 - var(--wt-space-2)));
       }
       .other {
         display: flex;
@@ -151,6 +163,14 @@ export class BoxStatusScreen extends LitElement {
   /** The bell's own list, as last read; null until it has been read once. */
   @state() private alerts: AlertView[] | null = null;
   @state() private failingReads: ReadonlySet<ReadName> = new Set();
+  @state() private retrying = false;
+  @state() private retryAnswer: FiscalRetryView | null = null;
+  /** The retry press's refusal, drawn on the Tax agency row; no read clears it. */
+  @state() private retryError: string | null = null;
+  /** After a press the waiting count is stale until the box is read again. */
+  @state() private awaitingRetryRead = false;
+  /** Whether the latest read left nothing to try again; a press needs it false to start. */
+  #nothingLeftToRetry = false;
   /** The free-space press's refusal; no read clears it. */
   @state() private actionError: string | null = null;
   @state() private freeing = false;
@@ -176,6 +196,10 @@ export class BoxStatusScreen extends LitElement {
       .watch("getBoxHealth", [], (health) => {
         this.health = health;
         this.awaitingFigure = false;
+        this.awaitingRetryRead = false;
+        this.#nothingLeftToRetry = this.#nothingToRetry(health);
+        if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingLeftToRetry)
+          this.retryAnswer = null;
         this.#readSucceeded("getBoxHealth");
       })
       .catch(() => undefined);
@@ -282,6 +306,71 @@ export class BoxStatusScreen extends LitElement {
     </span>`;
   }
 
+  #canRetry(health: BoxHealth): boolean {
+    const outbox = health.outbox;
+    return (
+      !this.awaitingRetryRead &&
+      outbox !== null &&
+      outbox.waiting > 0 &&
+      !outbox.awaitingCertificate &&
+      health.notices.some((notice) => notice.code === "fiscal.records_unsent")
+    );
+  }
+
+  async #retry(): Promise<void> {
+    const health = this.health;
+    if (this.retrying || health === null || !this.#canRetry(health)) return;
+    this.retrying = true;
+    this.retryError = null;
+    this.retryAnswer = null;
+    try {
+      const answer = await this.api.retryFiscalSubmissions();
+      this.retryAnswer = answer.waiting > 0 && this.#nothingLeftToRetry ? null : answer;
+      this.awaitingRetryRead = true;
+      this.api.liveData.refresh();
+    } catch (error) {
+      this.retryError = codeOf(error);
+    } finally {
+      this.retrying = false;
+    }
+  }
+
+  /** Whether a read leaves nothing for a "will be tried again" answer to speak of. */
+  #nothingToRetry(health: BoxHealth): boolean {
+    return (
+      health.outbox?.waiting === 0 ||
+      // A read that could not check the notices has not shown the unsent notice gone.
+      (health.noticesUnavailable.length === 0 &&
+        !health.notices.some((notice) => notice.code === "fiscal.records_unsent"))
+    );
+  }
+
+  #retriedWords(waiting: number): string {
+    if (waiting === 0) return t("box_status.retried_none");
+    if (waiting === 1) return t("box_status.retried_one");
+    return fill("box_status.retried", { count: String(waiting) });
+  }
+
+  #retryAction(health: BoxHealth): TemplateResult {
+    const can = this.#canRetry(health);
+    return html`<span class="retry">
+      <wt-button
+        data-test="retry"
+        variant=${can || this.retrying ? "primary" : "secondary"}
+        ?disabled=${!can || this.retrying}
+        ?loading=${this.retrying}
+        @click=${() => void this.#retry()}
+        >${t("box_status.retry")}</wt-button
+      ><wt-help-tooltip
+        mode="help-mode"
+        aria-label=${t("box_status.retry_help_label")}
+        guide-href=${guideHref("box-status.retry-now")}
+        guide-label=${t("box_status.retry_help_guide")}
+        >${t("box_status.retry_help")}</wt-help-tooltip
+      >
+    </span>`;
+  }
+
   #renderRow(row: PartRow, health: BoxHealth): TemplateResult {
     const sentences = [
       ...new Set(
@@ -289,6 +378,7 @@ export class BoxStatusScreen extends LitElement {
       ),
     ].filter((sentence) => sentence !== row.line);
     const disk = row.id === "disk";
+    const outbox = row.id === "tax" ? health.outbox : null;
     return html`<li data-test="row-${row.id}" data-state=${row.state}>
       <span class="dot ${row.state}"
         ><span class="state-words">${t(`box_status.state.${row.state}` as StringKey)}</span></span
@@ -314,8 +404,31 @@ export class BoxStatusScreen extends LitElement {
             ? html`<p class="aside" data-test="read-only">${t("box_status.free_read_only")}</p>`
             : nothing
         }
+        ${
+          outbox?.awaitingCertificate === true &&
+          !row.alerts.some((alert) => alert.code === "fiscal.awaiting_certificate")
+            ? html`<p class="aside" data-test="awaiting-certificate">
+                ${t("box_status.retry_awaiting_certificate")}
+              </p>`
+            : nothing
+        }
+        ${
+          outbox !== null && this.retryAnswer !== null
+            ? html`<p class="aside" role="status" data-test="retried">
+                ${this.#retriedWords(this.retryAnswer.waiting)}
+              </p>`
+            : nothing
+        }
+        ${
+          outbox !== null && this.retryError !== null
+            ? html`<p class="refusal" role="alert" data-test="retry-refused">
+                ${codeMessage(this.retryError)}
+              </p>`
+            : nothing
+        }
       </div>
       <div class="actions">
+        ${outbox === null ? nothing : this.#retryAction(health)}
         ${this.#screensOf(row).map((screen) => this.#goToButton(screen))}
         ${disk ? this.#freeAction(health) : nothing}
       </div>

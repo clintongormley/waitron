@@ -1264,6 +1264,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",
   },
+  "fiscal.not_filing": {
+    en: "This box does not send records to the tax agency.",
+    es: "Este equipo no envía registros a Hacienda.",
+  },
+  "fiscal.awaiting_certificate": {
+    en: "No record can be sent until the tax agency's certificate is installed. Install it in Venue settings.",
+    es: "No se puede enviar ningún registro hasta que se instale el certificado de la AEAT. Instálalo en Ajustes del local.",
+  },
   "storage.disk_full": {
     en: "Not saved: the box is out of disk space.",
     es: "No se ha guardado: el equipo no tiene espacio en disco.",
