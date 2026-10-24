@@ -366,7 +366,7 @@ export class ImageUpload extends LitElement {
           aria-invalid=${invalid}
           ?disabled=${this.disabled}
           @click=${() => this.#setOpen(true)}
-          >${t("appearance.logo_replace")}</wt-button
+          >${t("image.replace_logo")}</wt-button
         >
         <wt-button
           data-test="remove-image"

@@ -824,12 +824,12 @@ describe("image-upload as a venue logo", () => {
 
   it.each([
     ["en-GB", "Replace", "Remove"],
-    ["es-ES", es["appearance.logo_replace"], es["image.remove_logo"]],
+    ["es-ES", es["image.replace_logo"], es["image.remove_logo"]],
   ] as const)(
     "with an image, in %s, draws it on the plate with %s and %s beside it",
     async (locale, replaceText, removeText) => {
       setLocale(locale);
-      expect(replaceText).toBe(t("appearance.logo_replace"));
+      expect(replaceText).toBe(t("image.replace_logo"));
       expect(removeText).toBe(t("image.remove_logo"));
       const api = stubApi();
       const { el } = await venueLogo({ api, image: mediaTestReference("own.png") }, "dark");

@@ -1995,6 +1995,7 @@ export const en = {
   "image.change_photo": "Change photo",
   "image.add_logo": "Add a logo",
   "image.change_logo": "Change logo",
+  "image.replace_logo": "Replace",
   "image.remove_logo": "Remove",
   "image.remove_logo_name": "Remove logo",
   "product.edit_named": "Edit {name}",
@@ -3016,7 +3017,6 @@ export const en = {
   "nav.appearance": "Appearance",
   "appearance.title": "Appearance",
   "appearance.look": "Look",
-  "appearance.logo_replace": "Replace",
   "appearance.logo": "Logo",
   "appearance.logo_hint":
     "PNG, JPEG or WebP. A see-through background, at least 200 pixels tall, looks best.",
@@ -5293,6 +5293,7 @@ export const es: Record<StringKey, string> = {
   "image.change_photo": "Cambiar foto",
   "image.add_logo": "Añadir un logotipo",
   "image.change_logo": "Cambiar el logotipo",
+  "image.replace_logo": "Sustituir",
   "image.remove_logo": "Quitar",
   "image.remove_logo_name": "Quitar el logotipo",
   "product.edit_named": "Editar {name}",
@@ -6321,7 +6322,6 @@ export const es: Record<StringKey, string> = {
   "nav.appearance": "Apariencia",
   "appearance.title": "Apariencia",
   "appearance.look": "Aspecto",
-  "appearance.logo_replace": "Sustituir",
   "appearance.logo": "Logotipo",
   "appearance.logo_hint":
     "PNG, JPEG o WebP. Queda mejor con fondo transparente y al menos 200 píxeles de alto.",

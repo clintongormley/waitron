@@ -14,7 +14,7 @@ export const VENUE_LOGO_RETRY_MS = 60_000;
  * else `light`, which once loaded sits on a white plate on a dark screen. The image keeps its own
  * shape: it is drawn as large as the box's height and width allow, and the box keeps its height
  * while the image loads or when there is none. While the image fails it shows only its `fallback`
- * slot and asks for the same address again every `VENUE_LOGO_RETRY_MS`.
+ * slot and asks for the same address again every `VENUE_LOGO_RETRY_MS` while it is on the page.
  */
 @customElement("wt-venue-logo")
 export class WtVenueLogo extends LitElement {

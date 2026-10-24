@@ -88,9 +88,9 @@ it("hands the Look card the tenant's legal name, and a new one", async () => {
   });
   await flush(el);
   await expect.poll(() => card(el)?.legalName).toBe("BAR LUCÍA S.L.");
-  el.legalName = "RESTAURANTE LUCÍA S.L.";
+  el.legalName = "LUCÍA'S RESTAURANT LTD";
   await flush(el);
-  expect(card(el)!.legalName).toBe("RESTAURANTE LUCÍA S.L.");
+  expect(card(el)!.legalName).toBe("LUCÍA'S RESTAURANT LTD");
 });
 
 it("sends its first read as activity and a live re-read passively", async () => {

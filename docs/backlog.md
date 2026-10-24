@@ -2940,14 +2940,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
   and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
   image; every save that sets or changes its light image, and every library reframe or source
-  replacement of that image, draws its printed dots (`printedLogo`), which nothing prints until slice 9. No screen shows the logo until
-  slice 8. Slice 8a landed 2026-10-2x (#PR): the Look card's Logo field (a main image and an optional
+  replacement of that image, draws its printed dots (`printedLogo`), which nothing prints until slice 9. No live screen (the banner, the tills, the sign-in screens) shows the logo until
+  slice 8b. Slice 8a landed 2026-10-2x (#PR): the Look card's Logo field (a main image and an optional
   one for dark screens, picked from the image library), the preview's banner strip, the saved card's
   Logo row, Use Waitron's look removing the logo, and the image library naming the use "Logo of
   theme {name}" with a link to the Appearance page. An optional
   key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
   for slices 10 and 11 `textScale` 100 and `text` `{}`), with no configuration format change.
-  Next: 8 and 10, then 9, 11, 12 and 14.
+  Next: 8b and 10, then 9, 11, 12 and 14.
 
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu

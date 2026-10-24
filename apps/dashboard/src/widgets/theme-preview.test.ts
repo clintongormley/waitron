@@ -230,7 +230,7 @@ const SWEEPS = (["en-GB", "es-ES"] as const).flatMap((locale) => [
     locale,
     label: "a 4:1 logo and a long legal name",
     logo: { light: L },
-    legalName: "RESTAURANTE EL RINCÓN DE LA ABUELA LUCÍA S.L.",
+    legalName: "THE CORNER OF GRANDMOTHER LUCÍA'S RESTAURANT LTD",
   },
   // Words this name's spaces split fit a phone's panel; one word longer than the panel has to
   // break inside itself.
@@ -238,7 +238,7 @@ const SWEEPS = (["en-GB", "es-ES"] as const).flatMap((locale) => [
     locale,
     label: "a legal name with no spaces",
     logo: { light: L },
-    legalName: "RESTAURANTEELRINCÓNDELAABUELA",
+    legalName: "GRANDMOTHERLUCIASCORNERRESTAURANT",
   },
 ]);
 

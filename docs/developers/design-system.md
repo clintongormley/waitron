@@ -171,7 +171,7 @@ The three `--wt-color-google-button-*` tokens are the colours Google's sign-in b
 give its button, for the dashboard's Google sign-in button only: fill `#ffffff`, line `#747775` and
 text `#1f1f1f` in the light theme, and `#131314`, `#8e918f` and `#e3e3e3` in the dark.
 
-`--wt-color-logo-plate` is the white plate a venue logo is drawn on on dark screens when the logo has no version for dark screens (A841):
+`--wt-color-logo-plate` is the white plate a venue logo is drawn on on dark screens when the logo has no version for dark screens, and behind the Look card editor's logo picture (A841):
 `#ffffff` in both themes, and no venue theme writes it.
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. The one named set is the
@@ -4062,7 +4062,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   dark screens (optional)" offers "+ Add a version for dark screens", with the hint "Without one,
   dark screens show your logo on a light plate." until one is picked. Remove on the main image
   clears both. A `theme.invalid` naming `logo.light` or `logo.dark` shows under that picker, marks
-  it invalid and puts the form's one message at the bottom (D9); a logo change clears it.
+  it invalid and puts the form's one message at the bottom (D9); inside the name dialog, the code's own message shows at the dialog's bottom instead; a logo change clears it.
 - **Save as new theme… is drawn only while editing a stored theme**, in the `secondary` slot
   before Cancel, `variant="secondary"` (D8). It is never quiet-and-disabled for an unchanged draft:
   it is disabled only while a request is being sent, or after a save attempt while the brand colour's

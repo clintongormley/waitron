@@ -163,10 +163,13 @@ describe("colours set by hand", () => {
     },
   );
 
-  test.each(["scrim", "danger"])("a hand-set %s is refused, naming the key", (key) => {
-    const choices = withHand(DARK_GREEN, "dark", { [key]: "#000000" } as Partial<
-      Record<ThemeColour, string>
-    >);
-    expect(() => deriveTheme(choices)).toThrow(new RangeError(`not a theme colour: ${key}`));
-  });
+  test.each(["scrim", "logo-plate", "danger"])(
+    "a hand-set %s is refused, naming the key",
+    (key) => {
+      const choices = withHand(DARK_GREEN, "dark", { [key]: "#000000" } as Partial<
+        Record<ThemeColour, string>
+      >);
+      expect(() => deriveTheme(choices)).toThrow(new RangeError(`not a theme colour: ${key}`));
+    },
+  );
 });

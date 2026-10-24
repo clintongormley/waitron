@@ -1384,7 +1384,8 @@ carries the media condition the banner already uses for Waitron's own lockup —
 `not all` under Light, `(prefers-color-scheme: dark)` under Follow device (`darkLogoMedia`,
 `apps/dashboard/src/dashboard-app.ts:189-193`). A switch of the setting, or of the device's mode,
 therefore needs no fetch: both versions are already in the stylesheet and the stored copy (section
-12).
+12). (Overruled 2026-10-24 by the D3 ruling in section 16: each logo box reads its own computed
+`color-scheme`.)
 
 ## 8. Where the theme shows, and where it does not
 
@@ -2679,7 +2680,7 @@ permission-gated write (CLAUDE.md's risk triggers).
   screens. Not taken: one pull request of twenty tasks.
 - **Which image a logo box draws** (lane A ruling 2026-10-24, D3): the box reads its own computed
   `color-scheme`, so the image and the plate switch together and the preview's dark panel follows
-  its panel, not the page. Not taken: a `<picture>` with `darkLogoMedia` (section 8a), whose image
+  its panel, not the page. Not taken: a `<picture>` with `darkLogoMedia` (section 7), whose image
   would switch before the plate did.
 - **A logo refusal** (lane A ruling 2026-10-24, D9): shown under the image it names, with the form's
   usual bottom message; in the name dialog, at the dialog's bottom.
