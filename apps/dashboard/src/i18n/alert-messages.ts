@@ -22,8 +22,15 @@ const MORE_ES =
 const NOT_FIXED_EN = " Marking it handled does not fix it.";
 const NOT_FIXED_ES = " Marcarla como resuelta no lo soluciona.";
 
+type Words = { readonly en: string; readonly es: string };
+
 export const ALERT_MESSAGES: Readonly<
-  Record<string, { readonly en: string; readonly es: string }>
+  Record<
+    string,
+    Words & {
+      readonly variants?: Readonly<Record<string, Words & { readonly mode: "replace" | "append" }>>;
+    }
+  >
 > = {
   "fiscal.clock_drift": {
     en: "The server's last clock comparison with AEAT differed by {seconds} seconds. Check its date and time; you can continue selling.",
@@ -138,8 +145,24 @@ export const ALERT_MESSAGES: Readonly<
     es: "La hora del equipo ({clockAt:minute}) es anterior a la última venta ({lastRecordAt:minute}), así que no se puede cobrar. Los pedidos y la cocina siguen funcionando. Resuélvelo en Estado del equipo.",
   },
   "clock.behind_chain_restarted": {
-    en: "{person} restarted payments on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}). Proof: {proof:clock_restart_proof}.",
-    es: "{person} reanudó los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}). Prueba: {proof:clock_restart_proof}.",
+    en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {confirmedBy:clock_confirmed_by} confirmed it.",
+    es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}.",
+  },
+  "clock.records_misdated": {
+    en: "{count} sales were recorded with a time later than the real time (from {from:minute} to {to:minute}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.",
+    es: "Se registraron {count} ventas con una hora posterior a la real (de {from:minute} a {to:minute}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del equipo.",
+    variants: {
+      partial: {
+        mode: "append",
+        en: "The box restarted during the stop, so the list may be short.",
+        es: "El equipo se reinició durante la parada, así que puede faltar alguna.",
+      },
+      unconfirmed: {
+        mode: "replace",
+        en: "The payment stop that began at {from:minute} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.",
+        es: "La parada de cobros que empezó a las {from:minute} terminó sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces.",
+      },
+    },
   },
   "clock.behind_chain_disproved": {
     en: "Sales recorded between {from:minute} and {to:minute} were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.",
@@ -426,20 +449,14 @@ export const ALERT_WORDS: Readonly<
     },
     otherwise: { en: "Contact support.", es: "Contacta con soporte." },
   },
-  // What showed the box's clock right when a manager restarted payments, by the `proof` param of
+  // What confirmed the box's clock when payments restarted, by the `confirmedBy` param of
   // `clock.behind_chain_restarted`.
-  clock_restart_proof: {
+  clock_confirmed_by: {
     words: {
       authority: { en: "the tax agency's time", es: "la hora de Hacienda" },
-      devices: {
-        en: "the clocks of two devices or more",
-        es: "la hora de dos dispositivos o más",
-      },
-      authority_and_devices: {
-        en: "the tax agency's time and two devices or more",
-        es: "la hora de Hacienda y de dos dispositivos o más",
-      },
+      devices: { en: "two tills or handhelds", es: "dos cajas o terminales" },
+      admin: { en: "an administrator", es: "un administrador" },
     },
-    otherwise: { en: "recorded on the box", es: "anotada en el equipo" },
+    otherwise: { en: "a check recorded on the box", es: "una comprobación anotada en el equipo" },
   },
 };

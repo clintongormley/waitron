@@ -526,6 +526,16 @@ check), each in the task named:
   id), every other key unchanged → `:230-243` and `:632-638`; `clock-stop-incidents.test.ts:255`
   "control: the same confirmation with proof records it" — `before + 1` → `before + 2` at `:256`,
   plus one restarted and one misdated alert by code.
+- the restarted alert's words (Task R4c; lines at `81fe05f87` → after):
+  `apps/dashboard/src/i18n/alerts.test.ts:421-446` "a manager's restart of payments…", which pinned
+  `{person}` and the four `proof` values of the deleted `clock_restart_proof` list, → "payments
+  restarted on a clock behind the last sale", the three `confirmedBy` values and an unknown one of
+  `clock_confirmed_by`, still asserting the exact English, no `—` and no `{`; the word-list slot scan
+  ("names only registered word lists…") now reads variants too. `alerts-bell.test.ts:129-160` and
+  `alerts-screen.test.ts:90-106` "never breaks a written time across two lines": the restarted
+  alert's sentence no longer has a param before its times, so the sliding alert is now a
+  `clock.records_misdated` one with a count string of growing length; both still assert 80 times
+  checked and none broken.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
 and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed
