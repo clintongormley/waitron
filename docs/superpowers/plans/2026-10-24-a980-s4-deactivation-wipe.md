@@ -38,9 +38,10 @@ pending passkey challenges in the database — and so in every backup copy. _Res
    PIN and passkeys (found in review: before `{pin_hash:"scrypt$…", passkeys:1}`, after
    `{pin_hash:null, passkeys:0}`). `deactivatePerson`'s early return for an already-suspended
    person (`staff.ts:288`) becomes "wipe, then return" (no session work: their sessions ended when
-   they were first disabled); it checks `person.admin` before that branch, so pressing Disable is
-   the admin's way to clear the leftovers of a person disabled before this ships, or brought in by
-   an import. Amended 2026-10-24 after review; the first version wiped on every save that left a
+   they were first disabled); it checks `person.admin` before that branch. The dashboard offers Disable only for a person who
+   is not yet disabled (`apps/dashboard/src/widgets/staff-list.ts:107-110`), so this branch is
+   reached only by calling the route directly; from the dashboard, Enable (which also wipes) is the
+   way to clear the leftovers of a person disabled before this ships or brought in by an import. Amended 2026-10-24 after review; the first version wiped on every save that left a
    person suspended.
 3. **The two unused functions go.** `suspendPerson` (`staff.ts:567-577`) writes `suspended`
    without a wipe and `reactivatePerson` (`staff.ts:579-588`) writes `active` straight back,
@@ -55,7 +56,7 @@ pending passkey challenges in the database — and so in every backup copy. _Res
    none does.
 4. **No clean-up of people disabled before this ships.** Nothing walks existing suspended people:
    no venue is live (home CLAUDE.md §3, "No backwards-compatibility or data-migration code until
-   Waitron is in production"); decision 2 lets an admin clear one by hand.
+   Waitron is in production"); re-enabling one wipes it (decision 1).
 5. **A disabled person's passkey now answers `passkey.not_registered`.** Today a disabled person
    keeps their passkey row, so a passkey sign-in reaches the status check and answers the general
    `passkey.verification_failed`; `docs/developers/conventions-ui.md` (the passkey part of the

@@ -66,8 +66,7 @@ compliance”. This file holds their full text.
 
 [Design, revision 2](../superpowers/specs/2026-10-22-a980-data-protection-design.md) (2026-10-24)
 and its [build plan](../superpowers/plans/2026-10-24-a980-data-protection-build.md). The owner
-answered all ten questions on 2026-10-22 (design §8). Only S4 (deleting sign-in details when a
-person is disabled) is built. The open slices, by the design's numbers (S5, S7 and S8 were dropped
+answered all ten questions on 2026-10-22 (design §8). The open slices, by the design's numbers (S5, S7 and S8 were dropped
 by the answers):
 
 - **S2** — a staff member downloads their own data from their profile; an admin downloads another

@@ -1886,7 +1886,7 @@ export const en = {
     "This removes all current login methods, signs the user out, and sends a new invitation.",
   "person.confirm_reset_pin":
     "This removes the current PIN. The user cannot use a till until they set a new one.",
-  "person.confirm_disable": "This signs the user out and deletes their PIN, password and passkeys.",
+  "person.confirm_disable": "This signs the user out and removes all their login methods.",
   "person.confirm_enable": "This marks the user as Pending and sends a new invitation.",
   "profile.disable_authenticator": "Disable authenticator",
   "profile.disable_authenticator_button": "Disable",
@@ -5168,8 +5168,7 @@ export const es: Record<StringKey, string> = {
     "Esto elimina todos los métodos de acceso actuales, cierra la sesión y envía una invitación nueva.",
   "person.confirm_reset_pin":
     "Esto elimina el PIN actual. El usuario no podrá usar una caja hasta que configure uno nuevo.",
-  "person.confirm_disable":
-    "Esto cierra la sesión y elimina su PIN, contraseña y llaves de acceso.",
+  "person.confirm_disable": "Esto cierra la sesión y elimina todos sus métodos de acceso.",
   "person.confirm_enable": "Esto marca al usuario como pendiente y envía una invitación nueva.",
   "profile.disable_authenticator": "Desactivar autenticador",
   "profile.disable_authenticator_button": "Desactivar",
