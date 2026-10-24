@@ -66,6 +66,7 @@ describe("the own personal-data download in a real start", () => {
       const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
       const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
       expect([profile.id, profile.displayName]).toEqual([venue.personId, "Ana"]);
+      expect(strFromU8(files["README.txt"]!).split("\n")[0]).toContain("Clock venue SL");
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });

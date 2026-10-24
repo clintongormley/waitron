@@ -117,7 +117,14 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
 
   mountPersonalDataExportApi(
     app,
-    { db: deps.db, nodeId: deps.cfg.nodeId, modules: modulesNamed(deps.modules), now: deps.now },
+    {
+      db: deps.db,
+      nodeId: deps.cfg.nodeId,
+      modules: modulesNamed(deps.modules),
+      venueLocale: deps.venueLocale,
+      privacyNoticeUrl: deps.privacyNoticeUrl,
+      now: deps.now,
+    },
     log,
   );
 

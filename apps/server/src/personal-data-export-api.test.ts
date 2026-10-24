@@ -68,6 +68,7 @@ function deps(patch: Partial<PersonalDataExportDeps> = {}): PersonalDataExportDe
     nodeId,
     modules: identityModules,
     serverParts: [stubPart],
+    venueLocale: "en-GB",
     now: () => NOW,
     ...patch,
   };
@@ -155,7 +156,12 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     const files = await unzipped(response);
-    expect(Object.keys(files).sort()).toEqual(["extra.json", "profile.json", "sign-in.json"]);
+    expect(Object.keys(files).sort()).toEqual([
+      "README.txt",
+      "extra.json",
+      "profile.json",
+      "sign-in.json",
+    ]);
     expect(files["profile.json"]).toContain("marta@example.test");
     expect(subjects).toEqual([
       { personId: martaId, at: NOW, timeZone: "Europe/Madrid", locationId },
@@ -305,7 +311,7 @@ describe("sendPersonalData", () => {
   it("runs the caller's authorisation before reading and again after building", async () => {
     const authorize = vi.fn<PersonalDataAuthorize>(async () => {
       order.push("authorize");
-      return { personId: martaId, label: "Marta López" };
+      return { personId: martaId, label: "Marta López", language: "en" };
     });
     const response = await testRoute(authorize).request("/t");
     expect(response.status).toBe(200);
@@ -316,8 +322,8 @@ describe("sendPersonalData", () => {
   it("sends nothing when the second authorisation names a different person", async () => {
     const authorize = vi
       .fn<PersonalDataAuthorize>()
-      .mockResolvedValueOnce({ personId: martaId, label: "Marta López" })
-      .mockResolvedValueOnce({ personId: colleagueId, label: "Colleague Canary" });
+      .mockResolvedValueOnce({ personId: martaId, label: "Marta López", language: "en" })
+      .mockResolvedValueOnce({ personId: colleagueId, label: "Colleague Canary", language: "en" });
     const response = await testRoute(authorize).request("/t");
     expect(response.status).toBe(500);
     expect(response.headers.get("content-disposition")).toBeNull();
