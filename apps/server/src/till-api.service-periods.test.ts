@@ -393,6 +393,22 @@ async function mealVenue(weekdays: readonly number[] = [1]): Promise<Venue> {
 }
 
 const mondayAt = (time: string) => new Date(`2026-10-05T${time}:00+02:00`);
+
+/** The refusal of a fresh dish whose menu sold in `periodName` earlier today, sent unconfirmed. */
+const periodEnded = (v: Venue, menu: MenuName, periodName: string, menuItemId: string) => ({
+  status: 409,
+  body: {
+    error: {
+      code: "menu_period.ended",
+      params: {
+        departmentId: v.restaurant,
+        menus: [{ menuId: v.menus[menu], periodName }],
+        menuItemIds: [menuItemId],
+        needsManager: false,
+      },
+    },
+  },
+});
 /** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
 const ticketClock = (at: Date) =>
   `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
@@ -438,7 +454,9 @@ describe("service periods gate only added dishes and added stored quantities", (
         },
       },
     };
-    expect(await park(v, v.diningZone, v.toast.almuerzo)).toMatchObject(lunchEnded);
+    expect(await park(v, v.diningZone, v.toast.almuerzo)).toMatchObject(
+      periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
+    );
     const otherRoot = await park(v, v.diningZone, v.toast.desayunos);
     expect(otherRoot).toMatchObject({
       status: 400,
@@ -501,10 +519,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     const { tabId, submitUrl, submit } = await savedTableDraft(v);
     at(mondayAt("14:05"));
     const submitted = await sendAsTill(v, "POST", submitUrl, submit(randomUUID()));
-    expect(submitted).toMatchObject({
-      status: 400,
-      body: { error: { code: "menu_period.not_running" } },
-    });
+    expect(submitted).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toEqual([]);
   });
 
@@ -565,18 +580,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       const v = await mealVenue();
       const held = await park(v, v.diningZone, v.toast.almuerzo, v.versions.Almuerzo);
       if (time === "17:00") {
-        expect(held).toMatchObject({
-          status: 400,
-          body: {
-            error: {
-              code: "menu_period.not_running",
-              params: {
-                departmentId: v.restaurant,
-                menuId: v.menus.Almuerzo,
-              },
-            },
-          },
-        });
+        expect(held).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
         expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([]);
         return;
       }
@@ -610,32 +614,38 @@ describe("service periods gate only added dishes and added stored quantities", (
   });
 
   it.each([
-    ["2026-10-05T13:00:00+02:00", "Desayunos", "desayunos", [0, 1, 2, 3, 4, 5, 6]],
-    ["2026-10-04T13:00:00+02:00", "Almuerzo", "almuerzo", [1, 2, 3, 4, 5, 6]],
-    ["2026-10-05T14:00:00+02:00", "Almuerzo", "almuerzo", [1]],
-    ["2026-10-05T17:00:00+02:00", "Almuerzo", "almuerzo", [1]],
-    ["2026-10-05T19:00:00+02:00", "Almuerzo", "almuerzo", [1]],
-  ] as const)("at %s refuses %s outside its own period", async (instant, menu, item, weekdays) => {
-    at(new Date(instant));
-    const v = await mealVenue(weekdays);
-    const held = await park(v, v.diningZone, v.toast[item], v.versions[menu]);
-    expect(held).toMatchObject({
-      status: 400,
-      body: {
-        error: {
-          code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus[menu] },
-        },
-      },
-    });
-    expect(
-      await suite.db
-        .select({ id: workingOrders.id })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, held.id)),
-    ).toEqual([]);
-    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([]);
-  });
+    ["2026-10-05T13:00:00+02:00", "Desayunos", "desayunos", [0, 1, 2, 3, 4, 5, 6], false],
+    ["2026-10-04T13:00:00+02:00", "Almuerzo", "almuerzo", [1, 2, 3, 4, 5, 6], false],
+    ["2026-10-05T14:00:00+02:00", "Almuerzo", "almuerzo", [1], true],
+    ["2026-10-05T17:00:00+02:00", "Almuerzo", "almuerzo", [1], true],
+  ] as const)(
+    "at %s refuses %s outside its own period",
+    async (instant, menu, item, weekdays, endedToday) => {
+      at(new Date(instant));
+      const v = await mealVenue(weekdays);
+      const held = await park(v, v.diningZone, v.toast[item], v.versions[menu]);
+      expect(held).toMatchObject(
+        endedToday
+          ? periodEnded(v, menu, "Lunch", v.toast[item])
+          : {
+              status: 400,
+              body: {
+                error: {
+                  code: "menu_period.not_running",
+                  params: { departmentId: v.restaurant, menuId: v.menus[menu] },
+                },
+              },
+            },
+      );
+      expect(
+        await suite.db
+          .select({ id: workingOrders.id })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, held.id)),
+      ).toEqual([]);
+      expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([]);
+    },
+  );
 
   it("accepts a stored Lunch quantity increase while Lunch runs, keeping its id and price", async () => {
     at(mondayAt("13:50"));
@@ -830,18 +840,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     const water = offers.find((offer) => offer.menuId === v.menus.Bebidas)!;
     const held = await park(v, v.diningZone, water.id);
     if (time === "17:00") {
-      expect(held).toMatchObject({
-        status: 400,
-        body: {
-          error: {
-            code: "menu_period.not_running",
-            params: {
-              departmentId: v.restaurant,
-              menuId: v.menus.Bebidas,
-            },
-          },
-        },
-      });
+      expect(held).toMatchObject(periodEnded(v, "Bebidas", "Lunch", water.id));
       expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([]);
       return;
     }
@@ -1002,18 +1001,19 @@ describe("service periods gate only added dishes and added stored quantities", (
           groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
         },
       );
-      expect(submitted).toEqual({
-        status: 400,
-        body: {
-          error: {
-            code: "menu_period.not_running",
-            params: {
-              departmentId: v.restaurant,
-              menuId: v.menus[meal === "lunch" ? "Almuerzo" : "Desayunos"],
+      expect(submitted).toEqual(
+        meal === "lunch"
+          ? periodEnded(v, "Almuerzo", "Lunch", menuItemId)
+          : {
+              status: 400,
+              body: {
+                error: {
+                  code: "menu_period.not_running",
+                  params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+                },
+              },
             },
-          },
-        },
-      });
+      );
       expect(await sendAsTill(v, "GET", `/api/parties/${partyId}/drafts`)).toEqual(read);
       expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toEqual([]);
     },

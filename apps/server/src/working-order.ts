@@ -553,6 +553,12 @@ async function readBasketOffers(
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 
+/**
+ * Marks a requested line that prices a raised quantity of a stored line: after its period it is
+ * refused `menu_period.not_running`, never late and never also sold. A symbol, so no JSON body can set it.
+ */
+const STORED_RISE = Symbol("storedRise");
+
 // Answers an edit has already settled: symbols, so no JSON body can set them.
 const FROZEN_OPTIONS = Symbol("frozenOptions");
 const FROZEN_EXTRAS = Symbol("frozenExtras");
@@ -583,6 +589,7 @@ export async function priceOrderLines(
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
+    [STORED_RISE]?: true;
     [RECALLED_EXTRAS_SOURCE]?: {
       line: typeof workingOrderLines.$inferSelect;
       unit: NonNullable<ExtraChild["unitContext"]>;
@@ -638,14 +645,41 @@ export async function priceOrderLines(
       requestedLines,
       requestedLines.map((line) => line.menuItemId),
     ));
+  const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
+  // New dishes whose menu is not orderable but ended earlier today, each with its period's name.
+  const ended = new Map<(typeof requestedLines)[number], string>();
+  let alsoSold: ReadonlySet<string> = new Set();
   if (periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!);
     const at = new Date();
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, cfg, context.departmentId, at);
+    const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
+    const items: { productId: string; variantId: string | null }[] = [];
+    for (const line of requestedLines) {
+      const offer = offerById.get(line.menuItemId);
+      const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
+      if (
+        periodName === undefined ||
+        line[ADDED_EXTRAS_ONLY] === true ||
+        line[STORED_RISE] === true ||
+        service.orderableMenuIds.includes(offer!.menuId)
+      )
+        continue;
+      ended.set(line, periodName);
+      items.push({ productId: offer!.productId, variantId: line.variantId ?? null });
+    }
+    if (items.length > 0) {
+      alsoSold = await VENUE_SERVICE.productsOfferedIn(
+        tx,
+        context.zoneId,
+        service.orderableMenuIds,
+        items,
+      );
+    }
   }
-  const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const late: { menuItemId: string; menuId: string; periodName: string }[] = [];
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry, or the
@@ -665,7 +699,12 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
       });
     }
-    if (
+    const periodName = ended.get(line);
+    if (periodName !== undefined) {
+      if (!alsoSold.has(`${offer.productId}:${line.variantId ?? ""}`)) {
+        late.push({ menuItemId: offer.id, menuId: offer.menuId, periodName });
+      }
+    } else if (
       service !== null &&
       line[ADDED_EXTRAS_ONLY] !== true &&
       !service.orderableMenuIds.includes(offer.menuId)
@@ -690,6 +729,17 @@ export async function priceOrderLines(
     }
     return { ...line, offer };
   });
+  if (late.length > 0) {
+    const { departmentId } = service!;
+    throw new AppError("menu_period.ended", {
+      departmentId,
+      menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
+        ([menuId, periodName]) => ({ menuId, periodName }),
+      ),
+      menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
+      needsManager: await VENUE_SERVICE.readLateSendNeedsManager(tx, cfg, departmentId),
+    });
+  }
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
   const savedLanguages = await readSavedContentLanguages(tx);
   const contentConfig = contentLanguagesOr(savedLanguages, cfg.locale);
@@ -5640,6 +5690,7 @@ async function applyLineEdits(
       (intent.makeAt === null && parent.ticket?.stationChosenAt != null);
     const asOffered = (quantity: string): RequestedLine => ({
       [RETAINED_COURSE]: true,
+      [STORED_RISE]: true,
       courseId: parent.courseId,
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
