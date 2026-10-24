@@ -210,6 +210,44 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     }
   });
 
+  it("the sign-in page with Powered by under a venue logo renders accessibly", async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 120;
+    canvas.height = 40;
+    canvas.getContext("2d")!.fillRect(0, 0, 120, 40);
+    localStorage.setItem(
+      VENUE_THEME_STORAGE_KEY,
+      JSON.stringify({ hash: "logo", css: "", logo: { light: canvas.toDataURL(), dark: null } }),
+    );
+    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    try {
+      const api = stubApi({
+        getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      });
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+      await flush(el);
+      const line = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "wt-powered-by",
+      )!;
+      expect(line).not.toBeNull();
+      await line.updateComplete;
+      await vi.waitFor(() =>
+        expect(line.shadowRoot!.querySelector("img")?.naturalWidth).toBeGreaterThan(0),
+      );
+      await expectNoA11yViolations(host);
+    } finally {
+      // Back to Waitron's look with the stub's own hash, so the later cases' answers store nothing.
+      localStorage.setItem(
+        VENUE_THEME_STORAGE_KEY,
+        JSON.stringify({ hash: "waitron", css: "", logo: null }),
+      );
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+    }
+  });
+
   it("the staff self-service screen renders accessibly with a single, well-ordered heading", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({

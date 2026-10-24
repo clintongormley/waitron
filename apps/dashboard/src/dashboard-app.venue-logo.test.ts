@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import {
   applyTokens,
   chooseTheme,
@@ -8,6 +9,7 @@ import {
   THEME_STORAGE_KEY,
   VENUE_THEME_STORAGE_KEY,
   reportVenueLogoFailure,
+  VENUE_LOGO_RETRY_MS,
   type WtVenueLogo,
 } from "@waitron/ui";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
@@ -15,7 +17,7 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
 import type { DashboardApi } from "./api/client.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { nextLogoLoad, png, stubShellApi as stubApi } from "./testing/venue-logo-fixture.js";
 
 const LIGHT = png(120, 40);
@@ -227,4 +229,147 @@ it("a logo reported failed is cleared once the banner loads it", async () => {
   await mount(stubApi(false));
   await loads;
   await vi.waitFor(() => expect(currentVenueLogo()).toEqual({ kind: "logo", logo, failed: false }));
+});
+
+describe("Powered by", () => {
+  const body = (el: DashboardApp) => el.shadowRoot!.querySelector(".login-page > .body")!;
+  const poweredBy = (el: DashboardApp) => body(el).querySelectorAll("wt-powered-by");
+  const card = (el: DashboardApp) =>
+    body(el).querySelector("dashboard-login-screen")!.shadowRoot!.querySelector(".screen")!;
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  async function signInPage(locale: "en-GB" | "es-ES" = "es-ES"): Promise<DashboardApp> {
+    const { el } = await mount(stubApi(false, locale));
+    await expect.poll(() => el.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull();
+    return el;
+  }
+
+  /** One line, straight after the sign-in screen, 16 px under its card and centred on it. */
+  async function expectUnderCard(el: DashboardApp): Promise<void> {
+    const lines = poweredBy(el);
+    expect(lines).toHaveLength(1);
+    const line = lines[0]!;
+    expect(line.previousElementSibling?.localName).toBe("dashboard-login-screen");
+    expect(line.getAttribute("label")).toBe(t("login.powered_by"));
+    await line.updateComplete;
+    await frame();
+    const below = card(el).getBoundingClientRect();
+    const at = line.getBoundingClientRect();
+    expect(at.top - below.bottom).toBeCloseTo(16, 0);
+    expect(Math.abs((at.left + at.right) / 2 - (below.left + below.right) / 2)).toBeLessThanOrEqual(
+      1,
+    );
+  }
+
+  let width = 0;
+  let height = 0;
+  beforeEach(() => {
+    width = window.innerWidth;
+    height = window.innerHeight;
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    await page.viewport(width, height);
+  });
+
+  it("Powered by shows under the sign-in card exactly while a venue logo is in use", async () => {
+    store(withLogo(LIGHT));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const loads = nextLogoLoad();
+    const el = await signInPage();
+    await loads;
+    await expectUnderCard(el);
+  });
+
+  it("Powered by is not shown with no venue logo", async () => {
+    store(FIXTURE_ANSWER);
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const el = await signInPage();
+    expect(currentVenueLogo().kind).toBe("none");
+    expect(poweredBy(el)).toHaveLength(0);
+  });
+
+  it("Powered by is not shown while waiting for the answer", async () => {
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const el = await signInPage();
+    expect(currentVenueLogo().kind).toBe("waiting");
+    expect(poweredBy(el)).toHaveLength(0);
+  });
+
+  it("Powered by is not shown for a logo that fails to load", async () => {
+    store(withLogo("/no-such.png"));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const el = await signInPage();
+    await vi.waitFor(() => expect(venueLogo(el)?.hasAttribute("failed")).toBe(true));
+    await el.updateComplete;
+    expect(poweredBy(el)).toHaveLength(0);
+  });
+
+  it("Powered by goes when the logo fails and comes back when its retry loads", async () => {
+    store(withLogo(LIGHT));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const loads = nextLogoLoad();
+    const el = await signInPage();
+    const { logo, img } = await loads;
+    await expectUnderCard(el);
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    img.dispatchEvent(new Event("error"));
+    await logo.updateComplete;
+    await el.updateComplete;
+    expect(logo.failed).toBe(true);
+    expect(poweredBy(el)).toHaveLength(0);
+
+    vi.advanceTimersByTime(VENUE_LOGO_RETRY_MS);
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(logo.failed).toBe(false));
+    await vi.waitFor(() => expect(poweredBy(el)).toHaveLength(1));
+    await expectUnderCard(el);
+  });
+
+  it("Powered by stays for every step of the form", async () => {
+    store(withLogo(LIGHT));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const loads = nextLogoLoad();
+    const el = await signInPage();
+    await loads;
+    const screen = body(el).querySelector("dashboard-login-screen")!;
+    expect(screen.shadowRoot!.querySelector("h1")?.textContent).toBe(t("login.heading"));
+    await expectUnderCard(el);
+    Object.assign(screen as unknown as Record<string, string>, {
+      email: "owner@x.com",
+      step: "password",
+    });
+    await (screen as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(screen.shadowRoot!.querySelector("h1")?.textContent).toBe(t("login.password_heading"));
+    await expectUnderCard(el);
+  });
+
+  it.each([
+    ["English", "en-GB", "Powered by"],
+    ["Spanish", "es-ES", null],
+  ] as const)("Powered by reads in %s", async (_name, locale, english) => {
+    store(withLogo(LIGHT));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const el = await signInPage(locale);
+    await vi.waitFor(() => expect(poweredBy(el)).toHaveLength(1));
+    const label = poweredBy(el)[0]!.getAttribute("label");
+    expect(label).toBe(t("login.powered_by"));
+    if (english !== null) expect(label).toBe(english);
+    else expect(label).not.toBe("Powered by");
+  });
+
+  it("Powered by sits inside the window, under the card, at phone width", async () => {
+    await page.viewport(390, 844);
+    store(withLogo(LIGHT));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    const loads = nextLogoLoad();
+    const el = await signInPage();
+    await loads;
+    await expectUnderCard(el);
+    const at = poweredBy(el)[0]!.getBoundingClientRect();
+    expect(at.left).toBeGreaterThanOrEqual(0);
+    expect(at.right).toBeLessThanOrEqual(390);
+    expect(at.width).toBeGreaterThan(0);
+  });
 });

@@ -37,6 +37,7 @@ import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
+import "@waitron/ui/src/components/wt-powered-by.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
@@ -652,6 +653,10 @@ export class DashboardApp extends LitElement {
       .venue-logo {
         flex: 0 1 auto;
         min-width: 0;
+      }
+
+      .powered-by {
+        margin-top: var(--wt-space-4);
       }
 
       .venue-row {
@@ -1581,6 +1586,7 @@ export class DashboardApp extends LitElement {
               .noticeCode=${this.sessionNoticeCode}
               @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
             ></dashboard-login-screen>
+            ${this.#poweredBy()}
           </div>
         </div>
       `;
@@ -1722,6 +1728,13 @@ export class DashboardApp extends LitElement {
       .navigationLabel=${t("demo_bar.navigation")}
       .links=${links}
     ></wt-demo-bar>`;
+  }
+
+  #poweredBy(): TemplateResult | typeof nothing {
+    const state = this.#venueLogo.state;
+    return state.kind === "logo" && !state.failed
+      ? html`<wt-powered-by class="powered-by" label=${t("login.powered_by")}></wt-powered-by>`
+      : nothing;
   }
 
   #brandMark(): TemplateResult {
