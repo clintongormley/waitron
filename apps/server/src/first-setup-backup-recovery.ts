@@ -1,11 +1,16 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir, rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { openVenueDatabase, readBreakGlassVerifier, type Database } from "@waitron/db";
+import {
+  openVenueDatabase,
+  readBreakGlassVerifier,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
   firstSetupAnchorFor,
@@ -30,7 +35,8 @@ import {
   type BackupRepairSourceDeps,
 } from "./first-setup-backup-source.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
-import { readArtifactIdentity } from "./restore.js";
+import { readArtifactIdentity, writeValidated } from "./restore.js";
+import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import { readFirstSetupBackupHistory } from "./first-setup-backup-history.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
@@ -171,12 +177,23 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     touch(entry);
     return entry;
   };
-  const evidence = async (entry: Entry, allowMissing: boolean) => {
+  const evidence = async (entry: Entry, allowMissing: boolean, restoreTarget = false) => {
     const stateDir = entry.record!.target.target.stateDir;
+    const retainedPath = join(dirname(dirname(stateDir)), "retained-evidence.json");
+    const retained = await readDurableHostJson(retainedPath, 1024 * 1024);
+    if (
+      createHash("sha256").update(JSON.stringify(entry.evidence)).digest("hex") !==
+      entry.record!.retainedEvidenceDigest
+    )
+      conflict();
+    if (retained === null && allowMissing)
+      await writeDurableHostJson(retainedPath, entry.evidence, 1024 * 1024);
+    else if (!isDeepStrictEqual(retained, entry.evidence)) conflict();
     for (const [name, value] of Object.entries(entry.evidence!)) {
       const path = join(stateDir, "module-evidence", entry.session.binding.module, `${name}.json`);
       const current = await readDurableHostJson(path, 1024 * 1024);
-      if (current === null && allowMissing) await writeDurableHostJson(path, value, 1024 * 1024);
+      if ((current === null && allowMissing) || restoreTarget)
+        await writeDurableHostJson(path, value, 1024 * 1024);
       else if (!isDeepStrictEqual(current, value)) conflict();
     }
   };
@@ -400,6 +417,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       const proposal = structuredClone(supplied);
       return turn(async (hold) => {
         const entry = await admitted(sessionId);
+        if (entry.record !== undefined && entry.record.phase !== "prepared") conflict();
         const service = await preparation(entry);
         const store = await openVenueDatabase(entry.working!);
         try {
@@ -423,6 +441,89 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         } finally {
           await store.close();
         }
+      });
+    },
+    commit(sessionId: string, supplied: unknown, _client: OperationClient): Promise<void> {
+      const input = structuredClone(supplied);
+      void _client;
+      return turn(async (hold) => {
+        const entry = await admitted(sessionId);
+        if (
+          entry.preparation === undefined ||
+          entry.record?.phase !== "prepared" ||
+          entry.record.input === null ||
+          !isDeepStrictEqual(entry.record.input, input)
+        )
+          conflict();
+        if (entry.request.source.kind === "cloud") throw new AppError("setup.not_ready", {});
+        const assertCommitted = options.modules.find(
+          (module) => module.name === entry.session.binding.module,
+        )?.backup?.assertRestoreCommitted;
+        if (assertCommitted === undefined)
+          throw new AppError("module.operation_invalid", { module: entry.session.binding.module });
+        await evidence(entry, false);
+        const target = entry.record.target.target;
+        const allowed = new Set([
+          "venue.lock",
+          "venue.lock-journal",
+          "venue.holder.json",
+          "venue.holder.json.partial",
+          "first-setup-resolutions",
+        ]);
+        if ((await readdir(target.venueDir)).some((name) => !allowed.has(name))) conflict();
+        const allowedState = new Set([
+          "module-preparation-state.json",
+          "module-evidence",
+          "first-setup-resolutions",
+        ]);
+        if ((await readdir(target.stateDir)).some((name) => !allowedState.has(name))) conflict();
+        await refuseIfArchiveSourceLive({
+          validated: entry.selected.copy,
+          stateDir: target.stateDir,
+          oldBoxGone: entry.request.context.oldBoxGone,
+          now: options.sources.bucket.now,
+          openStore: options.sources.bucket.openStore,
+        });
+        await recheck(entry);
+        const started = { ...entry.record, phase: "placement-started" as const };
+        await options.workspace.append(started);
+        entry.record = started;
+        const store = await openVenueDatabase(entry.working!);
+        try {
+          await scopes.run({ hold, db: store.venue }, async () => {
+            await writeValidated(entry.selected.copy, {
+              ...target,
+              stagingDir: dirname(entry.selected.copy.databasePath),
+              modules: options.modules,
+              migrationsRoot: options.sources.migrationsRoot,
+              environment: options.environment,
+              log: options.log,
+              rebuildSource: entry.request.source.kind === "bucket" ? "stream" : "archive",
+              withModuleOperations: entry.preparation!.runner(input, { refresh: true }),
+            });
+          });
+        } finally {
+          await store.close();
+        }
+        const placed = await openVenueDatabase(target.venueDir);
+        try {
+          await withTransaction(placed.venue, (tx) =>
+            assertCommitted(
+              tx,
+              readArtifactIdentity(entry.selected.copy.secretEntries).node,
+              entry.session.binding,
+            ),
+          );
+        } finally {
+          await placed.close();
+        }
+        await recheck(entry);
+        // Core publishes backup secrets after activation; carry-forward must follow that publication.
+        await evidence(entry, false, true);
+        const restored = await options.workspace.append({ ...entry.record, phase: "restored" });
+        entry.record = { ...entry.record, phase: "restored" };
+        await options.workspace.select(restored);
+        await drop();
       });
     },
     close(sessionId: string): Promise<void> {
