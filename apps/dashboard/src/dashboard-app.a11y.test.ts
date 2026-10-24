@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
+import { png } from "./testing/venue-logo-fixture.js";
 
 import type { DashboardApp } from "./dashboard-app.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
@@ -177,13 +178,9 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     ["signed in", true],
     ["signed out", false],
   ] as const)("the banner with a venue logo renders accessibly %s", async (_state, signedIn) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 120;
-    canvas.height = 40;
-    canvas.getContext("2d")!.fillRect(0, 0, 120, 40);
     localStorage.setItem(
       VENUE_THEME_STORAGE_KEY,
-      JSON.stringify({ hash: "logo", css: "", logo: { light: canvas.toDataURL(), dark: null } }),
+      JSON.stringify({ hash: "logo", css: "", logo: { light: png(120, 40), dark: null } }),
     );
     startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
     try {
@@ -211,13 +208,9 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
   });
 
   it("the sign-in page with Powered by under a venue logo renders accessibly", async () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 120;
-    canvas.height = 40;
-    canvas.getContext("2d")!.fillRect(0, 0, 120, 40);
     localStorage.setItem(
       VENUE_THEME_STORAGE_KEY,
-      JSON.stringify({ hash: "logo", css: "", logo: { light: canvas.toDataURL(), dark: null } }),
+      JSON.stringify({ hash: "logo", css: "", logo: { light: png(120, 40), dark: null } }),
     );
     startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
     try {

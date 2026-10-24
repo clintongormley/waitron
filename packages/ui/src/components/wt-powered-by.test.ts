@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { commands } from "vitest/browser";
 import { mountThemed } from "../a11y-helpers.js";
-import { cleanup } from "../test-helpers.js";
+import { cleanup, host, mount } from "../test-helpers.js";
+import { THEME_STORAGE_KEY, chooseTheme, startThemeChoice } from "../theme-choice.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "../waitron-lockup.js";
 import type { WtPoweredBy } from "./wt-powered-by.js";
 import "./wt-powered-by.js";
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateColorScheme: (colorScheme: "light" | "dark" | null) => Promise<void>;
+  }
+}
 
 const label = (el: WtPoweredBy) => el.shadowRoot!.querySelector<HTMLElement>("[part=label]")!;
 const lockup = (el: WtPoweredBy) =>
@@ -20,7 +28,14 @@ async function poweredBy(theme?: "light" | "dark"): Promise<WtPoweredBy> {
   return el;
 }
 
-afterEach(cleanup);
+afterEach(async () => {
+  localStorage.removeItem(THEME_STORAGE_KEY);
+  chooseTheme("device");
+  await commands.emulateColorScheme(null);
+  startThemeChoice(document.documentElement);
+  vi.restoreAllMocks();
+  cleanup();
+});
 
 describe("wt-powered-by", () => {
   it("paints its words from its tokens", async () => {
@@ -52,6 +67,30 @@ describe("wt-powered-by", () => {
     await vi.waitFor(() => expect(image.complete && image.naturalWidth > 0).toBe(true));
     expect(image.getBoundingClientRect().width).toBe(64);
     expect(image.getBoundingClientRect().height).toBeGreaterThan(0);
+  });
+
+  it("switches its lockup with the setting and the device, asking nothing", async () => {
+    const fetchSpy = vi.spyOn(window, "fetch");
+    await commands.emulateColorScheme("light");
+    const el = (await mount(`<wt-powered-by label="Powered by"></wt-powered-by>`)) as WtPoweredBy;
+    startThemeChoice(host);
+    await el.updateComplete;
+    expect(lockup(el).src).toBe(WAITRON_LOCKUP_URL);
+
+    await commands.emulateColorScheme("dark");
+    await vi.waitFor(() => expect(lockup(el).src).toBe(WAITRON_LOCKUP_DARK_URL));
+    await commands.emulateColorScheme("light");
+    await vi.waitFor(() => expect(lockup(el).src).toBe(WAITRON_LOCKUP_URL));
+
+    chooseTheme("dark");
+    await el.updateComplete;
+    expect(lockup(el).src).toBe(WAITRON_LOCKUP_DARK_URL);
+    chooseTheme("light");
+    await el.updateComplete;
+    expect(lockup(el).src).toBe(WAITRON_LOCKUP_URL);
+
+    const asked = fetchSpy.mock.calls.map(([input]) => String(input));
+    expect(asked.filter((url) => url.includes("/api/theme"))).toEqual([]);
   });
 
   it("is named 'Powered by Waitron'", async () => {
