@@ -2285,42 +2285,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     before removing the route (slice 5, decision 15).
 
 - **Loose ends left by A466 (A429 slice 2) / A502 part 3.**
-  - `wt-input` has no visible description: the Add tables names preview is a polite live region
-    after Prefix, so it is not heard when the field takes focus.
-  - On computers whose scrollbars take space, a size reading just after a floor plan drop may
-    shift the plan by the extra room.
-  - Resizing a floor plan table needs a pointer or a keyboard, so a screen-reader user on a touch
-    screen cannot resize a table (accepted by the A502 coordinator, not yet by the owner).
-  - Small floor plan canvas details: `reveal` does not count the side dots or the corners.
-
+  `wt-input` has no visible description: the Add tables names preview is a polite live region
+  after Prefix, so it is not heard when the field takes focus.
   [Detail](backlog/till.md#loose-ends-left-by-a466-a429-slice-2--a502-part-3)
 
 - **Loose ends left by A672.**
-  - No key moves a floor plan table's top or left side or a corner. Shift with the arrow keys
-    moves only its right and bottom sides.
-  - Turning a floor plan table by key walks it away from the plan's top-left edge. Each press
-    steps a table that would poke past the edge back in from where the last press left it, and
-    turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to
-    (2, 2). Part of the owner question in "A turned floor plan table narrower than its unturned box
-    stops short of the plan's left or top edge".
-  - Two floor plan keyboard tests (zoom-out, half-zoom Shift+ArrowLeft) still pass with the
-    far-edge protection switched off.
-  - Possibly, not established: zooming out during a keyboard change grows the blank margin above
-    and left of the plan.
-
+  No key moves a floor plan table's top or left side or a corner. Shift with the arrow keys
+  moves only its right and bottom sides.
   [Detail](backlog/till.md#loose-ends-left-by-a672)
 
 - **Loose ends left by A718.**
-  - `wt-floor-plan-preview` has no product user. It remains in `packages/ui/demo/main.ts`, with
-    its token and its row in `docs/developers/design-system.md`. Retire it, or record why it is
-    kept.
-  - Check "closing the editor returns focus to its originating row menu" in
-    `docs/developers/design-system.md` (Departments and zones): a review saw focus return to the
-    Receipt link, which A756 has since removed; the department dialog still opens from the row
-    and from "Set up the tax-agency description".
-  - The pinned Actions column's left divider showed a gap between two zone rows in a 1280 px
-    light-theme screenshot of Departments and zones. Not known whether it predates A718.
-
+  `wt-floor-plan-preview` has no product user. Retire it, or record why it is kept.
   [Detail](backlog/till.md#loose-ends-left-by-a718)
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
@@ -2593,30 +2568,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   visible-table refresh follow the
   [per-bill ownership decision](backlog/till.md#one-editor-per-bill-owner-2026-10-17-a773).
   [Detail](backlog/till.md#task-8-806-the-till-works-from-the-servers-drafts)
-  - Seating a table whose answer arrives while a newer table is still opening shows the seated
-    table briefly before the newer one replaces it.
-  - A refused seat leaves the till pointing at the refused table.
-  - If the screen widens while Back on the Review view has focus, focus goes to the page.
-  - A dish no longer on the menu shows an empty name on its tick button in the person's own draft,
-    and in the spoken names of its course picker and Split quantity button (read in the code, not
-    run).
-  - The last-added bar is empty for a draft first read back from the server until the next tap.
-  - While a weight is being entered, the weight entry covers the bottom of the menu and the bar.
-  - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and calls
-    them "items", so the two can differ for one draft.
-  - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on Review; its
-    unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
-  - The counter's basket also tracks its last-added line, which it does not use.
-  - The server's "cannot be sold" mark is dropped once the till's newer menu read passes the line.
-    That the two checks agree was read, not run.
-  - Every line priced under an older menu version is asked about whenever the server's draft
-    replaces the till's lines (a reload, a re-read, a take-over).
-  - A line naming a version the till does not hold costs one more read of the table's menu.
-  - The "The menu has changed" dialog shows a focus ring round the whole dialog box.
-  - Tests: the accessibility test "has no violations with the round grid, the per-line course
-    picker and the open tab drawer" no longer scans the menu grid (a phone test does), but kept
-    its name.
-  - Rulings made on the branch for the owner to confirm.
 
 - A line outside any group that needs no kitchen, held, and first released after its bill was paid
   could not be marked served (`group.line_held`), because `stampSent` wrote `sent_at` only on an
@@ -2631,33 +2582,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     whether a late refusal should be said.
 
 - **Loose ends left by service Task 11 (#916, cancellations, comps and discounts; B11a–B11g).**
+  The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
+  rather than the reason, is why.
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
-  - **The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
-    rather than the reason, is why.** **Next action:** decide whether to record it.
-  - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
-    it is paid) cannot be adjusted.** **Next action:** decide whether a placed order can be
-    adjusted before it is collected.
-  - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
-    dropped quantity without a reason** (`applyLineEdits`, `apps/server/src/working-order.ts`).
-    **Next action:** decide whether the edit should refuse dropping a sent line.
-  - **Two basket changes the app makes by itself do not check the edit lock:** the menu poll's
-    price-version update of the basket's lines (`adoptLines`) and the order's label. **Next
-    action:** decide whether the two should wait for the lock.
-  - **Nothing on screen shows the lock.** **Next action:** dim the basket, or show a one-line
-    note, while `editsLocked` is set.
-  - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
-    discount, or two bill discounts under one reason. **Next action:** decide whether the per-line
-    cap should see bill discounts.
-  - For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
-    (B11g) but the till's cancel dialog still says only that it comes off the bill. **Next
-    action:** decide whether the till should be told that.
-  - An extra counts its dish's percentage under a reason's per-line cap, and a dish the largest of
-    its extras', which errs toward refusing. **Next action:** none unless staff find it gets in the
-    way.
-  - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
-    transferring items and moving part of a dish to another group still refuse a partial move of a
-    dish with extras (`tab.transfer_modifier_line`). **Next action:** decide whether those partial
-    moves should split extras too.
 
 - The till's "Amount off (€)" writes the euro sign into the label rather than taking the venue's
   currency. How a comp or discount appears on the invoice is still asesor Q29. Left open by service
@@ -2669,34 +2596,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   too.
 
 - **Loose ends left by service Task 16 (#981, counter handover).**
+  A collect straight after Place order does not re-read the kitchen queue.
   [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
-  - **A collect straight after Place order does not re-read the kitchen queue.**
-  - At login the counter's three lists are read one after another, so a read that hangs delays
-    the rest (left open by B31, #1018). Load them side by side.
-  - C130 (#1056): a till profile saved before C130, and one newly created on the Device profiles
-    screen, has the three switches off until a manager turns them on; a till with no device reads
-    no capabilities, so it shows none of the three buttons.
-  - C130 (#1056): a change to a device profile reaches a till only when the till starts again — a
-    page load, a move to another server or a re-enrolment, or in dev mode the lock screen's
-    switch-device button — so signing out and in again does not pick it up.
-  - C130 (#1056): on the handheld, the station screen's back button says "Back to counter" though
-    a handheld on the built-in phone layout lands on the floor plan.
-  - C133 (#1045): a staff list longer than the screen still makes the page scroll to reach the
-    language button.
-  - C133 (#1045): the table-order screen's bottom bar still keeps a tap target and two gaps clear
-    at its end (`padding-inline-end` on `.bottom-bar`,
-    `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till no
-    longer has. Removing the space changes the screen's layout, so it is its own change.
-  - C133 (#1045): the till's `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap
-    target and two gaps above the bottom edge; decide whether it should drop to the bottom edge.
 
 - **Loose ends left by service Task 17 (#991, a table that leaves without paying).**
+  Collecting PART of the debt later is not built. Collecting it in full uses
+  `POST /api/working-orders/:id/collect`.
   [Detail](backlog/till.md#task-17-991-a-table-that-leaves-without-paying)
-  - **Collecting PART of the debt later is not built.** Collecting it in full uses
-    `POST /api/working-orders/:id/collect`.
-  - **The table screen still reads a credited presented bill at its full amount.**
-  - **A bill presented without an invoice keeps the label it was placed with when the departure
-    invoices it.** Fixing it needs that trigger to allow the label to change.
 
 - **Gaps against the service plan's acceptance checks (spec §12)**, from a sweep on 2026-10-01: **No
   permanent test lays the service screens out at phone and till widths in both themes (§12 item
