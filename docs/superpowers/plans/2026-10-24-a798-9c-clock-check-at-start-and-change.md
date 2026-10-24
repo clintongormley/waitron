@@ -31,11 +31,14 @@ where nothing on the venue's network could lift it** (design §4.9 h).
 6. **When AEAT disagrees and the box cannot set its clock** (synchronised, or no host service), an
    administrator's confirmation still closes a 9c check; AEAT's disagreement is kept in the proof
    and raises `clock.disagrees` (round 1, I4.1).
-7. **A developer's laptop** (`WAITRON_ENV=dev`, round 1, I7): no start or change checks at all (the
-   laptop's clock is its operating system's); `/proc/uptime` is missing on macOS, where
-   `elapsedClock` falls back to `performance.now()`, which stops during sleep, so the change guard is
-   off wherever that fallback is in use — on every system, not only in development. A preproduction
-   demo box (`wa-wt demo` on Linux, a Prepare box) checks like a live one.
+7. **Development** (`WAITRON_ENV=dev`, round 1, I7): no start or change checks at all. That covers
+   a developer's laptop and the `wa-wt demo` and `wa-wt onboarding` stacks, which run `pnpm dev`
+   with `WAITRON_ENV` `"dev"` in the checkout's `apps/server/.env` (`apps/server/scripts/dev-setup.ts:145`,
+   `dev-onboard.ts:79`; `isDevMode` is `env.WAITRON_ENV === "dev"`, `config.ts:356-357`; round 3,
+   M3). `/proc/uptime` is missing on macOS, where `elapsedClock` falls back to `performance.now()`,
+   which stops during sleep, so the change guard is off wherever that fallback is in use — on every
+   system, not only in development. A box written `preproduction` — a Prepare box, or a demo box
+   installed with `waitron.sh` — checks like a live one.
 8. **An AEAT disagreement during normal trading opens a check** (reason `disagrees`, declared in
    slice 9's migration, round 1 M6), stopping selling until the box sets its clock to AEAT's time
    (9b) — or, where it cannot, an alert only (FYI 5, 6). The full plan's review may overturn it.
@@ -62,12 +65,15 @@ where nothing on the venue's network could lift it** (design §4.9 h).
 
 1. **What opens a check** (seat `openClockCheck`, slice 9): `start` in `startServer`'s trading mode,
    on the primary, before `serve()`; `change` from the clock guard; `disagrees` (FYI 8); a promotion
-   that makes this node the seller (find whether the server restarts after one).
+   that makes this node the seller opens a `start` check (no new reason value: slice 9's CHECK
+   allows `start`, `change`, `behind_chain` and `disagrees`; round 3, M6) — the full plan finds
+   whether the server restarts after one, which would make it the ordinary start.
 2. **One refusal code, with a reason** (round 1, C2; the runner's ruling): while a `start`, `change`
    or `disagrees` check is open, `refuseWhileClockBehind` throws **`clock.behind_chain`** with
    `reason: "unconfirmed"` and `since`, `checkReason`, `stepMs` — not a new code — so every place that
    matches the code by name keeps working. Each is named and tested in the full plan, from
    `/usr/bin/grep -rn '"clock.behind_chain"' apps packages` (round 1, experiment 4):
+   (seven places in two till files, and four in the dashboard's rows):
    `apps/server/src/bill-payments.ts:1262-1266` (`notRecordedReason`: a refusal after a card was
    charged becomes `sale.charged_not_recorded`), the status maps `apps/server/src/payments-api.ts:179`
    and `apps/server/src/till-api.ts:455`, `apps/till/src/till-app.ts:574`, `:847`, `:922`, `:1547`,
@@ -106,6 +112,14 @@ where nothing on the venue's network could lift it** (design §4.9 h).
    `record-one-sale.ts`, `daily-close*-demo.ts`, round 1 I7) are callers of the record append: on a
    box with an open check they are refused like a till. On a laptop (FYI 7) no check opens. Each is
    named in the full plan with a test of one of them against an open check.
+
+## Open for the full plan
+
+- **A time service synchronised to a wrong local time server, with no internet** (round 3, M7;
+  design §4.9 h case 5): devices and the administrator disagree, and 9b never sets the clock while
+  it reports itself synchronised. The full plan decides it — for example, a check is an alert only
+  while the time service reports synchronised and AEAT is unreachable — before any check can stop
+  selling there.
 
 ## Review notes for the full plan
 

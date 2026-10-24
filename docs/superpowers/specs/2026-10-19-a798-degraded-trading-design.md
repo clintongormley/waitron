@@ -1072,8 +1072,11 @@ runner's rulings, `RULINGS-1.md`.)
 "No, we must first correct the clock." Everything slice 8 stops is refused while a check started by
 a.1, a.2 or a.4 waits — **with slice 8's own code, `clock.behind_chain`, carrying a new `reason`**,
 not a new code: the code is matched by name after a card is charged (`apps/server/src/bill-payments.ts`'s
-"charged but not recorded" path), in two routes' status maps and in five places in the till, and a
-second code would miss them while money is mid-payment (round 1, C2). The red strip on every till
+"charged but not recorded" path), in two routes' status maps, in seven places in two till files
+(`apps/till/src/till-app.ts` five times, `widgets/pay-refusal.ts` twice) plus the till's words
+(`i18n/codes.ts`, `i18n/staff-notices.ts`), and four times in the dashboard's Box status rows
+(`apps/dashboard/src/screens/box-status-rows.ts`); a second code would miss them while money is
+mid-payment (round 1, C2; counted by round 3). The red strip on every till
 and handheld, an error in the bell, and an email to the managers when a check has waited five
 minutes. Orders, the kitchen and clock-ins carry on, as in §4.8 e. The check's state is kept in the
 database (`clock_checks`, part i), so the check inside the record append sees it without any change
@@ -1151,12 +1154,20 @@ passing the record).
 
 The owner (04:00): "the records later than the time the corrected clock showed when the stop
 began". So the box writes down when a stop began — a `clock_checks` row with the box's reading and
-the boot-time clock at that moment — and, when the check closes (a confirmation, or the stop ending
-by itself because real time caught up or the clock was put right), works out the corrected time at
-the start: the time at closing, which is right, less the boot-time clock's elapsed time since. Every
-record written before the closing and stamped more than a minute after that time is listed. If the
-machine restarted during the stop, the elapsed time is unknown and the list falls back to records
-stamped more than a minute after the closing time; the alert says the list may be short.
+the boot-time clock at that moment, opened when the stop with any lift applied holds (never under a
+lift that covers, or every lift would be followed by a second list naming the sales made under it,
+round 3 C1) — and, when the check closes, works out the corrected time at the start: the time at
+closing less the boot-time clock's elapsed time since. **That is right only when the clock at
+closing is right.** A confirmation's closing is (the clock was just confirmed). A stop that ends by
+itself is not necessarily: real time catching up and a clock put right end it, but so does a clock
+set back by mistake reaching the last sale (round 3, I1). So a stop that ends by itself lists only
+when, at that moment, AEAT or two devices agree with the box and nothing disagreed during the stop;
+otherwise the box records that it cannot tell which sales were dated wrongly, and says so to the
+owner. Every record written before the closing and stamped more than a minute after the corrected
+start is listed; the closing stores its own readings and the corrected start, so the list read later
+is the list the alert counted. If the machine restarted during the stop, the elapsed time is unknown
+and the list falls back to records stamped more than a minute after the closing time; the alert says
+the list may be short.
 
 After a change of the clock (slice 9c), with e₀ the clock's error before the change, Δ the change
 and s the step the confirmation applies (e₀ = −(Δ + s)): records written since the last
@@ -1195,6 +1206,10 @@ cases where an administrator alone cannot, and what the box does in each:
    today a venue has one node and there is no cloud primary (CLAUDE.md §5); when one exists it needs
    its own rule, and the backlog says so.
 4. **A developer's laptop**: covered in part c and slice 9c's plan.
+5. **A time service synchronised to a wrong local time server, with no internet**: the devices and
+   the administrator disagree with the box, and the box never sets its clock while it reports itself
+   synchronised (9b). Named by round 3; slice 9c's full plan decides it before any check can stop
+   selling there.
 Slice 8's stop keeps its own ways out (the clock fixed, or real time passing the record). The cost
 the owner accepted: a venue with no internet, fewer than two tills switched on and no administrator
 present cannot take payment after a start until one arrives.

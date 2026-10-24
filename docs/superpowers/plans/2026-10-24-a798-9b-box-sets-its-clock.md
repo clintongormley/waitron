@@ -31,12 +31,24 @@ a stop it already has (slice 8's clock behind the chain, slice 3's clock before 
    the person for an administrator, the reading before and after, and the step (round 1, I3).
 4. **A device's or administrator's time is self-reported** (slice 9's FYI 12): from this slice it
    can SET the clock. A scripted request from two enrolled devices at two addresses, or from a
-   signed-in administrator off the box, can set any time between 2024-10-28 and 2100. What limits
-   it: enrolment and sign-in, two addresses, never while synchronised, the alert and email on every
-   change, the append-only record with its proof, and the wrongly dated list. Considered and not
-   adopted: refusing a devices- or administrator-sourced set that moves the clock back past the
-   latest record without AEAT (round 1, I3 d) — with no internet it would leave slice 9c's start
-   check with no way out (§4.9 h).
+   signed-in administrator off the box, can set any time between 2024-10-28 and 2100. "Only inside
+   a stop the box already has" stops being a limit once slice 9c lands: unplugging the box's
+   internet and restarting it opens a start check at will, with the time service unsynchronised, so
+   two devices can then set the clock with no person involved (round 3, M1). What limits it:
+   enrolment and sign-in, two addresses, never while synchronised, the alert and email on every
+   change, the append-only record with its proof, and the wrongly dated list. The asesor question
+   below names this window.
+
+## Owner question, to ask when 9b is planned (round 3, M1; the runner's ruling)
+
+Round 1's I3 (d) would have refused any set, from devices or an administrator, that moves the clock
+back past the latest sale without AEAT; that leaves a clock that is AHEAD no way back offline, so it
+was not adopted. A narrower version keeps a way out and closes the backdating path that needs no
+person: **devices alone may not set the clock back past the last sale; an administrator may.** It
+runs against the owner's 04:24 answer ("two tills … no admin needed"), so it is the owner's to
+decide. Worked example for the question: the box's clock reads 24 Oct 21:00 after someone set it a
+day ahead by mistake; the last sale reads 24 Oct 20:55; two tills say 23 Oct 21:00. Under the
+narrower rule the tills do not set it back; an administrator confirming their phone's time does.
 5. **`clock.sync_off` is a warning in the bell only, no email.** A production box whose host service
    does not answer raises it too (`unreachable`); elsewhere (a laptop) it stays silent, as today.
 
@@ -143,6 +155,13 @@ If only M7 fails, make the bind optional for development, say so, and go on.
 8. **A clock before 28-10-2024** may be set from devices or an administrator; AEAT is not reachable
    then (its certificate cannot be checked; the production QR host's certificate starts 2025-11-17,
    claim check T27). The clock watch runs during that stop too.
+
+## The measurement workflow does not land (round 3, M11)
+
+The `pull_request` workflow that runs the measurement sets the runner's clock, which has no place
+in `main`'s CI. Its last commit on the 9b branch removes it, keeping `scripts/host-clock-measure.sh`
+and copying the job's log into the plan under "Measured for 9b"; the pull request's description
+says so.
 
 ## Review notes for the full plan
 
