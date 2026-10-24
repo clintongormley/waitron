@@ -2275,6 +2275,125 @@ describe("till-station-queue — a merged queue's station labels", () => {
     expect(bumpLabel("ti-4")).toBe("Advance #6");
   });
 
+  describe("a whole-ticket order is marked so a cook sees it before tapping", () => {
+    const queuedAtBar = {
+      ...groupB,
+      items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+    };
+    const readyAtKitchen = { ...groupB.items[0]!, id: "ti-5", state: "ready" as const };
+    const mixed = [
+      {
+        ...groupA,
+        stationId: "st-1",
+        bumpMode: "ticket" as const,
+        items: [...groupA.items, readyAtKitchen],
+      },
+      { ...queuedAtBar, stationId: "st-2", bumpMode: "line" as const },
+    ];
+    // A sighted cook can read it: a real box, not the 1px clipped box `.visually-hidden` draws.
+    const readable = (node: Element) => {
+      const box = node.getBoundingClientRect();
+      return (
+        box.width > 1 &&
+        box.height > 1 &&
+        getComputedStyle(node).clip !== "rect(0px, 0px, 0px, 0px)"
+      );
+    };
+    const mark = "[data-whole-ticket]";
+    const tap = (el: TillStationQueue) => {
+      const item = vi.fn();
+      const ticket = vi.fn();
+      el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
+      el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+      el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-1"]')!.click();
+      expect(ticket).toHaveBeenCalledExactlyOnceWith({
+        orderId: "wo-1",
+        stationId: "st-1",
+        to: "preparing",
+      });
+      expect(item).not.toHaveBeenCalled();
+      el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-4"]')!.click();
+      expect(item).toHaveBeenCalledExactlyOnceWith({
+        itemId: "ti-4",
+        stationId: "st-2",
+        to: "preparing",
+      });
+      expect(ticket).toHaveBeenCalledOnce();
+    };
+
+    it("rail: the ticket-mode card shows the mark once and the line-mode card none", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: mixed,
+        stationNames,
+        view: "rail",
+      });
+      const kitchen = el.shadowRoot!.querySelector('article[data-order="5"]')!;
+      const bar = el.shadowRoot!.querySelector('article[data-order="6"]')!;
+      const marks = kitchen.querySelectorAll(mark);
+      expect(marks).toHaveLength(1);
+      expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
+      expect(readable(marks[0]!)).toBe(true);
+      // The control: the hidden label the mark stands beside is still there, and is not readable.
+      const hidden = kitchen.querySelector('button[data-item="ti-1"] .visually-hidden')!;
+      expect(hidden.textContent).toBe("Advance ticket #5");
+      expect(readable(hidden)).toBe(false);
+      expect(bar.querySelector(mark)).toBeNull();
+      expect(bar.querySelector('button[data-item="ti-4"] .visually-hidden')!.textContent).toBe(
+        "Advance #6",
+      );
+      tap(el);
+    });
+
+    it("rail: a ticket-mode card with no dish left to bump shows no mark", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [{ ...groupB, stationId: "st-1", bumpMode: "ticket" as const }],
+        stationNames,
+        view: "rail",
+      });
+      expect(el.shadowRoot!.querySelector('article[data-order="6"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector(mark)).toBeNull();
+    });
+
+    it("kanban: each bumpable cell of the ticket-mode order shows the mark, no other cell", async () => {
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: mixed,
+        stationNames,
+        view: "kanban",
+      });
+      const cell = (itemId: string) =>
+        el.shadowRoot!.querySelector(`[data-item="${itemId}"]`)!.closest(".cell")!;
+      for (const itemId of ["ti-1", "ti-2"]) {
+        const marks = cell(itemId).querySelectorAll(mark);
+        expect(marks).toHaveLength(1);
+        expect(marks[0]!.textContent!.trim()).toBe("Whole ticket");
+        expect(readable(marks[0]!)).toBe(true);
+      }
+      expect(readable(cell("ti-1").querySelector(".visually-hidden")!)).toBe(false);
+      // A ready dish has no bump, so nothing to warn about.
+      expect(cell("ti-5").querySelector(mark)).toBeNull();
+      expect(cell("ti-4").querySelector(mark)).toBeNull();
+      expect(el.shadowRoot!.querySelectorAll(mark)).toHaveLength(2);
+      tap(el);
+    });
+
+    it.each(["rail", "kanban"] as const)("%s: the mark reads in Spanish", async (view) => {
+      const previousLocale = currentLocale();
+      setLocale("es-ES");
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: mixed,
+          stationNames,
+          view,
+        });
+        const marks = [...el.shadowRoot!.querySelectorAll(mark)];
+        expect(marks.length).toBeGreaterThan(0);
+        for (const node of marks) expect(node.textContent!.trim()).toBe("Toda la comanda");
+      } finally {
+        setLocale(previousLocale);
+      }
+    });
+  });
+
   it("each notice names its station", async () => {
     const base: KitchenNotice = {
       id: "kn-1",

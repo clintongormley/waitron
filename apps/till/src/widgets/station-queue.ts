@@ -500,6 +500,21 @@ export class TillStationQueue extends LitElement {
         margin: 0 0 var(--wt-space-2);
       }
 
+      .whole-ticket {
+        display: inline-block;
+        align-self: flex-start;
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .cell .whole-ticket {
+        margin: 0 0 var(--wt-space-1) var(--wt-space-2);
+      }
+
       .collect {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
@@ -866,6 +881,7 @@ export class TillStationQueue extends LitElement {
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
+          ${group.items.some((item) => this.#bumpable(item)) ? this.#wholeTicket(group) : nothing}
           ${this.#kitchenNote(group)}
           ${
             group.printProblem
@@ -1000,8 +1016,18 @@ export class TillStationQueue extends LitElement {
   #kanbanCell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const band = this.#band(group);
     return html`<div class="cell ${this.#accentClasses(band)}">
-      ${this.#kitchenNote(group)}${this.#cell(group, item)}
+      ${this.#kitchenNote(group)}${this.#bumpable(item) ? this.#wholeTicket(group) : nothing}${this.#cell(group, item)}
     </div>`;
+  }
+
+  /** Marks only the exception: a tap on any dish of a whole-ticket order moves every dish of it. */
+  #wholeTicket(group: StationQueueGroup): TemplateResult | typeof nothing {
+    if (group.bumpMode !== "ticket") return nothing;
+    return html`<span class="whole-ticket" data-whole-ticket>${t("station.whole_ticket")}</span>`;
+  }
+
+  #bumpable(item: StationQueueItem): boolean {
+    return item.firedAt !== null && NEXT[item.state] !== undefined;
   }
 
   #line(group: StationQueueGroup, item: StationQueueItem): TemplateResult {

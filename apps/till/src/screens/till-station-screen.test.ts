@@ -1936,6 +1936,16 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       });
       await merge(el);
       const queue = el.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!;
+      const holder = (itemId: string) =>
+        queue.shadowRoot!.querySelector(`[data-item="${itemId}"]`)!.closest(".cell, .ticket")!;
+      const marks = [...queue.shadowRoot!.querySelectorAll<HTMLElement>("[data-whole-ticket]")];
+      expect(marks.length).toBeGreaterThan(0);
+      for (const mark of marks) {
+        expect([holder("ti-1"), holder("ti-1b")]).toContain(mark.closest(".cell, .ticket"));
+        expect(mark.getBoundingClientRect().width).toBeGreaterThan(1);
+      }
+      expect(holder("ti-1").querySelector("[data-whole-ticket]")).not.toBeNull();
+      expect(holder("ti-2").querySelector("[data-whole-ticket]")).toBeNull();
       const ticket = vi.fn();
       const item = vi.fn();
       queue.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
