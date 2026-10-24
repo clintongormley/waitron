@@ -1568,11 +1568,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1060. Ask whether A773's picture 10 replaces the station's three late-flag fields** with its
   one "Late after · 5 · 10 · 15 min" dropdown; A756 PR 5 kept A725's three (owner, 2026-10-15).
 
-- **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its
-  fields** (they end at about x 951, the fields at about 905, measured in Chromium by A756 PRs 5 and
-  8's looks). The row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (#1837); the
-  note has no width rule of its own, and why the fields stop narrower was not traced. At 390 px
-  every field is full width. Left open by A756 PR 5.
+- **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its fields**
+  [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-late-flags-row-and-held-work-note-are-wider-than-its-fields)
 
 - **A1062. Ask whether picture 10's Held courses dropdown, "Print when sent", replaces the station
   editor's switch "Print held groups in advance"** (left open by A756 PR 6).
@@ -1602,11 +1599,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   editor, which needs `venue_service.manage`. Decide whether a supervisor gets a read-only view
   ([decision note](backlog/dashboard.md)). Left open by A756 PR 8.
 
-- **A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a
-  "Not allowed" station.** Within one dish `ticket.already_started` is checked first, but across a
-  save the answer can be `ticket.already_fired` (found by #2044's second Codex review, not called a
-  bug). Decide whether "started first" should hold across the whole save
-  ([rule](backlog/kitchen.md#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
+- **A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.**
+  [Detail](backlog/kitchen.md#a1080-owner-question-which-refusal-wins-when-one-save-holds-a-started-dish-and-a-dish-at-a-not-allowed-station)
 
 - **A1081. Owner FYI: the till's words for `ticket.already_fired`.** Since #2044 they no longer
   blame the station, because the server sends that code in other cases too: "This item has already

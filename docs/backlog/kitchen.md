@@ -265,6 +265,22 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
   taken off) — still print the bare order number (`formatCorrectionSlip`,
   `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
+## A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its fields
+
+- **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its
+  fields** (they end at about x 951, the fields at about 905, measured in Chromium by A756 PRs 5 and
+  8's looks). The row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (#1837); the
+  note has no width rule of its own, and why the fields stop narrower was not traced. At 390 px
+  every field is full width. Left open by A756 PR 5.
+
+## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
+
+- **A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a
+  "Not allowed" station.** Within one dish `ticket.already_started` is checked first, but across a
+  save the answer can be `ticket.already_fired` (found by #2044's second Codex review, not called a
+  bug). Decide whether "started first" should hold across the whole save
+  ([rule](#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
+
 ## Decisions and deliberate limits
 
 ### A switched-off course uses Fire now (owner, 2026-10-17; C80)
