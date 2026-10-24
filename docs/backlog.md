@@ -1756,6 +1756,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   nothing on a handheld's Floor whether it is tapped or opened first. Since that slice a handheld
   can open there. Fix: say the zone has no tables.
 
+- **A1057. A handheld whose profile allows no zones shows a blank Floor.** Seen, 2026-10-24 (A797
+  slice 4's finish review, a browser probe on the branch): a till in that state shows the
+  empty-zones page with Settings and Retry, but a handheld's home is always the Floor
+  (`homeScreenFor`, `apps/till/src/till-app.ts`), so it draws an empty Floor with no message. On
+  `main` before that slice a handheld's home was the Floor too, so I believe it predates it (read,
+  not run). Fix: give a handheld the same explanation and Retry.
+
 - **A934. The till's Spanish for parking an order before hiding a zone says «Retén».**
   `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
   reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
