@@ -1,7 +1,11 @@
 import { afterEach, expect, it } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
-import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
+import {
+  FIXTURE_LIGHT_BG,
+  TEXT_130_SHEET,
+  WAITRON_LIGHT_BG,
+} from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { renderNodeRecoveryPack } from "./node-recovery-print.js";
@@ -87,7 +91,9 @@ it("the sheet carries Waitron's type and the page's colours under a theme at 130
   document.body.append(source);
   applyTokens(source);
   source.setAttribute("data-theme", "light");
+  source.style.setProperty("--wt-color-bg", FIXTURE_LIGHT_BG);
   try {
+    expect(FIXTURE_LIGHT_BG).not.toBe(WAITRON_LIGHT_BG);
     const sourceTokens = getComputedStyle(source);
     expect(sourceTokens.getPropertyValue("--wt-font-size-md")).toBe("18px");
     const page = new DOMParser().parseFromString(renderNodeRecoveryPack(pack, source), "text/html");
@@ -100,9 +106,7 @@ it("the sheet carries Waitron's type and the page's colours under a theme at 130
     expect(root.getPropertyValue("--wt-font-family-mono")).toBe(
       WAITRON_DEFAULTS.structure["--wt-font-family-mono"],
     );
-    expect(root.getPropertyValue("--wt-color-bg")).toBe(
-      sourceTokens.getPropertyValue("--wt-color-bg"),
-    );
+    expect(root.getPropertyValue("--wt-color-bg")).toBe(FIXTURE_LIGHT_BG);
   } finally {
     source.remove();
     document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
