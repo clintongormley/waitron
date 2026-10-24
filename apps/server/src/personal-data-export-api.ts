@@ -11,8 +11,9 @@ import {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
-import { archiveFileName, knownZone, zipArchive } from "./download-archive.js";
+import { archiveFileName, zipArchive } from "./download-archive.js";
 import type { Logger } from "./logger.js";
+import { knownZone } from "./venue-time-zone.js";
 
 export interface PersonalDataExportDeps {
   db: Database;

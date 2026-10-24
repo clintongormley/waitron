@@ -31,17 +31,10 @@ function safeName(label: string): string {
   return safe === "" ? "person" : safe;
 }
 
-export function knownZone(timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-GB", { timeZone }).resolvedOptions().timeZone;
-  } catch {
-    return "UTC";
-  }
-}
-
-/** Plain ASCII, so a `Content-Disposition` header needs no `filename*=` form. */
+/** Plain ASCII, so a `Content-Disposition` header needs no `filename*=` form. `timeZone` must be
+ * one the runtime knows (`knownZone`). */
 export function archiveFileName(label: string, at: Date, timeZone: string): string {
-  return `${safeName(label)}-${civilDateOf(at, knownZone(timeZone))}.zip`;
+  return `${safeName(label)}-${civilDateOf(at, timeZone)}.zip`;
 }
 
 /** fflate throws for a modification time outside 1980–2099 in local time, as a box whose clock

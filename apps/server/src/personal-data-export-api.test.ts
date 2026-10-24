@@ -254,6 +254,20 @@ describe("GET /management-api/me/personal-data/export", () => {
     );
     expect(subjects).toEqual([{ personId: martaId, at: NOW, timeZone: "UTC", locationId: null }]);
   });
+
+  it("dates the file in UTC when the venue's stored zone is unknown", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Not/AZone" })
+      .where(eq(locations.id, locationId))
+      .run();
+    const response = await ask(mounted());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="marta-lopez-2026-10-04.zip"',
+    );
+    expect(subjects).toEqual([{ personId: martaId, at: NOW, timeZone: "UTC", locationId }]);
+  });
 });
 
 describe("sendPersonalData", () => {

@@ -33,10 +33,6 @@ describe("archiveFileName", () => {
     expect(archiveFileName("Marta López", AT, "Europe/Madrid")).toBe("marta-lopez-2026-10-05.zip");
     expect(archiveFileName("Marta López", AT, "UTC")).toBe("marta-lopez-2026-10-04.zip");
   });
-
-  it("dates the file in UTC when the zone is unknown", () => {
-    expect(archiveFileName("Marta López", AT, "Not/AZone")).toBe("marta-lopez-2026-10-04.zip");
-  });
 });
 
 function u16(bytes: Uint8Array, at: number): number {
