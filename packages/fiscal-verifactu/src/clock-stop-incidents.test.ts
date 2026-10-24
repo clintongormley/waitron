@@ -414,31 +414,31 @@ describe("a closing that cannot tell, across a summer-time change", () => {
 });
 
 describe("a restarted clock proved wrong", () => {
-  async function restartWithThreeSales(): Promise<{ restartId: string; saleId: string }> {
+  async function restartWithThreeSales(): Promise<{ confirmationId: string; saleId: string }> {
     await sale(T);
     const named = latest();
     const confirmation = await lift(R, twoDevices(R));
     await sale(R + M);
     await sale(R + 2 * S);
     await sale(R + 90 * S);
-    return { restartId: confirmation.id, saleId: named.saleId };
+    return { confirmationId: confirmation.id, saleId: named.saleId };
   }
 
   it("records one alert from the earliest to the latest time written under the restart", async () => {
-    const { restartId, saleId } = await restartWithThreeSales();
+    const { confirmationId, saleId } = await restartWithThreeSales();
     const before = {
       registros: count("registros_facturacion"),
       confirmations: count("clock_confirmations"),
     };
     const answer = await disprove(R + 2 * M);
-    expect(answer).toEqual({ recorded: [restartId], unused: [], held: [] });
+    expect(answer).toEqual({ recorded: [confirmationId], unused: [], held: [] });
     expect(incidents(DISPROVED)).toEqual([
       {
         source: "fiscal_filing",
         deviceId: null,
         saleId,
         code: DISPROVED,
-        params: { restartId, from: iso(R + 2 * S), to: iso(R + 90 * S) },
+        params: { confirmationId, from: iso(R + 2 * S), to: iso(R + 90 * S) },
         severity: "error",
         detectedAt: iso(OBSERVED),
       },
@@ -506,7 +506,7 @@ describe("a disproof over two chains", () => {
       await sale(R + 90 * S, chains[holder]);
       await disprove(R + 2 * M);
       expect(incidents(DISPROVED).map((row) => row.params)).toEqual([
-        { restartId: restart.id, from: iso(R + 2 * S), to: iso(R + 90 * S) },
+        { confirmationId: restart.id, from: iso(R + 2 * S), to: iso(R + 90 * S) },
       ]);
     },
   );
@@ -518,17 +518,17 @@ describe("a restart whose disproof cannot be told apart", () => {
     ["a proof that is not JSON", "not json"],
   ])("answers a restart with %s unused, recording nothing", async (_name, proof) => {
     await sale(T);
-    const restartId = "77777777-7777-4777-8777-777777777777";
+    const confirmationId = "77777777-7777-4777-8777-777777777777";
     suite.db.run(sql`
       insert into clock_confirmations
         (id, seq, node_id, box_clock_at, confirmed_at, step_ms, source, person_id, reason, proof,
          check_id, registro_id, record_at)
-      values (${restartId}, 1, ${nodeId}, ${iso(R)}, ${iso(R)}, 0, 'devices', null, 'behind_chain',
+      values (${confirmationId}, 1, ${nodeId}, ${iso(R)}, ${iso(R)}, 0, 'devices', null, 'behind_chain',
               ${proof}, null, ${latest().id}, ${iso(T)})`);
     // Covers nothing, so the record after it is at a forward clock.
     await sale(T + M);
     const before = count("incidents");
-    expect(await disprove(R + 2 * M)).toEqual({ recorded: [], unused: [restartId], held: [] });
+    expect(await disprove(R + 2 * M)).toEqual({ recorded: [], unused: [confirmationId], held: [] });
     expect(count("incidents")).toBe(before);
   });
 
@@ -541,7 +541,7 @@ describe("a restart whose disproof cannot be told apart", () => {
       recordIncident(tx, {
         origin: jobOrigin("fiscal_filing"),
         saleId: saleId as SaleId,
-        error: new AppError(DISPROVED, { restartId: "another", from: iso(R), to: iso(R) }),
+        error: new AppError(DISPROVED, { confirmationId: "another", from: iso(R), to: iso(R) }),
         severity: "error",
         detectedAt: new Date(R),
       }),
@@ -604,8 +604,11 @@ describe("two restarts of two records", () => {
     const rows = incidents(DISPROVED).map((row) => [row.saleId, row.params]);
     expect(rows).toEqual(
       expect.arrayContaining([
-        [firstNamed.saleId, { restartId: first.id, from: iso(R + 10 * S), to: iso(T + H) }],
-        [secondNamed.saleId, { restartId: second.id, from: iso(R2 + 10 * S), to: iso(T + 2 * H) }],
+        [firstNamed.saleId, { confirmationId: first.id, from: iso(R + 10 * S), to: iso(T + H) }],
+        [
+          secondNamed.saleId,
+          { confirmationId: second.id, from: iso(R2 + 10 * S), to: iso(T + 2 * H) },
+        ],
       ]),
     );
     expect(rows).toHaveLength(2);
@@ -618,7 +621,7 @@ describe("two restarts of two records", () => {
     await disprove(T - H);
     const params = incidents(DISPROVED).map((row) => row.params);
     expect(params).toContainEqual({
-      restartId: first.id,
+      confirmationId: first.id,
       from: iso(R + 10 * S),
       to: iso(T + H),
     });

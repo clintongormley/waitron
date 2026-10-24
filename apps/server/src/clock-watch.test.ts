@@ -374,12 +374,12 @@ describe("startClockWatch", () => {
       {
         level: "info",
         event: "clock_watch.disproved_unused",
-        fields: { restartId: "r1", reason: "jump" },
+        fields: { confirmationId: "r1", reason: "jump" },
       },
       {
         level: "warn",
         event: "clock_watch.disproved_held",
-        fields: { restartId: "r2", reason: "jump" },
+        fields: { confirmationId: "r2", reason: "jump" },
       },
     ]);
   });

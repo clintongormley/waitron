@@ -390,10 +390,10 @@ declare module "@waitron/shared" {
 
     /**
      * Recorded, never thrown, by `recordDisproofs` (./clock-stop-incidents.ts) once per lift whose
-     * clock later proved wrong; `restartId` is the lifting confirmation's id. `from` and `to` are
+     * clock later proved wrong; `confirmationId` is the lifting confirmation's id. `from` and `to` are
      * the earliest and latest generation times, ISO 8601, among the records written under it.
      */
-    "clock.behind_chain_disproved": { restartId: string; from: string; to: string };
+    "clock.behind_chain_disproved": { confirmationId: string; from: string; to: string };
 
     /**
      * Recorded, never thrown, by `recordMisdated` (./clock-stop-incidents.ts) for each closing of a

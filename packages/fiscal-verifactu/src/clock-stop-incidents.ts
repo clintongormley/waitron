@@ -175,10 +175,12 @@ export async function recordDisproofs(
   const disproved = new Set(
     (
       await tx
-        .select({ restartId: sql<string>`json_extract(${incidents.params}, '$.restartId')` })
+        .select({
+          confirmationId: sql<string>`json_extract(${incidents.params}, '$.confirmationId')`,
+        })
         .from(incidents)
         .where(eq(incidents.code, "clock.behind_chain_disproved"))
-    ).map((row) => row.restartId),
+    ).map((row) => row.confirmationId),
   );
   const current = Object.keys(await chainHeads(tx));
   const at = input.trustedUntil.getTime();
@@ -205,7 +207,7 @@ export async function recordDisproofs(
       origin: jobOrigin("fiscal_filing"),
       saleId: await saleOf(tx, lift.registroId),
       error: new AppError("clock.behind_chain_disproved", {
-        restartId: lift.id,
+        confirmationId: lift.id,
         from: times.from.toISOString(),
         to: times.to.toISOString(),
       }),

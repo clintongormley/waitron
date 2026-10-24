@@ -31,7 +31,7 @@ export function latestRecordQuery(tx: Transaction) {
 }
 
 /** The latest record in any chain, ties broken by the larger id. Every caller that needs "the
- * latest record" reads it here, so a restart names the same record the stop compares against. */
+ * latest record" reads it here, so a confirmation names the same record the stop compares against. */
 export async function latestRecord(tx: Transaction): Promise<LatestRecord | undefined> {
   const [latest] = await latestRecordQuery(tx);
   return latest;
@@ -46,7 +46,7 @@ export async function chainHeads(tx: Transaction): Promise<Record<string, number
   return Object.fromEntries(rows.map((row) => [row.node, Number(row.head)]));
 }
 
-/** The chain heads a restart stored in its proof, or null for anything a correct writer never
+/** The chain heads a confirmation stored in its proof, or null for anything a correct writer never
  * stores. Never throws. */
 export function storedHeads(proof: unknown): Map<string, number> | null {
   if (typeof proof !== "object" || proof === null || Array.isArray(proof)) return null;

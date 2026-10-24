@@ -107,11 +107,11 @@ export function startClockWatch(deps: {
       const input = pending[0]!;
       const { unused, held } = await deps.transaction((tx) => note(tx, input));
       pending.shift();
-      for (const restartId of unused) {
-        deps.log("info", "clock_watch.disproved_unused", { restartId, reason: input.reason });
+      for (const confirmationId of unused) {
+        deps.log("info", "clock_watch.disproved_unused", { confirmationId, reason: input.reason });
       }
-      for (const restartId of held) {
-        deps.log("warn", "clock_watch.disproved_held", { restartId, reason: input.reason });
+      for (const confirmationId of held) {
+        deps.log("warn", "clock_watch.disproved_held", { confirmationId, reason: input.reason });
       }
     }
   }
