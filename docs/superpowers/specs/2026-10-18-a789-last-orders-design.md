@@ -120,6 +120,8 @@ the refusals that were about the offset.
   everything. Anyone who can send can confirm: the check is with the kitchen, not with a manager.
   A venue can require a manager's PIN for this instead, with a setting in the dashboard's service
   settings beside "Allow changes to items already sent to the kitchen"; it is off by default.
+  (2026-10-24: that panel and switch are gone, #2044; where the setting lives is re-decided in
+  slice 3, see §12.)
 - **A dish the running period also sells** — a caña taken from Lunch's menu, which Sobremesa also
   sells — is not marked and needs no check: the kitchen or bar is still making it. It is sent at the
   price it was taken at (Lunch's). This is new: today the caña is held with the tortilla (§2).
