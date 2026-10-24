@@ -1,4 +1,4 @@
-import { STATION_COLOURS, TICKET_GROUPINGS } from "@waitron/shared";
+import { BUMP_MODES, STATION_COLOURS, TICKET_GROUPINGS } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import {
   CORE_CONFIGURATION_TRANSFER,
@@ -87,6 +87,30 @@ describe("validateCoreConfiguration", () => {
     expect(() =>
       validateCoreConfiguration({
         kitchen_stations: TICKET_GROUPINGS.map((ticket_grouping) => ({ ticket_grouping })),
+      }),
+    ).not.toThrow();
+  });
+
+  it.each(["bogus", "Ticket", null, 1])(
+    "refuses a station bump mode a save would refuse %j",
+    (bump_mode) => {
+      expect(() => validateCoreConfiguration({ kitchen_stations: [{ bump_mode }] })).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "kitchen_stations.bump_mode" },
+        }),
+      );
+    },
+  );
+
+  it("accepts an absent station bump mode", () => {
+    expect(() => validateCoreConfiguration({ kitchen_stations: [{}] })).not.toThrow();
+  });
+
+  it("accepts each station bump mode", () => {
+    expect(() =>
+      validateCoreConfiguration({
+        kitchen_stations: BUMP_MODES.map((bump_mode) => ({ bump_mode })),
       }),
     ).not.toThrow();
   });
