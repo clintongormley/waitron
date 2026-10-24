@@ -91,3 +91,20 @@ server-log access. The older slice descriptions and decisions below retain their
   cut beside pinned Actions in mounted 390 px fixtures, in English and Spanish and both themes.
   Desktop 1280 px fixtures show the complete message. These are controlled alert-data fixtures,
   not an authenticated server session; the table's phone readability remains open.
+
+## A1047. Send a problem report to Waitron Cloud
+
+**A1047. Send a problem report to Waitron Cloud (owner, 2026-10-24).** The follow-up A982
+leaves open. Cloud's approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) (section 11) has its triage agent
+sort reports by urgency. A report's errors, version and installation details go at once; the
+typed description goes only when someone with the venue's admin permission sends it (owner:
+"make it an admin decision to send", keeping A980's O9). A box that cannot reach Cloud keeps
+the report and sends it later, and the sender sees which.
+
+## A1048. Opt-in automatic error reports to Waitron Cloud
+
+**A1048. Opt-in automatic error reports to Waitron Cloud (owner, 2026-10-24: "Should be opt
+in").** Setup asks plainly, unticked; settings can change it. A report holds only the error's
+code and source, the version, counts and masked log lines (A980 O9), is signed with the box's
+Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
+by version to catch a bad release (design section 10).
