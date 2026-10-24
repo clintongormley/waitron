@@ -209,7 +209,7 @@ export class ThemePreview extends LitElement {
         gap: var(--wt-space-3);
         min-width: 0;
       }
-      /* The narrowest tile a till's grid draws. */
+      /* A counter till's narrowest tile (HOME_GRID_COLUMNS). */
       .tile {
         display: flex;
         flex-direction: column;

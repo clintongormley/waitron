@@ -76,8 +76,8 @@ Al lado o debajo de las elecciones, la **Vista previa** pinta una pequeña muest
 aspecto que estás preparando: una **Versión clara** y una **Versión oscura**, cada una encabezada
 por una franja con el logotipo y la razón social del local, y después un elemento del menú
 seleccionado, un campo, los botones Guardar y Cancelar, un interruptor, un enlace, una elección
-entre Claro y Oscuro, y después el botón de un producto de una caja y una línea de la cuenta. Toda
-la vista previa se dibuja con el tamaño del texto que has elegido. El nombre del producto está en el
+entre Claro y Oscuro, y después el botón de un producto de una caja y una línea de la cuenta. Las
+dos versiones se dibujan con el tamaño del texto que has elegido. El nombre del producto está en el
 idioma principal del contenido de la carta del local cuando el panel lo tiene y, si no, en el idioma
 del panel. Es una imagen, así que sus botones no hacen nada. El editor se organiza según el ancho de
 la tarjeta, no el de la ventana. En una tarjeta ancha la vista previa queda al lado de las

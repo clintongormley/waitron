@@ -70,8 +70,8 @@ again, so dark screens work their buttons out from the brand colour once more.
 Beside or below the choices, the **Preview** paints a small sample of the dashboard in the look you
 are building: a **Light version** and a **Dark version**, each headed by a strip with the logo and
 the venue's legal name, then a selected menu item, a field, Save and Cancel buttons, a switch, a
-link and a Light and Dark choice, then a till's product button and a bill line. The whole preview
-is drawn at the text size you have chosen. The product's name is in the venue's main language for
+link and a Light and Dark choice, then a till's product button and a bill line. Both versions are
+drawn at the text size you have chosen. The product's name is in the venue's main language for
 menu content when the dashboard has one, else in the dashboard's language. It is a picture, so its
 buttons do nothing. The editor arranges itself by the width of the card rather than of the window.
 On a wide card the preview sits beside the choices, and on a narrow one below them. When the
