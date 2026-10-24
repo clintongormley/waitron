@@ -818,7 +818,7 @@ describe("A841 the till follows the theme in use", () => {
 
   it("a moved theme hash brings a new logo into a handheld's bar without a reload", async () => {
     const handheld = till("tablet-landscape");
-    const before = innerWidth;
+    const before = { width: innerWidth, height: innerHeight };
     await page.viewport(1280, 844);
     try {
       const { el } = await mountApp({
@@ -843,7 +843,7 @@ describe("A841 the till follows the theme in use", () => {
       expect(bar().querySelector(":scope > .brand")).toBeNull();
       expect(themeFetch).toHaveBeenCalledTimes(2);
     } finally {
-      await page.viewport(before, 844);
+      await page.viewport(before.width, before.height);
     }
   });
 

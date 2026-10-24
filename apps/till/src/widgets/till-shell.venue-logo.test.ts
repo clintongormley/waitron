@@ -68,6 +68,28 @@ function wraps(el: TillShell): boolean {
   return h.scrollWidth > h.clientWidth || tabs.scrollWidth > tabs.clientWidth;
 }
 
+/** The logo and every other item of the bar share one row, centred alike, inside the bar. */
+function expectOneRow(el: TillShell): void {
+  const h = head(el);
+  const box = h.getBoundingClientRect();
+  const parts = [
+    ...h.querySelectorAll<HTMLElement>(
+      ":scope > .brand, :scope > wt-venue-logo, :scope > .tabs, :scope > .session > *",
+    ),
+  ]
+    .map((part) => ({ name: part.className || part.localName, r: part.getBoundingClientRect() }))
+    .filter(({ r }) => r.width > 0 && r.height > 0);
+  expect(parts.map(({ name }) => name)).toContain("wt-venue-logo");
+  const centres = parts.map(({ r }) => r.top + r.height / 2);
+  expect(Math.max(...centres) - Math.min(...centres)).toBeLessThanOrEqual(2);
+  for (const { name, r } of parts) {
+    expect(r.top, name).toBeGreaterThanOrEqual(box.top);
+    expect(r.bottom, name).toBeLessThanOrEqual(box.bottom);
+    expect(r.left, name).toBeGreaterThanOrEqual(box.left);
+    expect(r.right, name).toBeLessThanOrEqual(box.right);
+  }
+}
+
 /** The width the bar's content takes when nothing is squeezed. */
 function natural(el: TillShell): number {
   const h = head(el);
@@ -126,6 +148,8 @@ describe("the venue logo in a handheld's bar", () => {
       expect(img.getBoundingClientRect().height).toBeCloseTo(32, 0);
       expect(shown(word(el))).toBe(false);
       expect(head(el).querySelector(":scope > .brand")).toBeNull();
+      await settle(el);
+      expectOneRow(el);
     });
   });
 
@@ -256,22 +280,28 @@ describe("the bar refits when the logo changes", () => {
     return { wordWidth, withWord };
   }
 
+  /** At a width where the word fits and a 4:1 logo (128 px at 32 tall) does not, a wide logo
+   * arrives late: the bar starts waiting, with no step, and takes one once the image loads. */
+  async function wideLogoBar(): Promise<TillShell> {
+    const { wordWidth, withWord } = await measureWord();
+    const width = Math.round(withWord + (128 - wordWidth) / 2);
+    startFrom(null);
+    const { el } = await mount();
+    el.style.width = `${width}px`;
+    await settle(el);
+    expect(steps(el)).toBe(0);
+    const loads = nextLogoLoad();
+    applyVenueTheme(withLogo(WIDE));
+    await el.updateComplete;
+    expect(steps(el)).toBe(0);
+    await loads;
+    await settle(el);
+    return el;
+  }
+
   it("a wide logo that arrives late refits the bar", async () => {
     await atViewport(1280, async () => {
-      const { wordWidth, withWord } = await measureWord();
-      // A 4:1 logo at 32 px tall is 128 wide: the word fits at this width and the logo does not.
-      const width = Math.round(withWord + (128 - wordWidth) / 2);
-      startFrom(null);
-      const { el } = await mount();
-      el.style.width = `${width}px`;
-      await settle(el);
-      expect(steps(el)).toBe(0);
-      const loads = nextLogoLoad();
-      applyVenueTheme(withLogo(WIDE));
-      await el.updateComplete;
-      expect(steps(el)).toBe(0);
-      await loads;
-      await settle(el);
+      const el = await wideLogoBar();
       expect(steps(el)).toBeGreaterThan(0);
       expect(wraps(el)).toBe(false);
     });
@@ -318,14 +348,15 @@ describe("the bar refits when the logo changes", () => {
 
   it("a logo removed while the bar is off the page refits it when it comes back", async () => {
     await atViewport(1280, async () => {
-      const el = await narrowLogoBar();
+      const el = await wideLogoBar();
+      expect(steps(el)).toBe(1);
       const parent = el.parentElement!;
       el.remove();
       applyVenueTheme({ ...FIXTURE_ANSWER, hash: "no-logo" });
       parent.append(el);
       await settle(el);
-      expect(logoOf(el)).toBeNull();
-      expect(steps(el)).toBeGreaterThan(0);
+      expect(steps(el)).toBe(0);
+      expect(shown(head(el).querySelector(":scope > .brand"))).toBe(true);
       expect(wraps(el)).toBe(false);
     });
   });
