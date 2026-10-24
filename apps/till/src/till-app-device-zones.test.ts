@@ -131,6 +131,7 @@ async function mount(
   chosen: DeviceZoneSelection,
   over: Record<string, unknown> = {},
   props: Partial<TillApp> = {},
+  permissions: string[] = [],
 ) {
   setLocale("en-GB");
   const api = {
@@ -186,7 +187,7 @@ async function mount(
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
   el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
     new CustomEvent("logged-in", {
-      detail: { personId: "person", displayName: "Ana", permissions: [], locale: "en-GB" },
+      detail: { personId: "person", displayName: "Ana", permissions, locale: "en-GB" },
       bubbles: true,
       composed: true,
     }),
@@ -1134,4 +1135,337 @@ it("disconnecting the application retires its editor before reconnecting and reo
   ).toBe(true);
   expect(api.getDeviceZones).toHaveBeenCalledTimes(3);
   expect(api.setDeviceZones).not.toHaveBeenCalled();
+});
+
+describe("a handheld's zones", () => {
+  const handhelds = ["phone-portrait", "tablet-landscape"] as const;
+  const orderedFloorZones: FloorZone[] = floorZones.map((zone, index) => ({
+    ...zone,
+    displayOrder: index + 1,
+  }));
+  const tableIn = (id: string, zoneId: string) => ({
+    id,
+    label: id,
+    zoneId,
+    state: "open-tab",
+    hasOpenTab: true,
+    tabLineCount: 0,
+    tabTotal: "0.00",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    timingBand: "fresh",
+    nextReservation: null,
+    today: null,
+    signals: [],
+    party: {
+      kitchenNote: { scope: { partyId: `party-${id}` }, note: null, revision: 0, ownerRevision: 1 },
+      id: `party-${id}`,
+      revision: 1,
+      guestCount: 2,
+      state: "open",
+      mainBillId: `bill-${id}`,
+      outstanding: "0.00",
+      billCount: 1,
+      tableIds: [id],
+      unsentDrafts: [],
+      reminder: null,
+    },
+  });
+  afterEach(() => history.replaceState(null, "", "/"));
+
+  async function mountHandheld(
+    chosen: DeviceZoneSelection,
+    formFactor: string = "phone-portrait",
+    over: Record<string, unknown> = {},
+    permissions: string[] = [],
+  ) {
+    return mount(
+      chosen,
+      {
+        getTill: vi.fn().mockResolvedValue({
+          locale: "en-GB",
+          invoiceLocale: "en-GB",
+          venueName: "Restaurant",
+          nif: "B12345678",
+          orderFlow: "prepay",
+          bumpMode: "line",
+          fireControl: "waiter",
+          courses: [],
+          cardProvider: "none",
+          tipsEnabled: false,
+          formFactor,
+          capabilities: ["take-orders"],
+          inactivityTimeoutSeconds: null,
+          nodeId: "node",
+          servers: [],
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "device",
+          name: "Phone",
+          formFactor,
+          profileId: "profile",
+        }),
+        listZones: vi.fn().mockResolvedValue(orderedFloorZones),
+        ...over,
+      },
+      {},
+      permissions,
+    );
+  }
+  const floor = (el: TillApp) => el.shadowRoot!.querySelector("till-floor-screen")!;
+  async function floorZoneIds(el: TillApp) {
+    await vi.waitFor(() => expect(floor(el)).not.toBeNull());
+    await vi.waitFor(() => expect(floor(el).zones.length).toBeGreaterThan(0));
+    return floor(el).zones.map((zone) => zone.id);
+  }
+  async function activeTab(el: TillApp) {
+    await floorZoneIds(el);
+    await floor(el).updateComplete;
+    return floor(el)
+      .shadowRoot!.querySelector('nav.tabs wt-button.tab[variant="primary"]')
+      ?.getAttribute("data-zone");
+  }
+
+  it.each(handhelds)(
+    "reads the device's zones at sign-in and narrows Floor to them (%s)",
+    async (formFactor) => {
+      const { el, api } = await mountHandheld(
+        selection(["room", "garden"], "room", false),
+        formFactor,
+      );
+      expect(await floorZoneIds(el)).toEqual(["room", "garden"]);
+      expect(api.getDeviceZones).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(handhelds)(
+    "reads the device's zones at sign-in and with every zone chosen keeps every zone (%s)",
+    async (formFactor) => {
+      const { el, api } = await mountHandheld(
+        selection(["bar", "shop", "room", "garden"], "bar", false),
+        formFactor,
+      );
+      expect(await floorZoneIds(el)).toEqual(orderedFloorZones.map((zone) => zone.id));
+      expect(api.getDeviceZones).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(handhelds)(
+    "with one zone chosen the Floor shows no zone tabs (worked example 6) (%s)",
+    async (formFactor) => {
+      const { el } = await mountHandheld(selection(["garden"], "garden"), formFactor);
+      expect(await floorZoneIds(el)).toEqual(["garden"]);
+      await floor(el).updateComplete;
+      expect(floor(el).shadowRoot!.querySelector("nav.tabs")).toBeNull();
+    },
+  );
+
+  it.each(handhelds)(
+    "with two zones chosen the Floor shows their two zone tabs (worked example 6) (%s)",
+    async (formFactor) => {
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"), formFactor);
+      await floorZoneIds(el);
+      await floor(el).updateComplete;
+      expect(
+        [...floor(el).shadowRoot!.querySelectorAll("nav.tabs wt-button.tab")].map((tab) =>
+          tab.getAttribute("data-zone"),
+        ),
+      ).toEqual(["room", "garden"]);
+    },
+  );
+
+  it.each(handhelds)(
+    "keeps a chosen counter zone on the handheld's Floor and drops an unchosen one (%s)",
+    async (formFactor) => {
+      const { el } = await mountHandheld(selection(["bar", "room"], "room"), formFactor);
+      const ids = await floorZoneIds(el);
+      expect(ids).toContain("bar");
+      expect(ids).not.toContain("shop");
+      expect(ids).not.toContain("garden");
+    },
+  );
+
+  it("the More entry opens the zones dialog and a save narrows the Floor", async () => {
+    const { el, api } = await mountHandheld(
+      selection(["bar", "shop", "room", "garden"], "bar", false),
+      "phone-portrait",
+      { setDeviceZones: vi.fn().mockResolvedValue(selection(["garden"], "garden")) },
+    );
+    await floorZoneIds(el);
+    const more = shell(el).shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >('header wt-row-actions[data-test="more-menu"]')!;
+    await more.updateComplete;
+    await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+    await userEvent.click(more.querySelector<HTMLElement>("wt-button.zones")!);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).not.toBeNull(),
+    );
+    const dialog = el.shadowRoot!.querySelector("till-device-zones-dialog")!;
+    await vi.waitFor(() => expect(dialog.loading).toBe(false));
+    dialog.dispatchEvent(
+      new CustomEvent("save-device-zones", {
+        detail: {
+          profileId: "profile",
+          snapshot: "scope",
+          selectedZoneIds: ["garden"],
+          startingZoneId: "garden",
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).toBeNull(),
+    );
+    expect(api.setDeviceZones).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(floor(el).zones.map((zone) => zone.id)).toEqual(["garden"]));
+  });
+
+  it("a profile switch shows the new profile's own zones", async () => {
+    const { el, api } = await mountHandheld(
+      { ...selection(["room", "garden"], "room"), profileId: "profile" },
+      "phone-portrait",
+      {
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "device",
+          name: "Phone",
+          formFactor: "phone-portrait",
+          profileId: "profile",
+          approvedProfiles: [
+            { id: "profile", name: "Waiter" },
+            { id: "other", name: "Terrace" },
+          ],
+        }),
+        switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: "other" }),
+      },
+    );
+    expect(await floorZoneIds(el)).toEqual(["room", "garden"]);
+    api.getDeviceZones.mockResolvedValue({
+      ...selection(["shop", "garden"], "garden"),
+      profileId: "other",
+      snapshot: "other",
+    });
+    shell(el).dispatchEvent(new CustomEvent("open-profile", { bubbles: true, composed: true }));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-profile-dialog")).not.toBeNull(),
+    );
+    el.shadowRoot!.querySelector("till-profile-dialog")!.dispatchEvent(
+      new CustomEvent("profile-switch", {
+        detail: { profileId: "other" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(api.getDeviceZones).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(floor(el).zones.map((zone) => zone.id)).toEqual(["shop", "garden"]),
+    );
+  });
+
+  describe("an unsaved handheld opens as today; a saved one opens on its Opens first zone", () => {
+    const all = ["bar", "shop", "room", "garden"];
+    it.each(handhelds)("unsaved, no URL zone, opens on the first tab (%s)", async (formFactor) => {
+      const { el } = await mountHandheld(selection(all, "garden", false), formFactor);
+      expect(await activeTab(el)).toBe("bar");
+    });
+    it.each(handhelds)("unsaved, with a URL zone, opens on it (%s)", async (formFactor) => {
+      history.replaceState(null, "", "/tabs/floor/zone/room");
+      const { el } = await mountHandheld(selection(all, "garden", false), formFactor);
+      expect(await activeTab(el)).toBe("room");
+    });
+    it.each(handhelds)("saved, opens on its counter Opens first zone (%s)", async (formFactor) => {
+      const { el } = await mountHandheld(selection(all, "shop", true), formFactor);
+      expect(await activeTab(el)).toBe("shop");
+    });
+    it.each(handhelds)(
+      "saved, opens on its Opens first zone over a URL zone (%s)",
+      async (formFactor) => {
+        history.replaceState(null, "", "/tabs/floor/zone/room");
+        const { el } = await mountHandheld(selection(all, "shop", true), formFactor);
+        expect(await activeTab(el)).toBe("shop");
+      },
+    );
+  });
+
+  it.each([
+    ["room", false],
+    ["garden", true],
+  ] as const)(
+    "a hidden zone's table takes no new dishes; a shown one does, whatever the profile's start (%s)",
+    async (zoneId, allowed) => {
+      const table = tableIn(`table-${zoneId}`, zoneId);
+      const drafts = draftServer(() => ({
+        tabId: table.party.mainBillId,
+        revision: 1,
+        groups: [],
+      }));
+      drafts.bills.add(table.party.mainBillId);
+      const { el } = await mountHandheld(selection(["garden"], "garden"), "phone-portrait", {
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
+        getTablesState: vi.fn().mockResolvedValue([table]),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+        getPartyBills: vi.fn().mockResolvedValue([]),
+        listDrafts: drafts.listDrafts,
+        saveDraft: drafts.saveDraft,
+        submitDraft: drafts.submitDraft,
+      });
+      await vi.waitFor(() => expect(floor(el)?.tables.map((row) => row.id)).toEqual([table.id]));
+      floor(el).dispatchEvent(
+        new CustomEvent("open-table", {
+          detail: { tableId: table.id, seated: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      const screen = () => el.shadowRoot!.querySelector("till-table-order-screen")!;
+      await vi.waitFor(() => expect(screen()?.draftStore).toBeTruthy());
+      await el.updateComplete;
+      expect(screen().orderingAllowed).toBe(allowed);
+      const store = screen().draftStore!;
+      store.addProduct(screen().products[0]!, "1");
+      expect(store.lines).toHaveLength(allowed ? 1 : 0);
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    },
+  );
+
+  it("the transfer accept list stays the offers route's zones", async () => {
+    const offers = catalogue("bar");
+    const routeZones = offers.zones!.filter((zone) => zone.serviceMode !== "table_tab");
+    const { el } = await mountHandheld(
+      selection(["garden"], "garden"),
+      "phone-portrait",
+      {
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...offers, zones: routeZones }),
+        listIncomingDepartmentTransfers: vi.fn(async () => ({
+          receiving: true,
+          count: 0,
+          requests: [],
+        })),
+        listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
+        readDepartmentTransferEvents: vi.fn(
+          (_reload: () => void, { signal }: { signal: AbortSignal }) =>
+            new Promise<void>((resolve) =>
+              signal.addEventListener("abort", () => resolve(), { once: true }),
+            ),
+        ),
+      },
+      ["sale.take_payment"],
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
+    );
+    expect(
+      el
+        .shadowRoot!.querySelector("till-department-transfers")!
+        .serviceZones.map((zone) => zone.id),
+    ).toEqual(["bar", "shop"]);
+  });
+
+  it("a kitchen display reads no zones", async () => {
+    const { api } = await mountHandheld(selection(["garden"], "garden"), "kds");
+    expect(api.getDeviceZones).not.toHaveBeenCalled();
+  });
 });

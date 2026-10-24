@@ -4995,11 +4995,11 @@ export class TillApp extends LitElement {
     let offerLoadFailed: CounterError | false = false;
     const retainedZone = this.#store.lines.length > 0 ? this.counterServiceZoneId : undefined;
     try {
-      if (this.formFactor === "till") {
+      if (this.#choosesZones()) {
         const selection = await this.api.getDeviceZones();
         if (replaced()) return;
         this.deviceZoneSelection = selection;
-        this.profileServiceZones = [...selection.zones];
+        if (this.formFactor === "till") this.profileServiceZones = [...selection.zones];
       }
       if (
         this.formFactor === "till" &&
@@ -9093,7 +9093,7 @@ export class TillApp extends LitElement {
   }
 
   #openDeviceZones(): void {
-    if (!this.isConnected || this.operatorName === "" || this.formFactor !== "till") return;
+    if (!this.isConnected || this.operatorName === "" || !this.#choosesZones()) return;
     this.deviceSettingsOpen = false;
     if (this.deviceZonesOpen) return;
     this.#deviceZonesOpening++;
@@ -9143,14 +9143,22 @@ export class TillApp extends LitElement {
     );
   }
 
+  #choosesZones(): boolean {
+    return (
+      this.formFactor === "till" ||
+      this.formFactor === "phone-portrait" ||
+      this.formFactor === "tablet-landscape"
+    );
+  }
+
   #deviceZoneAllows(zoneId: string): boolean {
-    if (this.formFactor !== "till") return true;
+    if (!this.#choosesZones()) return true;
     const scope = this.#pendingDeviceZoneSelection ?? this.deviceZoneSelection;
     return scope?.selectedZoneIds.includes(zoneId) === true;
   }
 
   async #readLiveDeviceZones(signal: AbortSignal): Promise<void> {
-    if (!this.isConnected || this.operatorName === "" || this.formFactor !== "till") return;
+    if (!this.isConnected || this.operatorName === "" || !this.#choosesZones()) return;
     const session = this.#operatorSession;
     const api = this.api;
     const device = this.deviceId;
@@ -9218,7 +9226,7 @@ export class TillApp extends LitElement {
       if (this.#inactivityTimeoutSeconds !== previousTimeout) this.#configureSessionActivity();
     }
     this.deviceZoneSelection = selection;
-    this.profileServiceZones = [...selection.zones];
+    if (this.formFactor === "till") this.profileServiceZones = [...selection.zones];
     const tab = this.#resolveScreen(this.activeTabKey ?? null);
     this.#setActiveTab(tab, true, true);
     if (tab === "floor" && !this.#floorLoaded) void this.#loadFloorData();
@@ -17747,16 +17755,18 @@ export class TillApp extends LitElement {
       return html`<till-floor-screen
         embedded
         .zones=${
-          this.formFactor === "till"
-            ? this.zones.filter((zone) => this.#deviceNavigation()?.floorZoneIds.includes(zone.id))
-            : this.zones
+          this.#deviceNavigation() === null
+            ? this.zones
+            : this.zones.filter((zone) => this.#deviceNavigation()?.floorZoneIds.includes(zone.id))
         }
         .selectedZoneId=${
-          this.#deviceNavigation()?.floorZoneIds.includes(
-            this.deviceZoneSelection?.startingZoneId ?? "",
-          )
-            ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
-            : undefined
+          this.formFactor !== "till"
+            ? (this.#deviceNavigation()?.startingZoneId ?? undefined)
+            : this.#deviceNavigation()?.floorZoneIds.includes(
+                  this.deviceZoneSelection?.startingZoneId ?? "",
+                )
+              ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
+              : undefined
         }
         .tables=${this.tables}
         .tablesReadAt=${this.tablesReadAt}
