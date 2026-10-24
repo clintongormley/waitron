@@ -254,12 +254,17 @@ describe("scopeForPaths", () => {
       });
     });
 
-    it("selects the three browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
+    it("selects the browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
       expect(
         scopeForPaths(["scripts/vitest-shard-coverage-merge.mjs"], workspace(consumers)),
       ).toMatchObject({
         kind: "packages",
-        packages: ["@waitron/dashboard", "@waitron/till", "@waitron/venue-service"],
+        packages: [
+          "@waitron/dashboard",
+          "@waitron/fiscal-verifactu",
+          "@waitron/till",
+          "@waitron/venue-service",
+        ],
         root: true,
       });
     });
@@ -771,7 +776,7 @@ describe("the CLI", () => {
 
   it("selects the real browser packages whose test:merge loads scripts/vitest-shard-coverage-merge.mjs", () => {
     expect(run("scripts/vitest-shard-coverage-merge.mjs\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/till @waitron/venue-service\n" +
+      "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/fiscal-verifactu @waitron/till @waitron/venue-service\n" +
         "root=true\ndeploy=false\n",
     );
   });
