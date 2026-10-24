@@ -1149,8 +1149,9 @@ wedge every later publish identically until `:main` is deleted or retagged by ha
 
 Owner decision (2026-10-09, restated 2026-10-11 in the watcher session: "if something regularly
 takes 10 minutes it is not good, we want tests to max out at around 4 minutes" — "Each test group
-≤ 4 min"): each CI test job, one shard of one package, should take about 4 minutes at most on a
-normal runner. The whole run's wall time is not the target. The fix for a job over it is at its
+≤ 4 min"): each CI test job, one shard of one package, should take about 4 minutes at most on
+the slower of GitHub's two runner speeds, where about four jobs in five run (owner, 2026-10-24: a
+job is judged where it usually runs; see "Runners come in two speeds" below). The whole run's wall time is not the target. The fix for a job over it is at its
 cause: a shard holding one slow file (split the file or find why it is slow), too few shards for the
 package, or slow setup. Never cut what a test checks to save time, and never move coverage or
 mutation out of CI.
