@@ -408,7 +408,11 @@ export class BoxStatusScreen extends LitElement {
         // The verdict under the fresh times says it, so the footer does not say it twice.
         this.clockReading = { ...fresh, agrees: false };
         this.api.liveData.refresh();
-      } else this.#clockRefused(error);
+      } else {
+        // Nothing is left to confirm, so a retry could only be refused again.
+        if (refusalReason(error) === "not_stopped") this.clockReading = null;
+        this.#clockRefused(error);
+      }
     } finally {
       this.confirmingClock = false;
     }

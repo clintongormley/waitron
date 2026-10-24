@@ -204,7 +204,7 @@ Al pulsar **Confirmar**, el equipo vuelve a leer su hora y vuelve a comparar las
 comprobar que coinciden, el diálogo muestra las horas nuevas con el mismo mensaje y solo **Cerrar**.
 Si para entonces los cobros no están parados y no hay ninguna comprobación pendiente, por ejemplo
 porque otra cosa confirmó la hora o porque otros relojes dijeron que está mal, dice **No queda nada
-que confirmar. Mira la fila Reloj.**
+que confirmar. Mira la fila Reloj.** y solo ofrece **Cerrar**.
 
 El equipo da por buena la hora de tu dispositivo, así que comprueba antes que tu móvil u ordenador
 tiene la hora bien. Por la misma razón, nunca funciona desde la pantalla del propio equipo: ahí la

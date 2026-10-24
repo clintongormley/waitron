@@ -935,6 +935,24 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     }
   });
 
+  it("stops asking to confirm, and offers only Close, once the box says nothing is left to confirm", async () => {
+    deviceNow("2026-10-22T18:10:20.000Z");
+    const api = clockApi(
+      { clockStop: STOPPED },
+      { clockConfirm: vi.fn().mockRejectedValue(REFUSED("not_stopped")) },
+    );
+    const el = await mountClock(api);
+    await open(el);
+    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+    expect(footerMessage(el)).toBe("There is nothing left to confirm. See the Clock row.");
+    expect(q(el, "[data-test=clock-check-verdict]")).toBeNull();
+    expect(q(el, "[data-test=clock-check-times]")).toBeNull();
+    expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+    expect(api.liveData.refresh).toHaveBeenCalled();
+  });
+
   it.each([
     [20_000, 40_000, true],
     [20_000, 40_001, false],

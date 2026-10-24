@@ -193,7 +193,7 @@ When you press **Confirm**, the box reads its own time again and judges the two 
 cannot show that they agree, the dialog shows the new times with the same message and only
 **Close**. If by then payments are not stopped and no check waits, for example because something
 else confirmed the clock or other clocks said it is wrong, it says **There is nothing left to
-confirm. See the Clock row.**
+confirm. See the Clock row.** and offers only **Close**.
 
 The box takes your device's word for the time, so check that your phone or computer shows the
 right time first. For the same reason this never works from the box's own screen: there, the
