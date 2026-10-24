@@ -45,6 +45,11 @@ const bump = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }
   tag.endsWith("_station_bump_mode"),
 );
 if (bump === undefined) throw new Error("the station bump mode migration is missing");
+const changes = readJournal(CORE_MIGRATIONS.migrationsFolder).entries.find(({ tag }) =>
+  tag.endsWith("_station_changes_after_sending"),
+);
+if (changes === undefined)
+  throw new Error("the station changes after sending migration is missing");
 
 // Every set cut at the same moment, so no set references a table a later core migration made.
 function setsAsOf(name: string, keep: (when: number) => boolean): VenueMigrationOptions[] {
@@ -242,7 +247,11 @@ it("A725 drops only station order with populated cascading and restrictive child
     dirname(file!.file),
     setsAsOf(
       "printing",
-      (when) => when <= retirement.when || when === printing.when || when === bump.when,
+      (when) =>
+        when <= retirement.when ||
+        when === printing.when ||
+        when === bump.when ||
+        when === changes.when,
     ),
   );
   expect((await listStations(db, cfg)).map(({ name }) => name)).toEqual(["Alpha", "Bar", "Zulu"]);

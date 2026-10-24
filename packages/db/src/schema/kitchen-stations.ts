@@ -1,4 +1,4 @@
-import type { BumpMode, StationColour, TicketGrouping } from "@waitron/shared";
+import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
@@ -31,6 +31,11 @@ export const kitchenStations = table(
     printHeldWork: flag("print_held_work").notNull().default(false),
     // The station routes and the import refuse a value outside `isBumpMode`; a CHECK would rebuild this table.
     bumpMode: label("bump_mode").$type<BumpMode>().notNull().default("line"),
+    // The station routes and the import refuse a value outside `isChangesAfterSending`; a CHECK would rebuild this table.
+    changesAfterSending: label("changes_after_sending")
+      .$type<ChangesAfterSending>()
+      .notNull()
+      .default("held-or-waiting"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

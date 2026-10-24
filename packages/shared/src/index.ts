@@ -212,6 +212,12 @@ export {
 } from "./station-colours.js";
 export { TICKET_GROUPINGS, isTicketGrouping, type TicketGrouping } from "./ticket-grouping.js";
 export { BUMP_MODES, isBumpMode, type BumpMode } from "./bump-mode.js";
+export {
+  CHANGES_AFTER_SENDING,
+  allowsChangeAfterSending,
+  isChangesAfterSending,
+  type ChangesAfterSending,
+} from "./changes-after-sending.js";
 
 export type {
   RecordExportValue,

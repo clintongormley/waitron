@@ -1324,6 +1324,13 @@
       "when": 1792805393657,
       "tag": "0188_station_bump_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 189,
+      "version": "6",
+      "when": 1792844165440,
+      "tag": "0189_station_changes_after_sending",
+      "breakpoints": true
     }
   ]
 }
