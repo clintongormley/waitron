@@ -138,7 +138,7 @@ One page, one tab per group. Each tab's settings are set once and left.
   (2026-10-19: A757 slice 1 moved Needs clearing to each department's Service tab,
   `departments.needs_clearing`.)
 - **Adjustment reasons**: the discount and void reasons, and the largest discount on one bill.
-- **Kitchen**: courses; bump mode; fire control; the late-flag defaults (§6.5; 2026-10-23, A756 PR 5: gone, each station holds its own); the held-course
+- **Kitchen**: courses; bump mode (2026-10-24, A756 PR 7: gone, each station sets its own under Done on the screen); fire control; the late-flag defaults (§6.5; 2026-10-23, A756 PR 5: gone, each station holds its own); the held-course
   reminder; identical dishes on a ticket; printing held courses; allowing changes after sending.
   Fire control was missing from the list the owner saw; it is the Kitchen page's third setting, so
   it moves with the other two.

@@ -659,7 +659,7 @@ edits the same files)
   name; the plan of slice 1 settles it.
 - A larger text size for kitchen screens read from a distance; a "My tables" filter on the handheld
   floor; whether a dish leaves a station's Ready column on its own; the venue's bump mode once a dish
-  tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read).
+  tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order).
 - The wording of the fixed bottom bar and the opening rule's edge cases (a table with only served
   dishes opens on Order).
 

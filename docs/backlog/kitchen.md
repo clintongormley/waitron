@@ -156,8 +156,7 @@ Open points:
 
 - From #1852: the Transfers panel's heading is an `h2`, the dialog title's level, beside Service's
   `h3` sections — an existing accessibility check selects `h2`.
-- From #1854: once A773-1 lands, rename the two `kitchen-screen.a11y.test.ts` cases that still name
-  a course list. On the Courses page the row dividers stop short of the card's sides (mock-up 02
+- From #1854: on the Courses page the row dividers stop short of the card's sides (mock-up 02
   runs them to the edge; needs `course-list.ts` styles), and an error under the list would sit on
   the card's bottom border (read from the code, not seen).
 - From PR 4: offer “At once” (0 minutes) in each department's reminder, as A773 §3.4 decided

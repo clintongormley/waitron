@@ -274,7 +274,7 @@ async function req(path: string, init: RequestInit, cookie?: string): Promise<Re
   });
 }
 
-it("lets a supervisor read Kitchen settings while refusing edits", async () => {
+it("lets a supervisor read courses while refusing edits", async () => {
   for (const path of ["/courses"]) {
     const response = await req(path, { method: "GET" }, supervisorCookie);
     expect(response.status, path).toBe(200);
