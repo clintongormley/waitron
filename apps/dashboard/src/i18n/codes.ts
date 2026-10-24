@@ -1284,9 +1284,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Not recorded: the box's clock reads earlier than its last sale. Sort it out on the Box status page.",
     es: "No se ha registrado: la hora del equipo es anterior a la última venta. Resuélvelo en Estado del equipo.",
   },
-  "clock.restart_refused": {
-    en: "Payments cannot be restarted now. Look at the Box status page.",
-    es: "Ahora no se pueden reanudar los cobros. Mira Estado del equipo.",
+  "clock.confirm_refused": {
+    en: "The clock could not be confirmed. Look at the Box status page.",
+    es: "No se ha podido confirmar la hora. Mira Estado del equipo.",
   },
   "theme.name_taken": {
     en: "A theme with this name already exists.",

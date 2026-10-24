@@ -1,6 +1,7 @@
 import { formatBytes } from "@waitron/dashboard-kit";
 import type { AlertView, BoxHealth } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
+import { ALERT_WORDS } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -18,8 +19,6 @@ export interface PartRow {
   alerts: AlertView[];
   /** The screen the row's action opens; null when the row has none. */
   screen: string | null;
-  /** The latest record a restart of payments would name; null unless the Clock row offers one. */
-  restartRecordId: string | null;
 }
 
 type Notice = BoxHealth["notices"][number];
@@ -102,7 +101,7 @@ export function boxStatusRows(
         : notices.length > 0 ||
             rowAlerts.length > 0 ||
             clockOff(id, health) ||
-            restarted(id, health)
+            clockUnconfirmed(id, health)
           ? "attention"
           : "ok";
     return {
@@ -112,7 +111,6 @@ export function boxStatusRows(
       details: detailsOf(id, health, notices),
       alerts: rowAlerts,
       screen: SCREENS[id],
-      restartRecordId: restartOffered(id, health, notices) ? health.clockStop!.recordId : null,
     };
   });
   return { rows, other, checksUnavailable: health.noticesUnavailable.length > 0 };
@@ -123,15 +121,10 @@ function clockOff(id: PartId, health: BoxHealth): boolean {
   return id === "clock" && health.clock.authority.state === "warning";
 }
 
-function restarted(id: PartId, health: BoxHealth): boolean {
-  return id === "clock" && health.clockStop?.offer === "restarted";
-}
-
-function restartOffered(id: PartId, health: BoxHealth, notices: readonly Notice[]): boolean {
+/** Payments go on, but on a clock a confirmation covers or nothing has confirmed yet. */
+function clockUnconfirmed(id: PartId, health: BoxHealth): boolean {
   return (
-    id === "clock" &&
-    health.clockStop?.offer === "offered" &&
-    !notices.some((notice) => notice.code === "clock.unusable")
+    id === "clock" && (health.clockStop?.proof === "confirmed" || health.clockCheckWaiting !== null)
   );
 }
 
@@ -262,7 +255,7 @@ function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): s
         ...(notices.some((notice) => notice.code === "clock.behind_chain")
           ? [t("box_status.clock.behind_chain_fix")]
           : []),
-        ...(health.clockStop === null ? [] : clockStopDetails(health.clockStop)),
+        ...clockStopDetails(health),
       ];
     case "disk":
       return diskDetails(health.disk);
@@ -298,10 +291,10 @@ function clockDetails(clock: BoxHealth["clock"]): string[] {
   return details;
 }
 
-/** The proof lines of a payment stop, as the Clock row and the restart dialog both show them. */
-export function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
+/** The agreeing witnesses' lines of a payment stop. */
+function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
   const details: string[] = [];
-  const { authority, devices } = stop.proof;
+  const { authority, devices } = stop.agreeing;
   if (authority !== null)
     details.push(
       fill("box_status.clock.proof.authority", { time: formatIsoMinute(authority.boxAt) }),
@@ -318,19 +311,33 @@ export function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): strin
   return details;
 }
 
-function clockStopDetails(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
-  const details = clockStopProof(stop);
-  if (stop.offer === "restarted") {
-    // The seat offers "restarted" only when a restart names the latest record.
-    const restart = stop.restart!;
-    details.push(
-      fill("box_status.clock.restarted", {
-        person: restart.personName ?? t("box_status.clock.someone"),
-        time: formatIsoMinute(restart.restartedAt),
-      }),
-    );
-  } else if (stop.offer !== "offered") details.push(t(`box_status.clock.refused.${stop.offer}`));
+function clockStopDetails(health: BoxHealth): string[] {
+  const stop = health.clockStop;
+  const waiting = health.clockCheckWaiting;
+  const details = stop === null ? [] : clockStopProof(stop);
+  // A check can wait while an older confirmation still covers the clock; the wait is the news.
+  if (stop !== null && !(stop.proof === "confirmed" && waiting !== null))
+    details.push(stopLine(stop));
+  if (waiting !== null)
+    details.push(fill("box_status.clock.check_waiting", { time: formatIsoMinute(waiting.since) }));
   return details;
+}
+
+function stopLine(stop: NonNullable<BoxHealth["clockStop"]>): string {
+  if (stop.proof !== "confirmed") return t(`box_status.clock.stop.${stop.proof}`);
+  // The seat says "confirmed" only when a confirmation covers the reading.
+  const confirmation = stop.confirmation!;
+  return fill("box_status.clock.stop.confirmed", {
+    time: formatIsoMinute(confirmation.confirmedAt),
+    who: confirmedBy(confirmation.source),
+  });
+}
+
+/** The bell's words for what confirmed the clock. */
+function confirmedBy(source: string): string {
+  const list = ALERT_WORDS["clock_confirmed_by"]!;
+  const words = Object.hasOwn(list.words, source) ? list.words[source]! : list.otherwise;
+  return currentLocale() === "es" ? words.es : words.en;
 }
 
 function diskDetails(disk: BoxHealth["disk"]): string[] {

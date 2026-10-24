@@ -1744,6 +1744,21 @@ export interface BoxHealth {
     reclaimable: { bytes: number; backupRunning: boolean };
   };
   clockStop: ClockStopView | null;
+  /** Since the waiting check's opening reading; null when no check waits. */
+  clockCheckWaiting: { since: string } | null;
+  misdatedOpen: MisdatedOpenView[];
+}
+
+/** LOCAL copy of the server's `MisdatedOpen` (`apps/server/src/box-health.ts`). */
+export interface MisdatedOpenView {
+  confirmationId: string;
+  count: number;
+  from: string;
+  fromOffsetMinutes: number;
+  to?: string;
+  toOffsetMinutes?: number;
+  partial: boolean;
+  unconfirmed: boolean;
 }
 
 /** LOCAL copy of the Retry now route's answer (`packages/fiscal-verifactu/src/routes.ts`). */
@@ -1768,10 +1783,15 @@ export interface ClockStopView {
   lastRecordOffsetMinutes: number;
   recordId: string;
   gapMs: number;
-  restart: { personName: string | null; restartedAt: string; clockAt: string } | null;
-  offer: "offered" | "no_proof" | "contrary_proof" | "too_far" | "stepped_back" | "restarted";
-  proof: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
+  proof: "none" | "contrary" | "ready" | "confirmed";
+  agreeing: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
   contrary: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
+  confirmation: {
+    id: string;
+    source: "authority" | "devices" | "admin" | "elapsed";
+    personName: string | null;
+    confirmedAt: string;
+  } | null;
 }
 
 export type ClockStopDeviceView = ClockWitnessView & { label: string | null };
@@ -4207,10 +4227,6 @@ export class DashboardApi {
 
   freeBoxSpace(): Promise<FreedSpaceView> {
     return this.#request<FreedSpaceView>("/api/box/free-space", "POST", {});
-  }
-
-  restartClockPayments(recordId: string): Promise<void> {
-    return this.#request<void>("/api/box/clock-restart", "POST", { recordId });
   }
 
   exportConfiguration(passphrase: string): Promise<Blob> {

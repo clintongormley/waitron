@@ -3,6 +3,7 @@ import { formatBytes } from "@waitron/dashboard-kit";
 import type { AlertView, BoxHealth } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
+import { ALERT_WORDS } from "../i18n/alert-messages.js";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { boxStatusRows, partOfAlert, partsOfNotice, type PartRow } from "./box-status-rows.js";
@@ -50,6 +51,8 @@ function quietHealth(overrides: Partial<BoxHealth> = {}): BoxHealth {
       reclaimable: { bytes: 45_000_000, backupRunning: false },
     },
     clockStop: null,
+    clockCheckWaiting: null,
+    misdatedOpen: [],
     ...overrides,
   };
 }
@@ -646,7 +649,8 @@ describe("the Clock row while payments are stopped for the clock", () => {
   });
   const CHECKED = "2026-10-22T19:40:00.000Z";
   const DEVICE_READ = "2026-10-22T19:41:00.000Z";
-  const RESTARTED = "2026-10-22T19:44:00.000Z";
+  const CONFIRMED = "2026-10-22T19:44:00.000Z";
+  const STOP_BEGAN = "2026-10-22T18:02:00.000Z";
   type ClockStop = NonNullable<BoxHealth["clockStop"]>;
 
   const AUTHORITY = {
@@ -669,9 +673,8 @@ describe("the Clock row while payments are stopped for the clock", () => {
       lastRecordOffsetMinutes: 120,
       recordId: "rec-1",
       gapMs: 50_000_000_000,
-      restart: null,
-      offer: "offered",
-      proof: {
+      proof: "ready",
+      agreeing: {
         authority: AUTHORITY,
         devices: [
           device("d1", "2026-10-22T19:39:00.000Z", "Bar till"),
@@ -680,8 +683,18 @@ describe("the Clock row while payments are stopped for the clock", () => {
         ],
       },
       contrary: { authority: null, devices: [] },
+      confirmation: null,
       ...overrides,
     };
+  }
+
+  const NO_WITNESS = { authority: null, devices: [] };
+
+  function confirmedStop(source: "authority" | "devices" | "admin" | "elapsed"): ClockStop {
+    return clockStop({
+      proof: "confirmed",
+      confirmation: { id: "c-1", source, personName: "Ana", confirmedAt: CONFIRMED },
+    });
   }
 
   function clockRow(health: Partial<BoxHealth>): PartRow {
@@ -702,6 +715,12 @@ describe("the Clock row while payments are stopped for the clock", () => {
       count: "3",
       time: formatIsoMinute(DEVICE_READ),
     });
+  const who = (source: string, language: "en" | "es" = "en") => {
+    const list = ALERT_WORDS["clock_confirmed_by"]!;
+    return (Object.hasOwn(list.words, source) ? list.words[source]! : list.otherwise)[language];
+  };
+  const waiting = () =>
+    fill("box_status.clock.check_waiting", { time: formatIsoMinute(STOP_BEGAN) });
 
   it("says which way the clock is off past a minute, and only how far apart within one", () => {
     const detail = (driftSeconds: number) =>
@@ -722,123 +741,152 @@ describe("the Clock row while payments are stopped for the clock", () => {
     expect(detail(-2)).toBe(fill("box_status.clock.compared", { time, seconds: "2" }));
   });
 
-  it("offers the restart with the proof the box has, and no reason line", () => {
+  it("says proof is found, with the proof the box has, while payments are still stopped", () => {
     const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop() });
     expect(clock.state).toBe("stopped");
-    expect(clock.restartRecordId).toBe("rec-1");
     expect(clock.details).toEqual([
       compared(),
       t("box_status.clock.behind_chain_fix"),
       authorityProof(),
       devicesProof(),
+      "Proof found: payments restart within a few seconds.",
     ]);
   });
 
   it("names only the proof there is", () => {
-    const authorityOnly = clockStop({
-      proof: { authority: AUTHORITY, devices: [] },
-    });
+    const authorityOnly = clockStop({ agreeing: { authority: AUTHORITY, devices: [] } });
     expect(clockRow({ notices: [CLOCK_BEHIND], clockStop: authorityOnly }).details).toEqual([
       compared(),
       t("box_status.clock.behind_chain_fix"),
       authorityProof(),
+      t("box_status.clock.stop.ready"),
     ]);
     const devicesOnly = clockStop({
-      proof: { authority: null, devices: clockStop().proof.devices },
+      agreeing: { authority: null, devices: clockStop().agreeing.devices },
     });
     expect(clockRow({ notices: [CLOCK_BEHIND], clockStop: devicesOnly }).details).toEqual([
       compared(),
       t("box_status.clock.behind_chain_fix"),
       devicesProof(),
+      t("box_status.clock.stop.ready"),
     ]);
   });
 
-  it("gives each refusal its reason, without a restart to offer", () => {
-    for (const offer of ["no_proof", "contrary_proof", "too_far", "stepped_back"] as const) {
-      const proof = offer === "no_proof" ? { authority: null, devices: [] } : clockStop().proof;
-      const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop({ offer, proof }) });
-      expect(clock.restartRecordId).toBeNull();
-      expect(clock.state).toBe("stopped");
-      expect(clock.details).toEqual([
-        compared(),
-        t("box_status.clock.behind_chain_fix"),
-        ...(offer === "no_proof" ? [] : [authorityProof(), devicesProof()]),
-        t(`box_status.clock.refused.${offer}`),
-      ]);
-    }
+  it("says the box waits for proof while there is none", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS }),
+    });
+    expect(clock.state).toBe("stopped");
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      "Waiting for proof that the clock is right: the tax agency's time, or two tills or handhelds.",
+    ]);
   });
 
-  it("draws a restart amber, not red, with who restarted and when", () => {
-    const restarted = clockStop({
-      offer: "restarted",
-      restart: { personName: "Ana", restartedAt: RESTARTED, clockAt: "2025-03-14T09:20:00.000Z" },
+  it("says other clocks disagree while the proof is against the box", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "contrary", agreeing: NO_WITNESS }),
     });
-    const { rows } = boxStatusRows(quietHealth({ clockStop: restarted }), []);
+    expect(clock.state).toBe("stopped");
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      "Other clocks say the box's clock is wrong.",
+    ]);
+  });
+
+  it("draws a confirmed stop amber, not red, with when payments restarted and what confirmed it", () => {
+    const { rows } = boxStatusRows(quietHealth({ clockStop: confirmedStop("devices") }), []);
     expect(row(rows, "clock").state).toBe("attention");
     expect(row(rows, "sales").state).toBe("ok");
-    expect(row(rows, "clock").restartRecordId).toBeNull();
     expect(row(rows, "clock").details).toEqual([
       compared(),
       authorityProof(),
       devicesProof(),
-      fill("box_status.clock.restarted", {
-        person: "Ana",
-        time: formatIsoMinute(RESTARTED),
-      }),
+      `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by two tills or handhelds.`,
     ]);
   });
 
-  it("words a restart whose person is no longer known", () => {
-    const restarted = clockStop({
-      offer: "restarted",
-      restart: { personName: null, restartedAt: RESTARTED, clockAt: "2025-03-14T09:20:00.000Z" },
+  it("names what confirmed the clock with the bell's words for each source", () => {
+    for (const source of ["authority", "devices", "admin", "elapsed"] as const) {
+      expect(clockRow({ clockStop: confirmedStop(source) }).details.at(-1)).toBe(
+        fill("box_status.clock.stop.confirmed", {
+          time: formatIsoMinute(CONFIRMED),
+          who: who(source),
+        }),
+      );
+    }
+  });
+
+  it("says a check waits, amber, once a stop has ended with nothing confirming the clock", () => {
+    const clock = clockRow({ clockCheckWaiting: { since: STOP_BEGAN } });
+    expect(clock.state).toBe("attention");
+    expect(clock.details).toEqual([
+      compared(),
+      `The payment stop that began at ${formatIsoMinute(STOP_BEGAN)} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute; two tills or handhelds, or an administrator's own device, can confirm it too.`,
+    ]);
+  });
+
+  it("shows the waiting check alone in place of a confirmed stop's line", () => {
+    const clock = clockRow({
+      clockStop: confirmedStop("admin"),
+      clockCheckWaiting: { since: STOP_BEGAN },
     });
-    expect(clockRow({ clockStop: restarted }).details).toContain(
-      fill("box_status.clock.restarted", {
-        person: t("box_status.clock.someone"),
-        time: formatIsoMinute(RESTARTED),
-      }),
-    );
+    expect(clock.details).toEqual([compared(), authorityProof(), devicesProof(), waiting()]);
   });
 
-  it("never offers the restart while the clock is unusable", () => {
-    const clock = clockRow({ notices: [CLOCK_BEHIND, CLOCK_UNUSABLE], clockStop: clockStop() });
-    expect(clock.restartRecordId).toBeNull();
-    expect(clock.state).toBe("stopped");
+  it("shows a waiting check after a stop's own line when the stop is not confirmed", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS }),
+      clockCheckWaiting: { since: STOP_BEGAN },
+    });
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      t("box_status.clock.stop.none"),
+      waiting(),
+    ]);
   });
 
-  it("offers no restart on any row while payments are not stopped for the clock", () => {
+  it("adds nothing to the Clock row while payments are not stopped and no check waits", () => {
     const { rows } = boxStatusRows(quietHealth(), []);
-    expect(rows.map((r) => r.restartRecordId)).toEqual(Array(7).fill(null));
+    expect(row(rows, "clock").state).toBe("ok");
     expect(row(rows, "clock").details).toEqual([compared()]);
   });
 
-  it("reads the proof, the reasons and the restart in Spanish", () => {
+  it("reads the proof, every state and the waiting check in Spanish", () => {
     setLocale("es");
-    const offered = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop() });
-    expect(offered.details).toContain(
+    const ready = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop() });
+    expect(ready.details).toContain(
       es["box_status.clock.proof.authority"].replace("{time}", formatIsoMinute(CHECKED)),
     );
-    expect(offered.details).toContain(
+    expect(ready.details).toContain(
       es["box_status.clock.proof.devices"]
         .replace("{count}", "3")
         .replace("{time}", formatIsoMinute(DEVICE_READ)),
     );
-    const refused = clockRow({
-      notices: [CLOCK_BEHIND],
-      clockStop: clockStop({ offer: "stepped_back" }),
-    });
-    expect(refused.details).toContain(es["box_status.clock.refused.stepped_back"]);
-    const restarted = clockRow({
-      clockStop: clockStop({
-        offer: "restarted",
-        restart: { personName: null, restartedAt: RESTARTED, clockAt: RESTARTED },
-      }),
-    });
-    expect(restarted.details).toContain(
-      es["box_status.clock.restarted"]
-        .replace("{person}", es["box_status.clock.someone"])
-        .replace("{time}", formatIsoMinute(RESTARTED)),
+    expect(ready.details).toContain(es["box_status.clock.stop.ready"]);
+    for (const proof of ["none", "contrary"] as const) {
+      expect(
+        clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop({ proof }) }).details,
+      ).toContain(es[`box_status.clock.stop.${proof}`]);
+    }
+    expect(clockRow({ clockStop: confirmedStop("authority") }).details).toContain(
+      es["box_status.clock.stop.confirmed"]
+        .replace("{time}", formatIsoMinute(CONFIRMED))
+        .replace("{who}", who("authority", "es")),
+    );
+    expect(clockRow({ clockStop: confirmedStop("elapsed") }).details).toContain(
+      es["box_status.clock.stop.confirmed"]
+        .replace("{time}", formatIsoMinute(CONFIRMED))
+        .replace("{who}", who("elapsed", "es")),
+    );
+    expect(clockRow({ clockCheckWaiting: { since: STOP_BEGAN } }).details).toContain(
+      es["box_status.clock.check_waiting"].replace("{time}", formatIsoMinute(STOP_BEGAN)),
     );
     const behind = clockRow({
       clock: {

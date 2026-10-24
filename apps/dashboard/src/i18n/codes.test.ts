@@ -740,11 +740,11 @@ it("explains each manager refusal for a post-invoice refund in both languages", 
   }
 });
 
-it("words a refused restart of payments in both languages", () => {
-  expect(codeMessage("clock.restart_refused", "en")).toBe(
-    "Payments cannot be restarted now. Look at the Box status page.",
+it("words a refused confirmation of the clock in both languages", () => {
+  expect(codeMessage("clock.confirm_refused", "en")).toBe(
+    "The clock could not be confirmed. Look at the Box status page.",
   );
-  expect(codeMessage("clock.restart_refused", "es")).toBe(
-    "Ahora no se pueden reanudar los cobros. Mira Estado del equipo.",
+  expect(codeMessage("clock.confirm_refused", "es")).toBe(
+    "No se ha podido confirmar la hora. Mira Estado del equipo.",
   );
 });

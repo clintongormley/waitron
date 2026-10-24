@@ -22,6 +22,8 @@ function health(outbox: NonNullable<BoxHealth["outbox"]>): BoxHealth {
     noticesUnavailable: [],
     filing: true,
     clockStop: null,
+    clockCheckWaiting: null,
+    misdatedOpen: [],
     outbox,
     stream: { state: "off" },
     clock: {

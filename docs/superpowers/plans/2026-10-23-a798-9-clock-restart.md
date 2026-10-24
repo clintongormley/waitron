@@ -656,6 +656,35 @@ check), each in the task named:
   "where an administrator can confirm the clock with their own phone; with the internet or two tills
   switched on, the box does it by itself", the brief's own words; every other word and both times
   unchanged. The Spanish case reads its text from `box-emails.ts` and is unedited.
+- the Box status page's restart (Task R12a-1; lines at `55ce58617` → after). Removed with the
+  route and the method they test: `apps/dashboard/src/api/client.test.ts:3240` "restarts payments
+  by naming the latest record on the box route"; every case of `box-status-screen.test.ts:565`
+  "…'s restart of payments" (`:640`, `:669`, `:695`, `:705`, `:729`, `:752`, `:766`, `:787`, `:820`,
+  `:840`, `:850`, `:883`, `:902`, `:933`, `:966`, `:1036`: the button, the dialog, its sends,
+  refusals and Escape); `box-status-screen.a11y.test.ts:171` "renders the open restart dialog
+  accessibly, with a refusal". Reworded to what they still check: `codes.test.ts:743` "words a
+  refused restart of payments…" → "words a refused confirmation of the clock…", reading
+  `clock.confirm_refused`'s one sentence; `box-status-screen.a11y.test.ts:158` "…a stop the box
+  offers to restart" → "…a stop whose proof is found", the same axe check with `proof "ready"` and no
+  button lookup; `box-status-screen.test.ts:982` "never breaks a written time…, on the Clock row or
+  in the dialog" → "…on the Clock row", the row alone over the same widths with a `confirmed` stop
+  and R4c's alert params (`confirmedBy`), its floor `121 * 10` → `121 * 6` (the dialog's four times
+  are gone). In `box-status-rows.test.ts`'s "the Clock row while payments are stopped" (`:640`),
+  each old `offer` case maps to the status that shows the same state: `:725` "offers the restart
+  with the proof…" → "says proof is found…" (`ready`: the same proof lines, then the `ready`
+  sentence; `restartRecordId` is gone with the button); `:737` "names only the proof there is" reads
+  `agreeing` and ends with the `ready` sentence; `:756` "gives each refusal its reason…" (`no_proof`,
+  `contrary_proof`, `too_far`, `stepped_back`) → "says the box waits for proof…" (`none`) and "says
+  other clocks disagree…" (`contrary`), `too_far` and `stepped_back` gone with the states; `:771`
+  "draws a restart amber…" and `:791` "words a restart whose person is no longer known" → "draws a
+  confirmed stop amber…" and "names what confirmed the clock with the bell's words for each source"
+  (the line names what confirmed, not a person); `:804` "never offers the restart while the clock
+  is unusable" removed with the button; `:810` "offers no restart on any row…" → "adds nothing to
+  the Clock row while payments are not stopped and no check waits"; `:816` the Spanish case reads
+  every new state's words. Fixtures gain `clockCheckWaiting: null` and `misdatedOpen: []` in
+  `box-status-rows.test.ts`, `box-status-rows.tax.test.ts`, `box-status-screen.test.ts`,
+  `box-status-screen.a11y.test.ts`, `box-status-screen.retry.test.ts` and
+  `box-status-screen.retry.a11y.test.ts`.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
 and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed

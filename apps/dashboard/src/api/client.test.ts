@@ -3237,16 +3237,6 @@ it("reads the box's health and frees its disk through the box routes", async () 
   ]);
 });
 
-it("restarts payments by naming the latest record on the box route", async () => {
-  const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-  const api = new DashboardApi("", fetchImpl);
-  await expect(api.restartClockPayments("rec-1")).resolves.toBeUndefined();
-  const calls = fetchImpl.mock.calls as [string, RequestInit][];
-  expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
-    ["/api/box/clock-restart", "POST", '{"recordId":"rec-1"}'],
-  ]);
-});
-
 it("never sends a free-space press as a passive read, even from the background client", async () => {
   const freed = { freedBytes: 0, deleted: 0, failed: 0, backupRunning: false, freeBytes: 9 };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(freed));

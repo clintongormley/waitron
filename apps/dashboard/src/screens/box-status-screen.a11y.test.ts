@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./box-status-screen.js";
@@ -36,6 +36,8 @@ function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
       reclaimable: { bytes: 45_000_000, backupRunning: false },
     },
     clockStop: null,
+    clockCheckWaiting: null,
+    misdatedOpen: [],
     ...overrides,
   };
 }
@@ -77,7 +79,7 @@ const TROUBLED = health({
   canFree: false,
 });
 
-const OFFERED = health({
+const PROOF_READY = health({
   notices: [notice("clock.behind_chain", "error")],
   clockStop: {
     clockAt: "2026-10-22T18:10:00.000Z",
@@ -86,9 +88,8 @@ const OFFERED = health({
     lastRecordOffsetMinutes: 120,
     recordId: "rec-42",
     gapMs: 4_800_000,
-    restart: null,
-    offer: "offered",
-    proof: {
+    proof: "ready",
+    agreeing: {
       authority: {
         kind: "authority",
         id: "aeat",
@@ -108,6 +109,7 @@ const OFFERED = health({
       ],
     },
     contrary: { authority: null, devices: [] },
+    confirmation: null,
   },
 });
 
@@ -155,40 +157,13 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("renders accessibly with a stop the box offers to restart", async () => {
+  it("renders accessibly with a stop whose proof is found", async () => {
     const { el, host } = await mountWidget<BoxStatusScreen>(
       "dashboard-box-status-screen",
-      { api: stubApi(OFFERED), canOpen: () => true },
+      { api: stubApi(PROOF_READY), canOpen: () => true },
       theme,
     );
     await flush(el);
-    expect(
-      el.shadowRoot!.querySelector("[data-test=row-clock] [data-test=restart]"),
-    ).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders the open restart dialog accessibly, with a refusal", async () => {
-    const api = stubApi(OFFERED);
-    (api as unknown as { restartClockPayments: unknown }).restartClockPayments = vi
-      .fn()
-      .mockRejectedValue({ code: "clock.restart_refused", params: { reason: "record_changed" } });
-    const { el, host } = await mountWidget<BoxStatusScreen>(
-      "dashboard-box-status-screen",
-      { api, canOpen: () => true },
-      theme,
-    );
-    await flush(el);
-    (el.shadowRoot!.querySelector("[data-test=restart]") as HTMLElement).click();
-    await flush(el);
-    await expectNoA11yViolations(host);
-    (el.shadowRoot!.querySelector("[data-test=restart-confirm]") as HTMLElement).click();
-    await flush(el);
-    expect(
-      el
-        .shadowRoot!.querySelector("[data-test=restart-dialog]")!
-        .shadowRoot!.querySelector("[data-error]"),
-    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });
