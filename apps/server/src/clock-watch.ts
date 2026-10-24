@@ -31,7 +31,9 @@ const PENDING_MAX = 1_440;
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
  * last finished, on the primary only. During a stop each check opens a clock check (the seat
- * decides whether one is due) and confirms the clock when the witnesses are ready. `stop` resolves
+ * decides whether one is due) and confirms the clock when the witnesses are ready; while a check
+ * waits after its stop ended by itself, each check offers the seat the witnesses to close it. AEAT's
+ * time is asked during a stop or while a check waits. `stop` resolves
  * once a check in flight has finished; nothing is read, asked or written after it. */
 export function startClockWatch(deps: {
   backend: Pick<
@@ -42,6 +44,8 @@ export function startClockWatch(deps: {
     | "readAuthorityTime"
     | "openClockCheck"
     | "confirmClockStop"
+    | "waitingClockCheck"
+    | "closeClockCheckByItself"
   >;
   store: Pick<
     ClockWitnessStore,
@@ -164,6 +168,42 @@ export function startClockWatch(deps: {
     });
   }
 
+  async function askAuthority(): Promise<void> {
+    if (!deps.filesRecords() || deps.backend.readAuthorityTime === undefined || !authorityDue())
+      return;
+    lastAuthorityMs = monotonic();
+    const sample = await deps.backend.readAuthorityTime();
+    if (stopped) return;
+    if (sample !== null) deps.store.noteAuthority(sample);
+  }
+
+  /** AEAT is asked before the closing, so an answer it gives on this check can close the check. */
+  async function closeWaiting(
+    reading: Pick<Reading, "instant" | "offsetMinutes">,
+    bootAt: BootReading,
+  ): Promise<void> {
+    const { waitingClockCheck, closeClockCheckByItself } = deps.backend;
+    if (waitingClockCheck === undefined || closeClockCheckByItself === undefined) return;
+    const waiting = await deps.read((tx) => deps.backend.waitingClockCheck!(tx, reading));
+    if (waiting === null || stopped) return;
+    await askAuthority();
+    if (stopped) return;
+    const { confirmation } = await deps.transaction((tx) =>
+      deps.backend.closeClockCheckByItself!(tx, {
+        reading,
+        boot: bootAt,
+        witnesses: deps.store.witnesses(),
+        nodeId: deps.nodeId,
+      }),
+    );
+    if (confirmation === null) return;
+    deps.store.clear();
+    deps.log("info", "clock_watch.check_closed", {
+      confirmationId: confirmation.id,
+      source: confirmation.source,
+    });
+  }
+
   async function check(): Promise<void> {
     const current = { wallMs: wall(), monoMs: monotonic() };
     const earlier = previous;
@@ -214,6 +254,17 @@ export function startClockWatch(deps: {
       // at one not behind the latest record; only the second ends the stop, and with it AEAT's
       // disagreements (plan decision 4).
       if (reading === undefined || recordable(reading)) deps.store.endStop();
+      if (reading !== undefined) {
+        try {
+          await closeWaiting(
+            { instant: reading.instant, offsetMinutes: reading.offsetMinutes },
+            bootAt!,
+          );
+        } catch (error) {
+          deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+        }
+        if (stopped) return;
+      }
     } else {
       const at = { instant: reading!.instant, offsetMinutes: reading!.offsetMinutes };
       // A write that keeps failing must not keep the confirmation, AEAT's time and the disproofs
@@ -233,12 +284,8 @@ export function startClockWatch(deps: {
         }
       }
       if (stopped) return;
-      if (deps.filesRecords() && deps.backend.readAuthorityTime !== undefined && authorityDue()) {
-        lastAuthorityMs = monotonic();
-        const sample = await deps.backend.readAuthorityTime();
-        if (stopped) return;
-        if (sample !== null) deps.store.noteAuthority(sample);
-      }
+      await askAuthority();
+      if (stopped) return;
     }
     const disagreeing = judgeClockWitnesses(deps.store.takeNewAuthority()).authorityDisagrees;
     for (const witness of [...disagreeing].reverse()) {

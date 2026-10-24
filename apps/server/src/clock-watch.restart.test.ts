@@ -183,6 +183,41 @@ function noteTwoDevices(store: ClockWitnessStore, at: Box): void {
   store.noteDevice("till-b", "192.168.10.32", at.reading(), arrived);
 }
 
+/** AEAT answering the real time, against the box's clock now. */
+function truth(at: Box, aheadMs = 0): AuthorityTimeSample {
+  return {
+    authorityMs: at.clocks.real + aheadMs,
+    uncertaintyMs: 100,
+    at: { wallMs: at.reading(), monoMs: at.boot().ms },
+  };
+}
+
+/** One sale at 08:00 on a right clock, then the clock steps 10 minutes back: the first look, at
+ * `T`, sees the stop. */
+async function steppedBack(): Promise<Box> {
+  const at = box();
+  at.clocks.skew = 0;
+  expect(await sale(at)).toBe(200);
+  at.clocks.skew = -10 * M;
+  return at;
+}
+
+const T = T0 + 15 * S;
+
+function closings(): { source: string; check_id: string; unconfirmed: boolean; id: string }[] {
+  return suite.db
+    .all<{ id: string; source: string; check_id: string; proof: string }>(
+      sql`select id, source, check_id, proof from clock_confirmations order by seq`,
+    )
+    .map((row) => ({
+      id: row.id,
+      source: row.source,
+      check_id: row.check_id,
+      unconfirmed: (JSON.parse(row.proof) as { closing: { unconfirmed: boolean } }).closing
+        .unconfirmed,
+    }));
+}
+
 describe("the clock watch over the real seat", () => {
   it("opens no check while an administrator's lift covers, and lists the ahead-stamped sales once (the model's case A)", async () => {
     const at = box();
@@ -265,5 +300,110 @@ describe("the clock watch over the real seat", () => {
       partial: false,
     });
     expect(at.store.witnesses()).toEqual([]);
+  });
+
+  it("does not close a waiting check before AEAT can be asked again, then closes it on AEAT agreeing, listing nothing", async () => {
+    const at = await steppedBack();
+    const w = watch(at, () => truth(at));
+    await w.look(T);
+    expect(w.readAuthorityTime).toHaveBeenCalledTimes(1);
+    const [opened] = checks();
+    at.clocks.real = T + 20 * S;
+    at.clocks.skew = 0;
+    await w.look(T + 30 * S);
+    await w.look(T + 45 * S);
+    expect(w.readAuthorityTime).toHaveBeenCalledTimes(1);
+    expect(count("clock_confirmations")).toBe(0);
+    await w.look(T + 60 * S);
+    await w.stop();
+    expect(w.readAuthorityTime).toHaveBeenCalledTimes(2);
+    const rows = closings();
+    expect(rows).toEqual([
+      { id: expect.any(String), source: "authority", check_id: opened!.id, unconfirmed: false },
+    ]);
+    const listed = await withTransaction(venue.db, (tx) =>
+      venue.backend.misdatedRecords!(tx, rows[0]!.id),
+    );
+    expect(listed).toEqual({ known: true, records: [] });
+    expect(count("clock_checks")).toBe(1);
+  });
+
+  it("keeps a check waiting while no witness comes, asking AEAT once a minute and blocking no sale, then closes it when two devices agree", async () => {
+    const at = await steppedBack();
+    const w = watch(at, () => null);
+    await w.look(T);
+    const [opened] = checks();
+    at.clocks.skew = 0;
+    w.readAuthorityTime.mockClear();
+    for (let look = 1; look <= 40; look += 1) await w.look(T + look * 15 * S);
+    expect(w.readAuthorityTime).toHaveBeenCalledTimes(10);
+    expect(count("clock_confirmations")).toBe(0);
+    expect(count("clock_checks")).toBe(1);
+    at.clocks.real = T + 605 * S;
+    expect(await sale(at)).toBe(200);
+    const waiting = await withTransaction(venue.db, (tx) =>
+      venue.backend.waitingClockCheck!(tx, { instant: new Date(at.reading()), offsetMinutes: 60 }),
+    );
+    expect(waiting).toEqual({
+      checkId: opened!.id,
+      openedAt: new Date(T - 10 * M).toISOString(),
+    });
+    noteTwoDevices(at.store, at);
+    await w.look(T + 610 * S);
+    await w.stop();
+    expect(closings()).toEqual([
+      { id: expect.any(String), source: "devices", check_id: opened!.id, unconfirmed: false },
+    ]);
+  });
+
+  it("closes a waiting check unconfirmed when a fresh AEAT answer disagrees", async () => {
+    const at = await steppedBack();
+    let aheadMs: number | null = null;
+    const w = watch(at, () => (aheadMs === null ? null : truth(at, aheadMs)));
+    await w.look(T);
+    const [opened] = checks();
+    at.clocks.skew = 0;
+    await w.look(T + 15 * S);
+    expect(count("clock_confirmations")).toBe(0);
+    aheadMs = 10 * M;
+    await w.look(T + 60 * S);
+    await w.stop();
+    expect(closings()).toEqual([
+      { id: expect.any(String), source: "elapsed", check_id: opened!.id, unconfirmed: true },
+    ]);
+  });
+
+  it("closes the waiting check unconfirmed and opens one new check when the clock steps back after a sale", async () => {
+    const at = await steppedBack();
+    const w = watch(at, () => null);
+    await w.look(T);
+    const [opened] = checks();
+    at.clocks.skew = 0;
+    await w.look(T + 15 * S);
+    at.clocks.real = T + 20 * S;
+    expect(await sale(at)).toBe(200);
+    at.clocks.skew = -10 * M;
+    await w.look(T + 30 * S);
+    await w.look(T + 45 * S);
+    await w.stop();
+    expect(checks()).toHaveLength(2);
+    expect(checks()[0]!.id).toBe(opened!.id);
+    expect(closings()).toEqual([
+      { id: expect.any(String), source: "elapsed", check_id: opened!.id, unconfirmed: true },
+    ]);
+  });
+
+  it("keeps the same check open when the clock steps back again with no sale in between", async () => {
+    const at = await steppedBack();
+    const w = watch(at, () => null);
+    await w.look(T);
+    const [opened] = checks();
+    at.clocks.skew = 0;
+    await w.look(T + 15 * S);
+    at.clocks.skew = -10 * M;
+    await w.look(T + 30 * S);
+    await w.stop();
+    expect(checks().map((row) => row.id)).toEqual([opened!.id]);
+    expect(count("clock_confirmations")).toBe(0);
   });
 });

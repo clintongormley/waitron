@@ -6,6 +6,7 @@ import type {
   ClockProvedWrong,
   ClockStopState,
   ClockWitness,
+  WaitingClockCheck,
 } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -39,6 +40,15 @@ const CONFIRMATION: ClockConfirmation = {
   recordId: "record-1",
 };
 
+const CLOSING: ClockConfirmation = {
+  ...CONFIRMATION,
+  id: "confirmation-2",
+  source: "authority",
+  recordId: null,
+};
+
+const WAITING: WaitingClockCheck = { checkId: "check-1", openedAt: "2026-07-20T17:00:00.000Z" };
+
 function harness(
   options: {
     stop?: ClockStopState | null;
@@ -49,6 +59,8 @@ function harness(
     seat?: "full" | "empty";
     /** The seat also opens checks and confirms the clock. */
     checks?: boolean;
+    /** The seat also reads and closes a check that waits; this one waits. */
+    waiting?: WaitingClockCheck | null;
   } = {},
 ) {
   let wallMs = START_MS;
@@ -82,6 +94,16 @@ function harness(
           >(async () => ({ confirmation: CONFIRMATION })),
         }
       : {}),
+    ...(options.waiting === undefined
+      ? {}
+      : {
+          waitingClockCheck: vi.fn<(...args: unknown[]) => Promise<WaitingClockCheck | null>>(
+            async () => options.waiting!,
+          ),
+          closeClockCheckByItself: vi.fn<
+            (...args: unknown[]) => Promise<{ confirmation: ClockConfirmation | null }>
+          >(async () => ({ confirmation: CLOSING })),
+        }),
   };
   const store = {
     noteAuthority: vi.fn(),
@@ -711,6 +733,121 @@ describe("startClockWatch", () => {
     await stopping;
     expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
     expect(h.timers).toHaveLength(1);
+  });
+
+  it("closes a waiting check at a look with no stop, on the reading, the boot reading and the witnesses, logs it and clears the store", async () => {
+    const device: ClockWitness = {
+      kind: "device",
+      id: "device-1",
+      address: "192.168.10.31",
+      boxAt: "2026-07-20T18:00:10.000Z",
+      witnessAt: "2026-07-20T18:00:10.000Z",
+      uncertaintyMs: 0,
+    };
+    const h = harness({ stop: null, waiting: WAITING });
+    h.store.witnesses.mockReturnValue([device]);
+    await h.tick();
+    const reading = { instant: new Date(h.wall()), offsetMinutes: 120 };
+    expect(h.backend.waitingClockCheck).toHaveBeenCalledExactlyOnceWith(TX, reading);
+    expect(h.backend.closeClockCheckByItself).toHaveBeenCalledExactlyOnceWith(TX, {
+      reading,
+      boot: BOOT,
+      witnesses: [device],
+      nodeId: "node-1",
+    });
+    expect(h.transaction).toHaveBeenCalledTimes(1);
+    expect(h.store.endStop).toHaveBeenCalledTimes(1);
+    expect(h.store.clear).toHaveBeenCalledTimes(1);
+    expect(h.logs).toEqual([
+      {
+        level: "info",
+        event: "clock_watch.check_closed",
+        fields: { confirmationId: "confirmation-2", source: "authority" },
+      },
+    ]);
+  });
+
+  it("asks AEAT while a check waits, before closing it, at most once a minute by the steady clock", async () => {
+    const h = harness({ stop: null, waiting: WAITING });
+    h.backend.closeClockCheckByItself!.mockResolvedValue({ confirmation: null });
+    await h.tick();
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
+    expect(h.store.noteAuthority).toHaveBeenCalledExactlyOnceWith(h.sample);
+    expect(h.store.noteAuthority.mock.invocationCallOrder[0]).toBeLessThan(
+      h.backend.closeClockCheckByItself!.mock.invocationCallOrder[0]!,
+    );
+    await h.tick();
+    await h.tick();
+    await h.tick();
+    expect(h.backend.closeClockCheckByItself).toHaveBeenCalledTimes(4);
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
+    await h.tick();
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(2);
+    expect(h.store.clear).not.toHaveBeenCalled();
+    expect(h.logs).toEqual([]);
+  });
+
+  it("asks AEAT nothing and closes nothing when no check waits", async () => {
+    const h = harness({ stop: null, waiting: null });
+    await h.tick();
+    expect(h.backend.waitingClockCheck).toHaveBeenCalledTimes(1);
+    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
+    expect(h.backend.closeClockCheckByItself).not.toHaveBeenCalled();
+    expect(h.transaction).not.toHaveBeenCalled();
+  });
+
+  it("asks AEAT nothing while a check waits on a box that does not file, and still closes it", async () => {
+    const h = harness({ stop: null, waiting: WAITING, files: false });
+    await h.tick();
+    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
+    expect(h.backend.closeClockCheckByItself).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs a failing closing, still drains AEAT's new witnesses, and closes at the next look", async () => {
+    const h = harness({ stop: null, waiting: WAITING });
+    h.backend.closeClockCheckByItself!.mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    await h.tick();
+    expect(h.logs).toEqual([
+      {
+        level: "warn",
+        event: "clock_watch.check_failed",
+        fields: { errorCode: "storage.disk_full" },
+      },
+    ]);
+    expect(h.store.takeNewAuthority).toHaveBeenCalledTimes(1);
+    expect(h.store.clear).not.toHaveBeenCalled();
+    await h.tick();
+    expect(h.store.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks AEAT nothing and closes nothing when stopped while the waiting check is being read", async () => {
+    const h = harness({ stop: null, waiting: WAITING });
+    let release!: (answer: WaitingClockCheck | null) => void;
+    h.backend.waitingClockCheck!.mockImplementationOnce(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    h.timers.at(-1)!.fn();
+    await vi.waitFor(() => expect(h.backend.waitingClockCheck).toHaveBeenCalledTimes(1));
+    const stopping = h.watch.stop();
+    release(WAITING);
+    await stopping;
+    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
+    expect(h.backend.closeClockCheckByItself).not.toHaveBeenCalled();
+  });
+
+  it("closes nothing when stopped while AEAT is asked during a wait", async () => {
+    const h = harness({ stop: null, waiting: WAITING });
+    let release!: (answer: AuthorityTimeSample) => void;
+    h.backend.readAuthorityTime.mockImplementationOnce(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    h.timers.at(-1)!.fn();
+    await vi.waitFor(() => expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1));
+    const stopping = h.watch.stop();
+    release(h.sample);
+    await stopping;
+    expect(h.store.noteAuthority).not.toHaveBeenCalled();
+    expect(h.backend.closeClockCheckByItself).not.toHaveBeenCalled();
   });
 
   it("runs on the real clocks and timer when none are given", async () => {
