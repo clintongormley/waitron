@@ -308,6 +308,51 @@ describe("a closing that names no record", () => {
   );
 });
 
+describe("the wrongly dated sales' alert", () => {
+  const MISDATED = "clock.records_misdated";
+
+  function closesByItself(ms: number, witnesses: readonly ClockWitness[]) {
+    return withTransaction(suite.db, (tx) =>
+      closeClockCheckByItself(tx, { reading: reading(ms), boot: BOOT, witnesses, nodeId }),
+    );
+  }
+
+  it("stays one open alert when a second closing that cannot tell names the same sale", async () => {
+    await sale(T);
+    const named = latest();
+    // A stop opens at R and ends by itself; AEAT disagrees, so the box cannot tell.
+    await openCheckAt(R);
+    const first = (await closesByItself(T + M, [authority(T + 30 * S, 2 * H)])).confirmation!;
+    // The clock steps back again with no sale in between, and that stop ends the same way.
+    await openCheckAt(R + H);
+    const second = (await closesByItself(T + 2 * M, [authority(T + 90 * S, 2 * H)])).confirmation!;
+    expect([first.source, second.source]).toEqual(["elapsed", "elapsed"]);
+    expect(
+      suite.db
+        .all<{ id: string }>(sql`select id from clock_confirmations order by seq`)
+        .map((row) => row.id),
+    ).toEqual([first.id, second.id]);
+    expect(incidents(MISDATED)).toEqual([
+      {
+        source: "dashboard",
+        deviceId: null,
+        saleId: named.saleId,
+        code: MISDATED,
+        params: {
+          confirmationId: first.id,
+          count: 0,
+          from: iso(R),
+          fromOffsetMinutes: 60,
+          partial: true,
+          unconfirmed: true,
+        },
+        severity: "error",
+        detectedAt: iso(T + M),
+      },
+    ]);
+  });
+});
+
 describe("a restarted clock proved wrong", () => {
   async function restartWithThreeSales(): Promise<{ restartId: string; saleId: string }> {
     await sale(T);

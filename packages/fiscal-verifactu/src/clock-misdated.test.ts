@@ -3,13 +3,25 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { BootReading, ClockConfirmationSource, TrustedClock } from "@waitron/fiscal";
+import type {
+  BootReading,
+  ClockConfirmationSource,
+  ClockWitness,
+  TrustedClock,
+} from "@waitron/fiscal";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { correctedStart, openCheck, openClockCheck, writeClosing } from "./clock-checks.js";
+import {
+  closeClockCheckByItself,
+  correctedStart,
+  openCheck,
+  openClockCheck,
+  writeClosing,
+} from "./clock-checks.js";
+import { confirmClockStop } from "./clock-confirmation.js";
 import { misdatedRecords } from "./clock-misdated.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
@@ -382,5 +394,322 @@ describe("misdatedRecords", () => {
 
   it("answers null for an id no confirmation has", async () => {
     expect(await answer("no-such-confirmation")).toBeNull();
+  });
+});
+
+const MISDATED = "clock.records_misdated";
+
+function iso(ms: number): string {
+  return new Date(ms).toISOString();
+}
+
+function reading(ms: number) {
+  return { instant: new Date(ms), offsetMinutes: 60 };
+}
+
+/** The boot reading `ms` of real time after the check at X opened, on the same boot. */
+function bootAt(ms: number): BootReading {
+  return { ms: BOOT_MS + (ms - X), id: "boot-1" };
+}
+
+function authority(boxMs: number, differenceMs: number): ClockWitness {
+  return {
+    kind: "authority",
+    id: "authority",
+    boxAt: iso(boxMs),
+    witnessAt: iso(boxMs + differenceMs),
+    uncertaintyMs: S,
+  };
+}
+
+function watchLooks(ms: number, boot = bootAt(ms)) {
+  return withTransaction(suite.db, (tx) =>
+    openClockCheck(tx, { reading: reading(ms), boot, nodeId }),
+  );
+}
+
+function closesByItself(ms: number, witnesses: readonly ClockWitness[], boot = bootAt(ms)) {
+  return withTransaction(suite.db, (tx) =>
+    closeClockCheckByItself(tx, { reading: reading(ms), boot, witnesses, nodeId }),
+  );
+}
+
+/** An administrator's device, two seconds from the box, confirms at `ms`. */
+function adminConfirms(ms: number, boot = bootAt(ms)) {
+  return withTransaction(suite.db, (tx) =>
+    confirmClockStop(tx, {
+      reading: reading(ms),
+      boot,
+      witnesses: [],
+      nodeId,
+      admin: {
+        personId: "person-1",
+        personName: "Ana",
+        reading: { boxAt: iso(ms), witnessAt: iso(ms + 2 * S), uncertaintyMs: 0 },
+      },
+    }),
+  );
+}
+
+function storedProof(confirmationId: string): { closing?: unknown; checkId: string | null } {
+  const [row] = suite.db.all<{ proof: string; checkId: string | null }>(
+    sql`select proof, check_id as checkId from clock_confirmations where id = ${confirmationId}`,
+  );
+  return { ...(JSON.parse(row!.proof) as object), checkId: row!.checkId };
+}
+
+function misdatedAlerts() {
+  return suite.db
+    .all<{ saleId: string | null; params: string; severity: string; source: string }>(
+      sql`select sale_id as saleId, params, severity, source from incidents
+          where code = ${MISDATED} order by detected_at, id`,
+    )
+    .map((row) => ({ ...row, params: JSON.parse(row.params) as Record<string, unknown> }));
+}
+
+function saleOf(recordId: string): string {
+  return suite.db.all<{ saleId: string }>(
+    sql`select sale_id as saleId from registros_facturacion where id = ${recordId}`,
+  )[0]!.saleId;
+}
+
+function count(table: string): number {
+  return suite.db.all<{ n: number }>(sql`select count(*) as n from ${sql.identifier(table)}`)[0]!.n;
+}
+
+/** The model's fixture: a sale every 5 minutes stamped 10:00 to 11:55, while the clock read ahead. */
+async function modelSales(): Promise<void> {
+  for (let k = 0; k <= 23; k++) await sale(X + k * 5 * M);
+}
+
+/** The alert a closing that lists `records` records, as R7 words it. */
+function listAlert(confirmationId: string, records: ReturnType<typeof listed>, partial: boolean) {
+  return {
+    source: "dashboard",
+    severity: "error",
+    saleId: saleOf(records[0]!.recordId),
+    params: {
+      confirmationId,
+      count: records.length,
+      from: records[0]!.generatedAt,
+      fromOffsetMinutes: 60,
+      to: records.at(-1)!.generatedAt,
+      toOffsetMinutes: 60,
+      partial,
+      unconfirmed: false,
+    },
+  };
+}
+
+describe("the closings list and alert what they find", () => {
+  it("an administrator 90 minutes late lists from the stop's start, and stores the closing (case 1)", async () => {
+    await aheadSales();
+    const check = await watchLooks(X);
+    const { confirmation } = await adminConfirms(X + 90 * M);
+    expect(count("clock_checks")).toBe(1);
+    expect(storedProof(confirmation!.id)).toMatchObject({
+      checkId: check!.id,
+      closing: {
+        bootMs: BOOT_MS + 90 * M,
+        bootId: "boot-1",
+        correctedStart: iso(X),
+        partial: false,
+        unconfirmed: false,
+      },
+    });
+    const records = await list(confirmation!.id);
+    expect(records).toEqual(listed(after(X + M)));
+    expect(records).toHaveLength(24);
+    expect(misdatedAlerts()).toEqual([listAlert(confirmation!.id, records, false)]);
+  });
+
+  it("with no check open yet, opens one and closes it partial in the same transaction (case 1b)", async () => {
+    await aheadSales();
+    expect(count("clock_checks")).toBe(0);
+    const { confirmation } = await adminConfirms(X + 90 * M);
+    const checks = suite.db.all<{ id: string; openedAt: string; detail: string }>(
+      sql`select id, opened_at as openedAt, detail from clock_checks`,
+    );
+    expect(checks).toHaveLength(1);
+    expect(checks[0]!.openedAt).toBe(iso(X + 90 * M));
+    expect(JSON.parse(checks[0]!.detail)).toMatchObject({
+      clockAt: iso(X + 90 * M),
+      bootMs: BOOT_MS + 90 * M,
+      bootId: "boot-1",
+      heads: heads(),
+    });
+    expect(storedProof(confirmation!.id)).toMatchObject({
+      checkId: checks[0]!.id,
+      closing: {
+        bootMs: BOOT_MS + 90 * M,
+        bootId: "boot-1",
+        correctedStart: iso(X + 90 * M),
+        partial: true,
+        unconfirmed: false,
+      },
+    });
+    const records = await list(confirmation!.id);
+    // 11:35 to 12:00, not case 1's 24.
+    expect(records).toEqual(listed(after(X + 91 * M)));
+    expect(records).toHaveLength(6);
+    expect(misdatedAlerts()).toEqual([listAlert(confirmation!.id, records, true)]);
+  });
+
+  it("after a lift at 11:30, alerts once, and never lists a sale made under the lift (case 2b)", async () => {
+    await modelSales();
+    const stampedAhead = rows();
+    await watchLooks(X);
+    const { confirmation } = await adminConfirms(X + 90 * M);
+    // A sale every 5 minutes, real time, until 13:00, the watch looking at each.
+    for (let at = X + 95 * M; at <= X + 3 * H; at += 5 * M) {
+      await sale(at);
+      expect(await watchLooks(at + 10 * S)).toBeNull();
+      expect(await closesByItself(at + 10 * S, [authority(at + 10 * S, 0)])).toEqual({
+        confirmation: null,
+      });
+    }
+    expect(count("clock_confirmations")).toBe(1);
+    const records = await list(confirmation!.id);
+    // 10:05 to 11:55: every sale stamped ahead but the one at 10:00.
+    expect(records.map((record) => record.recordId)).toEqual(
+      stampedAhead.slice(1).map((row) => row.id),
+    );
+    expect(records).toHaveLength(23);
+    expect(records[0]!.generatedAt).toBe(iso(X + 5 * M));
+    expect(records.at(-1)!.generatedAt).toBe(iso(X + 115 * M));
+    expect(rows()).toHaveLength(24 + 18);
+    expect(misdatedAlerts()).toEqual([listAlert(confirmation!.id, records, false)]);
+  });
+
+  it("does not list sales made between the stop's end and its closing (case 5b)", async () => {
+    await modelSales();
+    await watchLooks(X);
+    // The stop ends by itself at 11:54:00; two sales follow before AEAT agrees at 11:54:06.
+    expect(await watchLooks(X + 114 * M)).toBeNull();
+    await sale(X + 114 * M + 2 * S);
+    await sale(X + 114 * M + 4 * S);
+    const at = X + 114 * M + 6 * S;
+    const { confirmation } = await closesByItself(at, [authority(at, 0)]);
+    expect(confirmation).toMatchObject({ source: "authority", recordId: null });
+    const records = await list(confirmation!.id);
+    expect(records).toHaveLength(23);
+    expect(records[0]!.generatedAt).toBe(iso(X + 5 * M));
+    expect(records.at(-1)!.generatedAt).toBe(iso(X + 115 * M));
+    const between = rows()
+      .filter((row) => row.at === iso(X + 114 * M + 2 * S) || row.at === iso(X + 114 * M + 4 * S))
+      .map((row) => row.id);
+    expect(between).toHaveLength(2);
+    expect(records.filter((record) => between.includes(record.recordId))).toEqual([]);
+    expect(misdatedAlerts()).toEqual([listAlert(confirmation!.id, records, false)]);
+  });
+
+  it("a clock set back by mistake and put right lists nothing and alerts nothing (case 5c)", async () => {
+    // The clock is right: sales at 09:50, 09:55 and 10:00.
+    await sale(X - 10 * M);
+    await sale(X - 5 * M);
+    await sale(X);
+    // At 10:00 it is set 30 minutes back, so it reads 09:30, and the stop opens.
+    await watchLooks(X - 30 * M, BOOT);
+    const disagreeing = authority(X - 29 * M, 30 * M);
+    expect(await closesByItself(X - 29 * M, [disagreeing], bootAt(X + M))).toEqual({
+      confirmation: null,
+    });
+    // At 10:10 it is put right; a sale at 10:10:02, then AEAT agrees at 10:10:06.
+    await sale(X + 10 * M + 2 * S);
+    const at = X + 10 * M + 6 * S;
+    const before = count("incidents");
+    const { confirmation } = await closesByItself(at, [disagreeing, authority(at, 0)]);
+    expect(confirmation).toMatchObject({ source: "authority" });
+    expect(storedProof(confirmation!.id)).toMatchObject({
+      closing: { correctedStart: iso(X), partial: false, unconfirmed: false },
+    });
+    expect(await answer(confirmation!.id)).toEqual({ known: true, records: [] });
+    expect(misdatedAlerts()).toEqual([]);
+    expect(count("incidents")).toBe(before);
+  });
+
+  it("a stop that ends by itself lists once AEAT agrees, with no restarted alert (case 2)", async () => {
+    await aheadSales();
+    await watchLooks(X);
+    // Real time passes 12:00, and AEAT agrees.
+    const at = X + 2 * H + 10 * S;
+    const { confirmation } = await closesByItself(at, [authority(at, 0)]);
+    expect(confirmation).toMatchObject({ source: "authority", recordId: null });
+    const records = await list(confirmation!.id);
+    expect(records).toEqual(listed(after(X + M)));
+    expect(records).toHaveLength(24);
+    expect(misdatedAlerts()).toEqual([listAlert(confirmation!.id, records, false)]);
+    expect(count("incidents")).toBe(1);
+  });
+
+  it("a stop that ends by itself cannot tell once AEAT disagrees, naming the opening's sale (case 2)", async () => {
+    await aheadSales();
+    const opening = rows().at(-1)!;
+    await watchLooks(X);
+    const at = X + 2 * H + 10 * S;
+    const { confirmation } = await closesByItself(at, [authority(at, 20 * M)]);
+    expect(confirmation).toMatchObject({ source: "elapsed", recordId: null });
+    expect(await answer(confirmation!.id)).toEqual({ known: false });
+    expect(misdatedAlerts()).toEqual([
+      {
+        source: "dashboard",
+        severity: "error",
+        saleId: saleOf(opening.id),
+        params: {
+          confirmationId: confirmation!.id,
+          count: 0,
+          from: iso(X),
+          fromOffsetMinutes: 60,
+          partial: false,
+          unconfirmed: true,
+        },
+      },
+    ]);
+    expect(count("incidents")).toBe(1);
+  });
+
+  it("the stop back while a check waited: the old check cannot tell, the new one lists its own (case 7)", async () => {
+    await aheadSales();
+    const opening = rows().at(-1)!;
+    await watchLooks(X);
+    // Real time passes 12:00 with no witness: the check waits, and a sale is recorded at 12:00:30.
+    await sale(X + 2 * H + 30 * S);
+    expect(await closesByItself(X + 2 * H + 40 * S, [])).toEqual({ confirmation: null });
+    // At 12:05 the clock jumps 2 hours ahead: two sales stamped 14:05 and 14:10.
+    await sale(X + 4 * H + 5 * M);
+    await sale(X + 4 * H + 10 * M);
+    const newStop = rows().slice(-2);
+    // At 12:15 it is put right: the stop is back, so the old check closes and a new one opens.
+    const before = count("clock_confirmations");
+    const fresh = await watchLooks(X + 2 * H + 15 * M);
+    expect(count("clock_confirmations")).toBe(before + 1);
+    const [old] = suite.db.all<{ id: string }>(
+      sql`select id from clock_confirmations where source = 'elapsed'`,
+    );
+    expect(misdatedAlerts()).toEqual([
+      {
+        source: "dashboard",
+        severity: "error",
+        saleId: saleOf(opening.id),
+        params: {
+          confirmationId: old!.id,
+          count: 0,
+          from: iso(X),
+          fromOffsetMinutes: 60,
+          partial: false,
+          unconfirmed: true,
+        },
+      },
+    ]);
+    // An administrator confirms the new stop at 12:30.
+    const { confirmation } = await adminConfirms(X + 2 * H + 30 * M);
+    expect(storedProof(confirmation!.id)).toMatchObject({
+      checkId: fresh!.id,
+      closing: { correctedStart: iso(X + 2 * H + 15 * M), partial: false, unconfirmed: false },
+    });
+    const records = await list(confirmation!.id);
+    expect(records.map((record) => record.recordId)).toEqual(newStop.map((row) => row.id));
+    expect(misdatedAlerts()).toHaveLength(2);
+    expect(misdatedAlerts()[1]).toEqual(listAlert(confirmation!.id, records, false));
   });
 });

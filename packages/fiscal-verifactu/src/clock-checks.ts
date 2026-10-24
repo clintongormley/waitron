@@ -17,6 +17,7 @@ import {
   storedHeads,
   type LatestRecord,
 } from "./clock-behind.js";
+import { recordMisdated } from "./clock-stop-incidents.js";
 import { isBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
@@ -141,8 +142,26 @@ export function storedWitnesses(witnesses: ClosingWitnesses) {
   };
 }
 
+/** A confirmation's `proof.closing`, from the boot reading taken at `confirmedAt`. A check opened
+ * by the closing itself has no elapsed time to correct by, so it is `partial`. */
+export function closingProof(
+  check: { detail: unknown },
+  confirmedAt: Date,
+  boot: BootReading,
+  flags: { unconfirmed: boolean; openedNow?: boolean },
+) {
+  const start = correctedStart(check, { confirmedAt, bootMs: boot.ms, bootId: boot.id });
+  return {
+    bootMs: boot.ms,
+    bootId: boot.id,
+    correctedStart: start.correctedStart,
+    partial: start.partial || flags.openedNow === true,
+    unconfirmed: flags.unconfirmed,
+  };
+}
+
 /** Writes the confirmation closing `check` without lifting a stop, so it names no record, with
- * `proof.closing` from the boot reading taken now. */
+ * `proof.closing` from the boot reading taken now, and records what it finds wrongly dated. */
 export async function writeClosing(
   tx: Transaction,
   input: {
@@ -157,6 +176,7 @@ export async function writeClosing(
   },
 ): Promise<ClockConfirmation> {
   const { check, reading, boot, source, personId } = input;
+  const closing = closingProof(check, reading.instant, boot, { unconfirmed: input.unconfirmed });
   const seq = await nextConfirmationSeq(tx);
   const [row] = await tx
     .insert(clockConfirmations)
@@ -169,24 +189,18 @@ export async function writeClosing(
       source,
       personId,
       reason: check.reason,
-      proof: {
-        ...storedWitnesses(input.witnesses),
-        closing: {
-          bootMs: boot.ms,
-          bootId: boot.id,
-          ...correctedStart(check, {
-            confirmedAt: reading.instant,
-            bootMs: boot.ms,
-            bootId: boot.id,
-          }),
-          unconfirmed: input.unconfirmed,
-        },
-      },
+      proof: { ...storedWitnesses(input.witnesses), closing },
       checkId: check.id,
       registroId: null,
       recordAt: null,
     })
     .returning({ id: clockConfirmations.id });
+  await recordMisdated(tx, {
+    confirmationId: row!.id,
+    check,
+    partial: closing.partial,
+    reading,
+  });
   return {
     id: row!.id,
     seq,

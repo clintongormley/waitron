@@ -7,6 +7,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin } from "@waitron/shared";
 import type { ErrorParams, NodeId, SaleId } from "@waitron/shared";
 import { chainHeads, storedHeads } from "./clock-behind.js";
+import { misdatedRecords } from "./clock-misdated.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
@@ -34,6 +35,60 @@ export async function recordRestarted(
     error: new AppError("clock.behind_chain_restarted", input.params),
     severity: "warning",
     detectedAt: input.detectedAt,
+  });
+}
+
+/** Records `clock.records_misdated` for the closing just written as `confirmationId`, when
+ * `misdatedRecords` finds any record or cannot tell; a closing that finds none records nothing.
+ * Its sale is the earliest listed record's, or, when it cannot tell, the latest record's when the
+ * check opened, so a second such closing on the same sale folds into the open alert. */
+export async function recordMisdated(
+  tx: Transaction,
+  input: {
+    confirmationId: string;
+    check: { openedAt: Date; detail: unknown };
+    partial: boolean;
+    reading: { instant: Date; offsetMinutes: number };
+  },
+): Promise<void> {
+  const { confirmationId, partial, reading } = input;
+  // The caller has just written the confirmation, so the answer is never null.
+  const answer = (await misdatedRecords(tx, confirmationId))!;
+  let saleId: SaleId | undefined;
+  let params: ErrorParams["clock.records_misdated"];
+  if (answer.known) {
+    const first = answer.records[0];
+    if (first === undefined) return;
+    const last = answer.records.at(-1)!;
+    saleId = await saleOf(tx, first.recordId);
+    params = {
+      confirmationId,
+      count: answer.records.length,
+      from: first.generatedAt,
+      fromOffsetMinutes: first.offsetMinutes,
+      to: last.generatedAt,
+      toOffsetMinutes: last.offsetMinutes,
+      partial,
+      unconfirmed: false,
+    };
+  } else {
+    const opening = (input.check.detail as { lastRecordId?: unknown } | null)?.lastRecordId;
+    saleId = typeof opening === "string" ? await saleOf(tx, opening) : undefined;
+    params = {
+      confirmationId,
+      count: 0,
+      from: input.check.openedAt.toISOString(),
+      fromOffsetMinutes: reading.offsetMinutes,
+      partial,
+      unconfirmed: true,
+    };
+  }
+  await recordIncident(tx, {
+    origin: jobOrigin("dashboard"),
+    saleId,
+    error: new AppError("clock.records_misdated", params),
+    severity: "error",
+    detectedAt: reading.instant,
   });
 }
 

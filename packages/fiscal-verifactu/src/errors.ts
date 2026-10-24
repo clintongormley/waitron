@@ -394,5 +394,24 @@ declare module "@waitron/shared" {
      * the earliest and latest generation times, ISO 8601, among the records written under it.
      */
     "clock.behind_chain_disproved": { restartId: string; from: string; to: string };
+
+    /**
+     * Recorded, never thrown, by `recordMisdated` (./clock-stop-incidents.ts) for each closing of a
+     * clock check that finds wrongly dated records, or cannot tell which they are (`unconfirmed`).
+     * With a list, `count` records from `from` to `to`, the earliest and latest generation times
+     * (ISO 8601), each with its record's offset. When it cannot tell, `count` is 0, `from` is when
+     * the check opened, with the box's offset at the closing, and there is no `to`. `partial` is
+     * the closing's: the stop's start was not known, so the list may be short.
+     */
+    "clock.records_misdated": {
+      confirmationId: string;
+      count: number;
+      from: string;
+      fromOffsetMinutes: number;
+      to?: string;
+      toOffsetMinutes?: number;
+      partial: boolean;
+      unconfirmed: boolean;
+    };
   }
 }

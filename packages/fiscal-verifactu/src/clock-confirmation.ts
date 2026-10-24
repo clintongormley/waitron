@@ -21,15 +21,17 @@ import {
   type LatestRecord,
 } from "./clock-behind.js";
 import {
+  closingProof,
   judgeAfterStopEnded,
   nextConfirmationSeq,
   openCheck,
+  openClockCheck,
   storedWitnesses,
   takenDuringStop,
   waitingCheck,
   writeClosing,
 } from "./clock-checks.js";
-import { recordDisproofs, recordRestarted } from "./clock-stop-incidents.js";
+import { recordDisproofs, recordMisdated, recordRestarted } from "./clock-stop-incidents.js";
 import { isBeforeFirstIssueDate, refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
@@ -189,7 +191,17 @@ export async function confirmClockStop(
     if (!adminAgrees(admin.reading)) refuse("differs");
   }
   const { latest, agreeing } = judged;
-  const check = await openCheck(tx);
+  const existing = await openCheck(tx);
+  // Every closing needs an opening's heads to bound its list.
+  const openedNow = existing === null;
+  if (openedNow)
+    await openClockCheck(tx, { reading: input.reading, boot: input.boot, nodeId: input.nodeId });
+  // The stop proper holds, so a check opened just now is open.
+  const check = existing ?? (await openCheck(tx))!;
+  const closing = closingProof(check, input.reading.instant, input.boot, {
+    unconfirmed: false,
+    openedNow,
+  });
   const source =
     admin !== undefined ? "admin" : agreeing.authority === null ? "devices" : "authority";
   const personId = admin?.personId ?? null;
@@ -204,15 +216,16 @@ export async function confirmClockStop(
       stepMs: 0,
       source,
       personId,
-      reason: check?.reason ?? "behind_chain",
+      reason: check.reason,
       proof: {
         ...storedWitnesses({
           ...agreeing,
           admin: admin === undefined ? null : admin.reading,
         }),
         heads: await chainHeads(tx),
+        closing,
       },
-      checkId: check?.id ?? null,
+      checkId: check.id,
       registroId: latest.id,
       recordAt: latest.at,
     })
@@ -228,6 +241,12 @@ export async function confirmClockStop(
       lastRecordAt: latest.at.toISOString(),
     },
   });
+  await recordMisdated(tx, {
+    confirmationId: row!.id,
+    check,
+    partial: closing.partial,
+    reading: input.reading,
+  });
   return {
     confirmation: {
       id: row!.id,
@@ -235,7 +254,7 @@ export async function confirmClockStop(
       source,
       personId,
       confirmedAt: input.reading.instant.toISOString(),
-      checkId: check?.id ?? null,
+      checkId: check.id,
       recordId: latest.id,
     },
   };
