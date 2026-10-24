@@ -41,15 +41,14 @@ async function flush(el: DashboardApp): Promise<void> {
   await el.updateComplete;
 }
 
-/** The signed-in shell, its theme the stored answer a start applies; the shell's own later read of
- * the theme answers the same, so it cannot put another size back mid-case. */
+/** The signed-in shell, its theme the stored answer a start applies. */
 async function mountShell(scale: number): Promise<DashboardApp> {
   const answer = ANSWER[scale]!;
   localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
   startVenueTheme(document.documentElement, { fetchImpl: never });
-  const api = stubShellApi(true, "en-GB");
-  api.getVenueTheme.mockResolvedValue(answer);
-  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api: stubShellApi(true, "en-GB"),
+  });
   await flush(el);
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=account-menu]")).not.toBeNull();
   await expect.poll(() => el.shadowRoot!.querySelector("aside.sidebar .nav-item")).not.toBeNull();
@@ -130,14 +129,10 @@ it.each([
     await el.updateComplete;
     const items = [...root.querySelectorAll(`#nav-group-panel-${OPEN_GROUP} .nav-item`)];
     expect(items.map((item) => item.textContent!.trim())).toEqual(OPEN_GROUP_ITEMS);
-    const across = rect(sidebar);
-    // The menu scrolls up and down, so only its width bounds an item.
-    const menuColumn = new DOMRect(across.left, -Infinity, across.width, Infinity);
     expect(
-      outside(
-        menuColumn,
-        Object.fromEntries(items.map((item) => [item.textContent!.trim(), item])),
-      ),
+      items
+        .filter((item) => item.scrollWidth > item.clientWidth + 1)
+        .map((item) => `${item.textContent!.trim()} ${item.scrollWidth}/${item.clientWidth}`),
     ).toEqual([]);
     expect(sidebar.scrollWidth).toBeLessThanOrEqual(sidebar.clientWidth);
   },

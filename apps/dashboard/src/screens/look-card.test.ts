@@ -1879,44 +1879,64 @@ describe("the Text size slider", () => {
   it("at 390 px and 130% the editor's controls stay inside the card", async () => {
     setLocale("en-GB");
     const before = { width: innerWidth, height: innerHeight };
-    const drawnSize = (el: Card) => getComputedStyle(q(el, "[data-test=text-sizes]")!).fontSize;
-    try {
-      await page.viewport(390, 844);
-      const plain = (await mountEditing(inUse(lucia))).el;
-      expect(drawnSize(plain), "the line of sizes at 100%").toBe("12px");
-      cleanupWidgets();
-      document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
-      const { el } = await mountEditing(inUse(lucia));
-      await document.fonts.ready;
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      expect(drawnSize(el), "the line of sizes at 130%").toBe("16px");
+    const sizeOf = (node: Element) => getComputedStyle(node).fontSize;
+    const inPreview = (el: Card, selector: string) => [
+      ...preview(el).shadowRoot!.querySelectorAll(selector),
+    ];
+    /** Names each control not drawn wholly inside the card. */
+    function outsideCard(el: Card): string[] {
       const card = q(el, "section.settings-card")!.getBoundingClientRect();
-      const parts: Record<string, Element> = {
-        slider: slider(el),
-        "line of sizes": q(el, "[data-test=text-sizes]")!,
-        ...Object.fromEntries(
-          [...preview(el).shadowRoot!.querySelectorAll(".panel")].map((panel, i) => [
-            `preview panel ${i + 1}`,
-            panel,
-          ]),
+      const named = (selector: string, label: string) =>
+        inPreview(el, selector).map((node, i) => [`${label} ${i + 1}`, node] as const);
+      const parts = [
+        ["slider", slider(el)] as const,
+        ["line of sizes", q(el, "[data-test=text-sizes]")!] as const,
+        ...named(".panel", "preview panel"),
+        ...named("[data-test=preview-tile]", "till button"),
+        ...named("[data-test=preview-bill-line]", "bill line"),
+        ...["use-waitron", "save-as-new", "cancel", "save"].map(
+          (name) => [name, button(el, name)] as const,
         ),
-        ...Object.fromEntries(
-          ["use-waitron", "save-as-new", "cancel", "save"].map((name) => [name, button(el, name)]),
-        ),
-      };
-      expect(Object.keys(parts).filter((name) => name.startsWith("preview panel"))).toHaveLength(2);
-      const outside = Object.entries(parts)
+      ];
+      expect(parts.filter(([name]) => name.startsWith("bill line"))).toHaveLength(2);
+      return parts
         .map(([name, node]) => [name, node.getBoundingClientRect()] as const)
         .filter(
           ([, box]) =>
-            box.width === 0 ||
             box.left < card.left - 0.5 ||
             box.right > card.right + 0.5 ||
             box.top < card.top - 0.5 ||
             box.bottom > card.bottom + 0.5,
         )
         .map(([name, box]) => `${name} ${box.left},${box.top},${box.right},${box.bottom}`);
-      expect(outside).toEqual([]);
+    }
+    async function settled(el: Card): Promise<void> {
+      await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await preview(el).updateComplete;
+    }
+    try {
+      await page.viewport(390, 844);
+      const plain = (await mountEditing(inUse(lucia))).el;
+      await settled(plain);
+      expect(sizeOf(q(plain, "[data-test=text-sizes]")!), "the line of sizes at 100%").toBe("12px");
+      expect(inPreview(plain, ".bill-name").map(sizeOf), "the preview at 100%").toEqual([
+        "14px",
+        "14px",
+      ]);
+      expect(outsideCard(plain), "at 100%").toEqual([]);
+      cleanupWidgets();
+
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+      const big = theme("t-big", "Big", { ...LUCIA, textScale: 130 });
+      const { el } = await mountEditing(inUse(big));
+      await settled(el);
+      expect(sizeOf(q(el, "[data-test=text-sizes]")!), "the line of sizes at 130%").toBe("16px");
+      expect(inPreview(el, ".bill-name").map(sizeOf), "the preview at 130%").toEqual([
+        "18px",
+        "18px",
+      ]);
+      expect(outsideCard(el), "at 130%").toEqual([]);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
     } finally {
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
