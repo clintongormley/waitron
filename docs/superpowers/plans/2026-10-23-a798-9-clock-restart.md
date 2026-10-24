@@ -570,22 +570,23 @@ check), each in the task named:
   `clock.restart_refused { reason }`, and every press of the restart button now a challenge and an
   administrator's confirm (Mario, a manager before, is seeded as an administrator):
   `:312` "refuses a restart with no proof…" is deleted, because an administrator needs no proof
-  (R4); its "payments stay stopped" sale moves to `:423` (refused on the box). `:326` two devices
-  contradicting → `:566`, the devices now at two addresses (decision R9), still asserting nothing
+  (R4); its "payments stay stopped" sale moves to `:427` (refused on the box). `:326` two devices
+  contradicting → `:579`, the devices now at two addresses (decision R9), still asserting nothing
   written. `:363` the permission and body case → `:390` (the supervisor's 403 kept, a manager's
   403 added, both now asserting `{ permission: "person.admin" }` exactly; no session and a till's
-  session 401 on both routes) and `:591` (each bad body's `field` is `challengeId` or `deviceAt`
-  where it was `recordId`; the unparsed body kept, field `challengeId`). `:406` → `:797` and
-  `:436` → `:821` re-aimed only (the second no longer notes two devices, which an administrator
+  session 401 on both routes; the control still counts rows and alerts exactly, and now checks
+  too) and `:604` (each bad body's `field` is `challengeId` or `deviceAt`
+  where it was `recordId`; the unparsed body kept, field `challengeId`). `:406` → `:810` and
+  `:436` → `:834` re-aimed only (the second no longer notes two devices, which an administrator
   does not need). `:451` "answers a second restart … with the first manager's" (`200`, `replayed:
-  true`) → `:649` "refuses a second administrator once the first has confirmed" (`409
+  true`) → `:662` "refuses a second administrator once the first has confirmed" (`409
   not_stopped`), because a confirmation has no replay; the one-row and one-alert counts kept; the
-  first answer's body moves to `:625`'s new shape. `:474` two simultaneous presses (`[200, 200]`,
-  one `replayed`) → `:665` (`[200, 409]`, the 409 `not_stopped`), the counts kept. `:490` no
-  restart on a seat that cannot → `:700`, 404 on both routes. `:542` → `:882` (case 5) without its
-  device-label assertion, which moves unchanged to its own case at `:871`. `:570`, `:588`, `:599`
-  → `:903`, `:921`, `:932`, the press re-aimed only; `:640`, `:668`, `:689` unchanged at `:973`,
-  `:1001`, `:1022`. `:871`, `:903`, `:932` and `:973` read the Box status view's old shape and fail
+  first answer's body moves to `:638`'s new shape. `:474` two simultaneous presses (`[200, 200]`,
+  one `replayed`) → `:678` (`[200, 409]`, the 409 `not_stopped`), the counts kept. `:490` no
+  restart on a seat that cannot → `:713`, 404 on both routes. `:542` → `:895` (case 5) without its
+  device-label assertion, which moves unchanged to its own case at `:884`. `:570`, `:588`, `:599`
+  → `:916`, `:934`, `:945`, the press re-aimed only; `:640`, `:668`, `:689` unchanged at `:986`,
+  `:1014`, `:1035`. `:884`, `:916`, `:945` and `:986` read the Box status view's old shape and fail
   until Task R10 reshapes it: the Box status read throws on the seat's new state.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)

@@ -417,7 +417,11 @@ it("lets only an administrator with a management session ask and confirm", async
 
   const control = await confirm(stop, mario.cookie);
   expect(control.status).toBe(200);
-  expect(written()).toMatchObject({ confirmations: before.confirmations + 1 });
+  expect(written()).toEqual({
+    confirmations: before.confirmations + 1,
+    checks: before.checks + 1,
+    alerts: before.alerts + 1,
+  });
 });
 
 it("refuses an administrator on the box itself, and payments stay stopped", async () => {
@@ -439,9 +443,18 @@ it("refuses an administrator on the box itself, and payments stay stopped", asyn
   });
   expect(answered.status).toBe(409);
   expect(answered.json).toEqual(refusal("same_machine"));
-  // Refused before the session is read.
-  const noSession = await ask(stop, undefined);
-  expect(noSession.json).toEqual(refusal("same_machine"));
+  // Refused before the session is read and before the body is.
+  for (const sent of [
+    await ask(stop, undefined),
+    await answerChallenge(stop, undefined, {
+      challengeId: offBox.json.challengeId,
+      deviceAt: boxTime(stop),
+    }),
+    await answerChallenge(stop, mario.cookie, { challengeId: 7 }),
+  ]) {
+    expect(sent.status).toBe(409);
+    expect(sent.json).toEqual(refusal("same_machine"));
+  }
 
   expect(written()).toEqual(before);
   const sale = await cashSale(venue.appAt(clockAt(stop.behind)));
