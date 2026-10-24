@@ -835,8 +835,8 @@ declare module "@waitron/shared" {
      * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
      * refuses a line that already holds a ticket item before any of its writes), a re-course of a
      * fired line (`setLineCourse`), and, when a station's choice of changes after sending refuses
-     * it, a recall (`recallToDraft`, `recallLines`) or an edit (`applyLineEdits`) of a dish with
-     * work there. It names the order, not a ticket item.
+     * it, a recall (`recallToDraft`, `recallLines`), or a change or quantity rise in an edit
+     * (`applyLineEdits`), of a dish with work there. It names the order, not a ticket item.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**

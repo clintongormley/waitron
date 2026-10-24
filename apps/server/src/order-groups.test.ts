@@ -5828,7 +5828,7 @@ describe("Fire now on one held dish", () => {
     },
   );
 
-  it("fires while sent edits are disabled", async () => {
+  it("fires a held dish at a Not allowed station", async () => {
     const { v, s, steak } = await fixture(false);
     await inTx((tx) => setChangesAfterSending(tx, "never"));
     const command = await args(s.partyId);

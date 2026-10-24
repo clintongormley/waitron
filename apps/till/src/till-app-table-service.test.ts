@@ -2632,7 +2632,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });
 
-  it("says the item's station does not allow changes once sent, and reloads the line's actions", async () => {
+  it("says the item has gone to the kitchen and cannot be changed, and reloads the line's actions", async () => {
     const { el, screen } = await openBurgerTab({
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_fired" }),
     });
@@ -2642,7 +2642,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "Este plato ya ha ido a cocina y su estación no permite cambios después de enviarlo. Puedes cancelarlo",
+      "Este plato ya ha ido a cocina y no se puede cambiar. Puedes cancelarlo",
     );
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });

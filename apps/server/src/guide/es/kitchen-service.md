@@ -127,8 +127,8 @@ adelantado los grupos en espera y si un plato ya enviado a ella se puede retirar
 **Platos iguales en una comanda de cocina**, **Imprimir por adelantado los grupos en espera** y
 **Cambios tras el envío**: **No permitidos**, **Solo en
 espera** o **En espera o sin empezar**. Un plato que la cocina ha empezado nunca se retira. Un plato
-sin comanda en cocina, ni él ni sus extras, se puede retirar sea cual sea el ajuste de las
-estaciones.
+que no fue a ninguna estación, sin ningún extra que fuera a una estación propia, se puede retirar
+sea cual sea el ajuste de las estaciones.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 

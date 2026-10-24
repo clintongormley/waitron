@@ -2495,7 +2495,7 @@ describe("moveDishesToStation", () => {
     },
   );
 
-  it("moves kitchen work even when ordinary sent-line edits are switched off", async () => {
+  it("moves kitchen work even at a Not allowed station", async () => {
     const { tabId, item } = await burger();
     await inTx(venue, (tx) => setChangesAfterSending(tx, "never"));
     try {

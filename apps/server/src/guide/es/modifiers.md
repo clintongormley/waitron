@@ -169,7 +169,8 @@ carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otr
 texto nuevo en todas las líneas que llevan la respuesta renombrada. Esas líneas conservan los
 precios a los que se vendieron. Una línea que la cocina ya tiene se retira y se le vuelve a enviar
 como una comanda nueva. La caja rechaza el cambio si la cocina ya ha empezado esa línea, o si
-**Cambios tras el envío** de su estación no lo permite. Cambia los nombres
+**Cambios tras el envío** de la estación de esa línea, o de uno de sus extras enviado a otra
+estación, no lo permite. Cambia los nombres
 entre servicios y no mientras haya pedidos aparcados. Una lista de extras es la excepción, porque un
 extra se empareja por su producto: renombrar una lista de extras, o el producto que contiene, no
 afecta a un pedido aparcado.

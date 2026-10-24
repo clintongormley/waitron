@@ -109,8 +109,9 @@ edit it in **Prep stations**. Each prep station also sets how identical dishes p
 whether it prints held groups in advance, and whether a dish already sent to it can be recalled or
 changed, under **Identical dishes on a kitchen ticket**, **Print held groups in advance** and
 **Changes after sending**: **Not allowed**, **While held**, or
-**While held or waiting**. A dish the kitchen has started is never recalled. A dish with no
-kitchen record, on it or on any of its extras, can be recalled whatever the stations allow.
+**While held or waiting**. A dish the kitchen has started is never recalled. A dish that went to no
+station, with no extra that went to a station of its own, can be recalled whatever the stations
+allow.
 
 ## Request cooking from the till {#request-cooking}
 

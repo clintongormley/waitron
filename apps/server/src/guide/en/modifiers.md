@@ -155,8 +155,8 @@ it is not free. The order remembers all three names, and Waitron cannot tell a r
 different one. So once the menu is published again, the next change made to that parked order, even
 to another line, saves the new wording onto every line carrying the renamed answer. Those lines keep
 the prices they were sold at. A line the kitchen already has is recalled and sent to it again as a
-new ticket. The till refuses the change instead if the kitchen has started such a line, or if its
-prep station's **Changes after sending** does not allow it. Do your renaming between
+new ticket. The till refuses the change instead if the kitchen has started such a line, or if **Changes after sending**
+at the station of that line, or of one of its extras routed elsewhere, does not allow it. Do your renaming between
 services rather than while orders are parked.
 An extras list is the exception, because an extra is matched by its product: renaming an extras
 list, or the product on it, leaves a parked order alone.
