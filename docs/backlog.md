@@ -5945,21 +5945,16 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the root
   `vitest.config.ts` and `eslint.config.js`; in `scripts/`, the `.sh` files and
-  `write-path-tables.json` are outside the checker and were left. What each pruning pull request
-  found and could not fix is listed under its own area, as "found by #NNN while pruning comments".
+  `write-path-tables.json` are outside the checker and were left.
   [Detail](backlog/architecture.md#prune-the-comments-one-package-per-pull-request)
 
 - **`apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
   condition by construction"** — found by the retroactive Codex reviews of #621–#626 and #629
-  (C3.18.12r) while pruning comments. `apps/server/src/rebuild-first-start.ts` (near line 121, lane
-  A's file) says "The log carries the error's code only", the overclaim #637 corrected in
-  `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
+  (C3.18.12r) while pruning comments.
   [Detail](backlog/architecture.md#appsserverreadmemd-near-line-496-still-says-an-error-line-and-a-503-are-the-same-condition-by-construction)
 
 - **`working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course
-  definition; `fireCourse` calls `requireCourse`** — found by #622 while pruning comments. The
-  lock-ordering and deadlock cases for transfers, merges and split bills went with PostgreSQL and
-  nothing replaced them (one write transaction per venue file is what serialises those writers now).
+  definition; `fireCourse` calls `requireCourse`** — found by #622 while pruning comments.
   [Detail](backlog/architecture.md#working-orderts-near-requirelivecourse-says-the-fire-verbs-use-the-same-live-course-definition-firecourse-calls-requirecourse)
 
 - **Pointers outside `docs/` that #597 made stale** — found by #597 while pruning comments. The fake
@@ -6002,32 +5997,24 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
   [Detail](backlog/architecture.md#a394-5-a394-6-a394-8-to-a394-17-and-a394-20-to-a394-22--refusal-statuses-by-one-rule)
 
-- **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26). A
-  pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)") was fixed only
-  for the last 28 documents. **Next action:** fold into the comment-pruning sweeps: re-point each to
+- **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26).
+  **Next action:** fold into the comment-pruning sweeps: re-point each to
   the pull request that built the work, or drop the tag.
   [Detail](backlog/architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
 
 - **Three shapes the read connection does not cover** — OPEN (stated 2026-09-23, task N3, PR #493).
   A transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told
   about — Drizzle's own migrator opens one that way — so a read concurrent with it still lands on
-  the writer. **Next action:** none needed while that holds; a temporary table, an attachment or a
-  connection pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and
-  a guard for that does not exist.
+  the writer.
   [Detail](backlog/architecture.md#three-shapes-the-read-connection-does-not-cover)
 
-- **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN (found
-  2026-09-23, task F1's review wave). `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
-  inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
+- **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN.
   **Next action:** decide whether a read-only body should take the lock at all.
   [Detail](backlog/architecture.md#every-read-route-now-takes-the-venues-exclusive-write-lock-and-issues-a-delete)
 
-- **Three copies of one SQL identifier validator and two cause-chain walkers** — OPEN (found
-  2026-09-23, task F1's review wave). The identifier validator is in
-  `packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
-  `packages/store/src/append-only.ts` — the first two are in the SAME package. **Next action:**
-  export one validator from `@waitron/shared`; `packages/store` depends only on `@waitron/shared`,
-  which depends on nothing, so that edge closes no loop.
+- **Three copies of one SQL identifier validator and two cause-chain walkers** — OPEN.
+  **Next action:** export one validator from `@waitron/shared`; `packages/store` depends only on
+  `@waitron/shared`, which depends on nothing, so that edge closes no loop.
   [Detail](backlog/architecture.md#three-copies-of-one-sql-identifier-validator-and-two-cause-chain-walkers)
 
 - **Raw engine imports in `apps/server/src/recovery-lock.ts` and
@@ -6087,9 +6074,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
     [Detail](backlog/architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
 
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
-  by the tenant-column removal (#378, 2026-09-16). A rename would want to keep that "did this pass
-  attempt work?" meaning rather than flatten it to a boolean, since the flag deliberately
-  distinguishes a no-work pass from a pass that exercised the certificate and skipped.
+  by the tenant-column removal (#378, 2026-09-16).
   [Detail](backlog/architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
 
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
