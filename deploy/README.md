@@ -271,7 +271,8 @@ cannot find that out, as on a disk with no room left for the note it writes whil
 folder, it keeps them while that folder's holder note shows a heartbeat less than 30 seconds old.
 In the same step it deletes `restore-staging/staged-recovery` in the state folder, where the setup
 wizard keeps a backup uploaded for checking. On a box whose first setup was moved into a new
-workspace, the start does the same in the workspace's folders.
+workspace, the start then does the same in the workspace's folders, once first-setup resolution has
+found them.
 
 Every start also checks the free space in the state folder and in the database's folder. Below
 256 MiB, it deletes as well:

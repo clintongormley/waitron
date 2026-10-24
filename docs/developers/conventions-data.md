@@ -2730,8 +2730,7 @@ whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n
 so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
 `holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). That is the start's forced
 clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses)
-minus the staged recovery copies in `<state>/restore-staging/staged-recovery`, which only the start
-deletes, and minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
+minus the staged recovery copies in `<state>/restore-staging/staged-recovery`, and minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
 the link and its size is not space freed. Also minus a configured backup folder: a `backup-encrypt-`
 folder that is a `local-fs` backup destination's folder, or holds one, is skipped. The destinations
 are read from the backup supervisor (`current()`) at every survey and every press, and compared both

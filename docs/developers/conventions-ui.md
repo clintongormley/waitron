@@ -1069,7 +1069,7 @@ recorded with the refusal (`refusedTriggers`) and shown under that line, one lin
 that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/status` reports
 `refused`, not the names.
 
-**A full disk at start** (A798-B slice 2). Every start first deletes the copies a cut-off backup
+**A full disk at start** (A798-B slice 2). Every start deletes the copies a cut-off backup
 run left in backup staging, and the staged recovery copies in `restore-staging/staged-recovery`,
 unless another process holds the venue folder's lock — in a first-setup workspace's folders too,
 when resolution moved the box there (the heartbeat fallback is in conventions-data.md, "Every start
