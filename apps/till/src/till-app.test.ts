@@ -9580,8 +9580,8 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      // A raced recall of a line the kitchen has just started, and a recall of an item whose station
-      // does not allow changes once sent, each name what the waiter can still do.
+      // A raced recall of a line the kitchen has just started, and a recall its station refuses, each
+      // name what the waiter can still do.
       it.each(["ticket.already_started", "ticket.already_fired"])(
         "a recall-lines refused %s says so in its own words AND still reloads to reconcile to server truth",
         async (code) => {
