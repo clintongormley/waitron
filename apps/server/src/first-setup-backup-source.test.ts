@@ -38,14 +38,12 @@ beforeEach(async () => {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
-  await suite.db
-    .insert(locations)
-    .values({
-      id: LOCATION,
-      name: "Selected location",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
-    });
+  await suite.db.insert(locations).values({
+    id: LOCATION,
+    name: "Selected location",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+  });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected node" });
   key = await mintBreakGlassKey(suite.db, NODE);
   database = join(scratch, "selected.db");
