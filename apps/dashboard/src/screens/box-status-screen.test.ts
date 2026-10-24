@@ -5,9 +5,13 @@ import type {
   AlertView,
   AlertsResponse,
   BoxHealth,
+  ClockMisdatedView,
   DashboardApi,
   FreedSpaceView,
+  MisdatedOpenView,
 } from "../api/client.js";
+import { formatIsoMinute } from "../date-utils.js";
+import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
@@ -642,5 +646,169 @@ describe("dashboard-box-status-screen's Clock row during a payment stop", () => 
       expect(q(el, "wt-dialog")).toBeNull();
       cleanupWidgets();
     }
+  });
+});
+
+describe("dashboard-box-status-screen's sales dated wrongly", () => {
+  const OPEN: MisdatedOpenView = {
+    confirmationId: "c1",
+    count: 2,
+    from: "2026-10-22T19:00:00.000Z",
+    fromOffsetMinutes: 120,
+    to: "2026-10-22T19:05:00.000Z",
+    toOffsetMinutes: 120,
+    partial: false,
+    unconfirmed: false,
+  };
+  const UNCONFIRMED: MisdatedOpenView = {
+    confirmationId: "c2",
+    count: 0,
+    from: "2026-10-22T17:00:00.000Z",
+    fromOffsetMinutes: 120,
+    partial: false,
+    unconfirmed: true,
+  };
+  const LISTS: ClockMisdatedView = {
+    lists: [
+      {
+        confirmationId: "c1",
+        records: [
+          { recordId: "r1", series: "T1", number: 7, at: OPEN.from, offsetMinutes: 120 },
+          { recordId: "r2", series: "T1", number: 8, at: OPEN.to!, offsetMinutes: 120 },
+        ],
+      },
+    ],
+  };
+  const MISDATED = ALERT_MESSAGES["clock.records_misdated"]!;
+
+  const section = (el: BoxStatusScreen) => q(el, "[data-test=misdated]");
+  const tableRows = (el: BoxStatusScreen) => [
+    ...(q(el, "[data-test=misdated-table]")?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
+  ];
+  const cells = (el: BoxStatusScreen) =>
+    tableRows(el).map((row) => [...row.querySelectorAll("td")].map((cell) => text(cell)));
+  const headings = (el: BoxStatusScreen) => [
+    ...q(el, "[data-test=misdated-table]")!.shadowRoot!.querySelectorAll("thead th"),
+  ];
+
+  function withOpen(open: MisdatedOpenView[], lists: unknown = LISTS) {
+    return stubApi(
+      {
+        clockMisdated:
+          lists instanceof Error
+            ? vi.fn().mockRejectedValue(lists)
+            : vi.fn().mockResolvedValue(lists),
+      },
+      { ...health(), misdatedOpen: open },
+    );
+  }
+
+  it("lists each sale's invoice and the time it was recorded, under the title and what to do", async () => {
+    const { el } = await mount(withOpen([OPEN]));
+    expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
+    expect(text(q(el, "[data-test=misdated-line]"))).toBe(t("box_status.misdated.line"));
+    expect(headings(el).map((th) => text(th))).toEqual([
+      t("box_status.misdated.col_invoice"),
+      t("box_status.misdated.col_at"),
+    ]);
+    expect(cells(el)).toEqual([
+      ["T1/7", formatIsoMinute(OPEN.from)],
+      ["T1/8", formatIsoMinute(OPEN.to!)],
+    ]);
+    expect(q(el, "[data-test=misdated-sentence]")).toBeNull();
+    expect(qa(el, "ul.rows > li")).toHaveLength(7);
+  });
+
+  it("draws its words in Spanish from the strings tables", async () => {
+    setLocale("es");
+    const { el } = await mount(withOpen([{ ...OPEN, partial: true }]));
+    expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
+    expect(text(q(el, "[data-test=misdated-line]"))).toBe(t("box_status.misdated.line"));
+    expect(headings(el).map((th) => text(th))).toEqual([
+      t("box_status.misdated.col_invoice"),
+      t("box_status.misdated.col_at"),
+    ]);
+    expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(MISDATED.variants!.partial!.es);
+  });
+
+  it("says a list may be short when the box restarted during the stop", async () => {
+    const { el } = await mount(withOpen([{ ...OPEN, partial: true }]));
+    expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(MISDATED.variants!.partial!.en);
+    expect(cells(el)).toHaveLength(2);
+  });
+
+  it("says the box cannot tell, with no table and no count, and reads no list for it", async () => {
+    const api = withOpen([UNCONFIRMED]);
+    const { el } = await mount(api);
+    const sentence = alertMessage("clock.records_misdated", { ...UNCONFIRMED });
+    expect(sentence).toBe(
+      MISDATED.variants!.unconfirmed!.en.replace(
+        "{from:minute}",
+        formatIsoMinute(UNCONFIRMED.from),
+      ),
+    );
+    expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(sentence);
+    expect(q(el, "[data-test=misdated-table]")).toBeNull();
+    expect(text(section(el))).toBe(
+      [t("box_status.misdated.title"), t("box_status.misdated.line"), sentence].join(" "),
+    );
+    expect(api.clockMisdated).not.toHaveBeenCalled();
+  });
+
+  it("draws a table for a found list beside a sentence for one that cannot tell", async () => {
+    const { el } = await mount(withOpen([UNCONFIRMED, OPEN]));
+    expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(2);
+    expect(qa(el, "[data-test=misdated-table]")).toHaveLength(1);
+    expect(cells(el)).toHaveLength(2);
+  });
+
+  it("shows a sale with no whole number by its series alone", async () => {
+    const lists: ClockMisdatedView = {
+      lists: [
+        {
+          confirmationId: "c1",
+          records: [
+            { recordId: "r9", series: "ODD", number: null, at: OPEN.from, offsetMinutes: 120 },
+          ],
+        },
+      ],
+    };
+    const { el } = await mount(withOpen([{ ...OPEN, count: 1 }], lists));
+    expect(cells(el)).toEqual([["ODD", formatIsoMinute(OPEN.from)]]);
+  });
+
+  it("draws nothing once the alert is handled", async () => {
+    const api = stubApi({
+      getBoxHealth: vi
+        .fn()
+        .mockResolvedValueOnce({ ...health(), misdatedOpen: [OPEN] })
+        .mockResolvedValue(health()),
+      clockMisdated: vi.fn().mockResolvedValue(LISTS),
+    });
+    const { el } = await mount(api);
+    expect(section(el)).not.toBeNull();
+    api.liveData.refresh();
+    await flush(el);
+    expect(section(el)).toBeNull();
+    expect(qa(el, "ul.rows > li")).toHaveLength(7);
+  });
+
+  it("draws nothing when no alert is open, and reads no list", async () => {
+    const api = withOpen([]);
+    const { el } = await mount(api);
+    expect(section(el)).toBeNull();
+    expect(api.clockMisdated).not.toHaveBeenCalled();
+  });
+
+  it("says the list could not be read, and still draws the rest of the page", async () => {
+    const { el } = await mount(withOpen([OPEN, UNCONFIRMED], new Error("down")));
+    expect(text(q(el, "[data-test=misdated-unavailable]"))).toBe(
+      t("box_status.misdated.read_error"),
+    );
+    expect(q(el, "[data-test=misdated-table]")).toBeNull();
+    expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
+    expect(qa(el, "[data-test=misdated-sentence]")).toHaveLength(1);
+    expect(qa(el, "ul.rows > li")).toHaveLength(7);
+    expect(q(el, "[role=alert]")).toBeNull();
   });
 });

@@ -3301,6 +3301,12 @@ export const en = {
   "box_status.other_alerts": "{count} other alerts",
   "box_status.other_alerts_one": "1 other alert",
   "box_status.read_error": "The box's status could not be read.",
+  "box_status.misdated.title": "Sales dated wrongly",
+  "box_status.misdated.line":
+    "Go through these with your tax adviser, then mark the alert as handled in the bell.",
+  "box_status.misdated.col_invoice": "Invoice",
+  "box_status.misdated.col_at": "Time recorded",
+  "box_status.misdated.read_error": "The list of sales dated wrongly could not be read.",
   "box_status.alerts_unavailable":
     "The alerts could not be read, so a part may look fine when it is not.",
 } as const;
@@ -6656,6 +6662,11 @@ export const es: Record<StringKey, string> = {
   "box_status.other_alerts": "{count} avisos más",
   "box_status.other_alerts_one": "1 aviso más",
   "box_status.read_error": "No se ha podido leer el estado del equipo.",
+  "box_status.misdated.title": "Ventas con fecha incorrecta",
+  "box_status.misdated.line": "Revísalas con tu asesor y después marca el aviso como atendido.",
+  "box_status.misdated.col_invoice": "Factura",
+  "box_status.misdated.col_at": "Hora registrada",
+  "box_status.misdated.read_error": "No se ha podido leer la lista de ventas con fecha incorrecta.",
   "box_status.alerts_unavailable":
     "No se han podido leer los avisos, así que puede parecer que una parte está bien cuando no lo está.",
 };

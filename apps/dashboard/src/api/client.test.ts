@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "@waitron/dashboard-kit";
-import { DashboardApi } from "./client.js";
+import { DashboardApi, type ClockMisdatedView } from "./client.js";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -3235,6 +3235,37 @@ it("reads the box's health and frees its disk through the box routes", async () 
     ["/api/box/health", "GET", undefined],
     ["/api/box/free-space", "POST", "{}"],
   ]);
+});
+
+it("reads the wrongly dated sales' lists, a record's number possibly missing", async () => {
+  const lists = {
+    lists: [
+      {
+        confirmationId: "c1",
+        records: [
+          {
+            recordId: "r1",
+            series: "T1",
+            number: 7,
+            at: "2026-10-22T19:00:00.000Z",
+            offsetMinutes: 120,
+          },
+          {
+            recordId: "r2",
+            series: "ODD",
+            number: null,
+            at: "2026-10-22T19:05:00.000Z",
+            offsetMinutes: 120,
+          },
+        ],
+      },
+    ],
+  } satisfies ClockMisdatedView;
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(lists));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.clockMisdated()).toEqual(lists);
+  const [url, init] = fetchImpl.mock.calls[0]! as [string, RequestInit];
+  expect([url, init.method]).toEqual(["/api/box/clock-misdated", "GET"]);
 });
 
 it("never sends a free-space press as a passive read, even from the background client", async () => {

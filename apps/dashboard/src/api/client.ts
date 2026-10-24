@@ -1761,6 +1761,22 @@ export interface MisdatedOpenView {
   unconfirmed: boolean;
 }
 
+/** LOCAL copy of `GET /api/box/clock-misdated`'s answer (`apps/server/src/box-health-api.ts`);
+ * a closing that cannot tell which sales it covers has no list here. */
+export interface ClockMisdatedView {
+  lists: {
+    confirmationId: string;
+    records: {
+      recordId: string;
+      series: string;
+      /** Null when the recorded invoice number has no whole number after its last slash. */
+      number: number | null;
+      at: string;
+      offsetMinutes: number;
+    }[];
+  }[];
+}
+
 /** LOCAL copy of the Retry now route's answer (`packages/fiscal-verifactu/src/routes.ts`). */
 export interface FiscalRetryView {
   waiting: number;
@@ -4223,6 +4239,10 @@ export class DashboardApi {
 
   getBoxHealth(): Promise<BoxHealth> {
     return this.#request<BoxHealth>("/api/box/health", "GET");
+  }
+
+  clockMisdated(): Promise<ClockMisdatedView> {
+    return this.#request<ClockMisdatedView>("/api/box/clock-misdated", "GET");
   }
 
   freeBoxSpace(): Promise<FreedSpaceView> {

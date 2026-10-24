@@ -3,7 +3,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./box-status-screen.js";
 import type { BoxStatusScreen } from "./box-status-screen.js";
-import type { AlertView, BoxHealth, DashboardApi } from "../api/client.js";
+import type { AlertView, BoxHealth, ClockMisdatedView, DashboardApi } from "../api/client.js";
 
 function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
   return {
@@ -128,6 +128,38 @@ function stubApi(answer: BoxHealth | Error, alerts: AlertView[] | Error = []): D
   } as unknown as DashboardApi;
 }
 
+const MISDATED: BoxHealth = {
+  ...health(),
+  misdatedOpen: [
+    {
+      confirmationId: "c1",
+      count: 2,
+      from: "2026-10-22T19:00:00.000Z",
+      fromOffsetMinutes: 120,
+      to: "2026-10-22T19:05:00.000Z",
+      toOffsetMinutes: 120,
+      partial: true,
+      unconfirmed: false,
+    },
+    {
+      confirmationId: "c2",
+      count: 0,
+      from: "2026-10-22T17:00:00.000Z",
+      fromOffsetMinutes: 120,
+      partial: false,
+      unconfirmed: true,
+    },
+  ],
+};
+
+function withMisdated(lists: ClockMisdatedView | Error): DashboardApi {
+  return {
+    ...stubApi(MISDATED),
+    clockMisdated:
+      lists instanceof Error ? vi.fn().mockRejectedValue(lists) : vi.fn().mockResolvedValue(lists),
+  } as unknown as DashboardApi;
+}
+
 async function flush(el: BoxStatusScreen): Promise<void> {
   for (let i = 0; i < 3; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -146,6 +178,34 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     ],
     ["a failed read", () => stubApi(new Error("read"))],
     ["a failed alert read", () => stubApi(TROUBLED, new Error("alerts"))],
+    [
+      "sales dated wrongly, one list found and one that cannot tell",
+      () =>
+        withMisdated({
+          lists: [
+            {
+              confirmationId: "c1",
+              records: [
+                {
+                  recordId: "r1",
+                  series: "T1",
+                  number: 7,
+                  at: "2026-10-22T19:00:00.000Z",
+                  offsetMinutes: 120,
+                },
+                {
+                  recordId: "r2",
+                  series: "ODD",
+                  number: null,
+                  at: "2026-10-22T19:05:00.000Z",
+                  offsetMinutes: 120,
+                },
+              ],
+            },
+          ],
+        }),
+    ],
+    ["a failed read of the wrongly dated sales", () => withMisdated(new Error("lists"))],
   ];
   it.each(cases)("renders accessibly with %s", async (_name, api) => {
     const { el, host } = await mountWidget<BoxStatusScreen>(

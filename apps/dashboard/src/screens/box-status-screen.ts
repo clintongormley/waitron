@@ -1,12 +1,21 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { formatBytes } from "@waitron/dashboard-kit";
-import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import { formatBytes, pickLocale } from "@waitron/dashboard-kit";
+import { baseStyles, visuallyHiddenStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import type { AlertView, BoxHealth, DashboardApi, FiscalRetryView } from "../api/client.js";
+import type {
+  AlertView,
+  BoxHealth,
+  ClockMisdatedView,
+  DashboardApi,
+  FiscalRetryView,
+  MisdatedOpenView,
+} from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
+import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -17,6 +26,10 @@ import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
 const LEAST_TO_FREE = 500_000;
+
+const MISDATED = "clock.records_misdated";
+
+type MisdatedRecordView = ClockMisdatedView["lists"][number]["records"][number];
 
 type ReadName = "getBoxHealth" | "listAlerts";
 
@@ -154,6 +167,18 @@ export class BoxStatusScreen extends LitElement {
         color: var(--wt-color-danger);
         margin: 0 0 var(--wt-space-4);
       }
+      .misdated {
+        margin: 0 0 var(--wt-space-4);
+      }
+      .misdated h2 {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
+      }
+      .misdated-entry {
+        display: grid;
+        gap: var(--wt-space-2);
+        margin: 0 0 var(--wt-space-3);
+      }
     `,
   ];
 
@@ -178,6 +203,10 @@ export class BoxStatusScreen extends LitElement {
   @state() private freedBytes: number | null = null;
   /** After a press the figure on the button is stale until the box is read again. */
   @state() private awaitingFigure = false;
+  /** The wrongly dated sales' lists by confirmation; null until read. */
+  @state() private misdatedLists: ReadonlyMap<string, MisdatedRecordView[]> | null = null;
+  @state() private misdatedFailed = false;
+  #watchingMisdated = false;
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
@@ -190,6 +219,11 @@ export class BoxStatusScreen extends LitElement {
     () => this.api,
     () => this.#readFailed("listAlerts"),
   );
+  readonly #misdatedQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => (this.misdatedFailed = true),
+  );
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -199,6 +233,7 @@ export class BoxStatusScreen extends LitElement {
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
         this.#nothingLeftToRetry = this.#nothingToRetry(health);
+        this.#followMisdated(health);
         if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingLeftToRetry)
           this.retryAnswer = null;
         this.#readSucceeded("getBoxHealth");
@@ -209,6 +244,27 @@ export class BoxStatusScreen extends LitElement {
         // The bell shows nothing when the list is not visible.
         this.alerts = response.visible ? response.alerts : [];
         this.#readSucceeded("listAlerts");
+      })
+      .catch(() => undefined);
+  }
+
+  /** Reads the lists only while an open alert has one; a closing that cannot tell lists none. */
+  #followMisdated(health: BoxHealth): void {
+    const wanted = health.misdatedOpen.some((open) => !open.unconfirmed);
+    if (wanted === this.#watchingMisdated) return;
+    this.#watchingMisdated = wanted;
+    if (!wanted) {
+      this.#misdatedQueries.release("clockMisdated");
+      this.misdatedLists = null;
+      this.misdatedFailed = false;
+      return;
+    }
+    void this.#misdatedQueries
+      .watch("clockMisdated", [], (answer) => {
+        this.misdatedLists = new Map(
+          answer.lists.map((list) => [list.confirmationId, list.records]),
+        );
+        this.misdatedFailed = false;
       })
       .catch(() => undefined);
   }
@@ -436,6 +492,67 @@ export class BoxStatusScreen extends LitElement {
     </li>`;
   }
 
+  #misdatedColumns(): DataTableColumn<MisdatedRecordView>[] {
+    return [
+      {
+        key: "invoice",
+        label: t("box_status.misdated.col_invoice"),
+        cell: (record) =>
+          record.number === null ? record.series : `${record.series}/${record.number}`,
+      },
+      {
+        key: "at",
+        label: t("box_status.misdated.col_at"),
+        cell: (record) => wholeTimes(formatIsoMinute(record.at)),
+      },
+    ];
+  }
+
+  #misdatedSentence(open: MisdatedOpenView): string | null {
+    if (open.unconfirmed) return alertMessage(MISDATED, { ...open }, currentLocale());
+    const partial = ALERT_MESSAGES[MISDATED]?.variants?.partial;
+    return open.partial && partial !== undefined ? pickLocale(partial, currentLocale()) : null;
+  }
+
+  #renderMisdatedEntry(open: MisdatedOpenView): TemplateResult {
+    const sentence = this.#misdatedSentence(open);
+    const records = open.unconfirmed ? undefined : this.misdatedLists?.get(open.confirmationId);
+    return html`<div class="misdated-entry" data-test="misdated-entry">
+      ${
+        sentence === null
+          ? nothing
+          : html`<p class="detail" data-test="misdated-sentence">${wholeTimes(sentence)}</p>`
+      }
+      ${
+        records === undefined
+          ? nothing
+          : html`<wt-data-table
+              data-test="misdated-table"
+              aria-label=${t("box_status.misdated.title")}
+              .rows=${records}
+              .columns=${this.#misdatedColumns()}
+              .rowKey=${(record: MisdatedRecordView) => record.recordId}
+            ></wt-data-table>`
+      }
+    </div>`;
+  }
+
+  #renderMisdated(health: BoxHealth): TemplateResult | typeof nothing {
+    if (health.misdatedOpen.length === 0) return nothing;
+    return html`<section class="misdated" data-test="misdated">
+      <h2>${t("box_status.misdated.title")}</h2>
+      <p class="note" data-test="misdated-line">${t("box_status.misdated.line")}</p>
+      ${health.misdatedOpen.map((open) => this.#renderMisdatedEntry(open))}
+      ${
+        this.misdatedFailed
+          ? html`<p class="note" data-test="misdated-unavailable">
+              ${t("box_status.misdated.read_error")}
+            </p>`
+          : nothing
+      }
+    </section>`;
+  }
+
   #renderBody(): TemplateResult | typeof nothing {
     const health = this.health;
     const alertsFailed = this.failingReads.has("listAlerts");
@@ -459,6 +576,7 @@ export class BoxStatusScreen extends LitElement {
       <ul class="rows">
         ${rows.map((row) => this.#renderRow(row, health))}
       </ul>
+      ${this.#renderMisdated(health)}
       ${
         checksUnavailable
           ? html`<p class="note" data-test="checks-unavailable">

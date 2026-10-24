@@ -527,6 +527,8 @@ export const QUERY_DEPENDENCIES = {
   // Mostly the box's disk, clock and processes, which no table change reports, so the timer
   // refreshes it; its sales, printer and reader rows wait for the timer too.
   getBoxHealth: [],
+  // Each list is read from stored records that never change; which lists exist follows the alerts.
+  clockMisdated: ["incidents"],
   listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions"],
   listHandledAlerts: ["incidents", "persons"],
 } as const;
