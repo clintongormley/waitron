@@ -4653,7 +4653,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
-  it can still sell.** Design revision 7 (2026-10-24); every owner question answered. The build
+  it can still sell.** Design revision 7 (2026-10-24); every owner question answered except one the slice 9b outline
+  keeps for when 9b is planned. The build
   follows the design's §8 slices:
   [plan](superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
@@ -4689,7 +4690,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **A device's or an administrator's time is self-reported.** Whatever their browser sends counts:
   a scripted request can send any time, and "nobody types a time" is true of the screen only. In
   slice 9 that can lift a stop, never set the clock. What limits it: devices must be enrolled and
-  come from two different network addresses; an administrator must be signed in and not on the box;
+  come from two different network addresses; an administrator must be signed in and, outside
+  development, not on the box;
   every confirmation is kept with its proof; the sales listed as dated wrongly go to the owner.
   Slice 9b is to add an alert and an email for every clock change the box makes. Left open by
   A798-B slice 9 (#2025).
@@ -4705,9 +4707,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **The box sends AEAT's QR host a HEAD at most once a minute while its clock reads more than a
   minute behind the latest sale — during a stop, and under a confirmation that lifted it — or while
-  a clock check whose stop has ended waits for its witness**, on a primary that files records. While
-  the clock reads a date before 28-10-2024 it is sent only if a clock check waits. Left open by
-  A798-B slice 9 (#2025).
+  a clock check whose stop has ended waits for its witness**, on a primary that files records; not
+  while the clock reads a date before 28-10-2024. Left open by A798-B slice 9 (#2025).
 
 - **The clock watch's suspend-aware clock has not been run on Linux.** It reads `/proc/uptime` so
   that a box waking from sleep is not taken for a clock jumping forward; the tests replace the file,

@@ -3654,9 +3654,10 @@ soon as the box's clock is confirmed
 What confirms it, in order: AEAT's time agreeing with the box within a minute; at least two
 enrolled tills or handhelds, from two different network addresses, that reported their time in the
 last five minutes, each within a minute of the box; or an administrator's own phone or computer,
-never the box's own screen. Nobody types a time: the device's browser sends its own. AEAT's time
-outranks the devices: when AEAT disagrees, neither the devices nor an administrator can confirm for
-the rest of that stop. The next record in the chain then carries a generation time earlier than the
+never the box's own screen. Nobody types a time on the screen: the device's browser sends its own,
+though a scripted request could send any time. AEAT's time outranks the devices: when AEAT
+disagrees, neither the devices nor an administrator can confirm for the rest of that stop, unless
+the box's server restarts, which forgets the disagreement. The next record in the chain then carries a generation time earlier than the
 record before it, with no limit on how much earlier; each later record carries a time no more than a
 minute earlier than the box's clock read at the confirmation, nor than the latest time written since.
 If the clock steps back again, payments stop again until a fresh confirmation. Nothing already
@@ -3686,9 +3687,10 @@ preproduction environment.
 > al menos dos dispositivos de venta dados de alta, conectados desde dos direcciones de red
 > distintas, que hayan comunicado su hora en los últimos cinco minutos, cada uno con menos de un
 > minuto de diferencia; o de la de un teléfono u ordenador propio de un administrador, nunca la
-> pantalla del propio equipo. Nadie teclea una hora: la envía el navegador del dispositivo. Si la hora
-> de la AEAT no coincide, ni los dispositivos ni el administrador pueden confirmarla mientras dure esa
-> parada.
+> pantalla del propio equipo. En la pantalla nadie teclea una hora: la envía el navegador del
+> dispositivo, aunque una petición programada podría enviar cualquier hora. Si la hora de la AEAT no
+> coincide, ni los dispositivos ni el administrador pueden confirmarla mientras dure esa parada,
+> salvo que se reinicie el servidor del equipo, que olvida esa discrepancia.
 > Desde ese momento, el siguiente registro de la cadena lleva una fecha y hora de generación anterior a
 > la del registro que le precede (sin límite), y cada registro posterior lleva una hora que, como
 > mucho, es un minuto anterior a la que marcaba el reloj del equipo al confirmarse y a la más reciente
@@ -3804,8 +3806,10 @@ required is what this asks.
 > registro, deja de cobrar (pregunta Q51). Cuando se confirma la hora, el sistema calcula la hora real
 > al comienzo de la parada (la hora de la confirmación menos el tiempo transcurrido desde que empezó,
 > medido por un reloj que cuenta desde el arranque del equipo) y lista los registros generados antes
-> de la parada con una hora más de un minuto posterior a ella: número de factura y hora registrada.
-> Avisa a los responsables, y el aviso queda abierto hasta que alguien lo marca como atendido. Si el
+> de la parada con una hora más de un minuto posterior a esa hora real: número de factura y hora
+> registrada. La lista se muestra en la página «Estado del equipo» del panel de gestión, y el sistema
+> avisa a los responsables en el panel y por correo electrónico; el aviso queda abierto hasta que
+> alguien lo marca como atendido. Si el
 > equipo se reinició durante la parada, la lista puede estar incompleta, y el aviso lo dice; si la
 > parada terminó sola y la siguiente comprobación contradijo la hora del equipo, no se lista nada y el
 > aviso dice que no se puede saber qué ventas se fecharon mal. No se modifica ningún registro: ni su
