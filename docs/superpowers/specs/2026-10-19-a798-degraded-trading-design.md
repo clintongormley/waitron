@@ -1048,7 +1048,8 @@ future date." The answers that followed it, verbatim, are in
 `~/waitron-campaign-b/a798-9-rev/OWNER-ANSWERS.md`; this section is what they mean for the box.
 Where an earlier sentence of this design disagrees, this section governs. (Folded the round-1 plan
 review and its claim check, `~/waitron-campaign-b/a798-9-rev/round1.md`, `claim-check.md`, under the
-runner's rulings, `RULINGS-1.md`.)
+runner's rulings, `RULINGS-1.md`; then rounds 3 and 4, `round3.md` and `round4.md`, under
+`RULINGS-3.md` and `RULINGS-4.md`.)
 
 #### a. What starts a clock check
 
@@ -1072,8 +1073,11 @@ runner's rulings, `RULINGS-1.md`.)
 "No, we must first correct the clock." Everything slice 8 stops is refused while a check started by
 a.1, a.2 or a.4 waits — **with slice 8's own code, `clock.behind_chain`, carrying a new `reason`**,
 not a new code: the code is matched by name after a card is charged (`apps/server/src/bill-payments.ts`'s
-"charged but not recorded" path), in two routes' status maps, in seven places in two till files
-(`apps/till/src/till-app.ts` five times, `widgets/pay-refusal.ts` twice) plus the till's words
+"charged but not recorded" path), in two routes' status maps, in seven places in two till files —
+five that match the code (`apps/till/src/till-app.ts:574`, `:847`, `:922` and `:1554`, whose `case`
+also returns the code at `:1556`, and `widgets/pay-refusal.ts:82`) and two that match the
+charged-but-not-recorded reason `"clock_behind_chain"` (`till-app.ts:1547`, `pay-refusal.ts:88`;
+round 4, M9) — plus the till's words
 (`i18n/codes.ts`, `i18n/staff-notices.ts`), and four times in the dashboard's Box status rows
 (`apps/dashboard/src/screens/box-status-rows.ts`); a second code would miss them while money is
 mid-payment (round 1, C2; counted by round 3). The red strip on every till
@@ -1153,21 +1157,30 @@ passing the record).
 #### f. Wrongly dated records go to the owner
 
 The owner (04:00): "the records later than the time the corrected clock showed when the stop
-began". So the box writes down when a stop began — a `clock_checks` row with the box's reading and
-the boot-time clock at that moment, opened when the stop with any lift applied holds (never under a
-lift that covers, or every lift would be followed by a second list naming the sales made under it,
-round 3 C1) — and, when the check closes, works out the corrected time at the start: the time at
-closing less the boot-time clock's elapsed time since. **That is right only when the clock at
-closing is right.** A confirmation's closing is (the clock was just confirmed). A stop that ends by
-itself is not necessarily: real time catching up and a clock put right end it, but so does a clock
-set back by mistake reaching the last sale (round 3, I1). So a stop that ends by itself lists only
-when, at that moment, AEAT or two devices agree with the box and nothing disagreed during the stop;
-otherwise the box records that it cannot tell which sales were dated wrongly, and says so to the
-owner. Every record written before the closing and stamped more than a minute after the corrected
-start is listed; the closing stores its own readings and the corrected start, so the list read later
-is the list the alert counted. If the machine restarted during the stop, the elapsed time is unknown
-and the list falls back to records stamped more than a minute after the closing time; the alert says
-the list may be short.
+began". So the box writes down when a stop began — a `clock_checks` row with the box's reading, the
+boot-time clock and the chain's heads at that moment, opened when the stop with any lift applied
+holds (never under a lift that covers, or every lift would be followed by a second list naming the
+sales made under it, round 3 C1) — and, when the check closes, works out the corrected time at the
+start: the time at closing less the boot-time clock's elapsed time since. **Every record written
+before the check opened and stamped more than a minute after the corrected start is listed.** The
+opening's heads are enough: no record is written while the stop holds (the record append refuses
+first, `packages/fiscal-verifactu/src/chain.ts:136-140` → `clock-behind.ts:166-173`), and a record
+written after the stop ends — under a lift, on fresh proof the clock is right, or after the stop
+ended by itself, on the clock the closing then confirms — is correctly dated. Bounding by the
+closing instead would list the sales customers pay in the seconds between the stop's end and the
+closing (round 4, I1, measured on a model). **The corrected start is right only when the clock at
+closing is right**, so a check closes only on a confirmation: during the stop (a lift), or, when the
+stop ends by itself — real time catching up and a clock put right end it, but so does a clock set
+back by mistake reaching the last sale (round 3, I1) — once a fresh witness answers. AEAT or two
+devices agreeing with the box then (or an administrator's device) close it and it lists; a fresh
+witness disagreeing closes it with nothing listed, and the box tells the owner it cannot tell which
+sales were dated wrongly. What disagreed during the stop does not decide this: a clock set back by
+mistake and put right again lists nothing either way, and the condition only hid sales paid after
+the stop ended (round 4, M5). With no witness at all the check stays open — it blocks nothing — and
+the Box status page says the clock is not yet confirmed (round 4, M7). The closing stores its own
+readings and the corrected start, so the list read later is the list the alert counted. If the
+machine restarted during the stop, the elapsed time is unknown and the list falls back to records
+stamped more than a minute after the closing time; the alert says the list may be short.
 
 After a change of the clock (slice 9c), with e₀ the clock's error before the change, Δ the change
 and s the step the confirmation applies (e₀ = −(Δ + s)): records written since the last
@@ -1500,9 +1513,11 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    time or two agreeing devices, or when an administrator (`person.admin`) confirms their own device
    agrees with the box, with no cap; every confirmation kept in the new `clock_confirmations` table
    (with `clock_checks`, which records when each clock-behind stop began; the slice's one
-   migration, and the backup check learns both tables' links); the wrongly dated records — stamped
-   more than a minute after the corrected time at the stop's start, also when the stop ends by
-   itself — listed on the Box status page with an owner's task (`clock.records_misdated`); the restart and the list told to
+   migration, and the backup check learns both tables' links); the wrongly dated records — written
+   before the stop began and stamped more than a minute after the corrected time at its start, also
+   when the stop ends by itself and a fresh witness then confirms the box's clock (a task saying the
+   box cannot tell when one contradicts it) — listed on the Box status page with an owner's task
+   (`clock.records_misdated`); the restart and the list told to
    managers by bell and email; the clock-stop email. The box does not set its clock yet. Tests: no
    proof, no restart; contrary proof, no restart; a 400-day gap restarts once proved; a second step
    back stops again and a fresh confirmation lifts it; a device on the box is no witness and an

@@ -38,6 +38,8 @@ a stop it already has (slice 8's clock behind the chain, slice 3's clock before 
    enrolment and sign-in, two addresses, never while synchronised, the alert and email on every
    change, the append-only record with its proof, and the wrongly dated list. The asesor question
    below names this window.
+5. **`clock.sync_off` is a warning in the bell only, no email.** A production box whose host service
+   does not answer raises it too (`unreachable`); elsewhere (a laptop) it stays silent, as today.
 
 ## Owner question, to ask when 9b is planned (round 3, M1; the runner's ruling)
 
@@ -49,8 +51,10 @@ runs against the owner's 04:24 answer ("two tills … no admin needed"), so it i
 decide. Worked example for the question: the box's clock reads 24 Oct 21:00 after someone set it a
 day ahead by mistake; the last sale reads 24 Oct 20:55; two tills say 23 Oct 21:00. Under the
 narrower rule the tills do not set it back; an administrator confirming their phone's time does.
-5. **`clock.sync_off` is a warning in the bell only, no email.** A production box whose host service
-   does not answer raises it too (`unreachable`); elsewhere (a laptop) it stays silent, as today.
+The cost of the narrower rule: once slice 9c stops selling while a check waits, a box whose two
+tills would have set its clock back stays stopped until an administrator confirms — with no
+administrator there, payments stay stopped, where under the 04:24 answer the tills would have set
+the clock and selling would have gone on (round 4, M11).
 
 ## What it rests on — and what nobody has measured yet
 

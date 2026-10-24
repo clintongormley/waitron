@@ -72,12 +72,15 @@ where nothing on the venue's network could lift it** (design §4.9 h).
    or `disagrees` check is open, `refuseWhileClockBehind` throws **`clock.behind_chain`** with
    `reason: "unconfirmed"` and `since`, `checkReason`, `stepMs` — not a new code — so every place that
    matches the code by name keeps working. Each is named and tested in the full plan, from
-   `/usr/bin/grep -rn '"clock.behind_chain"' apps packages` (round 1, experiment 4):
-   (seven places in two till files, and four in the dashboard's rows):
+   `/usr/bin/grep -rn '"clock.behind_chain"' apps packages` (round 1, experiment 4; its `.` also
+   matches `_`) — seven places in two till files, five that match the code and two the
+   charged-but-not-recorded reason `"clock_behind_chain"` (`till-app.ts:1547`, `pay-refusal.ts:88`;
+   round 4, M9), and four in the dashboard's rows:
    `apps/server/src/bill-payments.ts:1262-1266` (`notRecordedReason`: a refusal after a card was
    charged becomes `sale.charged_not_recorded`), the status maps `apps/server/src/payments-api.ts:179`
    and `apps/server/src/till-api.ts:455`, `apps/till/src/till-app.ts:574`, `:847`, `:922`, `:1547`,
-   `:1554`, `apps/till/src/widgets/pay-refusal.ts:82`, `:88`,
+   `:1554` (whose `case` also returns the code at `:1556`), `apps/till/src/widgets/pay-refusal.ts:82`,
+   `:88`,
    `apps/dashboard/src/screens/box-status-rows.ts:50`, `:59`, `:150`, `:262`, and the words files
    (the till's refusal and strip, the bell, the email: each words the new reason). **The mid-payment
    test:** a check opens (an injected guard tick) between a payment route's pre-check and the record
@@ -88,9 +91,9 @@ where nothing on the venue's network could lift it** (design §4.9 h).
 3. **The clock guard** (`apps/server/src/clock-guard.ts`): an anchor `{ wall, boot }` set at the
    start, after each confirmation and before and after each set the box makes (9b's order, round 1
    M7); every second, `(wall − anchor.wall) − (boot − anchor.boot)` past ±60 000 ms opens a `change`
-   check (`detail { stepMs, wallBefore, wallAfter, heads, bootMs, bootId }`) and re-anchors. A failed
-   write is retried with a back-off, not every second (round 1, M5). Off where `elapsedClock` fell
-   back to `performance.now()` (FYI 7).
+   check (`detail { stepMs, wallBefore, wallAfter, heads, lastRecordId, bootMs, bootId }`, as slice
+   9's R6 and R7 shape it) and re-anchors. A failed write is retried with a back-off, not every
+   second (round 1, M5). Off where `elapsedClock` fell back to `performance.now()` (FYI 7).
 4. **The start's first try** (FYI 2), and **a full disk at start** (round 1, M5): if the check cannot
    be written, the start still serves, every sale is refused (the full-disk stop already does), and
    nothing loops; compare `fullDiskFailure` and `start-full-disk.e2e.test.ts`.

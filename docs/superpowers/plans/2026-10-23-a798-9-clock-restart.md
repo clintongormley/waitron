@@ -1,5 +1,14 @@
 # A798-B slice 9 — payments restart by themselves once the clock is confirmed, and wrongly dated records go to the owner
 
+> **Revision 7 (2026-10-24): round 4 folded** (`~/waitron-campaign-b/a798-9-rev/round4.md`, under
+> `RULINGS-4.md`; finding by finding at the end; round 4 checked the fold below, which calls itself
+> Revision 6). Every wrongly dated list is bounded by the check's OPENING `detail.heads`, never the
+> closing's, so a correctly dated sale made after a stop ends is never listed; the "none disagreed
+> during the stop" condition is gone; a check whose stop ends by itself waits, open, for a fresh
+> witness instead of closing `unconfirmed` because AEAT was asked less than a minute before; the
+> closing's `source` now names what confirmed the clock, and `elapsed` is only a closing that cannot
+> tell. **No migration column changed**: the check's `detail` JSON gains `lastRecordId`, nothing else.
+>
 > **Revision 6 (2026-10-24): round 3 folded** (`~/waitron-campaign-b/a798-9-rev/round3.md`, under
 > `RULINGS-3.md`; finding by finding at the end). Checks now open and close on the stop with the lift
 > applied; a stop that ends by itself lists nothing unless something confirms the box's clock at
@@ -24,7 +33,8 @@
 >   payments restart by themselves on AEAT's time or two agreeing tills or handhelds, or when an
 >   administrator confirms that their own device agrees with the box; no button, no 24-hour cap;
 >   when each stop began is recorded; every closing kept; the wrongly dated records listed with an
->   owner's task, also when a stop ends by itself; managers told by bell and email; devices and
+>   owner's task, also when a stop ends by itself (once a fresh witness confirms the box's clock;
+>   a task saying the box cannot tell when one contradicts it); managers told by bell and email; devices and
 >   browsers on the box itself never count. The box does not set its clock yet. **The slice's one
 >   migration** (both new tables) is here.
 > - **Slice 9b** — an OUTLINE, [2026-10-24-a798-9b-box-sets-its-clock.md](2026-10-24-a798-9b-box-sets-its-clock.md):
@@ -57,8 +67,9 @@ Every point the owner's answers left open, the default built, and why. Each can 
    and a second lift of the same record is now normal; its `person_id` cannot be empty either.
 5. **The clock watch looks every 15 seconds**, stop or not (a few indexed reads: the latest record,
    the covering confirmation, the chain heads under a lift, the open check); AEAT is still asked at
-   most once a minute, and only during a stop. Why: tills report every 15 seconds, and the start of a
-   stop is recorded within 15 seconds.
+   most once a minute, and only during a stop or while a check whose stop has ended waits for its
+   witness (R6). Why: tills report every 15 seconds, and the start of a stop is recorded within 15
+   seconds.
 6. **AEAT's time outranks the devices.** AEAT agreeing with the box restarts payments even if two
    devices disagree (they get `clock.disagrees`); AEAT disagreeing blocks devices and the
    administrator for the rest of the stop in this slice, where the box cannot set its clock — slice
@@ -70,20 +81,28 @@ Every point the owner's answers left open, the default built, and why. Each can 
    confirm**: "Your device and the box differ by more than a minute. If your device is right, the
    box's clock is wrong: connect the box to the internet so it can correct it."
 9. **Wrongly dated follows the owner's 04:00 words**: every record written before the check
-   closed and stamped more than a minute after the corrected time at the start of the stop — the
-   time at closing less the boot-time clock's elapsed time since the stop began. That is right only
-   when the clock at closing is right, so: a confirmation's closing lists (the clock was just
-   confirmed, however late); **a stop that ends by itself lists only when, at that moment, a fresh
-   witness (AEAT, or two devices from two addresses) agrees with the box and none disagreed during
-   the stop** — otherwise it lists nothing and the owner's task says the box cannot tell which sales
-   were dated wrongly, because its own clock may be the wrong one (a clock set back by mistake ends
-   the stop by itself too). If the machine restarted during the stop, the elapsed time is unknown and
-   the list falls back to records stamped more than a minute after the closing time; the alert says
-   it may be short. The boot id this relies on has not been read inside the app's container (Docker
-   was down); slice 9b's M5 reads it, and if it differs there or cannot be read, every list is the
-   short fallback. One owner's task
-   (`clock.records_misdated`, open until marked handled) per closing that finds any; the list
-   (invoice number and recorded time) on the Box status page. A record can appear in two lists.
+   OPENED (at most its node's entry in the check's `detail.heads`) and stamped more than a minute
+   after the corrected time at the start of the stop — the time at closing less the boot-time
+   clock's elapsed time since the stop began. Why the opening's heads are enough: no record is
+   written while the stop holds (the chain append refuses first, `chain.ts:136-140` →
+   `clock-behind.ts:166-173`, `clock.behind_chain`), and a record written after the stop ends is
+   rightly outside the list (round 4, I1): under a lift it was written under fresh proof that the
+   clock is right; after a stop that ended by itself it was written on the clock the closing's
+   witness then confirms (or contradicts, and nothing is listed). A clock that was wrong while the
+   check waited and right at its closing changed in between, which is slice 9c's change check. The corrected start is right only when the clock at
+   closing is right, so a check closes only on a confirmation: by AEAT, two devices from two
+   addresses or an administrator's device, during the stop (a lift) or, **when the stop ends by
+   itself, after it** — the check stays open until a fresh witness answers, and the Box status page
+   says it is waiting. **If a fresh witness then contradicts the box** (its clock may be the one that
+   is wrong: a clock set back by mistake ends the stop by itself too), the check closes with nothing
+   listed and the owner's task says the box cannot tell which sales were dated wrongly. If the
+   machine restarted during the stop, the elapsed time is unknown and the list falls back to records
+   stamped more than a minute after the closing time; the alert says it may be short. The boot id
+   this relies on has not been read inside the app's container (Docker was down); slice 9b's M5 reads
+   it, and if it differs there or cannot be read, every list is the short fallback. One owner's task
+   (`clock.records_misdated`, open until marked handled) per closing that finds any, or that cannot
+   tell; the list (invoice number and recorded time) on the Box status page. A record can appear in
+   two lists.
 10. **A further step back after a restart no longer stops payments for good**: payments stop again,
     and a fresh confirmation restarts them. Why: "regardless of the time difference, we need to
     restart selling".
@@ -92,9 +111,12 @@ Every point the owner's answers left open, the default built, and why. Each can 
 12. **A device's or administrator's time is self-reported.** Whatever their browser sends counts: a
     scripted request can send any time, and "nobody types a time" is true of the screen only. In
     this slice that can lift a stop, never set the clock. What limits it: devices must be enrolled
-    and come from two different connection addresses (two browsers on one phone count once; devices
-    behind one NAT router count once too, which fails safe — the box listens on IPv4 only,
-    `WAITRON_HTTP_HOST=0.0.0.0`, `deploy/Dockerfile:278`); an
+    and come from two different connection addresses (two browsers on one phone count once: the box
+    listens on IPv4 only, `WAITRON_HTTP_HOST=0.0.0.0`, `deploy/Dockerfile:278`, so the phone's IPv6
+    temporary addresses never reach it — round 4's `r4/listen-v4.mjs`: a server on `0.0.0.0` answered
+    `127.0.0.1` and refused `::1`, `ECONNREFUSED`, while the control on `::` answered both; devices
+    behind one NAT router count once for another reason — the router gives them one address — which
+    fails safe); an
     administrator must be signed in and off the box; every closing is kept with its proof; records
     listed as wrongly dated go to the owner. Slice 9b adds an alert and an email for every clock
     change the box makes.
@@ -107,7 +129,7 @@ Every point the owner's answers left open, the default built, and why. Each can 
 15. **The `clock.behind_chain_disproved` alert stays as built.**
 16. **No new picture.** The LOOK tasks screenshot the built screens; picture 9 gets a dated pointer.
 
-## Measured for revisions 4 and 5
+## Measured for revisions 4–7
 
 Run on 2026-10-24, macOS (Darwin 25.6.0), Node v26.11.1, in this worktree. Logs and scripts under
 `~/waitron-campaign-b/a798-9-rev/probe/` (mine) and `~/waitron-campaign-b/a798-9-rev/claim-check/`
@@ -156,6 +178,17 @@ Run on 2026-10-24, macOS (Darwin 25.6.0), Node v26.11.1, in this worktree. Logs 
   with those two lines changed (`probe/r6/model-r6.mjs`, `model-r6.log`): A → `checks opened: 1`,
   one list `23 (10:05..11:55)`; B → `listed 0`; control C (the clock right, no confirmation, a
   witness agreeing when real time catches up) → `listed 23 (10:05..11:55)`.
+- **T8 — round 4's model of the window after a stop ends** (`r4/model-window.mjs`, `model-window.log`;
+  revision 6's rule with the watch checking every 15 s, 6 s past each quarter-minute, and sales at any
+  moment; a model of the plan's sentences, not product code). Two customers paying at 11:54:02 and
+  11:54:04, after the stop ends (11:54:00) and before the watch's closing (11:54:06): bounded by the
+  closing's heads → `listed 25 (10:05:00..11:55:00); of them correctly dated: 2 [11:54:02, 11:54:04]`;
+  bounded by the opening's heads → `listed 23 …; of them correctly dated: 0`. The clock set 30
+  minutes back by mistake at 10:00 and put right at 10:10, AEAT agreeing at the closing, without the
+  "none disagreed" condition: closing's heads → `listed 1 (10:10:00..10:10:00); of them correctly
+  dated: 1`; opening's heads → `listed 0`. Control: T7's case C with checks in step with the sales →
+  `listed 23 …; of them correctly dated: 0`, the same as the opening-heads run, so the window shows only
+  when the checks are out of step. Revision 7 takes the opening's heads.
 - **T6 — backups are pruned by the age in their names** (round 1, experiment 5):
   `pnpm --filter @waitron/server exec vitest run src/backup-sweep.test.ts -t "prunes by count AND age"`
   → `Tests 1 passed | 43 skipped (44)`; `pruneBackend` deletes a backup inside the count limit but
@@ -187,11 +220,12 @@ tables' links (Task R1b).
    confirmation (a new row, a larger `seq`) lifts it.
 4. Devices and browsers on the box itself never count, and an administrator on it is refused
    (except on a developer's laptop); two devices must come from two connection addresses.
-5. The clock watch records when each clock-behind stop began (a `clock_checks` row), and closes it
-   — by a confirmation, or by itself when the stop ends without one — listing the wrongly dated
-   records; the restart and the list are emailed to managers.
+5. The clock watch records when each clock-behind stop began (a `clock_checks` row), and it closes
+   on a confirmation — during the stop (a lift), or after a stop that ended by itself, once a fresh
+   witness answers — listing the wrongly dated records, or, when a fresh witness contradicts the
+   box's clock, a task saying the box cannot tell; the restart and the list are emailed to managers.
 
-## Words used in revision 5
+## Words used in revisions 5–7
 
 - The **stop proper** is slice 8's stop with the lift applied: `clockBehindChain` answers non-null.
   The **raw comparison** (the reading against the latest record, before any lift) stays "behind"
@@ -199,13 +233,17 @@ tables' links (Task R1b).
 - A **check** is one row of `clock_checks`. Slice 9 writes checks with `reason: "behind_chain"`, one
   per clock-behind stop, when the clock watch first sees the stop proper; slice 9c adds the others. At most
   one check is **open** at a time: the check with the largest `seq` is open while no confirmation
-  points at it, and opening while one is open answers the open one.
-- A **confirmation** is one row of `clock_confirmations`. Its **source** is `authority` (AEAT),
-  `devices` (two or more tills or handhelds from two or more addresses that agree with each other),
-  `admin` (an administrator's own device) or `elapsed` (the stop proper ended with no confirmation:
-  the clock put right, set back, or real time passed the record). It **closes** the open check (`check_id`). It **names** a
-  record when the confirmed clock read more than a minute behind the latest record; that row is the
-  **lift** (the old "restart").
+  points at it, and opening while one is open answers the open one. An open check whose stop proper
+  no longer holds is **waiting** for its witness (R6); it blocks nothing.
+- A **confirmation** is one row of `clock_confirmations`. Its **source** names what confirmed the
+  clock: `authority` (AEAT), `devices` (two or more tills or handhelds from two or more addresses
+  that agree with each other) or `admin` (an administrator's own device); or `elapsed` — the stop
+  ended by itself and a fresh witness then contradicted the box, or the stop came back after
+  records were written while the check waited, so nothing confirmed the clock (`proof.closing.unconfirmed`
+  is true exactly on these). It **closes** the open check (`check_id`; every confirmation from Task
+  R4b on has one). It **names** a record when the confirmed clock read more than a minute behind
+  the latest record; that row is the **lift** (the old "restart"). A confirmation of a waiting
+  check names none: the stop had already ended.
 - The **start of a stop**, corrected: the closing's `confirmed_at` less the boot-time clock's
   elapsed time since the check opened, when the boot id is the same at both ends; otherwise the
   closing's `confirmed_at`, flagged `partial`. The opening's boot reading and id are in the check's
@@ -215,12 +253,13 @@ tables' links (Task R1b).
 - **On the box**: a request whose connection comes from loopback or one of the box's own interface
   addresses (`requestFromBox`, `apps/server/src/request-from-box.ts`), with the app on the host's
   network.
-- **Wrongly dated**: a record written before the closing (its `secuencia` at most its node's entry
-  in the closing's `heads`) whose generation time is more than 60 000 ms after the stored corrected
-  start of the stop — for a confirmation, and for an `elapsed` closing only when it is not
-  `unconfirmed` (R6).
+- **Wrongly dated**: a record written before the check OPENED (its `secuencia` at most its node's
+  entry in the check's `detail.heads`) whose generation time is more than 60 000 ms after the stored
+  corrected start of the stop — for every closing except an `elapsed` one, which lists nothing
+  (R6). The closing's own `proof.heads` plays no part in the list (FYI 9 says why the opening's are
+  enough); it stays on a lift because the cover reads it (R2, decision 21's fail-closed `heads`).
 
-## Decisions revision 5 makes
+## Decisions revisions 5–7 make
 
 R1. **The tables** (Veri\*Factu set, one generated migration after `0010_clock_stop.sql`), both
     `appendOnly(…, "ledger", LEDGER)` in `classification.ts`, both in
@@ -228,7 +267,8 @@ R1. **The tables** (Veri\*Factu set, one generated migration after `0010_clock_s
     - `clock_checks`: `id` (`newId`), `seq` integer not null (unique), `node_id` → `nodes`,
       `opened_at` ts (the box's reading), `reason` text (CHECK in `start`, `change`,
       `behind_chain`, `disagrees`), `detail` json (slice 9: `{ clockAt, bootMs, bootId,
-      lastRecordAt, heads }`).
+      lastRecordAt, lastRecordId, heads }`; `lastRecordId` added in revision 7 for R7's `saleId`,
+      inside the JSON, so no column changes).
     - `clock_confirmations`: `id`, `seq` integer not null (unique), `node_id` → `nodes`,
       `box_clock_at` ts (the box's reading when judged, before any step), `confirmed_at` ts (the time
       adopted; equal to `box_clock_at` until 9b), `step_ms` integer not null (0 until 9b), `source`
@@ -250,16 +290,20 @@ R2. **The cover** (`clock-behind.ts` `uncoveredBy`): the confirmation with the l
     latest record's time, `gap ≤ (record_at − confirmed_at) + 60 000`, and the running maximum
     (decision 8c), exactly as built. No cap — so a reading up to a minute further back than the
     confirmed time is covered, and 61 s is not (pinned in Task R2).
-R3. **When the box confirms by itself** (the clock watch, every 15 s; AEAT HEAD at most once a
-    minute, only during a stop): the stop is on (raw comparison behind, not before 28-10-2024); no
+R3. **When the box confirms by itself during a stop** (the clock watch, every 15 s; AEAT HEAD at
+    most once a minute, only during a stop or while a check waits, R6): the stop proper holds
+    (`clockBehindChain` non-null, so a covering lift counts; not before 28-10-2024); no
     AEAT witness taken during the stop disagrees; and either an AEAT witness agrees (source
     `authority`, devices attached if two agree too) or, with no AEAT witness at all, devices from two
     or more connection addresses that agree with each other agree with the box, and no such group
     disagrees (source `devices`). Witnesses as built: fresh (five minutes, no step since), taken
-    during the stop, not after the reading. After a confirmation the witness store is cleared.
+    during the stop (`clock-stop-restart.ts:86-88`: the box read behind the latest record when the
+    witness was taken), not after the reading. After a confirmation the witness store is cleared.
+    The closing of a check that waits after its stop ended is R6's, not this one.
 R4. **When an administrator may confirm**: `person.admin`; not on the box (refused `same_machine`
     before anything else, at the challenge and at the confirm), except when `config.devMode`; the
-    stop is on; no AEAT witness taken during the stop disagrees, and no group of devices from two
+    stop proper holds, or a check waits (R6) — else `not_stopped`; no AEAT witness taken during the
+    stop disagrees (for a waiting check: no fresh AEAT witness), and no group of devices from two
     addresses disagrees (`contrary_proof`); a fresh challenge (≤ 5 000 ms by the steady clock, used
     once, kept per management session as `createSetupHourClock` keeps its challenges); the device's
     time agrees (`|deviceAt − boxAtMidpoint| + elapsed/2 ≤ 60 000`), else `differs`. Refusals are
@@ -269,28 +313,58 @@ R4. **When an administrator may confirm**: `person.admin`; not on the box (refus
 R5. **The confirmation row** (both paths): `seq`, the node, `box_clock_at = confirmed_at =` the one
     reading, `step_ms 0`, the source, `person_id` for `admin` only, `reason` the open check's (always
     `behind_chain` in this slice), `proof` = `{ authority, devices, admin, heads, closing }` (`heads`
-    as decision 10; `closing` = `{ bootMs, bootId, correctedStart, partial, unconfirmed }`, R6),
-    `check_id` the open check, `registro_id` and `record_at` the latest record's. In the
-    same transaction: `clock.behind_chain_restarted` and, when any record is wrongly dated,
-    `clock.records_misdated`.
-R6. **The start of a stop, and its end by itself.** The clock watch, on each check: if the **stop
-    proper** holds (`clockBehindChain` non-null, so a covering lift counts; not before 28-10-2024)
-    and no check is open, it opens one (`reason: "behind_chain"`, `detail` with the reading, the
-    boot-time clock from `elapsedClock`, the boot id from `/proc/sys/kernel/random/boot_id` — `null`
-    where unreadable, as on macOS — the latest record's time and the chain heads). A confirmation
-    that lifts the stop (R3, R4) closes the open check. While its lift covers, the stop proper does
-    not hold, so no new check opens, and real time later passing the ahead-stamped record writes
-    nothing (round 3, C1). If a `behind_chain` check is open and the stop proper no longer holds with
-    no confirmation having closed it, the watch closes it with an `elapsed` confirmation
-    (`registro_id` null). **What that closing lists** (round 3, I1): the time at closing is right
-    only if something says so — the clock may have ended the stop by being set back by mistake. So
-    the watch asks AEAT once if it has no fresh witness, and the `elapsed` closing lists against the
-    corrected start only when a fresh witness (AEAT, or devices from two addresses) agrees with the
-    box at closing and no AEAT witness or device group disagreed during the stop; otherwise it lists
-    nothing and stores `unconfirmed: true`. Every closing stores `proof.closing` (Words) at the moment
-    it is written, from a boot reader the seat is handed on every path — the watch's and the
-    administrator's route alike (R10). A watch restarted mid-stop (the process restarted, same boot)
-    finds the open check and keeps its stored start.
+    as decision 10, on a lift only, for the cover — never for the list; `closing` = `{ bootMs,
+    bootId, correctedStart, partial, unconfirmed }`, R6), `check_id` the open check — and when none
+    is open (an administrator confirming before the watch's first 15-second look), the seat opens
+    one first in the same transaction, so every closing has an opening's `detail.heads` —,
+    `registro_id` and `record_at` the latest record's on a lift, null when a waiting check is
+    confirmed. In the same transaction: `clock.behind_chain_restarted` for a lift, and, when any
+    record is wrongly dated or the closing is `unconfirmed`, `clock.records_misdated`. **Which task
+    writes what:** Task R3 writes the row without `proof.closing` (its tests assert none); Task R4a
+    builds `correctedStart` and writes `proof.closing` on the closing of a check whose stop came
+    back (R6); Task R4a2 writes it on the closing of a check that waits; Task R4b
+    writes it on the confirmation path (`clock-confirmation.ts`) and opens a check first when none
+    is open.
+R6. **The start of a stop, its end, and a check that waits.** The clock watch, on each look:
+    - **Opening.** If the **stop proper** holds (`clockBehindChain` non-null, so a covering lift
+      counts; not before 28-10-2024) and no check is open, it opens one (`reason: "behind_chain"`,
+      `detail` with the reading, the boot milliseconds and boot id from the boot reader — Task R8's
+      `boot-reader.ts`, whose id is `null` wherever the milliseconds do not come from `/proc/uptime`
+      (round 4, M12), as on macOS — the latest record's time and id, and the chain heads). If the
+      stop proper holds and a check is open whose `detail.heads` are behind the chain's heads now
+      (a node's head past its stored entry, or a node missing from it), a record was written since
+      it opened — which the chain append allows only at a reading where the stop proper did not hold
+      (`chain.ts:136-140` → `clock-behind.ts:166-173`) — so its stop ended while it waited and a new
+      stop has begun: in one transaction the watch closes it `elapsed` with `unconfirmed: true` and
+      opens a new check, or the new stop's ahead-stamped records, written after the old opening,
+      would be in no list. With the heads unmoved, the open check is this stop's.
+    - **A lift.** A confirmation that lifts the stop (R3, R4) closes the open check. While its lift
+      covers, the stop proper does not hold, so no new check opens, and real time later passing the
+      ahead-stamped record writes nothing (round 3, C1).
+    - **A check that waits** (round 3, I1; round 4, I1, M5, M7). If a `behind_chain` check is open and
+      the stop proper no longer holds with no confirmation having closed it, the check **waits**: it
+      blocks nothing (payments run; CLAUDE.md §5). The corrected start is right only when the clock
+      at closing is, and the clock may have ended the stop by being set back by mistake, so the
+      check closes only on a fresh witness. On each look the watch asks AEAT at most once a minute
+      (the same limit as during a stop) and judges the fresh witnesses — five minutes old at most
+      and no step of the clock since, as built, so a reading taken before the clock was put right
+      does not count; R3's during-the-stop filter does not apply — AEAT first (FYI 6): a fresh AEAT
+      witness agreeing closes it with source `authority` (devices attached if two agree too) and
+      lists; a fresh AEAT witness disagreeing closes it `elapsed`, `unconfirmed: true`, listing
+      nothing; with no fresh AEAT witness, a group of devices from two addresses agreeing, and none
+      disagreeing, closes it with source `devices` and lists, and a disagreeing group closes it
+      `elapsed`, `unconfirmed`; with nothing fresh it writes nothing and the check stays open. An
+      administrator's agreeing device closes it too (R4, source `admin`). None of these names a
+      record or records a restarted alert. **If no witness ever comes** (no internet, fewer than two
+      devices, no administrator), the check stays open for as long as that lasts, the Box status
+      page says the stop has ended and the clock is not yet confirmed (R11), and nothing else is
+      blocked. A disagreement noted during the stop plays no part in this closing (it still blocks a
+      lift during the stop, R3 and FYI 6): only the witnesses fresh when the check closes decide
+      (round 4, M5; the model's case D3, T8).
+    - Every closing stores `proof.closing` (Words) at the moment it is written, from the boot
+      reader the seat is handed on every path — the watch's and the administrator's route alike
+      (R10). A watch restarted mid-stop (the process restarted, same boot) finds the open check and
+      keeps its stored start; one restarted while a check waits finds it waiting.
 R7. **The alerts.** `clock.behind_chain_restarted` (warning, as built) gets params `{ confirmationId,
     confirmedBy, person, clockAt, lastRecordAt }`, `confirmedBy` worded by a list registered as
     `clock_confirmed_by`: `authority` "the tax agency's time" / "la hora de Hacienda", `devices` "two
@@ -298,11 +372,20 @@ R7. **The alerts.** `clock.behind_chain_restarted` (warning, as built) gets para
     dispositivo de un administrador". `clock.records_misdated` (error; origin
     `jobOrigin("dashboard")`; `saleId` the earliest wrongly dated record's sale; params
     `{ confirmationId, count, from, to, partial, unconfirmed }`), area `box`, `system.manage`: the
-    module claims the prefix `clock.records_misdated` beside `clock.behind_chain`. An `unconfirmed`
-    `elapsed` closing still records it, with `count: 0` and `from` the check's opening reading, as the
-    owner's task: "the stop that began at {from} ended by itself, but nothing confirmed the box's
-    clock, so the box cannot tell which sales were dated wrongly". No restarted alert for an
-    `elapsed` closing (nothing restarted payments but the clock itself).
+    module claims the prefix `clock.records_misdated` beside `clock.behind_chain`. An `elapsed`
+    (`unconfirmed`) closing still records it, with `count: 0`, `from` the check's opening reading and
+    no `to`, as the owner's task: "the stop that began at {from} ended by itself, but nothing
+    confirmed the box's clock, so the box cannot tell which sales were dated wrongly". Its `saleId` is
+    the sale of the latest record when the check opened (`detail.lastRecordId`; every record has a
+    sale, `registros.ts:49-50`; round 4, M8). That is never null for a `behind_chain` check, which
+    opens only with a latest record (`clockBehindChain` answers null without one,
+    `clock-behind.ts:149-154`); a slice 9c check opened on an empty chain would record it with no
+    sale. Either way, a second such task naming the same sale (or none) while the first is open is
+    dropped — `recordIncident` ends in `.onConflictDoNothing()` (`packages/core/src/incidents.ts:95-107`)
+    and the open-incident key reads a null sale as `''` (`packages/db/src/schema/incidents.ts:64-70`)
+    — so it folds into the open task, which already says the box cannot tell; both closings stay in
+    `clock_confirmations`. No restarted alert for a closing that names no record (an `elapsed` one,
+    or a waiting check's: nothing restarted payments but the clock itself).
 R8. **The emails.** The managers' email duty also sends, once per incident id per process, an email
     for each open `clock.behind_chain_restarted` and `clock.records_misdated`. Words in Task R11.
 R9. **On the box, and one witness per address.** `GET /api/device/equipment` notes a device's clock
@@ -314,20 +397,28 @@ R9. **On the box, and one witness per address.** `GET /api/device/equipment` not
 R10. **The seat** (`packages/fiscal/src/backend.ts`): `restartAfterClockStop` is replaced by
     `confirmClockStop(tx, { reading, boot, witnesses, nodeId, admin? })`, and it gains
     `openClockCheck(tx, { reading, boot, … })`, `closeClockCheckByItself(tx, { reading, boot,
-    witnesses })` and `misdatedRecords(tx, confirmationId)` (stored values only); `boot` is
-    `{ ms, id }` from one server-side boot reader (`elapsedClock` plus the boot id) that the watch and
-    the confirm route both use; `clockStopState` answers `proof: "none" | "contrary" |
+    witnesses })` (R6's waiting check: closes on a fresh witness, else writes nothing) and
+    `misdatedRecords(tx, confirmationId)` (stored values only: the closing's `proof.closing` and its
+    check's `detail.heads`); `boot` is `{ ms, id }` from one server-side boot reader
+    (`apps/server/src/boot-reader.ts`, Task R8: `/proc/uptime` and the boot id, the id `null`
+    whenever the milliseconds do not come from `/proc/uptime`) that the watch and the confirm route
+    both use; `clockStopState` answers `proof: "none" | "contrary" |
     "ready" | "confirmed"` instead of `offer`, plus the confirmation that covers (source, person,
-    `confirmedAt`). All optional; only Veri\*Factu has them.
-R11. **The Box status page**: the Clock row's words (no button); "Check with this device's time" for
-    `person.admin` holders during a stop; the dialog; and a "Sales dated wrongly" section per open
+    `confirmedAt`); and `waitingClockCheck(tx, reading)` answers `{ checkId, openedAt } | null` for
+    R6's waiting check — a method of its own, because `clockStopState` answers null whenever the
+    reading is not behind the latest record (`packages/fiscal/src/backend.ts:276-282`), which is
+    exactly when a check waits. All optional; only Veri\*Factu has them.
+R11. **The Box status page**: the Clock row's words (no button), including a check that waits (R6);
+    "Check with this device's time" for `person.admin` holders during a stop or while a check waits;
+    the dialog; and a "Sales dated wrongly" section per open
     `clock.records_misdated`, listing invoice number and recorded time, read by `GET
     /api/box/clock-misdated` (`system.manage`, write-lock turn with no drain, like the health read).
 
-## Changed test checks (revision 5)
+## Changed test checks (revisions 5–7)
 
-Each goes in a commit of its own whose message begins `Changed test checks (A798 slice 9 r5):` and
-lists each `file:line` with before and after; the PR names them.
+Each goes in a commit of its own whose message begins `Changed test checks (A798 slice 9 r6):`
+(round 4, M14: one prefix throughout) and lists each `file:line` with before and after; the PR
+names them.
 
 **On `main` already** (a whole-shape list gaining entries, the owner's standing exception
 2026-09-27, or a check the owner's answers change):
@@ -358,7 +449,7 @@ check), each in the task named:
   `backend.clock-stop.test.ts` (Task R5);
 - the restarted alert's params: `clock-stop-incidents.test.ts`, `apps/dashboard/src/i18n/alerts.test.ts`,
   `apps/dashboard/src/widgets/alerts-bell.test.ts:129-160`, `apps/dashboard/src/screens/alerts-screen.test.ts:90-106`
-  (Tasks R4b, R4c);
+  (Tasks R4b2, R4c);
 - the restart route and code in the dashboard: `apps/dashboard/src/api/client.test.ts:3255-3258`
   (`restartClockPayments`, `/api/box/clock-restart`), `apps/dashboard/src/i18n/codes.test.ts:744-749`
   (`clock.restart_refused`'s words; `codes.ts:1287` moves to `clock.confirm_refused`, CLAUDE.md §3:
@@ -402,14 +493,19 @@ above is a STOP.
 - Implementers are dispatched as `subagent_type: "implementer"`; each task well under 100 tool calls;
   one past about 150 stops at a passing or cleanly red point, commits, and hands over.
 
-## Review focus (revision 5)
+## Review focus (revisions 5–7)
 
 1. **No proof, no lift; contrary proof, no lift; AEAT outranks devices** (Tasks R3, R9).
-2. **The wrongly dated list follows the stop's start, and never lists a correctly dated sale**: a
-   confirmation 90 minutes late lists from the stop's start; sales made under a lift are never
-   listed; a stop that ends by itself lists only with a fresh agreeing witness, else says it cannot
-   tell; the list read later equals the alert's count; a restarted watch keeps the stored start; a
-   machine restart falls back and says so (Tasks R4a, R4b, R9).
+2. **The wrongly dated list follows the stop's start, is bounded by the check's OPENING heads, and
+   never lists a correctly dated sale in the cases the plan tests** (round 4, I1): a confirmation 90
+   minutes late lists from the stop's start; sales made under a lift are never listed; a sale made
+   after a stop ends by itself and before its closing is never listed (T8); a stop that ends by
+   itself waits for a fresh witness — lists when one agrees, says it cannot tell when one
+   disagrees, stays open (and says so) when none comes, and is not closed early by the once-a-minute
+   limit; a clock set back by mistake and put right lists nothing (T8, D3); the list read later
+   equals the alert's count; a restarted watch keeps the stored start; a machine restart falls back
+   and says so (Tasks R4a, R4a2, R4b, R9). What the tests do not reach: a clock that was wrong while
+   a check waited and right at its closing (FYI 9; slice 9c's change check).
 3. **A 400-day gap lifts once proved; a further step back stops again; a fresh confirmation lifts
    again** (Tasks R2, R3) — the running maximum and fail-closed `heads` still proved by deletion.
 4. **The box's own clock never counts**: a device on the box is not a witness; two device ids from
@@ -427,7 +523,8 @@ row (`source: "devices"`) closing the check, `clock.behind_chain_restarted` and
 sale. Then: as a manager, `POST /api/box/clock-challenge` → 403; as an admin from the box (seam
 true) → 409 `same_machine`. Delete, one at a time, the on-box check in `device-api.ts`, the
 `person.admin` gate, the distinct-address count, the AEAT-disagrees block, the `seq` ordering in the
-cover and the elapsed correction of the stop's start; name the failing test.
+cover, the elapsed correction of the stop's start and the opening-heads bound of the list (swap in
+the closing's); name the failing test.
 
 **Codex seat 2 (checklist set aside).** Make the box lift without proof, or list a record wrongly:
 one device's header sent from two browsers on one machine; two device cookies sending forged
@@ -435,9 +532,11 @@ matching headers from two addresses (expected: it lifts — FYI 12 says so; chec
 its proof); an admin `deviceAt` sent by `curl`; a challenge replayed or answered after six seconds;
 an admin request carrying `X-Forwarded-For` from a LAN address while connected over loopback; a
 confirmation row hand-inserted with `registro_id` set and `record_at` null; a step back after a lift,
-then two devices; two confirmations racing; the server restarted mid-stop.
+then two devices; two confirmations racing; the server restarted mid-stop; a sale paid in the
+seconds after a stop ends by itself (expected: never listed); a check left waiting with AEAT
+unreachable (expected: open, payments running, the Box status page saying so).
 
-## Tasks (revision 5)
+## Tasks (revisions 5–7)
 
 Run in order. Each: failing test first, watch it fail for the stated reason, minimal code, run
 again, guards, commit (`git commit -s`, plain-English message; explicit paths, never `git add -A`).
@@ -529,7 +628,7 @@ capture gains a check and a confirmation naming the sale's record; the "rejects 
   running maximum → case 3b records (S11); drop the `heads` bound → case 8b's too-large head records
   (S12); a 24 h cap put back → the 400-day case refuses; the margin dropped → the 60 s case refuses.
 - [ ] **Step 6: Commit** in two: the implementation with the new cases, then the two changed cap
-  cases alone (`Changed test checks (A798 slice 9 r5): …:246 and :256, the cap is gone`).
+  cases alone (`Changed test checks (A798 slice 9 r6): …:246 and :256, the cap is gone`).
 
 ### Task R3: The confirmation rule
 
@@ -561,81 +660,135 @@ pre-live, CLAUDE.md §3). Witness fixtures gain `address`.
   9. a reading before 28-10-2024 → `clock.unusable` for admin, `null` state.
 - [ ] **Step 2: Run, watch them fail**: `pnpm --filter @waitron/fiscal-verifactu exec vitest run
   src/clock-confirmation.test.ts`.
-- [ ] **Step 3: Implement** R3–R5 (no alerts or list yet: Task R4b).
+- [ ] **Step 3: Implement** R3, R4 and R5 without `proof.closing`, without opening a check when
+  none is open, and without alerts or a list (Tasks R4a2, R4b, R4b2); the rows this task writes carry
+  no `proof.closing`, and no case here asserts one.
 - [ ] **Step 4:** `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`
   → PASS; typecheck the package; the fiscal-core check.
 - [ ] **Step 5: Proofs by deletion**: the AEAT-disagrees block → case 4's second half writes; the
   admin bound `≤` → `<` → case 5 refuses at exactly 60 000; the during-the-stop filter → case 7
   writes. Commit `"The box confirms its clock during a payment stop on AEAT's time, two agreeing devices or an administrator's device, and keeps each confirmation"`.
 
-### Task R4a: When a stop began, and a stop that ends by itself
+### Task R4a: When a stop began
 
 **Files:** create `packages/fiscal-verifactu/src/clock-checks.ts` (`openClockCheck`,
-`openCheck(tx)`, `closeClockCheckByItself`, `correctedStart(check, closing, now)`) and
-`clock-checks.test.ts`.
+`openCheck(tx)`, `correctedStart(check, closing)`) and `clock-checks.test.ts`.
 
-- [ ] **Step 1: Failing tests**: opening a `behind_chain` check stores R6's detail; opening again
-  while it is open answers the same row (count 1); with a newer closed check above an older open one
-  (a restored database), nothing is open; `closeClockCheckByItself` while the stop proper no longer
-  holds writes an `elapsed` confirmation (`registro_id` null, `step_ms 0`, `proof.closing` stored)
-  closing it; while the stop proper still holds it writes nothing; **under a covering lift (the raw
-  comparison still behind, the stop proper not) neither `openClockCheck` from the watch's rule nor
-  `closeClockCheckByItself` writes anything** (round 3, C1). The `elapsed` list rule (round 3, I1,
-  the model's case B): the clock correct, set 30 minutes back by mistake at 10:00, sales every 5
-  minutes, the stop ending by itself when the wrong clock reaches the last sale — (i) with an AEAT
-  witness that disagreed during the stop → `unconfirmed: true`, nothing listed; (ii) with no witness
-  at all → the same; (iii) the control, the clock right and an AEAT witness agreeing at closing →
-  listed against the corrected start. `correctedStart`: the same boot id, opened at boot 1 000 000
-  ms and closed at boot 6 400 000 ms with `confirmed_at` 11:30 → 10:00 (the review's worked example);
-  different boot ids, or a `null` one → the closing's time and `partial: true`; a boot clock that
-  went backwards → the same fallback.
-- [ ] **Step 2: Run, watch them fail**: `pnpm --filter @waitron/fiscal-verifactu exec vitest run
-  src/clock-checks.test.ts`.
+- [ ] **Step 1: Failing tests**: opening a `behind_chain` check stores R6's detail, `lastRecordId`
+  included; opening again while it is open answers the same row (count 1); with a newer closed check
+  above an older open one (a restored database), nothing is open; **under a covering lift (the raw
+  comparison still behind, the stop proper not) `openClockCheck` from the watch's rule writes
+  nothing** (round 3, C1). **The stop back after the check waited** (R6; round 4, I1): a check open,
+  a sale recorded while the stop proper did not hold (the chain's head now past `detail.heads`), the
+  stop proper holding again → one `elapsed` confirmation closing the old check with
+  `proof.closing.unconfirmed: true` and one new check whose `detail.heads` include that sale, in one
+  transaction; the control, the stop proper holding with the heads unmoved → the open check answered,
+  nothing written. `correctedStart`: the same boot id, opened at boot 1 000 000 ms and closed at boot
+  6 400 000 ms with `confirmed_at` 11:30 → 10:00 (the review's worked example); different boot ids,
+  or a `null` one → the closing's time and `partial: true`; a boot clock that went backwards, or a
+  `NaN` reading (`elapsedClock`'s answer to a failed later read, `apps/server/src/clock-watch.ts:27-46`)
+  → the same fallback.
+- [ ] **Step 2: Run, watch them fail** (`Cannot find module './clock-checks.js'`):
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-checks.test.ts`.
 - [ ] **Step 3: Implement.** Step 4: the fiscal-core check; commit
-  `"The box records when each clock stop began, and closes it when the stop ends by itself"`.
+  `"The box records when each clock stop began"`.
 
-### Task R4b: The restart and wrongly-dated alerts, and the disproof reading the new table (the fiscal half)
+### Task R4a2: A stop that ends by itself, and a check that waits for its witness
 
-**Files:** `packages/fiscal-verifactu/src/clock-stop-incidents.ts` (restarted params R7;
-`clock.records_misdated`; `recordDisproofs` picks confirmations naming a record whose
-`[confirmed_at, record_at)` holds `trustedUntil`), create
-`packages/fiscal-verifactu/src/clock-misdated.ts` (`misdatedRecords(tx, confirmationId)`: invoice
-series and number, generation time and offset, record id, ordered by time; reads only the closing's
-stored `proof.closing.correctedStart` and `heads`, never a clock),
-`clock-confirmation.ts` and `clock-checks.ts` (record both alerts at each closing; no restarted
-alert for `elapsed`), `alerts.ts` (the claim), `errors.ts` (params); tests
-`clock-stop-incidents.test.ts`, `clock-misdated.test.ts`; declared change 2 in its own commit. The
+**Files:** `packages/fiscal-verifactu/src/clock-checks.ts` (`closeClockCheckByItself`,
+`waitingClockCheck`), `clock-checks.test.ts`.
+
+- [ ] **Step 1: Failing tests** (R6's waiting check; rows only — the list is Task R4b's):
+  `closeClockCheckByItself` while the stop proper still holds writes nothing; under a covering lift
+  it writes nothing (round 3, C1); with the stop proper ended and a fresh AEAT witness agreeing → one
+  confirmation, `source "authority"`, `registro_id` null, `step_ms 0`, `proof.closing` stored with
+  `unconfirmed: false`, closing the check; with no AEAT witness and two devices from two addresses
+  agreeing → `source "devices"`, the same shape; AEAT agreeing and two devices disagreeing →
+  `authority` (FYI 6). **Round 3's case B** (the clock correct, set 30 minutes back by mistake at
+  10:00, sales every 5 minutes, the stop ending by itself when the wrong clock reaches the last
+  sale): (i) a fresh AEAT witness disagreeing → an `elapsed` confirmation, `proof.closing.unconfirmed:
+  true`; (ii) a disagreeing device group from two addresses and no AEAT witness → the same; (iii)
+  **no fresh witness at all → nothing written, the check still open, `waitingClockCheck` answers it**
+  (round 4, M7: the check waits rather than closing `unconfirmed`); (iv) a witness taken before a
+  step of the clock (stale under "no step since") → as (iii). Control: the clock right and an AEAT
+  witness agreeing → closed `authority`, `unconfirmed: false`. `waitingClockCheck` answers null
+  while the stop proper holds and when no check is open.
+- [ ] **Step 2: Run, watch them fail** (`closeClockCheckByItself is not a function`): as Task R4a.
+- [ ] **Step 3: Implement.** Step 4: the fiscal-core check; commit
+  `"A clock check whose stop ended by itself closes only on a fresh witness"`.
+
+### Task R4b: The wrongly dated list and its alert (the fiscal half)
+
+**Files:** `packages/fiscal-verifactu/src/clock-stop-incidents.ts` (`clock.records_misdated`, R7),
+create `packages/fiscal-verifactu/src/clock-misdated.ts` (`misdatedRecords(tx, confirmationId)`:
+invoice series and number, generation time and offset, record id, ordered by time; reads only the
+closing's stored `proof.closing` and its check's `detail.heads`, never a clock and never the
+closing's `proof.heads`), `clock-confirmation.ts` (write `proof.closing`; open a check first when
+none is open, R5) and `clock-checks.ts` (record `clock.records_misdated` at each closing that finds
+any or is `unconfirmed`), `alerts.ts` (the claim), `errors.ts` (params); tests
+`clock-misdated.test.ts`, `clock-stop-incidents.test.ts`; declared change 2 in its own commit. The
 dashboard's words are Task R4c.
 
 - [ ] **Step 1: Failing tests.**
   1. **The worked example (round 1, C1):** the clock 2 h ahead from 08:00 to 10:00 real time, so
      sales stamped 10:00–12:00; at 10:00 the clock put right and the stop opens (boot clock B); an
      administrator confirms at 11:30 (boot B + 90 min) → listed: every sale stamped after 10:01;
-     not listed: one stamped at 10:00:30.
-  2. **A stop that ends by itself**: the same sales, no confirmation; real time passes 12:00 with an
-     AEAT witness agreeing at that moment → an `elapsed` closing and `clock.records_misdated` with
-     the same list; no `clock.behind_chain_restarted`. With no agreeing witness → `count: 0`,
-     `unconfirmed: true`, `from` the opening reading.
+     not listed: one stamped at 10:00:30. The confirmation row carries `proof.closing`.
+  1b. **No check open yet:** the same, with the administrator confirming before any check was
+     opened → one check opened and closed in the same transaction; the list is case 1's, bounded by
+     that check's `detail.heads`.
+  2. **A stop that ends by itself**: the same sales, no confirmation; real time passes 12:00 and an
+     AEAT witness then agrees → a closing with `source "authority"` naming no record, and
+     `clock.records_misdated` with the same list; no `clock.behind_chain_restarted`. With an AEAT
+     witness disagreeing instead → an `elapsed` closing and `clock.records_misdated` with `count: 0`,
+     `unconfirmed: true`, `from` the opening reading, no `to`, and `saleId` the sale of the record
+     named by the check's `detail.lastRecordId` (round 4, M8).
   2b. **After the lift (round 3, C1, the model's case A):** the lift at 11:30, then a sale every 5
      minutes until 13:00 → exactly one `clock.records_misdated` (23 records, 10:05–11:55); none of the
      sales made under the lift (11:35–11:50 real time) is ever listed.
-  2c. **The list does not move (round 3, I2):** `misdatedRecords` read an hour after the closing,
-     with the injected boot clock an hour on, names exactly the records the alert counted.
+  2c. **The list does not move (round 3, I2):** two sales recorded after the closing, then
+     `misdatedRecords` read again → exactly the records the alert counted (it takes no clock; the
+     route-level version with the boot reader moved is in Task R10).
   3. **A watch restarted mid-stop** (same boot id): the open check's stored start is used — the list
      is case 1's.
   4. **A machine restart mid-stop** (different boot id) → only sales stamped after the closing time
      plus a minute, `partial: true`.
   5. The boundary: records at corrected start `+ 60 000 ms` (not listed) and `+ 60 001 ms`
-     (listed); a record written after the closing (past its `heads`) not listed.
-  6. The restarted alert carries `confirmedBy` and `person` (`null` unless admin).
-  7. The built disproof case, re-pointed at a confirmation row, still records one
-     `clock.behind_chain_disproved` with `from`/`to` by time.
+     (listed); a record written after the check opened (past its `detail.heads`) not listed.
+  5b. **A sale between the stop's end and the closing (round 4, I1, T8's W):** case 2's sales, the
+     stop ending by itself at 11:54:00, two sales recorded at 11:54:02 and 11:54:04, AEAT agreeing at
+     11:54:06 → 23 listed (10:05–11:55), neither of the two. Fails first against a list bounded by
+     the closing's heads (25).
+  5c. **Set back by mistake and put right (round 4, M5, T8's D3):** the clock correct, set 30 minutes
+     back at 10:00 (the stop opens), an AEAT witness disagreeing during the stop, the clock put right
+     at 10:10, a sale at 10:10:02, AEAT agreeing at 10:10:06 → a closing with `source "authority"`,
+     not `unconfirmed`, and nothing listed (no `clock.records_misdated`). Fails first against a rule
+     that still asks that nothing disagreed during the stop (`unconfirmed`).
+  6. A second `unconfirmed` closing naming the same sale while the first's task is open → still one
+     open `clock.records_misdated`; both closings in `clock_confirmations` (R7).
 - [ ] **Step 2: Run, watch them fail**:
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-misdated.test.ts src/clock-stop-incidents.test.ts`.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Commit**, then declared change 2 alone; after it `pnpm exec vitest run
-  scripts/alert-codes.test.ts` and `pnpm --filter @waitron/fiscal-verifactu exec vitest run
-  src/alerts.test.ts` and `pnpm --filter @waitron/composition exec vitest run` → PASS.
+- [ ] **Step 4: Commit** `"Sales dated wrongly during a clock stop are listed for the owner, bounded by when the stop began"`,
+  then declared change 2 alone; after it `pnpm exec vitest run scripts/alert-codes.test.ts` and
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/alerts.test.ts` and
+  `pnpm --filter @waitron/composition exec vitest run` → PASS.
+
+### Task R4b2: The restarted alert, and the disproof reading the new table
+
+**Files:** `packages/fiscal-verifactu/src/clock-stop-incidents.ts` (restarted params R7;
+`recordDisproofs` picks confirmations naming a record whose `[confirmed_at, record_at)` holds
+`trustedUntil`), `clock-confirmation.ts` (record the restarted alert for a lift only),
+`errors.ts` (params); test `clock-stop-incidents.test.ts`.
+
+- [ ] **Step 1: Failing tests.** 1. A lift records `clock.behind_chain_restarted` carrying
+  `confirmedBy` and `person` (`null` unless admin); an administrator's confirmation of a waiting
+  check, and an `elapsed` closing, record none. 2. The built disproof case, re-pointed at a
+  confirmation row, still records one `clock.behind_chain_disproved` with `from`/`to` by time.
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-stop-incidents.test.ts`.
+- [ ] **Step 3: Implement.** Step 4: the fiscal-core check; commit
+  `"The restart alert says what confirmed the clock, and the disproof reads the confirmations"`.
 
 ### Task R4c: The alerts' words in the dashboard
 
@@ -645,8 +798,8 @@ dashboard's words are Task R4c.
 `apps/dashboard/src/screens/alerts-screen.test.ts:90-106` (params rebuilt; branch-only).
 
 - [ ] **Step 1: Failing tests**: `alertMessage` in EN and ES for each `confirmedBy`, an unknown value,
-  `partial` true and false, and `unconfirmed` (no `—`, no `{` left); the bell and the alerts screen
-  render a restarted and a misdated alert.
+  `partial` true and false, and `unconfirmed` (no `—`, no `{` left, and no "0 sales"); the bell and
+  the alerts screen render a restarted, a misdated and an `unconfirmed` misdated alert.
 - [ ] **Step 2: Run, watch them fail**:
   `pnpm --filter @waitron/dashboard exec vitest run src/i18n/alerts.test.ts src/widgets/alerts-bell.test.ts src/screens/alerts-screen.test.ts`
   (Chromium: memory first).
@@ -677,8 +830,8 @@ deleted), `packages/fiscal/src/index.ts`, `packages/fiscal-verifactu/src/backend
 `packages/fiscal-verifactu/src/backend.clock-stop.test.ts`, the fake's and `fiscal-none`'s tests.
 
 - [ ] **Step 1: Failing tests**: Veri\*Factu's backend answers `clockStopState`, `confirmClockStop`,
-  `openClockCheck`, `closeClockCheckByItself` and `misdatedRecords` as Tasks R3–R4b do; `NoneBackend`
-  and `FakeFiscalBackend` have none of them; `"restartAfterClockStop" in backend` is false.
+  `openClockCheck`, `closeClockCheckByItself`, `waitingClockCheck` and `misdatedRecords` as Tasks
+  R3–R4b2 do; `NoneBackend` and `FakeFiscalBackend` have none of them; `"restartAfterClockStop" in backend` is false.
 - [ ] **Step 2: Run, watch them fail**: `pnpm --filter @waitron/fiscal-verifactu exec vitest run
   src/backend.clock-stop.test.ts`.
 - [ ] **Step 3: Implement.** Step 4: `pnpm --filter @waitron/fiscal exec vitest run
@@ -727,9 +880,19 @@ with the connection's address from `getConnInfo`), `apps/server/src/device-equip
 **Files:** `apps/server/src/box-health-api.ts` (delete the restart route; add `POST
 /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both `person.admin`; `STATUS` gains
 `"clock.confirm_refused": 409`; deps `requestFromBox`, `devMode`, a challenge keeper, the steady
-clock, and the boot reader the watch uses, passed to `confirmClockStop` so the administrator's
-closing stores `proof.closing` too — round 3, I2), create `apps/server/src/clock-challenges.ts` (+ test), `apps/server/src/boot.ts`;
+clock, and the boot reader, passed to `confirmClockStop` so the administrator's closing stores
+`proof.closing` too — round 3, I2), create `apps/server/src/clock-challenges.ts` (+ test) and
+**`apps/server/src/boot-reader.ts`** (+ `boot-reader.test.ts`; created here because this task is
+its first user, round 4 M4; Task R9's watch uses the same one), `apps/server/src/boot.ts`;
 `git mv apps/server/src/clock-restart.route.test.ts apps/server/src/clock-confirm.route.test.ts`.
+
+**The boot reader** (round 4, M12): `readBoot(): { ms, id }`. It reads `/proc/uptime` itself (an
+injectable file reader, as the watch's `uptimeMs` reads it, `apps/server/src/clock-watch.ts:23-25`)
+and, only when that gave a finite number, `/proc/sys/kernel/random/boot_id`; whenever the
+milliseconds come from anywhere else — `performance.now()`, the fallback `elapsedClock` uses
+(`clock-watch.ts:27-46`), or `NaN` from a failed later read — `id` is `null`, so a process restart
+can never pair two different counters under one boot id; `null` makes R4a's `correctedStart` take
+the `partial` fallback.
 
 - [ ] **Step 1: Failing tests** (own database; slice 8 decision 13's clock rules):
   1. a manager (`system.manage`, no `person.admin`) → 403 on both routes; no session → 401; a till
@@ -745,9 +908,16 @@ closing stores `proof.closing` too — round 3, I2), create `apps/server/src/clo
   5. after a 200: `POST /api/sales` cash → 200; marking `clock.behind_chain_restarted` handled →
      a second sale 200 (moved from the old file);
   6. two confirms at once with two challenges → one row, the second `not_stopped` (moved, re-aimed);
-  7. the administrator's confirmation row carries `proof.closing` with the injected boot reading.
+  7. the administrator's confirmation row carries `proof.closing` with the injected boot reading;
+  8. **a check that waits** (R6): the stop ended by itself, no witness → an administrator's agreeing
+     device → 200, a row with `source "admin"` naming no record, closing the check, the list
+     recorded, no `clock.behind_chain_restarted`; with no stop and no open check → `not_stopped`;
+  9. `boot-reader.test.ts` (failing first, `Cannot find module './boot-reader.js'`): `/proc/uptime`
+     readable → its milliseconds and the boot id; unreadable → `performance.now()`'s and `id: null`;
+     readable at first, then a read failing → `ms` `NaN` and `id: null`; the boot id file unreadable
+     with `/proc/uptime` readable → `id: null`.
 - [ ] **Step 2: Run, watch them fail**:
-  `pnpm --filter @waitron/server exec vitest run src/clock-confirm.route.test.ts src/clock-challenges.test.ts`.
+  `pnpm --filter @waitron/server exec vitest run src/clock-confirm.route.test.ts src/clock-challenges.test.ts src/boot-reader.test.ts`.
 - [ ] **Step 3: Implement** R4. One `withTransaction` per request; the on-box check first.
 - [ ] **Step 4:** typecheck; `pnpm exec vitest run scripts/module-seams.test.ts
   scripts/write-path-tables.test.ts`; proofs by deletion of the on-box check (case 2 fails) and of
@@ -756,37 +926,73 @@ closing stores `proof.closing` too — round 3, I2), create `apps/server/src/clo
 
 ### Task R9: The clock watch records stops and restarts payments by itself
 
-**Files:** `apps/server/src/clock-watch.ts` (every 15 s; R6's open and close; the HEAD at most once
-per 60 s during a stop; `confirmClockStop` in a transaction when `clockStopState.proof` is
-`"ready"`; `store.clear()` after a confirmation; logs `clock_watch.stop_opened`,
-`clock_watch.confirmed { confirmationId, source }`, `clock_watch.stop_ended`; a boot-id reader,
-injectable; `PENDING_MAX`'s comment, "a day of minutely checks", corrected to the new interval),
-create `apps/server/src/boot-reader.ts` (`elapsedClock` plus the boot id; the watch and the confirm
-route share it), `apps/server/src/clock-witnesses.ts` (`clear()`), tests `clock-watch.test.ts`,
-`clock-witnesses.test.ts`, `boot.clock-watch.test.ts`, `boot-reader.test.ts`.
+**Files:** `apps/server/src/clock-watch.ts` (every 15 s; R6's opening, including the stop back after
+records were written while a check waited; the HEAD at most once per 60 s during a stop;
+`confirmClockStop` in a transaction when `clockStopState.proof` is `"ready"`; `store.clear()` after a
+confirmation; logs `clock_watch.stop_opened`, `clock_watch.confirmed { confirmationId, source }`;
+the boot reader from Task R8, injectable; `PENDING_MAX`'s comment, "a day of minutely checks"
+(`clock-watch.ts:48-49`), corrected to the new interval), `apps/server/src/clock-witnesses.ts`
+(`clear()`), `apps/server/src/boot.ts` (hand the watch Task R8's boot reader), tests
+`clock-watch.test.ts`, `clock-witnesses.test.ts`, `boot.clock-watch.test.ts`.
 
 - [ ] **Step 1: Failing tests, the round-3 case first** (round 3, C1; the model's case A through the
-  real watch over a real database, injected wall and boot clocks): the clock 2 h ahead 08:00–10:00,
-  a sale every 5 minutes, put right at 10:00, an administrator's confirmation at 11:30, sales every
-  5 minutes until 13:00 → after the lift, 20 watch checks while it covers open no check; real time
-  passing the ahead-stamped record at 12:00 writes no closing and no second
-  `clock.records_misdated`. **Proof by deletion:** the watch's test switched back to the raw
-  comparison → a second check opens and a second list names the 11:35–11:50 sales. Then: the first
-  check that sees a stop opens one check with the reading, boot clock and boot id; the next check
-  opens none; the stop gone → one `elapsed` closing, which asks AEAT once when it has no fresh
-  witness; ready → one confirm call, the store cleared; none → no call; a
-  failing confirm logs `clock_watch.check_failed` and the next check runs; four checks in a minute
-  make at most one HEAD; a watch built afresh over a database with an open check opens none and
-  closes it later with the stored start; `stop` during a confirm waits for it.
+  real watch over a real database, injected wall and boot clocks, and an AEAT fake that agrees with
+  the box after the lift): the clock 2 h ahead 08:00–10:00, a sale every 5 minutes, put right at
+  10:00, an administrator's confirmation at 11:30, sales every 5 minutes until 13:00 → after the
+  lift, 20 watch checks while it covers open no check; real time passing the ahead-stamped record at
+  12:00 writes no closing and no second `clock.records_misdated`. **Proof by deletion** (round 4,
+  M6): the watch's test switched back to the raw comparison → the "opens no check" assertion fails
+  (a second check opens at the first look after the lift), and, because the AEAT fake agrees after
+  the lift, a second closing and a second `clock.records_misdated` follow when real time passes
+  12:00 — without that fake the second check would only wait, open, and list nothing. Then: the
+  first look that sees a stop opens one check with the reading, boot reading and boot id; the next
+  look opens none; ready → one confirm call, the store cleared; none → no call; a failing confirm
+  logs `clock_watch.check_failed` and the next look runs; four looks in a minute make at most one
+  HEAD; a watch built afresh over a database with an open check opens none and later closes it with
+  the stored start; `stop` during a confirm waits for it.
 - [ ] **Step 2: Run, watch them fail**:
   `pnpm --filter @waitron/server exec vitest run src/clock-watch.test.ts src/clock-witnesses.test.ts src/boot.clock-watch.test.ts`.
 - [ ] **Step 3: Implement.** Step 4: `src/boot.failed-start.test.ts` PASS. Commit
   `"The box records when a clock stop began and restarts payments by itself as soon as AEAT or two tills confirm its clock"`.
 
+### Task R9b: The clock watch closes a check that waits, and only on a fresh witness
+
+**Files:** `apps/server/src/clock-watch.ts` (R6's waiting check: `waitingClockCheck`, then
+`closeClockCheckByItself` on each look; the HEAD widened to "during a stop or while a check waits",
+still at most once per 60 s — as built it is asked only when the stop read is non-null,
+`clock-watch.ts:164-173`; log `clock_watch.check_closed { confirmationId, source }`), tests
+`clock-watch.test.ts`, `boot.clock-watch.test.ts`.
+
+- [ ] **Step 1: Failing tests** (injected wall, boot and steady clocks; an AEAT fake):
+  1. **The limit does not close a check early** (round 4, M7): during a stop AEAT is asked at T
+     (it disagrees: the clock is behind); the clock is put right at T + 20 s (a step, so that
+     reading is no longer fresh); the look at T + 30 s makes no HEAD (under a minute) and writes
+     nothing — the check still open, no `unconfirmed` closing; the first look at or after T + 60 s
+     asks AEAT, which agrees → one closing, `source "authority"`, not `unconfirmed`, nothing listed
+     (T8's D3: the clock was behind, so nothing was stamped ahead). Fails first against revision 6's
+     rule, which closed `unconfirmed` at T + 30 s.
+  2. **No witness ever comes:** the stop ends by itself, the AEAT fake answers `null` (unreachable),
+     no devices: 40 looks (10 minutes) → no closing, the check open, one HEAD a minute, a sale
+     through `POST /api/sales` → 200 (the waiting check blocks nothing), and `GET /api/box/health`
+     names the waiting check's start (Task R10's field; until R10 lands, assert
+     `waitingClockCheck`); then two devices from two addresses agree → one closing, `source
+     "devices"`.
+  3. A fresh AEAT witness disagreeing while the check waits → one `elapsed` closing, `unconfirmed`.
+  4. **The stop back while the check waits** (R6): the stop ends, a sale is recorded, the clock
+     steps back again → at the next look the old check closes `elapsed` (`unconfirmed`) and one new
+     check opens; with no sale in between → no closing, the same check open.
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/server exec vitest run src/clock-watch.test.ts src/boot.clock-watch.test.ts`.
+- [ ] **Step 3: Implement.** Step 4: `src/boot.failed-start.test.ts` PASS. Commit
+  `"A clock check whose stop ended by itself waits for AEAT's next answer, two tills or an administrator"`.
+
 ### Task R10: The Box status read and the wrongly dated list
 
 **Files:** `apps/server/src/box-health.ts` (`clockStop` view: `proof`, the covering confirmation with
-the person's display name, `misdatedOpen: [{ confirmationId, count, partial }]`),
+the person's display name, `misdatedOpen: [{ confirmationId, count, partial, unconfirmed }]`
+(round 4, M3); and beside `clockStop`, `clockCheckWaiting: { since } | null` from the seat's
+`waitingClockCheck`, R6 and R10 — its own field, because `clockStop` is null whenever the reading is
+not behind, which is exactly when a check waits),
 `apps/server/src/box-health-api.ts` (`GET /api/box/clock-misdated`), `apps/server/src/boot.ts`,
 tests `box-health.test.ts`, `clock-confirm.route.test.ts`; and two branch-only lines that pinned the
 old offer, which the owner's removal of the button retires (round 3, M4; `git show origin/main:<file>
@@ -797,10 +1003,14 @@ old offer, which the owner's removal of the button retires (round 3, M4; `git sh
 checks (A798 slice 9 r6):` commit.
 
 - [ ] **Step 1: Failing tests**: health during a stop → `proof "none"`, then `"ready"` with device
-  labels, then `"confirmed"` with source and person; `GET /api/box/clock-misdated` → the listed
-  records with invoice number and time, `system.manage` only, and an empty list once the incident is
-  marked handled; both answer on a full disk with a change waiting (the existing full-disk case's
-  shape).
+  labels, then `"confirmed"` with source and person; after a stop that ended by itself with no
+  witness → `clockStop` null and `clockCheckWaiting.since` the check's opening reading, then null
+  once a witness closes it; an `unconfirmed` incident → `misdatedOpen` carries `unconfirmed: true`
+  and `count: 0`; `GET /api/box/clock-misdated` → the listed records with invoice number and time,
+  `system.manage` only, and an empty list once the incident is marked handled; **read again with the
+  injected boot reader moved an hour on and two sales recorded since → the same records** (round 4's
+  note on R4b case 2c: the route is where a boot clock could leak in); both answer on a full disk
+  with a change waiting (the existing full-disk case's shape).
 - [ ] **Step 2: Run, watch them fail**:
   `pnpm --filter @waitron/server exec vitest run src/box-health.test.ts src/clock-confirm.route.test.ts`.
 - [ ] **Step 3: Implement.** Then `pnpm --filter "...@waitron/fiscal" --workspace-concurrency 4
@@ -826,12 +1036,24 @@ later than the real time, from {from} to {to}. They stay as recorded. The list i
 page; go through it with your tax adviser and then mark the alert as handled." / ES "Se registraron
 {count} ventas con una hora posterior a la real, de {from} a {to}. Quedan como se registraron. La
 lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como atendido."
-The clock-stop email's "What to do" drops "which says whether payments can be restarted" for
+With `partial`, R4c's sentence after it. **An `unconfirmed` incident** (round 4, I2; R7's `count: 0`,
+no `to`) takes its own subject and text instead, matching R4c's bell sentence: subject EN "Sales
+may be dated wrongly at {venue}: check them with your tax adviser" / ES "Puede haber ventas con
+fecha incorrecta en {venue}: revísalas con tu asesor"; text EN "The payment stop that began at
+{from} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales
+were dated wrongly. Check the box's clock, and go through the sales since then with your tax
+adviser; then mark the alert as handled." / ES "La parada de cobros que empezó a las {from} terminó
+sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la
+fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces; después
+marca el aviso como atendido." The clock-stop email's "What to do" drops "which says whether payments can be restarted" for
 "where an administrator can confirm the clock with their own phone; with the internet or two tills
 switched on, the box does it by itself".
 
 - [ ] Failing tests: one email per manager per open incident, none for a handled one, a second
-  check sends nothing; the words in both languages with no `{` left. Commands:
+  check sends nothing; the words in both languages with no `{` left; **an `unconfirmed` incident
+  (`count: 0`, no `to`) → the "may be dated wrongly" subject and the "cannot tell" text in both
+  languages, and neither "0 sales" / "0 ventas" nor an empty "to"** (fails first against a single
+  `clock.records_misdated` text). Commands:
   `pnpm --filter @waitron/server exec vitest run src/box-alert-email.test.ts src/box-alert-email.duty.test.ts`;
   then `pnpm exec vitest run scripts/alert-codes.test.ts scripts/ongoing-alert-codes.test.ts
   scripts/errors-reachable.test.ts scripts/english-only.test.ts`. Commit
@@ -854,13 +1076,21 @@ two tills or handhelds." / "Esperando una prueba de que la hora es correcta: la 
 dos cajas o terminales."; `contrary` "Other clocks say the box's clock is wrong." / "Otros relojes
 dicen que la hora del equipo está mal."; `ready` "Proof found: payments restart within a few
 seconds." / "Hay prueba: los cobros se reanudan en unos segundos."; `confirmed` "Payments restarted
-at {time}, confirmed by {who}." / "Cobros reanudados a las {time}, confirmado por {who}." Section
+at {time}, confirmed by {who}." / "Cobros reanudados a las {time}, confirmado por {who}."; a check
+that waits (R6, the health read's `clockCheckWaiting`) "The payment stop that began at {time} has
+ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute; two
+tills or handhelds, or an administrator's own device, can confirm it too." / "La parada de cobros
+que empezó a las {time} ha terminado, pero nada ha confirmado aún la hora del equipo. El equipo
+pregunta a Hacienda cada minuto; también pueden confirmarla dos cajas o terminales, o el
+dispositivo de un administrador." Section
 title "Sales dated wrongly" / "Ventas con fecha incorrecta", columns invoice / time recorded, the
 line "Go through these with your tax adviser, then mark the alert as handled in the bell." /
 "Revísalas con tu asesor y después marca el aviso como atendido.", and with `partial` or
 `unconfirmed` the R4c sentences.
 
-- [ ] Failing tests for each state, the section with two records, `partial`, and none once handled.
+- [ ] Failing tests for each state, the waiting check, the section with two records, `partial`,
+  an `unconfirmed` entry (round 4, M3: the "cannot tell" sentence, no table, no "0"), and none once
+  handled.
   Command: `pnpm --filter @waitron/dashboard exec vitest run src/screens/box-status-rows.test.ts
   src/screens/box-status-screen.test.ts src/api/client.test.ts src/i18n/codes.test.ts` (Chromium:
   memory first). Then `pnpm exec vitest run scripts/native-form-fields.test.ts
@@ -875,7 +1105,7 @@ line "Go through these with your tax adviser, then mark the alert as handled in 
 handed), strings, tests `box-status-screen.test.ts`, `box-status-screen.a11y.test.ts`.
 
 Behaviour: a `secondary` "Check with this device's time" / "Comprobar con la hora de este
-dispositivo" on the Clock row during a stop, only for `person.admin`. Opening it asks for a challenge
+dispositivo" on the Clock row during a stop or while a check waits (R6), only for `person.admin`. Opening it asks for a challenge
 and shows "The box's clock says {box}. This device says {device}." Agreeing (within a minute): "They
 agree. Confirm that the box's clock is right?" with Cancel and Confirm (`primary`, loading while
 sent); Confirm asks a FRESH challenge and answers it at once with `Date.now()`. Differing: the FYI 8
@@ -885,7 +1115,8 @@ phone or another computer." / "Esta pantalla es el propio equipo, así que su ho
 Confírmalo desde tu móvil o desde otro ordenador."). Success closes and refreshes; a refusal
 refreshes too. No staged input, so no draft scope.
 
-- [ ] Failing tests: no button without the permission or without a stop; the two times; Confirm sends
+- [ ] Failing tests: no button without the permission or without a stop or a waiting check; the
+  button while a check waits; the two times; Confirm sends
   a fresh challenge and its answer; `same_machine` shown at open; Escape closes; axe in both themes
   for the closed row, the open agreeing dialog and the refusal. Command as R12a plus the a11y file.
   Commit `"An administrator can confirm the box's clock from the Box status page with their own device"`.
@@ -901,7 +1132,10 @@ EN `box-status.md` about `:137-219` (`{#clock-behind}`, `{#clock-witnesses}`) an
 themselves once the tax agency or two tills or handhelds confirm the clock, or an administrator
 confirms with their own phone or computer — never from the box's own screen; no limit on how far
 back; a later step back stops payments again until the clock is confirmed again; sales stamped later
-than the real time are listed for the tax adviser, also when the stop ends by itself. Keep each
+than the real time are listed for the tax adviser, also when the stop ends by itself — once the tax
+agency, two tills or handhelds or an administrator's device confirm the clock (the Box status page
+says while it waits); or, when one of them says the box's clock is wrong, a task saying the box
+cannot tell which sales were dated wrongly. Keep each
 heading's `{#id}` in both languages. Run `pnpm --filter @waitron/server exec vitest run
 src/guide-content.test.ts` and `pnpm exec vitest run scripts/guide-links.test.ts`. Commit.
 
@@ -910,10 +1144,13 @@ src/guide-content.test.ts` and `pnpm exec vitest run scripts/guide-links.test.ts
 CLAUDE.md §1: a behaviour change retires every receipt about the old behaviour. First re-run, and
 read every hit:
 `/usr/bin/grep -rn -i -E "24[ -]hours?|24 horas|restarts? payments|Restart payments|Reanudar los cobros|reanud(e|ó|ación|a)|clock-restart|set the clock|whoever installed|manager's restart|restartAfterClockStop|stepped_back|too_far|clock_stop_restarts|hand-set clock"`
-with `--exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=dist` over `docs`,
-`apps/*/src`, `packages`, `deploy` and `CLAUDE.md` (without the excludes it read build output: 1025
-hits, 149 in a coverage summary, round 3 M10; `git grep` with an `apps/*/src` pathspec matched no
-`apps/` file).
+with `--exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=dist --exclude-dir=reports`
+over `docs`, `apps/*/src`, `packages`, `deploy` and `CLAUDE.md` (without the excludes it read build
+output: 1025 hits, 149 in a coverage summary, round 3 M10; with the first three alone it still read
+one line each of `packages/fiscal/reports/mutation/index.html` and
+`packages/fiscal/reports/stryker-incremental.json`, git-ignored by `.gitignore:27`, round 4 M10 —
+593 hits, 591 with `reports` excluded too, run 2026-10-24 at `e074a6b06`; `git grep` with an
+`apps/*/src` pathspec matched no `apps/` file).
 - `CLAUDE.md` §5, the clock-stop rule: its bold first sentence (`:893-895`, "unless a manager's
   restart covers the reading") and the restart sentence (`:905-910`) become "…unless a confirmation
   of the clock covers the reading" and "A confirmation of the clock (`clock_confirmations`: AEAT's
@@ -927,7 +1164,7 @@ hits, 149 in a coverage summary, round 3 M10; `git grep` with an `apps/*/src` pa
   skips anchors). Run `pnpm exec prettier --check CLAUDE.md` and `pnpm exec vitest run
   scripts/claude-md-pointers.test.ts`.
 - `docs/developers/conventions-data.md`, the clock-stop section from `:3552` to its end (about
-  `:3792`), the restart part from `:3656`: the receipt for R1–R6, T1–T5 — the route, `RESTART_CAP_MS`,
+  `:3792`), the restart part from `:3656`: the receipt for R1–R6, T1–T8 — the route, `RESTART_CAP_MS`,
   `too_far` and `stepped_back` paragraphs rewritten.
 - `docs/developers/design-system.md` (about `:5397`, `:5442-5445`): the Restart payments button →
   the administrator's dialog and the wrongly dated section.
@@ -947,7 +1184,7 @@ hits, 149 in a coverage summary, round 3 M10; `git grep` with an `apps/*/src` pa
   9c named as open, outlines); and these follow-up entries — "Two devices can fake a restart's proof"
   (`:4627`) → FYI 12's wording; "Two restarts whose named records belong to one sale share a bell
   alert" (`:4631`) → FYI 11; "The box sends AEAT's QR host a HEAD at every clock-watch check"
-  (`:4640`) → once a minute during a stop; "An AEAT disagreement blocks a restart…" (`:4650`) → FYI 6;
+  (`:4640`) → once a minute during a stop or while a check waits for its witness; "An AEAT disagreement blocks a restart…" (`:4650`) → FYI 6;
   "A restart under which no sale was recorded raises no 'disproved' alert" (`:4654`) and "After a
   'disproved' alert, the restart still covers…" (`:4657`) → "confirmation" for "restart"; "A
   malformed restart row covers nothing, for ever … refused `stepped_back`" (`:4662`) → a malformed
@@ -972,8 +1209,8 @@ hits, 149 in a coverage summary, round 3 M10; `git grep` with an `apps/*/src` pa
 
 As Tasks 18a/18b below the line, with these states: a stop with no proof (no button for a manager);
 the same for an administrator (the button); the dialog agreeing, differing, and refused on the box;
-after a confirmation (amber row, who and how); the wrongly dated section with three sales, and with
-`partial`; the bell on `clock.behind_chain_restarted` (each `confirmedBy`) and
+after a confirmation (amber row, who and how); a check that waits after its stop ended; the wrongly
+dated section with three sales, with `partial`, and an `unconfirmed` entry; the bell on `clock.behind_chain_restarted` (each `confirmedBy`) and
 `clock.records_misdated`. Light and dark, 1280 and 390. Write what you saw, sheet by sheet; fix with a
 test where one can catch it.
 
@@ -1024,6 +1261,38 @@ test where one can catch it.
   changed-checks list. **M5**: FYI 9. **M6**: 9c's outline (a promotion writes `start`). **M7**:
   design §4.9 h. **M8**: FYI 5 and Task R9. **M9**: Task R4c. **M10**: Task R14a. **M11**: 9b's
   outline. **M12**: FYI 12.
+
+## Revision 7, finding by finding (round 4, under `RULINGS-4.md`)
+
+- **I1** (an `elapsed` closing listed correctly dated sales made between the stop's end and the
+  closing): every list is bounded by the check's OPENING `detail.heads` (Words, FYI 9 with the
+  receipt — the chain append refuses while the stop proper holds, `chain.ts:136-140` →
+  `clock-behind.ts:166-173` — R5, R10's `misdatedRecords`, Task R4b case 5 and the new case 5b);
+  the closing's `proof.heads` stays on a lift for the cover only (Words, R5); Review focus 2
+  corrected and narrowed; receipt T8. Two consequences: a confirmation with no open check opens one
+  first (R5, Task R4b case 1b), and a check whose stop came back after records were written while it
+  waited closes `unconfirmed` and a new one opens (R6, Tasks R4a and R9b case 4), or the new stop's
+  records would be in no list.
+- **I2**: R11's `unconfirmed` subject and text, and its failing-first test.
+- **M1**: R3 reads "the stop proper holds". **M2**: FYI 9 ("or that cannot tell"), Changes 5, R13's
+  guide words, the header's slice summary; the design's §4.9 f and §8 item 9. **M3**: R10's
+  `misdatedOpen` carries `unconfirmed`; R12a tests it. **M4**: `boot-reader.ts` created in Task R8;
+  R5 says which task writes `proof.closing` (R4a2 on the waiting closing, R4b on the confirmation
+  path; R3's rows have none). **M5**: the "none disagreed during the stop" condition dropped (FYI 9,
+  R6, design §4.9 f); Task R4b case 5c is the model's D3. **M6**: R9's first case gains an AEAT fake
+  agreeing after the lift and restates what its proof by deletion prints. **M7**: a check whose stop
+  ends by itself waits, open, for a fresh witness — the next allowed HEAD, two devices, or an
+  administrator (R4, R6, Tasks R4a2, R8 case 8, R9b); with none it stays open and the Box status
+  page says so (R10, R12a, R9b case 2). To let an administrator or two devices close it, a closing's
+  `source` now names what confirmed the clock and `elapsed` is only a closing that cannot tell
+  (Words); R1's `source` CHECK already allows every value. **M8**: R7 — `saleId` from the check's
+  `detail.lastRecordId` (added to R1's `detail` JSON, no column), and what the open-incident key does
+  with a repeat; Task R4b cases 2 and 6. **M9**: design §4.9 b and 9c decision 2. **M10**: Task R14a's
+  grep. **M11**: 9b's outline. **M12**: R6, R10 and Task R8's boot reader. **M13**: FYI 12. **M14**:
+  `r6` throughout. Round 4's note that R4b case 2c could not move a boot clock: case 2c restated, and
+  the route-level read with the boot reader moved added to Task R10.
+- **Tasks split to stay small**: R4a → R4a and R4a2; R4b → R4b and R4b2; R9 → R9 and R9b.
+- **No migration column changed** (R1): `detail` and `proof` are the existing JSON columns.
 
 ---
 
