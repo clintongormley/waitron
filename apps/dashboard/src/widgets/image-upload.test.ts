@@ -1034,12 +1034,12 @@ describe("image-upload as a venue logo, sized and laid out", () => {
     return { ...mounted, img };
   }
 
-  // 274 px is the field's width in the editor on a 390 px screen (the visual check, 2026-10-24).
+  // 260 px is the field's measured width in the editor on a 390 px screen.
   it.each([
     ["en-GB", 390],
-    ["en-GB", 274],
+    ["en-GB", 260],
     ["es-ES", 390],
-    ["es-ES", 274],
+    ["es-ES", 260],
   ] as const)(
     "on a 390 px screen, in %s, in a %i px column, keeps Replace and Remove beside a wide logo",
     async (locale, column) => {

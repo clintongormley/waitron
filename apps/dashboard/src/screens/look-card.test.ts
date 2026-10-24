@@ -357,7 +357,7 @@ describe("the saved card's Logo row", () => {
     }
   }
 
-  // 308 px is the card's width on a 390 px screen (the visual check, 2026-10-24).
+  // 308 px stands for a narrow card, where the note may not fit beside the logo.
   it.each([
     ["en-GB", 390],
     ["en-GB", 308],
