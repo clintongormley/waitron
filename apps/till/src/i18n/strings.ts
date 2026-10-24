@@ -232,8 +232,7 @@ export const en = {
   "clock.recorded_out": "Clocked out",
   "clock.logout_failed": "Your finish was recorded. This device is locked.",
 
-  "keep_open.line_until": "{period} · until {time}",
-  "keep_open.line_extended": "{period} · kept open until {time}",
+  "service.open_until": "Open · until {time}",
   "keep_open.zone_button": "Keep {zone} open later",
   "keep_open.zone_heading": "Keep {zone} open later today",
   "keep_open.zone_closes": "{zone} closes at {time} today.",
@@ -1996,8 +1995,7 @@ export const es: Record<StringKey, string> = {
   "clock.recorded_out": "Salida registrada",
   "clock.logout_failed": "Tu salida está registrada. Este dispositivo está bloqueado.",
 
-  "keep_open.line_until": "{period} · hasta las {time}",
-  "keep_open.line_extended": "{period} · horario ampliado hasta las {time}",
+  "service.open_until": "Abierto · hasta las {time}",
   "keep_open.zone_button": "Ampliar el horario de {zone}",
   "keep_open.zone_heading": "Ampliar hoy el horario de {zone}",
   "keep_open.zone_closes": "Hoy {zone} cierra a las {time}.",

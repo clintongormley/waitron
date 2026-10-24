@@ -6,7 +6,6 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillProduct } from "../api/client.js";
-import type { TillKeepOpen } from "../widgets/keep-open.js";
 
 const coffee: TillProduct = {
   id: "coffee",
@@ -26,20 +25,20 @@ for (const locale of ["en-GB", "es-ES"] as const) {
     for (const width of [390, 1280]) {
       describe(`${locale} ${theme} ${width}px`, () => {
         for (const kind of ["counter", "table"] as const) {
-          it(`${kind} keeps running, extended and closed-period recovery readable and accessible`, async () => {
+          it(`${kind} keeps the running and closed period lines readable and accessible`, async () => {
             const previous = currentLocale();
             try {
               setLocale(locale);
               await page.viewport(width, 900);
               expect(window.innerWidth).toBe(width);
-              for (const state of ["running", "extended", "closed"] as const) {
+              for (const state of ["running", "closed"] as const) {
                 const name = locale === "en-GB" ? "Lunch" : "Comida";
                 const subject = {
                   periodId: "lunch",
                   periodName: name,
                   endsAt: "14:00",
                   running: state !== "closed",
-                  extendedUntil: state === "extended" ? "14:30" : null,
+                  extendedUntil: null,
                 };
                 const store = new WorkingOrderStore();
                 store.addProduct(coffee, "2");
@@ -78,24 +77,13 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                 const want =
                   state === "closed"
                     ? t("menu.department_closed").replace("{department}", "Restaurant")
-                    : t(state === "extended" ? "keep_open.line_extended" : "keep_open.line_until")
-                        .replace("{period}", t("service.open"))
-                        .replace("{time}", state === "extended" ? "14:30" : "14:00");
-                const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open")!;
-                await widget.updateComplete;
-                const button = widget.shadowRoot!.querySelector<HTMLElement>("wt-button")!;
-                expect((state === "closed" ? line : button).textContent!.trim()).toBe(want);
-                expect(button.textContent!.trim()).toBe(
-                  state === "closed"
-                    ? t("keep_open.button").replace("{period}", widget.keepOpen!.periodName)
-                    : want,
-                );
-                for (const node of [line, button]) {
-                  const bounds = node.getBoundingClientRect();
-                  expect(bounds.width).toBeGreaterThan(0);
-                  expect(bounds.left).toBeGreaterThanOrEqual(0);
-                  expect(bounds.right).toBeLessThanOrEqual(width);
-                }
+                    : t("service.open_until").replace("{time}", "14:00");
+                expect(line.textContent!.trim()).toBe(want);
+                expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
+                const bounds = line.getBoundingClientRect();
+                expect(bounds.width).toBeGreaterThan(0);
+                expect(bounds.left).toBeGreaterThanOrEqual(0);
+                expect(bounds.right).toBeLessThanOrEqual(width);
                 expect(store.lines.map((l) => [l.product.id, l.quantity])).toEqual([
                   ["coffee", "2"],
                 ]);

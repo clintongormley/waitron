@@ -4,8 +4,6 @@ import type { MenuState } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { TillKeepOpen } from "../widgets/keep-open.js";
-import type { TillKeepOpenDialog } from "../widgets/keep-open-dialog.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -68,27 +66,25 @@ for (const kind of ["counter", "table"] as const) {
       return { el, calls };
     }
     it.each([
-      { extendedUntil: null, want: "Open · until 14:00" },
-      { extendedUntil: "14:30", want: "Open · kept open until 14:30" },
-    ])("shows the effective endpoint: $want", async ({ extendedUntil, want }) => {
+      { language: "en-GB", want: "Open · until 14:00" },
+      { language: "es-ES", want: "Abierto · hasta las 14:00" },
+    ])("shows the period line as status text: $want", async ({ language, want }) => {
+      setLocale(language);
       const { el } = await mount({
         open: true,
         zoneOpen: true,
         periodName: "Lunch",
         periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         zoneKeepOpen: null,
-        keepOpen: { ...subject, extendedUntil },
+        keepOpen: subject,
       });
       const line = el.shadowRoot!.querySelector("[data-service-period]")!;
-      await (line as TillKeepOpen).updateComplete;
-      expect(line.shadowRoot!.querySelector("[data-action]")!.textContent!.trim()).toBe(want);
-      const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open")!;
-      expect(widget, "the control is beside the period line").not.toBeNull();
-      expect(widget.parentElement).toBe(line.parentElement);
-      await widget.updateComplete;
-      expect(widget.shadowRoot!.querySelector("wt-button")!.textContent!.trim()).toBe(want);
+      expect(line.matches('p[role="status"]')).toBe(true);
+      expect(line.textContent!.trim()).toBe(want);
+      expect(line.querySelector("[data-action]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
     });
-    it("keeps recovery reachable in the closed-department notice and uses this screen's zone", async () => {
+    it("shows the closed-department notice with no keep-open control or read", async () => {
       const { el, calls } = await mount({
         open: false,
         zoneOpen: true,
@@ -99,22 +95,8 @@ for (const kind of ["counter", "table"] as const) {
       });
       const notice = el.shadowRoot!.querySelector("[data-service-closed]")!;
       expect(notice.textContent!.trim()).toBe("Restaurant is closed: no period is running");
-      const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open")!;
-      expect(widget, "the closed notice keeps the recovery control").not.toBeNull();
-      expect(widget.parentElement).toBe(notice.parentElement);
-      await widget.updateComplete;
-      widget.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
-      await expect
-        .poll(() => widget.shadowRoot!.querySelector("till-keep-open-dialog"))
-        .not.toBeNull();
-      const dialog = widget.shadowRoot!.querySelector<TillKeepOpenDialog>("till-keep-open-dialog")!;
-      await dialog.updateComplete;
-      expect(dialog.shadowRoot!.querySelector("wt-combobox")).not.toBeNull();
-      expect(calls).toEqual([
-        kind === "counter"
-          ? "/api/service-zones/counter%20%2F1/keep-open"
-          : "/api/service-zones/dining%20%2F2/keep-open",
-      ]);
+      expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
+      expect(calls).toEqual([]);
     });
     it("omits both the period line and recovery control when no period ran today", async () => {
       const { el } = await mount({

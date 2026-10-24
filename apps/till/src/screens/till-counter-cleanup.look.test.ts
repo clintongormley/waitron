@@ -237,8 +237,6 @@ for (const kind of ["counter", "table"] as const)
           await screen.updateComplete;
           const strip = screen.shadowRoot!.querySelector<LitElement>("till-last-added")!;
           await strip.updateComplete;
-          const status = screen.shadowRoot!.querySelector<LitElement>("till-keep-open")!;
-          await status.updateComplete;
           const bounds = strip.getBoundingClientRect();
           expect(bounds.width).toBeGreaterThan(0);
           expect(bounds.left).toBeGreaterThanOrEqual(0);

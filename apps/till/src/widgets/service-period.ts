@@ -23,9 +23,7 @@ export function servicePeriod(
   if (!service) return nothing;
   const subject = service.keepOpen;
   const line = subject
-    ? t(subject.extendedUntil === null ? "keep_open.line_until" : "keep_open.line_extended")
-        .replace("{period}", () => t("service.open"))
-        .replace("{time}", () => subject.extendedUntil ?? subject.endsAt)
+    ? t("service.open_until").replace("{time}", () => subject.endsAt)
     : t("service.open");
   return html`<div class="service-period">
     ${
@@ -34,26 +32,17 @@ export function servicePeriod(
             ${t("menu.zone_closed").replace("{zone}", () => zoneName || service.zoneKeepOpen?.zoneName || "")}
           </p>`
         : service.open
-          ? subject
-            ? html`<till-keep-open
-                data-service-period
-                .api=${api}
-                .zoneId=${zoneId}
-                .keepOpen=${subject}
-                .triggerLabel=${line}
-              ></till-keep-open>`
-            : html`<p
-                role="status"
-                ?data-service-period=${service.periodName !== null}
-                data-service-open
-              >
-                ${line}
-              </p>`
+          ? html`<p
+              role="status"
+              ?data-service-period=${service.periodName !== null}
+              data-service-open
+            >
+              ${line}
+            </p>`
           : html`<p role="status" data-service-closed>
               ${t("menu.department_closed").replace("{department}", () => departmentName)}
             </p>`
     }
-    ${service.zoneOpen && !service.open && subject ? html`<till-keep-open .api=${api} .zoneId=${zoneId} .keepOpen=${subject}></till-keep-open>` : nothing}
     ${zoneName ? html`<span data-service-zone>${zoneName}</span>` : nothing}
     <span data-receipt-status role="status"
       >${receiptEquipment === undefined ? t("service.printer_unknown") : receiptEquipment === null ? t("service.printer_none") : t(receiptEquipment.available ? "service.printer_available" : "service.printer_unavailable").replace("{name}", () => receiptEquipment.name)}</span
