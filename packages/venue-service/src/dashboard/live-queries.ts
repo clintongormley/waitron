@@ -39,7 +39,6 @@ const HIERARCHY_DELETE_READS = [
   "department_day_ranges",
   "zone_days",
   "zone_day_ranges",
-  "period_extensions",
   "department_transfer_desks",
   "department_transfer_destinations",
   "department_transfer_requests",
@@ -195,9 +194,6 @@ export const QUERY_DEPENDENCIES = {
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
-    // Painted in does not read it: the Periods window reads an open delete dialog's impact again on
-    // this query's answers, and the impact's kept-open-today line reads it.
-    "period_extensions",
   ],
   "opening-hours": [
     "menu_periods",

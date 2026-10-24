@@ -479,9 +479,7 @@ it("reads a floor closing summary without building period choices", async () => 
         extendedUntil: null,
       });
       const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
-      expect(
-        sql.some((q) => q.includes('"menu_periods"') || q.includes('"period_extensions"')),
-      ).toBe(false);
+      expect(sql.some((q) => q.includes('"menu_periods"'))).toBe(false);
     } finally {
       spy.mockRestore();
     }

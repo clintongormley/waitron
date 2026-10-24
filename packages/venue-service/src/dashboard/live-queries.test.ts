@@ -149,7 +149,6 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "department_day_ranges",
       "zone_days",
       "zone_day_ranges",
-      "period_extensions",
       "department_transfer_desks",
       "department_transfer_destinations",
       "department_transfer_requests",

@@ -15,7 +15,6 @@ import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { departmentDayRanges, departmentDays, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import {
   departmentTransferDesks,
@@ -430,9 +429,6 @@ export async function clearServiceDeleteSettings(
     .where(inArray(deviceKitchenScreenRemovals.zoneId, selected.zoneIds));
   await tx.delete(zoneServicePolicies).where(inArray(zoneServicePolicies.zoneId, selected.zoneIds));
   if (selected.departmentId !== null) {
-    await tx
-      .delete(periodExtensions)
-      .where(eq(periodExtensions.departmentId, selected.departmentId));
     await tx
       .delete(menuPeriodStaffMenus)
       .where(eq(menuPeriodStaffMenus.departmentId, selected.departmentId));
