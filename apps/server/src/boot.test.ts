@@ -3005,6 +3005,46 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     });
   }, 60_000);
 
+  it("keeps, with its address, the clock of an equipment read from another machine, in the store boot created", async () => {
+    await withCapturedStdout(async () => {
+      const port = await freePort();
+      witnessStores.length = 0;
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "dev",
+          WAITRON_MIN_TICK_MS: "50",
+          WAITRON_MAX_TICK_MS: "200",
+          WAITRON_SKIP_RETRY_MS: "100",
+        },
+        {},
+        { requestFromBox: () => false },
+      );
+      try {
+        const deviceMs = Date.now();
+        const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+          headers: { [DEV_DEVICE_HEADER]: deviceId1, [DEVICE_CLOCK_HEADER]: String(deviceMs) },
+        });
+        expect(res.status).toBe(200);
+        expect(witnessStores).toHaveLength(1);
+        expect(witnessStores[0]!.witnesses()).toEqual([
+          expect.objectContaining({
+            kind: "device",
+            id: deviceId1,
+            address: "127.0.0.1",
+            witnessAt: new Date(deviceMs).toISOString(),
+          }),
+        ]);
+      } finally {
+        await server.close();
+      }
+    });
+  }, 60_000);
+
   it("the equipment read names a stuck kitchen printer", async () => {
     const cfg = loadTillConfig(TILL_ENV);
     const [printer] = await sharedDb
