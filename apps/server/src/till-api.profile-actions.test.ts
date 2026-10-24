@@ -143,7 +143,6 @@ import {
  *   `PUT /api/stations/:stationId/today`: a decision about the venue's day; reads require a session,
  *   writes require `venue_service.manage` or a permitted PIN override;
  * - `GET /api/service-zones/:zoneId/keep-open` and
- *   `PUT /api/service-zones/:zoneId/period-extension` and
  *   `PUT /api/service-zones/:zoneId/zone-extension`: the venue's day, session reads and
  *   `venue_service.manage` or a permitted PIN for writes;
  * - the table's cleared mark, and `/api/sales/:id/receipt/handover` (a printed receipt
