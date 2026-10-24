@@ -277,6 +277,20 @@ describe("GET /management-api/me/personal-data/export", () => {
     );
     expect(subjects).toEqual([{ personId: martaId, at: NOW, timeZone: "UTC", locationId }]);
   });
+
+  it("names the file for the real date when the box's clock reads 1970", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "UTC" })
+      .where(eq(locations.id, locationId))
+      .run();
+    const response = await ask(mounted({ now: () => new Date("1970-01-01T00:00:00Z") }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="marta-lopez-1970-01-01.zip"',
+    );
+    expect(Object.keys(await unzipped(response))).toContain("extra.json");
+  });
 });
 
 describe("sendPersonalData", () => {

@@ -39,6 +39,10 @@ function u16(bytes: Uint8Array, at: number): number {
   return bytes[at]! | (bytes[at + 1]! << 8);
 }
 
+/** The first entry's modification date as its local header stores it, in the ZIP format's
+ * packing of local time: years since 1980, month, day. */
+const dosDate = (zip: Uint8Array) => u16(zip, 12);
+
 /** Each entry's compression method, read from the local headers in order: 0 stored, 8 deflated. */
 function methods(zip: Uint8Array): Record<string, number> {
   const found: Record<string, number> = {};
@@ -106,13 +110,19 @@ describe("zipArchive", () => {
   });
 
   it.each([
-    ["1970-01-01T00:00:00Z", "1970-01-01"],
-    ["2107-06-01T12:00:00Z", "2107-06-01"],
-  ])("builds a ZIP whose request time %s is outside 1980-2099; the name keeps %s", (at, day) => {
-    const when = new Date(at);
-    const entries = unzipSync(zipArchive([{ name: "profile.json", content: '{"a":1}' }], when));
-    expect(strFromU8(entries["profile.json"]!)).toBe('{"a":1}');
-    expect(archiveFileName("Marta López", when, "UTC")).toBe(`marta-lopez-${day}.zip`);
+    ["1970-01-01T00:00:00Z", "1980-01-01", (1 << 5) | 1],
+    ["2107-06-01T12:00:00Z", "2099-12-31", (119 << 9) | (12 << 5) | 31],
+  ])("builds a ZIP for request time %s, dating its entry %s", (at, _day, stamped) => {
+    const zip = zipArchive([{ name: "profile.json", content: '{"a":1}' }], new Date(at));
+    expect(strFromU8(unzipSync(zip)["profile.json"]!)).toBe('{"a":1}');
+    expect(dosDate(zip)).toBe(stamped);
+  });
+
+  it("dates an entry with the request time when it is inside 1980-2099", () => {
+    const zip = zipArchive([{ name: "profile.json", content: "{}" }], AT);
+    expect(dosDate(zip)).toBe(
+      ((AT.getFullYear() - 1980) << 9) | ((AT.getMonth() + 1) << 5) | AT.getDate(),
+    );
   });
 
   it("marks a non-ASCII entry name as UTF-8 and leaves an ASCII one unmarked", () => {
