@@ -2,7 +2,7 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { type WtTextarea, setContentLanguages } from "@waitron/ui";
+import { type WtTextarea, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
@@ -1157,6 +1157,77 @@ it("shows a retrieved line's frozen options answers in the STAFF wording", async
   expect(
     [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
   ).toEqual(["Punto personal: Poco personal"]);
+});
+
+describe("till-basket: a line name's language", () => {
+  const original = currentContentLanguages();
+  afterEach(async () => {
+    setContentLanguages(original);
+    await page.viewport(414, 896);
+  });
+
+  /** Each line box the name's text is drawn in, rounded to whole pixels. */
+  function textBoxes(own: HTMLElement): string[] {
+    const range = document.createRange();
+    range.selectNodeContents(own);
+    return [...range.getClientRects()].map(
+      (rect) =>
+        `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)}x${Math.round(rect.height)}`,
+    );
+  }
+
+  it("a bill line's own name carries the content language; its markers do not", async () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    const store = new WorkingOrderStore();
+    store.loadFrom("held", [
+      {
+        workingOrderLineId: "stored-gone",
+        product: { ...cafe, id: "gone", name: "Flat white" },
+        quantity: "1",
+        notOffered: true,
+      },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const name = el.shadowRoot!.querySelector(".line > .name")!;
+    const own = name.querySelector<HTMLElement>(".product-name")!;
+    expect(own.getAttribute("lang")).toBe("es");
+    expect(getComputedStyle(own).hyphens).toBe("auto");
+    // A word under 8 letters is never hyphenated, as on the product buttons.
+    expect(getComputedStyle(own).getPropertyValue("hyphenate-limit-chars")).toBe("8");
+    expect(own.textContent).toBe("Flat white");
+    expect(own.textContent).not.toContain(t("basket.not_offered"));
+    expect(name.textContent).toContain(t("basket.not_offered"));
+  });
+
+  it("the name's language follows a change of the content languages", async () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".product-name")!.getAttribute("lang")).toBe("en");
+  });
+
+  it("an English venue's names break as with no language set", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    const store = new WorkingOrderStore();
+    store.addProduct({ ...cafe, id: "long", name: "Strawberries" }, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    el.style.width = "70px";
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const own = el.shadowRoot!.querySelector<HTMLElement>(".product-name")!;
+    expect(own.getAttribute("lang")).toBe("en");
+    const asEnglish = textBoxes(own);
+    expect(asEnglish.length).toBeGreaterThan(1);
+    own.removeAttribute("lang");
+    own.style.hyphens = "manual";
+    expect(textBoxes(own)).toEqual(asEnglish);
+    // Control: under Spanish the same word breaks elsewhere, with a hyphen.
+    own.style.hyphens = "";
+    own.setAttribute("lang", "es");
+    expect(textBoxes(own)).not.toEqual(asEnglish);
+  });
 });
 
 describe("till-basket: a subset of the order's lines", () => {

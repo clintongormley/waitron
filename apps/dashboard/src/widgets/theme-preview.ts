@@ -229,6 +229,7 @@ export class ThemePreview extends LitElement {
       .tile-name {
         font-weight: var(--wt-font-weight-bold);
         hyphens: auto;
+        hyphenate-limit-chars: 8 auto auto;
       }
       .tile-price {
         color: var(--wt-color-text-muted);
@@ -244,6 +245,7 @@ export class ThemePreview extends LitElement {
         flex: 1;
         min-width: 0;
         hyphens: auto;
+        hyphenate-limit-chars: 8 auto auto;
         overflow-wrap: break-word;
       }
     `,

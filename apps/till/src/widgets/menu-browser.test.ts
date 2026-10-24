@@ -2,7 +2,7 @@ import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-
 import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { CATEGORY_PALETTE, setContentLanguages } from "@waitron/ui";
+import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type {
   DocumentMember,
@@ -836,6 +836,40 @@ describe("till-menu-browser", () => {
       } finally {
         setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
       }
+    });
+  });
+
+  describe("a product tile's name language", () => {
+    const original = currentContentLanguages();
+    afterEach(() => setContentLanguages(original));
+
+    it("a product button's name carries the venue's default content language and hyphenates", async () => {
+      setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
+      const productName = root(el).querySelector<HTMLElement>(
+        '[data-region="shortcuts"] wt-button[data-kind="product"] .name',
+      )!;
+      expect(productName.getAttribute("lang")).toBe("es");
+      expect(getComputedStyle(productName).hyphens).toBe("auto");
+      // A word under 8 letters is never hyphenated, so it stays whole where it fits.
+      expect(getComputedStyle(productName).getPropertyValue("hyphenate-limit-chars")).toBe("8");
+      const sectionName = root(el).querySelector<HTMLElement>(
+        '[data-region="shortcuts"] wt-button[data-kind="section"] .name',
+      )!;
+      expect(sectionName.hasAttribute("lang")).toBe(false);
+      expect(getComputedStyle(sectionName).hyphens).toBe("manual");
+    });
+
+    it("the name's language follows a change of the content languages", async () => {
+      setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
+      setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+      await el.updateComplete;
+      expect(
+        root(el)
+          .querySelector('[data-region="shortcuts"] wt-button[data-kind="product"] .name')!
+          .getAttribute("lang"),
+      ).toBe("en");
     });
   });
 

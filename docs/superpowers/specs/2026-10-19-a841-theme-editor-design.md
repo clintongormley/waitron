@@ -831,7 +831,8 @@ the owner meant it, it is its own item.
   leaves "Hamburguesa" split with no hyphen in the bill at 115% (`d6.txt`: `bill "Hamburguesa" w 95
   broken [Hamburguesa]`; the "Tortill / a" of the first probe was at 150%); (a) **chosen:
   hyphenation**, keeping 130%. The build puts `hyphens: auto` on the product button's name and the
-  bill line's name, and a `lang` on them. **Which `lang`:** a till's names carry no language — the
+  bill line's name, and a `lang` on them (slice 10b limits it to words of eight letters or more:
+  section 16's ruling of 2026-10-24). **Which `lang`:** a till's names carry no language — the
   button and the bill show the product's staff name, one plain string (`productName` and
   `lineProductName`, `apps/till/src/widgets/product-name.ts:22-27,34-36`, whose comment says it
   "takes no locale") — so the `lang` is the venue's default content language,
@@ -2595,8 +2596,8 @@ prints" lines sit under the Logo field, which slice 8 adds); 10, 11 and 13 after
     rounded to whole pixels; the slider on the Look card, its line of sizes and the preview's till
     button and bill line; the saved card's row; the equipment label and the recovery sheet keeping
     Waitron's type; the Google button's own `--wt-google-button-font-size` and
-    `--wt-google-button-font-weight`; `hyphens: auto` and a `lang` on the till's product button names
-    and bill line names; the 130% layout cases in the till's and the dashboard's suites (section 5a).
+    `--wt-google-button-font-weight`; `hyphens: auto` (words of eight letters or more, section 16) and a
+    `lang` on the till's product button names and bill line names; the 130% layout cases in the till's and the dashboard's suites (section 5a).
     `wt-slider` gains what the card needs, with the token-painting and axe cases a changed primitive
     takes (CLAUDE.md §3): today it shows the bare number in `<span part="value" aria-hidden="true">`
     and has no unit, hint or `aria-valuetext` (`packages/ui/src/components/wt-slider.ts:52-61,92-96`),
@@ -2703,6 +2704,16 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **Where the equipment label and the recovery sheet get Waitron's type** (lane A ruling 2026-10-24,
   D6): from Waitron's own token file (`WAITRON_DEFAULTS.structure`). Not taken: a theme-sheet
   selector that skips print frames, which would not reach the recovery sheet.
+- **Only long words take a hyphen on the tills** (lane A ruling 2026-10-24, slice 10b):
+  `hyphenate-limit-chars: 8 auto auto` beside `hyphens: auto`, because hyphenation also split short
+  words such as "asado" that fit a line on their own, which the till's home-columns layout case
+  (#1411) forbids. Measured on Chromium 156 on macOS: seven letters still broke that case, eight
+  kept it, and at 130% eight still kept every long name inside its box (ten let "Mushrooms"
+  overflow). Not taken: changing the home-columns rule, or hyphenating only from 115%.
+- **The floor map keeps its ellipsis at 130%** (lane A ruling 2026-10-24, slice 10b): the map ends
+  a name that does not fit its square with "…" and can be pinched, so the 130% cases hold every
+  name's box inside its square at both widths and every name whole only on a 1280 × 800 till; on a
+  390 px phone the map already cuts names at 100%.
 
 ## 17. Risks
 
@@ -2756,8 +2767,8 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **Text size was measured on one machine's fonts, in Spanish.** The 130% top, and hyphenation
   keeping long words readable at it, rest on probes in Chromium on macOS with Spanish names
   (section 5a). Chromium does not hyphenate English (macOS 156 and Linux 153, the round-7 reviewer's
-  run), so a venue whose default content language is English keeps long names breaking mid-word from
-  115%; WebKit and the tills' own browsers were not measured. Android and Windows tills, and CI's Linux runners, draw other fonts; a wider
+  run), so a venue whose default content language is English keeps a word longer than its button or line
+  breaking mid-word with no hyphen, at any text size (the probe's names did so from 115%); WebKit and the tills' own browsers were not measured. Android and Windows tills, and CI's Linux runners, draw other fonts; a wider
   one wraps sooner. Mitigation: the build's 130% layout cases run in CI on every change, and the
   probe's screens are the busiest the till has; screens the probe did not render (dialogs, the
   kitchen screens, the dashboard beyond the product editor) are covered only by those cases.

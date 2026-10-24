@@ -497,6 +497,53 @@ it("an English screen in a Spanish venue shows the Spanish sample, as the tills 
   }
 });
 
+/** Each word of `node`'s text, with the boxes it is drawn in. */
+function wordBoxes(node: HTMLElement): { word: string; boxes: DOMRect[] }[] {
+  const text = node.firstChild!;
+  let at = 0;
+  return text.textContent!.split(" ").map((word) => {
+    const range = document.createRange();
+    range.setStart(text, at);
+    range.setEnd(text, at + word.length);
+    at += word.length + 1;
+    return { word, boxes: [...range.getClientRects()] };
+  });
+}
+
+it("the preview's names leave a word under 8 letters whole, as the tills do", async () => {
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme({ ...WAITRON_CHOICES, textScale: 130 }),
+    name: "Bar Lucía",
+  });
+  await document.fonts.ready;
+  for (const name of names(el)) {
+    expect(getComputedStyle(name).getPropertyValue("hyphenate-limit-chars")).toBe("8");
+    // Where a short word sits in its line depends on the font, so a copy of the name is laid out
+    // at every width from its widest short word up to its one-line width, or the tile's when that is
+    // narrower.
+    const probe = name.cloneNode() as HTMLElement;
+    probe.textContent = name.textContent;
+    Object.assign(probe.style, { flex: "none", width: "max-content" });
+    name.after(probe);
+    const natural = Math.floor(probe.getBoundingClientRect().width);
+    const short = wordBoxes(probe).filter(({ word }) => word.length < 8);
+    expect(short.length).toBeGreaterThan(0);
+    const widest = Math.max(...short.map(({ boxes }) => boxes[0]!.width));
+    const split: string[] = [];
+    for (let width = Math.ceil(widest) + 1; width <= natural; width++) {
+      probe.style.width = `${width}px`;
+      for (const { word, boxes } of wordBoxes(probe)) {
+        if (word.length < 8 && new Set(boxes.map((box) => Math.round(box.top))).size > 1) {
+          split.push(`${word} at ${width}px`);
+        }
+      }
+    }
+    probe.remove();
+    expect(split, name.className).toEqual([]);
+  }
+});
+
 it("the sample follows a change of the venue's content language", async () => {
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {

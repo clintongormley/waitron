@@ -5,6 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   ContentLanguageController,
   baseStyles,
+  currentContentLanguages,
   readableTextColor,
   registerIcons,
   visuallyHiddenStyles,
@@ -249,6 +250,14 @@ export class TillMenuBrowser extends LitElement {
 
       .name {
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      .name[lang] {
+        hyphens: auto;
+        /* No hyphen in a word under 8 letters, so a short word that fits a line stays whole
+           (menu-browser.home-columns.test.ts); a longer one can still be hyphenated where it would
+           fit on the next line. */
+        hyphenate-limit-chars: 8 auto auto;
       }
 
       .price,
@@ -656,7 +665,9 @@ export class TillMenuBrowser extends LitElement {
       ${marked ? html`<wt-icon class="nutrition-mark" name="allergies"></wt-icon>` : nothing}
       <span class="label">
         ${fill.kind === "image" ? thumb(fill.image) : nothing}
-        <span class="name">${productName(product)}</span>
+        <span class="name" lang=${currentContentLanguages().defaultLanguage}
+          >${productName(product)}</span
+        >
         <span class="price">${price}</span>
         ${sellable ? nothing : html`<span class="sold-out">${t("menu.sold_out")}</span>`}
       </span>

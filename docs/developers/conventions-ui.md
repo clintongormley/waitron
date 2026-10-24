@@ -1591,6 +1591,20 @@ image is reframed.
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.
 
+**A name's language.** The `lang` on a till's product button names and bill line names is the venue's default content
+language, which is not part of the start read: the till reads the content languages at start and
+again 60 s after each read ends, answered or not (`#refreshContentLanguages`, `apps/till/src/till-app.ts`), and the
+menu browser and the basket redraw on a change (`ContentLanguageController`), so the `lang` follows
+within about a minute. A word of 8 letters or more can be hyphenated by that language's rules
+(`hyphens: auto` with `hyphenate-limit-chars: 8 auto auto`); a shorter one never is, so a short word
+that fits a line stays whole, as `apps/till/src/widgets/menu-browser.home-columns.test.ts`
+requires (it fails at 7). That keeps its rule only for words under 8 letters: Chromium can still
+hyphenate a longer word at a line's end even when it would fit whole on the next line, which is how
+"asado" broke before the limit. Chromium does not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
+long word overflowing a narrow box, where `es`, `de` and `fr` broke it with a hyphen). A table
+order's draft arrangement slots its own name into the basket's `lead-<n>`
+(`apps/till/src/screens/till-table-order-screen.ts`), and that name carries no `lang`.
+
 **Notices.** The till's staff notices (the strip under its top bar, see
 [design-system.md](design-system.md#the-notice-strip-till)) come with every read of `GET
 /api/device/equipment`: the equipment poll's, every 15 seconds from sign-in (`POLL_MS`,
