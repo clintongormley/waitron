@@ -107,4 +107,21 @@ describe("the clock challenge keeper", () => {
     expect(k.challenges.take("session-a", first)).toBeNull();
     expect(k.challenges.take("session-300", ids.at(-1)!)).not.toBeNull();
   });
+
+  it("holds at most 8 live challenges per session, dropping that session's own oldest", () => {
+    const k = keeper();
+    const other = k.challenges.issue("session-b").challengeId;
+    const ids = Array.from({ length: 9 }, () => k.challenges.issue("session-a").challengeId);
+    for (let i = 0; i < 300; i += 1) k.challenges.issue("session-a");
+    expect(k.challenges.size()).toBe(9);
+    expect(k.challenges.take("session-a", ids[0]!)).toBeNull();
+    expect(k.challenges.take("session-b", other)).not.toBeNull();
+  });
+
+  it("keeps a session's eight newest challenges usable", () => {
+    const k = keeper();
+    const ids = Array.from({ length: 9 }, () => k.challenges.issue("session-a").challengeId);
+    expect(k.challenges.take("session-a", ids[0]!)).toBeNull();
+    for (const id of ids.slice(1)) expect(k.challenges.take("session-a", id)).not.toBeNull();
+  });
 });

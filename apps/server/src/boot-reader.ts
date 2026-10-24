@@ -17,8 +17,7 @@ export interface BootReader {
 
 /** Linux's boot-time clock (`/proc/uptime`), which keeps counting while the machine is suspended;
  * performance.now() stops during a suspend there. Where `/proc/uptime` gives no number at
- * creation, performance.now() for the life of the reader. A later read that fails answers NaN,
- * which no comparison takes as a step. */
+ * creation, performance.now() for the life of the reader. A later read that fails answers NaN. */
 export function bootReader(
   read: (path: string) => string = (path) => readFileSync(path, "utf8"),
 ): BootReader {

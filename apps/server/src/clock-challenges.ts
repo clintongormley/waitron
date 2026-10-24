@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 export const CHALLENGE_MS = 5_000;
 
+const PER_SESSION = 8;
 /** Fresh challenges live 5 s, so this bounds a burst of asks rather than normal use. */
 const MAX_HELD = 256;
 
@@ -31,9 +32,16 @@ export function clockChallenges(deps: {
   return {
     issue(session) {
       const steadyAt = deps.steady();
+      let oldestOwn: string | undefined;
+      let own = 0;
       for (const [id, challenge] of held) {
         if (!fresh(steadyAt - challenge.steadyAt)) held.delete(id);
+        else if (challenge.session === session) {
+          oldestOwn ??= id;
+          own += 1;
+        }
       }
+      if (own >= PER_SESSION) held.delete(oldestOwn!);
       if (held.size >= MAX_HELD) held.delete(held.keys().next().value!);
       const challengeId = randomUUID();
       const boxAt = deps.wall();
