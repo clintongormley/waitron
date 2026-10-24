@@ -6,14 +6,12 @@ import {
   deriveThemeFrom,
   themeSheet,
   type ThemeChoices,
+  type VenueLogoAddresses,
   type VenueThemeAnswer,
 } from "@waitron/ui-core/theme";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 
-export interface VenueLogo {
-  readonly light: string;
-  readonly dark: string | null;
-}
+export type VenueLogo = VenueLogoAddresses;
 
 export interface VenueThemeSource {
   readonly inUse: ThemeInUse | null;
