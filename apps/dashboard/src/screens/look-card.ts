@@ -15,6 +15,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
+import "@waitron/ui/src/components/wt-slider.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import {
@@ -26,6 +27,7 @@ import {
   WAITRON_CHOICES,
   canFixAll,
   fixAll,
+  isTextScale,
   normaliseChoices,
   type Background,
   type Corners,
@@ -54,6 +56,7 @@ import {
   setBackground,
   setCorners,
   setHand,
+  setTextScale,
   typeCode,
   typeHandCode,
   useWorkedOut,
@@ -81,6 +84,9 @@ import {
   keptNote,
   saveDialogLine,
   savedWarningLine,
+  textScaleLabel,
+  textScaleSpoken,
+  textSizesLine,
 } from "../widgets/theme-words.js";
 
 const PRIMARY = "--wt-color-primary";
@@ -216,6 +222,11 @@ export class LookCard extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      .sizes {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .editing-line {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
@@ -270,6 +281,7 @@ export class LookCard extends LitElement {
   @state() private refusedCode = "";
   @state() private refusedHand: HandField | "" = "";
   @state() private refusedLogo: LogoRefusal | null = null;
+  @state() private refusedTextScale = "";
   @state() private actionError = "";
   @state() private submitting = false;
   @state() private asking = false;
@@ -375,6 +387,7 @@ export class LookCard extends LitElement {
     this.refusedCode = "";
     this.refusedHand = "";
     this.refusedLogo = null;
+    this.refusedTextScale = "";
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -449,6 +462,7 @@ export class LookCard extends LitElement {
     this.refusedCode = "";
     this.refusedHand = "";
     this.refusedLogo = null;
+    this.refusedTextScale = "";
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -716,6 +730,7 @@ export class LookCard extends LitElement {
     this.refusedCode = "";
     this.refusedHand = "";
     this.refusedLogo = null;
+    this.refusedTextScale = "";
     this.actionError = "";
     if (codeInvalid(draft) || invalidHandCodes(draft).length > 0) {
       await this.#focusInvalid();
@@ -765,6 +780,9 @@ export class LookCard extends LitElement {
         logoMessage
       ) {
         this.refusedLogo = { field, message: t(logoMessage) };
+        await this.#focusInvalid();
+      } else if (code === "theme.invalid" && field === "textScale") {
+        this.refusedTextScale = t("appearance.bad_text_size");
         await this.#focusInvalid();
       } else if (code === "theme.invalid" && field === "brandColor") {
         this.refusedCode = t("appearance.bad_code");
@@ -835,7 +853,7 @@ export class LookCard extends LitElement {
       this.submitted && codeInvalid(draft) ? t("appearance.bad_code") : this.refusedCode;
     const handErrors = this.#errorsFor(draft);
     const message =
-      codeError || Object.keys(handErrors).length > 0 || this.refusedLogo
+      codeError || Object.keys(handErrors).length > 0 || this.refusedLogo || this.refusedTextScale
         ? t("form.fix_fields")
         : this.actionError;
     const saveAction = saveActionState(this.#scope);
@@ -915,6 +933,29 @@ export class LookCard extends LitElement {
                 this.#change((d) => setCorners(d, event.detail.value));
               }}
             ></wt-segmented-control>
+            <wt-slider
+              name="textScale"
+              label=${t("appearance.text_size")}
+              min="100"
+              max="130"
+              step="5"
+              marks
+              continuous
+              .value=${draft.choices.textScale}
+              .format=${textScaleLabel}
+              .valueText=${textScaleSpoken}
+              hint=${t("appearance.text_size_hint")}
+              .error=${this.refusedTextScale}
+              ?disabled=${busy}
+              @wt-change=${(event: CustomEvent<{ value: number }>) => {
+                event.stopPropagation();
+                const { value } = event.detail;
+                if (!isTextScale(value)) return;
+                this.refusedTextScale = "";
+                this.#change((d) => setTextScale(d, value));
+              }}
+            ></wt-slider>
+            <p class="sizes" data-test="text-sizes">${textSizesLine(this.#derived!)}</p>
           </div>
           <dashboard-theme-preview
             .theme=${this.#derived!}

@@ -17,7 +17,7 @@ import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
-import { setLocale, t } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   computedColour,
@@ -1624,5 +1624,202 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
       expect(rect(line).height).toBeGreaterThan(rect(icon).height * 1.5);
       expect(rect(icon).width).toBe(wide);
     });
+  });
+});
+
+describe("the Text size slider", () => {
+  const slider = (el: Card) =>
+    q(el, "wt-slider[name=textScale]") as HTMLElementTagNameMap["wt-slider"];
+  const range = (el: Card) => slider(el).shadowRoot!.querySelector("input")!;
+  const sizesLine = (el: Card) => text(q(el, "[data-test=text-sizes]"));
+  const sizes = (sm: number, md: number, lg: number, xl: number) =>
+    fill("appearance.text_sizes", {
+      sm: String(sm),
+      md: String(md),
+      lg: String(lg),
+      xl: String(xl),
+    }).replace(/\s+/g, " ");
+  /** A drag to `value` and its release, as the browser sends them. */
+  async function slide(el: Card, value: number) {
+    const input = range(el);
+    input.value = String(value);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await slider(el).updateComplete;
+  }
+
+  it("comes after Corners, at 100% with Waitron's sizes", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    const control = slider(el);
+    expect(control).not.toBeNull();
+    expect(segmented(el, "corners").nextElementSibling).toBe(control);
+    expect(control.label).toBe(t("appearance.text_size"));
+    expect(control.min).toBe(100);
+    expect(control.max).toBe(130);
+    expect(control.step).toBe(5);
+    expect(control.marks).toBe(true);
+    expect(control.continuous).toBe(true);
+    expect(control.value).toBe(100);
+    expect(text(control.shadowRoot!.querySelector("[part=value]"))).toBe("100%");
+    expect(range(el).getAttribute("aria-valuetext")).toBe(
+      fill("appearance.text_size_spoken", { n: "100" }),
+    );
+    expect(control.hint).toBe(t("appearance.text_size_hint"));
+    expect(sizesLine(el)).toBe(sizes(12, 14, 18, 22));
+  });
+
+  it("draws its value in Spanish as the screen language prints a percent", async () => {
+    setLocale("es-ES");
+    const { el } = await mountEditing(inUse(lucia));
+    expect(text(slider(el).shadowRoot!.querySelector("[part=value]"))).toBe(
+      new Intl.NumberFormat("es-ES", { style: "percent" }).format(1).replace(/\s+/g, " "),
+    );
+    expect(slider(el).label).toBe(es["appearance.text_size"]);
+    expect(sizesLine(el)).toBe(sizes(12, 14, 18, 22));
+  });
+
+  it("moving it changes the draft, the line of sizes and the preview, and nothing else", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    slider(el).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: 120 }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(sizesLine(el)).toBe(sizes(14, 17, 22, 26));
+    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("17px");
+    expect(preview(el).theme.dark["--wt-font-size-md"]).toBe("17px");
+    const label = slider(el).shadowRoot!.querySelector("[part=label]")!;
+    expect(getComputedStyle(label).fontSize).toBe("14px");
+    expect(getComputedStyle(el).getPropertyValue("--wt-font-size-md").trim()).toBe("14px");
+    expect(button(el, "save").disabled).toBe(false);
+    expect(button(el, "save").variant).toBe("primary");
+  });
+
+  it("a value off its steps changes nothing", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    slider(el).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: 112 }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(sizesLine(el)).toBe(sizes(12, 14, 18, 22));
+    expect(preview(el).theme.light["--wt-font-size-md"]).toBe("14px");
+    expect(button(el, "save").disabled).toBe(true);
+  });
+
+  it("the line of sizes follows a drag before release", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(lucia));
+    const input = range(el);
+    const changes = vi.fn();
+    input.addEventListener("change", changes);
+    input.value = "125";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(sizesLine(el)).toBe(sizes(15, 18, 23, 28));
+    expect(changes).not.toHaveBeenCalled();
+    expect(button(el, "save").disabled).toBe(false);
+  });
+
+  it("Save sends the text size", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await slide(el, 120);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![1]).toEqual({ ...LUCIA, textScale: 120 });
+  });
+
+  it("Cancel and Use Waitron's look put 100% back", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await slide(el, 125);
+    expect(slider(el).value).toBe(125);
+    await userEvent.click(button(el, "use-waitron"));
+    await el.updateComplete;
+    expect(slider(el).value).toBe(100);
+    expect(sizesLine(el)).toBe(sizes(12, 14, 18, 22));
+    await slide(el, 125);
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    await userEvent.click(q(el, "[data-test=edit]")!);
+    await el.updateComplete;
+    expect(slider(el).value).toBe(100);
+    expect(sizesLine(el)).toBe(sizes(12, 14, 18, 22));
+    expect(button(el, "save").disabled).toBe(true);
+  });
+
+  it("a saved size opens on the slider", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(theme("t-big", "Big", { ...LUCIA, textScale: 130 })));
+    expect(slider(el).value).toBe(130);
+    expect(text(slider(el).shadowRoot!.querySelector("[part=value]"))).toBe("130%");
+    expect(sizesLine(el)).toBe(sizes(16, 18, 23, 29));
+    expect(button(el, "save").disabled).toBe(true);
+  });
+
+  it("the slider is disabled while a save is in flight", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await slide(el, 110);
+    let answer!: () => void;
+    saveTheme.mockImplementationOnce(
+      (id, choices) =>
+        new Promise((resolve) => {
+          answer = () => resolve(saved(id, "Bar Lucía", choices));
+        }),
+    );
+    expect(slider(el).disabled).toBe(false);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    await el.updateComplete;
+    expect(slider(el).disabled).toBe(true);
+    answer();
+    await expect
+      .poll(() => q(el, "section.settings-card")!.hasAttribute("data-editing"))
+      .toBe(false);
+  });
+
+  it("a refusal naming textScale is explained under the slider", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await slide(el, 115);
+    const refusal = { code: "theme.invalid", params: { field: "textScale", reason: "bad_value" } };
+    saveTheme.mockRejectedValueOnce(refusal);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => slider(el).error).toBe(t("appearance.bad_text_size"));
+    await slider(el).updateComplete;
+    expect(range(el).getAttribute("aria-invalid")).toBe("true");
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    expect(button(el, "save").disabled).toBe(false);
+    await expect.poll(() => slider(el).shadowRoot!.activeElement).toBe(range(el));
+
+    await slide(el, 120);
+    expect(slider(el).error).toBe("");
+    expect(await bottom(el)).toBe("");
+
+    saveTheme.mockRejectedValueOnce(refusal);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => slider(el).error).toBe(t("appearance.bad_text_size"));
+    let answer!: () => void;
+    saveTheme.mockImplementationOnce(
+      (id, choices) =>
+        new Promise((resolve) => {
+          answer = () => resolve(saved(id, "Bar Lucía", choices));
+        }),
+    );
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(3);
+    await el.updateComplete;
+    expect(slider(el).error).toBe("");
+    expect(await bottom(el)).toBe("");
+    answer();
+    await expect
+      .poll(() => q(el, "section.settings-card")!.hasAttribute("data-editing"))
+      .toBe(false);
   });
 });

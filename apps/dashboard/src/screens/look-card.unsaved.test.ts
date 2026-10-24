@@ -413,3 +413,44 @@ describe("the logo in an unsaved draft", () => {
     expect(await leave(app)).toBe("proceeded");
   });
 });
+
+describe("the text size in an unsaved draft", () => {
+  const slider = (card: Card) =>
+    q(card, "wt-slider[name=textScale]") as HTMLElementTagNameMap["wt-slider"];
+  async function slide(card: Card, value: number) {
+    const input = slider(card).shadowRoot!.querySelector("input")!;
+    input.value = String(value);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    await card.updateComplete;
+  }
+
+  it("a moved text size asks before leaving, and Discard drops it", async () => {
+    const { app, card, saveTheme } = await mount();
+    await slide(card, 125);
+    expect(unload()).toBe(true);
+    const request = leave(app);
+    await choose(app, "discard");
+    expect(await request).toBe("proceeded");
+    await expect.poll(() => editing(card)).toBe(false);
+    await userEvent.click(q(card, "[data-test=edit]")!);
+    await card.updateComplete;
+    expect(slider(card).value).toBe(100);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(unload()).toBe(false);
+  });
+
+  it("moving it back to the opened size asks nothing, and Save is quiet again", async () => {
+    const { app, card } = await mount({ ...lucia, choices: { ...LUCIA, textScale: 110 } });
+    expect(slider(card).value).toBe(110);
+    await slide(card, 125);
+    expect(save(card).disabled).toBe(false);
+    expect(save(card).variant).toBe("primary");
+    expect(unload()).toBe(true);
+    await slide(card, 110);
+    expect(save(card).disabled).toBe(true);
+    expect(save(card).variant).toBe("secondary");
+    expect(unload()).toBe(false);
+    expect(await leave(app)).toBe("proceeded");
+  });
+});
