@@ -255,24 +255,22 @@ describe("a restart lifts the stop for one step back", () => {
     ]);
   });
 
-  it("covers a step back of exactly 24 hours and not a second more", async () => {
+  it("covers a reading a minute further back than the confirmed time, not 61 s", async () => {
     await attempt(T);
     await restart({ clockMs: T - 24 * H });
-    expect(await attemptAll([T - 24 * H - S, T - 24 * H])).toEqual([
+    expect(await attemptAll([T - 24 * H - 61 * S, T - 24 * H - M])).toEqual([
       "clock.behind_chain",
       "recorded",
     ]);
-    expect(refusals[0]!.params).toEqual(behind(T - 24 * H - S, T));
+    expect(refusals[0]!.params).toEqual(behind(T - 24 * H - 61 * S, T));
   });
 
-  it("caps the cover at 24 hours even when the accepted gap is wider", async () => {
+  it("covers a 400-day gap", async () => {
     await attempt(T);
-    await restart({ clockMs: T - 25 * H });
-    expect(await attemptAll([T - 24 * H - S, T - 24 * H])).toEqual([
-      "clock.behind_chain",
-      "recorded",
-    ]);
-    expect(refusals[0]!.params).toEqual(behind(T - 24 * H - S, T));
+    await restart({ clockMs: T - 400 * 24 * H });
+    expect(await attempt(T - 400 * 24 * H + M)).toBe("recorded");
+    const [first, second] = chain();
+    expect(second!.anterior).toBe(first!.huella);
   });
 
   it("answers the same from the stop, the staff notice and the bell", async () => {
