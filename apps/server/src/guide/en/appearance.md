@@ -94,8 +94,9 @@ button, a till's product buttons included, so a long name that no longer fits ta
 
 On a till whose venue's default content language is Spanish, a word of eight letters or more in a
 product name, on a product button or a bill line, can break at a syllable with a hyphen; a shorter
-word is never hyphenated. Names in a language the browser does not hyphenate, English among them,
-can break inside a word from 115%.
+word is never hyphenated. In a language the browser does not hyphenate, English among them, a word
+longer than its button or line breaks inside the word, with no hyphen, at any text size; larger text
+makes that happen more often.
 
 A saved text size reaches the dashboards and tills as a saved theme's colours do (see
 [Save a theme](appearance.md#save)). A kitchen screen that nobody signs in on takes it when it next

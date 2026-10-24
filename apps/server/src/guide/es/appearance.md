@@ -101,9 +101,10 @@ que un nombre largo que ya no cabe ocupa otra línea.
 
 En una caja de un local cuyo idioma de contenido predeterminado es el español, una palabra de ocho
 letras o más en el nombre de un producto, en un botón de producto o en una línea de la cuenta, puede
-cortarse por una sílaba con un guion; una palabra más corta nunca se divide con guion. Los nombres
-en un idioma que el navegador no divide con guiones, entre ellos el inglés, pueden cortarse en mitad
-de una palabra a partir del 115 %.
+cortarse por una sílaba con un guion; una palabra más corta nunca se divide con guion. En un idioma
+que el navegador no divide con guiones, entre ellos el inglés, una palabra más larga que su botón o
+su línea se corta en mitad de la palabra, sin guion, con cualquier tamaño de texto; con el texto más
+grande ocurre más a menudo.
 
 Un tamaño de texto guardado llega a los paneles y las cajas igual que los colores de un tema guardado
 (consulta [Guarda un tema](appearance.md#save)). Una pantalla de cocina en la que nadie inicia sesión

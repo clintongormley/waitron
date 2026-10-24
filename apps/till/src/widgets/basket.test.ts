@@ -1161,7 +1161,20 @@ it("shows a retrieved line's frozen options answers in the STAFF wording", async
 
 describe("till-basket: a line name's language", () => {
   const original = currentContentLanguages();
-  afterEach(() => setContentLanguages(original));
+  afterEach(async () => {
+    setContentLanguages(original);
+    await page.viewport(414, 896);
+  });
+
+  /** Each line box the name's text is drawn in, rounded to whole pixels. */
+  function textBoxes(own: HTMLElement): string[] {
+    const range = document.createRange();
+    range.selectNodeContents(own);
+    return [...range.getClientRects()].map(
+      (rect) =>
+        `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)}x${Math.round(rect.height)}`,
+    );
+  }
 
   it("a bill line's own name carries the content language; its markers do not", async () => {
     setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
@@ -1169,7 +1182,7 @@ describe("till-basket: a line name's language", () => {
     store.loadFrom("held", [
       {
         workingOrderLineId: "stored-gone",
-        product: { ...cafe, id: "gone", name: "Cortado" },
+        product: { ...cafe, id: "gone", name: "Flat white" },
         quantity: "1",
         notOffered: true,
       },
@@ -1181,25 +1194,38 @@ describe("till-basket: a line name's language", () => {
     expect(getComputedStyle(own).hyphens).toBe("auto");
     // A word under 8 letters is never hyphenated, as on the product buttons.
     expect(getComputedStyle(own).getPropertyValue("hyphenate-limit-chars")).toBe("8");
-    expect(own.textContent).toBe("Cortado");
+    expect(own.textContent).toBe("Flat white");
     expect(own.textContent).not.toContain(t("basket.not_offered"));
     expect(name.textContent).toContain(t("basket.not_offered"));
   });
 
+  it("the name's language follows a change of the content languages", async () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".product-name")!.getAttribute("lang")).toBe("en");
+  });
+
   it("an English venue's names wrap as before", async () => {
     setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
-    await page.viewport(390, 844);
     const store = new WorkingOrderStore();
-    store.addProduct(
-      { ...cafe, id: "long", name: "A dish with a very long unbrokennameandmoretext" },
-      "15",
-    );
+    store.addProduct({ ...cafe, id: "long", name: "Strawberries" }, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
-    expect(el.shadowRoot!.querySelector(".product-name")!.getAttribute("lang")).toBe("en");
-    const edge = el.getBoundingClientRect();
-    const remove = el.shadowRoot!.querySelector<HTMLElement>(".remove")!.getBoundingClientRect();
-    expect(remove.left).toBeGreaterThanOrEqual(edge.left);
-    expect(remove.right).toBeLessThanOrEqual(edge.right);
+    el.style.width = "70px";
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const own = el.shadowRoot!.querySelector<HTMLElement>(".product-name")!;
+    expect(own.getAttribute("lang")).toBe("en");
+    const asEnglish = textBoxes(own);
+    expect(asEnglish.length).toBeGreaterThan(1);
+    // Before names carried a language they had none; the English one breaks exactly as that did.
+    own.removeAttribute("lang");
+    expect(textBoxes(own)).toEqual(asEnglish);
+    // Control: under Spanish the same word breaks elsewhere, with a hyphen.
+    own.setAttribute("lang", "es");
+    expect(textBoxes(own)).not.toEqual(asEnglish);
   });
 });
 

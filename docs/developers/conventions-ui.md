@@ -1558,7 +1558,9 @@ menu browser and the basket redraw on a change (`ContentLanguageController`), so
 within about a minute. A word of 8 letters or more can be hyphenated by that language's rules
 (`hyphens: auto` with `hyphenate-limit-chars: 8 auto auto`); a shorter one never is, so a short word
 that fits a line stays whole, as `apps/till/src/widgets/menu-browser.home-columns.test.ts`
-requires (it fails at 7). Chromium does not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
+requires (it fails at 7). That keeps its rule only for words under 8 letters: Chromium can still
+hyphenate a longer word at a line's end even when it would fit whole on the next line, which is how
+"asado" broke before the limit. Chromium does not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
 long word overflowing a narrow box, where `es`, `de` and `fr` broke it with a hyphen). A table
 order's draft arrangement slots its own name into the basket's `lead-<n>`
 (`apps/till/src/screens/till-table-order-screen.ts`), and that name carries no `lang`.
