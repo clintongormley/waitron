@@ -30,6 +30,9 @@ pending passkey challenges in the database — and so in every backup copy. _Res
    Each caller keeps its own status write (`pending` for reset and re-enable, `suspended` for
    disable) and its own `emailVerifiedAt` handling: reset and re-enable clear it as today;
    disabling leaves it (it is not a sign-in secret, and re-enabling clears it anyway).
+   Amended 2026-10-24 after the finish review: the function was split into `NO_SIGN_IN_SECRETS`,
+   the four nulled columns spread into each caller's own status write, and `deleteSignInRows`, the
+   four row deletes, so each caller writes the person's row once instead of twice.
 2. **The change into suspended wipes, and so does Disable on a person already suspended.** The edit
    route wipes only when it changes the status to `suspended` (`input.status === "suspended" &&
    person.status !== "suspended"`), a change that already needs `person.admin`. Saving an already
