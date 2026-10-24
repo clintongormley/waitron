@@ -1,0 +1,75 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { sql } from "drizzle-orm";
+import { strFromU8, unzipSync } from "fflate";
+import { describe, expect, it } from "vitest";
+import { stampDeployment, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { ALL_MODULES } from "./modules.js";
+import type { StartedServer } from "./boot.js";
+import { createClockVenue } from "./testing/clock-venue.js";
+import { serverFixture } from "./testing/server-fixture.js";
+import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
+import { freePorts } from "./testing/free-ports.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
+const disabled = new Set(["fiscal-none", "staffing"]);
+const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(
+    manifestSets().filter((s) => !disabled.has(s.name)),
+    null,
+  ),
+});
+
+describe("the own personal-data download in a real start", () => {
+  it("answers a signed-in person with their own profile in primary mode", async () => {
+    beforeServerStarts();
+    const venue = await createClockVenue(suite.db, () => new Date(), modules);
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: venue.personId }),
+    );
+    await stampDeployment(suite.db, "preproduction");
+    const scratch = await mkdtemp(join(tmpdir(), "waitron-personal-data-boot-"));
+    let server: StartedServer | undefined;
+    try {
+      await copyMigrationsRoot(join(scratch, "migrations"));
+      await writeFile(
+        join(scratch, "modules.json"),
+        JSON.stringify({ modules: Object.fromEntries([...disabled].map((m) => [m, false])) }),
+      );
+      const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+      const [port] = await freePorts(1);
+      server = await startServer({
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        WAITRON_STATE_DIR: scratch,
+        WAITRON_VENUE_DIR: dirname(database),
+        WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
+        WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
+        WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
+        WAITRON_ENV: "preproduction",
+      });
+      await awaitListening(port);
+      const response = await fetch(
+        `http://127.0.0.1:${port}/management-api/me/personal-data/export`,
+        { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, "x-waitron-live": "1" } },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("application/zip");
+      const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+      const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
+      expect([profile.id, profile.displayName]).toEqual([venue.personId, "Ana"]);
+    } finally {
+      await server?.close();
+      await rm(scratch, { recursive: true, force: true });
+    }
+    beforeServerStarts();
+  }, 60_000);
+});

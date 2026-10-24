@@ -70,7 +70,12 @@ answered all ten questions on 2026-10-22 (design §8). The open slices, by the d
 by the answers):
 
 - **S2** — a staff member downloads their own data from their profile; an admin downloads another
-  person's under a new admin-only permission, `personal_data.export`. Planned as S2a1, S2a2, S2b, S2c.
+  person's under a new admin-only permission, `personal_data.export`. The server route for a
+  person's own download exists (`GET /management-api/me/personal-data/export`, a ZIP of their
+  profile and sign-in details), but nothing in the dashboard links to it yet. Left: **S2a2** (the
+  Profile page's button, the explanation file inside the ZIP, and the guide pages, in English and
+  Spanish), **S2b** (the workforce and staffing files) and **S2c** (the counts of voids, refunds and
+  drawer openings, and an admin's download of another person's data).
 - **S3** — an admin finds an invoice customer by tax number and downloads what the box holds.
 - **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
   checklist.

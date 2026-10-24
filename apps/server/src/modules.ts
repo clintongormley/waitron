@@ -14,6 +14,11 @@ import type {
 
 export { ALL_MODULES };
 
+/** The members of `ALL_MODULES` whose name is listed, in `ALL_MODULES` order. */
+export function modulesNamed(names: readonly string[]): readonly WaitronModule[] {
+  return ALL_MODULES.filter((m) => names.includes(m.name));
+}
+
 /** The sole venue-service contribution, resolved during module assembly so boot fails immediately. */
 export const VENUE_SERVICE: VenueServiceContribution = selectVenueService(ALL_MODULES);
 
