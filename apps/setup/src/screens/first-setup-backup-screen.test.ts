@@ -5,6 +5,7 @@ import type { WtButton } from "@waitron/ui";
 import { FirstSetupBackupScreen } from "./first-setup-backup-screen.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { backupRepairStrings } from "../i18n/backup-repair.js";
 import {
   repairApi,
   inspection,
@@ -38,6 +39,33 @@ it("offers repair recovery even when the original attempt and password cannot be
   expect(q(el, "proof-key")).not.toBeNull();
   expect(q(el, "review")).toBeNull();
   expect(calls.map((c) => c.action)).toEqual(["status", "resolution"]);
+});
+it.each(["en-GB", "es-ES"] as const)(
+  "explains the restart needed to return to ordinary setup before opening a backup in %s",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mount();
+    expect(q(el, "handoff-restart")).not.toBeNull();
+    expect(q(el, "handoff-restart").textContent).toBe(
+      backupRepairStrings[locale === "es-ES" ? "es" : "en"].handoffRestart,
+    );
+  },
+);
+it("shows reconnection instead of offering proof or resume for an already selected target", async () => {
+  const fixture = repairApi((action) =>
+    action === "status"
+      ? Response.json({ phase: "selected", proofRequired: true, recoveryId: saved.recoveryId })
+      : undefined,
+  );
+  const { el } = await mountWidget<FirstSetupBackupScreen>("setup-first-backup", {
+    api: fixture.api,
+    inspection,
+  });
+  await expect.poll(() => q(el, "restarting")).not.toBeNull();
+  expect(q(el, "restarting").textContent).toBe(backupRepairStrings.en.restarting);
+  expect(q(el, "reconnect")).not.toBeNull();
+  for (const name of ["resume", "prove", "proof-key"]) expect(q(el, name)).toBeNull();
+  expect(fixture.calls.map((call) => call.action)).toEqual(["status", "resolution"]);
 });
 it("requires source, selected key and isolation beside their fields with one bottom message", async () => {
   const { el, calls } = await mount();

@@ -42,6 +42,9 @@ After **Open backup**, check the authenticated details and use the module's reco
 The key still needs to pass the current history and clock checks. Keep the former box stopped,
 coordinate with the other venues and follow any wait before selecting the series.
 
+Opening a backup pauses ordinary setup even if its key is refused. Retry recovery on this page,
+or restart the box to return to ordinary setup. Going back or refreshing the page does not resume it.
+
 If the page closes or the box restarts, enter the proof again. Reopen the same source when only
 preparation was saved. **Finish saved recovery** proves the retained committed target before
 completing the same event; it does not choose a new name. Do not erase a retained operation to

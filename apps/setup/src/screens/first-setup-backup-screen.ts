@@ -478,7 +478,7 @@ export class FirstSetupBackupScreen extends LitElement {
   }
   override render() {
     const s = this.#words;
-    if (this.restarting)
+    if (this.restarting || this.status?.phase === "selected")
       return html`<section data-test="screen-first-backup">
         <h1>${s.heading}</h1>
         <p data-test="restarting" role="status">${s.restarting}</p>
@@ -505,6 +505,7 @@ export class FirstSetupBackupScreen extends LitElement {
     >
       <h1>${s.heading}</h1>
       <p>${s.retained}</p>
+      <p data-test="handoff-restart">${s.handoffRestart}</p>
       <wt-combobox
         class="field"
         data-test="source"
@@ -719,7 +720,7 @@ export class FirstSetupBackupScreen extends LitElement {
                   >${s.prove}</wt-button
                 ></wt-form-actions
               >
-              ${this.status?.recoveryId && ["placement-started", "restored", "selected"].includes(this.status.phase) ? html`<wt-button data-test="resume" ?disabled=${this.busy || (this.attempted && ["secret", "offline", "sole"].some((field) => this.#invalid(field)))} @click=${() => void this.#open(true)}>${s.resume}</wt-button>` : nothing}
+              ${this.status?.recoveryId && ["placement-started", "restored"].includes(this.status.phase) ? html`<wt-button data-test="resume" ?disabled=${this.busy || (this.attempted && ["secret", "offline", "sole"].some((field) => this.#invalid(field)))} @click=${() => void this.#open(true)}>${s.resume}</wt-button>` : nothing}
               ${(!this.status || this.error) && !this.busy ? html`<wt-button data-test="reload-status" @click=${() => void this.#readStatus()}>${s.reconnect}</wt-button>` : nothing}`
       }
       ${this.busy ? html`<p role="status">${s.waiting}</p>` : nothing}

@@ -30,6 +30,9 @@ Confirm that the old box stays offline and that you are the only person recoveri
 Choose **Open backup**. Only after the key is accepted does the page show the backup's taxpayer,
 location, date and key name. Check those details before continuing.
 
+Opening a backup pauses ordinary setup even if the key is refused. You can retry recovery here.
+To return to ordinary setup, restart the box; going back or refreshing the page does not resume it.
+
 ## Make the new series {#series}
 
 Use the recovery controls below the authenticated details. Enter the matching key again, confirm
@@ -45,6 +48,7 @@ Leaving the page or restarting the box discards the browser's proof. Re-enter th
 continuing. If preparation stopped before placement, reopen the same source. When **Finish saved
 recovery** is available, use it to prove access to the retained target and complete that exact
 recovery. It keeps the saved event and selected input.
+If recovery is already saved, reconnect to the box rather than proving or placing it again.
 
 Changing the source or environment clears the page's authenticated controls. It does not delete
 the saved operation or select a different backup for it. After **Recovery saved**, reconnect to

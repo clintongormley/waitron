@@ -31,6 +31,10 @@ Confirma que la caja anterior seguirá desconectada y que eres la única persona
 contribuyente. Elige **Abrir copia**. Solo después de aceptar la clave, la página muestra el
 contribuyente, el local, la fecha y el nombre de la clave de la copia. Compruébalos antes de continuar.
 
+Abrir una copia pausa la configuración normal aunque se rechace la clave. Puedes reintentar aquí
+la recuperación. Para volver a la configuración normal, reinicia el equipo; volver atrás o recargar
+la página no la reanuda.
+
 ## Crea las nuevas series {#series}
 
 Usa los controles bajo los datos autenticados. Vuelve a introducir la clave correspondiente, confirma
@@ -48,6 +52,7 @@ Al salir de la página o reiniciar el equipo se pierde la identificación del na
 introducir la clave para continuar. Si la preparación se detuvo antes de colocar los datos, vuelve
 a abrir el mismo origen. Cuando aparezca **Finalizar recuperación guardada**, úsala para identificarte
 ante el destino conservado y completar esa misma recuperación. Conserva el evento y la selección guardados.
+Si la recuperación ya está guardada, reconecta con el equipo en lugar de volver a identificarte o colocarla.
 
 Cambiar el origen o el entorno vacía los controles autenticados de la página. No borra la operación
 guardada ni elige otra copia para ella. Después de **Recuperación guardada**, reconecta con el equipo.

@@ -23,6 +23,8 @@ export const backupRepairStrings = {
     waiting: "Checking recovery…",
     restarting: "Recovery saved. Reconnect to the box.",
     retained: "The old attempt and its files are kept separately.",
+    handoffRestart:
+      "Opening a backup pauses ordinary setup even if the key is refused. Retry here, or restart the box to return to ordinary setup.",
     review: "Selected backup",
     fix: "Correct the highlighted fields.",
     required: "Complete this field.",
@@ -64,6 +66,8 @@ export const backupRepairStrings = {
     waiting: "Comprobando recuperación…",
     restarting: "Recuperación guardada. Reconecta con el equipo.",
     retained: "El intento anterior y sus archivos se conservan por separado.",
+    handoffRestart:
+      "Abrir una copia pausa la configuración normal aunque se rechace la clave. Reinténtalo aquí o reinicia el equipo para volver a la configuración normal.",
     review: "Copia seleccionada",
     fix: "Corrige los campos señalados.",
     required: "Completa este campo.",

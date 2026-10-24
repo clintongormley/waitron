@@ -13,6 +13,103 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupBackupWorkspace } from "@waitron/provisioning";
 
 const prefix = "/setup-api/first-setup/resolution/backup";
+it("a refused key keeps repair retryable and ordinary setup resumes after restart", async () => {
+  const f = await archiveHost();
+  await writeFile(
+    join(f.roots.stateDir, "modules.json"),
+    JSON.stringify({ modules: { "fiscal-none": false } }),
+  );
+  const migrationsRoot = join(root, "migrations");
+  await mkdir(migrationsRoot);
+  const sets = manifestSets();
+  const options = migrationOptionsFor(sets, null);
+  for (const [index, set] of sets.entries())
+    await cp(options[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+      recursive: true,
+    });
+  const [port] = await freePorts(1);
+  const origin = `https://127.0.0.1:${port}`;
+  const agent = new Agent({ connect: { rejectUnauthorized: false } });
+  const environment = {
+    WAITRON_ENV: "dev",
+    WAITRON_STATE_DIR: f.roots.stateDir,
+    WAITRON_VENUE_DIR: f.roots.venueDir,
+    WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    WAITRON_HTTP_HOST: "127.0.0.1",
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_LANDING_PORT: "0",
+  };
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+  const send = (path: string, init: RequestInit = {}) =>
+    fetch(origin + path, { ...init, dispatcher: agent } as RequestInit);
+  try {
+    server = await startServer(environment);
+    expect((await send("/setup-api/venue-defaults")).status).toBe(200);
+    let inspected = await (await send("/setup-api/first-setup/resolution")).json();
+    const upload = (secret: string) => {
+      const form = new FormData();
+      form.set(
+        "request",
+        JSON.stringify({
+          observation: {
+            inspectionId: inspected.inspectionId,
+            revision: inspected.revision,
+            ownerGeneration: inspected.ownerGeneration,
+          },
+          source: {
+            kind: "archive",
+            recoveryKey: f.restore.recoveryKey,
+            environment: "preproduction",
+          },
+          nodeRecoverySecret: secret,
+          context: { oldBoxGone: true, soleRecovery: true },
+        }),
+      );
+      form.set("artifact", new Blob([Uint8Array.from(f.restore.artifact)]), "backup.wbk");
+      return form;
+    };
+    const denied = await send(prefix + "/open", {
+      method: "POST",
+      body: upload("wrong node key"),
+    });
+    expect(denied.status).toBe(422);
+    expect(await denied.json()).toEqual({
+      error: { code: "promotion.break_glass_invalid", params: {} },
+    });
+    expect(await (await send(prefix + "/status")).json()).toEqual({
+      phase: "unstarted",
+      proofRequired: true,
+    });
+    expect(await createFirstSetupBackupWorkspace(f.roots).read()).toEqual([]);
+    const paused = await send("/setup-api/venue-defaults");
+    expect(paused.status).toBe(503);
+    expect(await paused.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    inspected = await (await send("/setup-api/first-setup/resolution")).json();
+    const retried = await send(prefix + "/open", { method: "POST", body: upload(key.secret) });
+    expect(retried.status, await retried.clone().text()).toBe(200);
+    const session = await retried.json();
+    expect(session.preview.taxpayer).toEqual({ legalName: "Waitron SL", taxId: "89890001K" });
+    expect(
+      (
+        await send(prefix + "/close", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: session.sessionId }),
+        })
+      ).status,
+    ).toBe(200);
+    expect((await send("/setup-api/venue-defaults")).status).toBe(503);
+    await server.close();
+    server = undefined;
+    server = await startServer(environment);
+    await vi.waitFor(async () => {
+      expect((await send("/setup-api/venue-defaults")).status).toBe(200);
+    });
+  } finally {
+    await server?.close();
+    await agent.close();
+  }
+});
 it.each(["configuration", "offerings"] as const)(
   "backup proof drains an admitted %s upload and fences later ordinary actions",
   async (kind) => {
