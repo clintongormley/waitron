@@ -335,11 +335,14 @@ function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
 
 type Witnesses = NonNullable<BoxHealth["clockStop"]>["agreeing"];
 
+/** Answers are ordered by the box's time when each was taken, as the server orders them; the
+ * clock's own time is what is in dispute. A tie goes to the disagreement. */
 function latestAnswers(
   agreeing: Witnesses,
   contrary: Witnesses,
 ): { agreeing: Witnesses; contrary: Witnesses } {
-  const later = <W extends { witnessAt: string }>(a: W, b: W) => a.witnessAt > b.witnessAt;
+  const later = <W extends { boxAt: string }>(a: W, b: W) =>
+    Date.parse(a.boxAt) > Date.parse(b.boxAt);
   const agreed = agreeing.authority;
   const disagreed = contrary.authority;
   const agreedWins = agreed !== null && (disagreed === null || later(agreed, disagreed));
