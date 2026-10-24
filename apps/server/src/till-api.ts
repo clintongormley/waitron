@@ -1958,23 +1958,29 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
         revision?: unknown;
         expectedEdit: BillEditExpected | null;
+        lateSend?: unknown;
       }>(c);
+      const expected = requireRevision(body.revision);
+      const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const revision = await updateHeldOrder(
-        { db: deps.db },
-        sendCfg,
-        id,
-        {
-          lines: body.lines,
-          label: body.label,
-          revision: requireRevision(body.revision),
-          operatorId: personId,
-          expectedEdit: body.expectedEdit,
-        },
-        { fiscal, saleCfg: sendCfg },
-        deps.attendance === undefined
-          ? undefined
-          : { recorder: deps.attendance, clock: deps.clock },
+      const revision = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        updateHeldOrder(
+          { db: deps.db },
+          sendCfg,
+          id,
+          {
+            lines: body.lines,
+            label: body.label,
+            revision: expected,
+            operatorId: personId,
+            expectedEdit: body.expectedEdit,
+            lateSend: late,
+          },
+          { fiscal, saleCfg: sendCfg },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        ),
       );
       return c.json({ revision });
     }),

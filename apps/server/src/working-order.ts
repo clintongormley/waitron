@@ -5118,6 +5118,8 @@ export interface UpdateHeldOrderRequest {
   revision: number;
   /** Who saves: credited with the lines the save adds, and named by a group it starts or removes. */
   operatorId?: string;
+  /** The till's confirmation of the save's fresh dishes whose period ended earlier today. */
+  lateSend?: LateSendConfirmation;
 }
 
 /** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
@@ -5522,6 +5524,7 @@ async function applyLineEdits(
   },
   operatorId: string | undefined,
   attendance?: OrderAttendance,
+  lateSend?: LateSendConfirmation,
 ): Promise<{ changed: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
   const routing = routingOnce(tx, cfg, new Date());
@@ -5815,6 +5818,8 @@ async function applyLineEdits(
     context?.zoneId,
     snapshot,
     "ignore",
+    "added",
+    lateSend,
   );
   const groups: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.lineContexts }[] = [];
   priced.lineRows.forEach((row, index) => {
@@ -6455,6 +6460,7 @@ export async function updateHeldOrder(
       { edits, removed: order.parents.filter((parent) => !claimed.has(parent.id)), fresh },
       req.operatorId,
       attendance,
+      req.lateSend,
     );
     const relabelled = (req.label ?? null) !== label;
     if (relabelled) {
