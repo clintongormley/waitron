@@ -341,6 +341,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     onRepaired: async () => {
       (deps.exit ?? DEFAULT_EXIT)(0);
     },
+    ...(admission.kind === "resolution" ? { onClose: admission.dispose } : {}),
     operatorTls:
       !isUnset(transportEnv.WAITRON_TLS_CERT_FILE) || !isUnset(transportEnv.WAITRON_TLS_KEY_FILE),
   };
@@ -406,6 +407,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       landing: landingConfigFrom(deps.baseEnv, admission.roots.stateDir, port),
       onRepaired: transport.onRepaired,
       operatorTls: transport.operatorTls,
+      onClose: admission.dispose,
     });
     return;
   }

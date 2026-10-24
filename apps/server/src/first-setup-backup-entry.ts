@@ -6,6 +6,7 @@ import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import {
   assertFirstSetupBackupBootTarget,
   createFirstSetupBackupWorkspace,
+  firstSetupAnchorFor,
   resolveFirstSetupBackupWorkspace,
   type BackupRepairTarget,
 } from "@waitron/provisioning";
@@ -31,13 +32,18 @@ export function firstSetupBackupRecoveryFor(
 ) {
   roots = { venueDir: roots.venueDir, stateDir: roots.stateDir };
   const selectedEnvironment = deploymentEnvironmentFor(environment.WAITRON_ENV) ?? "preproduction";
-  const cloudOrigin = loadCloudOrigin(environment);
+  const workspace = async () => createFirstSetupBackupWorkspace(await firstSetupAnchorFor(roots));
   return createFirstSetupBackupRecovery({
     ...roots,
     host,
     environment: selectedEnvironment,
     modules: ALL_MODULES,
-    workspace: createFirstSetupBackupWorkspace(roots),
+    workspace: {
+      inspect: async (id) => (await workspace()).inspect(id),
+      read: async () => (await workspace()).read(),
+      append: async (record) => (await workspace()).append(record),
+      select: async (record) => (await workspace()).select(record),
+    },
     sources: {
       stateDir: roots.stateDir,
       stagingDir: join(roots.stateDir, RESTORE_STAGING_DIR),
@@ -52,11 +58,12 @@ export function firstSetupBackupRecoveryFor(
         openStore: (bucket) => boundObjectStore(createS3ObjectStore(bucket)),
       },
     },
-    ...(cloudOrigin === undefined || selectedEnvironment !== "preproduction"
-      ? {}
-      : {
-          cloud: { origin: cloudOrigin, environment: selectedEnvironment },
-        }),
+    get cloud() {
+      const origin = loadCloudOrigin(environment);
+      return origin === undefined || selectedEnvironment !== "preproduction"
+        ? undefined
+        : { origin, environment: selectedEnvironment };
+    },
     log,
   });
 }
@@ -78,7 +85,15 @@ export async function resolveFirstSetupBackupEntry(roots: FirstSetupRoots) {
         present = true;
     }
   }
-  if (!present) return { kind: "absent" as const };
+  if (!present) {
+    try {
+      const anchor = await firstSetupAnchorFor(roots);
+      if (!isDeepStrictEqual(anchor, roots)) return resolveFirstSetupBackupEntry(anchor);
+    } catch {
+      // The ordinary entry path retains responsibility for invalid V1 metadata.
+    }
+    return { kind: "absent" as const };
+  }
   let selected: Awaited<ReturnType<typeof resolveFirstSetupBackupWorkspace>>;
   try {
     selected = await resolveFirstSetupBackupWorkspace(roots);
@@ -86,7 +101,7 @@ export async function resolveFirstSetupBackupEntry(roots: FirstSetupRoots) {
     return { kind: "repair" as const, roots };
   }
   if (selected.kind === "absent") return selected;
-  if (selected.kind === "repair") return { kind: "repair" as const, roots: selected.target.anchor };
+  if (selected.kind === "repair") return { kind: "repair" as const, roots: selected.target.source };
   const target: BackupRepairTarget = selected.target;
   return {
     kind: "selected" as const,

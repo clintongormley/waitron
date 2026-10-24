@@ -180,6 +180,25 @@ routes remain available. The same case now retains every bound file and reads th
 after shutdown. Keep the ordinary POST guard unchanged. Further request-race and alternate-action
 qualification remains required; this checkpoint does not complete that qualification.
 
+**Task 3 anchor and listener qualification checkpoint, 24 October:** the factory now resolves the
+actual V1 anchor for journal access while the repair host stays at its selected source. A new
+real-database journey authenticates, prepares, restores and admits the same selected target from
+the original folders, V1 replacement and V2 target, preserving the original setup bytes and the
+backup's counter. V1 entry discovery checks its original anchor for V2 progress. Invalid Cloud
+origins no longer prevent public repair status; the Cloud action validates its setting when used.
+Configured preproduction Cloud and a real loopback S3 missing-pointer response are exercised through
+the factory. The API tests cover bucket and Cloud proof, provider refusal and streamed upload limits.
+
+An optional `RecoveryServeOptions.onClose` connects resolution disposal to explicit listener
+closure. Closure waits for disposal, removes the private backup copy and invalidates its grant in
+the direct, supervised and saved-recovery listener tests. These tests do not establish supervised
+process-signal handling. The focused 12-file repair run passes 312 cases; its diagnostic coverage
+over the entry, API, recovery and publication files is 98.18% statements, 99.85% lines, 99.19%
+functions and 96.59% branches. This is a four-file diagnostic, not package-wide CI. The existing
+entry checks pass 206 cases and the protected fiscal files pass 20 unchanged cases. Normal setup
+request-drain/alternate-action races, supervised signal handling, Task 4 and whole-branch
+qualification remain open. Do not finish or land this partial feature.
+
 ## Task 4: Guided page, documentation twins and final qualification
 
 **Interfaces — produce:** `FirstSetupBackupSession` in the new browser session file owns `open(request): Promise<BackupRepairSession>`, `prepare(proposal): Promise<unknown>`, `commit(input): Promise<void>`, `dispose(): Promise<void>`. It consumes new `SetupApi.openFirstSetupBackup`, `prepareFirstSetupBackup`, `commitFirstSetupBackup`, `closeFirstSetupBackup` methods matching Task 3. Its generation/disconnect handling discards late replies; it stores no secrets/grant in local/session storage. Add client Cloud adapter methods for the repair prefix rather than sending ordinary Cloud POSTs.

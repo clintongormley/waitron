@@ -1510,5 +1510,10 @@ older proof returning after its key check. Sealed publication blocks approval re
 Ordinary setup closes its store before backup proof, drains its other setup requests and stops
 writing the retained file log. This keeps the closed database sidecars and log bound to the repair
 journal through shutdown. Its other setup actions require a restart after this handoff.
+A setup that already replaced its original workspace now keeps the recovery records in the original
+folders and restores into a separate target. An invalid Cloud origin leaves public repair status available; Cloud
+validates that setting when used. Closing a repair listener waits for private-copy disposal and
+invalidates its grant. These paths have focused tests, including real TLS listeners in all three
+entry modes; they do not establish supervised signal handling or the remaining request races.
 Complete listener/source/race qualification, the dedicated page and whole-branch review remain open. The plan is
 `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.

@@ -57,7 +57,7 @@ export async function resolveFirstSetupEntry(
   if (backup.kind === "repair")
     return {
       kind: "resolution" as const,
-      app: await resolutionApp(backup.roots, environment, requestRestart, log),
+      ...(await resolutionApp(backup.roots, environment, requestRestart, log)),
       roots: backup.roots,
     };
   if (backup.kind === "selected") {
@@ -101,7 +101,7 @@ async function resolveLegacyFirstSetupEntry(
   } catch {
     return {
       kind: "resolution" as const,
-      app: await resolutionApp(roots, environment, requestRestart, log),
+      ...(await resolutionApp(roots, environment, requestRestart, log)),
       roots,
     };
   }
@@ -113,13 +113,13 @@ async function resolveLegacyFirstSetupEntry(
     if (admission.unresolved)
       return {
         kind: "resolution" as const,
-        app: await resolutionApp(target, environment, requestRestart, log),
+        ...(await resolutionApp(target, environment, requestRestart, log)),
         roots: target,
       };
   } catch {
     return {
       kind: "resolution" as const,
-      app: await resolutionApp(target, environment, requestRestart, log),
+      ...(await resolutionApp(target, environment, requestRestart, log)),
       roots: target,
     };
   }
@@ -212,5 +212,5 @@ async function resolutionApp(
   });
   if (!isUnset(environment.WAITRON_SETUP_APP_DIR))
     mountSetupSpa(app, environment.WAITRON_SETUP_APP_DIR!, log);
-  return app;
+  return { app, dispose: () => backup.dispose() };
 }

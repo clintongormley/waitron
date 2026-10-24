@@ -1,8 +1,8 @@
-import { archiveHost, key, root, clock } from "../test/hour-recovery-host.js";
-import { randomBytes } from "node:crypto";
+import { archiveHost, key, root, clock, node, suite } from "../test/hour-recovery-host.js";
+import { createHash, randomBytes } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { readFile, writeFile } from "node:fs/promises";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
@@ -17,6 +17,10 @@ import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { AppError } from "@waitron/shared";
 import { invoiceSeries, openVenueDatabase } from "@waitron/db";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
+import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
+import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 
 const prefix = "/setup-api/first-setup/resolution/backup";
 const sockets: TLSSocket[] = [];
@@ -371,4 +375,298 @@ it("keeps Cloud unavailable without provider configuration", async () => {
   const response = await f.post("cloud/start", {});
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+});
+
+type Payload = Awaited<ReturnType<typeof fixture>>["payload"];
+it.each<[string, (payload: Payload) => unknown, boolean]>([
+  ["null", () => null, true],
+  ["array", () => [], true],
+  ["number", () => 42, true],
+  ["null-observation", (p) => ({ ...p, observation: null }), true],
+  ["zero-revision", (p) => ({ ...p, observation: { ...p.observation, revision: 0 } }), true],
+  [
+    "fractional-generation",
+    (p) => ({ ...p, observation: { ...p.observation, ownerGeneration: 1.5 } }),
+    true,
+  ],
+  [
+    "string-generation",
+    (p) => ({ ...p, observation: { ...p.observation, ownerGeneration: "1" } }),
+    true,
+  ],
+  ["string-confirmation", (p) => ({ ...p, context: { ...p.context, soleRecovery: "true" } }), true],
+  ["blank-node-key", (p) => ({ ...p, nodeRecoverySecret: " " }), true],
+  ["oversize-node-key", (p) => ({ ...p, nodeRecoverySecret: "x".repeat(4097) }), true],
+  ["non-string-key", (p) => ({ ...p, nodeRecoverySecret: [] }), true],
+  ["null-recovery-id", (p) => ({ ...p, recoveryId: null }), true],
+  ["null-environment", (p) => ({ ...p, source: { ...p.source, environment: null } }), true],
+  ["blank-archive-key", (p) => ({ ...p, source: { ...p.source, recoveryKey: " " } }), true],
+  [
+    "unknown-source",
+    (p) => ({ ...p, source: { kind: "other", pointId: "047bacd4-df70-4881-a835-c6dd75ae7ecf" } }),
+    false,
+  ],
+  [
+    "bucket-artifact",
+    (p) => ({ ...p, source: { kind: "bucket", kit: "kit", environment: "preproduction" } }),
+    true,
+  ],
+  [
+    "bucket-environment",
+    (p) => ({ ...p, source: { kind: "bucket", kit: "kit", environment: [] } }),
+    false,
+  ],
+  [
+    "bucket-blank-kit",
+    (p) => ({ ...p, source: { kind: "bucket", kit: " ", environment: "preproduction" } }),
+    false,
+  ],
+  ["cloud-point", (p) => ({ ...p, source: { kind: "cloud", pointId: "not a UUID" } }), false],
+])("rejects malformed proof %s without admitting a session", async (_kind, change, artifact) => {
+  const f = await fixture();
+  const response = await f.app.request(
+    prefix + "/open",
+    { method: "POST", body: f.upload(change(f.payload), artifact) },
+    tls(),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "setup.request_invalid" } });
+  expect(await f.workspace.read()).toEqual([]);
+});
+
+it("refuses malformed multipart bodies and stops an upload that outgrows its bound", async () => {
+  const f = await fixture();
+  for (const init of [
+    { headers: { "Content-Type": "text/plain" }, body: "secret" },
+    { headers: { "Content-Type": "multipart/form-data; boundary=x" }, body: "broken boundary" },
+    { headers: { "Content-Type": "multipart/form-data; boundary=x" } },
+  ]) {
+    const response = await f.app.request(prefix + "/open", { method: "POST", ...init }, tls());
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "setup.request_invalid" } });
+  }
+  let canceled = false;
+  let sent = 0;
+  const chunk = new Uint8Array(1024 * 1024);
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (++sent > 260) controller.close();
+      else controller.enqueue(chunk);
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  const request = new Request("https://localhost" + prefix + "/open", {
+    method: "POST",
+    headers: { "Content-Type": "multipart/form-data; boundary=x" },
+    body: stream,
+    duplex: "half",
+  } as RequestInit);
+  const response = await f.app.request(request, {}, tls());
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "setup.request_invalid", params: { field: "artifact" } },
+  });
+  expect(canceled).toBe(true);
+  expect(await f.workspace.read()).toEqual([]);
+});
+
+it("authenticates a signed bucket generation through the repair API", async () => {
+  const f = await fixture();
+  const signer = generateNodeKeyPair(),
+    store = createMemoryObjectStore({ now: () => new Date() });
+  const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
+  const kit = {
+    version: 1 as const,
+    venueId: node.locationId,
+    bucket: {
+      region: "local",
+      bucket: "copy",
+      prefix: "",
+      accessKeyId: "unused",
+      secretAccessKey: "unused",
+    },
+    recoveryKey: "bucket-password",
+    pointerSignerPublicKey: signer.publicKey,
+  };
+  await writePointer(
+    store,
+    kit.venueId,
+    signPointer(
+      {
+        venueId: kit.venueId,
+        nodeId: node.nodeId,
+        generation,
+        term: 0,
+        writtenAt: new Date().toISOString(),
+      },
+      signer.privateKey,
+    ),
+    null,
+  );
+  const entries = unpackArchive(decryptArtifact(f.restore.artifact, f.restore.recoveryKey)).filter(
+    (entry) => entry.name !== "db.dump",
+  );
+  await writeSealedStateRow(
+    suite.db,
+    node.nodeId,
+    await sealNodeState(entries, kit.recoveryKey),
+    new Date(),
+  );
+  await suite.db.archiveTo(f.database);
+  const service = createFirstSetupBackupRecovery({
+    ...f.options,
+    sources: {
+      ...f.options.sources,
+      bucket: {
+        ...f.options.sources.bucket,
+        openStore: () => store,
+        restoreGeneration: async ({ outPath }) => copyFile(f.database, outPath),
+      },
+    },
+  });
+  services.push(service);
+  const app = new Hono();
+  mountFirstSetupBackupApi(app, service, f.log);
+  const response = await app.request(
+    prefix + "/open",
+    {
+      method: "POST",
+      body: f.upload(
+        {
+          ...f.payload,
+          source: { kind: "bucket", kit: encodeRecoveryKit(kit), environment: "preproduction" },
+        },
+        false,
+      ),
+    },
+    tls(),
+  );
+  expect(response.status).toBe(200);
+  const session = await response.json();
+  expect(session.preview.taxpayer).toEqual({ legalName: "Waitron SL", taxId: "89890001K" });
+  expect(session.preview.sourceId).toBe(`stream:${node.locationId}:${generation}`);
+  expect(session.binding.sourceId).toMatch(/^stream-sha256:[a-f0-9]{64}$/);
+  expect(JSON.stringify(session)).not.toContain(kit.recoveryKey);
+  expect(await f.workspace.read()).toEqual([]);
+});
+
+it("uses checked Cloud approval and node proof through the repair adapters", async () => {
+  const f = await fixture();
+  const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
+  const manifest = JSON.parse(
+    Buffer.from(
+      unpackArchive(decryptArtifact(f.restore.artifact, f.restore.recoveryKey)).find(
+        (entry) => entry.name === "manifest.json",
+      )!.bytes,
+    ).toString(),
+  ) as { modules: Record<string, number> };
+  const point = {
+    id: pointId,
+    venueId: node.locationId,
+    capturedAt: new Date().toISOString(),
+    modules: manifest.modules,
+    digest: createHash("sha256").update(f.restore.artifact).digest("hex"),
+    size: f.restore.artifact.length,
+    objectKey: `snapshots/${pointId}`,
+    verification: "verified",
+    kind: "snapshot",
+    deleting: false,
+    deletedAt: null,
+  };
+  const expiresAt = new Date(clock.wall() + 900_000).toISOString();
+  let refused = false,
+    expireStatusOnce = false;
+  const service = createFirstSetupBackupRecovery({
+    ...f.options,
+    cloud: {
+      origin: "https://cloud.example.test",
+      environment: "preproduction",
+      fetch: async (url, init) => {
+        const action = new URL(String(url)).pathname.split("/").at(-1);
+        if (refused) return new Response(null, { status: 403 });
+        if (action === "status" && expireStatusOnce) {
+          expireStatusOnce = false;
+          return new Response(null, { status: 410 });
+        }
+        const body = JSON.parse(String(init?.body)) as { payload: string };
+        const requestId = (
+          JSON.parse(Buffer.from(body.payload, "base64url").toString()) as string[]
+        )[2];
+        if (action === "start" || action === "status")
+          return Response.json({
+            requestId,
+            state: action === "start" ? "awaiting_owner" : "approved",
+            expiresAt,
+            operationId: action === "start" ? null : requestId,
+          });
+        return Response.json({
+          point,
+          operationExpiresAt: expiresAt,
+          ...(action === "read"
+            ? {
+                location: {
+                  endpoint: "https://store.example.test",
+                  bucket: "copy",
+                  region: "local",
+                },
+                credentials: {
+                  accessKeyId: "unused",
+                  secretAccessKey: "unused",
+                  sessionToken: "unused",
+                },
+                recoveryKey: f.restore.recoveryKey,
+                expiresAt,
+              }
+            : {}),
+        });
+      },
+      download: async () => f.restore.artifact,
+    },
+  });
+  services.push(service);
+  const app = new Hono();
+  mountFirstSetupBackupApi(app, service, f.log);
+  const post = (path: string) =>
+    app.request(
+      prefix + path,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+      tls(),
+    );
+  const start = await post("/cloud/start");
+  expect(start.status).toBe(200);
+  expect(await start.json()).toMatchObject({ state: "awaiting_owner" });
+  const approval = await post("/cloud/status");
+  expect(approval.status).toBe(200);
+  expect(await approval.json()).toMatchObject({ state: "approved", point: { id: pointId } });
+  const payload = { ...f.payload, source: { kind: "cloud", pointId } };
+  const invalid = await app.request(
+    prefix + "/open",
+    { method: "POST", body: f.upload({ ...payload, nodeRecoverySecret: "wrong key" }, false) },
+    tls(),
+  );
+  expect(invalid.status).toBe(422);
+  expect(await invalid.json()).toEqual({
+    error: { code: "promotion.break_glass_invalid", params: {} },
+  });
+  const opened = await app.request(
+    prefix + "/open",
+    { method: "POST", body: f.upload(payload, false) },
+    tls(),
+  );
+  expect(opened.status).toBe(200);
+  const session = await opened.json();
+  expect(session.preview.taxpayer).toEqual({ legalName: "Waitron SL", taxId: "89890001K" });
+  await service.close(session.sessionId);
+  expireStatusOnce = true;
+  const again = await post("/cloud/start-again");
+  expect(again.status).toBe(200);
+  expect(await again.json()).toMatchObject({ state: "awaiting_owner" });
+  refused = true;
+  const denied = await post("/cloud/status");
+  expect(denied.status).toBe(500);
+  expect(await denied.json()).toEqual({ error: { code: "server.internal" } });
+  expect(await f.workspace.read()).toEqual([]);
+  expect(JSON.stringify(f.log.mock.calls)).not.toContain(f.restore.recoveryKey);
 });

@@ -86,6 +86,7 @@ export async function startServerOrFirstSetupResolution(
         : effectiveEnv.WAITRON_HTTP_HOST,
       landing: landingConfigFrom(effectiveEnv, admission.roots.stateDir, port),
       onRepaired,
+      ...(admission.kind === "resolution" ? { onClose: admission.dispose } : {}),
       operatorTls:
         !isUnset(effectiveEnv.WAITRON_TLS_CERT_FILE) || !isUnset(effectiveEnv.WAITRON_TLS_KEY_FILE),
     };

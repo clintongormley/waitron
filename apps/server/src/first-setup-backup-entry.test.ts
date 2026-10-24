@@ -1,4 +1,15 @@
-import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -12,6 +23,7 @@ import { runEntry } from "./node-entry.js";
 import { startServer } from "./boot.js";
 import { FRESH } from "./recovery-state.js";
 import { lockVenueDatabase } from "@waitron/db";
+import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -205,4 +217,70 @@ it("recognises the same selected handoff when a restarted process is already roo
   const admission = await resolveFirstSetupEntry(f.target.target, {});
   expect(admission.kind).toBe("normal");
   expect(admission.roots).toMatchObject(f.target.target);
+});
+
+it("does not admit a selected target after its completion record disappears", async () => {
+  const f = await fixture("selected");
+  const admission = await resolveFirstSetupBackupEntry(f.roots);
+  expect(admission.kind).toBe("selected");
+  if (admission.kind !== "selected") throw new Error("selected entry missing");
+  const last = (await f.workspace.read()).at(-1)!;
+  await unlink(
+    join(
+      f.roots.stateDir,
+      "first-setup-resolutions",
+      "backup-recovery",
+      f.target.recoveryId,
+      `${String(last.sequence).padStart(6, "0")}.json`,
+    ),
+  );
+  let ran = false;
+  await expect(
+    admission.run(async () => {
+      ran = true;
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  expect(ran).toBe(false);
+});
+
+it("retains malformed V2 discovery on the repair surface", async () => {
+  const f = await fixture();
+  const path = join(f.roots.stateDir, "first-setup-resolutions", "backup-recovery", "current.json");
+  await writeFile(path, "private malformed witness");
+  const entry = await resolveFirstSetupEntry(f.roots, {});
+  expect(entry.kind).toBe("resolution");
+  if (entry.kind !== "resolution") throw new Error("repair entry missing");
+  try {
+    const response = await entry.app.request("/setup-api/first-setup/resolution/backup/status");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ phase: "uncertain", proofRequired: true });
+    expect(await readFile(path, "utf8")).toBe("private malformed witness");
+  } finally {
+    await entry.dispose();
+  }
+});
+
+it("treats an unreadable V2 namespace as repair-only", async () => {
+  const f = await fixture();
+  const parent = join(f.roots.stateDir, "first-setup-resolutions");
+  await chmod(parent, 0);
+  try {
+    await expect(lstat(join(parent, "backup-recovery"))).rejects.toMatchObject({ code: "EACCES" });
+    expect(await resolveFirstSetupBackupEntry(f.roots)).toEqual({ kind: "repair", roots: f.roots });
+  } finally {
+    await chmod(parent, 0o700);
+  }
+});
+
+it("retains an empty V2 namespace as uncertain repair evidence", async () => {
+  const f = await fixture();
+  for (const root of Object.values(f.roots)) {
+    const path = join(root, "first-setup-resolutions", "backup-recovery");
+    await rm(path, { recursive: true });
+    await mkdir(path);
+  }
+  expect(await resolveFirstSetupBackupEntry(f.roots)).toEqual({ kind: "repair", roots: f.roots });
+  expect(await readFile(join(f.roots.stateDir, "first-setup.json"), "utf8")).toBe(
+    "opaque retained attempt",
+  );
 });
