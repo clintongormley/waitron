@@ -2883,14 +2883,20 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
   and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
   image; every save that sets or changes its light image, and every library reframe or source
-  replacement of that image, draws its printed dots (`printedLogo`), which nothing prints until slice 9. No live screen (the banner, the tills, the sign-in screens) shows the logo until
-  slice 8b. Slice 8a landed 2026-10-24 (#2035): the Look card's Logo field (a main image and an optional
+  replacement of that image, draws its printed dots (`printedLogo`), which nothing prints until slice 9. A cash register's bar shows no logo until slice 14. Slice 8a
+  landed 2026-10-24 (#2035): the Look card's Logo field (a main image and an optional
   one for dark screens, picked from the image library), the preview's banner strip, the saved card's
   Logo row, Use Waitron's look removing the logo, and the image library naming the use "Logo of
-  theme {name}" with a link to the Appearance page. An optional
+  theme {name}" with a link to the Appearance page. Slice 8b landed 2026-10-2x (#PR): the venue's
+  logo replaces Waitron's in the dashboard banner, a handheld's bar and the till and handheld
+  sign-in, each image following the screen's Theme setting and dark screens with one image drawing
+  it on a white plate (`--wt-color-logo-plate`); "Powered by Waitron" under both sign-in forms while
+  a logo is set; the logo's place stays empty before the first answer, and a picture that cannot be
+  loaded falls back to Waitron's mark (the banner's lockup, the bar's word, nothing on the till
+  sign-in) and is tried again every minute. An optional
   key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
   for slices 10 and 11 `textScale` 100 and `text` `{}`), with no configuration format change.
-  Next: 8b and 10, then 9, 11, 12 and 14.
+  Next: 10, then 9, 11, 12 and 14.
 
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
@@ -2904,7 +2910,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   have the poll return the setup revision without asking about a zone, or accept it and correct the
   design. The user guide's Appearance page already says what is true. The switch dialog's sentence "every signed-in
   till within 15 seconds" (A841 slice 13, the design's approved words) is untrue for this till too
-  until this is decided.
+  until this is decided. The venue logo follows the same path, so such a till keeps an old logo too,
+  and its sign-in screen shows it after the next logout (A841 slice 8b).
 
 - **The colour field's custom colour box shows no focus ring while a custom colour is chosen.** The
   rule `.custom input[type="color"].on { outline: var(--wt-selected-ring) }`
