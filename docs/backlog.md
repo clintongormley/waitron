@@ -5353,17 +5353,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   `apps/server/test-durations.json` has gone stale. Left open by A938.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
-- **The other sharded packages still use Vitest's file-count split.** Fiscal-verifactu, till, dashboard,
-  venue-service, db and provisioning do not pack their shards by measured duration as the server
-  does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
-  shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
-  the fix at the cause.
-  [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **The other sharded packages still use Vitest's file-count split.**
+  [Detail](backlog/ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
 
-- **Nothing checks, on every CI run, that each server test file ran in exactly one shard.** The
-  guard checks the packing over a walk of the tree, and A938's pull request (#1930) recorded both
-  attempts of one run: 878 `[file-progress] end` lines each, no path repeated. A standing check, for example in `test-server-merge` comparing the shards' `end`
-  lines with the file list, is open. Left open by A938. [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
+- **Nothing checks, on every CI run, that each server test file ran in exactly one shard.**
+  [Detail](backlog/ci.md#nothing-checks-on-every-ci-run-that-each-server-test-file-ran-in-exactly-one-shard)
 
 - **Other server test files still hash fixed PINs and passwords on every test.**
   [Detail](backlog/ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
