@@ -15,14 +15,12 @@ import {
   createPerson,
   deactivatePerson,
   invitePerson,
-  reactivatePerson,
   reactivatePersonForInvitation,
   resetPersonLogin,
   resetPin,
   setEmail,
   setPassword,
   setRole,
-  suspendPerson,
   updatePersonDetails,
 } from "./staff.js";
 
@@ -81,22 +79,6 @@ const changes: {
       reactivatePersonForInvitation(tx, { managementSessionId, personId }),
     field: "status",
     value: "pending",
-  },
-  {
-    name: "reactivation",
-    status: "suspended",
-    change: (tx, managementSessionId, personId) =>
-      reactivatePerson(tx, { managementSessionId, personId }),
-    field: "status",
-    value: "active",
-  },
-  {
-    name: "suspension",
-    status: "active",
-    change: (tx, managementSessionId, personId) =>
-      suspendPerson(tx, { managementSessionId, personId }),
-    field: "status",
-    value: "suspended",
   },
   {
     name: "deactivation",

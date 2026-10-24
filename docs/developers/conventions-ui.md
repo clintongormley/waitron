@@ -771,13 +771,15 @@ dashboard asks the browser to forget it (`signalUnknownCredential`, `apps/dashbo
 and says so. The answer says only whether that credential id has a row, and it is given before any
 signature check, so the id plus a challenge, which anyone can fetch without signing in
 (`POST /management-api/passkey/auth/options`), is enough to ask. A credential row has no status of
-its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`) and suspension keeps
-it, so a suspended owner's passkey stays the generic answer. An admin's login reset and a reactivation do delete the person's
-passkeys (`resetPersonLogin`, `reactivatePersonForInvitation`, `packages/identity/src/staff.ts`),
-so after either, an old passkey answers `passkey.not_registered` like one the person removed.
-Guards: the unknown, wiped-install, login-reset and suspended cases in
+its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`), so a row that
+still belongs to a suspended person answers the generic refusal. Disabling a person (the Disable
+action, `deactivatePerson`, or saving their details as inactive, `updatePersonDetails`), an admin's
+login reset and a reactivation delete the person's passkeys (`packages/identity/src/staff.ts`), so
+afterwards an old passkey answers `passkey.not_registered` like one the person removed.
+Guards: the unknown, wiped-install, login-reset, disabled and suspended-with-a-row cases in
 `packages/identity/src/passkey.test.ts` (the wiped-install case runs the same lookup as the unknown
-one, since the lookup never reads the user handle), and the unknown and suspended route cases in
+one, since the lookup never reads the user handle), the deletion cases in
+`packages/identity/src/staff-lifecycle.test.ts`, and the unknown and suspended route cases in
 `apps/server/src/management-api-passkey.test.ts`.
 Identity's password and PIN refusals carry the real cause for the server log only:
 `new AppError(code, {}, { reason })`, whose `reason` a route using `createErrorBoundary`

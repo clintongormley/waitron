@@ -29,8 +29,9 @@ import {
  * person behind the management session, never a client-supplied id. The server only ever holds the
  * credential's public key, so there is no secret to hash. A credential id with no row answers
  * `passkey.not_registered`, so the browser can be told to forget it; that says only whether that
- * credential id has a row. A non-active owner answers `passkey.verification_failed`, so this
- * public endpoint does not expose an account's state.
+ * credential id has a row. Disabling a person deletes their rows, so their passkeys answer that too.
+ * A row whose owner is not active answers `passkey.verification_failed`, so this public endpoint
+ * does not expose an account's state.
  */
 
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;

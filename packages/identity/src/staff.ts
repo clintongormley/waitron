@@ -166,6 +166,17 @@ async function revokePersonAccess(tx: Transaction, personId: string): Promise<vo
   await invalidatePersonAccountActions(tx, personId);
 }
 
+async function wipeSignInDetails(tx: Transaction, personId: string): Promise<void> {
+  await tx
+    .update(persons)
+    .set({ pinHash: null, passwordHash: null, totpSecret: null, googleSubject: null })
+    .where(eq(persons.id, personId));
+  await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, personId));
+  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, personId));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, personId));
+  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, personId));
+}
+
 /**
  * The last-admin refusal counts the active admins and then writes. The count still holds at the
  * write only because a caller inside `withTransaction` holds the venue's write lock; the same goes
@@ -254,6 +265,7 @@ export async function updatePersonDetails(
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
+  if (input.status === "suspended") await wipeSignInDetails(tx, person.id);
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
   else if (input.role !== person.role && (input.role === "admin" || person.role === "admin"))
@@ -285,8 +297,12 @@ export async function deactivatePerson(
     throw new AppError("person.last_admin", {});
   }
   requireAdminAuthority(actorRole);
-  if (person.status === "suspended") return;
+  if (person.status === "suspended") {
+    await wipeSignInDetails(tx, person.id);
+    return;
+  }
   await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, person.id));
+  await wipeSignInDetails(tx, person.id);
   await revokePersonAccess(tx, person.id);
 }
 
@@ -333,19 +349,9 @@ export async function resetPersonLogin(
   }
   await tx
     .update(persons)
-    .set({
-      pinHash: null,
-      passwordHash: null,
-      totpSecret: null,
-      googleSubject: null,
-      emailVerifiedAt: null,
-      status: "pending",
-    })
+    .set({ emailVerifiedAt: null, status: "pending" })
     .where(eq(persons.id, person.id));
-  await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, person.id));
-  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, settleId(input.personId)));
-  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, settleId(input.personId)));
-  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, person.id));
+  await wipeSignInDetails(tx, person.id);
   await revokePersonAccess(tx, person.id);
 }
 
@@ -373,22 +379,12 @@ export async function reactivatePersonForInvitation(
   try {
     await tx
       .update(persons)
-      .set({
-        status: "pending",
-        pinHash: null,
-        passwordHash: null,
-        totpSecret: null,
-        googleSubject: null,
-        emailVerifiedAt: null,
-      })
+      .set({ status: "pending", emailVerifiedAt: null })
       .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName: person.displayName });
   }
-  await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, person.id));
-  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
-  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
-  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, person.id));
+  await wipeSignInDetails(tx, person.id);
   await revokePersonAccess(tx, person.id);
 }
 
@@ -561,29 +557,6 @@ export async function setPersonLocale(
   await tx
     .update(persons)
     .set({ locale })
-    .where(eq(persons.id, settleId(input.personId)));
-}
-
-export async function suspendPerson(
-  tx: Transaction,
-  input: { managementSessionId: string; personId: string },
-): Promise<void> {
-  const { authorizedBy } = await authorizePersonLoginChange(tx, input);
-  if (authorizedBy === settleId(input.personId)) throw new AppError("person.self_deactivation", {});
-  await tx
-    .update(persons)
-    .set({ status: "suspended" })
-    .where(eq(persons.id, settleId(input.personId)));
-}
-
-export async function reactivatePerson(
-  tx: Transaction,
-  input: { managementSessionId: string; personId: string },
-): Promise<void> {
-  await authorizePersonLoginChange(tx, input);
-  await tx
-    .update(persons)
-    .set({ status: "active" })
     .where(eq(persons.id, settleId(input.personId)));
 }
 
