@@ -2252,8 +2252,6 @@ export interface OrderLinePatch {
 export interface TabLines {
   lines: TabLine[];
   revision: number;
-  /** Read by nothing in the till. */
-  editSentLines: boolean;
 }
 
 /**

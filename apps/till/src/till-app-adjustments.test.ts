@@ -236,7 +236,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getTablesState: vi.fn().mockResolvedValue([mesa4]),
     listZones: vi.fn().mockResolvedValue([zone]),
     getPartyBills: vi.fn().mockResolvedValue([bill]),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [wine], revision: 6, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [wine], revision: 6 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     logout: vi.fn().mockResolvedValue(undefined),
     openDrawer: vi.fn().mockResolvedValue(undefined),
@@ -411,11 +411,10 @@ describe("till-app: giving away a dish", () => {
   it("offers only the reasons that allow it, shows what comes off, then applies it and reads the bill again", async () => {
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
+      .mockResolvedValueOnce({ lines: [wine], revision: 6 })
       .mockResolvedValue({
         lines: [{ ...wine, unitPriceGross: "0.00", listUnitPriceGross: "30.00" }],
         revision: 7,
-        editSentLines: true,
       });
     const { el } = await mountApp({ getTabLines });
     const order = await openMesa4(el);
@@ -635,11 +634,10 @@ describe("till-app: a bill changed on another device", () => {
   it("reads the bill again after a refused apply, says what changed, and sends nothing again", async () => {
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
+      .mockResolvedValueOnce({ lines: [wine], revision: 6 })
       .mockResolvedValue({
         lines: [{ ...wine, quantity: "2.000" }],
         revision: 8,
-        editSentLines: true,
       });
     const { el } = await mountApp({
       getTabLines,
@@ -671,8 +669,8 @@ describe("till-app: a bill changed on another device", () => {
   it("says a dish is gone when the bill read again no longer has it, after a refused preview", async () => {
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
-      .mockResolvedValue({ lines: [], revision: 8, editSentLines: true });
+      .mockResolvedValueOnce({ lines: [wine], revision: 6 })
+      .mockResolvedValue({ lines: [], revision: 8 });
     const { el } = await mountApp({
       getTabLines,
       previewAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
@@ -1089,7 +1087,7 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
     let answer!: (value: AdjustmentPreview) => void;
     const steaks: TabLine = { ...wine, name: "Steak", quantity: "2.000", unitPriceGross: "25.00" };
     const { el } = await mountApp({
-      getTabLines: vi.fn().mockResolvedValue({ lines: [steaks], revision: 6, editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [steaks], revision: 6 }),
       previewAdjustment: vi.fn(
         () => new Promise<AdjustmentPreview>((resolve) => (answer = resolve)),
       ),
@@ -1154,8 +1152,8 @@ describe("till-app: cancelling a dish", () => {
   it("asks for a reason that allows a cancel, records the cancel, then reads the bill, its party and what it owes again", async () => {
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
-      .mockResolvedValue({ lines: [], revision: 7, editSentLines: true });
+      .mockResolvedValueOnce({ lines: [wine], revision: 6 })
+      .mockResolvedValue({ lines: [], revision: 7 });
     const { el } = await mountApp({ getTabLines });
     const order = await openMesa4(el);
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
@@ -1191,7 +1189,6 @@ describe("till-app: cancelling a dish", () => {
       getTabLines: vi.fn(async () => ({
         lines: server.cancelled ? [] : [wine],
         revision: server.cancelled ? 7 : 6,
-        editSentLines: true,
       })),
       getPartyBills: vi.fn(async () => [
         server.cancelled
@@ -1278,9 +1275,7 @@ describe("till-app: cancelling a dish", () => {
     };
     const mountPair = () =>
       mountApp({
-        getTabLines: vi
-          .fn()
-          .mockResolvedValue({ lines: [pair, extra], revision: 6, editSentLines: true }),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [pair, extra], revision: 6 }),
       });
 
     it("cancels one of them when One is chosen", async () => {
@@ -1302,7 +1297,7 @@ describe("till-app: cancelling a dish", () => {
     it("gives away one of them, then shows the one given away with its own extra under it", async () => {
       const getTabLines = vi
         .fn()
-        .mockResolvedValueOnce({ lines: [pair, extra], revision: 6, editSentLines: true })
+        .mockResolvedValueOnce({ lines: [pair, extra], revision: 6 })
         .mockResolvedValue({
           // As the server lists it once split: the part given away and its extra numbered last.
           lines: [
@@ -1327,7 +1322,6 @@ describe("till-app: cancelling a dish", () => {
             },
           ],
           revision: 7,
-          editSentLines: true,
         });
       const { el } = await mountApp({ getTabLines });
       const order = await openMesa4(el);
@@ -1373,7 +1367,6 @@ describe("till-app: cancelling a dish", () => {
         getTabLines: vi.fn().mockResolvedValue({
           lines: [{ ...pair, state: "preparing" }, extra],
           revision: 6,
-          editSentLines: true,
         }),
       });
       const order = await openMesa4(el);
@@ -2940,7 +2933,6 @@ describe("till-app: service cancellation consent", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...wine, quantity: "3.000" }],
         revision: 6,
-        editSentLines: true,
       }),
     });
     const { el } = await mountApp(methods);
@@ -4695,7 +4687,6 @@ it.each([
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...wine, quantity: "3.000", unitPriceGross: "10.00" }, extra],
         revision: 6,
-        editSentLines: true,
       }),
       readCurrentOrders: vi.fn().mockResolvedValue(
         current({

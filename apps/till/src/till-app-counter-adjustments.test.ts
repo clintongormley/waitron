@@ -135,7 +135,6 @@ function heldOrder(revision: number, canaPrice = "2.50", canaQuantity = "1.000")
 function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): TabLines {
   return {
     revision,
-    editSentLines: true,
     lines: [
       tabLine({
         id: "l-1",

@@ -2326,9 +2326,7 @@ describe("TillApi", () => {
         groupId: null,
       },
     ];
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ lines, revision: 3, editSentLines: false }));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ lines, revision: 3 }));
 
     const tab = await new TillApi("", fetchStub).getTabLines("ord-1");
 
@@ -2336,7 +2334,7 @@ describe("TillApi", () => {
       "/api/working-orders/ord-1/lines",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(tab).toEqual({ lines, revision: 3, editSentLines: false });
+    expect(tab).toEqual({ lines, revision: 3 });
     const r = tab.lines;
     // The served-state signal survives the round-trip decoded per line.
     expect(r[0]!.servedAt).not.toBeNull();

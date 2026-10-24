@@ -9580,8 +9580,8 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      // A raced recall of a line the kitchen has just started, and a recall after the venue switched
-      // off changes to sent items, each name what the waiter can still do.
+      // A raced recall of a line the kitchen has just started, and a recall of an item whose station
+      // does not allow changes once sent, each name what the waiter can still do.
       it.each(["ticket.already_started", "ticket.already_fired"])(
         "a recall-lines refused %s says so in its own words AND still reloads to reconcile to server truth",
         async (code) => {
@@ -23466,7 +23466,7 @@ describe("A737 Find a bill page", () => {
   it("opens the selected party bill through the table's existing controls and retains a counter draft", async () => {
     const getTabLines = vi
       .fn<TillApi["getTabLines"]>()
-      .mockResolvedValue({ lines: [], revision: 0, editSentLines: false });
+      .mockResolvedValue({ lines: [], revision: 0 });
     const { el, view, counter } = await open({
       getFindBill: vi
         .fn()

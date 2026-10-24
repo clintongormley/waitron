@@ -276,7 +276,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       paidLines: [],
     })),
     getPartyBills: vi.fn().mockResolvedValue([]),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
     submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),
@@ -1503,7 +1503,7 @@ describe("A768 the order screen shows at once", () => {
       .mock.calls.filter(([, , url]) => String(url).includes("/tabs/order"));
 
   it("the order screen shows with its loading line before the table's reads answer", async () => {
-    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const lines = deferred<{ lines: never[]; revision: number }>();
     const drafts = deferred<void>();
     const { el } = await mountApp({
       getTabLines: vi.fn(() => lines.promise),
@@ -1517,7 +1517,7 @@ describe("A768 the order screen shows at once", () => {
     await flush(el, 1);
     expect(tableOrder(el)!.loading).toBe(true);
     expect(loadingLine(el)).not.toBeNull();
-    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    lines.resolve({ lines: [], revision: 0 });
     drafts.resolve();
     await flush(el);
     expect(tableOrder(el)!.loading).toBe(false);
@@ -1525,13 +1525,13 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("a second open during the first's loading shows only the second table", async () => {
-    const mesa4Lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const mesa4Lines = deferred<{ lines: never[]; revision: number }>();
     const z2Offers = deferred<ZoneOfferCatalogue>();
     const { el } = await mountApp();
     await openMesa(el, "t7");
     await back(el);
     api.getTabLines.mockImplementation(async (tabId: string) =>
-      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0, editSentLines: true },
+      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0 },
     );
     api.listZoneOffers.mockImplementation(async (zoneId: string) =>
       zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
@@ -1543,7 +1543,7 @@ describe("A768 the order screen shows at once", () => {
     const z2 = catalogue("v1", { Beer: "7.00" });
     z2Offers.resolve({ ...z2, context: { ...z2.context, zoneId: "z2" } });
     await flush(el);
-    mesa4Lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    mesa4Lines.resolve({ lines: [], revision: 0 });
     await flush(el);
     expect(tableOrder(el)!.party?.id).toBe("v9");
     expect(tableOrder(el)!.products.find((p) => p.name === "Beer")!.unitPrice).toBe("7.00");
@@ -1551,13 +1551,13 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("a first open's reads answering while a second table's menu is read keep the second loading", async () => {
-    const mesa4Lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const mesa4Lines = deferred<{ lines: never[]; revision: number }>();
     const z2Offers = deferred<ZoneOfferCatalogue>();
     const { el } = await mountApp();
     await openMesa(el, "t7");
     await back(el);
     api.getTabLines.mockImplementation(async (tabId: string) =>
-      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0, editSentLines: true },
+      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0 },
     );
     api.listZoneOffers.mockImplementation(async (zoneId: string) =>
       zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
@@ -1568,7 +1568,7 @@ describe("A768 the order screen shows at once", () => {
     await back(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
     await flush(el);
-    mesa4Lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    mesa4Lines.resolve({ lines: [], revision: 0 });
     await flush(el, 6);
     expect(tableOrder(el)!.loading).toBe(true);
     expect(loadingLine(el)).not.toBeNull();
@@ -1584,7 +1584,7 @@ describe("A768 the order screen shows at once", () => {
   it("a refused seat of an open already left keeps the next table loading", async () => {
     const free = table("t5", "5", null);
     let refuse!: () => void;
-    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const lines = deferred<{ lines: never[]; revision: number }>();
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
       seatTable: vi.fn(
@@ -1597,7 +1597,7 @@ describe("A768 the order screen shows at once", () => {
     await openMesa(el, "t7");
     await back(el);
     api.getTabLines.mockImplementation(async (tabId: string) =>
-      tabId === "wo-4" ? lines.promise : { lines: [], revision: 0, editSentLines: true },
+      tabId === "wo-4" ? lines.promise : { lines: [], revision: 0 },
     );
     emit(floor(el)!, "open-table", { tableId: "t5", seated: false, guestCount: 2 });
     await flush(el);
@@ -1607,7 +1607,7 @@ describe("A768 the order screen shows at once", () => {
     refuse();
     await flush(el, 6);
     expect(tableOrder(el)!.loading).toBe(true);
-    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    lines.resolve({ lines: [], revision: 0 });
     await flush(el, 6);
     expect(tableOrder(el)!.party?.id).toBe("v1");
     expect(tableOrder(el)!.loading).toBe(false);
@@ -1618,20 +1618,20 @@ describe("A768 the order screen shows at once", () => {
     await openMesa(el);
     emit(shell(el), "logout");
     await flush(el);
-    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const lines = deferred<{ lines: never[]; revision: number }>();
     api.getTabLines.mockImplementation(() => lines.promise);
     await signIn(el);
     await flush(el, 6);
     expect(tableOrder(el)!.loading).toBe(true);
     expect(loadingLine(el)).not.toBeNull();
-    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    lines.resolve({ lines: [], revision: 0 });
     await flush(el, 6);
     expect(tableOrder(el)!.party?.id).toBe("v1");
     expect(tableOrder(el)!.loading).toBe(false);
   });
 
   it("an order tab left for the floor while loading is never written to history", async () => {
-    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const lines = deferred<{ lines: never[]; revision: number }>();
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTabLines: vi.fn(() => lines.promise),
@@ -1643,7 +1643,7 @@ describe("A768 the order screen shows at once", () => {
     await flush(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
-    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    lines.resolve({ lines: [], revision: 0 });
     await flush(el, 6);
     expect(floor(el)).not.toBeNull();
     expect(tableOrder(el)).toBeNull();
@@ -1782,7 +1782,7 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("signing out while a table loads does not resume it at the next sign-in", async () => {
-    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const lines = deferred<{ lines: never[]; revision: number }>();
     const { el } = await mountApp({ getTabLines: vi.fn(() => lines.promise) });
     await onFloor(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
@@ -1790,7 +1790,7 @@ describe("A768 the order screen shows at once", () => {
     expect(loadingLine(el)).not.toBeNull();
     emit(shell(el), "logout");
     await flush(el);
-    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    lines.resolve({ lines: [], revision: 0 });
     await flush(el);
     api.getTabLines.mockClear();
     await signIn(el);
@@ -1800,7 +1800,7 @@ describe("A768 the order screen shows at once", () => {
   });
 
   it("the order tab shows at once and is written to history once it has loaded", async () => {
-    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const lines = deferred<{ lines: never[]; revision: number }>();
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTabLines: vi.fn(() => lines.promise),
@@ -1813,7 +1813,7 @@ describe("A768 the order screen shows at once", () => {
     expect(tableOrder(el)!.loading).toBe(true);
     expect(orderPushes()).toEqual([]);
     expect(orderReplaces()).toEqual([]);
-    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    lines.resolve({ lines: [], revision: 0 });
     await flush(el);
     expect(tableOrder(el)!.loading).toBe(false);
     expect(orderPushes()).toHaveLength(1);

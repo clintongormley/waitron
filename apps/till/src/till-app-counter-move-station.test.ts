@@ -310,7 +310,6 @@ function placedServer() {
     order,
     lines: {
       revision: 7,
-      editSentLines: true,
       lines: [
         sentDish("dish-line-1", 1, { changesAfterSending: "never" }),
         sentDish("dish-line-2", 2, { changesAfterSending: "never" }),

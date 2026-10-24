@@ -1085,9 +1085,7 @@ function tableStubs(
         serviceMode: "table_tab",
       },
     ]),
-    getTabLines: vi
-      .fn()
-      .mockResolvedValue({ lines: [tabLemonade], revision: 0, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLemonade], revision: 0 }),
     listDrafts: drafts.listDrafts,
     saveDraft: drafts.saveDraft,
     submitDraft: drafts.submitDraft,

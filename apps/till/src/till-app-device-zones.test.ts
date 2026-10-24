@@ -588,7 +588,7 @@ describe("live device zones", () => {
     const { el, api } = await mount(selection(["bar", "room"], "room"), {
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
       getTablesState: vi.fn().mockResolvedValue([table]),
-      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
       getPartyBills: vi.fn().mockResolvedValue([]),
       listDrafts: drafts.listDrafts,
@@ -1437,7 +1437,7 @@ describe("a handheld's zones", () => {
     const { el } = await mountHandheld(selection(["garden"], "garden"), formFactor, {
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
       getTablesState: vi.fn().mockResolvedValue([table]),
-      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
       getPartyBills: vi.fn().mockResolvedValue([]),
       listDrafts: drafts.listDrafts,
@@ -1507,7 +1507,7 @@ describe("a handheld's zones", () => {
     const { el } = await mount(selection(["room"], "room"), {
       getDeviceZones: vi.fn().mockRejectedValue({ code: "server.internal" }),
       getTablesState: vi.fn().mockResolvedValue([table]),
-      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
       getPartyBills: vi.fn().mockResolvedValue([]),
       listDrafts: drafts.listDrafts,
@@ -1850,7 +1850,7 @@ describe("a handheld's zones", () => {
       const { el } = await mount(selection(["bar", "room", "garden"], "bar"), {
         listZones: vi.fn().mockResolvedValue(orderedFloorZones),
         getTablesState: vi.fn().mockResolvedValue([table]),
-        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
         listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
         getPartyBills: vi.fn().mockResolvedValue([]),
         listDrafts: drafts.listDrafts,

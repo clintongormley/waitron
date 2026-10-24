@@ -262,7 +262,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getTablesState: vi.fn().mockResolvedValue([openTable]),
     listZones: vi.fn().mockResolvedValue([floorZone]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
     getBillBalance: vi.fn(async (workingOrderId: string) => ({
       workingOrderId,
       status: "open",
@@ -972,7 +972,6 @@ it("keeps the move dialog open with a raced start refusal and rereads the lines"
   const getTabLines = vi.fn().mockResolvedValue({
     lines: [{ ...tabLine, movable: false, state: "preparing" }],
     revision: 1,
-    editSentLines: true,
   });
   const { el } = await mountApp({
     ...seatedFloor(),
@@ -1473,9 +1472,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   async function openBurgerTab(overrides: Record<string, unknown> = {}) {
     const { el } = await mountApp({
       listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
-      getTabLines: vi
-        .fn()
-        .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [burgerLine], revision: 7 }),
       ...overrides,
     });
     const screen = await toTableOrder(el);
@@ -1493,11 +1490,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   it("applies the retained line-edit command with its opening revision and shows the note at the same price", async () => {
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7 })
       .mockResolvedValueOnce({
         lines: [{ ...burgerLine, note: "no onions" }],
         revision: 8,
-        editSentLines: true,
       });
     const { el, screen } = await openBurgerTab({
       getTabLines,
@@ -1546,7 +1542,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...burgerLine, changesAfterSending: "never" }],
         revision: 7,
-        editSentLines: true,
       }),
     });
     expect(screen.revision).toBe(7);
@@ -1586,7 +1581,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...burgerLine, changesAfterSending: "never" }],
         revision: 7,
-        editSentLines: true,
       }),
     });
     await logIn(el);
@@ -1623,11 +1617,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   it("says the kitchen has started the line, and offers to cancel it", async () => {
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7 })
       .mockResolvedValueOnce({
         lines: [{ ...burgerLine, state: "preparing" }],
         revision: 7,
-        editSentLines: true,
       });
     const { el, screen } = await openBurgerTab({
       getTabLines,
@@ -1652,7 +1645,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...burgerLine, state: "preparing" }],
         revision: 7,
-        editSentLines: true,
       }),
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
     });
@@ -1685,7 +1677,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...burgerLine, state: "preparing" }],
         revision: 7,
-        editSentLines: true,
       }),
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
     });
@@ -1703,7 +1694,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...burgerLine, state: "preparing" }],
         revision: 7,
-        editSentLines: true,
       }),
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
     });
@@ -1730,7 +1720,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [{ ...burgerLine, state: "preparing" }],
         revision: 7,
-        editSentLines: true,
       }),
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
     });
@@ -1785,7 +1774,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           Promise.resolve({
             lines: [orderId === "wo-8" ? otherLine : burgerLine],
             revision: orderId === "wo-8" ? 2 : 7,
-            editSentLines: true,
           }),
         ),
         updateOrderLine: vi.fn(
@@ -1901,7 +1889,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           Promise.resolve({
             lines: [orderId === "wo-8" ? otherLine : burgerLine],
             revision: orderId === "wo-8" ? 2 : 7,
-            editSentLines: true,
           }),
         ),
         updateOrderLine: vi.fn(
@@ -1991,7 +1978,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           Promise.resolve({
             lines: [orderId === "wo-8" ? otherLine : burgerLine],
             revision: orderId === "wo-8" ? 2 : 7,
-            editSentLines: true,
           }),
         ),
         updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => (settle = { reject }))),
@@ -2039,7 +2025,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           Promise.resolve({
             lines: [orderId === "wo-8" ? otherLine : burgerLine],
             revision: orderId === "wo-8" ? 2 : 7,
-            editSentLines: true,
           }),
         ),
         updateOrderLine: vi.fn(
@@ -2301,10 +2286,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         getTabLines: vi.fn((orderId: string) =>
           Promise.resolve(
             orderId === "wo-8"
-              ? { lines: [{ ...burgerLine, name: "Tarta" }], revision: 2, editSentLines: true }
+              ? { lines: [{ ...burgerLine, name: "Tarta" }], revision: 2 }
               : isSaved
-                ? { lines: [noted], revision: 8, editSentLines: true }
-                : { lines: [burgerLine], revision: 7, editSentLines: true },
+                ? { lines: [noted], revision: 8 }
+                : { lines: [burgerLine], revision: 7 },
           ),
         ),
         updateOrderLine: vi.fn(
@@ -2489,7 +2474,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     let finishReload!: () => void;
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7 })
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -2497,11 +2482,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
               resolve({
                 lines: [{ ...burgerLine, note: "no onions", changesAfterSending: "never" }],
                 revision: 8,
-                editSentLines: true,
               });
           }),
       )
-      .mockResolvedValue({ lines: [otherLine], revision: 2, editSentLines: true });
+      .mockResolvedValue({ lines: [otherLine], revision: 2 });
     const { el, screen } = await openBurgerTab({
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
       getTabLines,
@@ -2548,14 +2532,14 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     let failReload!: () => void;
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7 })
       .mockImplementationOnce(
         () =>
           new Promise((_resolve, reject) => {
             failReload = () => reject(new TypeError("Failed to fetch"));
           }),
       )
-      .mockResolvedValue({ lines: [otherLine], revision: 2, editSentLines: true });
+      .mockResolvedValue({ lines: [otherLine], revision: 2 });
     const { el, screen } = await openBurgerTab({
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
       getTabLines,
@@ -2597,14 +2581,14 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     let finishReload!: () => void;
     const getTabLines = vi
       .fn()
-      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
+      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7 })
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
-            finishReload = () => resolve({ lines: [otherLine], revision: 7, editSentLines: true });
+            finishReload = () => resolve({ lines: [otherLine], revision: 7 });
           }),
       )
-      .mockResolvedValue({ lines: [otherLine], revision: 2, editSentLines: true });
+      .mockResolvedValue({ lines: [otherLine], revision: 2 });
     const { el, screen } = await openBurgerTab({
       getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
       getTabLines,

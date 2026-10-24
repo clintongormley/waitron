@@ -127,7 +127,6 @@ function heldOrder(revision: number, canaPrice = "2.50", canaQuantity = "1.000")
 function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): TabLines {
   return {
     revision,
-    editSentLines: true,
     lines: [
       tabLine({
         id: "l-1",
@@ -939,7 +938,7 @@ async function mountedTable(
         .fn()
         .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor }),
       getTablesState: vi.fn().mockResolvedValue([tableRow(initialParty)]),
-      getTabLines: vi.fn().mockResolvedValue({ revision: 0, lines: [], editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ revision: 0, lines: [] }),
       getPartyBills: vi.fn().mockResolvedValue([]),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
       listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
