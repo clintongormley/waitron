@@ -80,6 +80,8 @@ export const en = {
   "device_zones.read_failed": "The zones could not be read. Try again.",
   "device_zones.write_failed": "The zones could not be saved. Try again.",
   "device_zones.order_in_zone": "Park, send or cancel this order before hiding its zone.",
+  "device_zones.table_order_in_zone": "Send or remove the unsent dishes before hiding their zone.",
+  "device_zones.table_order_pending": "Send or remove this table's unsent dishes to hide its zone.",
 
   "refund_ack.title": "Payment refund acknowledgment",
   "refund_ack.reference": "Refund reference",
@@ -1835,6 +1837,10 @@ export const es: Record<StringKey, string> = {
   "device_zones.read_failed": "No se han podido consultar las zonas. Inténtalo de nuevo.",
   "device_zones.write_failed": "No se han podido guardar las zonas. Inténtalo de nuevo.",
   "device_zones.order_in_zone": "Retén, envía o cancela este pedido antes de ocultar su zona.",
+  "device_zones.table_order_in_zone":
+    "Envía o quita los platos sin enviar antes de ocultar su zona.",
+  "device_zones.table_order_pending":
+    "Envía o quita los platos sin enviar de esta mesa para ocultar su zona.",
 
   "refund_ack.title": "Justificante de devolución del pago",
   "refund_ack.reference": "Referencia de la devolución",
