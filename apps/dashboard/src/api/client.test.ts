@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "@waitron/dashboard-kit";
-import { DashboardApi, type ClockMisdatedView } from "./client.js";
+import { DashboardApi, type ClockConfirmView, type ClockMisdatedView } from "./client.js";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -3266,6 +3266,46 @@ it("reads the wrongly dated sales' lists, a record's number possibly missing", a
   expect(await api.clockMisdated()).toEqual(lists);
   const [url, init] = fetchImpl.mock.calls[0]! as [string, RequestInit];
   expect([url, init.method]).toEqual(["/api/box/clock-misdated", "GET"]);
+});
+
+it("asks the box for a clock challenge and answers it with this device's time", async () => {
+  const challenge = { challengeId: "ch-1", boxAt: "2026-10-22T18:10:00.000Z" };
+  const confirmed = {
+    confirmationId: "c-1",
+    source: "admin",
+    confirmedAt: "2026-10-22T18:10:02.000Z",
+  } satisfies ClockConfirmView;
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(challenge))
+    .mockResolvedValueOnce(jsonResponse(confirmed));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.clockChallenge()).toEqual(challenge);
+  expect(await api.clockConfirm({ challengeId: "ch-1", deviceAt: 1_761_156_601_000 })).toEqual(
+    confirmed,
+  );
+  const calls = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+    ["/api/box/clock-challenge", "POST", "{}"],
+    ["/api/box/clock-confirm", "POST", '{"challengeId":"ch-1","deviceAt":1761156601000}'],
+  ]);
+});
+
+it("rejects a refused clock confirmation with its code and reason", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(
+      jsonResponse(
+        { error: { code: "clock.confirm_refused", params: { reason: "differs" } } },
+        false,
+        409,
+      ),
+    );
+  const api = new DashboardApi("", fetchImpl);
+  await expect(api.clockConfirm({ challengeId: "ch-1", deviceAt: 1 })).rejects.toMatchObject({
+    code: "clock.confirm_refused",
+    params: { reason: "differs" },
+  });
 });
 
 it("never sends a free-space press as a passive read, even from the background client", async () => {

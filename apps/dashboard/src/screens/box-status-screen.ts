@@ -4,6 +4,8 @@ import { formatBytes, pickLocale } from "@waitron/dashboard-kit";
 import { baseStyles, visuallyHiddenStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
@@ -28,6 +30,23 @@ import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 const LEAST_TO_FREE = 500_000;
 
 const MISDATED = "clock.records_misdated";
+
+/** The server's margin for an administrator's device agreeing with the box. */
+const AGREE_WITHIN_MS = 60_000;
+
+/** The reasons a refused confirmation names that have their own sentence. */
+const CONFIRM_REFUSALS = {
+  same_machine: "box_status.clock.admin.refused.same_machine",
+  contrary_proof: "box_status.clock.stop.contrary",
+  differs: "box_status.clock.admin.differ",
+  challenge: "box_status.clock.admin.refused.challenge",
+} as const satisfies Record<string, StringKey>;
+
+interface ClockReading {
+  boxAt: number;
+  deviceAt: number;
+  agrees: boolean;
+}
 
 type MisdatedRecordView = ClockMisdatedView["lists"][number]["records"][number];
 
@@ -174,6 +193,9 @@ export class BoxStatusScreen extends LitElement {
         margin: 0 0 var(--wt-space-2);
         font-size: var(--wt-font-size-md);
       }
+      .clock-check p {
+        margin: 0 0 var(--wt-space-2);
+      }
       .misdated-entry {
         display: grid;
         gap: var(--wt-space-2);
@@ -184,6 +206,8 @@ export class BoxStatusScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
+  /** Whether the session may confirm the box's clock from its own device (`person.admin`). */
+  @property({ attribute: false }) canConfirmClock = false;
 
   @state() private health: BoxHealth | null = null;
   /** The bell's own list, as last read; null until it has been read once. */
@@ -207,6 +231,14 @@ export class BoxStatusScreen extends LitElement {
   @state() private misdatedLists: ReadonlyMap<string, MisdatedRecordView[]> | null = null;
   @state() private misdatedFailed = false;
   #watchingMisdated = false;
+  @state() private clockCheckOpen = false;
+  /** The times the open check compares; null while it is asked for, or when it was refused. */
+  @state() private clockReading: ClockReading | null = null;
+  @state() private confirmingClock = false;
+  /** The check's refusal, shown above the dialog's buttons. */
+  @state() private clockCheckError = "";
+  /** Bumped at every opening, so an answer for a closed check is dropped. */
+  #clockCheckRun = 0;
   /** Whether a health read has finished, answered or failed: any read after it is automatic. */
   #healthAnswered = false;
 
@@ -317,6 +349,137 @@ export class BoxStatusScreen extends LitElement {
     } finally {
       this.freeing = false;
     }
+  }
+
+  #offersClockCheck(health: BoxHealth): boolean {
+    return (
+      this.canConfirmClock &&
+      ((health.clockStop !== null && health.clockStop.proof !== "confirmed") ||
+        health.clockCheckWaiting !== null)
+    );
+  }
+
+  /** Asks the box for its time, with the round trip's half as the reading's uncertainty. */
+  async #readBoxTime(): Promise<{ challengeId: string; reading: ClockReading }> {
+    const sentAt = Date.now();
+    const { challengeId, boxAt } = await this.api.clockChallenge();
+    const halfMs = (Date.now() - sentAt) / 2;
+    const deviceAt = sentAt + halfMs;
+    const box = Date.parse(boxAt);
+    // A hint for which buttons to draw only: the server judges the answer again, with the same
+    // margin, and refuses `differs`.
+    const agrees = Math.abs(deviceAt - box) + halfMs <= AGREE_WITHIN_MS;
+    return { challengeId, reading: { boxAt: box, deviceAt, agrees } };
+  }
+
+  #clockRefused(error: unknown): void {
+    this.clockCheckError = clockRefusal(error);
+    this.api.liveData.refresh();
+  }
+
+  async #openClockCheck(): Promise<void> {
+    const run = ++this.#clockCheckRun;
+    this.clockReading = null;
+    this.clockCheckError = "";
+    this.clockCheckOpen = true;
+    try {
+      const { reading } = await this.#readBoxTime();
+      if (run === this.#clockCheckRun) this.clockReading = reading;
+    } catch (error) {
+      if (run === this.#clockCheckRun) this.#clockRefused(error);
+    }
+  }
+
+  async #confirmClock(): Promise<void> {
+    if (this.confirmingClock) return;
+    this.confirmingClock = true;
+    this.clockCheckError = "";
+    try {
+      // A fresh challenge, answered at once: the one the dialog opened with may have expired.
+      const { challengeId } = await this.#readBoxTime();
+      await this.api.clockConfirm({ challengeId, deviceAt: Date.now() });
+      this.clockCheckOpen = false;
+      this.api.liveData.refresh();
+    } catch (error) {
+      this.#clockRefused(error);
+    } finally {
+      this.confirmingClock = false;
+    }
+  }
+
+  #closeClockCheck(): void {
+    this.#clockCheckRun += 1;
+    this.clockCheckOpen = false;
+  }
+
+  #clockCheckButton(): TemplateResult {
+    return html`<wt-button
+      variant="secondary"
+      data-test="clock-check"
+      @click=${() => void this.#openClockCheck()}
+      >${t("box_status.clock.admin.open")}</wt-button
+    >`;
+  }
+
+  #renderClockCheckDialog(): TemplateResult | typeof nothing {
+    if (!this.canConfirmClock) return nothing;
+    const reading = this.clockReading;
+    const asking = reading?.agrees === true;
+    return html`<wt-dialog
+      class="clock-check"
+      data-test="clock-check-dialog"
+      .open=${this.clockCheckOpen}
+      .dismissible=${!this.confirmingClock}
+      heading=${t("box_status.clock.admin.open")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#closeClockCheck();
+      }}
+    >
+      ${
+        reading === null
+          ? nothing
+          : html`<p data-test="clock-check-times">
+                ${wholeTimes(
+                  fill("box_status.clock.admin.times", {
+                    box: atSeconds(reading.boxAt),
+                    device: atSeconds(reading.deviceAt),
+                  }),
+                )}
+              </p>
+              <p data-test="clock-check-verdict">
+                ${t(asking ? "box_status.clock.admin.agree" : "box_status.clock.admin.differ")}
+              </p>`
+      }
+      <wt-form-actions slot="footer" .error=${this.clockCheckError}>
+        ${
+          asking
+            ? html`<wt-button
+                  slot="cancel"
+                  variant="secondary"
+                  data-test="clock-check-cancel"
+                  ?disabled=${this.confirmingClock}
+                  @click=${() => this.#closeClockCheck()}
+                  >${t("action.cancel")}</wt-button
+                >
+                <wt-button
+                  variant="primary"
+                  data-test="clock-check-confirm"
+                  ?disabled=${this.confirmingClock}
+                  ?loading=${this.confirmingClock}
+                  @click=${() => void this.#confirmClock()}
+                  >${t("action.confirm")}</wt-button
+                >`
+            : html`<wt-button
+                slot="cancel"
+                variant="secondary"
+                data-test="clock-check-close"
+                @click=${() => this.#closeClockCheck()}
+                >${t("action.close")}</wt-button
+              >`
+        }
+      </wt-form-actions>
+    </wt-dialog>`;
   }
 
   #goTo(event: MouseEvent, screen: string): void {
@@ -499,6 +662,7 @@ export class BoxStatusScreen extends LitElement {
         ${outbox === null ? nothing : this.#retryAction(health)}
         ${this.#screensOf(row).map((screen) => this.#goToButton(screen))}
         ${disk ? this.#freeAction(health) : nothing}
+        ${row.id === "clock" && this.#offersClockCheck(health) ? this.#clockCheckButton() : nothing}
       </div>
     </li>`;
   }
@@ -652,9 +816,25 @@ export class BoxStatusScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
-      ${this.#renderError()} ${this.#renderBody()}
+      ${this.#renderError()} ${this.#renderBody()} ${this.#renderClockCheckDialog()}
     `;
   }
+}
+
+/** A time to the second, written so `wholeTimes` keeps its date and minute on one line. */
+function atSeconds(ms: number): string {
+  const at = new Date(ms);
+  return `${formatIsoMinute(at.toISOString())}:${String(at.getSeconds()).padStart(2, "0")}`;
+}
+
+function clockRefusal(error: unknown): string {
+  const code = codeOf(error);
+  const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
+  return code === "clock.confirm_refused" &&
+    typeof reason === "string" &&
+    Object.hasOwn(CONFIRM_REFUSALS, reason)
+    ? t(CONFIRM_REFUSALS[reason as keyof typeof CONFIRM_REFUSALS])
+    : codeMessage(code);
 }
 
 declare global {

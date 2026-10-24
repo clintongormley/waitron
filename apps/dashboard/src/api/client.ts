@@ -1812,6 +1812,19 @@ export interface ClockStopView {
 
 export type ClockStopDeviceView = ClockWitnessView & { label: string | null };
 
+/** LOCAL copy of `POST /api/box/clock-challenge`'s answer (`apps/server/src/box-health-api.ts`). */
+export interface ClockChallengeView {
+  challengeId: string;
+  boxAt: string;
+}
+
+/** LOCAL copy of `POST /api/box/clock-confirm`'s answer (`apps/server/src/box-health-api.ts`). */
+export interface ClockConfirmView {
+  confirmationId: string;
+  source: "admin";
+  confirmedAt: string;
+}
+
 /** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
 export interface FreedSpaceView {
   freedBytes: number;
@@ -4243,6 +4256,15 @@ export class DashboardApi {
 
   clockMisdated(): Promise<ClockMisdatedView> {
     return this.#request<ClockMisdatedView>("/api/box/clock-misdated", "GET");
+  }
+
+  clockChallenge(): Promise<ClockChallengeView> {
+    return this.#request<ClockChallengeView>("/api/box/clock-challenge", "POST", {});
+  }
+
+  /** `deviceAt` is this device's clock in milliseconds since the epoch. */
+  clockConfirm(input: { challengeId: string; deviceAt: number }): Promise<ClockConfirmView> {
+    return this.#request<ClockConfirmView>("/api/box/clock-confirm", "POST", input);
   }
 
   freeBoxSpace(): Promise<FreedSpaceView> {

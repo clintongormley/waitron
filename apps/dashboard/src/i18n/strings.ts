@@ -3279,6 +3279,14 @@ export const en = {
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.behind_chain_fix":
     "Connect the box to the internet so it can correct its clock, or call whoever installed it.",
+  "box_status.clock.admin.open": "Check with this device's time",
+  "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
+  "box_status.clock.admin.agree": "They agree. Confirm that the box's clock is right?",
+  "box_status.clock.admin.differ":
+    "Your device and the box differ by more than a minute. If your device is right, the box's clock is wrong: connect the box to the internet so it can correct it.",
+  "box_status.clock.admin.refused.same_machine":
+    "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
+  "box_status.clock.admin.refused.challenge": "The check took too long. Try again.",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -6638,6 +6646,16 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":
     "Conecta el equipo a internet para que corrija la hora, o llama a quien lo instaló.",
+  "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
+  "box_status.clock.admin.times":
+    "El reloj del equipo marca {box}. Este dispositivo marca {device}.",
+  "box_status.clock.admin.agree": "Coinciden. ¿Confirmas que la hora del equipo es correcta?",
+  "box_status.clock.admin.differ":
+    "Tu dispositivo y el equipo se diferencian en más de un minuto. Si tu dispositivo tiene la hora bien, la del equipo está mal: conecta el equipo a internet para que la corrija.",
+  "box_status.clock.admin.refused.same_machine":
+    "Esta pantalla es el propio equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.",
+  "box_status.clock.admin.refused.challenge":
+    "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",
