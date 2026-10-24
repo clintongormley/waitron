@@ -145,10 +145,6 @@ What is left. The starting decisions are in the plan,
 2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable. PR 5 (late flags on
 each station) landed on 2026-10-23 (#2023).
 
-- **PR 8 — changes after sending, three values, on each station.**
-- **The Kitchen tab goes** with PR 8, which moves its last setting, Changes after sending (venue
-  service's panel); PR 7 removed its core panel.
-
 The Courses page's "Held until fired" column comes with A773-1 Task 1, which adds it to the shared
 course list widget; nothing is left for A756 there.
 
@@ -231,6 +227,19 @@ Open points:
   2026-10-24), and the kitchen screen marks such an order «Toda la comanda» ("Whole ticket");
   say if other words read better.
 - From PR 7: Add station sets no bump mode; a new station starts at one item at a time.
+- From PR 8 (owner question): the `kitchen` key stays in `VENUE_SETTINGS_TABS` with no panel, so
+  the page's tab checks keep a second tab; say if it should go (about 25 cases then lose their
+  subject) — plan PR 8 Decision 10.
+- From PR 8, owner FYI: the field reads "Changes after sending" with "Not allowed", "While held"
+  and "While held or waiting"; picture 10's "(printer only)" was dropped because the middle value
+  suits a printer-only station too. The Spanish is «Cambios tras el envío», «No permitidos», «Solo
+  en espera», «En espera o sin empezar»; say if other words read better.
+- From PR 8, owner FYI: a dish no station makes can be recalled whatever the stations allow
+  (A773-1 open point 4's answer A said so); a "Not allowed" station also refuses changes to a held dish, which the venue
+  switch allowed through line edits.
+- From PR 8, owner FYI: at a station set to "Not allowed", removing a waiting dish through an order
+  edit goes through, as a Void with its notice (with the venue switch off it was refused); the
+  setting decides only Recall and changes (controller's ruling, 2026-10-24).
 
 ## A long word in a routing-grid row name still splits at 390 px
 
@@ -387,7 +396,9 @@ handles, Add course, and Delete in each row's menu (courses already delete throu
 
 The switch exists for a printer-only station, which cannot see a change. A dish is believed to go
 to exactly one station (routing is single-target, A9), so one station answers whether an item may
-change; check that against the code when PR 8 is picked up.
+change; check that against the code when PR 8 is picked up. **2026-10-24 (A756 PR 8):** checked — a
+dish's own work is at one station, its split-off extras can be at others, and every part must allow
+the change (plan PR 8 Decision 1).
 
 ### A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
 
@@ -415,7 +426,7 @@ change; check that against the code when PR 8 is picked up.
   **2026-10-23 (A756 PR 6):** the choice is the station's own: Print or Don't print.
 - Configuration bundles use version 4. Older exports must be exported again from a compatible
   source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
-  export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6. **2026-10-23:** A756 PR 5 moved it to version 7.
+  export to version 5. **2026-10-21:** A841 slice 2 moved it to version 6. **2026-10-23:** A756 PR 5 moved it to version 7. **2026-10-24:** A756 PR 8 moved it to version 8.
 
 - **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one
   instruction above a counter order or a table party's dishes, alongside each dish's own note.

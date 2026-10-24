@@ -1621,10 +1621,11 @@ files; `configuration-transfer.test.ts` retains the receipt-choice round-trip an
 No old settings are converted. Cost: the whole-branch run-it review found the generic refusal
 while checking this reset-only release.
 A725 (format 4), A757 slice 2 (format 5, 2026-10-19, when it dropped `table_service_statuses`),
-A841 slice 2 (format 6, 2026-10-21, when it replaced `tenant_themes` with `custom_themes`) and A756
+A841 slice 2 (format 6, 2026-10-21, when it replaced `tenant_themes` with `custom_themes`), A756
 PR 5 (format 7, 2026-10-23, when it dropped `kitchen_timing_defaults` and `kitchen_station_timing`
-and the station's own minutes joined the copy) moved the format for the same reason;
-`configuration-transfer.test.ts` now pins format 7, and older files are refused as
+and the station's own minutes joined the copy) and A756 PR 8 (format 8, 2026-10-24, when it
+dropped `service_settings`) moved the format for the same reason;
+`configuration-transfer.test.ts` now pins format 8, and older files are refused as
 `setup.configuration_outdated`.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export

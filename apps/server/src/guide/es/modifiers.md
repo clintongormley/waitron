@@ -118,8 +118,8 @@ lista eliminada, junto con su cargo, y descarta cualquier respuesta a una lista 
 
 Un plato ya enviado en una mesa conserva sus extras y respuestas de opciones registrados. Para
 cambiarlos, usa **Retirar** en la ventana del plato y edítalo en **Nuevo pedido**. Puedes retirarlo
-solo en una cuenta sin pagar, mientras se permiten cambios en platos enviados y la cocina no ha
-empezado el plato. El plato retirado conserva sus precios y descuentos registrados. Puedes mantener
+solo en una cuenta sin pagar, mientras la estación del plato permita cambios tras el envío y la
+cocina no lo haya empezado. El plato retirado conserva sus precios y descuentos registrados. Puedes mantener
 una respuesta o un extra sin cambios aunque ya no se ofrezca; un extra nuevo usa su precio actual
 en la carta. Vuelve a enviar el plato cuando sus cambios estén listos.
 
@@ -169,7 +169,7 @@ carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otr
 texto nuevo en todas las líneas que llevan la respuesta renombrada. Esas líneas conservan los
 precios a los que se vendieron. Una línea que la cocina ya tiene se retira y se le vuelve a enviar
 como una comanda nueva. La caja rechaza el cambio si la cocina ya ha empezado esa línea, o si
-**Permitir cambios en los artículos ya enviados a cocina** está desactivado. Cambia los nombres
+**Cambios tras el envío** de su estación no lo permite. Cambia los nombres
 entre servicios y no mientras haya pedidos aparcados. Una lista de extras es la excepción, porque un
 extra se empareja por su producto: renombrar una lista de extras, o el producto que contiene, no
 afecta a un pedido aparcado.

@@ -124,7 +124,10 @@ estación de preparación fija sus propios avisos de demora al crearla con **Añ
 **Avisos de demora (minutos)** al editarla en **Estaciones de preparación**. Cada estación de
 preparación fija también cómo se imprimen los platos iguales en sus comandas y si imprime por
 adelantado los grupos en espera, en **Platos iguales en una comanda de cocina** e **Imprimir por
-adelantado los grupos en espera**.
+adelantado los grupos en espera**. Cada estación de preparación fija también si un plato ya enviado
+a ella se puede retirar o cambiar, en **Cambios tras el envío**: **No permitidos**, **Solo en
+espera** o **En espera o sin empezar**. Un plato que la cocina ha empezado nunca se retira. Un plato
+que no prepara ninguna estación se puede retirar sea cual sea el ajuste de las estaciones.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 

@@ -1556,7 +1556,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).**
-  PRs 1–7 landed (#1852, #1854, #1858, #2020, #2023, #2031, #2037); PR 8 is buildable. Open points are in the detail.
+  PRs 1–7 landed (#1852, #1854, #1858, #2020, #2023, #2031, #2037); PR 8 is in review. Open points are in the detail.
   [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17).**
@@ -3764,6 +3764,11 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
+
+- **A1058. A `wt-combobox` list with no room below its field covers the field's own value.**
+  `positionPopup` (`packages/ui/src/components/wt-combobox.ts`) pulls the list up only as far as
+  the window needs, never above the field: at a 900 px-tall window the station editor's last field,
+  Changes after sending, opens its list over its own value and the Save button (A756 PR 8's look).
 
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it

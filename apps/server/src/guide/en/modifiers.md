@@ -106,7 +106,8 @@ list, and its charge with it, and drops any answer to a deleted options list.
 
 A dish already sent at a table keeps its recorded extras and options answers. To change them, use
 **Recall** in the dish's line window, then edit it in **New order**. Recall is available only on an
-unpaid bill, while changes to sent dishes are allowed and the kitchen has not started the dish.
+unpaid bill, while the dish's prep station allows changes after sending and the kitchen has not
+started the dish.
 The recalled dish keeps its recorded prices and discounts. You can leave an old answer or extra
 unchanged even when it is no longer offered; a newly selected extra uses its current offered price.
 Send the dish again when its changes are ready.
@@ -154,8 +155,8 @@ it is not free. The order remembers all three names, and Waitron cannot tell a r
 different one. So once the menu is published again, the next change made to that parked order, even
 to another line, saves the new wording onto every line carrying the renamed answer. Those lines keep
 the prices they were sold at. A line the kitchen already has is recalled and sent to it again as a
-new ticket. The till refuses the change instead if the kitchen has started such a line, or if
-**Allow changes to items already sent to the kitchen** is switched off. Do your renaming between
+new ticket. The till refuses the change instead if the kitchen has started such a line, or if its
+prep station's **Changes after sending** does not allow it. Do your renaming between
 services rather than while orders are parked.
 An extras list is the exception, because an extra is matched by its product: renaming an extras
 list, or the product on it, leaves a parked order alone.

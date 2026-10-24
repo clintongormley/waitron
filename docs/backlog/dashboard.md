@@ -201,15 +201,11 @@ printer keys.
 
 ## What C47 part 2 found and did not fix
 
-  Found during C47 part 2 and not fixed: (a) a refused save of a venue service setting that saves at once shows twice,
-  beside the control and at the top of the panel (`render`,
-  `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
-  `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both;
-  (b) `wt-switch` cannot be marked invalid, so a server refusal of an adjustment reason's
+  Found during C47 part 2 and not fixed: (a) `wt-switch` cannot be marked invalid, so a server refusal of an adjustment reason's
   note-required switch would show its message but move focus nowhere — though the server refuses
   `noteRequired` only when it is not a true/false value (`requireFlag`,
   `packages/adjustments/src/routes.ts`) and the screen always sends one from its switch, so the
-  refusal is not expected from this screen; (c) in a screenshot of a `wt-modal` editor after a
+  refusal is not expected from this screen; (b) in a screenshot of a `wt-modal` editor after a
   refusal that names no field, a blue line runs along the top of the footer, which looks like the
   modal's scrolling body showing a focus ring — not traced, and not checked against `main`; an
   observation from the implementer's session.
@@ -793,7 +789,7 @@ registered as `venue-service:week`, and the others register theirs when they exi
   native `<form>`, and showing chosen options as chips (it shows a count instead).
 - **Venue settings' Tables and Kitchen tabs (A261 step 1, #1166; owner amendment, 2026-10-04).**
   Supervisors can read Tables and Kitchen, while writes remain manager-only. (2026-10-19: the Tables
-  tab was retired by A757 slice 2; Kitchen stays.)
+  tab was retired by A757 slice 2; 2026-10-24: the Kitchen tab went with A756 PR 8.)
 
 - **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177,
   #1037).** Kept as they were, because they answer a question rather than say nothing was made: the
@@ -1386,10 +1382,6 @@ A775 kept the button and named it by its label and its chosen value instead (des
     Since A200 the product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`)
     has the same defect.
     [Detail](dashboard.md#the-image-pickers-error-message-is-not-read-to-a-screen-reader)
-  - Found during C47 part 2 and not fixed: a refused save of a venue service setting that saves at
-    once shows twice, beside the control and at the top of the panel (`render`,
-    `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
-    `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both.
   - Found during C47 part 2 and not fixed: `wt-switch` cannot be marked invalid — a server refusal
     of an adjustment reason's note-required switch would show its message but move focus nowhere.
     [Detail](dashboard.md#what-c47-part-2-found-and-did-not-fix)

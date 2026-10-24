@@ -107,7 +107,10 @@ Each prep station sets
 its own late flags when you add it with **Add station**, and under **Late flags (minutes)** when you
 edit it in **Prep stations**. Each prep station also sets how identical dishes print on its tickets
 and whether it prints held groups in advance, under **Identical dishes on a kitchen ticket** and
-**Print held groups in advance**.
+**Print held groups in advance**. Each prep station also sets whether a dish already sent to it can
+be recalled or changed, under **Changes after sending**: **Not allowed**, **While held**, or
+**While held or waiting**. A dish the kitchen has started is never recalled. A dish no station
+makes can be recalled whatever the stations allow.
 
 ## Request cooking from the till {#request-cooking}
 
