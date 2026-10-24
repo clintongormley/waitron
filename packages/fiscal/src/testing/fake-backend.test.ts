@@ -64,7 +64,12 @@ describe("the clock-stop restart", () => {
   it("is absent: the fake never stops a clock", () => {
     const fake: FiscalBackend = backend;
     expect(fake.clockStopState).toBeUndefined();
-    expect(fake.restartAfterClockStop).toBeUndefined();
+    expect("restartAfterClockStop" in fake).toBe(false);
+    expect(fake.confirmClockStop).toBeUndefined();
+    expect(fake.openClockCheck).toBeUndefined();
+    expect(fake.closeClockCheckByItself).toBeUndefined();
+    expect(fake.waitingClockCheck).toBeUndefined();
+    expect(fake.misdatedRecords).toBeUndefined();
     expect(fake.noteClockProvedWrong).toBeUndefined();
   });
 });

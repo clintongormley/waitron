@@ -55,14 +55,34 @@ function latestId(): string {
   )[0]!.id;
 }
 
-function restartRows(): number {
-  return suite.db.all<{ n: number }>(sql`select count(*) as n from clock_stop_restarts`)[0]!.n;
+const M = 60_000;
+const BOOT = { ms: 1_000_000, id: "boot-1" };
+
+function deviceAt(id: string, address: string, boxMs: number): ClockWitness {
+  return { ...device(id, boxMs), address };
 }
 
-describe("VerifactuBackend offers and performs the restart through the seat", () => {
-  it("answers a stopped clock with two agreeing devices as offered, then restarts it", async () => {
+function invoiceNumber(recordId: string): string {
+  return suite.db.all<{ n: string }>(
+    sql`select num_serie_factura as n from registros_facturacion where id = ${recordId}`,
+  )[0]!.n;
+}
+
+function count(table: string): number {
+  return suite.db.all<{ n: number }>(sql`select count(*) as n from ${sql.identifier(table)}`)[0]!.n;
+}
+
+describe("VerifactuBackend confirms the clock through the seat", () => {
+  it("has no restart method left", () => {
+    expect("restartAfterClockStop" in backend).toBe(false);
+  });
+
+  it("answers a stop with two agreeing devices as ready, then confirms it automatically", async () => {
     await sellAt(T);
-    const witnesses = [device("till-1", R - 30 * S), device("till-2", R - 20 * S)];
+    const witnesses = [
+      deviceAt("till-1", "10.0.0.1", R - 30 * S),
+      deviceAt("till-2", "10.0.0.2", R - 20 * S),
+    ];
     const state = await withTransaction(suite.db, (tx) =>
       backend.clockStopState!(tx, reading(R), witnesses),
     );
@@ -73,39 +93,113 @@ describe("VerifactuBackend offers and performs the restart through the seat", ()
       lastRecordOffsetMinutes: 60,
       recordId: latestId(),
       gapMs: 2 * H,
-      restart: null,
-      offer: "offered",
-      proof: { authority: null, devices: witnesses },
+      proof: "ready",
+      agreeing: { authority: null, devices: witnesses },
       contrary: { authority: null, devices: [] },
+      confirmation: null,
     });
 
-    expect(restartRows()).toBe(0);
-    const answer = await withTransaction(suite.db, (tx) =>
-      backend.restartAfterClockStop!(tx, {
-        reading: reading(R),
-        witnesses,
-        personId: PERSON,
-        personName: "Ana",
-        nodeId,
-        recordId: latestId(),
-      }),
+    const opened = await withTransaction(suite.db, (tx) =>
+      backend.openClockCheck!(tx, { reading: reading(R), boot: BOOT, nodeId }),
     );
-    expect(restartRows()).toBe(1);
-    expect(answer).toEqual({
-      restart: {
-        id: expect.any(String),
-        personId: PERSON,
-        restartedAt: iso(R),
-        clockAt: iso(R),
-        lastRecordAt: iso(T),
-        proofKind: "devices",
-      },
-      replayed: false,
+    expect(opened).toEqual({ id: expect.any(String) });
+    expect(count("clock_confirmations")).toBe(0);
+    const { confirmation } = await withTransaction(suite.db, (tx) =>
+      backend.confirmClockStop!(tx, { reading: reading(R), boot: BOOT, witnesses, nodeId }),
+    );
+    expect(count("clock_confirmations")).toBe(1);
+    expect(confirmation).toEqual({
+      id: expect.any(String),
+      seq: 1,
+      source: "devices",
+      personId: null,
+      confirmedAt: iso(R),
+      checkId: opened!.id,
+      recordId: latestId(),
     });
     const after = await withTransaction(suite.db, (tx) =>
       backend.clockStopState!(tx, reading(R), witnesses),
     );
-    expect(after?.offer).toBe("restarted");
+    expect(after?.proof).toBe("confirmed");
+    expect(after?.confirmation).toEqual({
+      id: confirmation!.id,
+      source: "devices",
+      personId: null,
+      confirmedAt: iso(R),
+    });
+  });
+
+  it("confirms on an administrator's device and lists the sales dated wrongly", async () => {
+    await sellAt(T);
+    const sold = latestId();
+    await withTransaction(suite.db, (tx) =>
+      backend.openClockCheck!(tx, { reading: reading(R), boot: BOOT, nodeId }),
+    );
+    const at = R + 10 * M;
+    const { confirmation } = await withTransaction(suite.db, (tx) =>
+      backend.confirmClockStop!(tx, {
+        reading: reading(at),
+        boot: { ms: BOOT.ms + 10 * M, id: BOOT.id },
+        witnesses: [],
+        nodeId,
+        admin: {
+          personId: PERSON,
+          personName: "Ana",
+          reading: { boxAt: iso(at), witnessAt: iso(at), uncertaintyMs: 0 },
+        },
+      }),
+    );
+    expect(confirmation).toMatchObject({ source: "admin", personId: PERSON, recordId: sold });
+    expect(
+      await withTransaction(suite.db, (tx) => backend.misdatedRecords!(tx, confirmation!.id)),
+    ).toEqual({
+      known: true,
+      records: [
+        {
+          recordId: sold,
+          invoiceNumber: invoiceNumber(sold),
+          generatedAt: iso(T),
+          offsetMinutes: 60,
+        },
+      ],
+    });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        backend.misdatedRecords!(tx, "00000000-0000-4000-8000-000000000000"),
+      ),
+    ).toBeNull();
+  });
+
+  it("answers a check that waits, and closes it only on a fresh witness", async () => {
+    await sellAt(T);
+    const opened = await withTransaction(suite.db, (tx) =>
+      backend.openClockCheck!(tx, { reading: reading(R), boot: BOOT, nodeId }),
+    );
+    expect(
+      await withTransaction(suite.db, (tx) => backend.waitingClockCheck!(tx, reading(T))),
+    ).toEqual({ checkId: opened!.id, openedAt: iso(R) });
+
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        backend.closeClockCheckByItself!(tx, {
+          reading: reading(T),
+          boot: BOOT,
+          witnesses: [],
+          nodeId,
+        }),
+      ),
+    ).toEqual({ confirmation: null });
+    expect(count("clock_confirmations")).toBe(0);
+
+    const witnesses = [deviceAt("till-1", "10.0.0.1", T), deviceAt("till-2", "10.0.0.2", T)];
+    const { confirmation } = await withTransaction(suite.db, (tx) =>
+      backend.closeClockCheckByItself!(tx, { reading: reading(T), boot: BOOT, witnesses, nodeId }),
+    );
+    expect(count("clock_confirmations")).toBe(1);
+    expect(confirmation).toMatchObject({ source: "devices", checkId: opened!.id, recordId: null });
+    expect(
+      await withTransaction(suite.db, (tx) => backend.waitingClockCheck!(tx, reading(T))),
+    ).toBeNull();
   });
 
   it("answers no stop while the clock is not behind", async () => {

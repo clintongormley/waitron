@@ -174,8 +174,6 @@ export interface ClockBehindLatestRecord {
   readonly lastRecordOffsetMinutes: number;
 }
 
-export type ClockRestartProofKind = "authority" | "devices" | "authority_and_devices";
-
 /** What the witnesses say about a stop: nothing either way, against the box, enough to confirm
  * it, or a confirmation already covers the reading. */
 export type ClockStopProof = "none" | "contrary" | "ready" | "confirmed";
@@ -241,24 +239,35 @@ export interface ClockConfirmation {
   recordId: string | null;
 }
 
-export interface ClockRestart {
-  id: string;
-  personId: string;
-  restartedAt: string;
-  clockAt: string;
-  lastRecordAt: string;
-  proofKind: ClockRestartProofKind;
+export interface ClockCheckOpenRequest {
+  reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  boot: BootReading;
+  nodeId: string;
 }
 
-export interface ClockRestartRequest {
+export interface ClockCheckCloseRequest {
   reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  boot: BootReading;
   witnesses: readonly ClockWitness[];
-  personId: string;
-  /** For the alert's words; the restart itself keeps only the id. */
-  personName: string;
   nodeId: string;
-  recordId: string;
 }
+
+/** A check whose stop ended by itself, waiting for a witness taken after it ended. */
+export interface WaitingClockCheck {
+  checkId: string;
+  openedAt: string;
+}
+
+export interface MisdatedRecord {
+  recordId: string;
+  /** The invoice's series and number, as recorded. */
+  invoiceNumber: string;
+  generatedAt: string;
+  offsetMinutes: number;
+}
+
+/** What a closing found: the wrongly dated records, or that the box cannot tell which they are. */
+export type MisdatedRecords = { known: true; records: MisdatedRecord[] } | { known: false };
 
 export interface ClockProvedWrong {
   trustedUntil: Date;
@@ -327,17 +336,36 @@ export interface FiscalBackend {
     witnesses: readonly ClockWitness[],
   ): Promise<ClockStopState | null>;
 
-  /** A manager's restart of payments for the stop `recordId` names. A reading the regime cannot
-   * use is refused first. Otherwise a press on a record a restart already names and still covers
-   * answers that restart, `replayed: true`; any other press throws this regime's refusal unless
-   * `clockStopState` would offer it. */
-  restartAfterClockStop?(
+  /** Confirms the clock during a stop, which lifts it: automatically when the witnesses are ready
+   * (null, and nothing written, otherwise), or on `admin`'s device, which this regime's refusal
+   * may refuse. With `admin` and no stop, closes a check that waits instead. */
+  confirmClockStop?(
     tx: Transaction,
-    input: ClockRestartRequest,
-  ): Promise<{ restart: ClockRestart; replayed: boolean }>;
+    input: ClockConfirmRequest,
+  ): Promise<{ confirmation: ClockConfirmation | null }>;
 
-  /** The clock was proved wrong after `trustedUntil`, noticed at `observedAt`; answers the restart
-   * ids it recorded, those with nothing written under them, and those another open issue holds. */
+  /** Records when a stop began: opens a check while the stop holds and none is open, and answers
+   * the open one; null, and nothing written, while there is no stop. */
+  openClockCheck?(tx: Transaction, input: ClockCheckOpenRequest): Promise<{ id: string } | null>;
+
+  /** Closes a check that waits on a witness taken after its stop ended; with none, writes nothing. */
+  closeClockCheckByItself?(
+    tx: Transaction,
+    input: ClockCheckCloseRequest,
+  ): Promise<{ confirmation: ClockConfirmation | null }>;
+
+  /** The check whose stop ended by itself and that no confirmation has closed; null when none. */
+  waitingClockCheck?(
+    tx: Transaction,
+    reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
+  ): Promise<WaitingClockCheck | null>;
+
+  /** The records the confirmation `confirmationId` found wrongly dated, from stored values only;
+   * null when no confirmation has the id. */
+  misdatedRecords?(tx: Transaction, confirmationId: string): Promise<MisdatedRecords | null>;
+
+  /** The clock was proved wrong after `trustedUntil`, noticed at `observedAt`; answers the
+   * confirmation ids it recorded, those with nothing written under them, and those another open issue holds. */
   noteClockProvedWrong?(
     tx: Transaction,
     input: ClockProvedWrong,

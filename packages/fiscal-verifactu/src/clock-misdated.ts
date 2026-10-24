@@ -1,23 +1,13 @@
 import { and, asc, eq, gt, lte, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import type { MisdatedRecords } from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
 import { CLOCK_BEHIND_MARGIN_MS, storedHeads } from "./clock-behind.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
-export interface MisdatedRecord {
-  recordId: string;
-  /** The invoice's series and number, as filed. */
-  invoiceNumber: string;
-  generatedAt: string;
-  offsetMinutes: number;
-}
-
-/** What a closing found: the wrongly dated records, or that the box cannot tell which they are. */
-export type MisdatedAnswer = { known: true; records: MisdatedRecord[] } | { known: false };
-
-const CANNOT_TELL: MisdatedAnswer = { known: false };
+const CANNOT_TELL: MisdatedRecords = { known: false };
 
 function storedClosing(proof: unknown): { start: number; unconfirmed: boolean } | null {
   const closing = (proof as { closing?: unknown } | null)?.closing as
@@ -37,7 +27,7 @@ function storedClosing(proof: unknown): { start: number; unconfirmed: boolean } 
 export async function misdatedRecords(
   tx: Transaction,
   confirmationId: string,
-): Promise<MisdatedAnswer | null> {
+): Promise<MisdatedRecords | null> {
   const [row] = await tx
     .select({ proof: clockConfirmations.proof, detail: clockChecks.detail })
     .from(clockConfirmations)

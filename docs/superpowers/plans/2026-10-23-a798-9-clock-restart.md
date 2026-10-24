@@ -536,6 +536,22 @@ check), each in the task named:
   alert's sentence no longer has a param before its times, so the sliding alert is now a
   `clock.records_misdated` one with a count string of growing length; both still assert 80 times
   checked and none broken.
+- the seat loses the restart (Task R5; lines at `8a4610019` → after):
+  `packages/fiscal-verifactu/src/backend.clock-stop.test.ts:63` "answers a stopped clock … as
+  offered, then restarts it" (`:69` the state with `restart`/`offer`/`proof: {authority, devices}`,
+  `:82`/`:93` `clock_stop_restarts` counts, `:94` the restart answer, `:108` `offer "restarted"`) →
+  `:80` "… as ready, then confirms it automatically": `:89` the state in R3's shape (`proof
+  "ready"`, `agreeing`, `contrary`, `confirmation: null`), `:106`/`:110` `clock_confirmations`
+  counts 0 → 1, `:111` the whole confirmation (`source "devices"`, the opened check, the latest
+  record), `:123-124` `proof "confirmed"` and the covering confirmation; the devices gain two
+  addresses (decision R9). New beside it: `:76` no restart method, `:132` an administrator's confirmation
+  and `misdatedRecords` (the one sale, by id, number and time; null for an unknown id), `:173` a
+  check that waits (`waitingClockCheck`, `closeClockCheckByItself` writing nothing with no witness,
+  then closing on two fresh devices). `packages/fiscal-none/src/backend.test.ts:75` and
+  `packages/fiscal/src/testing/fake-backend.test.ts:67` `expect(x.restartAfterClockStop).toBeUndefined()`
+  → `expect("restartAfterClockStop" in x).toBe(false)` (the method is gone from the type, and `in`
+  is the stronger check), each followed by the five new methods `toBeUndefined()` (none `:76-80`,
+  fake `:68-72`).
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
 and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed

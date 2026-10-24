@@ -72,7 +72,12 @@ describe("NoneBackend records nothing", () => {
   it("offers no restart after a clock stop, having no stop", () => {
     const backend = make();
     expect(backend.clockStopState).toBeUndefined();
-    expect(backend.restartAfterClockStop).toBeUndefined();
+    expect("restartAfterClockStop" in backend).toBe(false);
+    expect(backend.confirmClockStop).toBeUndefined();
+    expect(backend.openClockCheck).toBeUndefined();
+    expect(backend.closeClockCheckByItself).toBeUndefined();
+    expect(backend.waitingClockCheck).toBeUndefined();
+    expect(backend.misdatedRecords).toBeUndefined();
     expect(backend.noteClockProvedWrong).toBeUndefined();
   });
 
