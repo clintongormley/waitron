@@ -46,7 +46,6 @@ import {
   keptOpenConflicts,
 } from "./business-day-schedule.js";
 import { inForceClock, settledClock } from "./service-day-context.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 
 const suite = useVenueDb({
@@ -2354,45 +2353,18 @@ it("lists the same conflicts for many yearly special days", async () => {
 });
 
 describe("a keep-open for the night before the change", () => {
-  const keptOpen = async (endsAt: string, zone = false, businessDay = "2026-11-03") => {
-    const v = await fixture([], { zone });
+  const keptOpen = async (endsAt: string, businessDay = "2026-11-03") => {
+    const v = await fixture([], { zone: true });
     await withTransaction(suite.db, async (tx) => {
-      if (zone)
-        await tx.insert(zoneExtensions).values({
-          zoneId: v.zoneId!,
-          businessDay,
-          startsAt: "22:00:00",
-          endsAt: `${endsAt}:00`,
-        });
-      else
-        await tx.insert(periodExtensions).values({
-          departmentId: v.departmentId,
-          periodId: v.periodId,
-          businessDay,
-          startsAt: "22:00:00",
-          endsAt: `${endsAt}:00`,
-        });
+      await tx.insert(zoneExtensions).values({
+        zoneId: v.zoneId!,
+        businessDay,
+        startsAt: "22:00:00",
+        endsAt: `${endsAt}:00`,
+      });
     });
     return v;
   };
-
-  it("clashes when it runs past the new changeover", async () => {
-    const v = await keptOpen("04:30");
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, v.cfg, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([
-      {
-        departmentId: v.departmentId,
-        departmentName: "Service",
-        periodId: v.periodId,
-        periodName: "Service",
-        endsAt: "04:30",
-        rangeIndex: 0,
-        reason: "kept_open",
-      },
-    ]);
-  });
 
   it("does not clash when it ends before the new changeover", async () => {
     const v = await keptOpen("02:30");
@@ -2403,7 +2375,7 @@ describe("a keep-open for the night before the change", () => {
   });
 
   it("names the zone a zone keep-open belongs to", async () => {
-    const v = await keptOpen("04:30", true);
+    const v = await keptOpen("04:30");
     const conflicts = await withTransaction(suite.db, (tx) =>
       keptOpenConflicts(tx, v.cfg, before, candidate("03:00"), E),
     );
@@ -2437,24 +2409,20 @@ describe("a keep-open for the night before the change", () => {
   });
 
   it("ignores a keep-open for another night", async () => {
-    for (const zone of [false, true]) {
-      const v = await keptOpen("04:30", zone, "2026-11-02");
-      const conflicts = await withTransaction(suite.db, (tx) =>
-        keptOpenConflicts(tx, v.cfg, before, candidate("03:00"), E),
-      );
-      expect(conflicts).toEqual([]);
-    }
+    const v = await keptOpen("04:30", "2026-11-02");
+    const conflicts = await withTransaction(suite.db, (tx) =>
+      keptOpenConflicts(tx, v.cfg, before, candidate("03:00"), E),
+    );
+    expect(conflicts).toEqual([]);
   });
 
   it("ignores another venue's keep-open", async () => {
-    for (const zone of [false, true]) {
-      await keptOpen("04:30", zone);
-      const other = await fixture([], { zone });
-      const conflicts = await withTransaction(suite.db, (tx) =>
-        keptOpenConflicts(tx, other.cfg, before, candidate("03:00"), E),
-      );
-      expect(conflicts).toEqual([]);
-    }
+    await keptOpen("04:30");
+    const other = await fixture([], { zone: true });
+    const conflicts = await withTransaction(suite.db, (tx) =>
+      keptOpenConflicts(tx, other.cfg, before, candidate("03:00"), E),
+    );
+    expect(conflicts).toEqual([]);
   });
 
   it("refuses the change with the keep-open in the list and the count", async () => {
@@ -2466,7 +2434,9 @@ describe("a keep-open for the night before the change", () => {
       code: "venue.business_day_hours_conflict",
       params: {
         conflictCount: 1,
-        conflicts: [expect.objectContaining({ reason: "kept_open", endsAt: "04:30" })],
+        conflicts: [
+          expect.objectContaining({ zoneId: v.zoneId, reason: "kept_open", endsAt: "04:30" }),
+        ],
       },
     });
   });

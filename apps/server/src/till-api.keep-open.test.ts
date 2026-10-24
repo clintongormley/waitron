@@ -7,7 +7,6 @@ import {
   floorZones,
   locations,
   withTransaction,
-  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -28,7 +27,6 @@ import {
   replaceMenuWeek,
   saveMenuPeriod,
   setProfileServiceAccess,
-  periodExtensions,
   zoneExtensions,
   replaceZoneClosedWeek,
   VENUE_SERVICE_PERMISSIONS,
@@ -49,9 +47,6 @@ let app: Hono;
 let department: string;
 let zone: string;
 let lunch: string;
-let afternoon: string;
-let lunchItem: string;
-let afternoonItem: string;
 let manager: string;
 let staff: string;
 let managerCookie: string;
@@ -60,10 +55,6 @@ let deliCookie: string;
 const at = (time: string) => vi.setSystemTime(new Date(`2026-10-05T${time}:00+02:00`));
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const read = () => `/api/service-zones/${zone}/keep-open`;
-const write = () => `/api/service-zones/${zone}/period-extension`;
-const body = () => ({ periodId: lunch, until: "14:30" });
-const rows = () =>
-  suite.db.select().from(periodExtensions).where(eq(periodExtensions.departmentId, department));
 const call = (method: string, path: string, body?: unknown, cookie = managerCookie) =>
   send(app, cookie, method, path, body);
 
@@ -119,14 +110,11 @@ beforeEach(async () => {
       department,
       zone,
       lunch: menus[0]!.period,
-      afternoon: menus[1]!.period,
-      lunchItem: menus[0]!.item,
-      afternoonItem: menus[1]!.item,
       manager: admin!.id,
       staff: operator!.id,
     };
   });
-  ({ department, zone, lunch, afternoon, lunchItem, afternoonItem, manager, staff } = f);
+  ({ department, zone, lunch, manager, staff } = f);
   const cookie = async (
     personId: string,
     pin: string,
@@ -180,196 +168,23 @@ beforeEach(async () => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe("the till keeps a running period open today", () => {
-  it("offers the current period to staff without management permission", async () => {
-    const answer = await call("GET", read(), undefined, staffCookie);
-    expect(answer.status).toBe(200);
-    expect(answer.json).toMatchObject({
-      period: {
-        id: lunch,
-        name: "Lunch",
-        endsAt: "14:00",
-        running: true,
-        extendedUntil: null,
-        next: { name: "Afternoon", startsAt: "14:00" },
-      },
+describe("the till's keep-open read", () => {
+  it("the period extension is no longer a till route", async () => {
+    const answer = await call("PUT", `/api/service-zones/${zone}/period-extension`, {
+      periodId: lunch,
+      until: "14:30",
     });
-    const period = (answer.json as { period: { choices: string[] } }).period;
-    expect(period.choices[0]).toBe("14:15");
-    expect(period.choices.at(-1)).toBe("05:00");
+    expect(answer.status).toBe(404);
   });
-  it("keeps Lunch orderable and displaces Afternoon, including a stored quantity increase", async () => {
-    const id = randomUUID();
-    const park = (id: string, menuItemId: string) =>
-      call("POST", "/api/working-orders", {
-        id,
-        zoneId: zone,
-        lines: [{ menuItemId, quantity: "1" }],
-      });
-    expect((await park(id, lunchItem)).status).toBe(200);
-    expect((await call("PUT", write(), body())).status).toBe(204);
-    expect(await rows()).toEqual([
-      expect.objectContaining({
-        departmentId: department,
-        periodId: lunch,
-        businessDay: "2026-10-05",
-        startsAt: "14:00:00",
-        endsAt: "14:30:00",
-      }),
-    ]);
-    at("14:15");
-    expect((await park(randomUUID(), lunchItem)).status).toBe(200);
-    const refused = await park(randomUUID(), afternoonItem);
-    expect(refused.status).toBe(400);
-    expect(refused.json).toMatchObject({ code: "menu_period.not_running" });
-    expect(
-      (await call("PUT", `/api/working-orders/${id}/lines/1`, { revision: 0, quantity: "2" }))
-        .status,
-    ).toBe(200);
-    expect(
-      await suite.db
-        .select({ quantity: workingOrderLines.quantity, price: workingOrderLines.unitPriceGross })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, id)),
-    ).toEqual([{ quantity: 2000, price: 1200 }]);
-    for (const path of [`/api/menu-state?zoneId=${zone}`, `/api/service-zones/${zone}/offers`]) {
-      const answer = await call("GET", path);
-      expect(answer.status).toBe(200);
-      expect(answer.json).toMatchObject({
-        service: {
-          open: true,
-          periodName: "Lunch",
-          keepOpen: {
-            periodId: lunch,
-            periodName: "Lunch",
-            endsAt: "14:30",
-            running: true,
-            extendedUntil: "14:30",
-          },
-        },
-      });
-    }
-    at("14:30");
-    expect((await park(randomUUID(), afternoonItem)).status).toBe(200);
-    expect((await park(randomUUID(), lunchItem)).status).toBe(400);
-  });
-  it("removes an extension with an explicit null", async () => {
-    expect((await call("PUT", write(), body())).status).toBe(204);
-    expect((await call("PUT", write(), { periodId: lunch, until: null })).status).toBe(204);
-    expect(await rows()).toEqual([]);
-    at("14:15");
-    const answer = await call("GET", read());
-    expect(answer.json).toMatchObject({ period: { id: afternoon, extendedUntil: null } });
-  });
-  it("refuses staff then accepts a manager PIN without requiring take-orders", async () => {
-    const refused = await call("PUT", write(), body(), staffCookie);
-    expect(refused.status).toBe(403);
-    expect(refused.json).toMatchObject({ code: "authorization.not_permitted" });
-    expect(await rows()).toEqual([]);
-    expect(
-      (
-        await call(
-          "PUT",
-          write(),
-          { ...body(), override: { personId: manager, pin: "1234" } },
-          staffCookie,
-        )
-      ).status,
-    ).toBe(204);
-    expect(await rows()).toHaveLength(1);
-  });
-  it("refuses a correct staff PIN", async () => {
-    const answer = await call(
-      "PUT",
-      write(),
-      { ...body(), override: { personId: staff, pin: "5555" } },
-      staffCookie,
-    );
+  it("refuses the read for a zone outside the profile department", async () => {
+    const answer = await call("GET", read(), undefined, deliCookie);
     expect(answer.status).toBe(403);
-    expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
-    expect(await rows()).toEqual([]);
+    expect(answer.json).toMatchObject({ code: "service_zone.not_allowed" });
   });
-  it("uses the shared PIN attempt throttle", async () => {
-    for (let i = 0; i < 4; i++) {
-      const answer = await call(
-        "PUT",
-        write(),
-        { ...body(), override: { personId: manager, pin: "9999" } },
-        staffCookie,
-      );
-      expect(answer.status).toBe(401);
-      expect(answer.json).toMatchObject({ code: "pin.invalid" });
-    }
-    const answer = await call(
-      "PUT",
-      write(),
-      { ...body(), override: { personId: manager, pin: "1234" } },
-      staffCookie,
-    );
-    expect(answer.status).toBe(429);
-    expect(answer.json).toMatchObject({ code: "pin.throttled" });
-    expect(await rows()).toEqual([]);
-  });
-  it.each(["GET", "PUT"])(
-    "refuses %s for a zone outside the profile department",
-    async (method) => {
-      const answer = await call(
-        method,
-        method === "GET" ? read() : write(),
-        method === "GET" ? undefined : body(),
-        deliCookie,
-      );
-      expect(answer.status).toBe(403);
-      expect(answer.json).toMatchObject({ code: "service_zone.not_allowed" });
-      expect(await rows()).toEqual([]);
-    },
-  );
-  it.each(["GET", "PUT"])("requires a session for %s", async (method) => {
-    const answer = await call(
-      method,
-      method === "GET" ? read() : write(),
-      method === "GET" ? undefined : body(),
-      "",
-    );
+  it("requires a session for the read", async () => {
+    const answer = await call("GET", read(), undefined, "");
     expect(answer.status).toBe(401);
     expect(answer.json).toMatchObject({ code: "session.required" });
-  });
-  it.each([
-    [false, { until: "14:30" }, "management.request_invalid", 400],
-    [false, { periodId: "invalid", until: "14:30" }, "management.request_invalid", 400],
-    [false, { periodId: null, until: "14:30" }, "management.request_invalid", 400],
-    [true, { until: 42 }, "management.request_invalid", 400],
-    [true, { until: [] }, "management.request_invalid", 400],
-    [true, {}, "management.request_invalid", 400],
-    [true, { until: "14:10" }, "period_extension.invalid", 400],
-    [true, { until: "13:45" }, "period_extension.invalid", 400],
-  ] as const)(
-    "refuses invalid input %s %j without writing",
-    async (includePeriod, patch, code, status) => {
-      const answer = await call("PUT", write(), {
-        ...(includePeriod ? { periodId: lunch } : {}),
-        ...patch,
-      });
-      expect(answer.status).toBe(status);
-      expect(answer.json).toMatchObject({ code });
-      expect(await rows()).toEqual([]);
-    },
-  );
-  it("refuses another period", async () => {
-    const answer = await call("PUT", write(), { periodId: afternoon, until: "14:30" });
-    expect(answer.status).toBe(409);
-    expect(answer.json).toMatchObject({ code: "period_extension.not_allowed" });
-    expect(await rows()).toEqual([]);
-  });
-  it("refuses an unreadable location clock without writing", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.cfg.locationId));
-    const answer = await call("PUT", write(), body());
-    expect(answer.status).toBe(409);
-    expect(answer.json).toMatchObject({ code: "time_zone.unreadable" });
-    expect(await rows()).toEqual([]);
   });
 });
 
@@ -435,6 +250,17 @@ describe("the till keeps a zone open today", () => {
       );
     });
   });
+  it("offers the zone's choices to staff without management permission", async () => {
+    const answer = await call("GET", read(), undefined, staffCookie);
+    expect(answer.status).toBe(200);
+    expect(answer.json).not.toHaveProperty("period");
+    expect(answer.json).toMatchObject({
+      zone: { id: zone, name: "Dining", endsAt: "23:30", running: true, extendedUntil: null },
+    });
+    const choices = (answer.json as { zone: { choices: string[] } }).zone.choices;
+    expect(choices[0]).toBe("23:45");
+    expect(choices.at(-1)).toBe("03:00");
+  });
   it("seats a table during the overnight extension and refuses at its exact end", async () => {
     expect(await zoneState()).toMatchObject({ closed: false, closesAt: "23:30" });
     expect((await call("PUT", writeZone(), { until: "01:30" })).status).toBe(204);
@@ -468,33 +294,6 @@ describe("the till keeps a zone open today", () => {
     } finally {
       choices.mockRestore();
     }
-  });
-  it("keeps period admission closed after cancelling its extension while a zone extension remains", async () => {
-    await run((tx) =>
-      replaceMenuWeek(
-        tx,
-        v.cfg,
-        department,
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-          weekday,
-          slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "01:00" }],
-        })),
-        new Date(),
-        0,
-      ),
-    );
-    expect((await call("PUT", write(), { periodId: lunch, until: "02:00" })).status).toBe(204);
-    expect((await call("PUT", writeZone(), { until: "01:30" })).status).toBe(204);
-    expect((await call("PUT", write(), { periodId: lunch, until: null })).status).toBe(204);
-    nextDay("01:15");
-    expect(await zoneState()).toMatchObject({ closed: false, closesAt: "01:30" });
-    const answer = await call("POST", "/api/working-orders", {
-      id: randomUUID(),
-      zoneId: zone,
-      lines: [{ menuItemId: lunchItem, quantity: "1" }],
-    });
-    expect(answer.status).toBe(400);
-    expect(answer.json).toMatchObject({ code: "menu_period.not_running" });
   });
   it("refuses an extension beyond the department closing time without writing", async () => {
     await run((tx) =>
@@ -535,6 +334,27 @@ describe("the till keeps a zone open today", () => {
       ).status,
     ).toBe(204);
     expect(await zoneRows()).toHaveLength(1);
+  });
+  it("refuses a correct staff PIN", async () => {
+    const answer = await call(
+      "PUT",
+      writeZone(),
+      { until: "01:30", override: { personId: staff, pin: "5555" } },
+      staffCookie,
+    );
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await zoneRows()).toEqual([]);
+  });
+  it("refuses an unreadable location clock without writing", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "not/a-zone" })
+      .where(eq(locations.id, v.cfg.locationId));
+    const answer = await call("PUT", writeZone(), { until: "01:30" });
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code: "time_zone.unreadable" });
+    expect(await zoneRows()).toEqual([]);
   });
   it("removes an extension with explicit null and restores the scheduled close", async () => {
     expect((await call("PUT", writeZone(), { until: "01:30" })).status).toBe(204);

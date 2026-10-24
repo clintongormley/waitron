@@ -186,7 +186,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
          ${kind === "moved" ? "Table 8" : null}, ${kind === "rerouted" ? "Cold" : null}, ${null})`);
     }
   }
-  const laterTableDrops = ["service_settings"];
+  const laterTableDrops = ["service_settings", "period_extensions"];
   const tables = suite.db
     .all<{ name: string }>(
       sql`select name from sqlite_master where type = 'table'

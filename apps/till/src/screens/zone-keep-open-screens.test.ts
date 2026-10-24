@@ -46,7 +46,7 @@ for (const kind of ["counter", "table"] as const) {
                 zoneId: "terrace",
                 draftStore: new WorkingOrderStore(),
               });
-        const widget = el.shadowRoot!.querySelector<TillKeepOpen>('till-keep-open[subject="zone"]');
+        const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open");
         if (state === "no closing") {
           expect(widget).toBeNull();
           return;
@@ -100,11 +100,11 @@ it.each([true, false])(
       ],
       tables: [],
     } as Partial<TillFloorScreen>);
-    const widget = el.shadowRoot!.querySelector<TillKeepOpen>('till-keep-open[subject="zone"]');
+    const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open");
     expect(widget, "the selected zone has its own control").not.toBeNull();
     expect(widget!.zoneId).toBe("terrace");
     el.shadowRoot!.querySelector<HTMLElement>('[data-zone="bar"]')!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector('till-keep-open[subject="zone"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
   },
 );

@@ -199,7 +199,6 @@ describe("offerProducts", () => {
           periodName: "Always",
           endsAt: "06:00",
           running: true,
-          extendedUntil: null,
         },
       });
       expect(

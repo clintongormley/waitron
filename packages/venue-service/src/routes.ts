@@ -109,8 +109,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department_menu.in_use": 409,
   "zone_extension.invalid": 400,
   "zone_extension.not_allowed": 409,
-  "period_extension.invalid": 400,
-  "period_extension.not_allowed": 409,
   "menu_period.not_found": 404,
   "menu_period.name_taken": 409,
   "menu_timetable.invalid": 400,

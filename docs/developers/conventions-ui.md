@@ -498,7 +498,7 @@ the server checks each at the route, never trusting the till's copy:
   `venue_service.manage`; they also check the device's `prepare-orders` action and that its
   station screen shows that station now (`assertScreenShowsStation`,
   `apps/server/src/station-today-api.ts`).
-  A till's station close/open and period-extension writes require a session, plus either that
+  A till's station close/open and zone-extension writes require a session, plus either that
   permission or a manager's PIN override. The PIN checks share the till's wrong-PIN limit.
   Cases: `apps/server/src/till-api.station-today.test.ts`,
   `apps/server/src/till-api.keep-open.test.ts`.

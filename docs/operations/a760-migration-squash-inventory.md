@@ -320,7 +320,7 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 | `device_kitchen_screen_zones`            | `device_kitchen_screen_zones`                | `packages/venue-service/src/classification.ts:27` |
 | `device_kitchen_screen_removals`         | `device_kitchen_screen_removals`             | `packages/venue-service/src/classification.ts:28` |
 | `station_day_states`                     | `station_day_states`                         | `packages/venue-service/src/classification.ts:29` |
-| `period_extensions`                      | `period_extensions`                          | `packages/venue-service/src/classification.ts:30` |
+| `period_extensions` (dropped 2026-10-24, A789 slice 2) | `period_extensions`                          | `packages/venue-service/src/classification.ts` (its `classify("period_extensions", …)` entry removed by A789 slice 2) |
 | `routing_cells`                          | `routing_cells`                              | `packages/venue-service/src/classification.ts:31` |
 | `routing_cell_periods`                   | `routing_cell_periods`                       | `packages/venue-service/src/classification.ts:32` |
 | `order_service_contexts`                 | `order_service_contexts`                     | `packages/venue-service/src/classification.ts:33` |
@@ -386,6 +386,8 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 **2026-10-24 (A756 PR 7):** core 0188 adds `kitchen_stations.bump_mode`. `locations.bump_mode` is read and written by nothing and is left in place, because dropping it rebuilds `locations`; a squash leaves it out.
 
 **2026-10-24 (A756 PR 8):** core 0189 adds `kitchen_stations.changes_after_sending`; venue-service 0069 drops `service_settings`. A squash writes the end state.
+
+**2026-10-24 (A789 slice 2):** venue-service 0070 drops `period_extensions`. A squash leaves it out.
 
 ## Removed and superseded material
 

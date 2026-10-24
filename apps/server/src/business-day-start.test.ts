@@ -1211,20 +1211,36 @@ describe("a Save takes the next changeover", () => {
 
 describe("a keep-open for tonight past the new changeover", () => {
   it("lists it in the preview and refuses the Save", async () => {
-    const { department, period } = await authorRange("13:00", "16:00");
-    await inTx((tx) =>
-      tx.execute(
-        sql`insert into period_extensions (id, department_id, business_day, period_id, starts_at, ends_at)
-            values (${randomUUID()}, ${department.id}, '2026-10-20', ${period.id}, '22:00:00', '04:30:00')`,
-      ),
-    );
+    const { department } = await authorRange("13:00", "16:00");
+    const zoneId = randomUUID();
+    await inTx(async (tx) => {
+      await tx.execute(
+        sql`insert into floor_zones (id, location_id, name, created_at)
+            values (${zoneId}, ${venue.cfg.locationId}, 'Terrace', ${at.toISOString()})`,
+      );
+      await tx.execute(
+        sql`insert into zone_service_policies (zone_id, location_id, department_id)
+            values (${zoneId}, ${venue.cfg.locationId}, ${department.id})`,
+      );
+      await tx.execute(
+        sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
+            values (${randomUUID()}, ${zoneId}, '2026-10-20', '22:00:00', '04:30:00')`,
+      );
+    });
     at = new Date("2026-10-20T20:00:00Z");
     const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "0" });
     const preview = await request("GET", `/business-day-start/preview?${query}`);
     expect(preview.status).toBe(200);
     expect(await preview.json()).toMatchObject({
       conflictCount: 1,
-      conflicts: [expect.objectContaining({ reason: "kept_open", endsAt: "04:30" })],
+      conflicts: [
+        expect.objectContaining({
+          zoneId,
+          zoneName: "Terrace",
+          reason: "kept_open",
+          endsAt: "04:30",
+        }),
+      ],
     });
     const saved = await clockRows();
     const response = await request(
@@ -1238,7 +1254,14 @@ describe("a keep-open for tonight past the new changeover", () => {
         code: "venue.business_day_hours_conflict",
         params: {
           conflictCount: 1,
-          conflicts: [expect.objectContaining({ reason: "kept_open", endsAt: "04:30" })],
+          conflicts: [
+            expect.objectContaining({
+              zoneId,
+              zoneName: "Terrace",
+              reason: "kept_open",
+              endsAt: "04:30",
+            }),
+          ],
         },
       },
     });

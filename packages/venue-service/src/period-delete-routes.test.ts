@@ -27,7 +27,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { readLocationClock } from "@waitron/reporting";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -37,7 +36,6 @@ import { createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { menuPeriods } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import {
   departmentDayRanges,
@@ -46,7 +44,6 @@ import {
   specialDayDates,
 } from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
-import { serviceMomentAt } from "./service-day.js";
 import { saveSpecialDay } from "./special-days.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
@@ -155,14 +152,6 @@ async function routed() {
       departmentId: restaurant,
       stationId: station!.id,
     });
-    const today = serviceMomentAt(new Date(), await readLocationClock(tx, locationId))!.businessDay;
-    await tx.insert(periodExtensions).values({
-      departmentId: restaurant,
-      businessDay: today,
-      periodId: lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -178,7 +167,6 @@ async function routed() {
       afternoon,
       deliLunch,
       aniversario,
-      today,
       seasons: { summer: season("Summer"), autumn: season("Autumn") },
       manager: await person("manager"),
       supervisor: await person("supervisor"),
@@ -239,16 +227,6 @@ async function stored(r: Routed) {
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
     .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId))
     .where(eq(routingCells.locationId, r.locationId));
-  const extensions = await db
-    .select({
-      businessDay: periodExtensions.businessDay,
-      period: menuPeriods.name,
-      startsAt: periodExtensions.startsAt,
-      endsAt: periodExtensions.endsAt,
-    })
-    .from(periodExtensions)
-    .innerJoin(menuPeriods, eq(menuPeriods.id, periodExtensions.periodId))
-    .where(eq(periodExtensions.departmentId, r.restaurant));
   const periods = await db
     .select({ name: menuPeriods.name })
     .from(menuPeriods)
@@ -263,9 +241,6 @@ async function stored(r: Routed) {
       (row) => `${row.date} ${row.period ?? "Closed"} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
     ),
     routing: routing.map((row) => row.period).sort(),
-    extensions: extensions.map(
-      (row) => `${row.businessDay} ${row.period} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
-    ),
     periods: periods.map((row) => row.name),
   };
 }
@@ -340,7 +315,6 @@ describe("the period-delete routes", () => {
       seasons: 2,
       specialDays: 1,
       routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: null }],
-      keptOpenToday: true,
       replacements: [
         { id: r.afternoon, name: "Afternoon" },
         { id: r.dinner, name: "Dinner" },
@@ -405,7 +379,7 @@ describe("the period-delete routes", () => {
     });
   });
 
-  it("POST delete with a replacement paints and keeps open the replacement instead, deletes the period's routing lines, and answers 204", async () => {
+  it("POST delete with a replacement paints the replacement instead, deletes the period's routing lines, and answers 204", async () => {
     const r = await routed();
 
     const response = await r.send("POST", `/${r.lunch}/delete`, r.manager, {
@@ -423,12 +397,11 @@ describe("the period-delete routes", () => {
       ],
       specialDays: [`${PAST} Afternoon 13:00-15:00`, `${FUTURE} Afternoon 13:00-18:00`],
       routing: [],
-      extensions: [`${r.today} Afternoon 16:00-17:00`],
       periods: ["Afternoon", "Dinner"],
     });
   });
 
-  it("POST delete with an explicit null replacement removes the period's paint, routing and extension", async () => {
+  it("POST delete with an explicit null replacement removes the period's paint and routing", async () => {
     const r = await routed();
 
     const response = await r.send("POST", `/${r.lunch}/delete`, r.manager, {
@@ -441,7 +414,6 @@ describe("the period-delete routes", () => {
       seasons: ["Summer 3 Dinner 20:00-23:00", "Autumn 3 Dinner 20:00-23:00"],
       specialDays: [`${FUTURE} Afternoon 15:00-18:00`],
       routing: [],
-      extensions: [],
       periods: ["Afternoon", "Dinner"],
     });
   });

@@ -7,13 +7,11 @@ import {
   assertWaitingChangeFits,
   readBusinessDayScheduleRevision,
 } from "./business-day-schedule.js";
-import { resolveDepartmentDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
 import { readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
-import { storedTime, wireTime, type VenueScope } from "./operations.js";
+import type { VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -36,7 +34,6 @@ export interface PeriodDeleteImpact {
   seasons: number;
   specialDays: number;
   routingUses: PeriodRoutingUse[];
-  keptOpenToday: boolean;
   /** The department's other periods. */
   replacements: { id: string; name: string }[];
   /** The revision this impact was read under, for the delete to send back. */
@@ -148,10 +145,8 @@ export async function readPaintedIn(
   return paintedIn(tx, cfg, await businessDayAt(tx, cfg, at), periodId);
 }
 
-/**
- * What the delete dialog shows for `periodId`: seasons and special days counted as Painted in
- * lists them, and today's extension only.
- */
+/** What the delete dialog shows for `periodId`: seasons and special days counted as Painted in
+ *  lists them. */
 export async function periodDeleteImpact(
   tx: Transaction,
   cfg: VenueScope,
@@ -162,15 +157,6 @@ export async function periodDeleteImpact(
   const today = await businessDayAt(tx, cfg, at);
   const painted = (await paintedIn(tx, cfg, today, periodId)).get(periodId)!;
   const routingUses = (await readRoutingUses(tx, cfg, periodId)).get(periodId) ?? [];
-  const kept =
-    today === null
-      ? []
-      : await tx
-          .select({ id: periodExtensions.id })
-          .from(periodExtensions)
-          .where(
-            and(eq(periodExtensions.periodId, periodId), eq(periodExtensions.businessDay, today)),
-          );
   const replacements = await tx
     .select({ id: menuPeriods.id, name: menuPeriods.name })
     .from(menuPeriods)
@@ -180,7 +166,6 @@ export async function periodDeleteImpact(
     seasons: painted.seasons.length,
     specialDays: painted.specialDays.length,
     routingUses,
-    keptOpenToday: kept.length > 0,
     replacements,
     clockRevision: await readBusinessDayScheduleRevision(tx, cfg),
   };
@@ -244,65 +229,9 @@ export async function deletePeriod(
       .set({ periodId: replacementId })
       .where(eq(departmentDayRanges.periodId, periodId));
     await joinTouchingRanges(tx, dayIds, clock, at);
-    await fitExtensionsToReplacement(tx, cfg, period.departmentId, periodId, replacementId, clock);
-    await tx
-      .update(periodExtensions)
-      .set({ periodId: replacementId })
-      .where(eq(periodExtensions.periodId, periodId));
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
   await assertWaitingChangeFits(tx, cfg, at, clock);
-}
-
-async function fitExtensionsToReplacement(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-  periodId: string,
-  replacementId: string,
-  clock: BusinessDayClock,
-): Promise<void> {
-  const extensions = await tx
-    .select({
-      id: periodExtensions.id,
-      businessDay: periodExtensions.businessDay,
-      startsAt: periodExtensions.startsAt,
-      endsAt: periodExtensions.endsAt,
-    })
-    .from(periodExtensions)
-    .where(eq(periodExtensions.periodId, periodId));
-  if (extensions.length === 0) return;
-  const days = await resolveDepartmentDays(
-    tx,
-    cfg,
-    departmentId,
-    [...new Set(extensions.map((row) => row.businessDay))],
-    clock,
-  );
-  for (const row of extensions) {
-    const cutover = cutoverForBusinessDay(clock, row.businessDay);
-    const extension = rangeSpan(
-      { startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) },
-      cutover,
-    );
-    const covering = days
-      .get(row.businessDay)!
-      .ranges.map((range) => ({ range, span: rangeSpan(range, cutover) }))
-      .find(
-        ({ range, span }) =>
-          range.periodId === replacementId &&
-          span.start <= extension.start &&
-          extension.start < span.end,
-      );
-    if (covering === undefined) continue;
-    if (covering.span.end >= extension.end)
-      await tx.delete(periodExtensions).where(eq(periodExtensions.id, row.id));
-    else
-      await tx
-        .update(periodExtensions)
-        .set({ startsAt: storedTime(covering.range.endsAt) })
-        .where(eq(periodExtensions.id, row.id));
-  }
 }
 
 /** Joins touching ranges of one period within each of `dayIds`' days, ordered from a dated day's

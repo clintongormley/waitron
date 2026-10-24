@@ -5,19 +5,17 @@ import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
 import "./keep-open-dialog.js";
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-describe.each(["period", "zone"] as const)("%s draft", (subject) => {
+describe("zone draft", () => {
   async function mount() {
     const { el } = await mountWidget<TillKeepOpenDialog>("till-keep-open-dialog", {
-      subject,
-      period: {
-        id: "lunch",
-        name: subject === "zone" ? "Terrace" : "Lunch",
+      zone: {
+        id: "terrace",
+        name: "Terrace",
         endsAt: "14:00",
         running: true,
         extendedUntil: null,
         dayEndsAt: "05:00",
         choices: ["14:15", "14:30", "05:00"],
-        next: null,
       },
     });
     expect(el.shadowRoot).not.toBeNull();
@@ -53,7 +51,7 @@ describe.each(["period", "zone"] as const)("%s draft", (subject) => {
     el.busy = true;
     expect(await state(el)).toEqual(["primary", true, true]);
     el.busy = false;
-    el.refusal = "period_extension.invalid";
+    el.refusal = "zone_extension.invalid";
     expect(await state(el)).toEqual(["primary", false, false]);
   });
   it("commit restores the quiet baseline and an unchanged host press cannot resubmit", async () => {

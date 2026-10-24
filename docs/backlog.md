@@ -1204,6 +1204,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   file could store 0, a negative number or 999; only the department save refuses them. Left open
   by A756 PR 4's review (#2020).
 
+- **A1083. The department delete preview says "Removes 1 floor plan sets."** Each
+  `venue.delete_item_*` line with `{count}` in `packages/venue-service/src/dashboard/strings.ts`
+  has one plural wording in English and Spanish, filled by `serviceDeleteCopy`
+  (`service-delete-copy.ts`), so a count of 1 reads wrongly — seen, 2026-10-24 (A789 slice 2's
+  look), for `delete_item_floor_plan_sets`, `delete_item_staff_menus` and
+  `delete_item_department_policy`. Fix: a singular wording for a count of 1.
+
 - **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
   A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
   column draws blank cells. Owner to decide whether it goes
@@ -1377,7 +1384,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A789 — last orders without an offset: a period is when its menu can be ordered**
   APPROVED 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by default);
-  building — slice 1 (the end offset retired) landed in #1948; slices 2–4 next.
+  building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
+  retired) in review; slices 3–4 next.
   [Detail](backlog/service-periods.md#a789--last-orders-without-an-offset-a-period-is-when-its-menu-can-be-ordered)
 
 - **The start-time part of the business-day check's `transition_strip` reason never decides it**
@@ -1516,9 +1524,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   The slice 4 review read the planning and zone-week paths but did not compare the real sale
   resolver. Add a real-database comparison before claiming they agree on that case.
 
-- **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
+- **Who authorised today's station or zone change** — A366 slice 3 decision 14 leaves
   the authorising person's identity unstored. Decide whether to retain that identity before
-  adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-period-change)
+  adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-zone-change)
 
 - **Departments, service styles and opening hours (A254, owner 2026-10-03) — residuals.**
   Tabs without tables, the remaining department-name survey, and advisor questions stay open.
@@ -1800,6 +1808,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   2026-10-24 (A797 slice 4's look): the demo's Upstairs bar, a counter zone with no tables, draws
   nothing on a handheld's Floor whether it is tapped or opened first. Since that slice a handheld
   can open there. Fix: say the zone has no tables.
+
+- **A1082. At 390 px the counter till's top bar is cut off.** Seen, 2026-10-24 (A789 slice 2's
+  look, `11-counter-sale-390-light.png` in `~/waitron-campaign-c/a789-2-shots/`): the first tab,
+  Counter with its zone, reads "Counter: Do", and the buttons after it (Floor, Parked, Waiting)
+  are out of sight; the bar scrolls inside itself, while the page itself does not scroll sideways.
+  A handheld's top bar fits at the same width. Slice 2 did not change the top bar,
+  so I believe it predates it.
 
 - **A1057. A handheld whose profile allows no zones shows a blank Floor.** Seen, 2026-10-24 (A797
   slice 4's finish review, a browser probe on the branch): a till in that state shows the
@@ -3224,6 +3239,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     and the "Keep … open later" button go with it. Seen once at 1280 wide. Read, not run: the
     retired renderer hid controls with its menu card. Recheck the observation on fixed Counter
     (`apps/till/src/screens/till-counter-screen.ts`); its controls and menu are separate now.
+    (2026-10-24, A789 slice 2: the period's Keep open button is gone.)
   - In Spanish at 390 wide, the counter's basket line showed no product name in two screenshots of
     the Collect step (light and dark): the row with quantity, price and Note is there, the name row
     above it is missing, not cut off. In English at 390, and in Spanish at 1280, the name shows.

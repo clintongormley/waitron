@@ -11,7 +11,6 @@ import {
 import {
   CORE_MIGRATIONS,
   categories,
-  floorZones,
   kitchenStations,
   locations,
   withTransaction,
@@ -23,19 +22,12 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
-import { keepPeriodOpen, readKeepOpen } from "./keep-open.js";
-import {
-  readRoutingUses,
-  replaceMenuWeek,
-  resolveDepartmentService,
-  saveMenuPeriod,
-} from "./menu-timetable.js";
+import { readRoutingUses, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment } from "./operations.js";
+import { createDepartment } from "./operations.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 import { menuPeriods } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import {
   departmentDayRanges,
@@ -63,7 +55,6 @@ const WRITE_AT = new Date("2026-10-07T10:00:00Z");
  *  06:00). */
 const AT = localTimeOccurrences("2026-10-08", "00:30", ZONE)[0]!;
 const TODAY = "2026-10-07";
-const CLOCK_DATE = "2026-10-08";
 
 const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => ({
   periodId,
@@ -353,7 +344,6 @@ describe("what deleting a period touches", () => {
       seasons: 2,
       specialDays: 2,
       routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: null }],
-      keptOpenToday: false,
       replacements: [
         { id: v.afternoon, name: "Afternoon" },
         { id: v.dinner, name: "Dinner" },
@@ -372,66 +362,12 @@ describe("what deleting a period touches", () => {
       seasons: 0,
       specialDays: 0,
       routingUses: [],
-      keptOpenToday: false,
       replacements: [
         { id: v.dinner, name: "Dinner" },
         { id: v.lunch, name: "Lunch" },
       ],
       clockRevision: 0,
     });
-  });
-
-  it("says the period is kept open today when it has an extension on today's business day", async () => {
-    const v = await venue();
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
-
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
-
-    expect(impact.keptOpenToday).toBe(true);
-  });
-
-  it("does not say kept open today for an extension on the clock's date or of another period", async () => {
-    const v = await venue();
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: CLOCK_DATE,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.dinner,
-      startsAt: "23:00:00",
-      endsAt: "23:30:00",
-    });
-
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
-
-    expect(impact.keptOpenToday).toBe(false);
-  });
-
-  it("does not say kept open today when the clock cannot be read", async () => {
-    const v = await venue();
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
-    await db.update(locations).set({ timeZone: "Not/AZone" }).where(eq(locations.id, v.locationId));
-
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
-
-    expect(impact.keptOpenToday).toBe(false);
   });
 
   it("refuses a period that does not exist, or is another venue's, as not found", async () => {
@@ -448,7 +384,7 @@ describe("deleting a period", () => {
   const hhmm = (time: string) => time.slice(0, 5);
 
   /** A venue whose No category cell names Lunch alone (Barra), and whose Cocktails cell names
-   *  Lunch (Barra), Afternoon (Cocina) and Dinner (Cocina); Lunch is kept open today. */
+   *  Lunch (Barra), Afternoon (Cocina) and Dinner (Cocina). */
   async function deleteVenue() {
     const v = await venue();
     const [barra] = await db
@@ -476,13 +412,6 @@ describe("deleting a period", () => {
     await line(cocktailsCell, v.lunch, barra!.id);
     await line(cocktailsCell, v.afternoon, v.stationId);
     await line(cocktailsCell, v.dinner, v.stationId);
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
     return {
       ...v,
       cellNames: new Map([
@@ -497,7 +426,7 @@ describe("deleting a period", () => {
   }
   type DeleteVenue = Awaited<ReturnType<typeof deleteVenue>>;
 
-  /** The four places that name a period, and the restaurant's periods, read by value. */
+  /** The three places that name a period, and the restaurant's periods, read by value. */
   async function stored(v: DeleteVenue) {
     const seasonRanges = await db
       .select({
@@ -540,17 +469,6 @@ describe("deleting a period", () => {
       .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
       .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId))
       .where(eq(routingCells.locationId, v.locationId));
-    const extensions = await db
-      .select({
-        businessDay: periodExtensions.businessDay,
-        period: menuPeriods.name,
-        startsAt: periodExtensions.startsAt,
-        endsAt: periodExtensions.endsAt,
-      })
-      .from(periodExtensions)
-      .innerJoin(menuPeriods, eq(menuPeriods.id, periodExtensions.periodId))
-      .where(eq(periodExtensions.departmentId, v.restaurant))
-      .orderBy(asc(periodExtensions.businessDay));
     const periods = await db
       .select({ name: menuPeriods.name })
       .from(menuPeriods)
@@ -570,9 +488,6 @@ describe("deleting a period", () => {
             `${v.cellNames.get(row.cellId)} ${row.period} ${v.stationNames.get(row.stationId!)}`,
         )
         .sort(),
-      extensions: extensions.map(
-        (row) => `${row.businessDay} ${row.period} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
-      ),
       periods: periods.map((row) => row.name),
     };
   }
@@ -678,158 +593,6 @@ describe("deleting a period", () => {
       );
       expect(await afternoonUses()).toEqual(afternoonBefore);
     });
-
-    it("moves today's extension of the period, and an older day's, to the replacement", async () => {
-      const v = await deleteVenue();
-      await db.insert(periodExtensions).values({
-        departmentId: v.restaurant,
-        businessDay: "2026-10-01",
-        periodId: v.lunch,
-        startsAt: "16:00:00",
-        endsAt: "16:30:00",
-      });
-
-      await remove(v, v.lunch, v.afternoon);
-
-      expect((await stored(v)).extensions).toEqual([
-        "2026-10-01 Afternoon 16:00-16:30",
-        `${TODAY} Afternoon 16:00-17:00`,
-      ]);
-    });
-
-    describe("when the period was kept open today into the replacement's time", () => {
-      const local = (time: string) => localTimeOccurrences(TODAY, time, ZONE)[0]!;
-
-      /** Wednesday: Lunch 12:00-16:00, Afternoon 16:00-20:00, Dinner 20:00-23:00; Lunch kept
-       *  open at 15:00 until `until`, then deleted with Afternoon in its place. */
-      async function keptOpenThenReplaced(until: string) {
-        const v = await venue();
-        const zoneId = await scoped(async (tx) => {
-          const [zone] = await tx
-            .insert(floorZones)
-            .values({ locationId: v.locationId, name: "Dining" })
-            .returning({ id: floorZones.id });
-          await configureZone(tx, v.cfg, { zoneId: zone!.id, departmentId: v.restaurant });
-          await replaceMenuWeek(
-            tx,
-            v.cfg,
-            v.restaurant,
-            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-              weekday,
-              slots:
-                weekday === 3
-                  ? [
-                      slot(v.lunch, "12:00", "16:00"),
-                      slot(v.afternoon, "16:00", "20:00"),
-                      slot(v.dinner, "20:00", "23:00"),
-                    ]
-                  : [],
-            })),
-            WRITE_AT,
-            0,
-            { seasonId: v.seasons.autumn },
-          );
-          return zone!.id;
-        });
-        await scoped((tx) =>
-          keepPeriodOpen(tx, v.cfg, zoneId, { periodId: v.lunch, until }, local("15:00")),
-        );
-        await scoped((tx) => deletePeriod(tx, v.cfg, v.lunch, v.afternoon, local("15:00"), 0));
-        const till = (time: string) =>
-          scoped(async (tx) => ({
-            service: await resolveDepartmentService(tx, v.cfg, v.restaurant, local(time)),
-            keepOpen: (await readKeepOpen(tx, v.cfg, zoneId, local(time))).period,
-          }));
-        const extensions = async () =>
-          (
-            await db
-              .select({
-                businessDay: periodExtensions.businessDay,
-                periodId: periodExtensions.periodId,
-                startsAt: periodExtensions.startsAt,
-                endsAt: periodExtensions.endsAt,
-              })
-              .from(periodExtensions)
-              .where(eq(periodExtensions.departmentId, v.restaurant))
-          ).map(
-            (row) =>
-              `${row.businessDay} ${row.periodId === v.afternoon ? "Afternoon" : row.periodId} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
-          );
-        return { v, till, extensions };
-      }
-
-      it("shows Afternoon running to its own 20:00 end when Lunch was kept open to 17:00", async () => {
-        const { v, till, extensions } = await keptOpenThenReplaced("17:00");
-
-        expect(await extensions()).toEqual([]);
-
-        for (const [time, firstChoice] of [
-          ["16:30", "20:15"],
-          ["18:00", "20:15"],
-        ] as const) {
-          const { service, keepOpen } = await till(time);
-          expect({ time, open: service.open, periodId: service.periodId }).toEqual({
-            time,
-            open: true,
-            periodId: v.afternoon,
-          });
-          expect(service.keepOpen).toEqual({
-            periodId: v.afternoon,
-            periodName: "Afternoon",
-            endsAt: "20:00",
-            running: true,
-            extendedUntil: null,
-          });
-          expect({ time, ...keepOpen, choices: keepOpen!.choices[0] }).toMatchObject({
-            time,
-            id: v.afternoon,
-            endsAt: "20:00",
-            running: true,
-            extendedUntil: null,
-            choices: firstChoice,
-          });
-        }
-      });
-
-      it("drops the extension when Afternoon's own time ends exactly where Lunch was kept open to", async () => {
-        const { extensions } = await keptOpenThenReplaced("20:00");
-
-        expect(await extensions()).toEqual([]);
-      });
-
-      it("shows Afternoon kept open to 21:00 when Lunch was kept open past Afternoon's end", async () => {
-        const { v, till, extensions } = await keptOpenThenReplaced("21:00");
-
-        expect(await extensions()).toEqual([`${TODAY} Afternoon 20:00-21:00`]);
-
-        for (const [time, firstChoice] of [
-          ["16:30", "20:15"],
-          ["20:30", "20:45"],
-        ] as const) {
-          const { service, keepOpen } = await till(time);
-          expect({ time, open: service.open, periodId: service.periodId }).toEqual({
-            time,
-            open: true,
-            periodId: v.afternoon,
-          });
-          expect(service.keepOpen).toEqual({
-            periodId: v.afternoon,
-            periodName: "Afternoon",
-            endsAt: "21:00",
-            running: true,
-            extendedUntil: "21:00",
-          });
-          expect({ time, ...keepOpen, choices: keepOpen!.choices[0] }).toMatchObject({
-            time,
-            id: v.afternoon,
-            endsAt: "21:00",
-            running: true,
-            extendedUntil: "21:00",
-            choices: firstChoice,
-          });
-        }
-      });
-    });
   });
 
   describe("without a replacement", () => {
@@ -884,21 +647,6 @@ describe("deleting a period", () => {
       expect((await stored(v)).routing).toEqual(
         ["Cocktails Afternoon Cocina", "Cocktails Dinner Cocina"].sort(),
       );
-    });
-
-    it("ends the period's extension and keeps another period's", async () => {
-      const v = await deleteVenue();
-      await db.insert(periodExtensions).values({
-        departmentId: v.restaurant,
-        businessDay: "2026-10-01",
-        periodId: v.dinner,
-        startsAt: "23:00:00",
-        endsAt: "23:30:00",
-      });
-
-      await remove(v, v.lunch, null);
-
-      expect((await stored(v)).extensions).toEqual(["2026-10-01 Dinner 23:00-23:30"]);
     });
 
     it("leaves no day row on a special day whose only paint was the period, so the day reads as its season's", async () => {

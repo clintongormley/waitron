@@ -43,7 +43,6 @@ export interface DepartmentService {
     periodName: string;
     endsAt: string;
     running: boolean;
-    extendedUntil: string | null;
   } | null;
 }
 

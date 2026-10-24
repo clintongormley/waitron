@@ -12,7 +12,6 @@ import {
   departmentFloorPlanSets,
   linkFloorPlanSet,
   menuPeriods,
-  periodExtensions,
   replaceZoneClosedWeek,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout } from "./floor-plan.js";
@@ -209,25 +208,6 @@ describe("GET /api/zones offers the due layout", () => {
     expect(await zoneAt(AFTERNOON, d.zoneId)).toMatchObject({
       layoutSetName: "Dinner",
       layoutDue: { setId: party, revision: 0, periodName: null },
-    });
-  });
-
-  it("offers nothing when a keep open pushes the recorded run later", async () => {
-    const { d } = await twoSets();
-    await updateToDue(d.zoneId, AFTER_LUNCH);
-    await inTx(v, (tx) =>
-      tx.insert(periodExtensions).values({
-        departmentId: d.departmentId,
-        businessDay: "2026-10-12",
-        periodId: d.lunchPeriod,
-        startsAt: "15:00:00",
-        endsAt: "21:00:00",
-      }),
-    );
-
-    expect(await zoneAt(new Date("2026-10-12T21:30:00+02:00"), d.zoneId)).toMatchObject({
-      layoutSetName: "Dinner",
-      layoutDue: null,
     });
   });
 

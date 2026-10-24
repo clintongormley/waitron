@@ -147,7 +147,7 @@ it("A738 adding and merging reveal the exact Counter row while unrelated edits p
 });
 
 for (const kind of ["counter", "table"] as const) {
-  it(`A738 ${kind} status uses the service text as its keep-open action and updates equipment`, async () => {
+  it(`A738 ${kind} status shows the service text and updates equipment`, async () => {
     const shared = {
       service: {
         open: true,
@@ -160,7 +160,6 @@ for (const kind of ["counter", "table"] as const) {
           periodName: "Late service",
           endsAt: "02:00",
           running: true,
-          extendedUntil: null,
         },
       },
       zoneName: "Garden",
@@ -173,11 +172,10 @@ for (const kind of ["counter", "table"] as const) {
             store: new WorkingOrderStore(),
           })
         : await (await import("./till-table-order-screen.test-helpers.js")).mount(shared);
-    const control = el.shadowRoot!.querySelector<LitElement>("till-keep-open")!;
-    await control.updateComplete;
-    expect(control.shadowRoot!.querySelector("[data-action]")!.textContent!.trim()).toBe(
-      "Open · until 02:00",
-    );
+    const status = el.shadowRoot!.querySelector("[data-service-period]")!;
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.textContent!.trim()).toBe("Open · until 02:00");
+    expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-service-zone]")?.textContent).toContain("Garden");
     expect(el.shadowRoot!.querySelector("[data-receipt-status]")?.textContent).toContain(
       "Receipt printer status unknown",
@@ -202,15 +200,6 @@ for (const kind of ["counter", "table"] as const) {
         expected,
       );
     }
-    el.service = {
-      ...shared.service,
-      keepOpen: { ...shared.service.keepOpen, extendedUntil: "03:00" },
-    };
-    await el.updateComplete;
-    await control.updateComplete;
-    expect(control.shadowRoot!.querySelector("[data-action]")!.textContent!.trim()).toBe(
-      "Open · kept open until 03:00",
-    );
     el.service = { ...shared.service, open: false };
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-service-closed]")?.textContent).toContain(

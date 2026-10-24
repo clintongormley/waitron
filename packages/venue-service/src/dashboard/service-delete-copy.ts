@@ -20,7 +20,6 @@ const itemKeys = {
   floor_plan_sets: "venue.delete_item_floor_plan_sets",
   staff_menus: "venue.delete_item_staff_menus",
   seasons: "venue.delete_item_seasons",
-  period_extensions: "venue.delete_item_period_extensions",
   department_policy: "venue.delete_item_department_policy",
   service_steps: "venue.delete_item_service_steps",
   transfer_desks: "venue.delete_item_transfer_desks",

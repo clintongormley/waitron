@@ -15,7 +15,6 @@ import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { departmentDayRanges, departmentDays, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import {
   departmentTransferDesks,
@@ -199,10 +198,6 @@ async function settings(
     .from(zoneDays)
     .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
     .where(and(inArray(zoneDays.zoneId, zoneIds), isNotNull(zoneDays.seasonId)));
-  const periodExtra = await tx
-    .select()
-    .from(periodExtensions)
-    .where(eq(periodExtensions.departmentId, departmentId ?? ""));
   const departmentPolicy = await tx
     .select()
     .from(departmentSalePolicies)
@@ -339,7 +334,6 @@ async function settings(
       count: new Set([...departmentSeasons, ...zoneSeasons].map((row) => row.seasonId)).size,
       targets: [],
     },
-    { key: "period_extensions", count: periodExtra.length, targets: [] },
     { key: "department_policy", count: departmentPolicy.length, targets: [] },
     { key: "service_steps", count: steps.length, targets: [] },
     {
@@ -435,9 +429,6 @@ export async function clearServiceDeleteSettings(
     .where(inArray(deviceKitchenScreenRemovals.zoneId, selected.zoneIds));
   await tx.delete(zoneServicePolicies).where(inArray(zoneServicePolicies.zoneId, selected.zoneIds));
   if (selected.departmentId !== null) {
-    await tx
-      .delete(periodExtensions)
-      .where(eq(periodExtensions.departmentId, selected.departmentId));
     await tx
       .delete(menuPeriodStaffMenus)
       .where(eq(menuPeriodStaffMenus.departmentId, selected.departmentId));

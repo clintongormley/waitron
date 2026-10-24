@@ -31,7 +31,7 @@ import {
   receiptDepartmentForOrder,
   receiptDefaultDepartment,
 } from "./department-receipts.js";
-import { readKeepOpen, keepPeriodOpen, keepZoneOpen } from "./keep-open.js";
+import { readKeepOpen, keepZoneOpen } from "./keep-open.js";
 import { assertZoneTakesNewOrders, closedZoneIdsAt } from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
@@ -171,7 +171,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveZoneContext,
   resolveDepartmentService,
   readKeepOpen,
-  keepPeriodOpen,
   keepZoneOpen,
   resolveSalePolicy,
   recordSaleReceiptHeader,

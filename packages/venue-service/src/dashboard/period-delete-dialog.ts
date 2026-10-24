@@ -20,8 +20,7 @@ const cellLabel = (use: PeriodRoutingUse) =>
     zone: use.zoneName ?? t("routing.every_zone"),
   });
 const offersReplacement = (impact: PeriodDeleteImpact) =>
-  impact.replacements.length > 0 &&
-  (impact.seasons + impact.specialDays > 0 || impact.keptOpenToday);
+  impact.replacements.length > 0 && impact.seasons + impact.specialDays > 0;
 
 @customElement("period-delete-dialog")
 export class PeriodDeleteDialog extends LitElement {
@@ -134,11 +133,6 @@ export class PeriodDeleteDialog extends LitElement {
           : t("period.delete_closes")
         : "",
       uses.length > 0 ? t("period.delete_routing") : "",
-      impact.keptOpenToday
-        ? replacement
-          ? format("period.delete_kept_moves", { replacement })
-          : t("period.delete_kept_ends")
-        : "",
     ].filter(Boolean);
     return lines.length ? lines : [t("period.delete_nothing")];
   }

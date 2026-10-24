@@ -491,6 +491,13 @@
       "when": 1792855801176,
       "tag": "0069_retire_service_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "6",
+      "when": 1792870778781,
+      "tag": "0070_retire_period_extensions",
+      "breakpoints": true
     }
   ]
 }

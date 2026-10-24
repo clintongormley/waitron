@@ -30,12 +30,14 @@ readers listed in slice 6 decision 4. These are source pointers, not a runtime r
 an exhaustive future implementation plan. Preserve payment, money/VAT, hashes, drawer and
 login behaviour; decide the future schema/contract and test it separately.
 
-## Who authorised today's station or period change
+## Who authorised today's station or zone change
 
 The approved [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md)
-leaves the authorising person unstored (decision 14). The station-day and period-extension rows
-hold the choice, but no person ID. Decide whether to retain that identity before adding a history
-view; this is separate from checking the manager's permission and PIN before a write.
+leaves the authorising person unstored (decision 14). The station-day and zone-extension rows
+hold the choice, but no person ID. (2026-10-24, A789 slice 2: the period extension this entry
+first named is gone; a zone's keep-open is the remaining change of this kind.) Decide whether to
+retain that identity before adding a history view; this is separate from checking the manager's
+permission and PIN before a write.
 
 ## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
 
@@ -336,9 +338,9 @@ code, not run again here.
 - **A865, the clash order.** One implementer saw the order between departments vary from run to
   run, and a review traced the order of one special day's dates to their random row ids.
   Reported by A788's implementers, not reproduced since.
-- **A866.** A keep-open saved for tonight by a deactivated department still blocks a start change
-  (`keptOpenConflicts`, `packages/venue-service/src/business-day-schedule.ts`, reads every
-  department).
+- **A866.** A zone keep-open saved for tonight in a deactivated department still blocks a start
+  change (`keptOpenConflicts`, `packages/venue-service/src/business-day-schedule.ts`, reads every
+  department's zone extensions). (2026-10-24, A789 slice 2: the period half is gone.)
 - **A867, a crossing range hides an overlap.** A range that fails on its own is listed as crossing
   the new start; the day's other ranges are marked overlapping only when no range fails on its own
   (`overlapping` in `businessDayClockConflicts`). A review's probe: 13:00–16:00, 15:00–17:00 and
@@ -401,7 +403,8 @@ bar is which department (hover shows it; the All departments Month has none eith
 
 **A789 — last orders without an offset: a period is when its menu can be ordered** — APPROVED
 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by
-default); building — slice 1 (the end offset retired) landed in #1948; slices 2–4 next, plan
+default); building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
+retired) in review; slices 3–4 next, plan
 [2026-10-21-a789-last-orders](../superpowers/plans/2026-10-21-a789-last-orders.md);
 [design](../superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
 [mockups/a789-last-orders/](mockups/a789-last-orders/). The period end offset
@@ -808,10 +811,9 @@ review.
   an emptied explicit/profile screen scope stays empty rather than widening to Every.
 
 - **Zone and period extensions remain separate (A366 slice 3 Part B, 2026-10-09).** Cancelling
-  a department's period extension does not delete its zones' overrides. In the server keep-open
-  suite, a retained zone override until 01:30 still leaves the 01:15 dish submission refused
-  with `menu_period.not_running` after the period extension is cancelled. The zone line reports
-  its own closure, rather than the department's combined availability.
+  a department's period extension does not delete its zones' overrides. **2026-10-24, A789 slice
+  2:** the period extension is gone; a zone extension is measured against its department's own
+  hours for the day, and the zone line still reports its own closure.
 
 - **A department row's arrow (A301, #1335, A261 step 2).** Departments start open, unlike the
   Products, menu Structure and menu prices trees, which start closed, and a folded department is

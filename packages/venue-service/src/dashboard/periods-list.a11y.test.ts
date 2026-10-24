@@ -131,7 +131,6 @@ async function mount(state: string, theme: "light" | "dark", inWindow = false) {
                 { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
                 { rowKind: "all", rowLabel: null, zoneName: "Terrace" },
               ],
-        keptOpenToday: true,
         replacements: [
           { id: "p1", name: "Breakfast" },
           { id: "p5", name: "Christmas set menu" },

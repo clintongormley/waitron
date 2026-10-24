@@ -9,13 +9,6 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       ),
     ).toEqual([["zone_extensions", "state"]]);
   });
-  it("copies today's period extensions as state", () => {
-    expect(
-      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "period_extensions").map(
-        (entry) => [entry.table, entry.class],
-      ),
-    ).toEqual([["period_extensions", "state"]]);
-  });
   it("does not copy the retired local-holiday table", () => {
     expect(VENUE_SERVICE_CLASSIFICATION.map((entry) => entry.table)).not.toContain(
       "local_holidays",

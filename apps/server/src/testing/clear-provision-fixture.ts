@@ -11,7 +11,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "seasons",
       // Its location key has no delete rule; its dates go with it.
       "special_days",
-      "period_extensions",
       "zone_extensions",
       "holiday_geographies",
       "menu_period_staff_menus",

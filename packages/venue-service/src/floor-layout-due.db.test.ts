@@ -19,7 +19,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { VENUE_SERVICE } from "./service.js";
 
 const suite = useVenueDb({
@@ -175,32 +174,7 @@ describe("which floor layout is due", () => {
     });
   });
 
-  it("follows the recorded run a keep open pushed later", async () => {
-    const f = await fixture();
-    await run((tx) =>
-      tx.insert(periodExtensions).values({
-        departmentId: f.restaurant,
-        businessDay: FRIDAY,
-        periodId: f.lunch,
-        startsAt: "15:00:00",
-        endsAt: "21:00:00",
-      }),
-    );
-    const layouts = await due(
-      f,
-      [f.zones.dining],
-      at("21:30"),
-      key(f.restaurant, FRIDAY, f.dinner, "20:00"),
-    );
-    expect(layouts.get(f.zones.dining)).toEqual({
-      setId: f.dinnerSet,
-      setName: "Dinner",
-      occurrence: key(f.restaurant, FRIDAY, f.dinner, "21:00"),
-      periodName: "Dinner",
-    });
-  });
-
-  it("gives each department its own day and keep open", async () => {
+  it("gives each department its own day", async () => {
     const f = await fixture();
     const bar = await run(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar menu" });
@@ -225,23 +199,16 @@ describe("which floor layout is due", () => {
       const standard = await newSet(tx, f.cfg, f.bar, "Standard");
       const late = await newSet(tx, f.cfg, f.bar, "Late");
       await tx.update(menuPeriods).set({ floorPlanSetId: late }).where(eq(menuPeriods.id, evening));
-      await tx.insert(periodExtensions).values({
-        departmentId: f.restaurant,
-        businessDay: FRIDAY,
-        periodId: f.lunch,
-        startsAt: "15:00:00",
-        endsAt: "21:00:00",
-      });
       return { standard, late, evening };
     });
 
     const layouts = await due(f, [f.zones.dining, f.zones.counter], at("16:00"));
 
     expect(layouts.get(f.zones.dining)).toEqual({
-      setId: f.standard,
-      setName: "Standard",
-      occurrence: key(f.restaurant, FRIDAY, f.lunch, "12:00"),
-      periodName: "Lunch",
+      setId: f.dinnerSet,
+      setName: "Dinner",
+      occurrence: key(f.restaurant, FRIDAY, f.dinner, "20:00"),
+      periodName: "Dinner",
     });
     expect(layouts.get(f.zones.counter)).toEqual({
       setId: bar.late,
@@ -320,31 +287,6 @@ describe("which floor layout is due", () => {
     expect(layouts.get(f.zones.loose)).toEqual(none);
     expect(layouts.get(f.zones.counter)).toEqual(none);
     expect(layouts.size).toBe(2);
-  });
-
-  it("reads every department's keep open in one statement", async () => {
-    const f = await fixture();
-    await run(async (tx) => {
-      await newSet(tx, f.cfg, f.bar, "Standard");
-      const session = (
-        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
-      ).session;
-      const spy = vi.spyOn(session, "prepareQuery");
-      try {
-        const zoneIds = [f.zones.dining, f.zones.terrace, f.zones.garden, f.zones.counter];
-        const layouts = await VENUE_SERVICE.dueFloorLayouts(
-          tx,
-          f.cfg,
-          zoneIds.map((zoneId) => ({ zoneId, recordedOccurrence: null })),
-          at("14:00"),
-        );
-        expect(layouts.size).toBe(4);
-        const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
-        expect(sql.filter((q) => q.includes('from "period_extensions"'))).toHaveLength(1);
-      } finally {
-        spy.mockRestore();
-      }
-    });
   });
 
   it("says whether each zone's department has a set and names the recorded set", async () => {

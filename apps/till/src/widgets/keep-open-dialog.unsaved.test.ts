@@ -6,23 +6,21 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
 import "./keep-open-dialog.js";
-describe.each(["period", "zone"] as const)("%s draft", (subject) => {
+describe("zone draft", () => {
   class KeepOpenLeaveApp extends LitElement {
     readonly leave = new LeaveController(this);
     closes = 0;
     confirmed: unknown[] = [];
     override render() {
       return html`<till-keep-open-dialog
-          .subject=${subject}
-          .period=${{
-            id: "lunch",
-            name: subject === "zone" ? "Terrace" : "Lunch",
+          .zone=${{
+            id: "terrace",
+            name: "Terrace",
             endsAt: "14:00",
             running: true,
             extendedUntil: null,
             dayEndsAt: "05:00",
             choices: ["14:15", "14:30", "05:00"],
-            next: null,
           }}
           @close=${() => this.closes++}
           @keep-open-confirm=${(e: CustomEvent) => this.confirmed.push(e.detail)}
@@ -30,14 +28,11 @@ describe.each(["period", "zone"] as const)("%s draft", (subject) => {
         >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
     }
   }
-  customElements.define(`keep-open-${subject}-leave-test-app`, KeepOpenLeaveApp);
+  customElements.define("keep-open-zone-leave-test-app", KeepOpenLeaveApp);
   beforeEach(() => setLocale("en"));
   afterEach(cleanupWidgets);
   async function mount() {
-    const { el: app } = await mountWidget<KeepOpenLeaveApp>(
-      `keep-open-${subject}-leave-test-app`,
-      {},
-    );
+    const { el: app } = await mountWidget<KeepOpenLeaveApp>("keep-open-zone-leave-test-app", {});
     const form = app.shadowRoot!.querySelector<TillKeepOpenDialog>("till-keep-open-dialog")!;
     await form.updateComplete;
     expect(form.shadowRoot).not.toBeNull();
@@ -152,8 +147,8 @@ describe.each(["period", "zone"] as const)("%s draft", (subject) => {
   it("a request refusal keeps the chosen draft protected and refreshing choices does not reset it", async () => {
     const { app, form } = await mount();
     await choose(form, "14:30");
-    form.refusal = "period_extension.invalid";
-    form.period = { ...form.period!, choices: ["14:15", "14:30", "19:00", "05:00"] };
+    form.refusal = "zone_extension.invalid";
+    form.zone = { ...form.zone!, choices: ["14:15", "14:30", "19:00", "05:00"] };
     await form.updateComplete;
     expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
     expect(unload()).toBe(true);

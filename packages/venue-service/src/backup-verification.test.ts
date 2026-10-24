@@ -47,9 +47,6 @@ beforeEach(() => {
     db.run(
       sql`insert into menu_periods (id,department_id,name,menu_id) values ('period','department','Lunch','menu')`,
     );
-    db.run(
-      sql`insert into period_extensions (id,department_id,business_day,period_id,starts_at,ends_at) values ('extension','department','2026-10-20','period','10:00','14:00')`,
-    );
   }
 });
 
@@ -148,7 +145,6 @@ describe("service backup evidence", () => {
     "update order_service_contexts set service_mode='prepay'",
     "delete from order_service_contexts",
     "update menu_periods set name='Changed period'",
-    "delete from period_extensions",
   ])("never replaces historical context with current config: %s", async (statement) => {
     expect(await run()).toEqual(passed);
     await corrupt(restored.db, statement);
@@ -160,8 +156,6 @@ describe("service backup evidence", () => {
     "update order_service_contexts set zone_id='missing'",
     "update order_service_contexts set department_id='missing'",
     "update menu_periods set menu_id='missing'",
-    "update period_extensions set department_id='other'",
-    "update period_extensions set period_id='missing'",
   ])("checks live and staged service references on both copies: %s", async (statement) => {
     expect(await run()).toEqual(passed);
     for (const db of [original.db, restored.db]) await corrupt(db, statement);
@@ -185,7 +179,6 @@ describe("service backup evidence", () => {
   });
   it("accepts empty target-only service but refuses invented state", async () => {
     for (const table of [
-      "period_extensions",
       "menu_periods",
       "order_service_contexts",
       "sale_receipt_headers",

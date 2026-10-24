@@ -718,8 +718,8 @@ const allYear = (weekday: number, endsAt: string) => ({
 const keptOpen = {
   departmentId: "d",
   departmentName: "Restaurant",
-  periodId: "p",
-  periodName: "Dinner",
+  zoneId: "z",
+  zoneName: "Terrace",
   endsAt: "04:30",
   rangeIndex: 0,
   reason: "kept_open" as const,
@@ -737,10 +737,10 @@ it("lists the opening hours that clash with the new start, season first", async 
     "All year: Restaurant · Sat · Dinner · 21:00–04:30 · Crosses the new start",
   ]);
 });
-it("says until when a period is kept open tonight, without a range", async () => {
+it("says until when a zone is kept open tonight, without a range", async () => {
   setLocale("en-GB");
   const { lines } = await previewLines(changeoverPreview(tonight, [keptOpen]));
-  expect(lines.at(-1)).toBe("Restaurant · Dinner · Kept open until 04:30 tonight");
+  expect(lines.at(-1)).toBe("Restaurant · Terrace · Kept open until 04:30 tonight");
 });
 it.each([
   ["range", "Crosses the new start", "Cruza el nuevo inicio"],
@@ -770,7 +770,7 @@ it("previews in Spanish", async () => {
     "Los informes anteriores conservan sus días.",
     "Horarios que chocan con el nuevo inicio: 2. Revisar horarios",
     "All year: Restaurant · Vie · Dinner · 21:00–04:00 · Cruza el nuevo inicio",
-    "Restaurant · Dinner · Abierto hasta las 04:30 esta noche",
+    "Restaurant · Terrace · Abierto hasta las 04:30 esta noche",
   ]);
   expect(q<WtInput>(el, "[name=dayCutover]")!.label).toBe("El día de trabajo empieza a las");
 });

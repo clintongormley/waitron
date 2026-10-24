@@ -32,13 +32,12 @@ for (const locale of ["en", "es"] as const)
                   extendedUntil: state === "extended" ? "22:30" : null,
                   dayEndsAt: "05:00",
                   choices: ["22:45", "23:00"],
-                  next: null,
                 };
                 const api = new TillApi(
                   "",
                   vi.fn(
                     async () =>
-                      new Response(JSON.stringify({ period: null, zone }), {
+                      new Response(JSON.stringify({ zone }), {
                         headers: { "content-type": "application/json" },
                       }),
                   ),
@@ -106,9 +105,7 @@ for (const locale of ["en", "es"] as const)
                           },
                           theme,
                         );
-                const widget = el.shadowRoot!.querySelector<TillKeepOpen>(
-                  'till-keep-open[subject="zone"]',
-                );
+                const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open");
                 if (state === "open") expect(widget).toBeNull();
                 else {
                   expect(widget).not.toBeNull();

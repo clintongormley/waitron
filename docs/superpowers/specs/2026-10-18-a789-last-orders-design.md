@@ -120,6 +120,8 @@ the refusals that were about the offset.
   everything. Anyone who can send can confirm: the check is with the kitchen, not with a manager.
   A venue can require a manager's PIN for this instead, with a setting in the dashboard's service
   settings beside "Allow changes to items already sent to the kitchen"; it is off by default.
+  (2026-10-24: that panel and switch are gone, #2044; where the setting lives is re-decided in
+  slice 3, see §12.)
 - **A dish the running period also sells** — a caña taken from Lunch's menu, which Sobremesa also
   sells — is not marked and needs no check: the kitchen or bar is still making it. It is sent at the
   price it was taken at (Lunch's). This is new: today the caña is held with the tortilla (§2).
@@ -297,7 +299,9 @@ answer.
 - **The manager's-PIN setting lives in `service_settings`**, shown in the dashboard's service
   settings panel beside "Allow changes to items already sent to the kitchen": that panel already
   holds the venue's settings about sending to the kitchen, while the department and zone policies
-  are about how an order starts and is paid. Built in slices 3–4.
+  are about how an order starts and is paid. Built in slices 3–4. **2026-10-24:** A756 PR 8 (#2044)
+  dropped `service_settings` and its panel and moved "Changes after sending" onto each kitchen
+  station, so slice 3 re-decides this home (plan, "Where the manager's-PIN setting lives").
 - **The per-menu `sendable` flag stays on the wire until slice 4**, set from the one window, so it
   always equals `orderable`; slice 4 removes it with the till's handling of an ended dish.
 - **No clash check still refuses anything with every offset at 0**, so the checks §7 says are "kept,

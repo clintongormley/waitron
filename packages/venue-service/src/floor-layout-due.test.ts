@@ -7,7 +7,7 @@ import {
   type DueDay,
 } from "./floor-layout-due.js";
 import { serviceRuns } from "./menu-timetable.js";
-import { minuteOfServiceDay, withExtension, type ServiceRange } from "./service-day.js";
+import { minuteOfServiceDay, type ServiceRange } from "./service-day.js";
 import type { ServiceDayContext } from "./service-day-context.js";
 
 const CUTOVER = "06:00";
@@ -25,11 +25,7 @@ const range = (periodId: string, startsAt: string, endsAt: string): ServiceRange
 const L = (startsAt = "13:00", endsAt = "16:00") => range("lunch", startsAt, endsAt);
 const D = (startsAt = "20:00", endsAt = "23:30") => range("dinner", startsAt, endsAt);
 const Bar = (startsAt: string, endsAt: string) => range("bar", startsAt, endsAt);
-const day = (painted: ServiceRange[], extension: ServiceRange | null = null): DueDay => ({
-  painted,
-  extension,
-  runs: serviceRuns(withExtension(painted, extension, CUTOVER)),
-});
+const day = (painted: ServiceRange[]): DueDay => ({ runs: serviceRuns(painted) });
 const at = (time: string) => minuteOfServiceDay(time, CUTOVER);
 const record = (periodId: string, startsAt: string) => ({ periodId, startsAt });
 const due = (
@@ -48,21 +44,8 @@ describe("dueRun", () => {
     expect(due(standard(), "16:00", record("lunch", "13:00"))).toEqual(D());
   });
 
-  it("follows keep open made before the end", () => {
-    const kept = day([L(), D()], L("16:00", "16:45"));
-    expect(due(kept, "16:30", record("lunch", "13:00"))).toEqual(L("13:00", "16:45"));
-    expect(due(kept, "16:45", record("lunch", "13:00"))).toEqual(D());
-  });
-
-  it("never goes back to a period reopened after its end", () => {
-    const kept = day([L(), D()], L("16:00", "17:00"));
-    expect(due(kept, "16:10", record("dinner", "20:00"))).toEqual(D());
-  });
-
-  it("comes back after a reopened period ends when nobody updated", () => {
-    const kept = day([L(), D()], L("16:00", "17:00"));
-    expect(due(kept, "16:10", record("lunch", "13:00"))).toEqual(L("13:00", "17:00"));
-    expect(due(kept, "17:00", record("lunch", "13:00"))).toEqual(D());
+  it("never goes back to a run earlier than the recorded one", () => {
+    expect(due(standard(), "14:00", record("dinner", "20:00"))).toEqual(D());
   });
 
   it("takes a later run of the same period", () => {
@@ -76,10 +59,9 @@ describe("dueRun", () => {
     expect(due(night, "03:00", record("night", "22:00"))).toEqual(range("night", "22:00", "02:00"));
   });
 
-  it("holds a recorded run past midnight against a period reopened in the afternoon", () => {
+  it("holds a recorded run past midnight against an earlier run", () => {
     const late = range("late", "00:30", "02:00");
-    const kept = day([L(), late], L("16:00", "17:00"));
-    expect(due(kept, "16:10", record("late", "00:30"))).toEqual(late);
+    expect(due(day([L(), late]), "14:00", record("late", "00:30"))).toEqual(late);
   });
 
   it("is the last run after the day's last ends", () => {
@@ -98,44 +80,16 @@ describe("dueRun", () => {
     expect(due(standard(), "14:30", record("lunch", "14:00"))).toEqual(L());
   });
 
-  it("keeps a run whose start a keep open pushed later", () => {
-    const kept = day([L(), D()], L("16:00", "20:30"));
-    expect(kept.runs).toEqual([L("13:00", "20:30"), D("20:30", "23:30")]);
-    expect(due(kept, "16:10", record("dinner", "20:00"))).toEqual(D("20:30", "23:30"));
-    expect(matchRecorded(kept, record("dinner", "20:00"), context)).toEqual(D("20:30", "23:30"));
-  });
-
-  it("a repaint is not a keep open", () => {
+  it("a repaint does not match a recorded run", () => {
     const repainted = day([L("10:00", "13:00"), Bar("16:00", "23:00")]);
-    expect(matchRecorded(repainted, record("bar", "10:00"), context)).toBeNull();
+    expect(matchRecorded(repainted, record("bar", "10:00"))).toBeNull();
     expect(due(repainted, "11:00", record("bar", "10:00"))).toEqual(L("10:00", "13:00"));
   });
 });
 
 describe("matchRecorded", () => {
   it("is the run of the recorded period starting at the recorded time", () => {
-    expect(matchRecorded(standard(), record("dinner", "20:00"), context)).toEqual(D());
-  });
-
-  it("is gone when the keep open does not cover the recorded start", () => {
-    const kept = day([L(), D()], L("16:00", "17:00"));
-    expect(matchRecorded(kept, record("dinner", "21:00"), context)).toBeNull();
-  });
-
-  it("is gone when the painted range of the period ended inside the keep open", () => {
-    const kept = day([L(), D("17:00", "18:00"), D("18:30", "23:30")], L("16:00", "18:30"));
-    expect(kept.runs).toEqual([L("13:00", "18:30"), D("18:30", "23:30")]);
-    expect(matchRecorded(kept, record("dinner", "17:00"), context)).toBeNull();
-  });
-
-  it("is gone when no painted range of the period started at the recorded time", () => {
-    const kept = day([L(), D()], L("16:00", "20:30"));
-    expect(matchRecorded(kept, record("dinner", "19:00"), context)).toBeNull();
-  });
-  it("is gone when the keep open joins the recorded run into an earlier one", () => {
-    const kept = day([L(), L("20:00", "23:30")], L("16:00", "20:30"));
-    expect(kept.runs).toEqual([L("13:00", "23:30")]);
-    expect(matchRecorded(kept, record("lunch", "20:00"), context)).toBeNull();
+    expect(matchRecorded(standard(), record("dinner", "20:00"))).toEqual(D());
   });
 });
 

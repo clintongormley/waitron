@@ -31,7 +31,6 @@ import {
 import { routingCells, routingCellPeriods } from "./schema/routing.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import {
   departmentTransferDesks,
   departmentTransferDestinations,
@@ -351,22 +350,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         menuId: menu!.id,
       })),
     );
-    await tx.insert(periodExtensions).values([
-      {
-        departmentId: f.department,
-        periodId: p1,
-        businessDay: "2026-10-12",
-        startsAt: "17:00:00",
-        endsAt: "18:00:00",
-      },
-      {
-        departmentId: f.alpha,
-        periodId: p3,
-        businessDay: "2026-10-12",
-        startsAt: "17:00:00",
-        endsAt: "18:00:00",
-      },
-    ]);
     await tx.insert(zoneSalePolicies).values([{ zoneId: f.gone }, { zoneId: f.elsewhere }]);
     await tx.insert(zoneExtensions).values(
       [f.gone, f.elsewhere].map((zoneId) => ({
@@ -393,7 +376,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       children: routingCellPeriods,
       periods: menuPeriods,
       staff: menuPeriodStaffMenus,
-      extensions: periodExtensions,
       policies: zoneServicePolicies,
       overrides: zoneSalePolicies,
       zoneExtensions,
@@ -415,7 +397,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       { key: "zone_extensions", count: 1, targets: [] },
       { key: "department_periods", count: 2, targets: [] },
       { key: "staff_menus", count: 2, targets: [] },
-      { key: "period_extensions", count: 1, targets: [] },
       { key: "department_policy", count: 1, targets: [] },
       { key: "transfer_desks", count: 1, targets: [{ id: f.explicit, name: "Explicit" }] },
       {
