@@ -472,6 +472,7 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
           printMovedSlips: true,
           ticketGrouping: "combined",
           printHeldWork: false,
+          bumpMode: "line",
         }));
         const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
         const createStation = vi

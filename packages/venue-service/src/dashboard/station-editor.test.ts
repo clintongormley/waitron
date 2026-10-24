@@ -25,6 +25,7 @@ const GRILL: StationEditorStation = {
   printMovedSlips: true,
   ticketGrouping: "combined",
   printHeldWork: false,
+  bumpMode: "line",
   printerIds: ["epson"],
   warmAfterMinutes: 5,
   overdueAfterMinutes: 12,
@@ -69,6 +70,8 @@ const movedField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=printMovedSlips]")!;
 const groupingField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=ticketGrouping]")!;
+const bumpField = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=bumpMode]")!;
 const heldSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=printHeldWork]")!;
 const saveButton = (el: StationEditor) =>
@@ -627,6 +630,46 @@ it("reads the ticket grouping and held printing in Spanish", async () => {
   expect($(el, "[data-test=held-work-hint]")!.textContent).toBe(
     "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",
   );
+});
+
+it("opens on the station's bump mode, right after the late flags", async () => {
+  const el = await mount({ ...GRILL, bumpMode: "ticket" });
+  expect(bumpField(el).label).toBe("Done on the screen");
+  expect(bumpField(el).value).toBe("ticket");
+  expect(bumpField(el).options.map(({ value, label }) => [value, label])).toEqual([
+    ["line", "One item at a time"],
+    ["ticket", "Whole ticket at once"],
+  ]);
+  expect(bumpField(el).previousElementSibling!.tagName).toBe("FIELDSET");
+  expect(bumpField(el).previousElementSibling!.querySelector("legend")!.textContent).toBe(
+    "Late flags (minutes)",
+  );
+  expect(bumpField(el).nextElementSibling).toBe(restSwitch(el));
+});
+
+it("sends only a changed bump mode, and nothing for a choice put back", async () => {
+  const el = await mount({ ...GRILL, bumpMode: "ticket" });
+  const seen = saves(el);
+  const pickBump = async (value: string) => {
+    bumpField(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    await el.updateComplete;
+  };
+  await pickBump("line");
+  expect(saveButton(el).disabled).toBe(false);
+  await pickBump("ticket");
+  expect(saveButton(el).disabled).toBe(true);
+  await pickBump("line");
+  await save(el);
+  expect(seen).toEqual([{ bumpMode: "line" }]);
+});
+
+it("reads the bump mode in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es" });
+  expect(bumpField(el).label).toBe("Marcado en la pantalla");
+  expect(bumpField(el).options.map(({ label }) => label)).toEqual([
+    "Un plato cada vez",
+    "Toda la comanda a la vez",
+  ]);
 });
 
 it("opens on the station's own Print a slip when sent dishes move table choice", async () => {

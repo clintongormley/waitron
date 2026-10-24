@@ -20,6 +20,7 @@ class StationEditorLeaveApp extends LitElement {
           printMovedSlips: true,
           ticketGrouping: "combined",
           printHeldWork: false,
+          bumpMode: "line",
           printerIds: ["epson"],
           warmAfterMinutes: 3,
           overdueAfterMinutes: 5,

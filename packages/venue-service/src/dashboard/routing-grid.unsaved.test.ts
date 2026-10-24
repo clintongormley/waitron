@@ -56,6 +56,7 @@ const view: PrepStationsView = {
       printMovedSlips: true,
       ticketGrouping: "combined",
       printHeldWork: false,
+      bumpMode: "line",
     },
   ],
   categories: [
