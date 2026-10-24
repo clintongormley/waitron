@@ -160,6 +160,12 @@ async function capture(populate = true) {
     await suite.db.execute(
       sql`insert into clock_stop_restarts (id,node_id,person_id,restarted_at,clock_at,registro_id,record_at,proof) select '10000000-0000-4000-8000-000000000006',${node.nodeId},'10000000-0000-4000-8000-000000000003',${time},${time},id,${time},'{"heads":{}}' from registros_facturacion`,
     );
+    await suite.db.execute(
+      sql`insert into clock_checks (id,seq,node_id,opened_at,reason,detail) values ('10000000-0000-4000-8000-000000000007',1,${node.nodeId},${time},'behind_chain','{"heads":{}}')`,
+    );
+    await suite.db.execute(
+      sql`insert into clock_confirmations (id,seq,node_id,box_clock_at,confirmed_at,step_ms,source,person_id,reason,proof,check_id,registro_id,record_at) select '10000000-0000-4000-8000-000000000008',1,${node.nodeId},${time},${time},0,'authority',null,'behind_chain','{"authority":{"agrees":true}}','10000000-0000-4000-8000-000000000007',id,${time} from registros_facturacion`,
+    );
   }
   directory = await mkdtemp(join(tmpdir(), "waitron-backup-history-"));
   const [file] = suite.db.all<{ file: string }>(sql`pragma database_list`);
@@ -292,10 +298,20 @@ it.each([
   ["certificate reminder parent", "update fiscal_certificate_reminders set install_id='missing'"],
   ["restart node parent", "update clock_stop_restarts set node_id='missing'"],
   ["restart record parent", "update clock_stop_restarts set registro_id='missing'"],
+  ["confirmation record parent", "update clock_confirmations set registro_id='missing'"],
+  ["confirmation node parent", "update clock_confirmations set node_id='missing'"],
+  ["confirmation check parent", "update clock_confirmations set check_id='missing'"],
+  ["check node parent", "update clock_checks set node_id='missing'"],
 ])("rejects internally damaged %s even when both copies match", async (_name, statement) => {
   await capture();
   both((db) => db.exec(statement));
   expect(await verify()).toEqual(result("invalid"));
+});
+
+it("accepts a clock confirmation that names no record", async () => {
+  await capture();
+  both((db) => db.exec("update clock_confirmations set registro_id=null, record_at=null"));
+  expect(await verify()).toEqual(result("passed"));
 });
 
 it.each([

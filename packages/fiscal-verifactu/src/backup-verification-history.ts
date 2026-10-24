@@ -432,6 +432,10 @@ const LINKS = [
   ["fiscal_certificate_reminders", "install_id", "fiscal_certificate_installs", "id"],
   ["clock_stop_restarts", "node_id", "nodes", "id"],
   ["clock_stop_restarts", "registro_id", "registros_facturacion", "id"],
+  ["clock_confirmations", "node_id", "nodes", "id"],
+  ["clock_confirmations", "registro_id", "registros_facturacion", "id"],
+  ["clock_confirmations", "check_id", "clock_checks", "id"],
+  ["clock_checks", "node_id", "nodes", "id"],
 ] as const;
 async function walk(
   query: BackupQuery,
