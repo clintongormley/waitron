@@ -2226,6 +2226,26 @@ describe("till-app simplified-invoice limit", () => {
     }
   });
 
+  it.each([
+    ["en-GB", "A dish's period has ended."],
+    ["es-ES", "Ha terminado el periodo de un plato."],
+  ])("says a dish's period has ended in %s and keeps its basket", async (locale, message) => {
+    try {
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockRejectedValue({ code: "menu_period.ended", status: 409 }),
+      });
+      const c = await toCounter(el);
+      setLocale(locale);
+      c.store.addProduct(c.products[0]!, "1");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(banner(el)!.textContent!.trim()).toBe(message);
+      expect(c.store.lines).toHaveLength(1);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
   it("says the department needs a tax-agency description when the server refuses the sale for it", async () => {
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({

@@ -571,6 +571,7 @@ const TABLE_REFUSALS = new Set([
   "working_order.not_open",
   "storage.disk_full",
   "clock.behind_chain",
+  "menu_period.ended",
 ]);
 
 /** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
@@ -844,6 +845,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "sale.department_missing",
   "storage.disk_full",
   "clock.behind_chain",
+  "menu_period.ended",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */

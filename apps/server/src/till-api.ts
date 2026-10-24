@@ -437,6 +437,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // A line never sent whose product sold out, refused at send and at pay.
   "product.unavailable": 409,
   "product.not_sold_separately": 409,
+  // A confirmation from the kitchen settles it, so it is a conflict rather than a bad request.
+  "menu_period.ended": 409,
   // A basket priced against a menu version that is no longer live: nothing was priced or written.
   "menu.version_changed": 409,
   "sale.unsupported_tender": 400,

@@ -122,6 +122,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That menu is not available in the current period.",
     es: "Esa carta no está disponible en el periodo actual.",
   },
+  "menu_period.ended": {
+    en: "A dish's period has ended.",
+    es: "Ha terminado el periodo de un plato.",
+  },
   "department_transfer.desk_unavailable": {
     en: "That department has no usable receiving desk. Ask a manager to check its transfer settings.",
     es: "Ese departamento no tiene un mostrador receptor disponible. Pide a un responsable que revise los ajustes de traspaso.",
