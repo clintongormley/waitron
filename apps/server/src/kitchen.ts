@@ -9,7 +9,7 @@ import {
   kitchenStations,
   nextStationColour,
 } from "@waitron/db";
-import type { BumpMode, StationColour, TicketGrouping } from "@waitron/shared";
+import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
@@ -38,6 +38,7 @@ export interface Station {
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
   bumpMode: BumpMode;
+  changesAfterSending: ChangesAfterSending;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -135,6 +136,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       ticketGrouping: kitchenStations.ticketGrouping,
       printHeldWork: kitchenStations.printHeldWork,
       bumpMode: kitchenStations.bumpMode,
+      changesAfterSending: kitchenStations.changesAfterSending,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -175,6 +177,7 @@ export async function updateStation(
     ticketGrouping?: TicketGrouping;
     printHeldWork?: boolean;
     bumpMode?: BumpMode;
+    changesAfterSending?: ChangesAfterSending;
     printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {

@@ -232,6 +232,7 @@ describe("kitchen-station config", () => {
         ticketGrouping: "combined",
         printHeldWork: false,
         bumpMode: "line",
+        changesAfterSending: "held-or-waiting",
         ...defaultThresholds,
       },
       {
@@ -245,6 +246,7 @@ describe("kitchen-station config", () => {
         ticketGrouping: "combined",
         printHeldWork: false,
         bumpMode: "line",
+        changesAfterSending: "held-or-waiting",
         ...defaultThresholds,
       },
       {
@@ -258,6 +260,7 @@ describe("kitchen-station config", () => {
         ticketGrouping: "combined",
         printHeldWork: false,
         bumpMode: "line",
+        changesAfterSending: "held-or-waiting",
         ...defaultThresholds,
       },
     ]);
@@ -305,6 +308,29 @@ describe("kitchen-station config", () => {
     });
     expect(after.find((s) => s.id === grill)).toEqual(before.find((s) => s.id === grill));
     expect(after.find((s) => s.id === grill)!.bumpMode).toBe("line");
+  });
+
+  it("a new station allows changes while held or waiting", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    expect(
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
+    ).toMatchObject({ changesAfterSending: "held-or-waiting" });
+  });
+
+  it("updateStation writes a station's changes after sending and leaves the others", async () => {
+    const cfg = await setupVenue();
+    const { id: bar } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
+    const { id: grill } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Grill" }));
+    const before = await asApp(cfg, (tx) => listStations(tx, cfg));
+    await asApp(cfg, (tx) => updateStation(tx, cfg, bar, { changesAfterSending: "never" }));
+    const after = await asApp(cfg, (tx) => listStations(tx, cfg));
+    expect(after.find((s) => s.id === bar)).toEqual({
+      ...before.find((s) => s.id === bar),
+      changesAfterSending: "never",
+    });
+    expect(after.find((s) => s.id === grill)).toEqual(before.find((s) => s.id === grill));
+    expect(after.find((s) => s.id === grill)!.changesAfterSending).toBe("held-or-waiting");
   });
 
   it("a station stored with no MOVED slips choice answers that it prints them", async () => {
@@ -383,6 +409,7 @@ describe("kitchen-station config", () => {
         ticketGrouping: "combined",
         printHeldWork: false,
         bumpMode: "line",
+        changesAfterSending: "held-or-waiting",
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,

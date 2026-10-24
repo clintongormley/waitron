@@ -18,9 +18,11 @@ import {
   AppError,
   isAppError,
   isBumpMode,
+  isChangesAfterSending,
   isStationColour,
   isTicketGrouping,
   type BumpMode,
+  type ChangesAfterSending,
   type StationColour,
   type TicketGrouping,
 } from "@waitron/shared";
@@ -372,6 +374,14 @@ function parseTicketGrouping(value: unknown): TicketGrouping | undefined {
 function parseBumpMode(value: unknown): BumpMode | undefined {
   if (value === undefined) return undefined;
   if (!isBumpMode(value)) throw new AppError("management.request_invalid", { field: "bumpMode" });
+  return value;
+}
+
+function parseChangesAfterSending(value: unknown): ChangesAfterSending | undefined {
+  if (value === undefined) return undefined;
+  if (!isChangesAfterSending(value)) {
+    throw new AppError("management.request_invalid", { field: "changesAfterSending" });
+  }
   return value;
 }
 
@@ -1626,6 +1636,7 @@ export function mountManagementApi(
         ticketGrouping?: unknown;
         printHeldWork?: unknown;
         bumpMode?: unknown;
+        changesAfterSending?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
@@ -1644,6 +1655,7 @@ export function mountManagementApi(
         ticketGrouping?: TicketGrouping;
         printHeldWork?: boolean;
         bumpMode?: BumpMode;
+        changesAfterSending?: ChangesAfterSending;
         warmAfterMinutes?: number;
         overdueAfterMinutes?: number;
         forgottenAfterMinutes?: number;
@@ -1677,6 +1689,8 @@ export function mountManagementApi(
       if (ticketGrouping !== undefined) patch.ticketGrouping = ticketGrouping;
       const bumpMode = parseBumpMode(body.bumpMode);
       if (bumpMode !== undefined) patch.bumpMode = bumpMode;
+      const changesAfterSending = parseChangesAfterSending(body.changesAfterSending);
+      if (changesAfterSending !== undefined) patch.changesAfterSending = changesAfterSending;
       Object.assign(patch, parseStationTimingPatch(body));
       const printerIds = parseStationPrinterIds(body.printerIds);
       if (printerIds !== undefined) patch.printerIds = printerIds;
