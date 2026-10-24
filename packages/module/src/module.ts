@@ -543,6 +543,7 @@ export interface DeviceZoneSelection {
   selectedZoneIds: readonly string[];
   startingZoneId: string | null;
   adjusted: boolean;
+  saved: boolean;
 }
 
 export interface DeviceZoneSelectionInput {

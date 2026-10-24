@@ -6,6 +6,7 @@ const selection: DeviceZoneSelection = {
   profileId: "profile",
   snapshot: "scope",
   adjusted: false,
+  saved: true,
   zones: [
     {
       id: "bar",

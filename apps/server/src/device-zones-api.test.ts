@@ -133,8 +133,10 @@ describe("the device's zone preferences", () => {
     expect(
       (await suite.db.select().from(devices).where(eq(devices.id, f.deviceId)))[0]!.lastSeenAt,
     ).toBe(lastSeenAt);
+    expect((await f.request("GET")).json.saved).toBe(false);
     const saved = await f.request("PUT", { ...f.input, deviceId: f.otherDeviceId });
     expect(saved.status).toBe(200);
+    expect(saved.json.saved).toBe(true);
     expect(saved.json).toMatchObject({
       selectedZoneIds: f.input.selectedZoneIds,
       startingZoneId: f.input.startingZoneId,

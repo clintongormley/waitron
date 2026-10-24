@@ -102,6 +102,28 @@ async function save(f: Fixture, selectedZoneIds: string[], startingZoneId: strin
 }
 
 describe("device zone selection", () => {
+  it("says whether this device saved a choice under its current profile", async () => {
+    const f = await fixture();
+    const before = await read(f);
+    expect(before.saved).toBe(false);
+    const after = await save(f, [f.dining, f.terrace], f.dining);
+    expect(after).toMatchObject({
+      saved: true,
+      selectedZoneIds: before.selectedZoneIds,
+      startingZoneId: before.startingZoneId,
+    });
+    expect(after.snapshot).not.toBe(before.snapshot);
+    expect((await read(f)).saved).toBe(true);
+    expect((await read(f, f.otherDeviceId)).saved).toBe(false);
+    await run((tx) =>
+      tx
+        .update(devices)
+        .set({ deviceProfileId: f.secondProfileId })
+        .where(eq(devices.id, f.deviceId)),
+    );
+    expect(await read(f)).toMatchObject({ profileId: f.secondProfileId, saved: false });
+  });
+
   it("defaults to current profile zones and isolates devices and switched profiles", async () => {
     const f = await fixture();
     const profileBefore = await run((tx) => readProfileServiceScopes(tx, [f.profileId]));
@@ -127,6 +149,7 @@ describe("device zone selection", () => {
       selectedZoneIds: [f.dining, f.terrace],
       startingZoneId: f.dining,
       adjusted: false,
+      saved: false,
     });
     expect(await save(f, [f.terrace], f.terrace)).toMatchObject({
       selectedZoneIds: [f.terrace],

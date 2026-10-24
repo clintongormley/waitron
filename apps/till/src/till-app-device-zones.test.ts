@@ -45,13 +45,14 @@ const zones: DeviceZoneSelection["zones"] = [
     serviceMode: "table_tab",
   },
 ];
-const selection = (ids: string[], start: string | null): DeviceZoneSelection => ({
+const selection = (ids: string[], start: string | null, saved = true): DeviceZoneSelection => ({
   profileId: "profile",
   snapshot: "scope",
   zones,
   selectedZoneIds: ids,
   startingZoneId: start,
   adjusted: false,
+  saved,
 });
 const floorZones: FloorZone[] = zones.map((zone) => ({
   ...zone,
