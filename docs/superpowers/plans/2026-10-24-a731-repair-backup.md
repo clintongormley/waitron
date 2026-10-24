@@ -90,9 +90,11 @@ No required edit to Lane A's `restore.ts`, `restore-request.ts`, `recovery-prepa
 - [x] Serialize journal writes with the shared coordinator under anchor/source venue exclusion; the API service owns authorisation. Use a distinct store coordinator internally if needed to avoid queueing recursively behind its own held turn. Durably record retirement intent before placement; durably record restored completion before selection. `select` cannot independently grant authority.
 - [x] **GREEN:** rerun the two new suites plus `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-resolution.test.ts src/first-setup-resolution.integrity.test.ts src/first-setup-workspace.test.ts src/first-setup-state.test.ts src/first-setup-host-path.test.ts`. Require nonzero test counts and unchanged V1 assertions. Parent makes a focused `git commit -s` after checking the index.
 
+**Execution clarification, 24 October 2026:** original binding excludes root-level `venue.holder.json`, `venue.holder.json.partial` and `venue.lock-journal` as well as this operation's V2 output. Actual repeated `lockVenueDatabase` calls change the lock journal; the new repeated-exclusion test checks stable binding and still refuses a newly appearing `venue.db-wal`. Originals remain in place.
+
 ## Task 2: Authenticate selected source, retain history, place through unchanged core
 
-**Execution checkpoint, 24 October 2026:** Task 1 is committed at `d0bc15a952f187d4c849c8734dc66024ea463f21`. Task 2's private source adapter, authenticated-copy preview and checked Cloud reconciliation are implemented in this branch. The repair session/recovery service, retained-history combination, placement/resume, routes and page remain to be implemented. These helpers alone do not enable repair recovery.
+**Execution checkpoint, 24 October 2026:** Task 1 is committed at `d0bc15a952f187d4c849c8734dc66024ea463f21`. Task 2's private source adapter, authenticated-copy preview, checked Cloud reconciliation and authenticated session open/close/disposal are implemented in this branch. Session admission rechecks retained originals and selected bytes after key derivation; replacement, expiry and shutdown revoke only the matching in-memory selection. Retained-history admission, preparation, placement/resume, routes and the page remain to be implemented. These internal helpers do not enable repair recovery.
 
 **Interfaces — consume Task 1 and existing signatures:**
 

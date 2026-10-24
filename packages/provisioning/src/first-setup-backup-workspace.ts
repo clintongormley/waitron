@@ -297,12 +297,13 @@ async function originals(
   const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
   async function walk(path: string, isRoot = false): Promise<void> {
     if (path === output || pointers.has(path)) return;
-    // Heartbeats describe the live lock holder, never retained setup or recovery authority.
+    // Lock journals and holder heartbeats carry no setup or recovery authority.
     if (
       rootsToRead.some(
         (root) =>
           path === join(root, "venue.holder.json") ||
-          path === join(root, "venue.holder.json.partial"),
+          path === join(root, "venue.holder.json.partial") ||
+          path === join(root, "venue.lock-journal"),
       )
     )
       return;

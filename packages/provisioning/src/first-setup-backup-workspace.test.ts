@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, realpath, rm, writeFile, readFile } from "node:fs/promi
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
+import { lockVenueDatabase } from "@waitron/db";
 import * as provision from "./index.js";
 import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
 
@@ -61,6 +62,31 @@ it("leaves an ordinary first-setup target alone when no V2 namespace exists", as
   const f = await fixture();
   expect(await provision.resolveFirstSetupBackupWorkspace(f.anchor)).toEqual({ kind: "absent" });
   await provision.assertFirstSetupBackupBootTarget(f.anchor);
+});
+it("rechecks the same originals across real venue exclusions while binding ordinary database sidecars", async () => {
+  const f = await fixture();
+  const first = await lockVenueDatabase(f.anchor.venueDir);
+  let input: Awaited<ReturnType<typeof f.input>>;
+  let lockJournal: Buffer;
+  try {
+    input = await f.input();
+    lockJournal = await readFile(join(f.anchor.venueDir, "venue.lock-journal"));
+  } finally {
+    first.release();
+  }
+  const second = await lockVenueDatabase(f.anchor.venueDir);
+  try {
+    expect(await readFile(join(f.anchor.venueDir, "venue.lock-journal"))).not.toEqual(lockJournal);
+    expect(await f.store.inspect(recoveryId)).toBe(input.observation.originalsDigest);
+    await f.store.append(input);
+    expect(await f.store.read()).toHaveLength(1);
+    await writeFile(join(f.anchor.venueDir, "venue.db-wal"), "new retained business rows");
+    await expect(f.store.append({ ...input, input: { accepted: true } })).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+  } finally {
+    second.release();
+  }
 });
 it.each([false, true])(
   "admits only the exact selected target (shared roots: %s)",

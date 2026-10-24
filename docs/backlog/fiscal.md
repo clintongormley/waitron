@@ -1482,3 +1482,8 @@ selected backup’s named node recovery key, archive encryption key where applic
 outside recovery evidence. Follow [the offline restore procedure](../developers/offline-fiscal-restore.md).
 Unresolved first-setup guards currently block restore; the page must say this path is not yet
 available until this item lands. Do not expose retained business records without proof.
+
+Implementation checkpoint, 24 October 2026: backup validation, named-key authentication and
+memory-only repair sessions are internal helpers. No repair API or page is enabled. Retained-history
+admission, preparation, isolated placement, exact restart completion and listener/page qualification
+remain open; the plan is `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.
