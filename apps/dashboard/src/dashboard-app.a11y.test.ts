@@ -374,8 +374,6 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         defaultProductVatClass: "general",
       }),
       listStaff: vi.fn().mockResolvedValue(people),
-      getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-      getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
       listCourses: vi.fn().mockResolvedValue([]),
     });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);

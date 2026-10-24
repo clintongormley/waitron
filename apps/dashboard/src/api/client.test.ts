@@ -1651,18 +1651,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("setBumpMode PUTs { mode } to /management-api/bump-mode (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setBumpMode("ticket")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/bump-mode", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "ticket" }),
-    });
-  });
-
   it("createStation rejects with { code } on a non-2xx (name already taken)", async () => {
     const fetchImpl = vi
       .fn()

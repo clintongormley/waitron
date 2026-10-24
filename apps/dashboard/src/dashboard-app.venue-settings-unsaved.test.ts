@@ -59,8 +59,6 @@ async function mount(
         getVenueDetails: async () => venueDetailsFixture(),
         listStations: async () => [],
         listCourses: async () => [],
-        getBumpMode: async () => ({ mode: "line" }),
-        getFireControl: async () => ({ mode: "waiter" }),
         getDepartmentReceipt: async () => ({
           receipt: {},
           venueDefaults: {},

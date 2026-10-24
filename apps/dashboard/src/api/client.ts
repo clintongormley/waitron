@@ -735,8 +735,6 @@ export interface Station {
   forgottenAfterMinutes: number;
 }
 
-export type BumpMode = "line" | "ticket";
-
 export interface Course {
   id: string;
   name: string;
@@ -3275,14 +3273,6 @@ export class DashboardApi {
 
   setDefaultStation(id: string): Promise<void> {
     return this.#request<void>(`/management-api/stations/${id}/default`, "POST");
-  }
-
-  setBumpMode(mode: BumpMode): Promise<void> {
-    return this.#request<void>("/management-api/bump-mode", "PUT", { mode });
-  }
-
-  getBumpMode(): Promise<{ mode: BumpMode }> {
-    return this.#request<{ mode: BumpMode }>("/management-api/bump-mode", "GET");
   }
 
   // ── Kitchen courses + fire control ─────────────────────────────────────────────────────────────

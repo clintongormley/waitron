@@ -486,7 +486,6 @@ export const QUERY_DEPENDENCIES = {
     "dining_tables",
     "floor_zones",
   ],
-  getBumpMode: ["locations"],
   listMyAbsences: ["absences"],
   listMyShifts: ["shifts", "roster_versions", "employments", "locations"],
   listMySwaps: ["shift_swaps", "shifts"],

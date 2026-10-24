@@ -120,8 +120,6 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
       defaultProductVatClass: "reduced",
     }),
     listCourses: vi.fn().mockResolvedValue([]),
-    getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
-    getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
   } as unknown as DashboardApi;
 }
 

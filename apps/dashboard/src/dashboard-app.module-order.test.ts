@@ -57,8 +57,6 @@ function stubApi(modules: string[] = ["second", "unordered", "first"]): Dashboar
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
-    getFireControl: vi.fn().mockResolvedValue({ enabled: false }),
-    getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
     listCourses: vi.fn().mockResolvedValue([]),
   } as unknown as DashboardApi;
 }
