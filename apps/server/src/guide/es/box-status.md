@@ -229,7 +229,7 @@ venta registrada para Hacienda no se puede cambiar. Cuando se confirma la hora, 
 cuáles son: las ventas registradas antes de la parada con una hora de más de un minuto después del
 momento en que el equipo notó la parada. Las muestra en esta página en **Ventas con fecha
 incorrecta**, con la **Factura** y la **Hora registrada** de cada una, y dice **Revísalas con tu
-asesor y después marca el aviso como atendido.** La campana tiene un aviso con cuántas ventas son y
+asesor y después marca el aviso como resuelto.** La campana tiene un aviso con cuántas ventas son y
 la primera y la última hora, y el equipo envía un correo a las personas que gestionan el sistema. Si
 el propio equipo se reinició durante la parada, no puede estar seguro de cuándo empezó, así que puede
 faltar alguna venta en la lista, y el aviso lo dice. Cuando ninguna venta tiene la fecha mal, no hay

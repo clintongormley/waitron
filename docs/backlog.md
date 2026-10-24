@@ -129,8 +129,7 @@ come after the list above:
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
-  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 6; every owner
-  question answered; slices 1 to 8 and 10 of 10 built; slice 9 is #2025).
+  [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) revision 7; slices 1 to 8 and 10 built; slice 9 is #2025; slices 9b and 9c are outlined).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.

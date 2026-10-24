@@ -83,7 +83,7 @@ A sibling guard, `scripts/ongoing-alert-codes.test.ts`, holds the ongoing (non-i
 to the same English-and-Spanish wording bar; it too reads source TEXT and hand-lists its source files
 (`apps/server/src/alert-sources.ts`, `packages/fiscal-verifactu/src/submission-alerts.ts`,
 `packages/fiscal-verifactu/src/certificate-alerts.ts`,
-`packages/fiscal-verifactu/src/clock-behind-alerts.ts`), so an ongoing source added in any other file
+`packages/fiscal-verifactu/src/clock-behind-alerts.ts`, `apps/server/src/clock-disagrees-alert.ts`), so an ongoing source added in any other file
 is silently missed until it is added to that list.
 
 ## General code is English only
@@ -3676,8 +3676,7 @@ cover the routes they name; a new money route is seen by none.
 
 ### A confirmation of the clock lifts the stop for one step back
 
-Added 2026-10-23 by A798-B slice 9 (#2025) as a manager's "Restart payments", and replaced on
-2026-10-24 by revision 8 of [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md),
+Revision 8 of [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md),
 whose decisions and measurements are named here: a confirmation of the clock now lifts the stop by
 itself, with no limit on the gap. Every Q and S label below is a run made for the plan against a
 PROTOTYPE of `clock-behind.ts` — the Q labels against revision 2's, the S labels against revision
@@ -3726,7 +3725,7 @@ chain's current largest `secuencia`; and the gap is at most the gap that confirm
 a 400-day gap", and in `clock-confirmation.test.ts` "a 400-day gap with proof is confirmed: there is
 no cap"). Anything else covers nothing and throws nothing — a proof that is not JSON, JSON `null`,
 `heads` missing or an array, a value that is not a safe integer `≥ 0` or is past its chain's head
-(S6, S7; the bound check's deletion let a `1e12` row cover, S12; shipped: the cases under "a restart
+(S6, S7; the bound check's deletion let a `1e12` row cover, S12; shipped: the cases under "a confirmation
 whose stored heads a correct writer never stores covers nothing"); a confirmation that names no
 record ("covers nothing with a confirmation that names no record"); and an earlier confirmation of
 the record once a later one fails ("keeps the stop when the later of two confirmations naming the

@@ -6,7 +6,7 @@
 > dispatch. What it fixes now: the scope, the decisions the split depends on, the measurements that
 > must come first, and the risks round 1 found. Design: revision 7, §4.9 c, d, g, h
 > ([design](../specs/2026-10-19-a798-degraded-trading-design.md)). Slice 9's plan
-> ([2026-10-23-a798-9-clock-restart.md](2026-10-23-a798-9-clock-restart.md), revision 5) is its
+> ([2026-10-23-a798-9-clock-restart.md](2026-10-23-a798-9-clock-restart.md), revisions 5–8) is its
 > base. Its own branch and pull request after slice 9 (#2025) lands: `python3
 > ~/workspace/tools/worktree.py new waitron feat/a798-9b-box-sets-clock --headless`. **Parked for the
 > owner** (it changes the clock that dates every record). Review path: FULL, two Codex run-it

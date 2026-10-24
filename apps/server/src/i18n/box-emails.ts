@@ -83,12 +83,12 @@ export const CLOCK_MISDATED_EMAIL_WORDS = {
   },
   es: {
     subject: "Ventas con fecha incorrecta en {venue}: revísalas con tu asesor",
-    text: "Se registraron {count} ventas con una hora posterior a la real, de {from} a {to}. Quedan como se registraron. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como atendido.",
-    one: "Se registró una venta con una hora posterior a la real, a las {from}. Queda como se registró. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como atendido.",
+    text: "Se registraron {count} ventas con una hora posterior a la real, de {from} a {to}. Quedan como se registraron. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como resuelto.",
+    one: "Se registró una venta con una hora posterior a la real, a las {from}. Queda como se registró. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como resuelto.",
     partial: "El equipo se reinició durante la parada, así que puede faltar alguna.",
     unconfirmed: {
       subject: "Puede haber ventas con fecha incorrecta en {venue}: revísalas con tu asesor",
-      text: "La parada de cobros que empezó a las {from} terminó sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces; después marca el aviso como atendido.",
+      text: "La parada de cobros que empezó a las {from} terminó sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces; después marca el aviso como resuelto.",
     },
   },
 } as const;

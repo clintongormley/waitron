@@ -6,7 +6,7 @@
 
 **2026-10-18, A793 (tips):** [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31) gained an open part (d) on suggested tip percentages and a default service charge; [Q49](#q49-card-tips-in-the-venues-books--income-or-money-owed-to-staff-added-2026-10-18) (how card tips are booked) and [Q50](#q50-a-fixed-service-charge-on-the-bill--allowed-by-consumer-law-added-2026-10-18) (a fixed "service" charge under consumer law) were added after Q13. The research behind them is [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md). None is in the shortened list or the Word copies yet, and no enquiry has been sent.
 
-**2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24) (a chain whose record times step back once, when a manager restarts payments) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
+**2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24) (a chain whose record times step back once, when the box's clock is confirmed) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
 
 **2026-10-22, A980 (data protection):** [Q54 to Q58](#data-protection-questions-for-a-privacy-specialist-added-2026-10-22) were added for a privacy specialist, not the asesor fiscal, from the [A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md) §9. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) still carries the Article 9 basis for allergy notes. [Q59](#q59-a-privacy-line-on-receipts-and-full-invoices-added-2026-10-24) (a privacy line on receipts and full invoices) joined them on 2026-10-24, from the design's §4.1.1. None is in the shortened list or the Word copies, and no enquiry has been sent.
 
@@ -3728,7 +3728,7 @@ This records a question; no enquiry has been sent.
 
 ### Q52. Sales recorded under a restart whose clock later proved wrong (added 2026-10-21)
 
-**Why it matters.** After a manager restarts payments as Q51 describes, the box keeps checking its
+**Why it matters.** After payments restart on a confirmation of the clock, as Q51 describes, the box keeps checking its
 clock: against AEAT's time on the next send and, while the clock still reads more than a minute
 behind the latest record, once a minute from AEAT's QR validation site; and for a jump forward of
 more than a minute beyond the time that has passed (compared only while the server keeps running).
@@ -3751,7 +3751,8 @@ records, the chain and the box's clock stay as they are
 > la misma lectura del reloj. Hoy el sistema no modifica nada: avisa a los responsables («Las ventas
 > registradas entre {desde} y {hasta} se fecharon con un reloj que resultó estar mal. Quedan como se
 > registraron; consúltalo con tu asesor.») y los registros, la cadena y la hora del equipo quedan
-> como están. Queda constancia de quién reanudó, cuándo, con qué prueba y entre qué horas.
+> como están. Queda constancia de qué confirmó la hora (y, si fue un administrador, quién), cuándo,
+> con qué prueba y entre qué horas.
 >
 > **(a)** ¿Debe hacerse algo con esos registros o facturas (subsanación, anulación y nueva
 > expedición, factura rectificativa, comunicación a la AEAT), o basta con conservar la constancia de
@@ -3764,8 +3765,6 @@ records, the chain and the box's clock stay as they are
 
 **Proposed interim treatment (design default, A798 revision 5 decision 13):** raise the alert and
 change nothing else; the restart and its proof stay in the append-only table Q51 describes.
-Built by A798-B slices 8 (#2012) and 9 (#2025), 2026-10-23;
-parked for the owner. One step back per restart; later records are held to the minute.
 
 **2026-10-24:** the manager's restart this question describes was replaced by a confirmation of the
 clock that lifts the stop by itself ([Q51](#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24)).
