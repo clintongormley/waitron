@@ -1370,7 +1370,7 @@ describe("till-shell above phone width", () => {
 
   /** The items of `shell` that rank below Pass and Kitchen, and the viewport widths
    * just wide enough (`fits`) and just too narrow (`tight`) for its bar to keep both with the
-   * name hidden and those items in More. Measured in the running browser, because how wide the text
+   * brand mark (the venue's logo, or the word) hidden and those items in More. Measured in the running browser, because how wide the text
    * draws differs between platforms. */
   async function serviceWidths(
     shell: Partial<TillShell>,
