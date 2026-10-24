@@ -35,6 +35,7 @@ import { DEFAULT_FRAMING, type ImageFraming } from "../framing.js";
 
 /** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
+  if (use.kind === "theme_logo") return "/manage/appearance";
   if (use.kind === "department_receipt")
     return `/manage/venue-operations/department/${encodeURIComponent(use.id)}/view/receipt`;
   if (use.kind === "section")
@@ -60,6 +61,8 @@ function usageName(use: ImageUsage): string {
       return `${use.menuName} (${t("image.published_menu")})`;
     case "scheduled_menu_version":
       return `${use.menuName} (${t("image.scheduled_menu")})`;
+    case "theme_logo":
+      return t("image.theme_logo").replace("{name}", () => use.name);
     default:
       return use.name;
   }
@@ -632,8 +635,6 @@ export class ImageLibrary extends LitElement {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
   }
   #usage(use: ImageUsage) {
-    // Plain text until the Appearance page can be linked to (slice 8).
-    if (use.kind === "theme_logo") return html`<span>${use.name}</span>`;
     const name = usageName(use);
     const inactive =
       "active" in use && !use.active
