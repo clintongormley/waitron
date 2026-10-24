@@ -3821,7 +3821,9 @@ refused `409 clock.confirm_refused` with `reason: "same_machine"` when the reque
 (`requestFromBox`), unless the server runs in development mode. A challenge belongs to the
 management session that asked for it, is taken once, and holds for 5 000 ms on the steady clock
 (`CHALLENGE_MS`, `apps/server/src/clock-challenges.ts`); otherwise `challenge`. The box's time is
-taken at the round trip's midpoint, with half the round trip as its uncertainty, and the device
+taken at the round trip's midpoint, counted back on the steady clock from the reading the
+confirmation lifts rather than from the challenge's time, so a step of the box's clock during the
+round trip counts as a difference. Half the round trip is its uncertainty, and the device
 agrees when the difference plus that uncertainty is at most 60 000 ms (`adminAgrees`); otherwise
 `differs`. During a stop the seat refuses `contrary_proof` when AEAT, or a group of two or more
 devices from two addresses, disagrees — even when AEAT agrees (ruling R3b-1); with no stop it closes

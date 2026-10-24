@@ -544,15 +544,17 @@ it("refuses a device more than a minute off the box, counting half the challenge
   expect(off.status).toBe(409);
   expect(off.json).toEqual(refusal("differs"));
 
-  // Asked at 0 and answered at 2 000 on the steady clock: the box's time is taken at the midpoint,
-  // a second after the challenge, give or take a second.
+  // Asked at 0 and answered at 2 000 on the steady clock, the box's clock advancing with it: the
+  // box's time is taken at the midpoint, a second after the challenge, give or take a second.
   const roundTrip = async (offsetMs: number) => {
     stop.setSteady(0);
+    stop.setClock(stop.behind);
     const asked = await ask(stop, mario.cookie);
     stop.setSteady(2_000);
+    stop.setClock(stop.behind + 2_000);
     return answerChallenge(stop, mario.cookie, {
       challengeId: asked.json.challengeId,
-      deviceAt: boxTime(stop) + 1_000 + offsetMs,
+      deviceAt: stop.behind + 1_000 + offsetMs,
     });
   };
   const outside = await roundTrip(59_001);
@@ -566,6 +568,46 @@ it("refuses a device more than a minute off the box, counting half the challenge
   expect(row.proof.admin).toEqual({
     boxAt: new Date(stop.behind + 1_000).toISOString(),
     witnessAt: new Date(stop.behind + 60_000).toISOString(),
+    uncertaintyMs: 1_000,
+  });
+});
+
+it("compares the device with the box's clock as it reads now, not as it read at the challenge", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  const before = written();
+  const deviceAt = boxTime(stop);
+
+  // The box's clock steps back ten minutes between the challenge and the answer.
+  stop.setSteady(0);
+  const asked = await ask(stop, mario.cookie);
+  stop.setSteady(1_000);
+  stop.setClock(stop.behind - 10 * MINUTE);
+  const stepped = await answerChallenge(stop, mario.cookie, {
+    challengeId: asked.json.challengeId,
+    deviceAt: deviceAt + 1_000,
+  });
+  expect(stepped.status).toBe(409);
+  expect(stepped.json).toEqual(refusal("differs"));
+  expect(written()).toEqual(before);
+  const sale = await cashSale(venue.appAt(stop.clock));
+  expect(sale.status).toBe(409);
+  expect(sale.json).toMatchObject({ code: "clock.behind_chain" });
+
+  // Control: a clock that advances with the steady clock through the round trip.
+  stop.setClock(stop.behind);
+  stop.setSteady(0);
+  const again = await ask(stop, mario.cookie);
+  stop.setSteady(2_000);
+  stop.setClock(stop.behind + 2_000);
+  const confirmed = await answerChallenge(stop, mario.cookie, {
+    challengeId: again.json.challengeId,
+    deviceAt: stop.behind + 1_000,
+  });
+  expect(confirmed.status).toBe(200);
+  expect(written()).toMatchObject({ confirmations: before.confirmations + 1 });
+  expect(confirmationRow(confirmed.json.confirmationId as string).proof.admin).toEqual({
+    boxAt: new Date(stop.behind + 1_000).toISOString(),
+    witnessAt: new Date(stop.behind + 1_000).toISOString(),
     uncertaintyMs: 1_000,
   });
 });

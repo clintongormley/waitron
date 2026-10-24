@@ -169,15 +169,17 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       const { challengeId, deviceAt } = confirmBody(await readRawJsonBody<unknown>(c));
       const confirmation = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeAdmin(tx, sessionId);
+        // Before the reading: a witness noted after it would be left out as taken after it.
+        const witnesses = clockConfirm.witnesses();
+        const { instant, offsetMinutes } = clockConfirm.clock.now();
+        // Taken at the reading, so the round trip ends there on the steady clock.
         const challenge = challenges.take(sessionId, challengeId);
         if (challenge === null)
           throw new AppError("clock.confirm_refused", { reason: "challenge" });
         const personName = await requiredNameOf(tx, authorizedBy);
-        // Before the reading: a witness noted after it would be left out as taken after it.
-        const witnesses = clockConfirm.witnesses();
-        const { instant, offsetMinutes } = clockConfirm.clock.now();
         // The device read its clock somewhere in the round trip: the box's time is taken at its
-        // midpoint, give or take half of it.
+        // midpoint, give or take half of it, counted back from this reading rather than from the
+        // challenge's, so a step of the box's clock since the challenge is compared too.
         const halfMs = challenge.elapsedMs / 2;
         const answer = await confirmClockStop(tx, {
           reading: { instant, offsetMinutes },
@@ -188,7 +190,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
             personId: authorizedBy,
             personName,
             reading: {
-              boxAt: new Date(Math.round(challenge.boxAt + halfMs)).toISOString(),
+              boxAt: new Date(Math.round(instant.getTime() - halfMs)).toISOString(),
               witnessAt: new Date(deviceAt).toISOString(),
               uncertaintyMs: Math.ceil(halfMs),
             },

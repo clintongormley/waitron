@@ -8,15 +8,14 @@ const MAX_HELD = 256;
 
 interface Held {
   readonly session: string;
-  readonly boxAt: number;
   readonly steadyAt: number;
 }
 
 export interface ClockChallenges {
   issue(session: string): { challengeId: string; boxAt: number };
-  /** The challenge's issue, once, to the session it was issued to and within `CHALLENGE_MS` of
-   * it on the steady clock; null otherwise. */
-  take(session: string, challengeId: string): { boxAt: number; elapsedMs: number } | null;
+  /** The steady time since the challenge's issue, once, to the session it was issued to and
+   * within `CHALLENGE_MS` of it; null otherwise. */
+  take(session: string, challengeId: string): { elapsedMs: number } | null;
   size(): number;
 }
 
@@ -44,16 +43,15 @@ export function clockChallenges(deps: {
       if (own >= PER_SESSION) held.delete(oldestOwn!);
       if (held.size >= MAX_HELD) held.delete(held.keys().next().value!);
       const challengeId = randomUUID();
-      const boxAt = deps.wall();
-      held.set(challengeId, { session, boxAt, steadyAt });
-      return { challengeId, boxAt };
+      held.set(challengeId, { session, steadyAt });
+      return { challengeId, boxAt: deps.wall() };
     },
     take(session, challengeId) {
       const challenge = held.get(challengeId);
       if (challenge === undefined || challenge.session !== session) return null;
       held.delete(challengeId);
       const elapsedMs = deps.steady() - challenge.steadyAt;
-      return fresh(elapsedMs) ? { boxAt: challenge.boxAt, elapsedMs } : null;
+      return fresh(elapsedMs) ? { elapsedMs } : null;
     },
     size: () => held.size,
   };
