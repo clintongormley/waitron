@@ -712,4 +712,84 @@ describe("the closings list and alert what they find", () => {
     expect(misdatedAlerts()).toHaveLength(2);
     expect(misdatedAlerts()[1]).toEqual(listAlert(confirmation!.id, records, false));
   });
+
+  it("the stop back and an administrator confirming before the watch looks: the old check cannot tell, the lift lists the new stop", async () => {
+    await aheadSales();
+    const opening = rows().at(-1)!;
+    const old = await watchLooks(X);
+    await sale(X + 2 * H + 30 * S);
+    await sale(X + 4 * H + 5 * M);
+    await sale(X + 4 * H + 10 * M);
+    const newStop = rows().slice(-2);
+    // The clock is put right at 12:15, and the administrator confirms at 12:30 before any look.
+    const { confirmation } = await adminConfirms(X + 2 * H + 30 * M);
+    const closings = suite.db.all<{ id: string; source: string; checkId: string }>(
+      sql`select id, source, check_id as checkId from clock_confirmations order by seq`,
+    );
+    expect(closings.map((row) => [row.source, row.checkId === old!.id])).toEqual([
+      ["elapsed", true],
+      ["admin", false],
+    ]);
+    expect(count("clock_checks")).toBe(2);
+    // The new check opened in the lift's own transaction, so its start is not known.
+    expect(storedProof(confirmation!.id)).toMatchObject({
+      closing: { correctedStart: iso(X + 2 * H + 30 * M), partial: true, unconfirmed: false },
+    });
+    const records = await list(confirmation!.id);
+    expect(records.map((record) => record.recordId)).toEqual(newStop.map((row) => row.id));
+    // Both are dated at the confirmation's reading, so they are put in the closings' order.
+    const byClosing = misdatedAlerts().sort(
+      (a, b) =>
+        closings.findIndex((row) => row.id === a.params.confirmationId) -
+        closings.findIndex((row) => row.id === b.params.confirmationId),
+    );
+    expect(byClosing).toEqual([
+      {
+        source: "dashboard",
+        severity: "error",
+        saleId: saleOf(opening.id),
+        params: {
+          confirmationId: closings[0]!.id,
+          count: 0,
+          from: iso(X),
+          fromOffsetMinutes: 60,
+          partial: false,
+          unconfirmed: true,
+        },
+      },
+      listAlert(confirmation!.id, records, true),
+    ]);
+  });
+
+  it("cannot tell on a check that names no latest record: the alert names no sale", async () => {
+    await aheadSales();
+    const [row] = await suite.db
+      .insert(clockChecks)
+      .values({
+        seq: 1,
+        nodeId,
+        openedAt: new Date(X),
+        reason: "behind_chain",
+        detail: { clockAt: iso(X), bootMs: BOOT_MS, bootId: "boot-1", heads: heads() },
+      })
+      .returning({ id: clockChecks.id });
+    const at = X + 2 * H + 10 * S;
+    const { confirmation } = await closesByItself(at, [authority(at, 20 * M)]);
+    expect(confirmation).toMatchObject({ source: "elapsed", checkId: row!.id });
+    expect(misdatedAlerts()).toEqual([
+      {
+        source: "dashboard",
+        severity: "error",
+        saleId: null,
+        params: {
+          confirmationId: confirmation!.id,
+          count: 0,
+          from: iso(X),
+          fromOffsetMinutes: 60,
+          partial: false,
+          unconfirmed: true,
+        },
+      },
+    ]);
+  });
 });

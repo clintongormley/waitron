@@ -169,8 +169,10 @@ async function closeWaitingAsAdmin(
 }
 
 /** Confirms the box's clock while the stop proper holds, writing one `clock_confirmations` row
- * naming the latest record and closing the open check, which lifts the stop, and records
- * `clock.behind_chain_restarted` beside it. With no `admin`, only
+ * naming the latest record and closing this stop's check, which lifts the stop, and records
+ * `clock.behind_chain_restarted` and, through `recordMisdated`, `clock.records_misdated` beside it.
+ * This stop's check is the one the watch's look answers: the open check, or one opened now (after
+ * closing an open check whose stop came back), whose closing is then `partial`. With no `admin`, only
  * when the witnesses are ready; otherwise it writes nothing and answers null. With `admin`, on the
  * administrator's device unless a witness taken during the stop disagrees; a refusal throws
  * `clock.confirm_refused`, and a reading before 28-10-2024 `clock.unusable`, writing nothing. With
@@ -192,12 +194,16 @@ export async function confirmClockStop(
   }
   const { latest, agreeing } = judged;
   const existing = await openCheck(tx);
-  // Every closing needs an opening's heads to bound its list.
-  const openedNow = existing === null;
-  if (openedNow)
-    await openClockCheck(tx, { reading: input.reading, boot: input.boot, nodeId: input.nodeId });
-  // The stop proper holds, so a check opened just now is open.
-  const check = existing ?? (await openCheck(tx))!;
+  // Every closing needs an opening's heads to bound its list, and a check whose stop came back
+  // while it waited is not this stop's: the watch's own look closes it and opens one.
+  const opened = (await openClockCheck(tx, {
+    reading: input.reading,
+    boot: input.boot,
+    nodeId: input.nodeId,
+  }))!;
+  const openedNow = existing?.id !== opened.id;
+  // The stop proper holds, so the check just answered is open.
+  const check = openedNow ? (await openCheck(tx))! : existing!;
   const closing = closingProof(check, input.reading.instant, input.boot, {
     unconfirmed: false,
     openedNow,
