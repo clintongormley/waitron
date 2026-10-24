@@ -34,10 +34,11 @@ export interface PersonalDataPart {
   readonly part: ModulePersonalData;
 }
 
-/** Lower-case ASCII only, so no name can collide with the archive's own `README.txt` and none
+/** Lower-case ASCII only, so no name can collide with a `README.txt` the server adds and none
  * needs the ZIP's UTF-8 flag. */
 const FILE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*\.(?:json|csv|pdf)$/;
 
+/** Give it the enabled set: a disabled module's tables are not migrated. */
 export function personalDataParts(modules: readonly WaitronModule[]): PersonalDataPart[] {
   return modules.flatMap((m) =>
     m.personalData === undefined ? [] : [{ owner: m.name, part: m.personalData }],

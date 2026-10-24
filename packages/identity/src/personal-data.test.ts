@@ -43,7 +43,7 @@ async function seedLocation(db: Database): Promise<string> {
   return row!.id;
 }
 
-/** A person with a distinct value in every column decision 10 exports, and rows in every table. */
+/** A person with a distinct value in every exported column, and rows in every table. */
 async function seedFull(
   db: Database,
   locationId: string,
@@ -332,7 +332,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
     expect(IDENTITY_PERSONAL_DATA.files).toEqual(["profile.json", "sign-in.json"]);
   });
 
-  it("builds exactly the files decision 10 describes, with every list in its order", async () => {
+  it("builds exactly the expected files, with every list in its order", async () => {
     const { marta } = await seedBoth();
     const t = (n: number) => at(2021, n);
     const expectedProfile = {
@@ -413,7 +413,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
     const { profile, signIn } = await downloadParsed(marta.personId);
     expect(profile).toEqual(expectedProfile);
     expect(signIn).toEqual(expectedSignIn);
-    // toEqual ignores key order, which decision 10 fixes as written: compare the text too.
+    // toEqual ignores key order, which the export fixes: compare the text too.
     expect((await download(marta.personId)).map((f) => f.text)).toEqual([
       `${JSON.stringify(expectedProfile, null, 2)}\n`,
       `${JSON.stringify(expectedSignIn, null, 2)}\n`,

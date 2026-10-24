@@ -1,7 +1,8 @@
 # A980 slice S2a1: a staff member downloads their own data (server side)
 
 **Status: plan, 2026-10-24. Nothing is built.** Revised the same day after the plan review (its
-rulings I1–I3, M4–M10, W1–W4 are folded in below). Design:
+rulings I1–I3, M4–M10, W1–W4 are folded in below). 2026-10-24: built on
+`feat/a980-s2a1-own-download`. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4.2 (the
 download and its worked example), §2.1 and §2.3 (what is held), §5.3 row S2 (its tests), §8 owner
 answer O5 ("staff should be able to download their own data"). Overview:
@@ -138,7 +139,8 @@ Left for later, on purpose:
      files out). S2b changes the mount call and adds a part; it does not change
      `sendPersonalData` or the gatherer.
    - **S2c** adds a second route in the same file that calls `sendPersonalData` with its own
-     `authorize` step (decision 7), wrapped in the same exported error handler,
+     `authorize` step (decision 7), mounted from the management API mount rather than from
+     `mountMeApi`, whose routes are role-blind (`apps/server/src/me-api.ts`), wrapped in the same exported error handler,
      `withPersonalDataErrors`, and adds `authorization.not_permitted: 403` to that handler's one
      map (the own route never throws it; without the entry the code would fall to the boundary's
      default 400, `packages/server-kit/src/error-boundary.ts:42`). It also adds the actions part. The core tables that part reads (sales,
@@ -249,7 +251,7 @@ Left for later, on purpose:
      `authorize`'s `label`.
    - Made safe in this order: Unicode compatibility decomposition (NFKD), accents removed (every
      combining mark), lower case, then `ß→ss`, `æ→ae`, `œ→oe`, `ø→o`, `ł→l`, `đ→d`, `ð→d`, `þ→th`,
-     `ı→i` (letters that decomposition leaves whole), every run of anything other than `a-z` and
+     `ı→i`, `ħ→h`, `ŋ→n`, `ŧ→t` (letters that decomposition leaves whole), every run of anything other than `a-z` and
      `0-9` becomes one hyphen, hyphens trimmed from both ends, cut to 60 characters and trimmed
      again. If nothing is left the name is `person`. Experiment, 2026-10-24 (a throwaway
      `node -e` of exactly this function): `Marta López → marta-lopez`, `José Ñúñez → jose-nunez`,

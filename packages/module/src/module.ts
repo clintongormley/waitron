@@ -1578,6 +1578,7 @@ export interface WaitronModule {
   readonly fiscal?: FiscalContribution;
   readonly routes?: ModuleRoutes;
   readonly timeRecordExport?: ModuleTimeRecordExport;
+  /** Read only from enabled modules: a disabled module's tables are not migrated. */
   readonly personalData?: ModulePersonalData;
   readonly describeShifts?: (
     tx: Transaction,
