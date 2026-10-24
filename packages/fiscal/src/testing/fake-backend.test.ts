@@ -60,7 +60,7 @@ describe("clockBehindLatestRecord and refuseWhileClockBehind", () => {
   });
 });
 
-describe("the clock-stop restart", () => {
+describe("the clock-stop methods", () => {
   it("is absent: the fake never stops a clock", () => {
     const fake: FiscalBackend = backend;
     expect(fake.clockStopState).toBeUndefined();

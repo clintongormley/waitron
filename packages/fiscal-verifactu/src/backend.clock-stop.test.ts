@@ -209,7 +209,7 @@ describe("VerifactuBackend confirms the clock through the seat", () => {
     ).toBeNull();
   });
 
-  it("notes a clock proved wrong with no restart in force as touching nothing", async () => {
+  it("notes a clock proved wrong with no lift in force as touching nothing", async () => {
     await sellAt(T);
     expect(
       await withTransaction(suite.db, (tx) =>

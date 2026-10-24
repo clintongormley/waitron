@@ -507,7 +507,10 @@ check), each in the task named:
   `not_stopped`), because a confirmation has no replay, still asserting one alert; `:198` and `:277`
   count and insert into `clock_confirmations` instead of `clock_stop_restarts`; `:328` "records each
   restart's alert with its own person" → `:466`, the two lifts made by two administrators (Ana,
-  Berta), since only an administrator's confirmation carries a person; `:387` the control's params
+  Berta), since only an administrator's confirmation carries a person, and the same `twoRestarts`
+  helper puts administrators' lifts under the two disproof cases after it, `:493` "records a
+  disproof for each restart in force, …" and `:509` "counts a chain the later restart's heads leave
+  out …", whose checks change only from `first.restart.id` and `second.restart.id` to `first.id` and `second.id`; `:387` the control's params
   rebuilt to R7's shape;
 - the restart route and code in the dashboard: `apps/dashboard/src/api/client.test.ts:3255-3258`
   (`restartClockPayments`, `/api/box/clock-restart`), `apps/dashboard/src/i18n/codes.test.ts:744-749`

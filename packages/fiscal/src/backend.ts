@@ -215,8 +215,9 @@ export interface ClockConfirmRequest {
   admin?: ClockAdminConfirm;
 }
 
-/** An administrator's device's time against the box's: `boxAt` the box's time at the reading,
- * `uncertaintyMs` how far either way it may be off. */
+/** An administrator's device's time against the box's: `boxAt` the box's time at the midpoint of
+ * the round trip in which the device read its clock, not the request's `reading`; `uncertaintyMs`
+ * how far either way it may be off. */
 export interface ClockAdminReading {
   boxAt: string;
   witnessAt: string;
@@ -337,8 +338,9 @@ export interface FiscalBackend {
   ): Promise<ClockStopState | null>;
 
   /** Confirms the clock during a stop, which lifts it: automatically when the witnesses are ready
-   * (null, and nothing written, otherwise), or on `admin`'s device, which this regime's refusal
-   * may refuse. With `admin` and no stop, closes a check that waits instead. */
+   * (null, and nothing written, otherwise), or on `admin`'s device. With `admin`, an unusable
+   * reading is refused first, and the confirmation may then be refused with this regime's
+   * refusal. With `admin` and no stop, closes a check that waits instead. */
   confirmClockStop?(
     tx: Transaction,
     input: ClockConfirmRequest,
@@ -365,7 +367,8 @@ export interface FiscalBackend {
   misdatedRecords?(tx: Transaction, confirmationId: string): Promise<MisdatedRecords | null>;
 
   /** The clock was proved wrong after `trustedUntil`, noticed at `observedAt`; answers the
-   * confirmation ids it recorded, those with nothing written under them, and those another open issue holds. */
+   * confirmation ids it recorded, those with nothing written under them, and those another open
+   * issue holds. */
   noteClockProvedWrong?(
     tx: Transaction,
     input: ClockProvedWrong,
