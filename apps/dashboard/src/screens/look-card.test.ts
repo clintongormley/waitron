@@ -321,6 +321,87 @@ describe("the saved card's Logo row", () => {
     expect(logo.shadowRoot!.querySelector("img")).toBeNull();
     expect(row(el, "logo")).toBe(t("appearance.logo_dark_plate"));
   });
+
+  /** A 3:1 logo, loaded before anything is measured: the logo's box is sized by it. */
+  async function loadedLogo(el: Card) {
+    const logo = logoOf(el)!;
+    await expect.poll(() => logo.getAttribute("light")).toBe(display(L));
+    const canvas = document.createElement("canvas");
+    canvas.width = 1200;
+    canvas.height = 400;
+    canvas.getContext("2d")!.fillRect(0, 0, 1200, 400);
+    const loaded = new Promise((resolve) =>
+      logo.addEventListener("wt-logo-load", resolve, { once: true }),
+    );
+    logo.setAttribute("light", canvas.toDataURL("image/png"));
+    await loaded;
+    await logo.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    return logo;
+  }
+
+  /** The note's line boxes, read from its words rather than its element. */
+  function noteLines(el: Card): DOMRect[] {
+    const range = document.createRange();
+    range.selectNodeContents(q(el, "[data-test=saved-logo] .logo-note")!);
+    return [...range.getClientRects()].filter((rect) => rect.width > 0);
+  }
+
+  async function atViewport(width: number, run: () => Promise<void>): Promise<void> {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(width, 900);
+    try {
+      await run();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  }
+
+  // 308 px is the card's width on a 390 px screen (the visual check, 2026-10-24).
+  it.each([
+    ["en-GB", 390],
+    ["en-GB", 308],
+    ["es-ES", 390],
+    ["es-ES", 308],
+  ] as const)(
+    "on a 390 px screen, in %s, in a %i px card, sets 'Dark screens: on a light plate' wholly beside the logo or wholly under it",
+    async (locale, cardWidth) => {
+      setLocale(locale);
+      await atViewport(390, async () => {
+        const el = await mount(withLogo({ light: L }));
+        el.parentElement!.style.width = `${cardWidth}px`;
+        const logo = (await loadedLogo(el)).getBoundingClientRect();
+        expect(text(q(el, "[data-test=saved-logo] .logo-note"))).toBe(
+          (locale === "es-ES" ? es : en)["appearance.logo_dark_plate"],
+        );
+        const lines = noteLines(el);
+        expect(lines.length).toBeGreaterThan(0);
+        const beside = lines.every((line) => line.left >= logo.right - 0.5);
+        const under = lines.every((line) => line.top >= logo.bottom - 0.5);
+        expect(
+          beside || under,
+          lines.map((line) => `${line.left},${line.top}`).join(" ") +
+            ` logo ${logo.right},${logo.bottom}`,
+        ).toBe(true);
+      });
+    },
+  );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "on a wide screen, in %s, sets the note on one line beside the logo, as the banner mock-up does",
+    async (locale) => {
+      setLocale(locale);
+      await atViewport(1280, async () => {
+        const el = await mount(withLogo({ light: L }));
+        const logo = (await loadedLogo(el)).getBoundingClientRect();
+        const lines = noteLines(el);
+        expect(new Set(lines.map((line) => Math.round(line.top))).size).toBe(1);
+        expect(lines[0]!.left).toBeGreaterThanOrEqual(logo.right);
+        expect(lines[0]!.top).toBeLessThan(logo.bottom);
+        expect(lines[0]!.bottom).toBeGreaterThan(logo.top);
+      });
+    },
+  );
 });
 
 type Choices = ThemeChoices;

@@ -121,7 +121,8 @@ function brandRow(view: ThemeView | undefined, choices: ThemeChoices): TemplateR
 
 function logoRow(logo: ThemeLogo | null): TemplateResult | string {
   if (logo === null) return t("appearance.none");
-  return html`<wt-venue-logo
+  return html`<span class="logo-value"
+    ><wt-venue-logo
       size="banner"
       alt=""
       light=${liveMediaImage(logo.light, "display")}
@@ -129,7 +130,8 @@ function logoRow(logo: ThemeLogo | null): TemplateResult | string {
     ></wt-venue-logo>
     <span class="logo-note"
       >${t(logo.dark ? "appearance.logo_dark_own" : "appearance.logo_dark_plate")}</span
-    >`;
+    ></span
+  >`;
 }
 
 const HAND_FIELDS: ReadonlySet<unknown> = new Set(
@@ -198,6 +200,13 @@ export class LookCard extends LitElement {
         margin: var(--wt-space-4) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      /* The note moves under the logo whole rather than breaking around it. */
+      .logo-value {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
       }
       .logo-note {
         color: var(--wt-color-text-muted);
