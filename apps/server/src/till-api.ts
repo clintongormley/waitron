@@ -3215,19 +3215,22 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ...joinGroupOf(body),
         ...billOf(body),
       };
+      const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return submitGroups(
-          tx,
-          sendCfg,
-          partyId,
-          input,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-        );
-      });
+      const submitted = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          return submitGroups(
+            tx,
+            sendCfg,
+            partyId,
+            { ...input, lateSend: late },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
+        }),
+      );
       return c.json(submitted);
     }),
   );
@@ -3747,16 +3750,26 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         groups: parseDraftGroups(body.groups),
         ...joinGroupOf(body),
       };
+      const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withIssuanceTransaction(
-        deps.db,
-        async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
-          const result = await submitDraft(tx, sendCfg, partyId, draftId, input, deps.attendance);
-          await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
-          return result;
-        },
-        log,
+      const submitted = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            await checkZones(tx, deps.cfg, session, [{ partyId }]);
+            const result = await submitDraft(
+              tx,
+              sendCfg,
+              partyId,
+              draftId,
+              { ...input, lateSend: late },
+              deps.attendance,
+            );
+            await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
+            return result;
+          },
+          log,
+        ),
       );
       return c.json(submitted);
     }),

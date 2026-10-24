@@ -72,6 +72,7 @@ import "./errors.js";
 import { orderTableLabel } from "./kitchen-print.js";
 import { assertBillInvariant } from "./bill-payments.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
+import type { LateSendConfirmation } from "./late-send.js";
 import {
   applyPartyAllergyPatch,
   assertPartyAllergyAnswered,
@@ -1058,6 +1059,7 @@ export interface SubmitDraftInput extends PartyCommandArgs {
   }[];
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
   joinGroupId?: string;
+  lateSend?: LateSendConfirmation;
 }
 
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
@@ -1173,6 +1175,7 @@ export async function submitDraft(
           operatorId,
           billId,
           expectedEdit,
+          lateSend: input.lateSend,
           sourceDraftLineIds: freshGroups.flatMap((lines) => lines.map((line) => line.id)),
         },
         attendance === undefined ? undefined : { recorder: attendance, at },

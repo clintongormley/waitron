@@ -2923,6 +2923,7 @@ export async function priceTabRound(
   tabId: string,
   lines: TabRoundLine[],
   bill: "check" | "checked" = "check",
+  lateSend?: LateSendConfirmation,
 ): Promise<PricedTabRound> {
   if (bill === "check") await assertPartyBillOpen(tx, cfg, tabId);
   if (lines.length === 0) {
@@ -2939,6 +2940,10 @@ export async function priceTabRound(
     tabId,
     lines,
     context?.zoneId,
+    undefined,
+    "refuse",
+    "added",
+    lateSend,
   );
   return {
     tabId,
