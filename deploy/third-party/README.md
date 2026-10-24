@@ -25,6 +25,10 @@ their emitted JavaScript chunks. The generator (`scripts/npm-bundle-notices.mjs`
 installed package's licence and notice files into the generated text, grouped by name and version.
 The image build fails when a bundled package has no local notice and no pinned fallback.
 
+Stripe and Nodemailer also carry separate installed licence copies in `stripe/` and `nodemailer/`.
+Their module-type-only subdirectory manifests stop the current generator before it finds the
+owning package. Keep those copies until the lookup fix is checked against the emitted notices.
+
 For packages without local licence files, exact name-and-version fallback files live in
 `npm-fallback/`. These include the invoice renderer's brotli, dfa and fontkit dependencies,
 beside the QR generator, Nodable entities, Drizzle ORM and internal AWS SDK packages. The QR generator text comes from its
