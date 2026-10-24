@@ -120,126 +120,23 @@ does not exist.
   stays, counting, until the screen is opened again; long outages are counted in minutes, never
   hours.
 
-## A756. The Kitchen tab split up: a Courses page, a department Service tab and an Every station card
+## A1064. The station editor's ticket-grouping hint is never seen
 
-**Changed by A773 (owner, 2026-10-16, the same day).** These replace parts of the mock-ups below:
+"Applies to new kitchen tickets and to reprints." is the "Identical dishes on a kitchen ticket"
+dropdown's hint. `wt-combobox` always draws its hint visually hidden
+(`packages/ui-core/src/field-styles.ts:153-155`) for screen readers
+(`packages/ui/src/components/wt-combobox.ts:1100`), and shows it in the box only while nothing is
+chosen and there is no placeholder (`wt-combobox.ts:1102`); a station always has a grouping. The
+owner kept it as a hint on the old Kitchen tab (dashboard.md → Decisions, 2026-10-17); left open by
+A756 PR 6, which moved it to the station editor. Ask the owner whether it should be a visible note.
 
-- "Who fires held courses" is dropped, not moved to departments.
-- There is no "Every station" card: every station setting is set on each station.
-- Stations gain "Waits for the pass", and the Courses page gains "Held until fired".
-- "Changes after sending" has three values (A773 revision, owner 2026-10-17): no changes; while
-  held; while held or waiting. It decides when a sent dish can be recalled.
+## A1066. Four server test files mark a HOLD ticket printed without recording a station
 
-See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#7-settings--changes-to-a756).
-
-**A756 (owner, 2026-10-16) — the owner approved the mock-ups.** Mock-ups:
-[where each setting goes](mockups/a756-kitchen-settings/01-where-each-setting-goes.png),
-[Courses page](mockups/a756-kitchen-settings/02-courses-page.png),
-[department Service tab](mockups/a756-kitchen-settings/03-department-service-tab.png),
-[Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
-were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
-
-What is left. The starting decisions are in the plan,
-`docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` → "Parts that wait".
-
-2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable. PR 5 (late flags on
-each station) landed on 2026-10-23 (#2023).
-
-The Courses page's "Held until fired" column comes with A773-1 Task 1, which adds it to the shared
-course list widget; nothing is left for A756 there.
-
-Open points:
-
-- From #1852: the Transfers panel's heading is an `h2`, the dialog title's level, beside Service's
-  `h3` sections — an existing accessibility check selects `h2`.
-- From #1854: on the Courses page the row dividers stop short of the card's sides (mock-up 02
-  runs them to the edge; needs `course-list.ts` styles), and an error under the list would sit on
-  the card's bottom border (read from the code, not seen).
-- From PR 4: offer “At once” (0 minutes) in each department's reminder, as A773 §3.4 decided
-  (owner, 2026-10-17); the list offers Off and 5–30 minutes and the save refuses 0
-  (`requireReleaseReminderMinutes`, `packages/venue-service/src/routes.ts`).
-- From PR 4's look: the reminder's hint is never on screen. `wt-combobox` hides its hint paragraph
-  (`.hint`, `packages/ui-core/src/field-styles.ts:153-155`) and draws the placeholder before the
-  hint (`packages/ui/src/components/wt-combobox.ts:1102`), and the field's placeholder is "Off".
-  Unchanged from the Kitchen tab's control, which the owner kept as a hint on 2026-10-17
-  (dashboard.md → Decisions); reopen only if that changes.
-- From PR 4's look: a chosen "Off" looks unset. Off is the empty value, which `wt-combobox` treats
-  as no choice without `show-empty-option` (`wt-combobox.ts:508`), so it is drawn as a placeholder,
-  grey and italic (`wt-combobox.ts:159-162`, `:1047`). Unchanged from the Kitchen tab's control.
-- From #2020's review: saving one field in the department dialog can undo another manager's change
-  to a different field. Edit only the name while another dashboard turns the reminder Off, then
-  save, and the reminder is back at 10; Needs clearing behaves the same (both reproduced in
-  Chromium during #2020's finish). Once anything is edited the dialog keeps its whole draft
-  (since #1891, `ef59aa44c`), so the fix is the dialog keeping each untouched field in step with
-  incoming updates.
-- From #2020's review: a configuration import does not range-check a department's reminder
-  minutes, so a file could store 0, a negative number or 999; only the department save refuses
-  them. Main before #2020 did not check the old venue-wide value either (neither
-  `packages/db/src/configuration-transfer.ts` nor `apps/server/src/configuration-transfer.ts`
-  names the column at `b85119762`).
-- From PR 5: Add station draws its three minutes as full-width fields, one under another, labelled
-  "Warm after (min)", "Overdue after (min)" and "Forgotten after (min)"; the Edit window draws them
-  as one short row under Late flags (minutes), labelled "Warm", "Overdue" and "Forgotten"
-  (`prep-stations-screen.ts` `#dialog`, `station-editor.ts`). Unchanged by PR 5, whose only change
-  to Add station is reading 5/10/15 from one constant. The owner's one-row decision (A725 below)
-  names the Edit window; ask whether Add should match.
-- From PR 5: A773's picture 10 draws late flags as one "Late after · 5 · 10 · 15 min" dropdown;
-  PR 5 kept A725's three fields (owner, 2026-10-15). Ask the owner whether picture 10 replaces them.
-- From PR 5's look: at 1280 px the Edit window's late-flags row is about 46 px wider than the fields
-  above and below it (it ends at about x 951, the others at about 905, measured in Chromium). The
-  row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (`6a4331b4d`, #1837, by
-  `git blame`) and PR 5 did not change it. At 390 px every field is full width.
-- From PR 5's look: Spanish names the three flags three ways — the Edit window's labels "En demora",
-  "Retrasado", "Olvidado" (`prep.health.*`), the error "Usa minutos enteros con aviso < atraso <
-  olvido." (`prep.threshold_invalid`) and Add station's "Aviso / Atraso / Olvido a partir de (min)"
-  (`prep.warm`, `prep.overdue`, `prep.forgotten`), all in
-  `packages/venue-service/src/dashboard/strings.ts`. English uses warm, overdue and forgotten
-  throughout. PR 5 added no strings.
-- From PR 6: A773's picture 10 draws Held courses as a dropdown, "Print when sent"; PR 6 uses the
-  switch "Print held groups in advance" the Kitchen tab had. Ask the owner whether picture 10's
-  wording replaces it.
-- From PR 6: picture 10 lists Identical dishes and Held courses above MOVED slips; PR 6 puts them
-  after it, the editor's built order.
-- From PR 6: Add station sets none of a station's printing choices; a new station starts at one
-  line, no held printing, MOVED slips printed.
-- From PR 6: the station editor's ticket-grouping hint ("Applies to new kitchen tickets and to
-  reprints.") is never seen. `wt-combobox` always draws its hint visually hidden
-  (`packages/ui-core/src/field-styles.ts:153-155`) for screen readers (`packages/ui/src/components/wt-combobox.ts:1100`), and
-  shows it in the box only while nothing is chosen and there is no placeholder
-  (`wt-combobox.ts:1102`); a station always has a grouping — as the old Kitchen tab's dropdown
-  did. Ask the owner whether it should be a visible note.
-- From PR 6: a printer shared by a recorded and an unrecorded station prints one FIRE-marked
-  ticket carrying both stations' dishes (`apps/server/src/kitchen-print.ts:662-666`); ask the
-  owner whether FIRE should mark only the recorded station's part.
-- From PR 6: the new core table `order_group_hold_stations` has no row in the retention inventory
-  (`docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md`, its 2026-10-23 line);
-  its retention policy is the owner's to choose.
-- From PR 6's review: four server test files mark a group's HOLD ticket printed by writing its
-  stamp straight to the row, without recording any station in `order_group_hold_stations` —
-  `party-allergy.restart`, `party-allergy.submit`, `party-arriving-dishes` and `kitchen-print`.
-  They pass in CI; nobody has checked whether what they assert still depends on HOLD paper
-  reaching a station. `line-service-projections.test.ts` failed for this reason and now records
-  its stations.
-- From PR 7: the station editor labels the bump mode "Done on the screen", "One item at a time"
-  and "Whole ticket at once" (pictures 04 and 10); the Kitchen tab said "Bump mode", "Per item"
-  and "Whole ticket". Owner FYI, not a blocker: the Spanish is new and built as «Marcado en la
-  pantalla», «Un plato cada vez», «Toda la comanda a la vez» (the coordinator's choice of
-  2026-10-24), and the kitchen screen marks such an order «Toda la comanda» ("Whole ticket");
-  say if other words read better.
-- From PR 7: Add station sets no bump mode; a new station starts at one item at a time.
-- From PR 8 (owner question): the `kitchen` key stays in `VENUE_SETTINGS_TABS` with no panel, so
-  the page's tab checks keep a second tab; say if it should go (about 25 cases then lose their
-  subject) — plan PR 8 Decision 10.
-- From PR 8, owner FYI: the field reads "Changes after sending" with "Not allowed", "While held"
-  and "While held or waiting"; picture 10's "(printer only)" was dropped because the middle value
-  suits a printer-only station too. The Spanish is «Cambios tras el envío», «No permitidos», «Solo
-  en espera», «En espera o sin empezar»; say if other words read better.
-- From PR 8, owner FYI: a dish no station makes can be recalled whatever the stations allow
-  (A773-1 open point 4's answer A said so); a "Not allowed" station also refuses changes to a held dish, which the venue
-  switch allowed through line edits.
-- From PR 8, owner FYI: at a station set to "Not allowed", removing a waiting dish through an order
-  edit goes through, as a Void with its notice (with the venue switch off it was refused); the
-  setting decides only Recall and changes (controller's ruling, 2026-10-24).
+`party-allergy.restart`, `party-allergy.submit`, `party-arriving-dishes` and `kitchen-print` write a
+group's HOLD stamp straight to the row, without recording any station in
+`order_group_hold_stations`. They pass in CI; nobody has checked whether what they assert still
+depends on HOLD paper reaching a station. `line-service-projections.test.ts` failed for this reason
+and now records its stations. Left open by A756 PR 6's review.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
@@ -385,6 +282,44 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 A dish whose course is switched off follows the no-course rule: Fire now, listed first, whether
 you send it or move its bill. This replaces the earlier earliest-listed-course rule in the
 [table-actions plan](../superpowers/plans/2026-09-28-table-actions.md).
+
+### A756. The Kitchen tab split up: a Courses page, a department Service tab and an Every station card
+
+**A756 (owner, 2026-10-16) — the owner approved the mock-ups.** Mock-ups:
+[where each setting goes](mockups/a756-kitchen-settings/01-where-each-setting-goes.png),
+[Courses page](mockups/a756-kitchen-settings/02-courses-page.png),
+[department Service tab](mockups/a756-kitchen-settings/03-department-service-tab.png),
+[Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
+were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
+
+**Changed by A773 (owner, 2026-10-16, the same day).** These replace parts of the mock-ups:
+
+- "Who fires held courses" is dropped, not moved to departments.
+- There is no "Every station" card: every station setting is set on each station.
+- Stations gain "Waits for the pass", and the Courses page gains "Held until fired".
+- "Changes after sending" has three values (A773 revision, owner 2026-10-17): no changes; while
+  held; while held or waiting. It decides when a sent dish can be recalled.
+
+See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#7-settings--changes-to-a756).
+Built by A756 PRs 1–8 (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`);
+"Waits for the pass" and `locations.fire_control`'s removal belong to A773-2.
+
+### Add station sets a station's name, colour, printers and late flags only (A756 PRs 6–8)
+
+Every other choice starts at its default and is changed in the station editor: one line for
+identical dishes, no held printing, MOVED slips printed, one item at a time on the screen, and
+changes allowed while held or waiting.
+
+### Changes after sending: every part of a dish decides, and removal is not gated (A756 PR 8, 2026-10-24)
+
+Owner FYIs, built this way; say if any should change. A dish the kitchen has started is refused
+first. Otherwise the dish's own station and the station of each extra routed elsewhere must all
+allow the change. A dish no station makes can be recalled whatever the stations allow (A773-1 open
+point 4's answer A said so). A "Not allowed" station also refuses changes to a held dish, which the
+venue switch allowed through line edits. At a "Not allowed" station, removing a waiting dish or
+lowering its quantity through an order edit goes through, as a Void with its notice (with the venue
+switch off it was refused); the setting decides only Recall and changes (controller's ruling,
+2026-10-24).
 
 ### A756 point 1. Courses have their own page under Products and menus (owner, 2026-10-16)
 

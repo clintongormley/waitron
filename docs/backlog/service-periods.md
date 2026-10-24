@@ -513,6 +513,14 @@ A721's LOOK, 2026-10-18 (#1843). Left open by A721.
   `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on
   every day; a lookup exported from `shared` that validates once would remove the copy.
 
+## A1073. Saving one field in the department dialog can undo another manager's change to a different field
+
+Edit only the name while another dashboard turns the reminder Off, then save, and the reminder is
+back at 10; Needs clearing behaves the same (both reproduced in Chromium during #2020's finish).
+Once anything is edited the dialog keeps its whole draft (since #1891, `ef59aa44c`), so the fix is
+the dialog keeping each untouched field in step with incoming updates. Left open by A756 PR 4's
+review.
+
 ## Decisions and deliberate limits
 
 - **One legal seller for the first venue (owner, 2026-10-21, A898).** Every department

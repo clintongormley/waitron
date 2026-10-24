@@ -118,8 +118,8 @@ lista eliminada, junto con su cargo, y descarta cualquier respuesta a una lista 
 
 Un plato ya enviado en una mesa conserva sus extras y respuestas de opciones registrados. Para
 cambiarlos, usa **Retirar** en la ventana del plato y edítalo en **Nuevo pedido**. Puedes retirarlo
-solo en una cuenta sin pagar, mientras la estación del plato permita cambios tras el envío y la
-cocina no lo haya empezado. El plato retirado conserva sus precios y descuentos registrados. Puedes mantener
+solo en una cuenta sin pagar, mientras las estaciones del plato y de sus extras permitan cambios
+tras el envío y la cocina no lo haya empezado. El plato retirado conserva sus precios y descuentos registrados. Puedes mantener
 una respuesta o un extra sin cambios aunque ya no se ofrezca; un extra nuevo usa su precio actual
 en la carta. Vuelve a enviar el plato cuando sus cambios estén listos.
 

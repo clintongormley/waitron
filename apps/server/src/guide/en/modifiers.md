@@ -106,8 +106,8 @@ list, and its charge with it, and drops any answer to a deleted options list.
 
 A dish already sent at a table keeps its recorded extras and options answers. To change them, use
 **Recall** in the dish's line window, then edit it in **New order**. Recall is available only on an
-unpaid bill, while the dish's prep station allows changes after sending and the kitchen has not
-started the dish.
+unpaid bill, while the stations of the dish and its extras allow changes after sending and the
+kitchen has not started the dish.
 The recalled dish keeps its recorded prices and discounts. You can leave an old answer or extra
 unchanged even when it is no longer offered; a newly selected extra uses its current offered price.
 Send the dish again when its changes are ready.

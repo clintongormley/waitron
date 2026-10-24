@@ -5201,8 +5201,8 @@ Defaults — and, with the Veri\*Factu module, a fifth: the AEAT certificate, wh
 `fiscal.view` to read and `system.manage` to install or replace. The other four cards need
 `venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
 receipt language and the "VAT class for new products" default — is shown with `venue.view`, and is
-editable with `venue.configure` and read-only without it. Venue settings has no Kitchen tab
-since A756 PR 8 (2026-10-24): its address opens Venue details. Voids and comps
+editable with `venue.configure` and read-only without it. Venue settings has no Kitchen tab:
+the `kitchen` key names no panel since A756 PR 8 (2026-10-24), so its address opens Venue details. Voids and comps
 (`/manage/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
