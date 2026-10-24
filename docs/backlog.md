@@ -2968,7 +2968,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   sign-in) and is tried again every minute. An optional
   key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
   for slices 10 and 11 `textScale` 100 and `text` `{}`), with no configuration format change.
-  Slice 10a landed 2026-10-2x (#PR): a theme has a text size, 100% to 130% in 5% steps, set with a
+  Slice 10a landed 2026-10-24 (#2045): a theme has a text size, 100% to 130% in 5% steps, set with a
   slider on the Look card that shows the four sizes it gives and a till button and bill line in the
   preview; every screen draws it, while the equipment label, the recovery sheet and Google's sign-in
   button keep Waitron's sizes. Until 10b, long names on the tills break inside a word from 115%, while
