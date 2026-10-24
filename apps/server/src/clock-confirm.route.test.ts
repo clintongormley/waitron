@@ -613,6 +613,28 @@ it("compares the device with the box's clock as it reads now, not as it read at 
   });
 });
 
+it("refuses a device that matched the box's clock before the box's clock stepped forward", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  const before = written();
+  const deviceAt = boxTime(stop);
+
+  // Three minutes forward during a one-second round trip leaves the clock behind the last record.
+  stop.setSteady(0);
+  const asked = await ask(stop, mario.cookie);
+  stop.setSteady(1_000);
+  stop.setClock(stop.behind + 3 * MINUTE);
+  const stepped = await answerChallenge(stop, mario.cookie, {
+    challengeId: asked.json.challengeId,
+    deviceAt: deviceAt + 1_000,
+  });
+  expect(stepped.status).toBe(409);
+  expect(stepped.json).toEqual(refusal("differs"));
+  expect(written()).toEqual(before);
+  const sale = await cashSale(venue.appAt(stop.clock));
+  expect(sale.status).toBe(409);
+  expect(sale.json).toMatchObject({ code: "clock.behind_chain" });
+});
+
 it("refuses a confirmation AEAT contradicts during the stop", async () => {
   const stop = await stoppedBox(10 * MINUTE);
   stop.witnesses.noteAuthority({
