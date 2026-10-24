@@ -25,6 +25,7 @@ import {
   dotOf,
   mountWidget,
 } from "../widgets/test-helpers.js";
+import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 // Registers the media module's code messages, image.changed among them.
 import "@waitron/dashboard-modules";
 import type { ImageUpload } from "../widgets/image-upload.js";
@@ -1873,5 +1874,55 @@ describe("the Text size slider", () => {
     await expect
       .poll(() => q(el, "section.settings-card")!.hasAttribute("data-editing"))
       .toBe(false);
+  });
+
+  it("at 390 px and 130% the editor's controls stay inside the card", async () => {
+    setLocale("en-GB");
+    const before = { width: innerWidth, height: innerHeight };
+    const drawnSize = (el: Card) => getComputedStyle(q(el, "[data-test=text-sizes]")!).fontSize;
+    try {
+      await page.viewport(390, 844);
+      const plain = (await mountEditing(inUse(lucia))).el;
+      expect(drawnSize(plain), "the line of sizes at 100%").toBe("12px");
+      cleanupWidgets();
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+      const { el } = await mountEditing(inUse(lucia));
+      await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(drawnSize(el), "the line of sizes at 130%").toBe("16px");
+      const card = q(el, "section.settings-card")!.getBoundingClientRect();
+      const parts: Record<string, Element> = {
+        slider: slider(el),
+        "line of sizes": q(el, "[data-test=text-sizes]")!,
+        ...Object.fromEntries(
+          [...preview(el).shadowRoot!.querySelectorAll(".panel")].map((panel, i) => [
+            `preview panel ${i + 1}`,
+            panel,
+          ]),
+        ),
+        ...Object.fromEntries(
+          ["use-waitron", "save-as-new", "cancel", "save"].map((name) => [name, button(el, name)]),
+        ),
+      };
+      expect(Object.keys(parts).filter((name) => name.startsWith("preview panel"))).toHaveLength(2);
+      const outside = Object.entries(parts)
+        .map(([name, node]) => [name, node.getBoundingClientRect()] as const)
+        .filter(
+          ([, box]) =>
+            box.width === 0 ||
+            box.left < card.left - 0.5 ||
+            box.right > card.right + 0.5 ||
+            box.top < card.top - 0.5 ||
+            box.bottom > card.bottom + 0.5,
+        )
+        .map(([name, box]) => `${name} ${box.left},${box.top},${box.right},${box.bottom}`);
+      expect(outside).toEqual([]);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    } finally {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+        (sheet) => sheet !== TEXT_130_SHEET,
+      );
+      await page.viewport(before.width, before.height);
+    }
   });
 });
