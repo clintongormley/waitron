@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import {
   applyTokens,
@@ -6,23 +6,17 @@ import {
   VENUE_THEME_STORAGE_KEY,
   type WtVenueLogo,
 } from "@waitron/ui";
-import { LiveData } from "@waitron/dashboard-kit";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
-import type { DashboardApi } from "./api/client.js";
 import { setLocale } from "./i18n/t.js";
-
-function png(width: number, height: number): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d")!;
-  context.fillStyle = "#1e5b3a";
-  context.fillRect(0, 0, width, height);
-  return canvas.toDataURL("image/png");
-}
+import {
+  nextLogoLoad,
+  png,
+  stubShellApi,
+  type ShellLocale as Locale,
+} from "./testing/venue-logo-fixture.js";
 
 const LOGOS = [
   ["3:1", png(150, 50), 3],
@@ -30,55 +24,7 @@ const LOGOS = [
   ["1:4", png(20, 80), 0.25],
 ] as const;
 
-type Locale = "en-GB" | "es-ES";
-
 const never = () => new Promise<Response>(() => {});
-
-function stubApi(signedIn: boolean, locale: Locale): DashboardApi {
-  return {
-    liveData: new LiveData(),
-    getGoogleConfig: async () => ({ configured: false }),
-    getLocales: async () => ({
-      locales: [
-        { code: "es-ES", label: "Español" },
-        { code: "en-GB", label: "English" },
-      ],
-      venueDefault: locale,
-      loginDefault: locale,
-      venueName: "Deli Test SL",
-      onboardingIntent: "prepare",
-    }),
-    getMe: signedIn
-      ? vi.fn().mockResolvedValue({
-          personId: "p1",
-          role: "manager",
-          email: "manager@example.com",
-          locale,
-          venueLocale: locale,
-          sessionDefault: locale,
-          venueName: "Deli Test SL",
-          onboardingIntent: "prepare",
-          permissions: [],
-          modules: [],
-        })
-      : vi.fn().mockRejectedValue({ code: "management_session.required" }),
-    getVenueTheme: vi.fn().mockReturnValue(new Promise(() => {})),
-    getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
-    listAlerts: async () => ({ visible: false, alerts: [] }),
-    getSalesOverview: async () => ({
-      businessDay: "2026-08-30",
-      takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
-      counts: { sales: 0, corrections: 0, voids: 0 },
-      openTables: { open: 0, total: 0 },
-      topSellers: [],
-    }),
-    getOverdueOrders: async () => ({ orders: [] }),
-    listMyShifts: async () => [],
-    listMySwaps: async () => [],
-    listMyAbsences: async () => [],
-    getStaffRoster: async () => [],
-  } as unknown as DashboardApi;
-}
 
 async function flush(el: DashboardApp): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -96,7 +42,7 @@ async function mountShell(
   );
   startVenueTheme(document.documentElement, { fetchImpl: never });
   const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-    api: stubApi(signedIn, locale),
+    api: stubShellApi(signedIn, locale),
   });
   await flush(el);
   const ready = signedIn ? "[data-test=account-menu]" : "dashboard-login-screen";
@@ -112,16 +58,6 @@ async function controlHeight(signedIn: boolean, locale: Locale): Promise<number>
   const height = banner.getBoundingClientRect().height;
   cleanupWidgets();
   return height;
-}
-
-async function loadedImage(logo: WtVenueLogo): Promise<HTMLImageElement> {
-  await vi.waitFor(() => {
-    const img = logo.shadowRoot!.querySelector<HTMLImageElement>("img[part=image]");
-    expect(img?.complete && img.naturalWidth > 0).toBe(true);
-  });
-  await logo.updateComplete;
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-  return logo.shadowRoot!.querySelector<HTMLImageElement>("img[part=image]")!;
 }
 
 /** True when the two boxes overlap vertically, so they sit on one row. */
@@ -158,9 +94,10 @@ async function check(
   ratio: number,
 ): Promise<void> {
   const expectedHeight = await controlHeight(signedIn, locale);
+  const loads = nextLogoLoad();
   const { el, banner } = await mountShell(address, signedIn, locale);
-  const logo = banner.querySelector<WtVenueLogo>("wt-venue-logo")!;
-  const img = await loadedImage(logo);
+  const { logo, img } = await loads;
+  expect(logo).toBe(banner.querySelector<WtVenueLogo>("wt-venue-logo"));
   const drawn = img.getBoundingClientRect();
   expect(drawn.height).toBeGreaterThan(0);
   expect(drawn.height).toBeLessThanOrEqual(40);

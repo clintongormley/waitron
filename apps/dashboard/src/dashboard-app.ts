@@ -756,10 +756,6 @@ export class DashboardApp extends LitElement {
           grid-area: logo;
           max-width: 100%;
         }
-        .venue-logo {
-          grid-area: logo;
-          max-width: 100%;
-        }
         .banner-actions {
           grid-area: actions;
           margin-inline-start: var(--wt-space-2);

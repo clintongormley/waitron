@@ -7,25 +7,16 @@ import {
   startVenueTheme,
   THEME_STORAGE_KEY,
   VENUE_THEME_STORAGE_KEY,
+  reportVenueLogoFailure,
   type WtVenueLogo,
 } from "@waitron/ui";
-import { LiveData } from "@waitron/dashboard-kit";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
 import type { DashboardApi } from "./api/client.js";
 import { setLocale } from "./i18n/t.js";
-
-function png(width: number, height: number): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d")!;
-  context.fillStyle = "#1e5b3a";
-  context.fillRect(0, 0, width, height);
-  return canvas.toDataURL("image/png");
-}
+import { nextLogoLoad, png, stubShellApi as stubApi } from "./testing/venue-logo-fixture.js";
 
 const LIGHT = png(120, 40);
 const DARK = png(90, 30);
@@ -58,53 +49,6 @@ function store(answer: unknown): void {
   localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
 }
 
-const meResponse = {
-  personId: "p1",
-  role: "manager",
-  email: "manager@example.com",
-  locale: null,
-  venueLocale: "es-ES",
-  sessionDefault: "es-ES",
-  venueName: "Deli Test SL",
-  onboardingIntent: "prepare",
-  permissions: [],
-  modules: [],
-};
-
-function stubApi(signedIn: boolean, overrides: Record<string, unknown> = {}) {
-  const api = {
-    liveData: new LiveData(),
-    getGoogleConfig: async () => ({ configured: false }),
-    getLocales: async () => ({
-      locales: [{ code: "es-ES", label: "Spanish" }],
-      venueDefault: "es-ES",
-      loginDefault: "es-ES",
-      venueName: "Deli Test SL",
-      onboardingIntent: "prepare",
-    }),
-    getMe: signedIn
-      ? vi.fn().mockResolvedValue({ ...meResponse })
-      : vi.fn().mockRejectedValue({ code: "management_session.required" }),
-    getVenueTheme: vi.fn().mockResolvedValue(FIXTURE_ANSWER),
-    getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
-    listAlerts: async () => ({ visible: false, alerts: [] }),
-    getSalesOverview: async () => ({
-      businessDay: "2026-08-30",
-      takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
-      counts: { sales: 0, corrections: 0, voids: 0 },
-      openTables: { open: 0, total: 0 },
-      topSellers: [],
-    }),
-    getOverdueOrders: async () => ({ orders: [] }),
-    listMyShifts: async () => [],
-    listMySwaps: async () => [],
-    listMyAbsences: async () => [],
-    getStaffRoster: async () => [],
-    ...overrides,
-  };
-  return api as typeof api & DashboardApi;
-}
-
 async function mount(api: DashboardApi): Promise<{ el: DashboardApp; host: HTMLElement }> {
   const mounted = await mountWidget<DashboardApp>("dashboard-app", { api });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -116,15 +60,6 @@ const banner = (el: DashboardApp) => el.shadowRoot!.querySelector("[data-test=br
 const venueLogo = (el: DashboardApp) => banner(el).querySelector<WtVenueLogo>("wt-venue-logo");
 const lockup = (el: DashboardApp) => banner(el).querySelector<HTMLImageElement>(".brand-logo");
 const lockupShown = (el: DashboardApp) => lockup(el)?.checkVisibility() ?? false;
-
-async function loaded(logo: WtVenueLogo): Promise<HTMLImageElement> {
-  await vi.waitFor(() => {
-    const img = logo.shadowRoot!.querySelector<HTMLImageElement>("img[part=image]");
-    expect(img?.complete && img.naturalWidth > 0).toBe(true);
-  });
-  await logo.updateComplete;
-  return logo.shadowRoot!.querySelector<HTMLImageElement>("img[part=image]")!;
-}
 
 beforeEach(() => {
   applyTokens(document.documentElement);
@@ -160,6 +95,7 @@ it.each([
   async (_where, signedIn) => {
     store(withLogo(LIGHT, DARK));
     startVenueTheme(document.documentElement, { fetchImpl: never });
+    const loads = nextLogoLoad();
     const { el } = await mount(stubApi(signedIn));
     if (!signedIn) {
       await expect
@@ -172,7 +108,7 @@ it.each([
     expect(logo.getAttribute("light")).toBe(LIGHT);
     expect(logo.getAttribute("dark")).toBe(DARK);
     expect(logo.getAttribute("alt")).toBe("");
-    await loaded(logo);
+    expect((await loads).logo).toBe(logo);
     expect(lockupShown(el)).toBe(false);
     const name = banner(el).querySelector("[data-test=venue-name]")!;
     expect(logo.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -257,9 +193,10 @@ it("follows a live answer without a reload", async () => {
   const { el } = await mount(api);
   await vi.waitFor(() => expect(lockupShown(el)).toBe(true));
   api.getVenueTheme.mockResolvedValue(withLogo(LIGHT, null, "live-logo-hash"));
+  const loads = nextLogoLoad();
   api.liveData.invalidate([{ type: "custom_themes" }]);
   await vi.waitFor(() => expect(venueLogo(el)?.getAttribute("light")).toBe(LIGHT));
-  await loaded(venueLogo(el)!);
+  await loads;
   expect(lockupShown(el)).toBe(false);
 });
 
@@ -267,10 +204,10 @@ it("switches with the Theme setting, asking nothing", async () => {
   store(withLogo(LIGHT));
   const fetchImpl = answering(withLogo(LIGHT));
   startVenueTheme(document.documentElement, { fetchImpl });
-  const { el, host } = await mount(stubApi(false));
+  const loads = nextLogoLoad();
+  const { host } = await mount(stubApi(false));
   startThemeChoice(host);
-  const logo = venueLogo(el)!;
-  await loaded(logo);
+  const { logo } = await loads;
   const plate = () => logo.shadowRoot!.querySelector(".box")!.hasAttribute("data-plate");
   chooseTheme("dark");
   await vi.waitFor(() => expect(plate()).toBe(true));
@@ -278,4 +215,16 @@ it("switches with the Theme setting, asking nothing", async () => {
   await vi.waitFor(() => expect(plate()).toBe(false));
   expect(fetchImpl).toHaveBeenCalledOnce();
   expect(fetchImpl.mock.calls[0]![0]).toBe("/api/theme");
+});
+
+it("a logo reported failed is cleared once the banner loads it", async () => {
+  const logo = { light: LIGHT, dark: null };
+  store(withLogo(LIGHT));
+  startVenueTheme(document.documentElement, { fetchImpl: never });
+  reportVenueLogoFailure(logo);
+  expect(currentVenueLogo()).toEqual({ kind: "logo", logo, failed: true });
+  const loads = nextLogoLoad();
+  await mount(stubApi(false));
+  await loads;
+  await vi.waitFor(() => expect(currentVenueLogo()).toEqual({ kind: "logo", logo, failed: false }));
 });
