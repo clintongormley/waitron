@@ -876,6 +876,12 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **Backup access is independent of a retained setup's password (A731; owner, 2026-10-15).**
+  Authenticate the selected backup with its own named node key, plus the archive key or source
+  credentials it needs. Keep unrelated local records opaque and retain their files. A key that
+  opens the backup does not replace fiscal history admission. Follow
+  [repair recovery](../operations/hour-recovery.md#recover-while-first-setup-is-blocked).
+
 - **Pre-squash certificate metadata (A889).** Until a pre-A795 test box is reset under
   [A760](../operations/a760-migration-squash.md), reinstall its certificate through the
   certificate card if it shows **Installed: not recorded**. The card's expiry alerts and
@@ -1472,50 +1478,3 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
   [Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
   (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
   open.
-
-
-## A731. Recover from backup from the first-setup repair page
-
-Required before any venue goes live; owner 2026-10-15 at about 17:15. Connect the repair
-page to existing archive, bucket and managed-Cloud recovery, retaining real owner proof and the
-selected backup’s named node recovery key, archive encryption key where applicable and current
-outside recovery evidence. Follow [the offline restore procedure](../developers/offline-fiscal-restore.md).
-Unresolved first-setup guards currently block restore; the page must say this path is not yet
-available until this item lands. Do not expose retained business records without proof.
-
-Internal archive and bucket recovery prepares and selects a separate target. It retains the
-approved public history outside the backup secrets and republishes it after placement, so another
-backup keeps that history. Unknown files at either target root refuse placement. The unpublished
-branch has TLS repair routes and boot admission; the dedicated page is unfinished. The internal
-archive and bucket restart path requires new named-node
-proof and exact module commitment, then replays the same operation without replacing counters
-advanced after proof. Encrypted publication material retains the original secret entries without
-saving the node proof. A prepared operation without a target database can reopen the same archive
-or signed bucket generation with fresh named-node proof. It keeps the saved event and target,
-checks clocks again and preserves any sealed selection. This also covers a placement-started
-record whose target folders contain no database or unrecognised top-level file. A database or
-unrecognised top-level file is retained and refuses this path.
-
-Internal Cloud placement uses the existing checked restore wrapper with the original approved
-request and matching destination state. Its private approval moves into the operation after the
-journal is written. A restart after local commitment needs fresh named-node proof and the exact
-saved Cloud and module result before replay; it does not download again. The source’s `backup.env`
-is excluded from both placement and sealed replay material. A failed provider acknowledgement
-leaves the local selection complete and its Cloud state pending. If the first approval-state
-transfer was interrupted before input selection or sealed publication, new approval can serve the
-same journal, event and target; the selected source and node key are checked again. A newer
-approval rejects an earlier proof still downloading. An expired approval may renew before
-publication while the saved input, event and target remain unchanged; renewal also rejects an
-older proof returning after its key check. Sealed publication blocks approval replacement.
-Ordinary setup closes its store before backup proof, drains its other setup requests and stops
-writing the retained file log. This keeps the closed database sidecars and log bound to the repair
-journal through shutdown. Its other setup actions require a restart after this handoff.
-A setup that already replaced its original workspace now keeps the recovery records in the original
-folders and restores into a separate target. An invalid Cloud origin leaves public repair status available; Cloud
-validates that setting when used. Closing a repair listener waits for private-copy disposal and
-invalidates its grant. These paths have focused tests, including real TLS listeners in all three
-entry modes. Real supervised-process checks cover disposal of an authenticated copy on SIGTERM
-and SIGINT, both before and after recovery escalation, and a restart after exact target resume.
-Controlled uploads check that backup proof waits for admitted setup work and later ordinary
-actions refuse. The dedicated page, complete integration and whole-branch review remain open. The plan is
-`docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.

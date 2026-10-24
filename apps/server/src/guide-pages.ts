@@ -10,6 +10,7 @@ import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import { GUIDE_CERTIFICATE_TITLE } from "./i18n/guide-certificate.js";
 import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
 import { TILL_NOTICES_GUIDE_TITLE } from "./i18n/till-notices-guide.js";
+import { BACKUP_RECOVERY_GUIDE_TITLE } from "./i18n/backup-recovery-guide.js";
 import { BOX_STATUS_GUIDE_TITLE } from "./i18n/box-status-guide.js";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
@@ -79,6 +80,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       purchases: PURCHASES_GUIDE_TITLE.en,
       "till-notices": TILL_NOTICES_GUIDE_TITLE.en,
       "box-status": BOX_STATUS_GUIDE_TITLE.en,
+      "backup-recovery": BACKUP_RECOVERY_GUIDE_TITLE.en,
     },
     notFoundTitle: "Page not found",
     notFound: "There is no guide page at this address.",
@@ -99,6 +101,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       purchases: PURCHASES_GUIDE_TITLE.es,
       "till-notices": TILL_NOTICES_GUIDE_TITLE.es,
       "box-status": BOX_STATUS_GUIDE_TITLE.es,
+      "backup-recovery": BACKUP_RECOVERY_GUIDE_TITLE.es,
     },
     missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
     notFoundTitle: "Página no encontrada",

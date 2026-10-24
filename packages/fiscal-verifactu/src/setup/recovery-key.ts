@@ -36,7 +36,7 @@ export class RecoveryKeyEntry extends LitElement {
       }
     `,
   ];
-  @property({ attribute: false }) selection!: RecoveryKeySelection;
+  @property({ attribute: false }) selection?: RecoveryKeySelection;
   @property() errorMessage?: string;
   @property() locale: "en" | "es" = "en";
   @state() private draft = empty();
@@ -123,17 +123,17 @@ export class RecoveryKeyEntry extends LitElement {
     if (picker) picker.value = "";
     this.#scope?.changed();
     const generation = ++this.#generation;
-    const selection = { ...this.selection };
+    const selection = this.selection && { ...this.selection };
     this.invalid = false;
     this.#notify();
     if (!this.draft.value) return;
     const current = () =>
       this.isConnected &&
       generation === this.#generation &&
-      selection.taxId === this.selection.taxId &&
-      selection.environment === this.selection.environment &&
-      selection.nodeId === this.selection.nodeId &&
-      selection.keyName === this.selection.keyName;
+      selection?.taxId === this.selection?.taxId &&
+      selection?.environment === this.selection?.environment &&
+      selection?.nodeId === this.selection?.nodeId &&
+      selection?.keyName === this.selection?.keyName;
     try {
       const secret = decodeRecoveryKey(this.draft.value);
       if (current()) this.#notify(secret);
@@ -150,14 +150,14 @@ export class RecoveryKeyEntry extends LitElement {
     this.draft = { ...empty(), file };
     this.#scope?.changed();
     const generation = this.#generation;
-    const selection = { ...this.selection };
+    const selection = this.selection && { ...this.selection };
     const current = () =>
       this.isConnected &&
       generation === this.#generation &&
-      selection.taxId === this.selection.taxId &&
-      selection.environment === this.selection.environment &&
-      selection.nodeId === this.selection.nodeId &&
-      selection.keyName === this.selection.keyName;
+      selection?.taxId === this.selection?.taxId &&
+      selection?.environment === this.selection?.environment &&
+      selection?.nodeId === this.selection?.nodeId &&
+      selection?.keyName === this.selection?.keyName;
     try {
       if (file.size > MAX_RECOVERY_PDF) throw new Error("oversized");
       const { readRecoveryPdf } = await import("../recovery-reader.js");
@@ -165,11 +165,12 @@ export class RecoveryKeyEntry extends LitElement {
       const { document } = await readRecoveryPdf(new Uint8Array(await file.arrayBuffer()));
       if (!current()) return;
       if (
-        document.scope.taxpayerNif !== this.selection.taxId ||
         document.scope.softwareId !== WAITRON_ID_SISTEMA ||
-        document.scope.environment !== this.selection.environment ||
-        document.nodeKey.nodeId !== this.selection.nodeId ||
-        document.nodeKey.name !== this.selection.keyName
+        (this.selection !== undefined &&
+          (document.scope.taxpayerNif !== this.selection.taxId ||
+            document.scope.environment !== this.selection.environment ||
+            document.nodeKey.nodeId !== this.selection.nodeId ||
+            document.nodeKey.name !== this.selection.keyName))
       ) {
         this.pdfError = "mismatch";
         return;

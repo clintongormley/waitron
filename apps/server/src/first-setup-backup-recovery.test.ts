@@ -316,11 +316,9 @@ it("shutdown discards authenticated private copies and prevents a delayed open i
     (error) => ({ error }),
   );
   await opened.promise;
-  try {
-    await service.dispose();
-  } finally {
-    release.resolve();
-  }
+  const disposing = service.dispose();
+  release.resolve();
+  await disposing;
   const result = await pending;
   expect(result).toMatchObject({ error: { code: "setup.owner_required" } });
   await expect(readFile(selected!.copy.databasePath)).rejects.toMatchObject({ code: "ENOENT" });
@@ -1506,4 +1504,127 @@ it("places into a new target while retaining a populated local database and its 
   } finally {
     await local.close();
   }
+});
+
+it("shutdown waits for a private source still opening before reporting cleanup complete", async () => {
+  const f = await fixture();
+  const opened = barrier(),
+    release = barrier();
+  const real = (await vi.importActual<typeof sources>("./first-setup-backup-source.js"))
+    .openFirstSetupBackupSource;
+  let selected: Awaited<ReturnType<typeof real>> | undefined;
+  vi.spyOn(sources, "openFirstSetupBackupSource").mockImplementation(async (...args) => {
+    selected = await real(...args);
+    opened.resolve();
+    await release.promise;
+    return selected;
+  });
+  const service = recovery(f.options);
+  const pending = service.open(f.request, { onBox: false }).catch((error: unknown) => error);
+  await opened.promise;
+  let closed = false;
+  const closing = service.dispose().then(() => {
+    closed = true;
+  });
+  try {
+    await expect(service.status()).rejects.toMatchObject({ code: "setup.owner_required" });
+    expect(closed, "private opening has not returned its disposer yet").toBe(false);
+  } finally {
+    release.resolve();
+    await closing;
+    await pending;
+  }
+  expect(await pending).toMatchObject({ code: "setup.owner_required" });
+  await expect(readFile(selected!.copy.databasePath)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(closed).toBe(true);
+  expect(await f.workspace.read()).toEqual([]);
+});
+
+it("shutdown drains an unfinished bucket restore before deleting its private destination", async () => {
+  const f = await fixture();
+  const signer = generateNodeKeyPair();
+  const store = createMemoryObjectStore({ now: () => new Date() });
+  const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
+  const kit = {
+    version: 1 as const,
+    venueId: node.locationId,
+    bucket: {
+      region: "local",
+      bucket: "copy",
+      prefix: "",
+      accessKeyId: "synthetic",
+      secretAccessKey: "synthetic",
+    },
+    recoveryKey: "bucket-secret",
+    pointerSignerPublicKey: signer.publicKey,
+  };
+  await writePointer(
+    store,
+    node.locationId,
+    signPointer(
+      {
+        venueId: node.locationId,
+        nodeId: node.nodeId,
+        generation,
+        term: 0,
+        writtenAt: new Date().toISOString(),
+      },
+      signer.privateKey,
+    ),
+    null,
+  );
+  await writeSealedStateRow(
+    suite.db,
+    node.nodeId,
+    await sealNodeState(f.entries, kit.recoveryKey),
+    new Date(),
+  );
+  await suite.db.archiveTo(f.database);
+  const entered = barrier(),
+    release = barrier();
+  let destination: string | undefined;
+  const service = recovery({
+    ...f.options,
+    sources: {
+      ...f.options.sources,
+      bucket: {
+        ...f.options.sources.bucket,
+        openStore: () => store,
+        restoreGeneration: async ({ outPath }) => {
+          destination = outPath;
+          await copyFile(f.database, outPath);
+          entered.resolve();
+          await release.promise;
+        },
+      },
+    },
+  });
+  const pending = service
+    .open(
+      {
+        ...f.request,
+        source: { kind: "bucket", kit: encodeRecoveryKit(kit), environment: "preproduction" },
+      },
+      { onBox: false },
+    )
+    .catch((error: unknown) => error);
+  await entered.promise;
+  expect((await readFile(destination!)).byteLength).toBeGreaterThan(0);
+  let closed = false;
+  const closing = service.dispose().then(() => {
+    closed = true;
+  });
+  try {
+    await expect(service.status()).rejects.toMatchObject({ code: "setup.owner_required" });
+    expect(closed).toBe(false);
+    expect((await readFile(destination!)).byteLength).toBeGreaterThan(0);
+  } finally {
+    release.resolve();
+    await closing;
+    await pending;
+  }
+  expect(await pending).toMatchObject({ code: "setup.owner_required" });
+  await expect(access(destination!)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await f.workspace.read()).toEqual([]);
+  expect((await readFile(f.database)).byteLength).toBeGreaterThan(0);
 });

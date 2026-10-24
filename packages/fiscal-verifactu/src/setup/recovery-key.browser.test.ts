@@ -308,3 +308,27 @@ it.each([
   );
   expect(page.getByText(error, { exact: true }).elements()).toHaveLength(1);
 });
+
+it.each(["en", "es"] as const)(
+  "reads a recovery PDF for backup proof in %s before the backup identity is known",
+  async (locale) => {
+    const el = await mount();
+    el.selection = undefined;
+    el.locale = locale;
+    await el.updateComplete;
+    const secrets: (string | undefined)[] = [];
+    el.addEventListener("recovery-key-change", (event) =>
+      secrets.push((event as CustomEvent<{ secret?: string }>).detail.secret),
+    );
+    await upload(el, await renderRecoveryPdf(saved, locale, "Europe/Madrid"));
+    expect(secrets.at(-1)).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    expect(
+      el.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files!.item(0)!.name,
+    ).toBe("recovery.pdf");
+    expect(
+      el
+        .shadowRoot!.querySelector("wt-input")!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!.value,
+    ).toBe("");
+  },
+);

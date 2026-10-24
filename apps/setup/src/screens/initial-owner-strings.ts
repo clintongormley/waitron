@@ -1,6 +1,7 @@
 export const initialOwnerStrings = {
   en: {
     heading: "First setup",
+    recoverBackup: "Recover from backup",
     waiting: "Saving setup ownership…",
     resume: "Continue with your setup password",
     password: "Administrator password",
@@ -37,6 +38,7 @@ export const initialOwnerStrings = {
   },
   es: {
     heading: "Primera configuración",
+    recoverBackup: "Recuperar desde una copia",
     waiting: "Guardando titularidad de configuración…",
     resume: "Continuar con tu contraseña de configuración",
     password: "Contraseña de administrador",

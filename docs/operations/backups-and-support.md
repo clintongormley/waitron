@@ -17,6 +17,14 @@ the former key active. See the [archive settings reference](../../apps/server/RE
 and [restore procedures](../developers/offline-fiscal-restore.md) for the separate archive
 and node recovery keys. The [recovery PDF](recovery-document.md) is a different document.
 
+## Recover from an interrupted first setup
+
+Choose **Recover from backup** on the repair page and follow the
+[repair recovery procedure](hour-recovery.md#recover-while-first-setup-is-blocked). Keep the
+selected copy's named node key and any archive key or source credentials ready. Proving access
+to that backup does not grant access to an unrelated local database. Keep its original files
+when a history or ownership check refuses, and investigate the cause before trying another recovery.
+
 ## Capture detailed logs while reproducing a problem
 
 Open **Diagnostics** using an account with `diagnostics.view`. Choose **Turn on detailed

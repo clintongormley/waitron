@@ -37,7 +37,7 @@ export interface SetupContribution {
   }): ModuleRecoveryEntry;
   createRecoveryKey?(context: {
     locale: "en" | "es";
-    selection: RecoveryKeySelection;
+    selection?: RecoveryKeySelection;
   }): ModuleRecoveryKeyEntry;
   create(context: { locale: "en" | "es"; request: unknown; api: InitialSetupActions }): HTMLElement;
 }

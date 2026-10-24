@@ -121,6 +121,19 @@ async function verifier(selected: Selected): Promise<string | null> {
 export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
   let generation = 0;
   let disposed = false;
+  const openings = new Set<Promise<void>>();
+  let disposal: Promise<void> | undefined;
+  const opening = () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((done) => {
+      finish = done;
+    });
+    openings.add(pending);
+    return () => {
+      openings.delete(pending);
+      finish();
+    };
+  };
   type Entry = {
     session: BackupRepairSession;
     usedAt: number;
@@ -544,376 +557,391 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       supplied: BackupRepairOpenRequest,
       _client: OperationClient,
     ): Promise<BackupRepairSession> {
-      void _client;
-      if (disposed) ownerRequired();
-      const request = structuredClone(supplied);
-      if (request.source.kind !== "cloud" && request.source.environment !== options.environment)
-        throw new AppError("restore.environment_mismatch", {
-          backup: request.source.environment,
-          target: options.environment,
-        });
-      if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
-        throw new AppError("module.operation_invalid", { module: "core" });
-      const recoveryId =
-        request.recoveryId ??
-        (request.source.kind === "cloud" ? pendingCloudId : undefined) ??
-        randomUUID();
-      const before = await turn(async () => {
-        if (disposed) ownerRequired();
-        if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
-        const records = await options.workspace.read();
-        const record = records.at(-1);
-        if (
-          request.recoveryId === undefined
-            ? records.length !== 0
-            : record === undefined ||
-              record.target.recoveryId !== recoveryId ||
-              !["prepared", "placement-started"].includes(record.phase) ||
-              !isDeepStrictEqual(request.observation, {
-                inspectionId: record.observation.inspectionId,
-                revision: record.observation.revision,
-                ownerGeneration: record.observation.ownerGeneration,
-              })
-        )
-          conflict();
-        const digest = await options.workspace.inspect(recoveryId);
-        if (record !== undefined && digest !== record.observation.originalsDigest) conflict();
-        return { digest, generation: ++generation, record };
-      });
-      // Decrypted copies and key derivation stay outside the retained roots and their action lock.
-      const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
-      let selected: Selected | undefined;
-      let owned = true;
-      const discard = async () => {
-        try {
-          await selected?.copy.discard();
-        } finally {
-          await rm(scratch, { recursive: true, force: true });
-        }
-      };
+      const finish = opening();
       try {
-        selected = await openFirstSetupBackupSource(
-          request.source,
-          {
-            ...options.sources,
-            ...(request.source.kind === "cloud"
-              ? {
-                  cloudRecovery:
-                    options.cloud === undefined ? undefined : (await cloudFor(recoveryId)).client,
-                }
-              : {}),
-            stateDir: scratch,
-            stagingDir: join(scratch, "staging"),
-          },
-          request.context,
-        );
-        if (selected.copy.manifest.environment !== options.environment)
+        void _client;
+        if (disposed) ownerRequired();
+        const request = structuredClone(supplied);
+        if (request.source.kind !== "cloud" && request.source.environment !== options.environment)
           throw new AppError("restore.environment_mismatch", {
-            backup: selected.copy.manifest.environment,
+            backup: request.source.environment,
             target: options.environment,
           });
-        const { node } = readArtifactIdentity(selected.copy.secretEntries);
-        if (
-          before.record !== undefined &&
-          (selected.sourceId !== before.record.sourceId ||
-            selected.copy.sourceId !== before.record.activationSourceId)
-        )
-          conflict();
-        const proofBinding: OperationBinding = before.record?.binding ?? {
-          module: "core",
-          action: "restore",
-          eventId: randomUUID(),
-          sourceId: selected.copy.sourceId!,
-          targetNodeId: node.nodeId,
-        };
-        const provedVerifier = await verifier(selected);
-        const sourceDigest = await fingerprint(selected);
-        const preview = await authenticatedFirstSetupBackupPreview(
-          selected,
-          proofBinding,
-          request.nodeRecoverySecret,
-          options.sources,
-        );
-        if (preview.fiscalSelection === undefined)
+        if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
           throw new AppError("module.operation_invalid", { module: "core" });
-        const binding = { ...proofBinding, module: preview.fiscalSelection.module };
-        if (before.record !== undefined && !isDeepStrictEqual(binding, before.record.binding))
-          conflict();
-        return await turn(async () => {
+        const recoveryId =
+          request.recoveryId ??
+          (request.source.kind === "cloud" ? pendingCloudId : undefined) ??
+          randomUUID();
+        const before = await turn(async () => {
           if (disposed) ownerRequired();
+          if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
+          const records = await options.workspace.read();
+          const record = records.at(-1);
           if (
-            generation !== before.generation ||
-            !isDeepStrictEqual(await observation(), request.observation) ||
-            (await options.workspace.inspect(recoveryId)) !== before.digest ||
-            (await fingerprint(selected!)) !== sourceDigest ||
-            (await verifier(selected!)) !== provedVerifier ||
-            !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record)
+            request.recoveryId === undefined
+              ? records.length !== 0
+              : record === undefined ||
+                record.target.recoveryId !== recoveryId ||
+                !["prepared", "placement-started"].includes(record.phase) ||
+                !isDeepStrictEqual(request.observation, {
+                  inspectionId: record.observation.inspectionId,
+                  revision: record.observation.revision,
+                  ownerGeneration: record.observation.ownerGeneration,
+                })
           )
             conflict();
-          await drop();
-          const session = {
-            sessionId: randomBytes(32).toString("hex"),
-            recoveryId,
-            binding,
-            preview,
-            ...(before.record === undefined ? {} : { input: structuredClone(before.record.input) }),
-          };
-          const entry: Entry = {
-            session,
-            usedAt: performance.now(),
-            discard,
-            request,
-            selected: selected!,
-            originalsDigest: before.digest,
-            sourceDigest,
-            provedVerifier,
-            ...(request.source.kind === "cloud"
-              ? {
-                  cloudState: await readCloudRecoveryState((await cloudFor(recoveryId)).stateDir),
-                }
-              : {}),
-          };
-          active = entry;
-          try {
-            if (before.record !== undefined) {
-              const { version, sequence, previousRecordDigest, recordedAt, ...record } =
-                before.record;
-              void version;
-              void sequence;
-              void previousRecordDigest;
-              void recordedAt;
-              entry.record = record;
-              entry.sourceReopened = true;
-              await emptyTarget(record, entry.cloudState);
-              await preparation(entry);
-              const path = join(
-                dirname(dirname(record.target.target.stateDir)),
-                "publication.json",
-              );
-              if (
-                await lstat(path).then(
-                  () => true,
-                  (error: unknown) => {
-                    if (
-                      typeof error === "object" &&
-                      error !== null &&
-                      "code" in error &&
-                      error.code === "ENOENT"
-                    )
-                      return false;
-                    throw new AppError("setup.attempt_uncertain", {});
-                  },
-                )
-              ) {
-                const saved = await readBackupRepairPublication(record);
-                const published = await openBackupRepairPublication(
-                  record,
-                  saved.ciphertext,
-                  request.nodeRecoverySecret,
-                  entry.selected.copy.databasePath,
-                  {
-                    ...options.sources,
-                    environment: options.environment,
-                    stateDir: join(scratch, "publication-state"),
-                    stagingDir: join(scratch, "publication-staging"),
-                  },
-                );
-                if (!isDeepStrictEqual(published.preview, session.preview)) conflict();
-                entry.publicationDigest = saved.digest;
-              }
-              await recheck(entry);
-            }
-            touch(entry);
-            owned = false;
-            return structuredClone(session);
-          } catch (error) {
-            await drop();
-            throw error;
-          }
+          const digest = await options.workspace.inspect(recoveryId);
+          if (record !== undefined && digest !== record.observation.originalsDigest) conflict();
+          return { digest, generation: ++generation, record };
         });
+        // Decrypted copies and key derivation stay outside the retained roots and their action lock.
+        const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
+        let selected: Selected | undefined;
+        let owned = true;
+        const discard = async () => {
+          try {
+            await selected?.copy.discard();
+          } finally {
+            await rm(scratch, { recursive: true, force: true });
+          }
+        };
+        try {
+          selected = await openFirstSetupBackupSource(
+            request.source,
+            {
+              ...options.sources,
+              ...(request.source.kind === "cloud"
+                ? {
+                    cloudRecovery:
+                      options.cloud === undefined ? undefined : (await cloudFor(recoveryId)).client,
+                  }
+                : {}),
+              stateDir: scratch,
+              stagingDir: join(scratch, "staging"),
+            },
+            request.context,
+          );
+          if (selected.copy.manifest.environment !== options.environment)
+            throw new AppError("restore.environment_mismatch", {
+              backup: selected.copy.manifest.environment,
+              target: options.environment,
+            });
+          const { node } = readArtifactIdentity(selected.copy.secretEntries);
+          if (
+            before.record !== undefined &&
+            (selected.sourceId !== before.record.sourceId ||
+              selected.copy.sourceId !== before.record.activationSourceId)
+          )
+            conflict();
+          const proofBinding: OperationBinding = before.record?.binding ?? {
+            module: "core",
+            action: "restore",
+            eventId: randomUUID(),
+            sourceId: selected.copy.sourceId!,
+            targetNodeId: node.nodeId,
+          };
+          const provedVerifier = await verifier(selected);
+          const sourceDigest = await fingerprint(selected);
+          const preview = await authenticatedFirstSetupBackupPreview(
+            selected,
+            proofBinding,
+            request.nodeRecoverySecret,
+            options.sources,
+          );
+          if (preview.fiscalSelection === undefined)
+            throw new AppError("module.operation_invalid", { module: "core" });
+          const binding = { ...proofBinding, module: preview.fiscalSelection.module };
+          if (before.record !== undefined && !isDeepStrictEqual(binding, before.record.binding))
+            conflict();
+          return await turn(async () => {
+            if (disposed) ownerRequired();
+            if (
+              generation !== before.generation ||
+              !isDeepStrictEqual(await observation(), request.observation) ||
+              (await options.workspace.inspect(recoveryId)) !== before.digest ||
+              (await fingerprint(selected!)) !== sourceDigest ||
+              (await verifier(selected!)) !== provedVerifier ||
+              !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record)
+            )
+              conflict();
+            await drop();
+            const session = {
+              sessionId: randomBytes(32).toString("hex"),
+              recoveryId,
+              binding,
+              preview,
+              ...(before.record === undefined
+                ? {}
+                : { input: structuredClone(before.record.input) }),
+            };
+            const entry: Entry = {
+              session,
+              usedAt: performance.now(),
+              discard,
+              request,
+              selected: selected!,
+              originalsDigest: before.digest,
+              sourceDigest,
+              provedVerifier,
+              ...(request.source.kind === "cloud"
+                ? {
+                    cloudState: await readCloudRecoveryState((await cloudFor(recoveryId)).stateDir),
+                  }
+                : {}),
+            };
+            active = entry;
+            try {
+              if (before.record !== undefined) {
+                const { version, sequence, previousRecordDigest, recordedAt, ...record } =
+                  before.record;
+                void version;
+                void sequence;
+                void previousRecordDigest;
+                void recordedAt;
+                entry.record = record;
+                entry.sourceReopened = true;
+                await emptyTarget(record, entry.cloudState);
+                await preparation(entry);
+                const path = join(
+                  dirname(dirname(record.target.target.stateDir)),
+                  "publication.json",
+                );
+                if (
+                  await lstat(path).then(
+                    () => true,
+                    (error: unknown) => {
+                      if (
+                        typeof error === "object" &&
+                        error !== null &&
+                        "code" in error &&
+                        error.code === "ENOENT"
+                      )
+                        return false;
+                      throw new AppError("setup.attempt_uncertain", {});
+                    },
+                  )
+                ) {
+                  const saved = await readBackupRepairPublication(record);
+                  const published = await openBackupRepairPublication(
+                    record,
+                    saved.ciphertext,
+                    request.nodeRecoverySecret,
+                    entry.selected.copy.databasePath,
+                    {
+                      ...options.sources,
+                      environment: options.environment,
+                      stateDir: join(scratch, "publication-state"),
+                      stagingDir: join(scratch, "publication-staging"),
+                    },
+                  );
+                  if (!isDeepStrictEqual(published.preview, session.preview)) conflict();
+                  entry.publicationDigest = saved.digest;
+                }
+                await recheck(entry);
+              }
+              touch(entry);
+              owned = false;
+              return structuredClone(session);
+            } catch (error) {
+              await drop();
+              throw error;
+            }
+          });
+        } finally {
+          if (owned) await discard();
+        }
       } finally {
-        if (owned) await discard();
+        finish();
       }
     },
     async resume(
       supplied: BackupRepairResumeRequest,
       _client: OperationClient,
     ): Promise<BackupRepairResumeSession> {
-      void _client;
-      const request = structuredClone(supplied);
-      if (disposed) ownerRequired();
-      if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
-        throw new AppError("module.operation_invalid", { module: "core" });
-      const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
-      let owned = true;
-      const discard = () => rm(scratch, { recursive: true, force: true });
+      const finish = opening();
       try {
-        const before = await turn(async () => {
-          if (disposed) ownerRequired();
-          const record = (await options.workspace.read()).at(-1);
-          if (
-            record === undefined ||
-            record.target.recoveryId !== request.recoveryId ||
-            !["placement-started", "restored"].includes(record.phase) ||
-            !isDeepStrictEqual(await observation(), request.observation) ||
-            !isDeepStrictEqual(request.observation, {
-              inspectionId: record.observation.inspectionId,
-              revision: record.observation.revision,
-              ownerGeneration: record.observation.ownerGeneration,
-            })
-          )
-            conflict();
-          const material = await readBackupRepairPublication(record);
-          await existingTarget(record);
-          const lock = await lockVenueDatabase(record.target.target.venueDir);
-          try {
-            const target = await openVenueDatabase(record.target.target.venueDir);
-            try {
-              await target.venue.archiveTo(join(scratch, "venue.db"));
-            } finally {
-              await target.close();
-            }
-          } finally {
-            lock.release();
-          }
-          return { record, material, generation: ++generation };
-        });
-        const selected = await openBackupRepairPublication(
-          before.record,
-          before.material.ciphertext,
-          request.nodeRecoverySecret,
-          join(scratch, "venue.db"),
-          {
-            ...options.sources,
-            environment: options.environment,
-            stateDir: join(scratch, "state"),
-            stagingDir: join(scratch, "staging"),
-          },
-        );
-        const { node } = readArtifactIdentity(selected.copy.secretEntries);
-        const assertCommitted = options.modules.find(
-          (module) => module.name === before.record.binding.module,
-        )?.backup?.assertRestoreCommitted;
-        if (assertCommitted === undefined)
-          throw new AppError("module.operation_invalid", { module: before.record.binding.module });
-        const source = { copy: selected.copy, sourceId: before.record.sourceId };
-        if (selected.kind === "cloud") {
-          const cloud = await cloudFor(request.recoveryId);
-          const binding = await cloud.client.binding();
-          if (
-            !isDeepStrictEqual(binding, {
-              requestId: selected.cloudState?.requestId,
-              pointId: selected.cloudState?.pointId,
-            })
-          )
-            conflict();
-        }
-        const cloudState =
-          selected.kind === "cloud"
-            ? await readCloudRecoveryState((await cloudFor(request.recoveryId)).stateDir)
-            : undefined;
-        if (
-          selected.kind === "cloud" &&
-          (cloudState === undefined ||
-            selected.cloudState === undefined ||
-            !isDeepStrictEqual(cloudIdentity(cloudState), cloudIdentity(selected.cloudState)))
-        )
-          conflict();
-        const proved = await authenticatedFirstSetupBackupPreview(
-          source,
-          before.record.binding,
-          request.nodeRecoverySecret,
-          options.sources,
-        );
-        if (
-          proved.nodeRecoveryKeyName !== selected.preview.nodeRecoveryKeyName ||
-          proved.nodeId !== selected.preview.nodeId ||
-          !isDeepStrictEqual(proved.taxpayer, selected.preview.taxpayer)
-        )
-          conflict();
-        const database = await openVenueDatabase(scratch);
+        void _client;
+        const request = structuredClone(supplied);
+        if (disposed) ownerRequired();
+        if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
+          throw new AppError("module.operation_invalid", { module: "core" });
+        const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
+        let owned = true;
+        const discard = () => rm(scratch, { recursive: true, force: true });
         try {
-          await withTransaction(database.venue, (tx) =>
-            assertCommitted(tx, node, before.record.binding),
+          const before = await turn(async () => {
+            if (disposed) ownerRequired();
+            const record = (await options.workspace.read()).at(-1);
+            if (
+              record === undefined ||
+              record.target.recoveryId !== request.recoveryId ||
+              !["placement-started", "restored"].includes(record.phase) ||
+              !isDeepStrictEqual(await observation(), request.observation) ||
+              !isDeepStrictEqual(request.observation, {
+                inspectionId: record.observation.inspectionId,
+                revision: record.observation.revision,
+                ownerGeneration: record.observation.ownerGeneration,
+              })
+            )
+              conflict();
+            const material = await readBackupRepairPublication(record);
+            await existingTarget(record);
+            const lock = await lockVenueDatabase(record.target.target.venueDir);
+            try {
+              const target = await openVenueDatabase(record.target.target.venueDir);
+              try {
+                await target.venue.archiveTo(join(scratch, "venue.db"));
+              } finally {
+                await target.close();
+              }
+            } finally {
+              lock.release();
+            }
+            return { record, material, generation: ++generation };
+          });
+          const selected = await openBackupRepairPublication(
+            before.record,
+            before.material.ciphertext,
+            request.nodeRecoverySecret,
+            join(scratch, "venue.db"),
+            {
+              ...options.sources,
+              environment: options.environment,
+              stateDir: join(scratch, "state"),
+              stagingDir: join(scratch, "staging"),
+            },
           );
-        } finally {
-          await database.close();
-        }
-        const sourceDigest = await fingerprint(source);
-        const provedVerifier = await verifier(source);
-        const publicEvidence = await readDurableHostJson(
-          join(dirname(dirname(before.record.target.target.stateDir)), "retained-evidence.json"),
-          1024 * 1024,
-        );
-        if (
-          publicEvidence === null ||
-          createHash("sha256").update(JSON.stringify(publicEvidence)).digest("hex") !==
-            before.record.retainedEvidenceDigest
-        )
-          conflict();
-        return await turn(async () => {
-          if (disposed) ownerRequired();
+          const { node } = readArtifactIdentity(selected.copy.secretEntries);
+          const assertCommitted = options.modules.find(
+            (module) => module.name === before.record.binding.module,
+          )?.backup?.assertRestoreCommitted;
+          if (assertCommitted === undefined)
+            throw new AppError("module.operation_invalid", {
+              module: before.record.binding.module,
+            });
+          const source = { copy: selected.copy, sourceId: before.record.sourceId };
+          if (selected.kind === "cloud") {
+            const cloud = await cloudFor(request.recoveryId);
+            const binding = await cloud.client.binding();
+            if (
+              !isDeepStrictEqual(binding, {
+                requestId: selected.cloudState?.requestId,
+                pointId: selected.cloudState?.pointId,
+              })
+            )
+              conflict();
+          }
+          const cloudState =
+            selected.kind === "cloud"
+              ? await readCloudRecoveryState((await cloudFor(request.recoveryId)).stateDir)
+              : undefined;
           if (
-            generation !== before.generation ||
-            !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record) ||
-            !isDeepStrictEqual(await observation(), request.observation) ||
-            (await readBackupRepairPublication(before.record)).digest !== before.material.digest
+            selected.kind === "cloud" &&
+            (cloudState === undefined ||
+              selected.cloudState === undefined ||
+              !isDeepStrictEqual(cloudIdentity(cloudState), cloudIdentity(selected.cloudState)))
           )
             conflict();
-          await existingTarget(before.record);
-          const target = await openVenueDatabase(before.record.target.target.venueDir);
+          const proved = await authenticatedFirstSetupBackupPreview(
+            source,
+            before.record.binding,
+            request.nodeRecoverySecret,
+            options.sources,
+          );
+          if (
+            proved.nodeRecoveryKeyName !== selected.preview.nodeRecoveryKeyName ||
+            proved.nodeId !== selected.preview.nodeId ||
+            !isDeepStrictEqual(proved.taxpayer, selected.preview.taxpayer)
+          )
+            conflict();
+          const database = await openVenueDatabase(scratch);
           try {
-            if ((await readBreakGlassVerifier(target.venue, node.nodeId)) !== provedVerifier)
-              conflict();
-            await withTransaction(target.venue, (tx) =>
+            await withTransaction(database.venue, (tx) =>
               assertCommitted(tx, node, before.record.binding),
             );
           } finally {
-            await target.close();
+            await database.close();
           }
-          await drop();
-          const { version, sequence, previousRecordDigest, recordedAt, ...record } = before.record;
-          void version;
-          void sequence;
-          void previousRecordDigest;
-          void recordedAt;
-          const session = {
-            sessionId: randomBytes(32).toString("hex"),
-            recoveryId: request.recoveryId,
-            preview: selected.preview,
-            binding: record.binding,
-            input: structuredClone(record.input),
-          };
-          const entry: Entry = {
-            session,
-            usedAt: performance.now(),
-            request,
-            selected: source,
-            originalsDigest: record.observation.originalsDigest,
-            sourceDigest,
-            provedVerifier,
-            discard,
-            working: scratch,
-            record,
-            evidence: publicEvidence as Record<string, unknown>,
-            resumed: true,
-            rebuildSource: selected.kind === "cloud" ? "archive" : selected.kind,
-            ...(cloudState === undefined ? {} : { cloudState }),
-            publicationDigest: before.material.digest,
-          };
-          active = entry;
-          await admitCloud(entry);
-          buildPreparation(entry);
-          await recheck(entry);
-          touch(entry);
-          owned = false;
-          return structuredClone(session);
-        });
-      } catch (error) {
-        if (isAppError(error)) throw error;
-        throw new AppError("setup.attempt_uncertain", {});
+          const sourceDigest = await fingerprint(source);
+          const provedVerifier = await verifier(source);
+          const publicEvidence = await readDurableHostJson(
+            join(dirname(dirname(before.record.target.target.stateDir)), "retained-evidence.json"),
+            1024 * 1024,
+          );
+          if (
+            publicEvidence === null ||
+            createHash("sha256").update(JSON.stringify(publicEvidence)).digest("hex") !==
+              before.record.retainedEvidenceDigest
+          )
+            conflict();
+          return await turn(async () => {
+            if (disposed) ownerRequired();
+            if (
+              generation !== before.generation ||
+              !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record) ||
+              !isDeepStrictEqual(await observation(), request.observation) ||
+              (await readBackupRepairPublication(before.record)).digest !== before.material.digest
+            )
+              conflict();
+            await existingTarget(before.record);
+            const target = await openVenueDatabase(before.record.target.target.venueDir);
+            try {
+              if ((await readBreakGlassVerifier(target.venue, node.nodeId)) !== provedVerifier)
+                conflict();
+              await withTransaction(target.venue, (tx) =>
+                assertCommitted(tx, node, before.record.binding),
+              );
+            } finally {
+              await target.close();
+            }
+            await drop();
+            const { version, sequence, previousRecordDigest, recordedAt, ...record } =
+              before.record;
+            void version;
+            void sequence;
+            void previousRecordDigest;
+            void recordedAt;
+            const session = {
+              sessionId: randomBytes(32).toString("hex"),
+              recoveryId: request.recoveryId,
+              preview: selected.preview,
+              binding: record.binding,
+              input: structuredClone(record.input),
+            };
+            const entry: Entry = {
+              session,
+              usedAt: performance.now(),
+              request,
+              selected: source,
+              originalsDigest: record.observation.originalsDigest,
+              sourceDigest,
+              provedVerifier,
+              discard,
+              working: scratch,
+              record,
+              evidence: publicEvidence as Record<string, unknown>,
+              resumed: true,
+              rebuildSource: selected.kind === "cloud" ? "archive" : selected.kind,
+              ...(cloudState === undefined ? {} : { cloudState }),
+              publicationDigest: before.material.digest,
+            };
+            active = entry;
+            await admitCloud(entry);
+            buildPreparation(entry);
+            await recheck(entry);
+            touch(entry);
+            owned = false;
+            return structuredClone(session);
+          });
+        } catch (error) {
+          if (isAppError(error)) throw error;
+          throw new AppError("setup.attempt_uncertain", {});
+        } finally {
+          if (owned) await discard();
+        }
       } finally {
-        if (owned) await discard();
+        finish();
       }
     },
     prepare(sessionId: string, supplied: unknown, client: OperationClient): Promise<unknown> {
@@ -1164,13 +1192,19 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       });
     },
     dispose(): Promise<void> {
-      return options.host.coordinator.run(async () => {
-        disposed = true;
-        generation++;
-        await drop();
-        for (const directory of cloudScratch.splice(0))
-          await rm(directory, { recursive: true, force: true });
-      });
+      disposal ??= (async () => {
+        await options.host.coordinator.run(async () => {
+          disposed = true;
+          generation++;
+          await drop();
+        });
+        await Promise.all([...openings]);
+        await options.host.coordinator.run(async () => {
+          for (const directory of cloudScratch.splice(0))
+            await rm(directory, { recursive: true, force: true });
+        });
+      })();
+      return disposal;
     },
   };
 }
