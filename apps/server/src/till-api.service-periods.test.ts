@@ -44,12 +44,14 @@ import {
   workingLineContexts,
   type MenuSlot,
 } from "@waitron/venue-service";
+import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { createPrinter } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 import { createTable } from "./testing/live-table.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -1381,14 +1383,17 @@ describe("a dish whose period ended earlier today", () => {
         simulationOutcome: "captured",
         ...extra,
       });
+    const filingRows = async () => (await suite.db.select().from(registrosFacturacion)).length;
 
     it("refuses an unconfirmed cash sale at 14:05 and writes no order", async () => {
       const v = await counterVenue();
       const id = randomUUID();
+      const filed = await filingRows();
       expect(await cashSale(v, id, {})).toMatchObject(
         periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
       );
       expect(await orderRows(id)).toEqual([]);
+      expect(await filingRows()).toBe(filed);
     });
 
     it("takes a confirmed cash sale at 14:05 at its published 4.00, marked by the signed-in person", async () => {
@@ -1408,10 +1413,12 @@ describe("a dish whose period ended earlier today", () => {
     it("refuses an unconfirmed simulator card pay at 14:05 and writes no order", async () => {
       const v = await counterVenue();
       const id = randomUUID();
+      const filed = await filingRows();
       expect(await cardSale(v, id, {})).toMatchObject(
         periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
       );
       expect(await orderRows(id)).toEqual([]);
+      expect(await filingRows()).toBe(filed);
     });
 
     it("takes a confirmed simulator card pay at 14:05 at its published 4.00, marked by the signed-in person", async () => {
@@ -2006,6 +2013,58 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       expect.stringMatching(/^Upstairs bar\n[^]*\n1\.000 x Mojito\n/),
     ]);
     expect(await printed(c.downstairs.printerId)).toEqual([]);
+  });
+
+  /** The venue's tickets print in its Spanish locale; the mark's words come from the table. */
+  const lunchMark = `\\*\\* ${KITCHEN_LATE_SEND_WORDS.es.mark.replace("{period}", "Lunch").toLocaleUpperCase("es")} \\*\\*`;
+
+  const lateGroup = async (
+    c: Awaited<ReturnType<typeof cocktailVenue>>,
+    release: "fire" | "hold",
+  ) => {
+    const answer = await sendAsTill(c.v, "POST", `/api/parties/${c.partyId}/groups`, {
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, c.tabId)),
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(c.partyId),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups: [{ lines: [{ menuItemId: c.offer, quantity: "1" }], release }],
+      lateSend: { menuIds: [c.v.menus.Almuerzo] },
+    });
+    expect(answer.status).toBe(200);
+    return (answer.body as { groups: { id: string }[] }).groups[0]!;
+  };
+
+  it("prints the mark above a dish confirmed late on its station's ticket", async () => {
+    at(mondayAt("13:00"));
+    const c = await cocktailVenue();
+    at(mondayAt("14:05"));
+    await lateGroup(c, "fire");
+    expect(await printed(c.upstairs.printerId)).toEqual([
+      expect.stringMatching(new RegExp(`\\nGROUP 1\\n${lunchMark}\\n1\\.000 x Mojito\\n$`)),
+    ]);
+  });
+
+  it("prints the mark on the FIRE paper of a dish confirmed late and sent on hold", async () => {
+    at(mondayAt("13:00"));
+    const c = await cocktailVenue();
+    at(mondayAt("14:05"));
+    const held = await lateGroup(c, "hold");
+    const before = (await printed(c.upstairs.printerId)).length;
+    at(mondayAt("14:10"));
+    const released = await sendAsTill(
+      c.v,
+      "POST",
+      `/api/parties/${c.partyId}/groups/${held.id}/fire`,
+      { submissionId: randomUUID(), expectedPartyRevision: await partyRevision(c.partyId) },
+    );
+    expect(released.status).toBe(200);
+    expect((await printed(c.upstairs.printerId)).slice(before)).toEqual([
+      expect.stringMatching(
+        new RegExp(
+          `\\n${ticketClock(mondayAt("14:10"))}\\nGROUP 1\\n${lunchMark}\\n1\\.000 x Mojito\\n$`,
+        ),
+      ),
+    ]);
   });
 });
 
