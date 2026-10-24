@@ -73,8 +73,8 @@ async function abandon(billId: string): Promise<void> {
 
 describe("the main bill", () => {
   it("is the tab seating opens, and a round with no bill named lands on it", async () => {
-    const mesa4 = await v.table("Mesa 4");
-    const { partyId, tabId } = await seat(v, mesa4);
+    const table4 = await v.table("Mesa 4");
+    const { partyId, tabId } = await seat(v, table4);
     expect((await partyRow(v, partyId)).mainBillId).toBe(tabId);
 
     const { tabId: landed } = await orderForParty(v, partyId, ["Burger"]);
@@ -84,8 +84,8 @@ describe("the main bill", () => {
   });
 
   it("is cleared when it is paid, and the next order starts a new, empty main bill on the party", async () => {
-    const mesa4 = await v.table("Mesa 4b");
-    const { partyId, tabId } = await seat(v, mesa4);
+    const table4 = await v.table("Mesa 4b");
+    const { partyId, tabId } = await seat(v, table4);
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
     const saleBefore = await soldLinesOf(tabId);
@@ -103,8 +103,8 @@ describe("the main bill", () => {
   });
 
   it("is cleared when it is presented, and the next order starts a new one while the presented bill stays as it was", async () => {
-    const mesa6 = await v.table("Mesa 6");
-    const { partyId, tabId } = await seat(v, mesa6);
+    const table6 = await v.table("Mesa 6");
+    const { partyId, tabId } = await seat(v, table6);
     await order(v, tabId, "Paella");
     await placeByHand(v, tabId);
 
@@ -120,8 +120,8 @@ describe("the main bill", () => {
   });
 
   it("is cleared by setMainBill naming none", async () => {
-    const mesa14 = await v.table("Mesa 14");
-    const { partyId, tabId } = await seat(v, mesa14);
+    const table14 = await v.table("Mesa 14");
+    const { partyId, tabId } = await seat(v, table14);
     await abandon(tabId);
 
     await inTx(v, (tx) => setMainBill(tx, partyId, null));
@@ -132,8 +132,8 @@ describe("the main bill", () => {
   it.each(["a presented bill", "another party's open bill"])(
     "when written by hand to name %s, refuses the next order tab.not_open, writing nothing",
     async (kind) => {
-      const mesa = await v.table(`Mesa main ${kind}`);
-      const { partyId, tabId } = await seat(v, mesa);
+      const diningTable = await v.table(`Mesa main ${kind}`);
+      const { partyId, tabId } = await seat(v, diningTable);
       await order(v, tabId, "Burger");
       let target = tabId;
       if (kind === "a presented bill") await placeByHand(v, tabId);
@@ -218,8 +218,8 @@ describe("the main bill", () => {
   });
 
   it("is cleared when it is abandoned", async () => {
-    const mesa8 = await v.table("Mesa 8");
-    const { partyId, tabId } = await seat(v, mesa8);
+    const table8 = await v.table("Mesa 8");
+    const { partyId, tabId } = await seat(v, table8);
     await abandon(tabId);
     expect((await partyRow(v, partyId)).mainBillId).toBeNull();
   });
@@ -233,8 +233,8 @@ describe("a party service zone", () => {
 
 describe("an order sent to a named bill", () => {
   it("lands on another open bill of the party, and the main bill stays", async () => {
-    const mesa9 = await v.table("Mesa 9");
-    const { partyId, tabId } = await seat(v, mesa9);
+    const table9 = await v.table("Mesa 9");
+    const { partyId, tabId } = await seat(v, table9);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
     const revisionBefore = await revisionOf(v, partyId);
@@ -255,8 +255,8 @@ describe("an order sent to a named bill", () => {
     ["another party's bill", "bill.other_party"],
     ["a bill that does not exist", "tab.not_open"],
   ])("refuses %s with its own code, writing no line", async (kind, code) => {
-    const mesa = await v.table(`Mesa ${kind}`);
-    const { partyId, tabId } = await seat(v, mesa);
+    const diningTable = await v.table(`Mesa ${kind}`);
+    const { partyId, tabId } = await seat(v, diningTable);
     await order(v, tabId, "Tarta");
     let target = tabId;
     if (kind === "a presented bill") await placeByHand(v, tabId);
@@ -287,8 +287,8 @@ describe("an order sent to a named bill", () => {
 
 describe("a split bill is a bill like any other", () => {
   it("can have a line voided", async () => {
-    const mesa10 = await v.table("Mesa 10");
-    const { partyId, tabId } = await seat(v, mesa10);
+    const table10 = await v.table("Mesa 10");
+    const { partyId, tabId } = await seat(v, table10);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
 
@@ -300,8 +300,8 @@ describe("a split bill is a bill like any other", () => {
 
 describe("the party's name", () => {
   it("is shown instead of its tables, trimmed, and cleared by an empty name", async () => {
-    const mesa12 = await v.table("Mesa 12");
-    const { partyId, revision } = await seat(v, mesa12);
+    const table12 = await v.table("Mesa 12");
+    const { partyId, revision } = await seat(v, table12);
 
     const named = await inTx(v, (tx) =>
       setPartyName(tx, { partyId, name: "  Ana ", expectedPartyRevision: revision }),
@@ -310,7 +310,7 @@ describe("the party's name", () => {
 
     expect(named).toEqual({ revision: revision + 1, name: "Ana" });
     expect((await partyRow(v, partyId)).name).toBe("Ana");
-    expect(floor.find((t) => t.id === mesa12)!.party).toMatchObject({
+    expect(floor.find((t) => t.id === table12)!.party).toMatchObject({
       name: "Ana",
       displayName: "Ana",
     });
@@ -319,15 +319,15 @@ describe("the party's name", () => {
       setPartyName(tx, { partyId, name: "", expectedPartyRevision: revision + 1 }),
     );
     const after = await inTx(v, (tx) => listTablesWithState(tx, v.cfg));
-    expect(after.find((t) => t.id === mesa12)!.party).toMatchObject({
+    expect(after.find((t) => t.id === table12)!.party).toMatchObject({
       name: null,
       displayName: "Mesa 12",
     });
   });
 
   it("is refused with a stale revision, changing nothing", async () => {
-    const mesa13 = await v.table("Mesa 13");
-    const { partyId, revision } = await seat(v, mesa13);
+    const table13 = await v.table("Mesa 13");
+    const { partyId, revision } = await seat(v, table13);
     const error = await captureError(() =>
       inTx(v, (tx) =>
         setPartyName(tx, { partyId, name: "Ana", expectedPartyRevision: revision - 1 }),
@@ -341,8 +341,8 @@ describe("the party's name", () => {
 
 describe("pay, then order dessert", () => {
   it("opens a new tab on the same party and leaves the earlier sale untouched", async () => {
-    const mesa20 = await v.table("Mesa 20");
-    const { partyId, tabId } = await seat(v, mesa20, 2);
+    const table20 = await v.table("Mesa 20");
+    const { partyId, tabId } = await seat(v, table20, 2);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
     await pay(v, tabId, "12.00");
@@ -368,7 +368,7 @@ describe("pay, then order dessert", () => {
       [checkId, "30.00", "0.00"],
       [dessertTab, "5.00", "5.00"],
     ]);
-    const floor = await floorRow(v, mesa20);
+    const floor = await floorRow(v, table20);
     expect(floor).toMatchObject({
       state: "open-tab",
       hasOpenTab: true,
@@ -377,12 +377,12 @@ describe("pay, then order dessert", () => {
   });
 
   it("shows the table held with no bill open until the next round opens one", async () => {
-    const mesa21 = await v.table("Mesa 21");
-    const { partyId, tabId } = await seat(v, mesa21, 2);
+    const table21 = await v.table("Mesa 21");
+    const { partyId, tabId } = await seat(v, table21, 2);
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
 
-    const floor = await floorRow(v, mesa21);
+    const floor = await floorRow(v, table21);
 
     expect(floor).toMatchObject({ state: "open-tab", hasOpenTab: false });
     expect(floor.tabTotal).toBeUndefined();
@@ -397,15 +397,15 @@ describe("pay, then order dessert", () => {
       mainBillId: null,
       outstanding: "0.00",
       billCount: 1,
-      tableIds: [mesa21],
+      tableIds: [table21],
       unsentDrafts: [],
       reminder: null,
     });
   });
 
   it("refuses a round sent to a settled tab the party has already moved on from, or to a settled check", async () => {
-    const mesa22 = await v.table("Mesa 22");
-    const { partyId, tabId } = await seat(v, mesa22);
+    const table22 = await v.table("Mesa 22");
+    const { partyId, tabId } = await seat(v, table22);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
     await pay(v, tabId, "12.00");
@@ -427,8 +427,8 @@ describe("pay, then order dessert", () => {
   it("refuses a round for a finished party", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
-      const mesa23 = await v.table("Mesa 23");
-      const { partyId, tabId } = await seat(v, mesa23);
+      const table23 = await v.table("Mesa 23");
+      const { partyId, tabId } = await seat(v, table23);
       await order(v, tabId, "Burger");
       await pay(v, tabId, "12.00");
       await inTx(v, (tx) =>
@@ -446,19 +446,19 @@ describe("pay, then order dessert", () => {
   });
 
   it("keeps the party seated when its tab is abandoned, and the next round opens a new tab", async () => {
-    const mesa24 = await v.table("Mesa 24");
-    const { partyId, tabId } = await seat(v, mesa24);
+    const table24 = await v.table("Mesa 24");
+    const { partyId, tabId } = await seat(v, table24);
     await order(v, tabId, "Burger");
 
     await abandonHeldOrder({ db: v.db }, v.cfg, tabId);
 
     expect((await partyRow(v, partyId)).state).toBe("open");
-    expect(await activeTablesOf(v, partyId)).toEqual([mesa24]);
-    expect((await floorRow(v, mesa24)).state).toBe("open-tab");
+    expect(await activeTablesOf(v, partyId)).toEqual([table24]);
+    expect((await floorRow(v, table24)).state).toBe("open-tab");
     const { tabId: next } = await orderForParty(v, partyId, ["Flan"]);
     expect((await billRow(v, next)).partyId).toBe(partyId);
     expect((await partyRow(v, partyId)).mainBillId).toBe(next);
-    expect((await floorRow(v, mesa24)).party).toMatchObject({
+    expect((await floorRow(v, table24)).party).toMatchObject({
       billCount: 1,
       outstanding: "5.00",
     });
