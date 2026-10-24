@@ -78,6 +78,13 @@
       "when": 1792710495964,
       "tag": "0010_clock_stop",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792839400988,
+      "tag": "0011_glossy_silhouette",
+      "breakpoints": true
     }
   ]
 }
