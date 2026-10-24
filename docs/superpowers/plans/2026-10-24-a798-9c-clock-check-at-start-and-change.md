@@ -50,7 +50,13 @@ where nothing on the venue's network could lift it** (design §4.9 h).
 
 - **The check's state is in the database** (`clock_checks`, slice 9's migration): `attemptAppend`
   calls `refuseWhileClockBehind(tx, reading)` from `clock-behind.ts` (`chain.ts:136-137`), which this
-  slice extends; no edit to `chain.ts`. At most one check is open (slice 9, Words).
+  slice extends; no edit to `chain.ts`. At most one check is open (slice 9, Words). Since slice 9's
+  revision 7 a `behind_chain` check can wait open indefinitely once its stop has ended (no internet,
+  fewer than two devices, no administrator), and opening a `start` or `change` check answers the
+  open one, which stops nothing — so the start check would be skipped exactly at a venue with no
+  internet (round 5, I4). Default: opening a `start` or `change` check first closes a waiting
+  `behind_chain` check `elapsed` (cannot tell, its `clock.records_misdated` task recorded) in the
+  same transaction; the full plan keeps this or decides otherwise, and tests it.
 - **A change of the clock** is read against `CLOCK_BOOTTIME` through `/proc/uptime`, as slice 9's
   watch does. As built the watch counts only forward jumps (slice 9 plan, T3); this slice builds a
   separate guard for both directions and leaves the watch's forward-jump disproof alone. **9b's M3

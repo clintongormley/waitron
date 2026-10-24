@@ -1048,8 +1048,8 @@ future date." The answers that followed it, verbatim, are in
 `~/waitron-campaign-b/a798-9-rev/OWNER-ANSWERS.md`; this section is what they mean for the box.
 Where an earlier sentence of this design disagrees, this section governs. (Folded the round-1 plan
 review and its claim check, `~/waitron-campaign-b/a798-9-rev/round1.md`, `claim-check.md`, under the
-runner's rulings, `RULINGS-1.md`; then rounds 3 and 4, `round3.md` and `round4.md`, under
-`RULINGS-3.md` and `RULINGS-4.md`.)
+runner's rulings, `RULINGS-1.md`; then rounds 3, 4 and 5, `round3.md`, `round4.md` and
+`round5.md`, under `RULINGS-3.md`, `RULINGS-4.md` and the coordinator's ruling on round 5.)
 
 #### a. What starts a clock check
 
@@ -1165,22 +1165,31 @@ start: the time at closing less the boot-time clock's elapsed time since. **Ever
 before the check opened and stamped more than a minute after the corrected start is listed.** The
 opening's heads are enough: no record is written while the stop holds (the record append refuses
 first, `packages/fiscal-verifactu/src/chain.ts:136-140` → `clock-behind.ts:166-173`), and a record
-written after the stop ends — under a lift, on fresh proof the clock is right, or after the stop
-ended by itself, on the clock the closing then confirms — is correctly dated. Bounding by the
+written after the stop ends is outside the list: under a lift it is written on fresh proof the
+clock is right; after the stop ended by itself it is written on the clock the closing then confirms
+— correctly dated only if that clock did not change in between. A clock that went wrong-forward
+while the check waited, stamped sales ahead and was put right is caught when putting it right
+brings the stop back: the chain is then past the opening's heads, so the waiting check closes
+saying the box cannot tell and a new check lists those sales (round 5, M5, on a model). That holds
+whenever the box's 15-second look sees the returning stop, so not for a clock put right from little
+more than a minute ahead; such sales are in no list. Bounding by the
 closing instead would list the sales customers pay in the seconds between the stop's end and the
 closing (round 4, I1, measured on a model). **The corrected start is right only when the clock at
 closing is right**, so a check closes only on a confirmation: during the stop (a lift), or, when the
 stop ends by itself — real time catching up and a clock put right end it, but so does a clock set
-back by mistake reaching the last sale (round 3, I1) — once a fresh witness answers. AEAT or two
-devices agreeing with the box then (or an administrator's device) close it and it lists; a fresh
+back by mistake reaching the last sale (round 3, I1) — once a witness taken after the stop ended
+answers (a disagreement noted during the stop does not count here, round 5 I2). AEAT or two
+devices agreeing with the box then (or an administrator's device) close it and it lists; such a
 witness disagreeing closes it with nothing listed, and the box tells the owner it cannot tell which
 sales were dated wrongly. What disagreed during the stop does not decide this: a clock set back by
 mistake and put right again lists nothing either way, and the condition only hid sales paid after
 the stop ended (round 4, M5). With no witness at all the check stays open — it blocks nothing — and
 the Box status page says the clock is not yet confirmed (round 4, M7). The closing stores its own
 readings and the corrected start, so the list read later is the list the alert counted. If the
-machine restarted during the stop, the elapsed time is unknown and the list falls back to records
-stamped more than a minute after the closing time; the alert says the list may be short.
+machine restarted during the stop, or an administrator's confirmation came before the box had
+written the check down (it then opens the check itself, with no elapsed time to subtract; round 5,
+I1), the elapsed time is unknown and the list falls back to records stamped more than a minute after
+the closing time; the alert says the list may be short.
 
 After a change of the clock (slice 9c), with e₀ the clock's error before the change, Δ the change
 and s the step the confirmation applies (e₀ = −(Δ + s)): records written since the last
@@ -1232,7 +1241,8 @@ present cannot take payment after a start until one arrives.
 One more migration in the Veri*Factu module's set, in slice 9: two append-only `ledger` tables.
 `clock_checks` holds each check opened (a start, a change, a clock-behind stop, an AEAT
 disagreement), with when it began; `clock_confirmations` each closing of one — the source (AEAT,
-devices, an administrator, or the stop ending by itself), the administrator for a hand confirmation,
+devices, an administrator, or nothing — `elapsed`, a closing that cannot tell which sales were dated
+wrongly), the administrator for a hand confirmation,
 the box's reading and the time adopted, any step applied, the proof, the check it closes and, for a
 lift, the record it names. Neither table can be corrected. `clock_stop_restarts` (slice 8) stays,
 written by nothing: it allows one row per record (`clock_stop_restarts_registro_uq`), and a second
