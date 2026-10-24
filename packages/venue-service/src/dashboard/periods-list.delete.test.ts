@@ -57,7 +57,6 @@ function impactOf(overrides: Partial<PeriodDeleteImpact> = {}): PeriodDeleteImpa
     seasons: 0,
     specialDays: 0,
     routingUses: [],
-    keptOpenToday: false,
     replacements: [],
     clockRevision: 0,
     ...overrides,
@@ -208,7 +207,7 @@ it("asks before deleting, reads the impact, sends the delete with no replacement
   await expect.poll(() => table(el)!.rows.length).toBe(1);
 });
 
-it("a replacement chosen is sent, and the dialog says the routing lines go and today's opening moves", async () => {
+it("a replacement chosen is sent, and the dialog says the routing lines go", async () => {
   const writes: unknown[] = [];
   const el = await mount(
     fake({
@@ -217,7 +216,6 @@ it("a replacement chosen is sent, and the dialog says the routing lines go and t
         impactOf({
           seasons: 1,
           routingUses: [{ rowKind: "category", rowLabel: "Cocktails", zoneName: null }],
-          keptOpenToday: true,
           replacements: [{ id: "p2", name: "Dinner" }],
         }),
       write: (path, method, sent) => {
@@ -228,11 +226,9 @@ it("a replacement chosen is sent, and the dialog says the routing lines go and t
   const dialog = await removePeriod(el);
   await impactShown(dialog);
   expect(body(dialog)).toContain("Its routing lines are deleted.");
-  expect(body(dialog)).toContain("Today's later opening of it ends.");
   await choose(dialog, "p2");
   expect(body(dialog)).toContain("Dinner takes its painted time.");
   expect(body(dialog)).toContain("Its routing lines are deleted.");
-  expect(body(dialog)).toContain("Today's later opening moves to Dinner.");
   confirm(dialog).click();
   await expect
     .poll(() => writes)
@@ -610,15 +606,14 @@ it("reads the impact actively for Delete… and Retry, and passively when a live
   await expect.poll(() => reads).toEqual(["active", "passive", "passive", "passive", "active"]);
 });
 
-it("with live data, reads the impact again when today's kept-open period changes, and not on a change the impact does not read", async () => {
+it("with live data, reads the impact again when a day range it counts changes, and not on a change the impact does not read", async () => {
   const liveData = new LiveData();
-  let keptOpen = false;
   let reads = 0;
   const el = await mount(
     fake({
       impact: () => {
         reads++;
-        return impactOf({ keptOpenToday: keptOpen });
+        return impactOf({ seasons: reads });
       },
     }),
     document.body,
@@ -626,14 +621,13 @@ it("with live data, reads the impact again when today's kept-open period changes
   );
   const dialog = await removePeriod(el);
   await impactShown(dialog);
-  expect(body(dialog)).not.toContain("Today's later opening");
+  expect(body(dialog)).toContain("Painted in 1 season.");
   liveData.invalidate([{ type: "printers" }]);
   await new Promise((done) => setTimeout(done, 50));
   expect(reads).toBe(1);
 
-  keptOpen = true;
-  liveData.invalidate([{ type: "period_extensions" }]);
-  await expect.poll(() => body(dialog)).toContain("Today's later opening of it ends.");
+  liveData.invalidate([{ type: "department_day_ranges" }]);
+  await expect.poll(() => body(dialog)).toContain("Painted in 2 seasons.");
   expect(reads).toBe(2);
 });
 
@@ -673,7 +667,7 @@ it("with live data, an impact answer that arrives while the list is detached is 
   const el = await mount(request, document.body, liveData);
   const dialog = await removePeriod(el);
   await impactShown(dialog);
-  liveData.invalidate([{ type: "period_extensions" }]);
+  liveData.invalidate([{ type: "department_day_ranges" }]);
   await expect.poll(() => reads).toBe(2);
   el.remove();
   held(impactOf({ seasons: 2, clockRevision: 4 }));

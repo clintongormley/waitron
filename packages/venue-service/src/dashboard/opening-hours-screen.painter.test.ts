@@ -1519,7 +1519,6 @@ class DeletingApp extends PainterApp {
         seasons: 1,
         specialDays: 0,
         routingUses: [],
-        keptOpenToday: false,
         replacements: [],
         clockRevision: 4,
       };
@@ -1552,7 +1551,6 @@ class ReplacingApp extends PainterApp {
         seasons: 1,
         specialDays: 0,
         routingUses: [],
-        keptOpenToday: false,
         replacements: [{ id: "p2", name: "Dinner" }],
         clockRevision: 4,
       };

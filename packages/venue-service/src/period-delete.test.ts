@@ -56,7 +56,6 @@ const WRITE_AT = new Date("2026-10-07T10:00:00Z");
  *  06:00). */
 const AT = localTimeOccurrences("2026-10-08", "00:30", ZONE)[0]!;
 const TODAY = "2026-10-07";
-const CLOCK_DATE = "2026-10-08";
 
 const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => ({
   periodId,
@@ -346,7 +345,6 @@ describe("what deleting a period touches", () => {
       seasons: 2,
       specialDays: 2,
       routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: null }],
-      keptOpenToday: false,
       replacements: [
         { id: v.afternoon, name: "Afternoon" },
         { id: v.dinner, name: "Dinner" },
@@ -365,66 +363,12 @@ describe("what deleting a period touches", () => {
       seasons: 0,
       specialDays: 0,
       routingUses: [],
-      keptOpenToday: false,
       replacements: [
         { id: v.dinner, name: "Dinner" },
         { id: v.lunch, name: "Lunch" },
       ],
       clockRevision: 0,
     });
-  });
-
-  it("says the period is kept open today when it has an extension on today's business day", async () => {
-    const v = await venue();
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
-
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
-
-    expect(impact.keptOpenToday).toBe(true);
-  });
-
-  it("does not say kept open today for an extension on the clock's date or of another period", async () => {
-    const v = await venue();
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: CLOCK_DATE,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.dinner,
-      startsAt: "23:00:00",
-      endsAt: "23:30:00",
-    });
-
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
-
-    expect(impact.keptOpenToday).toBe(false);
-  });
-
-  it("does not say kept open today when the clock cannot be read", async () => {
-    const v = await venue();
-    await db.insert(periodExtensions).values({
-      departmentId: v.restaurant,
-      businessDay: TODAY,
-      periodId: v.lunch,
-      startsAt: "16:00:00",
-      endsAt: "17:00:00",
-    });
-    await db.update(locations).set({ timeZone: "Not/AZone" }).where(eq(locations.id, v.locationId));
-
-    const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
-
-    expect(impact.keptOpenToday).toBe(false);
   });
 
   it("refuses a period that does not exist, or is another venue's, as not found", async () => {
@@ -671,24 +615,6 @@ describe("deleting a period", () => {
       );
       expect(await afternoonUses()).toEqual(afternoonBefore);
     });
-
-    it("moves today's extension of the period, and an older day's, to the replacement", async () => {
-      const v = await deleteVenue();
-      await db.insert(periodExtensions).values({
-        departmentId: v.restaurant,
-        businessDay: "2026-10-01",
-        periodId: v.lunch,
-        startsAt: "16:00:00",
-        endsAt: "16:30:00",
-      });
-
-      await remove(v, v.lunch, v.afternoon);
-
-      expect((await stored(v)).extensions).toEqual([
-        "2026-10-01 Afternoon 16:00-16:30",
-        `${TODAY} Afternoon 16:00-17:00`,
-      ]);
-    });
   });
 
   describe("without a replacement", () => {
@@ -743,21 +669,6 @@ describe("deleting a period", () => {
       expect((await stored(v)).routing).toEqual(
         ["Cocktails Afternoon Cocina", "Cocktails Dinner Cocina"].sort(),
       );
-    });
-
-    it("ends the period's extension and keeps another period's", async () => {
-      const v = await deleteVenue();
-      await db.insert(periodExtensions).values({
-        departmentId: v.restaurant,
-        businessDay: "2026-10-01",
-        periodId: v.dinner,
-        startsAt: "23:00:00",
-        endsAt: "23:30:00",
-      });
-
-      await remove(v, v.lunch, null);
-
-      expect((await stored(v)).extensions).toEqual(["2026-10-01 Dinner 23:00-23:30"]);
     });
 
     it("leaves no day row on a special day whose only paint was the period, so the day reads as its season's", async () => {

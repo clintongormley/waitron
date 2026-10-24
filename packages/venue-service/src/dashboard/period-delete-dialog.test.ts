@@ -25,7 +25,6 @@ function impactOf(overrides: Partial<PeriodDeleteImpact> = {}): PeriodDeleteImpa
     seasons: 0,
     specialDays: 0,
     routingUses: [],
-    keptOpenToday: false,
     replacements,
     clockRevision: 0,
     ...overrides,
@@ -136,15 +135,6 @@ it("without a replacement it says the time closes and the routing lines are dele
   expect(body(el)).toContain("Its routing lines are deleted.");
   await choose(el, "");
   expect(body(el)).toContain(closes);
-});
-
-it("a keep-open extension today ends without a replacement and moves to the one chosen", async () => {
-  const el = await mount(impactOf({ keptOpenToday: true }));
-  expect(body(el)).toContain("Today's later opening of it ends.");
-  expect(body(el)).not.toContain("painted time");
-  await choose(el, "p3");
-  expect(body(el)).toContain("Today's later opening moves to Brunch.");
-  expect(body(el)).not.toContain("ends.");
 });
 
 it("the replacement offers None then the department's other periods, and Confirm sends the choice", async () => {
@@ -268,10 +258,10 @@ it("a failed re-read beside a shown impact keeps a refusal's sentence at the bot
 });
 
 it("a Replace-with choice is dropped when a new impact no longer offers the picker", async () => {
-  const el = await mount(impactOf({ keptOpenToday: true }));
+  const el = await mount(impactOf({ seasons: 1 }));
   await choose(el, "p2");
-  expect(body(el)).toContain("Today's later opening moves to Dinner.");
-  el.impact = impactOf({ keptOpenToday: false });
+  expect(body(el)).toContain("Dinner takes its painted time.");
+  el.impact = impactOf();
   await el.updateComplete;
   expect(picker(el)).toBeNull();
   expect(body(el)).toBe("Not painted anywhere. No hours change.");

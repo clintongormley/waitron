@@ -45,7 +45,6 @@ describe("OpeningHoursApi", () => {
       seasons: 1,
       specialDays: 0,
       routingUses: [],
-      keptOpenToday: false,
       replacements: [{ id: "p/2", name: "Dinner" }],
     };
     const request = vi.fn(async (path: string, method: string) =>

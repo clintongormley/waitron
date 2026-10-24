@@ -239,16 +239,6 @@ async function stored(r: Routed) {
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
     .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId))
     .where(eq(routingCells.locationId, r.locationId));
-  const extensions = await db
-    .select({
-      businessDay: periodExtensions.businessDay,
-      period: menuPeriods.name,
-      startsAt: periodExtensions.startsAt,
-      endsAt: periodExtensions.endsAt,
-    })
-    .from(periodExtensions)
-    .innerJoin(menuPeriods, eq(menuPeriods.id, periodExtensions.periodId))
-    .where(eq(periodExtensions.departmentId, r.restaurant));
   const periods = await db
     .select({ name: menuPeriods.name })
     .from(menuPeriods)
@@ -263,9 +253,6 @@ async function stored(r: Routed) {
       (row) => `${row.date} ${row.period ?? "Closed"} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
     ),
     routing: routing.map((row) => row.period).sort(),
-    extensions: extensions.map(
-      (row) => `${row.businessDay} ${row.period} ${hhmm(row.startsAt)}-${hhmm(row.endsAt)}`,
-    ),
     periods: periods.map((row) => row.name),
   };
 }
@@ -340,7 +327,6 @@ describe("the period-delete routes", () => {
       seasons: 2,
       specialDays: 1,
       routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: null }],
-      keptOpenToday: true,
       replacements: [
         { id: r.afternoon, name: "Afternoon" },
         { id: r.dinner, name: "Dinner" },
@@ -405,7 +391,7 @@ describe("the period-delete routes", () => {
     });
   });
 
-  it("POST delete with a replacement paints and keeps open the replacement instead, deletes the period's routing lines, and answers 204", async () => {
+  it("POST delete with a replacement paints the replacement instead, deletes the period's routing lines, and answers 204", async () => {
     const r = await routed();
 
     const response = await r.send("POST", `/${r.lunch}/delete`, r.manager, {
@@ -423,12 +409,11 @@ describe("the period-delete routes", () => {
       ],
       specialDays: [`${PAST} Afternoon 13:00-15:00`, `${FUTURE} Afternoon 13:00-18:00`],
       routing: [],
-      extensions: [`${r.today} Afternoon 16:00-17:00`],
       periods: ["Afternoon", "Dinner"],
     });
   });
 
-  it("POST delete with an explicit null replacement removes the period's paint, routing and extension", async () => {
+  it("POST delete with an explicit null replacement removes the period's paint and routing", async () => {
     const r = await routed();
 
     const response = await r.send("POST", `/${r.lunch}/delete`, r.manager, {
@@ -441,7 +426,6 @@ describe("the period-delete routes", () => {
       seasons: ["Summer 3 Dinner 20:00-23:00", "Autumn 3 Dinner 20:00-23:00"],
       specialDays: [`${FUTURE} Afternoon 15:00-18:00`],
       routing: [],
-      extensions: [],
       periods: ["Afternoon", "Dinner"],
     });
   });
