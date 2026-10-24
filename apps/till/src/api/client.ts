@@ -170,11 +170,6 @@ export interface TillInfo {
   receiptLanguages: string[];
   venueName: string;
   nif: string;
-  /**
-   * The KDS bump mode: `line` (per-line bump only, the source of truth) or `ticket` (the display also
-   * offers a whole-ticket bump).
-   */
-  bumpMode: "line" | "ticket";
   /** The venue's ACTIVE kitchen courses, by `displayOrder`; `[]` for a venue with none. */
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";

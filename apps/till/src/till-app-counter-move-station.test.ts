@@ -38,7 +38,6 @@ const till = {
   nif: "B12345678",
   orderFlow: "ticket_then_pay" as const,
   receiptPrintMode: "auto" as const,
-  bumpMode: "line" as const,
   fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,

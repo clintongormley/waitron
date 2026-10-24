@@ -170,7 +170,6 @@ const till = {
   nif: "B12345678",
   orderFlow: "prepay" as const,
   receiptPrintMode: "auto" as const,
-  bumpMode: "line" as const,
   fireControl: "waiter" as const,
   courses: [],
   cardProvider: "none" as const,

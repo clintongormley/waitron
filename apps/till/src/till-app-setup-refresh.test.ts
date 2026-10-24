@@ -213,7 +213,6 @@ function till(formFactor: FormFactor) {
     nif: "B12345678",
     orderFlow: "prepay" as const,
     receiptPrintMode: "auto" as const,
-    bumpMode: "line" as const,
     fireControl: "waiter" as const,
     courses,
     cardProvider: "none" as const,
@@ -475,7 +474,6 @@ describe("A768 the till follows the venue's setup revision", () => {
     const reads = api.getTill.mock.calls.length;
     api.getTill.mockResolvedValue({
       ...stationTill,
-      bumpMode: "ticket",
       fireControl: "kitchen",
       setupRevision: "s2",
     });
@@ -498,7 +496,6 @@ describe("A768 the till follows the venue's setup revision", () => {
     answerLate({
       ...till(drillFormFactor),
       courses: [{ id: "late", name: "Late", displayOrder: 0 }],
-      bumpMode: "ticket",
       setupRevision: "s2",
     });
     await flush(el);

@@ -72,7 +72,6 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]
           nif: "B12345678",
           orderFlow: "prepay",
           receiptPrintMode: "auto",
-          bumpMode: "line",
           fireControl: "waiter",
           courses: [],
           cardProvider: "none",

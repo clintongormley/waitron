@@ -628,7 +628,6 @@ describe("TillApi", () => {
       nif: "B12345678",
       orderFlow: "prepay",
       receiptPrintMode: "on_request",
-      bumpMode: "line",
       fireControl: "waiter",
       cardProvider: "none",
       tipsEnabled: false,

@@ -17,7 +17,6 @@ export const till = {
   venueName: "Terrace restaurant",
   nif: "B12345678",
   orderFlow: "prepay",
-  bumpMode: "line",
   fireControl: "waiter",
   courses: [],
   cardProvider: "none",
