@@ -588,6 +588,25 @@ check), each in the task named:
   → `:916`, `:934`, `:945`, the press re-aimed only; `:640`, `:668`, `:689` unchanged at `:986`,
   `:1014`, `:1035`. `:884`, `:916`, `:945` and `:986` read the Box status view's old shape and fail
   until Task R10 reshapes it: the Box status read throws on the seat's new state.
+- the clock watch looks every 15 s and asks AEAT at most once a minute (Task R9, rulings C20, C21;
+  lines in `apps/server/src/clock-watch.test.ts` at `c0c6da41e` → after, unchanged in number):
+  `:170` "arms its first check a minute after start" → "… 15 seconds after start", `:173`
+  `toBe(60_000)` → `toBe(15_000)`; `:177` "reads AEAT's time once a tick during a stop…" → "reads
+  AEAT's time during a stop on a filing primary, again a minute later, and notes the sample", its
+  second tick at `:196` now advancing the steady clock 60 s (`h.tick({ monoMs: 60_000 })`), still
+  expecting two HEADs; `:380` "still reads the stop and asks AEAT on every check while a record
+  keeps failing" → "still reads the stop on every check, and asks AEAT once a minute, while a record
+  keeps failing", its second tick at `:384` advancing the steady clock 60 s, every count unchanged;
+  `:467` "keeps at most a day of unrecorded disproofs…" → "keeps at most six hours…" (1 440 checks
+  at 15 s), its assertion unchanged. Fixtures only, no assertion changed, in `c0c6da41e`: the
+  file's `STOPPED` state rebuilt in R3's shape (`proof "none"`, `agreeing`, `contrary`,
+  `confirmation: null`), and the case "still reads AEAT's time while a restart is in force…"
+  (`:200`, C21) given a covering confirmation (`proof "confirmed"`, `confirmation`) in place of the
+  deleted `restart` field, still expecting one HEAD; the harness and the elapsed-clock suite's
+  store gain `clear`, and the watch `nodeId` and a boot reader. In
+  `apps/server/src/clock-confirm.route.test.ts`, the `watchChecks` helper's steady clock now moves a
+  minute before each check (it read 0 throughout), so "asks AEAT's time at every watch check while a
+  confirmation is in force…" still sees two HEADs in two checks, unedited.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
 and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed

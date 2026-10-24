@@ -167,14 +167,14 @@ function authority(boxAtMs: number, offsetMs: number): ClockWitness {
 }
 
 describe("startClockWatch", () => {
-  it("arms its first check a minute after start", () => {
+  it("arms its first check 15 seconds after start", () => {
     const h = harness();
     expect(h.timers).toHaveLength(1);
-    expect(h.timers[0]!.ms).toBe(60_000);
+    expect(h.timers[0]!.ms).toBe(15_000);
     expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
   });
 
-  it("reads AEAT's time once a tick during a stop on a filing primary, and notes the sample", async () => {
+  it("reads AEAT's time during a stop on a filing primary, again a minute later, and notes the sample", async () => {
     const h = harness();
     const device: ClockWitness = {
       kind: "device",
@@ -193,7 +193,7 @@ describe("startClockWatch", () => {
       [device],
     );
     expect(h.store.endStop).not.toHaveBeenCalled();
-    await h.tick();
+    await h.tick({ monoMs: 60_000 });
     expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(2);
   });
 
@@ -377,11 +377,11 @@ describe("startClockWatch", () => {
     expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(2);
   });
 
-  it("still reads the stop and asks AEAT on every check while a record keeps failing", async () => {
+  it("still reads the stop on every check, and asks AEAT once a minute, while a record keeps failing", async () => {
     const h = harness();
     h.backend.noteClockProvedWrong.mockRejectedValue(new AppError("storage.disk_full", {}));
     await h.tick({ monoMs: 60_000, wallMs: 121_000 });
-    await h.tick();
+    await h.tick({ monoMs: 60_000 });
     expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(2);
     expect(h.backend.clockStopState).toHaveBeenCalledTimes(2);
     expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(2);
@@ -464,7 +464,7 @@ describe("startClockWatch", () => {
     expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps at most a day of unrecorded disproofs, logging each one it leaves out", async () => {
+  it("keeps at most six hours of unrecorded disproofs, logging each one it leaves out", async () => {
     const many = Array.from({ length: 1_441 }, (_, index) =>
       authority(START_MS - index * 1_000, 3_600_000),
     );
