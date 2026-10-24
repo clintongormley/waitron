@@ -1496,6 +1496,7 @@ export interface ParkOrderRequest {
   zoneId?: string;
   label?: string;
   operatorId?: string;
+  lateSend?: LateSendConfirmation;
 }
 
 export interface ParkOrderResult {
@@ -1672,6 +1673,7 @@ export async function parkOrder(
         kitchenNote: req.kitchenNote,
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
+        lateSend: req.lateSend,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, cfg.locationId, 0, "park");
       return { id: req.id, orderNumber };

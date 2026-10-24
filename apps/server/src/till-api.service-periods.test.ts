@@ -1140,6 +1140,119 @@ describe("service periods gate only added dishes and added stored quantities", (
   });
 });
 
+describe("a dish whose period ended earlier today", () => {
+  const parkWith = (
+    v: Venue,
+    menuItemId: string,
+    extra: Record<string, unknown>,
+    id = randomUUID(),
+  ) =>
+    sendAsTill(v, "POST", "/api/working-orders", {
+      id,
+      zoneId: v.diningZone,
+      lines: [{ menuItemId, quantity: "1" }],
+      ...extra,
+    }).then((answer) => ({ ...answer, id }));
+  const marksOf = (workingOrderId: string) =>
+    suite.db
+      .select({
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        latePeriodName: workingLineContexts.latePeriodName,
+        lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+      })
+      .from(workingOrderLines)
+      .innerJoin(
+        workingLineContexts,
+        eq(workingLineContexts.workingOrderLineId, workingOrderLines.id),
+      )
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+  const orderRows = (id: string) =>
+    suite.db.select({ id: workingOrders.id }).from(workingOrders).where(eq(workingOrders.id, id));
+
+  it("is refused unconfirmed at 14:05 and writes no order", async () => {
+    at(mondayAt("14:05"));
+    const v = await mealVenue();
+    const held = await parkWith(v, v.toast.almuerzo, {});
+    expect(held).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
+    expect(await orderRows(held.id)).toEqual([]);
+  });
+
+  it("is parked at 14:05 when the till confirms its menu, priced as published and marked by the signed-in person", async () => {
+    at(mondayAt("14:05"));
+    const v = await mealVenue();
+    const held = await parkWith(v, v.toast.almuerzo, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+    expect(held.status).toBe(200);
+    expect(await marksOf(held.id)).toEqual([
+      { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+    ]);
+  });
+
+  it("is refused when the confirmation names another menu, naming Almuerzo, and writes no order", async () => {
+    at(mondayAt("14:05"));
+    const v = await mealVenue();
+    const held = await parkWith(v, v.toast.almuerzo, { lateSend: { menuIds: [v.menus.Bebidas] } });
+    expect(held).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
+    expect(await orderRows(held.id)).toEqual([]);
+  });
+
+  it("is refused not_running the next morning, even confirmed, and writes no order", async () => {
+    at(new Date("2026-10-06T10:00:00+02:00"));
+    const v = await mealVenue();
+    const held = await parkWith(v, v.toast.almuerzo, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+    expect(held).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: "menu_period.not_running",
+          params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+        },
+      },
+    });
+    expect(await orderRows(held.id)).toEqual([]);
+  });
+
+  it.each(["19:00", "19:30"])(
+    "is parked at %s at its own 4.00, unmarked and unconfirmed, while Dinner sells the Tostada",
+    async (time) => {
+      at(mondayAt(time));
+      const v = await mealVenue();
+      const held = await parkWith(v, v.toast.almuerzo, {});
+      expect(held.status).toBe(200);
+      expect(await marksOf(held.id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+      ]);
+    },
+  );
+
+  it.each([
+    ["null", null],
+    ["an empty menu list", { menuIds: [] }],
+    ["a menu id that is not a UUID", { menuIds: ["not-a-uuid"] }],
+    ["an array", []],
+  ] as const)("refuses a lateSend that is %s and writes no order", async (_shape, lateSend) => {
+    at(mondayAt("14:05"));
+    const v = await mealVenue();
+    const held = await parkWith(v, v.toast.almuerzo, { lateSend });
+    expect(held).toMatchObject({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
+    });
+    expect(await orderRows(held.id)).toEqual([]);
+  });
+
+  it("replays a retried confirmed park with the same body", async () => {
+    at(mondayAt("14:05"));
+    const v = await mealVenue();
+    const body = { lateSend: { menuIds: [v.menus.Almuerzo] } };
+    const first = await parkWith(v, v.toast.almuerzo, body);
+    expect(first.status).toBe(200);
+    const retried = await parkWith(v, v.toast.almuerzo, body, first.id);
+    expect(retried).toMatchObject({ status: 200, body: first.body });
+    expect(retried.body).toEqual({ id: first.id, orderNumber: expect.any(Number) });
+    expect(await marksOf(first.id)).toHaveLength(1);
+  });
+});
+
 describe("GET /api/menu-state", () => {
   const defaultMenu = async (v: Venue, query: string) => {
     const answer = await sendAsTill(v, "GET", `/api/menu-state${query}`);

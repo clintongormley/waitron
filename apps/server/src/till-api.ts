@@ -254,6 +254,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
+import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import {
   checkZones,
   gateZones,
@@ -1875,6 +1876,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         zoneId?: string;
         label?: string;
         kitchenNote?: string | null;
+        lateSend?: unknown;
       }>(c);
       // The client mints `body.id`, which becomes the stored primary key; this screen is the only
       // refusal of a malformed one.
@@ -1882,26 +1884,30 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
+      const lateSend = parseLateSend(body.lateSend);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
         session,
         named(zoneId !== undefined && { zoneId }, { orderId: body.id }),
       );
-      const result = await parkOrder(
-        { db: deps.db },
-        cfg,
-        {
-          id: body.id,
-          lines: body.lines,
-          zoneId,
-          label: body.label,
-          kitchenNote: body.kitchenNote,
-          operatorId: personId,
-        },
-        deps.attendance === undefined
-          ? undefined
-          : { recorder: deps.attendance, clock: deps.clock },
+      const result = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        parkOrder(
+          { db: deps.db },
+          cfg,
+          {
+            id: body.id,
+            lines: body.lines,
+            zoneId,
+            label: body.label,
+            kitchenNote: body.kitchenNote,
+            operatorId: personId,
+            lateSend: late,
+          },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        ),
       );
       return c.json(result);
     }),
