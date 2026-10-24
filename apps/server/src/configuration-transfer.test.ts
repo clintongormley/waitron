@@ -398,7 +398,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 7,
+  version: 8,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -4758,6 +4758,22 @@ it.each([
   ).toEqual([]);
 });
 
+it("exports no service settings", async () => {
+  const source = await applyVenue(planVenue(venue("B13572499"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-24T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables).not.toHaveProperty("service_settings");
+});
+
 it("refuses an imported minute that is not a whole number", async () => {
   const source = await applyVenue(planVenue(venue("B13572473"), ALL_MODULES), {
     db: suite.db,
@@ -5016,7 +5032,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(7);
+  expect(exported.version).toBe(8);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

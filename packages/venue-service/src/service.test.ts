@@ -131,9 +131,8 @@ describe("VENUE_SERVICE", () => {
     ]);
   });
 
-  it("transfers the service settings, and never the kitchen notices, which are operational rows", () => {
+  it("never transfers the kitchen notices, which are operational rows", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names).toContain("service_settings");
     expect(names).not.toContain("kitchen_notices");
   });
 

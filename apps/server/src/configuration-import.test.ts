@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 7,
+  version: 8,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -167,8 +167,16 @@ describe("staged configuration import", () => {
       },
     ],
     ["A756 pre-late-flags export without them", { version: 6 }],
+    [
+      "A756 pre-station-changes export with the venue's switch",
+      {
+        version: 7,
+        tables: { ...bundle.tables, service_settings: [{ id: 1, edit_sent_lines: 1 }] },
+      },
+    ],
+    ["A756 pre-station-changes export without it", { version: 7 }],
     ["old version", { version: 1 }],
-    ["future version", { version: 8 }],
+    ["future version", { version: 9 }],
     [
       "retired drawer value",
       {

@@ -133,7 +133,7 @@ export async function buildConfigurationBundle(
   };
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 7,
+    version: 8,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -166,7 +166,7 @@ export async function applyPreparedLocation(
 }
 
 export interface ConfigurationBundle {
-  version: 7;
+  version: 8;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
@@ -477,10 +477,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 7) {
+  if (typeof value.version === "number" && value.version > 8) {
     throw new AppError("setup.request_invalid", { field: "version" });
   }
-  if (value.version !== 7) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 8) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const location = isRecord(venue) ? venue.location : undefined;
   if (
