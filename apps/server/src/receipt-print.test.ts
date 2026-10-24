@@ -116,7 +116,12 @@ import {
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { venueModuleConfig } from "./provision.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { putThemeInUse, saveThemeThroughRoute, THEME_DOTS } from "./testing/theme-logo.js";
+import {
+  putThemeInUse,
+  saveThemeThroughRoute,
+  THEME_DOTS,
+  UNTRUSTED_CASES,
+} from "./testing/theme-logo.js";
 import { WAITRON_CHOICES } from "@waitron/ui-core/theme";
 import {
   inTx,
@@ -3933,6 +3938,92 @@ describe("the theme's logo on thermal receipts", () => {
     expect(logos((await reprint(ticket)).payload)).toEqual([[0xff]]);
     await suite.db.execute(sql`update custom_themes set in_use = null where in_use = 1`);
     expect(logos((await reprint(ticket)).payload)).toEqual([]);
+  });
+
+  async function untrustedAt(cfg: DeviceRequestConfig, departmentId: string) {
+    const [foreign] = await suite.db
+      .insert(locations)
+      .values({
+        name: randomUUID(),
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+      })
+      .returning({ id: locations.id });
+    return { departmentId, locationId: cfg.locationId, foreignLocationId: foreign!.id };
+  }
+
+  async function expectTextOnlyReprint(job: { payload: Uint8Array }, cfg: DeviceRequestConfig) {
+    expect(logos(job.payload)).toEqual([]);
+    const text = decodeTicket(job.payload);
+    expect(text).toContain("Agua mineral");
+    expect(text).toContain("TOTAL");
+    expect(await registroCount(cfg)).toBe(1);
+  }
+
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "prints no logo, not even the theme's, when the department's settings cannot be trusted: %s",
+    async (_name, untrusted) => {
+      const { cfg, departmentId, sell, documents, reprint } = await setupReceipt();
+      const at = await untrustedAt(cfg, departmentId);
+      const ownPair = {
+        "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
+        "80mm": { widthDots: 24, heightDots: 1, data: "////" },
+      };
+      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, ownPair);
+      await putThemeInUse(suite.db);
+      const ticket = await sell();
+      const [original] = await documents();
+      expect(logos(original!.payload)).toEqual([[255, 255, 255]]);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await untrusted.apply(suite.db, at);
+      try {
+        await expectTextOnlyReprint(await reprint(ticket), cfg);
+      } finally {
+        await untrusted.undo(suite.db, at);
+        warning.mockRestore();
+      }
+    },
+  );
+
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "a department with no logo of its own stops the theme's printing once it cannot be trusted: %s",
+    async (_name, untrusted) => {
+      const { cfg, departmentId, sell, documents, reprint } = await setupReceipt();
+      const at = await untrustedAt(cfg, departmentId);
+      await putThemeInUse(suite.db);
+      const ticket = await sell();
+      const [original] = await documents();
+      expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await untrusted.apply(suite.db, at);
+      try {
+        await expectTextOnlyReprint(await reprint(ticket), cfg);
+      } finally {
+        await untrusted.undo(suite.db, at);
+        warning.mockRestore();
+      }
+    },
+  );
+
+  it("a failed theme read prints the sale without a logo and reports it", async () => {
+    const { cfg, sell, documents, reprint } = await setupReceipt();
+    await putThemeInUse(suite.db);
+    const ticket = await sell();
+    const [original] = await documents();
+    expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await suite.db.execute(sql`alter table custom_themes rename to test_hidden_custom_themes`);
+    try {
+      const copy = await reprint(ticket);
+      await expectTextOnlyReprint(copy, cfg);
+      expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
+        operation: "readPrintedThemeLogo",
+        code: "receipt.read_failed",
+      });
+    } finally {
+      await suite.db.execute(sql`alter table test_hidden_custom_themes rename to custom_themes`);
+      warning.mockRestore();
+    }
   });
 });
 
