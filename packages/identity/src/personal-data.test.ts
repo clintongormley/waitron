@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { DISABLED_IMPORT_PIN_PREFIX, IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 import { persons } from "./schema/persons.js";
+import { SECRET_HASH_PREFIX } from "./secret-hash.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import { sessions } from "./schema/sessions.js";
@@ -53,7 +54,7 @@ async function seedFull(
   const s = (name: string) => `${who}-${name}`;
   const t = (n: number) => at(year, n);
   const secrets = {
-    pinHash: s("pin-hash-secret"),
+    pinHash: `${SECRET_HASH_PREFIX}${s("pin-salt-secret")}$${s("pin-hash-secret")}`,
     passwordHash: s("password-hash-secret"),
     totpSecret: s("totp-ciphertext-secret"),
     googleSubject: s("google-subject-secret"),
@@ -497,6 +498,16 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         pinHash: `${DISABLED_IMPORT_PIN_PREFIX}${crypto.randomUUID()}`,
         status: "suspended",
       })
+      .returning({ id: persons.id });
+    const { signIn } = await downloadParsed(row!.id);
+    expect(signIn).toMatchObject({ pinSet: false });
+  });
+
+  it("does not count a stored value no PIN can match as a PIN", async () => {
+    await seedBoth();
+    const [row] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Mirror Viewer", pinHash: "mirror-viewer-never-logs-in" })
       .returning({ id: persons.id });
     const { signIn } = await downloadParsed(row!.id);
     expect(signIn).toMatchObject({ pinSet: false });

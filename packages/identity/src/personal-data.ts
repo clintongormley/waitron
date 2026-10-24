@@ -14,6 +14,7 @@ import { sessions } from "./schema/sessions.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { passkeyProviderName } from "./passkey-providers.js";
+import { SECRET_HASH_PREFIX } from "./secret-hash.js";
 
 /** True when the column holds a value; a secret's existence is tested in SQL so the secret itself
  * is never read. */
@@ -21,7 +22,7 @@ const isSet = (column: AnyColumn) =>
   sql<boolean>`${column} is not null`.mapWith((v: number) => v === 1);
 
 /** The start of the `pin_hash` the configuration import writes for an imported person: a value no
- * PIN matches, so it is not a PIN. */
+ * PIN matches. */
 export const DISABLED_IMPORT_PIN_PREFIX = "disabled-import:";
 
 const jsonFile = (name: string, value: unknown): PersonalDataFile => ({
@@ -48,8 +49,10 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
         status: persons.status,
         createdAt: persons.createdAt,
         passkeyOfferedAt: persons.passkeyOfferedAt,
+        // Only a value `hashSecret` wrote can match a PIN; placeholders such as the import's or the
+        // mirror viewer's cannot.
         pinSet:
-          sql<boolean>`${persons.pinHash} is not null and substr(${persons.pinHash}, 1, ${DISABLED_IMPORT_PIN_PREFIX.length}) <> ${DISABLED_IMPORT_PIN_PREFIX}`.mapWith(
+          sql<boolean>`${persons.pinHash} is not null and substr(${persons.pinHash}, 1, ${SECRET_HASH_PREFIX.length}) = ${SECRET_HASH_PREFIX}`.mapWith(
             (v: number) => v === 1,
           ),
         passwordSet: isSet(persons.passwordHash),

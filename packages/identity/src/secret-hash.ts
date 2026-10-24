@@ -13,10 +13,14 @@ const scryptAsync = promisify(scrypt) as (
   keyLength: number,
 ) => Promise<Buffer>;
 
+/** How every stored value {@link hashSecret} writes begins; a value that does not is matched by no
+ * secret. */
+export const SECRET_HASH_PREFIX = `${ALGORITHM}$`;
+
 export function hashSecret(secret: string): string {
   const salt = randomBytes(SALT_BYTES);
   const derived = scryptSync(secret, salt, KEY_BYTES);
-  return `${ALGORITHM}$${salt.toString("hex")}$${derived.toString("hex")}`;
+  return `${SECRET_HASH_PREFIX}${salt.toString("hex")}$${derived.toString("hex")}`;
 }
 
 /** The salt and derived key of a stored hash, or null when its shape or algorithm tag is wrong. */
