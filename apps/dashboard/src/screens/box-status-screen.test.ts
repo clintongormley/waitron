@@ -1,4 +1,5 @@
 import { page, userEvent } from "vitest/browser";
+import { setHelpMode } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData, formatBytes } from "@waitron/dashboard-kit";
 import type {
@@ -773,6 +774,40 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(text(openButton(el))).toBe("Check with this device's time");
     expect(openButton(el)!.getAttribute("variant")).toBe("secondary");
     expect(dialog(el).open).toBe(false);
+  });
+
+  it("explains the check in a help-mode tooltip beside its button", async () => {
+    const el = await mountClock(clockApi());
+    const tooltip = q(el, "[data-test=row-clock] .clock-check-action wt-help-tooltip")!;
+    expect(tooltip.getAttribute("mode")).toBe("help-mode");
+    expect(tooltip.getAttribute("aria-label")).toBe("What this check does");
+    expect(tooltip.getAttribute("aria-label")).toBe(t("box_status.clock_check_help_label"));
+    expect(text(tooltip)).toBe(t("box_status.clock_check_help"));
+    expect(tooltip.getAttribute("guide-label")).toBe(t("box_status.clock_check_help_guide"));
+  });
+
+  it.each([
+    ["en", "/help/en/box-status#clock-behind"],
+    ["es", "/help/es/box-status#clock-behind"],
+  ])("the check's help tooltip links to the guide's clock section in %s", async (locale, href) => {
+    setLocale(locale);
+    const el = await mountClock(clockApi());
+    const tooltip = q(el, "[data-test=row-clock] .clock-check-action wt-help-tooltip")!;
+    expect(tooltip.getAttribute("guide-href")).toBe(href);
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("box-status.clock-behind"));
+    expect(text(tooltip)).toBe(t("box_status.clock_check_help"));
+  });
+
+  it("hangs the check's help badge over its button's top trailing corner while help is on", async () => {
+    setHelpMode(true);
+    onTestFinished(() => setHelpMode(false));
+    const el = await mountClock(clockApi());
+    const button = openButton(el)!.getBoundingClientRect();
+    const badge = q(el, ".clock-check-action wt-help-tooltip")!.getBoundingClientRect();
+    expect(badge.width).toBeGreaterThan(0);
+    const [x, y] = [badge.left + badge.width / 2, badge.top + badge.height / 2];
+    expect(Math.abs(x - button.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(y - button.top)).toBeLessThanOrEqual(1);
   });
 
   it("offers the check while a check waits after the stop ended", async () => {

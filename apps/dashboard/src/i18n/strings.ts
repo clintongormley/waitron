@@ -3294,6 +3294,10 @@ export const en = {
   "box_status.clock.admin.refused.challenge": "The check took too long. Try again.",
   "box_status.clock.admin.refused.not_stopped":
     "There is nothing left to confirm. See the Clock row.",
+  "box_status.clock_check_help_label": "What this check does",
+  "box_status.clock_check_help":
+    "Compares the box's clock with this device's. If they are within a minute of each other, you can confirm that the box's clock is right, and payments restart if they are stopped. Check that this device shows the right time first. It does not work on the box's own screen.",
+  "box_status.clock_check_help_guide": "More about checking the clock",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -6670,6 +6674,10 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.admin.refused.challenge":
     "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
   "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
+  "box_status.clock_check_help_label": "Qué hace esta comprobación",
+  "box_status.clock_check_help":
+    "Compara la hora del equipo con la de este dispositivo. Si están a menos de un minuto, puedes confirmar que la hora del equipo es correcta, y los cobros se reanudan si estaban parados. Comprueba antes que este dispositivo tiene la hora bien. No funciona en la pantalla del propio equipo.",
+  "box_status.clock_check_help_guide": "Más sobre comprobar la hora",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",

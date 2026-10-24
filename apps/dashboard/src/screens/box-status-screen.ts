@@ -166,7 +166,8 @@ export class BoxStatusScreen extends LitElement {
         }
       }
       .free,
-      .retry {
+      .retry,
+      .clock-check-action {
         position: relative;
         display: flex;
         gap: var(--wt-space-1);
@@ -424,12 +425,20 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #clockCheckButton(): TemplateResult {
-    return html`<wt-button
-      variant="secondary"
-      data-test="clock-check"
-      @click=${() => void this.#openClockCheck()}
-      >${t("box_status.clock.admin.open")}</wt-button
-    >`;
+    return html`<span class="clock-check-action">
+      <wt-button
+        variant="secondary"
+        data-test="clock-check"
+        @click=${() => void this.#openClockCheck()}
+        >${t("box_status.clock.admin.open")}</wt-button
+      ><wt-help-tooltip
+        mode="help-mode"
+        aria-label=${t("box_status.clock_check_help_label")}
+        guide-href=${guideHref("box-status.clock-behind")}
+        guide-label=${t("box_status.clock_check_help_guide")}
+        >${t("box_status.clock_check_help")}</wt-help-tooltip
+      >
+    </span>`;
   }
 
   #renderClockCheckDialog(): TemplateResult | typeof nothing {
