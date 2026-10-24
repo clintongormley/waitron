@@ -4,6 +4,8 @@ export interface ClockWitness {
   readonly kind: "authority" | "device";
   /** The device's id; "authority" for AEAT readings. */
   readonly id: string;
+  /** The network address a device's reading came from; devices at one address are one witness. */
+  readonly address?: string;
   /** The box's wall clock at the moment the comparison refers to, ISO 8601. */
   readonly boxAt: string;
   /** The witness's clock at that moment, ISO 8601. */
@@ -12,13 +14,14 @@ export interface ClockWitness {
 }
 
 export interface ClockWitnessVerdict {
-  /** Each device whose latest reading agrees with the box, and the authority's latest agreeing
-   * reading. */
+  /** Each address whose latest device reading agrees with the box, and the authority's latest
+   * agreeing reading. */
   readonly agreeing: readonly ClockWitness[];
   /** Authority witnesses that disagree, the latest first. */
   readonly authorityDisagrees: readonly ClockWitness[];
-  /** The largest group (every pair agrees with each other) of two or more devices that all
-   * disagree with the box; among groups of one size, the one whose newest `boxAt` is latest. */
+  /** The largest group (every pair agrees with each other) of two or more devices, one per
+   * address, that all disagree with the box; among groups of one size, the one whose newest `boxAt`
+   * is latest. */
   readonly devicesDisagreeing: readonly ClockWitness[];
 }
 
@@ -44,14 +47,23 @@ function disagrees(reading: Reading): boolean {
   return Math.abs(reading.differenceMs) - reading.witness.uncertaintyMs > CLOCK_WITNESS_MARGIN_MS;
 }
 
-function latestPerId(readings: readonly Reading[]): Reading[] {
+function latestPer(readings: readonly Reading[], key: (reading: Reading) => string): Reading[] {
   const latest = new Map<string, Reading>();
   for (const reading of readings) {
-    const seen = latest.get(reading.witness.id);
-    if (seen === undefined || reading.boxAtMs > seen.boxAtMs)
-      latest.set(reading.witness.id, reading);
+    const seen = latest.get(key(reading));
+    if (seen === undefined || reading.boxAtMs > seen.boxAtMs) latest.set(key(reading), reading);
   }
   return [...latest.values()];
+}
+
+function latestPerId(readings: readonly Reading[]): Reading[] {
+  return latestPer(readings, (reading) => reading.witness.id);
+}
+
+function latestPerAddress(readings: readonly Reading[]): Reading[] {
+  return latestPer(readings, ({ witness }) =>
+    witness.address === undefined ? `id ${witness.id}` : `address ${witness.address}`,
+  );
 }
 
 function newestBoxAtMs(group: readonly Reading[]): number {
@@ -91,7 +103,9 @@ function witnessesOf(readings: readonly Reading[]): ClockWitness[] {
  * neither way. */
 export function judgeClockWitnesses(witnesses: readonly ClockWitness[]): ClockWitnessVerdict {
   const readings = witnesses.flatMap((witness) => readable(witness) ?? []);
-  const devices = latestPerId(readings.filter((reading) => reading.witness.kind === "device"));
+  const devices = latestPerAddress(
+    latestPerId(readings.filter((reading) => reading.witness.kind === "device")),
+  );
   const authorities = readings.filter((reading) => reading.witness.kind === "authority");
   return {
     agreeing: witnessesOf([...devices.filter(agrees), ...latestPerId(authorities.filter(agrees))]),

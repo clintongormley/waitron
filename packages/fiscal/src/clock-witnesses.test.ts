@@ -258,6 +258,95 @@ describe("the same device twice", () => {
   });
 });
 
+function at(address: string, witness: ClockWitness): ClockWitness {
+  return { ...witness, address };
+}
+
+describe("devices at one address", () => {
+  it("count once when they agree: the latest reading from the address stands for it", () => {
+    const verdict = judgeClockWitnesses([
+      at("10.0.0.5", device("a", 0)),
+      at("10.0.0.5", device("b", 0, 1_000)),
+    ]);
+    expect(ids(verdict.agreeing)).toEqual(["b"]);
+  });
+
+  it("count twice when they agree from two addresses", () => {
+    const verdict = judgeClockWitnesses([
+      at("10.0.0.5", device("a", 0)),
+      at("10.0.0.6", device("b", 0)),
+    ]);
+    expect(ids(verdict.agreeing)).toEqual(["a", "b"]);
+  });
+
+  it("make no group when two of them disagree from one address", () => {
+    const verdict = judgeClockWitnesses([
+      at("10.0.0.5", device("a", HOUR_MS)),
+      at("10.0.0.5", device("b", HOUR_MS)),
+    ]);
+    expect(verdict.devicesDisagreeing).toEqual([]);
+    expect(verdict.agreeing).toEqual([]);
+  });
+
+  it("make a group of two when two disagree from two addresses", () => {
+    const verdict = judgeClockWitnesses([
+      at("10.0.0.5", device("a", HOUR_MS)),
+      at("10.0.0.6", device("b", HOUR_MS)),
+    ]);
+    expect(ids(verdict.devicesDisagreeing)).toEqual(["a", "b"]);
+  });
+
+  it("count three disagreeing ids over two addresses as a group of two, keeping each address's latest", () => {
+    const verdict = judgeClockWitnesses([
+      at("10.0.0.5", device("a", HOUR_MS, 2_000)),
+      at("10.0.0.5", device("b", HOUR_MS)),
+      at("10.0.0.6", device("c", HOUR_MS, 1_000)),
+    ]);
+    expect(ids(verdict.devicesDisagreeing)).toEqual(["a", "c"]);
+  });
+
+  it("let a newer disagreeing reading from an address replace an older agreeing one from another id there", () => {
+    const verdict = judgeClockWitnesses([
+      at("10.0.0.5", device("a", 0)),
+      at("10.0.0.5", device("b", HOUR_MS, 1_000)),
+      at("10.0.0.6", device("c", HOUR_MS)),
+    ]);
+    expect(verdict.agreeing).toEqual([]);
+    expect(ids(verdict.devicesDisagreeing)).toEqual(["b", "c"]);
+  });
+
+  it("count by id alone when a witness has no address", () => {
+    const verdict = judgeClockWitnesses([
+      device("a", HOUR_MS),
+      device("b", HOUR_MS),
+      at("10.0.0.5", device("c", 0)),
+      device("d", 0),
+    ]);
+    expect(ids(verdict.devicesDisagreeing)).toEqual(["a", "b"]);
+    expect(ids(verdict.agreeing)).toEqual(["c", "d"]);
+  });
+
+  it("do not mistake an address for a device id that has no address", () => {
+    const verdict = judgeClockWitnesses([
+      device("10.0.0.5", HOUR_MS),
+      at("10.0.0.5", device("b", HOUR_MS)),
+    ]);
+    expect(ids(verdict.devicesDisagreeing)).toEqual(["10.0.0.5", "b"]);
+  });
+
+  it("keep the latest reading per id before the latest per address", () => {
+    const verdict = judgeClockWitnesses([
+      at("10.0.0.5", device("a", HOUR_MS, 2_000)),
+      at("10.0.0.6", device("a", HOUR_MS, 3_000)),
+      at("10.0.0.5", device("b", HOUR_MS, 1_000)),
+    ]);
+    expect(verdict.devicesDisagreeing.map((witness) => witness.address).sort()).toEqual([
+      "10.0.0.5",
+      "10.0.0.6",
+    ]);
+  });
+});
+
 describe("a witness that cannot be judged", () => {
   const empty = { agreeing: [], authorityDisagrees: [], devicesDisagreeing: [] };
 
