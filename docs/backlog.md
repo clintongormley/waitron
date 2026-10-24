@@ -4189,11 +4189,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
-- **A1076. Spanish names the three late flags three ways**: the station editor's «En demora»,
-  «Retrasado», «Olvidado» (`prep.health.*`), the error's «aviso < atraso < olvido»
-  (`prep.threshold_invalid`) and Add station's «Aviso / Atraso / Olvido a partir de (min)»
-  (`packages/venue-service/src/dashboard/strings.ts`); English says warm, overdue and forgotten.
+- **A1076. Spanish names the three late flags three ways**.
   Left open by A756 PR 5.
+  [Detail](backlog/languages.md#a1076-spanish-names-the-three-late-flags-three-ways)
 
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)
