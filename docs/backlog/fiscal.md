@@ -1485,8 +1485,9 @@ available until this item lands. Do not expose retained business records without
 
 Internal archive and bucket recovery prepares and selects a separate target. It retains the
 approved public history outside the backup secrets and republishes it after placement, so another
-backup keeps that history. Unknown files at either target root refuse placement. The repair API
-and page remain disabled. The internal archive and bucket restart path requires new named-node
+backup keeps that history. Unknown files at either target root refuse placement. The unpublished
+branch has TLS repair routes and boot admission; the dedicated page is unfinished. The internal
+archive and bucket restart path requires new named-node
 proof and exact module commitment, then replays the same operation without replacing counters
 advanced after proof. Encrypted publication material retains the original secret entries without
 saving the node proof. A prepared operation without a target database can reopen the same archive
@@ -1506,5 +1507,8 @@ same journal, event and target; the selected source and node key are checked aga
 approval rejects an earlier proof still downloading. An expired approval may renew before
 publication while the saved input, event and target remain unchanged; renewal also rejects an
 older proof returning after its key check. Sealed publication blocks approval replacement.
-Listener/page qualification and whole-branch review remain open. The plan is
+Ordinary setup closes its store before backup proof, drains its other setup requests and stops
+writing the retained file log. This keeps the closed database sidecars and log bound to the repair
+journal through shutdown. Its other setup actions require a restart after this handoff.
+Complete listener/source/race qualification, the dedicated page and whole-branch review remain open. The plan is
 `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.

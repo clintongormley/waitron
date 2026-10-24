@@ -635,8 +635,27 @@ export async function resolveFirstSetupBackupWorkspace(
   anchorInput: FirstSetupRoots,
 ): Promise<{ kind: "absent" } | { kind: "repair" | "selected"; target: BackupRepairTarget }> {
   try {
-    const anchor = await canonical(anchorInput),
-      selected = await witness(anchor);
+    let anchor = await canonical(anchorInput);
+    const backlinks = await Promise.all(
+      Object.values(anchor).map((root) => read(join(root, NAMESPACE, "backlink.json"))),
+    );
+    if (backlinks.some((value) => value !== null)) {
+      const backlink = backlinks[0];
+      if (
+        !exact(backlink, ["version", "target", "initialRecordDigest", "initialRecord"]) ||
+        backlink.version !== 2
+      )
+        uncertain();
+      targetValid(backlink.target);
+      if (
+        !isDeepStrictEqual(backlink.target.target, anchor) ||
+        !backlinks.every((value) => isDeepStrictEqual(value, backlink))
+      )
+        uncertain();
+      anchor = backlink.target.anchor;
+      if (!isDeepStrictEqual(await witness(anchor), backlink)) uncertain();
+    }
+    const selected = await witness(anchor);
     if (selected === null) return { kind: "absent" };
     const records = await checkedRecords(anchor, selected),
       last = records.at(-1)!;

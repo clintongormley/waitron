@@ -161,6 +161,25 @@ checks. It takes `observation`, `recoveryId`, `nodeRecoverySecret` and the two c
 continues through multipart `/open` with `recoveryId`; committed-target completion uses `/resume`.
 These routes and browser methods remain unimplemented at this checkpoint.
 
+**Task 3 API/entry implementation checkpoint, 24 October:** the unpublished branch now mounts the
+bounded TLS routes, including `/resume`, plus public progress that carries no backup preview or
+saved input. The direct, supervised and already-recovery listeners authenticate an archive through
+real HTTPS; their HTTP listeners serve public guidance. V2 selection carries its roots without a
+V1 binding, rechecks under exclusion and precedes raw database opens. A pending V2 journal skips
+ordinary source cleanup; an absent namespace leaves ordinary filesystem refusals to strict boot.
+Full Task 3 source/boot/race qualification and Task 4 remain open. In particular, qualify the V1
+retired-workspace anchor path, factory configuration failures and listener/session disposal before
+calling Task 3 complete. The prior statement about unimplemented browser methods still applies.
+
+**Task 3 handoff ruling:** ordinary setup must close its long-lived store before backup proof binds
+the retained files. A new real-server case first showed shutdown changing `waitron.log` and both
+databases' WAL/SHM files, then refusing the journal. Its new repair boundary drains other setup
+requests, closes the store under the shared host coordinator and sends subsequent logs to stdout.
+Other setup actions answer `setup.not_ready` until restart; public status/inspection and the repair
+routes remain available. The same case now retains every bound file and reads the prepared journal
+after shutdown. Keep the ordinary POST guard unchanged. Further request-race and alternate-action
+qualification remains required; this checkpoint does not complete that qualification.
+
 ## Task 4: Guided page, documentation twins and final qualification
 
 **Interfaces — produce:** `FirstSetupBackupSession` in the new browser session file owns `open(request): Promise<BackupRepairSession>`, `prepare(proposal): Promise<unknown>`, `commit(input): Promise<void>`, `dispose(): Promise<void>`. It consumes new `SetupApi.openFirstSetupBackup`, `prepareFirstSetupBackup`, `commitFirstSetupBackup`, `closeFirstSetupBackup` methods matching Task 3. Its generation/disconnect handling discards late replies; it stores no secrets/grant in local/session storage. Add client Cloud adapter methods for the repair prefix rather than sending ordinary Cloud POSTs.

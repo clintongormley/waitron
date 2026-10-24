@@ -21,6 +21,11 @@ import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 import { readBoxPublicCa } from "./box-tls-repair.js";
+import {
+  firstSetupBackupRecoveryFor,
+  resolveFirstSetupBackupEntry,
+} from "./first-setup-backup-entry.js";
+import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -43,6 +48,36 @@ async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHos
 }
 
 export async function resolveFirstSetupEntry(
+  roots: FirstSetupRoots,
+  environment: Readonly<Record<string, string | undefined>>,
+  requestRestart?: () => void,
+  log: Logger = () => {},
+) {
+  const backup = await resolveFirstSetupBackupEntry(roots);
+  if (backup.kind === "repair")
+    return {
+      kind: "resolution" as const,
+      app: await resolutionApp(backup.roots, environment, requestRestart, log),
+      roots: backup.roots,
+    };
+  if (backup.kind === "selected") {
+    const admission = await resolveLegacyFirstSetupEntry(
+      backup.roots,
+      environment,
+      requestRestart,
+      log,
+    );
+    if (admission.kind === "resolution") return admission;
+    return {
+      ...admission,
+      run: <T>(body: (venueHeld: boolean) => Promise<T>) =>
+        backup.run(() => admission.run(() => body(true))),
+    };
+  }
+  return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log);
+}
+
+async function resolveLegacyFirstSetupEntry(
   roots: FirstSetupRoots,
   environment: Readonly<Record<string, string | undefined>>,
   requestRestart?: () => void,
@@ -128,6 +163,8 @@ async function resolutionApp(
     moduleConfig,
   });
   const app = new Hono();
+  const backup = firstSetupBackupRecoveryFor(roots, environment, host, log);
+  mountFirstSetupBackupApi(app, backup, log, requestRestart);
   app.get("/setup-api/status", async (c) => {
     const pair = await host.store.readResumable().catch(() => null);
     const frozenEnvironment = pair?.state.frozen.environment;

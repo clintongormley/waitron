@@ -468,6 +468,19 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     return entry.preparation;
   };
   return {
+    status() {
+      return turn(async () => {
+        if (disposed) ownerRequired();
+        try {
+          const record = (await options.workspace.read()).at(-1);
+          return record === undefined
+            ? { phase: "unstarted" as const, proofRequired: true }
+            : { phase: record.phase, recoveryId: record.target.recoveryId, proofRequired: true };
+        } catch {
+          return { phase: "uncertain" as const, proofRequired: true };
+        }
+      });
+    },
     cloudStart() {
       return turn(async () => {
         if (disposed) ownerRequired();
