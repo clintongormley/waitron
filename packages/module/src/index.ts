@@ -53,6 +53,7 @@ export type {
   KeepOpenSubject,
   ServiceMode,
   VenueServiceContribution,
+  PrintedDepartmentReceipt,
   DueFloorLayout,
   ZoneFloorLayout,
   PreparedServiceDay,

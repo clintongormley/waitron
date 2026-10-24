@@ -702,6 +702,13 @@ export interface PreparedServiceDay {
   readonly [preparedServiceDay]: true;
 }
 
+/** `unreadable`: the department's receipt settings cannot be trusted, so no logo prints for it, not even the venue's. */
+export interface PrintedDepartmentReceipt {
+  readonly receipt: DepartmentReceiptConfig;
+  readonly logo: ReceiptLogoRaster | null;
+  readonly unreadable?: true;
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
   readServiceDay(
@@ -902,7 +909,7 @@ export interface VenueServiceContribution {
     cfg: DepartmentReceiptScope,
     departmentId: string,
     paperWidth: ReceiptPaperWidth,
-  ): Promise<{ receipt: DepartmentReceiptConfig; logo: ReceiptLogoRaster | null }>;
+  ): Promise<PrintedDepartmentReceipt>;
   readDepartmentLogoRasters(
     tx: Transaction,
     cfg: DepartmentReceiptScope,

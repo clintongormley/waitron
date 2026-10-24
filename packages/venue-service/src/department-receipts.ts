@@ -14,6 +14,7 @@ import {
   type ReceiptLogoRasters,
   type ReceiptPaperWidth,
 } from "@waitron/shared";
+import type { PrintedDepartmentReceipt } from "@waitron/module";
 import { departmentReceipts } from "./schema/department-receipts.js";
 import {
   departments,
@@ -217,15 +218,27 @@ export async function readPrintedDepartmentReceipt(
   cfg: DepartmentReceiptScope,
   departmentId: string,
   paperWidth: ReceiptPaperWidth,
-): Promise<{ receipt: DepartmentReceiptConfig; logo: ReceiptLogoRaster | null }> {
+): Promise<PrintedDepartmentReceipt> {
+  const doc = departmentReceipts.receipt;
   try {
     const [row] = await tx
-      .select({ ...trimProjection(cfg), picture: picture(paperWidth) })
+      .select({
+        ...trimProjection(cfg),
+        picture: picture(paperWidth),
+        receiptRow: departmentReceipts.departmentId,
+        top: sql<string | null>`case when json_valid(${doc}) then json_type(${doc}) end`,
+        hasLogoKey: sql<
+          number | null
+        >`case when json_valid(${doc}) then json_type(${doc}, '$.logo') is not null end`,
+      })
       .from(departments)
       .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
       .where(rowQuery(cfg, departmentId));
-    if (!row) return { receipt: {}, logo: null };
+    if (!row) return { receipt: {}, logo: null, unreadable: true };
+    if (row.receiptRow !== null && row.top !== "object")
+      return { receipt: {}, logo: null, unreadable: true };
     const receipt = parseReceipt(row);
+    if (row.hasLogoKey === 1 && !receipt.logo) return { receipt, logo: null, unreadable: true };
     return { receipt, logo: receipt.logo ? parsePicture(row.picture, paperWidth) : null };
   } catch {
     try {
@@ -237,7 +250,7 @@ export async function readPrintedDepartmentReceipt(
     } catch {
       /* Diagnostics must not turn an optional read failure into a sale failure. */
     }
-    return { receipt: {}, logo: null };
+    return { receipt: {}, logo: null, unreadable: true };
   }
 }
 
