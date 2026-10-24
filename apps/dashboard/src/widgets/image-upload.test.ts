@@ -19,6 +19,14 @@ async function open(el: ImageUpload): Promise<HTMLElement> {
   await el.updateComplete;
   return el.shadowRoot!.querySelector("media-image-picker")!;
 }
+function png(width: number, height: number): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d")!;
+  context.fillRect(0, 0, width, height);
+  return canvas.toDataURL("image/png");
+}
 function select(picker: HTMLElement, filename = mediaTestReference("abc123.png")): void {
   picker.dispatchEvent(
     new CustomEvent("select-image", {
@@ -559,14 +567,6 @@ describe("image-upload as a receipt logo", () => {
   const remove = (el: ImageUpload) =>
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=remove-image]");
   const picture = (el: ImageUpload) => choose(el).querySelector<HTMLImageElement>("img")!;
-  function png(width: number, height: number): string {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d")!;
-    context.fillRect(0, 0, width, height);
-    return canvas.toDataURL("image/png");
-  }
   const cssPx = (dots: number) => (dots / dpiValue("203dpi")) * 96;
 
   it.each([
@@ -1000,6 +1000,83 @@ describe("image-upload as a venue logo", () => {
     add(el)!.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  });
+});
+
+describe("image-upload as a venue logo, sized and laid out", () => {
+  const plate = (el: ImageUpload) => el.shadowRoot!.querySelector<HTMLElement>(".plate")!;
+  const stack = (el: ImageUpload) => el.shadowRoot!.querySelector<HTMLElement>(".stack")!;
+
+  async function atViewport(width: number, run: () => Promise<void>): Promise<void> {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(width, 900);
+    try {
+      await run();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  }
+
+  /** A 4:1 logo, loaded before anything is measured: the plate is sized by it. */
+  async function wideLogo(hostWidth?: number) {
+    const mounted = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      venueLogo: true,
+      image: mediaTestReference("own.png"),
+    });
+    if (hostWidth !== undefined) mounted.host.style.width = `${hostWidth}px`;
+    const img = plate(mounted.el).querySelector<HTMLImageElement>("img")!;
+    await vi.waitFor(() => expect(img.getAttribute("src")).toContain("/display/"));
+    const loaded = new Promise((resolve) => img.addEventListener("load", resolve, { once: true }));
+    img.src = png(1200, 300);
+    await loaded;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    return { ...mounted, img };
+  }
+
+  // 274 px is the field's width in the editor on a 390 px screen (the visual check, 2026-10-24).
+  it.each([
+    ["en-GB", 390],
+    ["en-GB", 274],
+    ["es-ES", 390],
+    ["es-ES", 274],
+  ] as const)(
+    "on a 390 px screen, in %s, in a %i px column, keeps Replace and Remove beside a wide logo",
+    async (locale, column) => {
+      setLocale(locale);
+      await atViewport(390, async () => {
+        const { el, host, img } = await wideLogo(column);
+        const plateBox = plate(el).getBoundingClientRect();
+        const stackBox = stack(el).getBoundingClientRect();
+        const hostBox = host.getBoundingClientRect();
+        expect(stackBox.left).toBeGreaterThanOrEqual(plateBox.right);
+        expect(stackBox.top).toBeLessThan(plateBox.bottom);
+        expect(stackBox.bottom).toBeGreaterThan(plateBox.top);
+        expect(stackBox.right).toBeLessThanOrEqual(hostBox.right + 0.5);
+        const imgBox = img.getBoundingClientRect();
+        expect(imgBox.left).toBeGreaterThanOrEqual(plateBox.left);
+        expect(imgBox.right).toBeLessThanOrEqual(plateBox.right);
+        expect(getComputedStyle(img).objectFit).toBe("contain");
+      });
+    },
+  );
+
+  it("on a wide screen, draws a wide logo's plate about 212 × 84, as the editor's mock-up does", async () => {
+    setLocale("en-GB");
+    await atViewport(1280, async () => {
+      const { el, img } = await wideLogo();
+      const box = plate(el).getBoundingClientRect();
+      expect(box.width).toBeGreaterThanOrEqual(196);
+      expect(box.width).toBeLessThanOrEqual(224);
+      expect(box.height).toBeGreaterThanOrEqual(76);
+      expect(box.height).toBeLessThanOrEqual(92);
+      const imgBox = img.getBoundingClientRect();
+      const scale = Math.min(imgBox.width / img.naturalWidth, imgBox.height / img.naturalHeight);
+      // The whole logo is drawn, filling the box's width: none of it is cut off.
+      expect(Math.abs(img.naturalWidth * scale - imgBox.width)).toBeLessThan(1);
+      expect(getComputedStyle(img).objectFit).toBe("contain");
+      expect(stack(el).getBoundingClientRect().left).toBeGreaterThanOrEqual(box.right);
+    });
   });
 });
 

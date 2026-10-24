@@ -157,7 +157,17 @@ export class ImageUpload extends LitElement {
         inline-size: calc(var(--wt-space-6) * 8);
         block-size: calc(var(--wt-space-6) * 3);
       }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        min-inline-size: 0;
+      }
+      /* The plate gives way first, so Replace and Remove stay beside it on a phone. */
       .plate {
+        flex: 0 1 auto;
+        min-inline-size: 0;
+        max-inline-size: calc(var(--wt-space-6) * 6 + var(--wt-space-5));
         padding: var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -165,14 +175,15 @@ export class ImageUpload extends LitElement {
       }
       .stack {
         display: flex;
+        flex: none;
         flex-direction: column;
         gap: var(--wt-space-2);
       }
       .plate img {
         display: block;
-        block-size: calc(var(--wt-space-6) * 3);
-        min-inline-size: calc(var(--wt-space-6) * 3);
-        max-inline-size: calc(var(--wt-space-6) * 8);
+        block-size: calc(var(--wt-space-6) * 2);
+        min-inline-size: calc(var(--wt-space-6) * 2);
+        max-inline-size: 100%;
         object-fit: contain;
       }
     `,
@@ -343,7 +354,8 @@ export class ImageUpload extends LitElement {
           ></span
         >
       </button>`;
-    return html`<div class="plate">
+    return html`<div class="row">
+      <div class="plate">
         <img src=${liveMediaImage(this.image, "display")} alt="" />
       </div>
       <div class="stack">
@@ -367,7 +379,8 @@ export class ImageUpload extends LitElement {
           }}
           >${t("image.remove_logo")}</wt-button
         >
-      </div>`;
+      </div>
+    </div>`;
   }
 
   override render() {
