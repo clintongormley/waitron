@@ -120,8 +120,8 @@ the refusals that were about the offset.
   everything. Anyone who can send can confirm: the check is with the kitchen, not with a manager.
   A venue can require a manager's PIN for this instead, with a setting in the dashboard's service
   settings beside "Allow changes to items already sent to the kitchen"; it is off by default.
-  (2026-10-24: that panel and switch are gone, #2044; where the setting lives is re-decided in
-  slice 3, see §12.)
+  (2026-10-24: it is a department setting, under Courses and the kitchen on the department's Service
+  tab; plan D18.)
 - **A dish the running period also sells** — a caña taken from Lunch's menu, which Sobremesa also
   sells — is not marked and needs no check: the kitchen or bar is still making it. It is sent at the
   price it was taken at (Lunch's). This is new: today the caña is held with the tortilla (§2).
@@ -185,6 +185,15 @@ till's error strings in English and Spanish.
 A line sent with a confirmation records that it was sent after its period ended and who confirmed
 it (the signed-in person). The kitchen ticket and the kitchen screen read that record for the mark in
 §3.3. This needs a migration (a column on the order line; the plan decides where).
+
+2026-10-24 (plan D23): the "also sold" acceptance applies to a dish whose own period ended earlier
+the same business day; a line naming a period that has not yet run is refused as before.
+
+2026-10-24 (plan D25): the record is two columns on the line's service context
+(`working_line_contexts`), not on the order line.
+
+2026-10-24 (plan D26): with the department's setting on, the recorded confirmer is the manager who
+authorised — the signed-in person when they hold the permission — not the waiter who sent.
 
 ## 6. What is removed
 
@@ -302,6 +311,8 @@ answer.
   are about how an order starts and is paid. Built in slices 3–4. **2026-10-24:** A756 PR 8 (#2044)
   dropped `service_settings` and its panel and moved "Changes after sending" onto each kitchen
   station, so slice 3 re-decides this home (plan, "Where the manager's-PIN setting lives").
+  **2026-10-24 (slice 3 planning):** one flag per department, `departments.late_send_needs_manager`,
+  under Courses and the kitchen (plan D18).
 - **The per-menu `sendable` flag stays on the wire until slice 4**, set from the one window, so it
   always equals `orderable`; slice 4 removes it with the till's handling of an ended dish.
 - **No clash check still refuses anything with every offset at 0**, so the checks §7 says are "kept,
