@@ -5506,12 +5506,21 @@ alert list, and holds no staged input.
   half the round trip, it asks "They agree. Confirm that the box's clock is right?" with Cancel
   (`secondary`) and Confirm (`primary`, with `loading` while it is sent; both disabled, and the
   dialog not dismissible, while it is sent); Confirm asks the box for a fresh challenge and answers
-  it at once. When they differ it says "Your device and the box differ by more than a minute. If
-  your device is right, the box's clock is wrong: connect the box to the internet so it can correct
-  it." with Close alone. The server judges the answer again. A refusal shows in the dialog's footer,
-  above its buttons, in its own sentence for `same_machine` (this screen is the box itself),
-  `differs`, `challenge` (the check took too long) and `contrary_proof`, and every open read is read
-  again. A confirmation closes the dialog and reads every open read again.
+  it at once. Otherwise it says "The box could not show that its clock is within a minute of your
+  device's. Check that your device's time is right; if it is, connect the box to the internet so it
+  can correct its clock." with Close alone. The server judges the answer again, and refuses
+  `differs` when it cannot show the two agree; the dialog then shows the fresh times with that same
+  sentence and Close alone, and nothing in its footer. Every other refusal shows in the dialog's
+  footer, above its buttons, in its own sentence for `same_machine` ("This screen is the box
+  itself, …", refused before any times are shown, so with Close alone), `challenge` ("The check
+  took too long. Try again.") and `contrary_proof` ("Other clocks say the box's clock is wrong."),
+  each of those two keeping Cancel and Confirm, and `not_stopped` ("There is nothing left to
+  confirm. See the Clock row."), after which the times and the question go and Close is alone; any
+  other reason is worded by its code. Every refusal reads every open read again. A confirmation
+  closes the dialog and reads every open read again. The button carries a `help-mode`
+  `wt-help-tooltip` ("What this check does") that says what the check does and links to the
+  guide's `box-status#clock-behind` section, its badge hung over the button's top trailing corner
+  as Free's and Retry now's are.
 - **Sales dated wrongly.** Under the rows, one section headed "Sales dated wrongly", with "Go
   through these with your tax adviser, then mark the alert as handled in the bell." under the
   heading and one entry for each open `clock.records_misdated` alert. An alert that lists sales draws them in a
