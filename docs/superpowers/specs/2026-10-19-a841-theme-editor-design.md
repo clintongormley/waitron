@@ -2683,7 +2683,9 @@ permission-gated write (CLAUDE.md's risk triggers).
   its panel, not the page. Not taken: a `<picture>` with `darkLogoMedia` (section 7), whose image
   would switch before the plate did.
 - **A logo refusal** (lane A ruling 2026-10-24, D9): shown under the image it names, with the form's
-  usual bottom message; in the name dialog, at the dialog's bottom.
+  usual bottom message, when its reason is `image_not_found` or `dark_without_light`; any other logo
+  refusal is the code's own message at the bottom, with no field marked; in the name dialog, at the
+  dialog's bottom.
 - **Before the first answer** (lane A ruling 2026-10-24, D13): the logo's place is an empty box of
   its height and no width.
 - **A picture that fails to load** (lane A ruling 2026-10-24, D14): the place draws what it draws
