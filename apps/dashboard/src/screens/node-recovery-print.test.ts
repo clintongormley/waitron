@@ -1,5 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { applyTokens } from "@waitron/ui";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
+import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { renderNodeRecoveryPack } from "./node-recovery-print.js";
@@ -76,5 +78,35 @@ it("gives the printed page the colour scheme of the screen it copies its colours
   } finally {
     dark.remove();
     light.remove();
+  }
+});
+
+it("the sheet carries Waitron's type and the page's colours under a theme at 130%", () => {
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+  const source = document.createElement("div");
+  document.body.append(source);
+  applyTokens(source);
+  source.setAttribute("data-theme", "light");
+  try {
+    const sourceTokens = getComputedStyle(source);
+    expect(sourceTokens.getPropertyValue("--wt-font-size-md")).toBe("18px");
+    const page = new DOMParser().parseFromString(renderNodeRecoveryPack(pack, source), "text/html");
+    const root = page.documentElement.style;
+    expect(root.getPropertyValue("--wt-font-size-md")).toBe("14px");
+    expect(root.getPropertyValue("--wt-font-size-xl")).toBe("22px");
+    expect(root.getPropertyValue("--wt-font-family")).toBe(
+      WAITRON_DEFAULTS.structure["--wt-font-family"],
+    );
+    expect(root.getPropertyValue("--wt-font-family-mono")).toBe(
+      WAITRON_DEFAULTS.structure["--wt-font-family-mono"],
+    );
+    expect(root.getPropertyValue("--wt-color-bg")).toBe(
+      sourceTokens.getPropertyValue("--wt-color-bg"),
+    );
+  } finally {
+    source.remove();
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+      (sheet) => sheet !== TEXT_130_SHEET,
+    );
   }
 });

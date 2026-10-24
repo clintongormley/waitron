@@ -2,6 +2,7 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
 import { applyTokens, baseStyles, type WtModal } from "@waitron/ui";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { DashboardApi, Printer } from "../api/client.js";
@@ -49,14 +50,13 @@ export function printEquipmentLabel(
   frame.addEventListener("load", () => {
     const view = frame.contentWindow!;
     const doc = frame.contentDocument!;
-    const tokens = getComputedStyle(frame);
     for (const token of [
       "--wt-font-family",
       "--wt-font-size-md",
       "--wt-font-size-xl",
       "--wt-font-weight-bold",
     ])
-      doc.documentElement.style.setProperty(token, tokens.getPropertyValue(token));
+      doc.documentElement.style.setProperty(token, WAITRON_DEFAULTS.structure[token]!);
     const style = doc.createElement("style");
     style.textContent =
       "body{margin:0;font-family:var(--wt-font-family);font-size:var(--wt-font-size-md);text-align:center}" +

@@ -1,3 +1,4 @@
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import type { NodeRecoveryPack } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 
@@ -8,12 +9,16 @@ export function renderNodeRecoveryPack(pack: NodeRecoveryPack, source: HTMLEleme
   meta.name = "viewport";
   meta.content = "width=device-width, initial-scale=1";
   page.head.append(meta);
-  const tokens = getComputedStyle(source);
   for (const name of [
     "--wt-font-family",
     "--wt-font-family-mono",
     "--wt-font-size-md",
     "--wt-font-size-xl",
+  ]) {
+    page.documentElement.style.setProperty(name, WAITRON_DEFAULTS.structure[name]!);
+  }
+  const tokens = getComputedStyle(source);
+  for (const name of [
     "--wt-space-3",
     "--wt-space-4",
     "--wt-space-5",
