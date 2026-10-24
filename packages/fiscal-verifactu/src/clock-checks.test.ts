@@ -116,6 +116,7 @@ describe("openClockCheck", () => {
         reason: "behind_chain",
         detail: {
           clockAt: iso(R),
+          offsetMinutes: 60,
           bootMs: 1_000_000,
           bootId: "boot-1",
           lastRecordAt: iso(T),
@@ -228,6 +229,7 @@ describe("openClockCheck", () => {
       reason: "behind_chain",
       detail: {
         clockAt: iso(R + H),
+        offsetMinutes: 60,
         bootMs: 6_400_000,
         bootId: "boot-1",
         lastRecordAt: iso(T + 2 * M),

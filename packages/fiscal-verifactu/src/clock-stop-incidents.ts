@@ -72,13 +72,17 @@ export async function recordMisdated(
       unconfirmed: false,
     };
   } else {
-    const opening = (input.check.detail as { lastRecordId?: unknown } | null)?.lastRecordId;
+    const detail = input.check.detail as { lastRecordId?: unknown; offsetMinutes?: unknown } | null;
+    const opening = detail?.lastRecordId;
     saleId = typeof opening === "string" ? await saleOf(tx, opening) : undefined;
     params = {
       confirmationId,
       count: 0,
       from: input.check.openedAt.toISOString(),
-      fromOffsetMinutes: reading.offsetMinutes,
+      // The opening's own offset: a summer-time change can fall between the opening and now. A
+      // check written without one falls back to the closing's.
+      fromOffsetMinutes:
+        typeof detail?.offsetMinutes === "number" ? detail.offsetMinutes : reading.offsetMinutes,
       partial,
       unconfirmed: true,
     };

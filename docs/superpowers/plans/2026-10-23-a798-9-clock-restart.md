@@ -497,6 +497,11 @@ check), each in the task named:
 - the restarted alert's params: `clock-stop-incidents.test.ts`, `apps/dashboard/src/i18n/alerts.test.ts`,
   `apps/dashboard/src/widgets/alerts-bell.test.ts:129-160`, `apps/dashboard/src/screens/alerts-screen.test.ts:90-106`
   (Tasks R4b2, R4c);
+- a check's `detail` gains the opening's `offsetMinutes`, so a closing that cannot tell dates its
+  alert's start with the offset the clock read at the opening (minor wave A, R4b-2):
+  `clock-checks.test.ts`'s exact `detail` checks in "opens a behind_chain check holding the
+  reading, …" and "closes a check whose stop came back after a sale, …" each gain
+  `offsetMinutes: 60`, every other key unchanged; both files exist only on this branch;
 - `clock-stop-incidents.test.ts`'s setup re-pointed from `restartAfterClockStop` to
   `confirmClockStop` (Task R4b2; lines at `46afdd9dc` → after): `:159` "is not recorded for a
   refused restart" (`clock.restart_refused { reason: "no_proof" }`) → `:241` "… refused

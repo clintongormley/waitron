@@ -263,6 +263,7 @@ export async function openClockCheck(
       reason: "behind_chain",
       detail: {
         clockAt: reading.instant.toISOString(),
+        offsetMinutes: reading.offsetMinutes,
         bootMs: boot.ms,
         bootId: boot.id,
         lastRecordAt: latest.at.toISOString(),

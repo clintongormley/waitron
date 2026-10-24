@@ -367,6 +367,39 @@ describe("the wrongly dated sales' alert", () => {
   });
 });
 
+describe("a closing that cannot tell, across a summer-time change", () => {
+  it("dates the alert's start with the offset the clock read when the check opened", async () => {
+    await sale(T);
+    // Opened on summer time (UTC+2); closed after the change to winter time (UTC+1).
+    await withTransaction(suite.db, (tx) =>
+      openClockCheck(tx, {
+        reading: { instant: new Date(R), offsetMinutes: 120 },
+        boot: BOOT,
+        nodeId,
+      }),
+    );
+    const { confirmation } = await withTransaction(suite.db, (tx) =>
+      closeClockCheckByItself(tx, {
+        reading: { instant: new Date(T + M), offsetMinutes: 60 },
+        boot: BOOT,
+        witnesses: [authority(T + 30 * S, 2 * H)],
+        nodeId,
+      }),
+    );
+    expect(confirmation).toMatchObject({ source: "elapsed", recordId: null });
+    expect(incidents("clock.records_misdated").map((row) => row.params)).toEqual([
+      {
+        confirmationId: confirmation!.id,
+        count: 0,
+        from: iso(R),
+        fromOffsetMinutes: 120,
+        partial: true,
+        unconfirmed: true,
+      },
+    ]);
+  });
+});
+
 describe("a restarted clock proved wrong", () => {
   async function restartWithThreeSales(): Promise<{ restartId: string; saleId: string }> {
     await sale(T);
