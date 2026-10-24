@@ -484,6 +484,13 @@
       "when": 1792796028770,
       "tag": "0068_retire_venue_printing_choices",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "6",
+      "when": 1792855801176,
+      "tag": "0069_retire_service_settings",
+      "breakpoints": true
     }
   ]
 }

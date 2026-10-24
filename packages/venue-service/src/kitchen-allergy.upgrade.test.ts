@@ -186,12 +186,14 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
          ${kind === "moved" ? "Table 8" : null}, ${kind === "rerouted" ? "Cold" : null}, ${null})`);
     }
   }
+  const laterTableDrops = ["service_settings"];
   const tables = suite.db
     .all<{ name: string }>(
       sql`select name from sqlite_master where type = 'table'
     and name not glob 'sqlite_*' and name not glob '__drizzle_migrations*' and name <> 'change_log' order by name`,
     )
-    .map(({ name }) => name);
+    .map(({ name }) => name)
+    .filter((name) => !laterTableDrops.includes(name));
   expect(tables).not.toContain("ticket_item_allergies");
   const snapshot = () =>
     new Map(
@@ -243,10 +245,6 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
     [
       "waitron_change_menu_periods_update",
       ' or new."end_offset_minutes" is not old."end_offset_minutes"',
-    ],
-    [
-      "waitron_change_service_settings_update",
-      ' or new."kitchen_ticket_grouping" is not old."kitchen_ticket_grouping" or new."print_held_work" is not old."print_held_work" or new."release_reminder_minutes" is not old."release_reminder_minutes" or new."print_moved_slips" is not old."print_moved_slips"',
     ],
   ]);
   const laterColumnAdds = new Map([

@@ -339,7 +339,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     ).toEqual([{ period_id: periodId, menu_id: staff!.id, display_order: 5 }]);
   });
 
-  it("writes no service settings row", async () => {
+  it("leaves no service settings table", async () => {
     await seedTenant(db);
     const [location] = await db
       .insert(locations)
@@ -348,9 +348,13 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const locationId = brandLocationId(location!.id);
     const node = { locationId, nodeId: await seedNode(db, locationId) };
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-    expect((await db.execute(sql`select count(*) as n from service_settings`)).rows).toEqual([
-      { n: 0 },
-    ]);
+    expect(
+      (
+        await db.execute(
+          sql`select name from sqlite_master where type = 'table' and name = 'service_settings'`,
+        )
+      ).rows,
+    ).toEqual([]);
   });
   it("leaves a fresh Spanish venue's holiday storage empty while its address reads the shipped holidays, and a re-run keeps entries made later", async () => {
     await seedTenant(db);

@@ -786,7 +786,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "section_members_one_ref_ck",
   "sections_role_ck",
   "service_commands_scope_kind_ck",
-  "service_settings_singleton_ck",
   "sessions_token_hash_ck",
   "shift_templates_ends_minute_ck",
   "shift_templates_label_ck",
