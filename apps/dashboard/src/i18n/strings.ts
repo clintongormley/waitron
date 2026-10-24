@@ -6656,9 +6656,9 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.contrary.device": "{name}: no coincide (marcó {time})",
   "box_status.clock.contrary.unnamed_device": "Un dispositivo",
   "box_status.clock.stop.ready": "Hay prueba: los cobros se reanudan en unos segundos.",
-  "box_status.clock.stop.confirmed": "Cobros reanudados a las {time}, confirmado por {who}.",
+  "box_status.clock.stop.confirmed": "Cobros reanudados el {time}, confirmado por {who}.",
   "box_status.clock.check_waiting":
-    "La parada de cobros que empezó a las {time} ha terminado, pero nada ha confirmado aún la hora del equipo. El equipo pregunta a Hacienda cada minuto si le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
+    "La parada de cobros que empezó el {time} ha terminado, pero nada ha confirmado aún la hora del equipo. El equipo pregunta la hora a Hacienda cada minuto cuando le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":

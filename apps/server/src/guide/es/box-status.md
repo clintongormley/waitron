@@ -214,7 +214,7 @@ equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde o
 Cuando se confirma la hora, el equipo vuelve a cobrar en ese momento. No cambia ninguna venta ya
 registrada. La siguiente venta lleva la hora del reloj del equipo, así que se registra con una hora
 anterior a la de la última venta. La fila **Reloj** se pone en ámbar y dice qué confirmó la hora,
-por ejemplo **Cobros reanudados a las 2026-10-23 21:42, confirmado por dos cajas o terminales.** La
+por ejemplo **Cobros reanudados el 2026-10-23 21:42, confirmado por dos cajas o terminales.** La
 campana guarda un aviso con las dos horas y lo que confirmó la hora, y el equipo envía un
 [correo](box-status.md#emails) a las personas que gestionan el sistema.
 
@@ -238,19 +238,19 @@ lista ni aviso.
 La parada también puede terminar sola, porque se puso bien la hora o el reloj llegó a la hora de la
 última venta. El equipo sigue necesitando una confirmación para saber qué ventas tienen la fecha
 mal, así que hasta que la tiene, la fila **Reloj** sigue en ámbar, su línea dice **Sin confirmar desde
-la parada de cobros**, y dice **La parada de cobros que
-empezó a las 2026-10-23 21:10 ha terminado, pero nada ha confirmado aún la hora del equipo. El
-equipo pregunta a Hacienda cada minuto si le envía registros; también pueden confirmarla dos cajas o
-terminales, o el dispositivo de un administrador.** Mientras tanto se sigue cobrando. Un equipo que
-envía registros a Hacienda le sigue pidiendo su hora más o menos una vez por minuto, y los
-administradores ven **Comprobar con la hora de este dispositivo** bajo la fila. En cuanto Hacienda,
-dos cajas o terminales, o el dispositivo de un administrador confirman la hora, el equipo muestra
-las ventas con fecha incorrecta como se explica arriba.
+la parada de cobros**, y dice **La parada de cobros que empezó el 2026-10-23 21:10 ha terminado,
+pero nada ha confirmado aún la hora del equipo. El equipo pregunta la hora a Hacienda cada minuto
+cuando le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un
+administrador.** Mientras tanto se sigue cobrando. Un equipo que envía registros a Hacienda le
+sigue pidiendo su hora más o menos una vez por minuto, y los administradores ven **Comprobar con la
+hora de este dispositivo** bajo la fila. En cuanto Hacienda, dos cajas o terminales, o el
+dispositivo de un administrador confirman la hora, el equipo muestra las ventas con fecha incorrecta
+como se explica arriba.
 
 Si en cambio Hacienda o dos cajas o terminales dicen que la hora del equipo está mal, o los cobros se
 vuelven a parar por la hora después de registrarse más ventas, el equipo no puede saber qué ventas
 tienen la fecha mal. La campana, un correo y la sección **Ventas con fecha incorrecta** lo dicen
-entonces: **La parada de cobros que empezó a las 2026-10-23 21:10 terminó sola, pero nada confirmó
+entonces: **La parada de cobros que empezó el 2026-10-23 21:10 terminó sola, pero nada confirmó
 la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la
 hora del equipo y revisa con tu asesor las ventas desde entonces.**
 

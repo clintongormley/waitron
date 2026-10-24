@@ -501,7 +501,7 @@ describe("sales recorded with a time later than the real time", () => {
       `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.`,
     );
     expect(alertMessage("clock.records_misdated", one, "es")).toBe(
-      `Se registró una venta con una hora posterior a la real, a las ${from}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.`,
+      `Se registró una venta con una hora posterior a la real, el ${from}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.`,
     );
     expect(alertMessage("clock.records_misdated", { ...one, partial: true }, "en")).toBe(
       `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page. The box restarted during the stop, so the list may be short.`,

@@ -155,7 +155,7 @@ export const ALERT_MESSAGES: Readonly<
     one: {
       param: "count",
       en: "One sale was recorded with a time later than the real time, at {from:minute}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.",
-      es: "Se registró una venta con una hora posterior a la real, a las {from:minute}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.",
+      es: "Se registró una venta con una hora posterior a la real, el {from:minute}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del equipo.",
     },
     variants: {
       partial: {
@@ -166,7 +166,7 @@ export const ALERT_MESSAGES: Readonly<
       unconfirmed: {
         mode: "replace",
         en: "The payment stop that began at {from:minute} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.",
-        es: "La parada de cobros que empezó a las {from:minute} terminó sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces.",
+        es: "La parada de cobros que empezó el {from:minute} terminó sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces.",
       },
     },
   },
