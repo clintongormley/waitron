@@ -2482,8 +2482,15 @@ describe("department service periods", () => {
       expect(
         await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, instant)),
       ).toMatchObject({ orderableMenuIds: [v.menus.Cena] });
+      const service = await scoped((tx) =>
+        resolveDepartmentService(tx, v.cfg, v.restaurant, instant),
+      );
+      expect(service.endedMenus.map((entry) => entry.menuId)).not.toContain(v.menus.Cena);
     }
     expect(await read(v, "2026-10-25", "03:00")).toMatchObject({ orderableMenuIds: [] });
+    expect((await read(v, "2026-10-25", "03:00")).endedMenus).toEqual([
+      { menuId: v.menus.Cena, periodName: "Night" },
+    ]);
   });
 
   it("unions a shared staff menu without reviving its ended selling root", async () => {
@@ -2491,6 +2498,15 @@ describe("department service periods", () => {
     expect(await read(v, FRIDAY, "14:00")).toMatchObject({
       orderableMenuIds: [v.menus.Café],
     });
+  });
+
+  it("names each ended menu's period, the one that ended last when two share a menu", async () => {
+    const v = await serviceVenue();
+    expect((await read(v, FRIDAY, "20:00")).endedMenus).toEqual([
+      { menuId: v.menus.Almuerzo, periodName: "Lunch" },
+      { menuId: v.menus.Bebidas, periodName: "Lunch" },
+      { menuId: v.menus.Café, periodName: "Afternoon" },
+    ]);
   });
 
   it("orders the current customer and staff menus and switches at the exact boundary", async () => {
@@ -2509,7 +2525,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Almuerzo,
       orderableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
-      endedMenuIds: [],
+      endedMenus: [],
     });
     expect(await read(v, FRIDAY, "14:00")).toEqual({
       keepOpen: {
@@ -2525,7 +2541,10 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Café,
       orderableMenuIds: [v.menus.Café],
-      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas],
+      endedMenus: [
+        { menuId: v.menus.Almuerzo, periodName: "Lunch" },
+        { menuId: v.menus.Bebidas, periodName: "Lunch" },
+      ],
     });
   });
 
@@ -2545,7 +2564,11 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Cena,
       orderableMenuIds: [v.menus.Cena],
-      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
+      endedMenus: [
+        { menuId: v.menus.Almuerzo, periodName: "Lunch" },
+        { menuId: v.menus.Bebidas, periodName: "Lunch" },
+        { menuId: v.menus.Café, periodName: "Afternoon" },
+      ],
     });
     expect(await read(v, SATURDAY, "03:00")).toEqual({
       keepOpen: {
@@ -2561,7 +2584,12 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena],
+      endedMenus: [
+        { menuId: v.menus.Almuerzo, periodName: "Lunch" },
+        { menuId: v.menus.Bebidas, periodName: "Lunch" },
+        { menuId: v.menus.Café, periodName: "Afternoon" },
+        { menuId: v.menus.Cena, periodName: "Night" },
+      ],
     });
     expect(await read(v, SATURDAY, "06:10")).toEqual({
       keepOpen: null,
@@ -2572,11 +2600,11 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena],
+      endedMenus: [],
     });
   });
 
-  it("closes in a gap and forgets menus older than the preceding business day", async () => {
+  it("closes in a gap and lists only the menus that ended in the current business day", async () => {
     const v = await serviceVenue();
     expect(await read(v, FRIDAY, "20:00")).toEqual({
       keepOpen: {
@@ -2592,7 +2620,11 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      endedMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
+      endedMenus: [
+        { menuId: v.menus.Almuerzo, periodName: "Lunch" },
+        { menuId: v.menus.Bebidas, periodName: "Lunch" },
+        { menuId: v.menus.Café, periodName: "Afternoon" },
+      ],
     });
     expect(await read(v, "2026-10-18", "06:10")).toEqual({
       keepOpen: null,
@@ -2603,7 +2635,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      endedMenuIds: [],
+      endedMenus: [],
     });
   });
 
@@ -2618,7 +2650,7 @@ describe("department service periods", () => {
     expect(await read(v, FRIDAY, "12:30")).toMatchObject({
       open: false,
       orderableMenuIds: [],
-      endedMenuIds: [],
+      endedMenus: [],
     });
     expect(await read(v, FRIDAY, "15:00")).toMatchObject({
       open: true,
@@ -2626,11 +2658,7 @@ describe("department service periods", () => {
       orderableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
     });
     expect(await read(v, SATURDAY, "02:30")).toMatchObject({ open: true, periodId: v.lunch });
-    expect((await read(v, SATURDAY, "06:10")).endedMenuIds).toEqual([
-      v.menus.Almuerzo,
-      v.menus.Bebidas,
-      v.menus.Café,
-    ]);
+    expect((await read(v, SATURDAY, "06:10")).endedMenus).toEqual([]);
   });
 
   it("distinguishes an empty special-date row from following the normal week", async () => {
@@ -2644,7 +2672,7 @@ describe("department service periods", () => {
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({
       open: false,
       orderableMenuIds: [],
-      endedMenuIds: [],
+      endedMenus: [],
     });
     await saveDay(v, FRIDAY, { id: date.id });
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: true, periodId: v.lunch });
@@ -2663,11 +2691,11 @@ describe("department service periods", () => {
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({
       open: false,
       orderableMenuIds: [],
-      endedMenuIds: [],
+      endedMenus: [],
     });
     await saveDay(v, FRIDAY, { id: date.id, closedAllDay: true });
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: false, orderableMenuIds: [] });
-    expect((await read(v, SATURDAY, "06:10")).endedMenuIds).toEqual([]);
+    expect((await read(v, SATURDAY, "06:10")).endedMenus).toEqual([]);
   });
 
   it("fails open with each distinct period menu when the clock cannot be read", async () => {
@@ -2684,7 +2712,7 @@ describe("department service periods", () => {
       periodName: null,
       periodOccurrenceKey: null,
       customerMenuId: null,
-      endedMenuIds: [],
+      endedMenus: [],
     });
     expect(new Set(service.orderableMenuIds)).toEqual(
       new Set([v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café, v.menus.Cena]),
@@ -2703,7 +2731,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      endedMenuIds: [],
+      endedMenus: [],
     });
     const other = await venue({ timetable: false });
     await expect(

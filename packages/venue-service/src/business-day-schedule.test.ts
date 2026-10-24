@@ -515,7 +515,7 @@ describe("service boundaries remain chronological", () => {
     const running = await read(instant);
     expect(running.open).toBe(true);
     expect(running.orderableMenuIds).toHaveLength(1);
-    expect(running.endedMenuIds).toEqual([]);
+    expect(running.endedMenus).toEqual([]);
     expect(running.keepOpen).toMatchObject({ periodId: v.periodId, running: true });
     expect((await read(end)).open).toBe(false);
   });
@@ -1733,7 +1733,7 @@ describe("dated runtime service across a moved changeover", () => {
         const result = await read(instant);
         expect(result.open).toBe(false);
         expect(result.orderableMenuIds).toEqual([]);
-        expect(result.endedMenuIds).toHaveLength(1);
+        expect(result.endedMenus).toHaveLength(1);
       }
       const boundary = time === "07:00" ? "2026-11-04T06:00:00Z" : "2026-11-04T02:00:00Z";
       expect(await read(boundary)).toMatchObject({

@@ -836,7 +836,7 @@ export interface VenueServiceContribution {
   ): Promise<{
     departmentId: string;
     orderableMenuIds: readonly string[];
-    endedMenuIds: readonly string[];
+    endedMenus: readonly { menuId: string; periodName: string }[];
   }>;
   readKeepOpen(
     tx: Transaction,
