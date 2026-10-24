@@ -12,7 +12,8 @@ import {
   colourKey,
   groupAgainst,
 } from "@waitron/ui-core/theme";
-import type { StringKey } from "../i18n/strings.js";
+import { currentContentLanguages } from "@waitron/ui";
+import { catalogues, type StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
 
@@ -250,4 +251,12 @@ export function textSizesLine(theme: Pick<DerivedTheme, "light">): string {
     lg: pixels(theme, "lg"),
     xl: pixels(theme, "xl"),
   });
+}
+
+/** The preview's sample name in the venue's default content language, else in the screen's. */
+export function previewProductName(): { text: string; lang: string } {
+  const lang = currentContentLanguages().defaultLanguage;
+  const text = catalogues[lang]?.["appearance.preview_product"];
+  if (text !== undefined) return { text, lang };
+  return { text: t("appearance.preview_product"), lang: currentLocale() };
 }

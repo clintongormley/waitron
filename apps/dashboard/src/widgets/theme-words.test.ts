@@ -8,7 +8,8 @@ import {
   type ThemeWarning,
 } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import { es, type StringKey } from "../i18n/strings.js";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { en, es, type StringKey } from "../i18n/strings.js";
 import { fill, setLocale } from "../i18n/t.js";
 import {
   advancedSummary,
@@ -22,6 +23,7 @@ import {
   handNames,
   handWarningLines,
   keptNote,
+  previewProductName,
   saveDialogLine,
   savedWarningLine,
   textScaleLabel,
@@ -579,5 +581,31 @@ describe("text size words", () => {
     );
     const replaced = { light: { ...theme.light, "--wt-font-size-md": "20px" } };
     expect(textSizesLine(replaced)).toBe(fill("appearance.text_sizes", { ...sizes, md: "20" }));
+  });
+});
+
+describe("the preview's sample name", () => {
+  const before = currentContentLanguages();
+  afterEach(() => {
+    setContentLanguages(before);
+  });
+
+  it("the preview's sample name is in the venue's content language when the strings have it", () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    expect(previewProductName()).toEqual({ text: es["appearance.preview_product"], lang: "es" });
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    expect(previewProductName()).toEqual({ text: en["appearance.preview_product"], lang: "en" });
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
+    expect(previewProductName()).toEqual({
+      text: en["appearance.preview_product"],
+      lang: "en-GB",
+    });
+    setLocale("es-ES");
+    expect(previewProductName()).toEqual({
+      text: es["appearance.preview_product"],
+      lang: "es-ES",
+    });
   });
 });
