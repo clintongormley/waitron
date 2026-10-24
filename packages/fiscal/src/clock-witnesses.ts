@@ -14,8 +14,8 @@ export interface ClockWitness {
 }
 
 export interface ClockWitnessVerdict {
-  /** Each address whose latest device reading agrees with the box, and the authority's latest
-   * agreeing reading. */
+  /** Each address (or id, for a witness with no address) whose latest device reading agrees with
+   * the box, and the authority's latest agreeing reading. */
   readonly agreeing: readonly ClockWitness[];
   /** Authority witnesses that disagree, the latest first. */
   readonly authorityDisagrees: readonly ClockWitness[];
@@ -51,7 +51,13 @@ function latestPer(readings: readonly Reading[], key: (reading: Reading) => stri
   const latest = new Map<string, Reading>();
   for (const reading of readings) {
     const seen = latest.get(key(reading));
-    if (seen === undefined || reading.boxAtMs > seen.boxAtMs) latest.set(key(reading), reading);
+    if (
+      seen === undefined ||
+      reading.boxAtMs > seen.boxAtMs ||
+      (reading.boxAtMs === seen.boxAtMs && disagrees(reading) && !disagrees(seen))
+    ) {
+      latest.set(key(reading), reading);
+    }
   }
   return [...latest.values()];
 }

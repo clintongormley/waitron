@@ -256,6 +256,21 @@ describe("the same device twice", () => {
     );
     expect(verdict.devicesDisagreeing).toHaveLength(2);
   });
+
+  it("keeps the disagreeing reading when two share a box time, in either order", () => {
+    const agreed = device("a", 0);
+    const contrary = device("a", HOUR_MS);
+    const other = device("b", HOUR_MS);
+    for (const readings of [
+      [agreed, contrary, other],
+      [contrary, agreed, other],
+    ]) {
+      const verdict = judgeClockWitnesses(readings);
+      expect(verdict.agreeing).toEqual([]);
+      expect(verdict.devicesDisagreeing).toEqual(expect.arrayContaining([contrary, other]));
+      expect(verdict.devicesDisagreeing).toHaveLength(2);
+    }
+  });
 });
 
 function at(address: string, witness: ClockWitness): ClockWitness {
@@ -313,6 +328,23 @@ describe("devices at one address", () => {
     ]);
     expect(verdict.agreeing).toEqual([]);
     expect(ids(verdict.devicesDisagreeing)).toEqual(["b", "c"]);
+  });
+
+  it("keep the disagreeing reading when two from one address share a box time, in either order", () => {
+    const agreed = at("10.0.0.5", device("a", 0));
+    const contrary = at("10.0.0.5", device("b", HOUR_MS));
+    const elsewhere = at("10.0.0.6", device("c", 0));
+    const third = at("10.0.0.7", device("d", HOUR_MS));
+    for (const tie of [
+      [agreed, contrary],
+      [contrary, agreed],
+    ]) {
+      expect(ids(judgeClockWitnesses([...tie, elsewhere]).agreeing)).toEqual(["c"]);
+      expect(ids(judgeClockWitnesses([...tie, elsewhere, third]).devicesDisagreeing)).toEqual([
+        "b",
+        "d",
+      ]);
+    }
   });
 
   it("count by id alone when a witness has no address", () => {
