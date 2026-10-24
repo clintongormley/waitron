@@ -3,7 +3,8 @@
 **Status: plan, 2026-10-25. Nothing was built when this was written.** Revised the same day after
 round 1: the plan review (`~/waitron-campaign-b/a980-s2a2-plan-review/round1-review.md`, findings
 I1–I3 and M1–M11) and the claim check (`…/claim-check.md`, its FALSE and OVERSTATED list and its
-minor list) are folded in below. Design:
+minor list) are folded in below. Revised again the same day after round 3, a narrow check of
+that revision (`…/round3-check.md`, findings I1–I3 and M1–M9). Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4.2 (the
 download, its worked example, what the README carries), §2.1 and §2.4 (what is held and where it
 goes, which the README explains), §4.1 (the staff notice's wording), §5.3 row S2, §8 owner answer
@@ -122,7 +123,8 @@ Left for later, on purpose:
    **How long it is kept**: the box's own facts, then the venue's part. The box deletes the
    sign-in secrets when an account is disabled (S4, #2032), clears old account-email records and
    expired Google sign-in states by itself, and deletes no person and no session (Task 1's source
-   table gives the code). The rest is the venue's to decide.
+   table gives the code). For how long the venue keeps the data, and why, the README sends the
+   person to the venue.
 
    Left out, each on purpose:
    - **(h), automated decisions**: the clause applies to the decisions of GDPR art. 22, and this
@@ -241,9 +243,12 @@ Left for later, on purpose:
      both halves (its probes P5 and P6). So after a download the dashboard may believe the session
      has up to 30 minutes more than the server does; when the server's clock ends it, the next
      request is refused `management_session.expired` and the dashboard returns to sign-in, the same
-     path as any server-side expiry. This is known and matches the working-time export, whose route
-     also resolves the session with `touch: false` (`apps/server/src/attendance-export-api.ts:61`).
-     Marking the press passive would break the rule that only automatic reads are passive.
+     path as any server-side expiry. The mismatch is specific to this route and accepted for the
+     full-disk reason above: the working-time download, by contrast, does restart the server's
+     countdown (`apps/server/src/attendance-export-api.ts:84` resolves with `touch` on; only its
+     second check after building, `:126`, and its options read, `:61`, pass `false`; its tests at
+     `attendance-export-api.test.ts:340-353` and `:543-553` assert the stamp moves). Marking the
+     press passive would break the rule that only automatic reads are passive.
    - **Leaving.** If the screen is removed while the request is out, the answer is dropped: no file
      is saved and no message is set (a counter like the screen's `#operation`,
      `profile-screen.ts:249`, bumped on removal at `:291`).
@@ -381,7 +386,7 @@ exactly as shown; the text ends with one `\n`.
 | `filesHeading` | `What each file holds` |
 | `files["profile.json"].holds` | `your name, contact details, language, role and account status, and any device profile set to let you in or keep you out.` |
 | `files["profile.json"].use` | `Used to run the venue, contact you and decide what you may do.` |
-| `files["profile.json"].sentTo[0]` | `A manager or admin can download a configuration export, protected by a passphrase they choose, that holds your name, contact details, language, role and account status, including after you leave.` |
+| `files["profile.json"].sentTo[0]` | `A manager or admin can download a configuration export that holds your name, contact details, language, role and account status, and any device profile set to let you in or keep you out, including after you leave; they protect it with a passphrase they choose.` |
 | `files["profile.json"].kept[0]` | `Your profile stays on the box after your account is disabled: nothing in the box deletes it.` |
 | `files["sign-in.json"].holds` | `how you sign in: whether you have a PIN, a password, an authenticator app or a Google login (never the secrets themselves), your passkeys, how many recovery codes you have, your sign-ins, the account emails issued to you and any setup you started but did not finish.` |
 | `files["sign-in.json"].use` | `Used to keep your account secure.` |
@@ -389,16 +394,16 @@ exactly as shown; the text ends with one `\n`.
 | `files["sign-in.json"].sentTo[1]` | `If you link a Google login, the box asks Google to confirm who you are each time you link or use it, and keeps Google's identifier for your account; this file says only whether one is linked.` |
 | `files["sign-in.json"].kept[0]` | `When your account is disabled, your PIN, password, passkeys, authenticator app, recovery codes and Google login are deleted from the box.` |
 | `files["sign-in.json"].kept[1]` | `Your sign-in sessions stay on the box after they end.` |
-| `files["sign-in.json"].kept[2]` | `The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted some time after it expires.` |
+| `files["sign-in.json"].kept[2]` | `The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in after it has expired.` |
 | `machineReadable` | `The .json files are a machine-readable copy you can take to another service.` |
 | `originHeading` | `Where it came from` |
 | `origin` | `You or the venue's managers entered your details, or they were imported when the box was set up; the rest was recorded automatically as you used Waitron.` |
 | `sentToHeading` | `Who else receives it` |
 | `backup` | `If the venue has set up backups, they hold a copy of the whole database, this data included, wherever the venue keeps them.` |
 | `keptHeading` | `How long it is kept` |
-| `decides` | `The venue decides how long it keeps your data, within what the law requires. Ask it.` |
+| `decides` | `Ask the venue how long it keeps your data and why; its privacy notice may say.` |
 | `rightsHeading` | `Your rights` |
-| `rights` | `You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so within that first month. You may also complain to a data-protection authority.` |
+| `rights` | `You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so, and why, within that first month. You may also complain to a data-protection authority.` |
 | `ask` | `To ask, contact {venue}.` |
 | `notice` | `Its privacy notice: {url}` |
 | `unnamedVenue` | `the venue` |
@@ -412,24 +417,24 @@ exactly as shown; the text ends with one `\n`.
 | `filesHeading` | `Qué contiene cada archivo` |
 | `files["profile.json"].holds` | `tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta, y los perfiles de dispositivo configurados para dejarte entrar o impedírtelo.` |
 | `files["profile.json"].use` | `Sirve para gestionar el local, contactarte y decidir qué puedes hacer.` |
-| `files["profile.json"].sentTo[0]` | `Un gerente o un administrador puede descargar una exportación de la configuración, protegida con una contraseña que elige, con tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta, también después de que te vayas.` |
-| `files["profile.json"].kept[0]` | `Tu perfil se queda en el equipo de Waitron después de que se deshabilite tu cuenta: nada en el equipo lo borra.` |
+| `files["profile.json"].sentTo[0]` | `Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu nombre, tus datos de contacto, tu idioma, tu rol, el estado de tu cuenta y los perfiles de dispositivo configurados para dejarte entrar o impedírtelo, también después de que te vayas; la protege con una contraseña que elige esa persona.` |
+| `files["profile.json"].kept[0]` | `Tu perfil se queda en el servidor Waitron del local después de que se deshabilite tu cuenta: nada en el servidor lo borra.` |
 | `files["sign-in.json"].holds` | `cómo accedes: si tienes PIN, contraseña, aplicación de autenticación o inicio de sesión con Google (nunca los secretos), tus passkeys, cuántos códigos de recuperación tienes, tus sesiones, los correos de cuenta generados para ti y cualquier configuración que empezaste sin terminar.` |
 | `files["sign-in.json"].use` | `Sirve para mantener tu cuenta segura.` |
 | `files["sign-in.json"].sentTo[0]` | `Los correos de cuenta (invitaciones, restablecimientos de contraseña y códigos de cambio de correo) se envían a través del servicio de correo que configuró el local, si tiene uno.` |
-| `files["sign-in.json"].sentTo[1]` | `Si vinculas un inicio de sesión con Google, el equipo de Waitron pide a Google que confirme quién eres cada vez que lo vinculas o lo usas, y guarda el identificador de Google de tu cuenta; este archivo solo dice si hay uno vinculado.` |
-| `files["sign-in.json"].kept[0]` | `Cuando se deshabilita tu cuenta, se borran del equipo de Waitron tu PIN, tu contraseña, tus passkeys, la aplicación de autenticación, los códigos de recuperación y el inicio de sesión con Google.` |
-| `files["sign-in.json"].kept[1]` | `Tus sesiones se quedan en el equipo de Waitron después de terminar.` |
-| `files["sign-in.json"].kept[2]` | `El registro de un correo de cuenta ya usado o caducado se borra cuando se genera para ti otro del mismo tipo; una vinculación con Google sin terminar se borra algún tiempo después de caducar.` |
+| `files["sign-in.json"].sentTo[1]` | `Si vinculas un inicio de sesión con Google, el servidor Waitron del local pide a Google que confirme quién eres cada vez que lo vinculas o lo usas, y guarda el identificador de Google de tu cuenta; este archivo solo dice si hay uno vinculado.` |
+| `files["sign-in.json"].kept[0]` | `Cuando se deshabilita tu cuenta, se borran del servidor Waitron del local tu PIN, tu contraseña, tus passkeys, la aplicación de autenticación, los códigos de recuperación y el inicio de sesión con Google.` |
+| `files["sign-in.json"].kept[1]` | `Tus sesiones se quedan en el servidor Waitron del local aunque hayan terminado.` |
+| `files["sign-in.json"].kept[2]` | `El registro de un correo de cuenta ya usado o caducado se borra cuando se genera para ti otro del mismo tipo; una vinculación con Google sin terminar se borra la próxima vez que alguien empieza un inicio de sesión o una vinculación con Google después de que caduque.` |
 | `machineReadable` | `Los archivos .json son una copia legible por máquina que puedes llevar a otro servicio.` |
 | `originHeading` | `De dónde salen` |
-| `origin` | `Tus datos los introdujiste tú o los gerentes del local, o se importaron al configurar el equipo de Waitron; el resto se registró automáticamente mientras usabas Waitron.` |
+| `origin` | `Tus datos los introdujiste tú o los gerentes del local, o se importaron al configurar el servidor Waitron del local; el resto se registró automáticamente mientras usabas Waitron.` |
 | `sentToHeading` | `Quién más los recibe` |
 | `backup` | `Si el local tiene copias de seguridad, estas guardan una copia de toda la base de datos, incluidos estos datos, allí donde el local las tenga.` |
 | `keptHeading` | `Cuánto tiempo se guardan` |
-| `decides` | `El local decide cuánto tiempo guarda tus datos, dentro de lo que exige la ley. Pregúntale.` |
+| `decides` | `Pregunta al local cuánto tiempo guarda tus datos y por qué; su aviso de privacidad puede indicarlo.` |
 | `rightsHeading` | `Tus derechos` |
-| `rights` | `Puedes pedir al local que corrija o borre tus datos, que limite su uso o que te dé otra copia en un formato que puedas llevar a otro servicio, y puedes oponerte a su uso. Debe responder en el plazo de un mes; si necesita más tiempo, hasta dos meses más, debe decírtelo dentro de ese primer mes. También puedes reclamar ante una autoridad de protección de datos.` |
+| `rights` | `Puedes pedir al local que corrija o borre tus datos, que limite su uso o que te dé otra copia en un formato que puedas llevar a otro servicio, y puedes oponerte a su uso. Debe responder en el plazo de un mes; si necesita más tiempo, hasta dos meses más, debe decírtelo, y por qué, dentro de ese primer mes. También puedes reclamar ante una autoridad de protección de datos.` |
 | `ask` | `Para pedirlo, contacta con {venue}.` |
 | `notice` | `Su aviso de privacidad: {url}` |
 | `unnamedVenue` | `el local` |
@@ -445,8 +450,10 @@ says "disabled" / «se deshabilita». «gerentes» is the guide's word for manag
 `:18`); «responsables» is avoided because in Spanish data protection it means the controller
 (design, "Words used here"). The box is «el equipo» in the server's Spanish text
 (`apps/server/src/i18n/box-emails.ts:9`), but «el equipo» alone also means "the team"
-(`es/staff.md:3`, «datos del equipo»), so the README writes «el equipo de Waitron», and the origin
-sentence avoids naming the box at all.
+(`es/staff.md:3`, «datos del equipo»), and «el equipo de Waitron» reads as "Waitron's staff", which
+would tell the person that the Waitron company holds their data. So the README writes «el servidor
+Waitron del local» the first time in a line and «el servidor» after it, in every Spanish line that
+names the box (profile `kept[0]`, sign-in `sentTo[1]`, `kept[0]`, `kept[1]`, and `origin`).
 
 **What backs each sentence.** A reviewer checks each row; a sentence with no row is not shipped.
 
@@ -454,21 +461,21 @@ sentence avoids naming the box at all.
 | --- | --- |
 | profile.json holds | the file's keys: `packages/identity/src/personal-data.ts:37-50`, `:67-78`, written at `:140`; S2a1 decision 10's `profile.json` shape (name fields, email, pending email, telephone, locale, role, status, `deviceProfileExceptions` with `admitted`). The file also holds `id`, `emailVerifiedAt` and `createdAt`; the sentence does not claim to be complete |
 | profile.json use | design §2.1 rows s1 ("run the venue, attribute work"), s2 ("sign-in, invitations"), s3 ("contact"), s7 ("permissions") |
-| profile.json sentTo (configuration export) | the export route needs `system.manage` (`apps/server/src/configuration-export-api.ts:46-49`), which managers hold (`packages/identity/src/permissions.ts:55-74`, `:62`) and admins hold with every permission (`:76`, `:82`); the passphrase is at least 12 characters (`configuration-export-api.ts:40-42`; `packages/provisioning/src/configuration-transfer.ts:466-471`); it carries `persons` minus PIN, password, two-factor secret, email-verified time, Google subject, pending email and passkey-offer time (`packages/identity/src/configuration-transfer.ts:1-23`), so names, telephone, email, locale, role and status, with no status filter (no `status` in that file; design §2.4 r4, "former staff included") |
-| profile.json kept | no code outside tests deletes a `persons` row: `grep -rniE "delete\s+from\s+\"?(persons\|sessions\|management_sessions)\b\|\.delete\((persons\|sessions\|managementSessions)\b" packages apps --include='*.ts'`, test and `testing/` files excluded, 2026-10-25, found only two unrelated in-memory `Map`s named `sessions` (`hour-setup-clock.ts:57`, `recovery-preparation.ts:364`); disabling sets `status` and keeps the row (`packages/identity/src/staff.ts:266-274`, `:306-311`) |
+| profile.json sentTo (configuration export) | the export route needs `system.manage` (`apps/server/src/configuration-export-api.ts:46-49`), which managers hold (`packages/identity/src/permissions.ts:55-74`, `:62`) and admins hold with every permission (`:76`, `:82`); the passphrase is at least 12 characters (`configuration-export-api.ts:40-42`; `packages/provisioning/src/configuration-transfer.ts:465`); it carries `persons` minus PIN, password, two-factor secret, email-verified time, Google subject, pending email and passkey-offer time, and `device_profile_admission_persons` (`packages/identity/src/configuration-transfer.ts:1-23`, the admission table at `:20-21`), so names, telephone, email, locale, role, status and device-profile exceptions; `persons` is read with `select *` and no status filter (`packages/provisioning/src/configuration-transfer.ts:251-290`; design §2.4 r4, "former staff included") |
+| profile.json kept | no code outside tests deletes a `persons` row: `grep -rniE "delete\s+from\s+\"?(persons\|sessions\|management_sessions)\b\|\.delete\((persons\|sessions\|managementSessions)\b" packages apps --include='*.ts'`, test and `testing/` files excluded, 2026-10-25, found only two unrelated in-memory `Map`s named `sessions` (`hour-setup-clock.ts:57`, `recovery-preparation.ts:364`). A literal grep cannot see a table name filled in at run time: the configuration import runs `delete from ${sql.identifier("persons")} where role <> 'admin'` (`packages/provisioning/src/configuration-transfer.ts:696-700`), but only inside the transaction that sets up a new venue (`apps/server/src/boot.ts:1363-1370`; `packages/provisioning/src/first-setup-command-deployment.ts:329`), before anyone on that box could download anything; and the whole-database removals (`apps/server/src/db-wipe.ts`, used by `rejoin-command.ts` and `reset-request.ts`) discard the local copy, not a row. Disabling sets `status` and keeps the row (`packages/identity/src/staff.ts:266-274`, `:306-311`) |
 | sign-in.json holds | S2a1 decision 10's `sign-in.json` shape (yes/no for PIN, password, two-factor, Google; passkeys; recovery-code counts; dashboard and device sessions; account emails; unfinished setups; `personal-data.ts:51-61`, `:80-105`, `:107-119`, `:121-157`) and its "no secrets" rule, enforced by its tests (`packages/identity/src/personal-data.test.ts`). "Issued", not "sent": a `management_account_actions` row is written before delivery and stays when the send fails (`apps/server/src/management-api.ts:1140-1162`, `invitationSent: false`) |
 | sign-in.json use | design §2.1 rows s4–s6 ("secure sign-in", "stay signed in") |
 | sign-in.json sentTo[0] (email) | account emails are sent through `resolveAccountEmail` (`apps/server/src/boot.ts:1963-1964`, `:2148-2155`), which reads the venue's `email.smtp` credential (`apps/server/src/email-delivery.ts:24-40`); design §2.4 row r7. With no credential, a practice or dev box sends the mail to a local capture server on the box (`email-delivery.ts:39`; dev mode at `boot.ts:1964`), and any other box refuses to send (`boot.ts:2153`): hence "when it has one" |
 | sign-in.json sentTo[1] (Google) | Google sign-in exists only when configured (`apps/server/src/config.ts:493`; design §2.4 r8); linking and signing in each send the person to Google's authorisation endpoint with the venue's client id and the `openid email` scope (`packages/identity/src/google-oidc.ts:58-66`, `begin`, used by both `beginGoogleLogin` and `beginGoogleLink`); a link stores Google's subject on `persons.google_subject` (`google-oidc.ts:121`); `sign-in.json` carries only `googleLinked` (`personal-data.ts:59`) |
 | sign-in.json kept[0] | both disable paths clear `pin_hash`, `password_hash`, `totp_secret`, `google_subject` and delete passkeys, recovery codes, two-factor enrolments and passkey challenges (`staff.ts:170-182`, `:266-274`, `:306-311`), since S4 (#2032, commit `69fb3fdf0`, 2026-10-24). Design §2.1 row s4 ("today kept after deactivation") and §5.2 item 1 predate S4 and no longer describe the code. "From the box": backups keep earlier copies until they age out (design §2.4 r1, r2) |
 | sign-in.json kept[1] | sessions are ended, never deleted (`staff.ts:157-167` sets `ended_at`; the grep in the profile.json kept row finds no delete of `sessions` or `management_sessions`) |
-| sign-in.json kept[2] | issuing an account action of a purpose deletes that person's used or expired rows of the same purpose (`deleteDeadActions`, `packages/identity/src/account-action.ts:147-165`, called at `:98` and `:387`); starting any Google sign-in deletes every expired state (`google-oidc.ts:49`), so an unfinished link goes at the next start after it expires, not at expiry ("some time after") |
+| sign-in.json kept[2] | issuing an account action of a purpose deletes that person's used or expired rows of the same purpose (`deleteDeadActions`, `packages/identity/src/account-action.ts:147-165`, called for the person at `:98`; its other call, `:387`, is a stand-in run against no real person); starting any Google sign-in or link deletes every expired state (`google-oidc.ts:49`, inside `begin`), and a used state is deleted when claimed (`:94`), so an expired unfinished link goes at the next start after it expires, and stays if none comes |
 | machineReadable | GDPR 20(1), «en un formato estructurado, de uso común y lectura mecánica» (design provenance R15; claim check P7); the files are JSON |
 | origin | rows are created by an admin (`invitePerson`, `createPerson`, `staff.ts:397`, `:453`) or by a configuration import at setup (`apps/server/src/boot.ts:1363-1370`), edited by the person (`saveOwnProfile`, `apps/server/src/me-api.ts:160`) or a manager (`updatePersonDetails`, `staff.ts:190`); sessions, passkeys and account emails are written by the box as the person signs in and acts |
 | backup | design §2.4 rows r1 (the bucket copy, "the whole database, every table above") and r2 (scheduled archives, "the whole database", to "the venue's folder or bucket") |
-| decides | design §4, the Retention row: the venue "states its periods, or how they are set, in its notice"; §2: "Every period below is a proposal" |
+| decides | design §4, the Retention row: the venue "states its periods, or how they are set, in its notice" (hence "may say": the box cannot check the notice); §2: "Every period below is a proposal"; the box offers no way to delete a person (the profile.json kept row) |
 | rights (first sentence) | GDPR 15(1)(e), quoted in decision 3; another copy: 15(3) «facilitará una copia» (R11); in a form to take elsewhere: 20(1), as machineReadable |
-| rights (one month and the extension) | GDPR 12(3), from the BOE copy (claim check P7): «… y, en cualquier caso, en el plazo de un mes a partir de la recepción de la solicitud. Dicho plazo podrá prorrogarse otros dos meses en caso necesario, teniendo en cuenta la complejidad y el número de solicitudes. El responsable informará al interesado de cualquiera de dichas prórrogas en el plazo de un mes …» (design provenance R9 quotes only the first part) |
+| rights (one month and the extension) | GDPR 12(3), from the BOE copy (claim check P7): «… y, en cualquier caso, en el plazo de un mes a partir de la recepción de la solicitud. Dicho plazo podrá prorrogarse otros dos meses en caso necesario, teniendo en cuenta la complejidad y el número de solicitudes. El responsable informará al interesado de cualquiera de dichas prórrogas en el plazo de un mes a partir de la recepción de la solicitud, indicando los motivos de la dilación.» (design provenance R9 quotes only the first part) |
 | rights (authority) | GDPR 15(1)(f), «el derecho a presentar una reclamación ante una autoridad de control» (decision 3) |
 | ask, title | the venue is the controller: design §3, first row |
 | notice | the configured address (decision 4) |
@@ -503,7 +510,9 @@ Steps:
    fail because neither file exists.
 2. Write the words file and the builder.
 3. Omission controls, each run and reverted, the failing case recorded for the pull request:
-   list every file that has words instead of the input's files → "No files" and "One file" fail;
+   list every file that has words instead of the input's files → "No files", "One file" and "A
+   file with no words" (both its sub-cases: `extra.json` drops out and the `sign-in.json` lines
+   appear) fail;
    replace with a string instead of a function → "Replacement is literal" fails; drop
    `profile.json` from the Spanish words → "Every module file has words" fails.
 4. Run `pnpm --filter @waitron/server typecheck`.
@@ -734,7 +743,7 @@ writes them; check each label against `strings.ts` before committing):
 > contraseña. Para cualquier otra cosa sobre tus datos, pregunta al local.
 
 In the same files, the existing "Your own account" sentence (`en/staff.md:22`, and its twin) says
-"Open **Your profile** from the account menu" / «Abre **Tu perfil** desde el menú de cuenta"; the
+"Open **Your profile** from the account menu" / «Abre **Tu perfil** desde el menú de cuenta»; the
 menu entry reads **Account settings** / «Configuración de la cuenta» (decision 9), so it becomes
 "Open **Account settings** from the account menu" / «Abre **Configuración de la cuenta** desde el
 menú de cuenta», the rest of the sentence unchanged.
@@ -797,6 +806,12 @@ task leads to is committed with a test that would have caught it where one can.
    Write what was seen, one line per picture, for the pull request's **LOOK** section.
 
 ## Task 6b (visual) — LOOK at a real download and the guide on the dev stack
+
+If dispatched alone: screenshots and the downloaded files go to
+`/Users/clintongormley/waitron-campaign-b/a980-s2a2-shots/`, named
+`<what>-<lang>-<theme>-<width>.png`; the Playwright script lives in
+`/Users/clintongormley/waitron-campaign-b/a980-s2a2-scripts/`, never in the worktree; a fix this
+leads to is committed with a test that would have caught it where one can.
 
 1. `wa-wt demo waitron-feat-a980-s2a2-own-download-ui`; `wa-wt ls` gives the dashboard and server
    addresses. With the workspace's Playwright Chromium (a script in the scripts folder; record its
@@ -863,7 +878,8 @@ entry, `:6198-6201`), `docs/superpowers/plans/2026-10-24-a980-data-protection-bu
 - **Whose data.** Nothing here changes who may download: the own route still takes no query and
   compares the person id after building (S2a1 decision 7); the README is built from the same
   person's files after the second check.
-- **The idle-countdown mismatch** (decision 8): known, and the same as the working-time export's.
+- **The idle-countdown mismatch** (decision 8): specific to this route (the working-time download
+  does restart the server's countdown), accepted for the full-disk reason.
 - **The file name.** `as: "file"` reads the header only in the server's own form and is otherwise
   `null`; the cross-origin limit is stated in decision 7.
 - **Nothing written.** The README adds one read (`readTenant`) to the snapshot turn and no write;
