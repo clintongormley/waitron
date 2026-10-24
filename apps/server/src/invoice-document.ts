@@ -25,6 +25,7 @@ import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptGuests } from "./receipt-guests.js";
+import { resolvePrintedLogo } from "./receipt-venue-logo.js";
 import { readBillTenderLines, readTenderBlock, receiptQr } from "./till-sale.js";
 import { VENUE_SERVICE } from "./modules.js";
 
@@ -110,9 +111,9 @@ export async function readInvoiceDocument(
           header.departmentId,
           "80mm",
         );
+  const { venue, logo } = await resolvePrintedLogo(tx, department, "80mm", diagnostic);
   const authored = department?.receipt ?? null;
-  const receipt = resolveReceiptTrim(authored, {}, sale.locale, current.locale);
-  const logo = department?.logo ?? null;
+  const receipt = resolveReceiptTrim(authored, venue, sale.locale, current.locale);
   const payments = await readBillTenderLines(tx, brandSaleId(saleId));
   const issueDay = new Date(new Date(sale.issuedAt).getTime() + sale.issuedOffsetMinutes * 60_000)
     .toISOString()

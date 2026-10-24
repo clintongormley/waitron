@@ -18,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale, settleSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
-import { decimal, jobOrigin, seriesId } from "@waitron/shared";
+import { decimal, jobOrigin, seriesId, type PrintedReceiptTrim } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
@@ -34,6 +34,8 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
+import { INVOICE_PAGE_WIDTH, layoutInvoicePages } from "./invoice-page.js";
+import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
 let venue: AdjustmentVenue;
 const suite = useVenueDb({
@@ -950,5 +952,170 @@ describe("the guests a full invoice prints", () => {
   it("reads no guests for a party seated with no count", async () => {
     const document = await read(venue.backend, await paidFullInvoice(null));
     expect(document).not.toHaveProperty("guests");
+  });
+});
+
+describe("the theme's logo on the A4 invoice", () => {
+  const THEME_80MM = { widthDots: 16, heightDots: 1, bits: new Uint8Array([0xf0, 0x0f]) };
+
+  async function department(): Promise<string> {
+    const [row] = await suite.db
+      .insert(departments)
+      .values({
+        locationId: venue.cfg.locationId,
+        name: `A4 logo ${randomUUID()}`,
+        tradingName: "A4 dining",
+      })
+      .returning({ id: departments.id });
+    return row!.id;
+  }
+
+  async function saleIn(backend: FiscalBackend, departmentId: string | null): Promise<string> {
+    const issued = await issue(backend);
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId,
+      tradingName: "Recorded dining",
+      printTradingName: true,
+    });
+    return issued.saleId;
+  }
+
+  async function ownLogo(departmentId: string): Promise<void> {
+    await suite.db.insert(departmentReceipts).values({
+      departmentId,
+      receipt: { logo: `${"b".repeat(64)}.png` },
+      logoRasters: {
+        "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
+        "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
+      },
+    });
+  }
+
+  /** `resolveReceiptTrim` keeps the logo's name; the document input's type does not name it. */
+  function trimLogo(document: Awaited<ReturnType<typeof read>>): string | undefined {
+    return (document.receipt as PrintedReceiptTrim).logo;
+  }
+
+  function printedOf(document: Awaited<ReturnType<typeof read>>): string {
+    return JSON.stringify(buildReceiptDocument(document).elements);
+  }
+
+  it("a department with no receipt logo prints the theme's 80 mm logo, and its trim names it", async () => {
+    const backend = none();
+    const saleId = await saleIn(backend, await department());
+    await putThemeInUse(suite.db);
+    try {
+      const document = await read(backend, saleId);
+      expect(document.logo).toEqual(THEME_80MM);
+      expect(trimLogo(document)).toBe(THEME_LOGO);
+    } finally {
+      await clearThemes(suite.db);
+    }
+  });
+
+  it("a department's own receipt logo wins", async () => {
+    const backend = none();
+    const departmentId = await department();
+    await ownLogo(departmentId);
+    const saleId = await saleIn(backend, departmentId);
+    await putThemeInUse(suite.db);
+    try {
+      const document = await read(backend, saleId);
+      expect(document.logo).toEqual({ widthDots: 8, heightDots: 1, bits: new Uint8Array([64]) });
+      expect(trimLogo(document)).toBe(`${"b".repeat(64)}.png`);
+    } finally {
+      await clearThemes(suite.db);
+    }
+  });
+
+  it("a sale with no department prints the theme's logo", async () => {
+    const backend = none();
+    const saleId = await saleIn(backend, null);
+    await putThemeInUse(suite.db);
+    try {
+      const document = await read(backend, saleId);
+      expect(document.logo).toEqual(THEME_80MM);
+      expect(trimLogo(document)).toBe(THEME_LOGO);
+    } finally {
+      await clearThemes(suite.db);
+    }
+  });
+
+  it("a sale with no receipt header prints the theme's logo", async () => {
+    const backend = none();
+    const { saleId } = await issue(backend);
+    await putThemeInUse(suite.db);
+    try {
+      const document = await read(backend, saleId);
+      expect(document.logo).toEqual(THEME_80MM);
+      expect(trimLogo(document)).toBe(THEME_LOGO);
+    } finally {
+      await clearThemes(suite.db);
+    }
+  });
+
+  it("no theme in use prints none", async () => {
+    const backend = none();
+    await clearThemes(suite.db);
+    const saleId = await saleIn(backend, await department());
+    const document = await read(backend, saleId);
+    expect(document.logo).toBeNull();
+    expect(trimLogo(document)).toBeUndefined();
+  });
+
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "prints no logo when the department cannot be trusted: %s",
+    async (_name, untrusted) => {
+      const backend = none();
+      const departmentId = await department();
+      const saleId = await saleIn(backend, departmentId);
+      const [foreign] = await suite.db
+        .insert(locations)
+        .values({
+          name: randomUUID(),
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Hospitality",
+        })
+        .returning({ id: locations.id });
+      const at = { departmentId, locationId: venue.cfg.locationId, foreignLocationId: foreign!.id };
+      await putThemeInUse(suite.db);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const control = await read(backend, saleId);
+        expect(control.logo).toEqual(THEME_80MM);
+        await untrusted.apply(suite.db, at);
+        let document;
+        try {
+          document = await read(backend, saleId);
+        } finally {
+          await untrusted.undo(suite.db, at);
+        }
+        expect(document.logo).toBeNull();
+        expect(trimLogo(document)).toBeUndefined();
+        expect(printedOf(document)).toContain(`"${document.result.invoiceNumber}"`);
+      } finally {
+        warning.mockRestore();
+        await clearThemes(suite.db);
+      }
+    },
+  );
+
+  it("the page draws the theme's dots centred at the top", async () => {
+    const backend = none();
+    const saleId = await saleIn(backend, await department());
+    await putThemeInUse(suite.db);
+    try {
+      const [first] = layoutInvoicePages(await read(backend, saleId));
+      const logos = first!.elements.filter((element) => element.kind === "logo");
+      expect(logos).toHaveLength(1);
+      const [logo] = logos;
+      expect(logo).toMatchObject({ raster: THEME_80MM });
+      expect(logo!.x + logo!.width / 2).toBeCloseTo(INVOICE_PAGE_WIDTH / 2);
+      const others = first!.elements.filter((element) => element.kind !== "logo");
+      expect(Math.min(...others.map((element) => element.y))).toBeGreaterThan(logo!.y);
+    } finally {
+      await clearThemes(suite.db);
+    }
   });
 });
