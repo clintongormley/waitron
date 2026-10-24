@@ -940,6 +940,7 @@ describe("printOverIpp — a job the printer is holding", () => {
     ["paused,door-open", "cover_open"],
     ["toner-empty-warning,media-empty-report,marker-supply-empty", "ink_or_toner_out"],
   ])("holds a stopped printer's job with reasons [%s] as %s", async (reasons, expected) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const holds: Array<PageHold | null> = [];
     const printer = await fakePrinter(
       (req, res) => res.end(accepted(req)),
@@ -947,10 +948,14 @@ describe("printOverIpp — a job the printer is holding", () => {
       (req, res) =>
         res.end(printerState(req, PRINTER_STOPPED, reasons === "" ? [] : reasons.split(","))),
     );
-    const outcome = await printOverIpp(target(printer.port), DOCUMENT, {
+    let outcome: IppPrintOutcome | undefined;
+    void printOverIpp(target(printer.port), DOCUMENT, {
       ...holding,
       onHold: (hold) => holds.push(hold),
-    });
+    }).then((o) => (outcome = o));
+    await until(() => holds.length > 0);
+    await vi.advanceTimersByTimeAsync(holding.heldPollIntervalMs!);
+    await until(() => outcome !== undefined);
     expect(outcome).toEqual(sent);
     expect(holds).toEqual([expected]);
     expect(printer.printJobs()).toHaveLength(1);
