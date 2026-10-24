@@ -4996,12 +4996,17 @@ export class TillApp extends LitElement {
     const retainedZone = this.#store.lines.length > 0 ? this.counterServiceZoneId : undefined;
     try {
       if (this.#choosesZones()) {
-        const read = this.api.getDeviceZones();
-        const selection = this.formFactor === "till" ? await read : await read.catch(() => null);
-        if (replaced()) return;
-        this.deviceZoneSelection = selection;
-        if (this.formFactor === "till") this.profileServiceZones = [...selection!.zones];
-        else this.deviceZonesNotice = selection === null ? t("device_zones.read_failed") : "";
+        if (this.formFactor === "till") {
+          const selection = await this.api.getDeviceZones();
+          if (replaced()) return;
+          this.deviceZoneSelection = selection;
+          this.profileServiceZones = [...selection.zones];
+        } else {
+          const selection = await this.api.getDeviceZones().catch(() => null);
+          if (replaced()) return;
+          this.deviceZoneSelection = selection;
+          this.deviceZonesNotice = selection === null ? t("device_zones.read_failed") : "";
+        }
       }
       if (
         this.formFactor === "till" &&
@@ -9147,7 +9152,10 @@ export class TillApp extends LitElement {
     return (
       (this.#partylessDraft.lines.length > 0 || (this.#draftSync?.store.lines.length ?? 0) > 0) &&
       this.#tableZoneId !== undefined &&
-      !input.selectedZoneIds.includes(this.#tableZoneId)
+      !input.selectedZoneIds.includes(this.#tableZoneId) &&
+      (this.deviceZoneSelection === null
+        ? this.formFactor !== "till"
+        : this.deviceZoneSelection.selectedZoneIds.includes(this.#tableZoneId))
     );
   }
 
