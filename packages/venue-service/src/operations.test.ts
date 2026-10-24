@@ -90,6 +90,9 @@ import {
   updateDepartment,
   menuState,
   orderInZones,
+  offeredKey,
+  productsOfferedIn,
+  readLateSendMarks,
 } from "./operations.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
@@ -3599,4 +3602,123 @@ it.each(["create", "rename"])("allows department %s onto a deleted name", async 
       }),
     ]),
   );
+});
+
+describe("a line sent late", () => {
+  it("records the late mark on a line's context, reads only marked lines, and copies it on a split", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      const late = await addLine(tx, venue, orderId, 1);
+      const onTime = await addLine(tx, venue, orderId, 2);
+      const split = await addLine(tx, venue, orderId, 3);
+      await recordWorkingLineContexts(
+        tx,
+        cfg,
+        orderId,
+        [
+          {
+            workingOrderLineId: late,
+            menuItemId: venue.menuItemId,
+            late: { periodName: "Lunch", confirmedBy: "person-7" },
+          },
+          { workingOrderLineId: onTime, menuItemId: venue.menuItemId },
+        ],
+        await listZoneOffers(tx, cfg, venue.diningZone),
+      );
+      const stored = await tx.execute<{ late_confirmed_by: string | null }>(sql`
+        select late_confirmed_by from working_line_contexts
+        where working_order_line_id in (${late}, ${onTime}) order by late_confirmed_by`);
+      expect(stored.rows.map((row) => row.late_confirmed_by)).toEqual([null, "person-7"]);
+      await expect(readLateSendMarks(tx, [late, onTime])).resolves.toEqual(
+        new Map([[late, "Lunch"]]),
+      );
+      await copyWorkingLineContext(tx, cfg, late, split);
+      await expect(readLateSendMarks(tx, [split, onTime])).resolves.toEqual(
+        new Map([[split, "Lunch"]]),
+      );
+      await expect(readLateSendMarks(tx, [])).resolves.toEqual(new Map());
+    });
+  });
+});
+
+describe("products a zone's listed menus offer", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("answers the products and variants a listed menu of the zone offers in its live version", async () => {
+    const venue = await seedTwoMenuVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const barMenu = await createCatalogue(tx, { name: "Bar specials" });
+      const nuts = await createProduct(tx, {
+        catalogueId: barMenu.id,
+        categoryId: null,
+        name: "Bar nuts",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      await addProductToMenu(tx, { menuId: barMenu.id, productId: nuts.id });
+      await offerMenuThroughZone(tx, cfg, venue.barZone, barMenu.id, { displayOrder: 1 });
+      await publish(tx, barMenu.id);
+      const offered = (items: { productId: string; variantId: string | null }[]) =>
+        productsOfferedIn(tx, venue.diningZone, [venue.dinner, barMenu.id], items);
+
+      await expect(
+        offered([
+          { productId: venue.burger, variantId: null },
+          { productId: venue.lemonade, variantId: venue.large },
+          { productId: venue.lemonade, variantId: venue.burger },
+          { productId: venue.productId, variantId: null },
+          { productId: nuts.id, variantId: null },
+        ]),
+      ).resolves.toEqual(
+        new Set([offeredKey(venue.burger, null), offeredKey(venue.lemonade, venue.large)]),
+      );
+      expect(offeredKey(venue.lemonade, null)).toBe(`${venue.lemonade}:`);
+      await expect(
+        productsOfferedIn(
+          tx,
+          venue.barZone,
+          [barMenu.id],
+          [{ productId: nuts.id, variantId: null }],
+        ),
+      ).resolves.toEqual(new Set([offeredKey(nuts.id, null)]));
+    });
+  });
+
+  it("reads as many statements for five items as for one, and none for an empty list", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      const item: { productId: string; variantId: string | null } = {
+        productId: venue.burger,
+        variantId: null,
+      };
+      const ask = (items: (typeof item)[]) =>
+        productsOfferedIn(tx, venue.diningZone, [venue.dinner, venue.menuId], items);
+      // The first read keeps the documents on this transaction; both measured reads find them kept.
+      await ask([item]);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      await ask([item]);
+      const one = prepared.mock.calls.length;
+      prepared.mockClear();
+      await ask([
+        item,
+        { productId: venue.lemonade, variantId: null },
+        { productId: venue.lemonade, variantId: venue.large },
+        { productId: venue.productId, variantId: null },
+        { productId: venue.offMenu, variantId: null },
+      ]);
+      expect(one).toBeGreaterThan(0);
+      expect(prepared).toHaveBeenCalledTimes(one);
+      prepared.mockClear();
+      await expect(ask([])).resolves.toEqual(new Set());
+      await expect(productsOfferedIn(tx, venue.diningZone, [], [item])).resolves.toEqual(new Set());
+      expect(prepared).not.toHaveBeenCalled();
+    });
+  });
 });
