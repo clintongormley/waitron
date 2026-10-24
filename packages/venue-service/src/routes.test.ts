@@ -2516,7 +2516,7 @@ describe("the venue-wide clearing switch", () => {
 });
 
 describe("the venue-wide reminder", () => {
-  it("is gone from the model and settings, and its save route answers 404", async () => {
+  it("is gone from the model, and its save route answers 404", async () => {
     const fx = await fixture();
     expect(
       await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json(),

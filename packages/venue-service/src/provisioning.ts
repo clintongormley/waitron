@@ -16,7 +16,7 @@ import { addStarterServiceSteps } from "./service-steps.js";
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
-      "Create the default department with its starter service steps, counter zone, service settings and four seasons, and give each profile that takes orders that department",
+      "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
