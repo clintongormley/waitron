@@ -1084,7 +1084,8 @@ file, outside the repository):
    installed box after 15 seconds rather than stopping (guard 3); the 60-second wait before erasing
    another system (§5.2), and never erasing a disk it cannot classify without a key; the installer's
    open hotspot (§5.3), and **no hotspot at all once a box holds a venue** (§10); no hand-set clock,
-   keeping A798's decision (§10); the till signed out when «Panel» opens the dashboard (§9);
+   keeping A798's decision (§10; _2026-10-24: reopened for A798, see §10's pointer — still no typed
+   time_); the till signed out when «Panel» opens the dashboard (§9);
    maintenance for admins only, at the box's own console (§11); the setup code, made by the
    installer, on the stick and asked on every setup request (§12); the installer refusing a box with
    Secure Boot off (§7.7); and the update to Microsoft's newer certificate needing a person present

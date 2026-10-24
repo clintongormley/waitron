@@ -129,7 +129,7 @@ slice does not block a later slice that does not depend on it: 4 to 7 can land w
 10 while 8 and 9 wait for the owner.
 
 **Two asesor questions** were added with this plan, as design §10 asks:
-[Q51](../../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
+[Q51](../../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24)
 (a chain whose record times step back once under a manager's restart) and
 [Q52](../../compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21)
 (sales recorded under a restart whose clock later proved wrong). Slices 8 and 9 build the

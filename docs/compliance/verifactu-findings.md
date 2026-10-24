@@ -172,7 +172,10 @@ Two consequences:
   [conventions-data.md](../developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
   **2026-10-23:** A798-B slice 9 (#2025) adds a manager's restart, which lifts the stop for
   one step back; see
-  [conventions-data.md](../developers/conventions-data.md#a-managers-restart-lifts-the-stop-for-one-step-back).
+  [conventions-data.md](../developers/conventions-data.md#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back).
+  **2026-10-24:** the manager's restart was replaced, before landing, by a confirmation of the
+  clock — AEAT's time, two devices from two network addresses, or an administrator's own device —
+  that lifts the stop by itself, with no limit on the gap; the same link describes it.
 - **The two margins are different things.** One minute is the standard the system must be built
   to; 240 seconds is the tolerance a submission is judged against. Conflating them would lead to
   gating sales on a threshold that is not the one AEAT applies.

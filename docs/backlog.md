@@ -4284,15 +4284,12 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   source's five-minute cache shares that in-flight call with reads during its lifetime. Left open
   by the A258 follow-up (the alerts list's battery check has its own deadline, W58, #1176).
 
-- **The alert pop-up can split a written time across two lines.** The Box status page's rows and
-  restart proof, the bell and the Alerts screen keep each `YYYY-MM-DD HH:MM` whole (`wholeTimes`,
-  `apps/dashboard/src/widgets/alert-format.ts`); the pop-up (`wt-toast`) takes a plain string, so
-  keeping times whole there needs `wt-toast` to take more than a string, or no-break characters in
-  the text. The page's 'Updated' line does not use `wholeTimes` either, nor do the restart dialog's
-  two times (the box's clock and the latest sale, `formatIsoMinute` in
-  `apps/dashboard/src/screens/box-status-screen.ts`): the dialog's test finds those two whole at
-  every 8 px from 320 to 1280 px wide, but nothing keeps them whole. Left open by A798-B slice 9
-  (#2025).
+- **The alert pop-up can split a written time across two lines.** The Box status page's rows, its
+  clock check dialog and its list of wrongly dated sales, the bell and the Alerts screen keep each
+  `YYYY-MM-DD HH:MM` whole (`wholeTimes`, `apps/dashboard/src/widgets/alert-format.ts`); the pop-up
+  (`wt-toast`) takes a plain string, so keeping times whole there needs `wt-toast` to take more than
+  a string, or no-break characters in the text. The page's 'Updated' line does not use `wholeTimes`
+  either (`apps/dashboard/src/screens/box-status-screen.ts`). Left open by A798-B slice 9 (#2025).
 
 ### Working time and staff
 
@@ -4656,7 +4653,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
-  it can still sell.** Design revision 6 (2026-10-20); every owner question answered. The build
+  it can still sell.** Design revision 7 (2026-10-24); every owner question answered. The build
   follows the design's §8 slices:
   [plan](superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
@@ -4665,65 +4662,93 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   handheld is told at two minutes; while the box's clock reads earlier than its last recorded
   sale, every action that takes or gives back money, or would write a fiscal record, stops on every
   device — reversing D8 and A364 for that case only — until the clock is set (design §4.8; the
-  defaults that answer left open are in §6); and a manager may restart payments only with fresh
-  proof from AEAT or two devices that the clock is right, and at most 24 hours behind (question 4,
-  2026-10-20). It adds a module seat for staff notices and one
+  defaults that answer left open are in §6); and payments restart only on fresh proof that the clock
+  is right. On 2026-10-24 the owner replaced that last answer's manager's restart, at most 24 hours
+  behind (question 4, 2026-10-20): payments restart by themselves, whatever the gap, once AEAT, two
+  devices from two network addresses or an administrator's own device confirms the clock, and the
+  sales a clock running ahead dated wrongly are listed for the owner and the tax adviser (design
+  §4.9). It adds a module seat for staff notices and one
   migration in the Veri*Factu module's set. Slice 1 of 10 (a full disk reported as
   `storage.disk_full`; nothing a body writes through the write queue after one that ended its
-  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora on the Box status page: a manager has the records waiting after a failed send tried again at once, never before AEAT's wait between sends except a full batch, which AEAT's own rule lets go at once, and never releasing a chain held after repeated refusals; and the Tax agency row's last acceptance) landed in #2030; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration) landed in #2012; slice 10 (emails to the managers about the disk and a clock before 28-10-2024, `reader.offline`, the printer notice on every till, and `waitron.sh` switching on time synchronisation and deleting the images an upgrade replaced) landed in #2019; slice 9 (devices report their clock; `clock.disagrees` and `clock.unusable` in the bell; a manager's restart of payments with fresh proof, at most 24 hours behind and one step back, kept in `clock_stop_restarts`, with its bell alerts and the disproof check; the clock-stop email) is open in #2025, being revised for the owner's 2026-10-24 answers on clock checks. Open asesor questions:
-  [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
+  transaction can commit, except as the entry below says) landed in #1936; slice 2 (a full disk at start) landed in #1941; slice 3 (refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21) landed in #1950; slice 4 (a module seat for staff notices, with the Veri*Factu module's notice for a clock before 28-10-2024; nothing shows notices yet) landed in #1958; slice 5 (a free-space watch every minute: the bell warns below 2 GiB and shows a full disk, and a full-disk stop lifts once space is back with no write) landed in #1963; slice 6 (the strip on every signed-in till and handheld: a full or nearly full disk, a clock before 28-10-2024, and the sales not yet sent to the tax agency; and the equipment read and the till's session checks answer on a full disk) landed in #1977; slice 7 (the Box status page under Settings for people who manage the system, showing each part of the box with what to do, and Liberar, which frees only what the box can make again and works on a full disk) landed; slice 7b (Reintentar ahora on the Box status page: a manager has the records waiting after a failed send tried again at once, never before AEAT's wait between sends except a full batch, which AEAT's own rule lets go at once, and never releasing a chain held after repeated refusals; and the Tax agency row's last acceptance) landed in #2030; slice 8 (payments stop while the box's clock reads more than a minute earlier than the latest record, with the red strip, the bell alert and the Box status rows; the build's one migration) landed in #2012; slice 10 (emails to the managers about the disk and a clock before 28-10-2024, `reader.offline`, the printer notice on every till, and `waitron.sh` switching on time synchronisation and deleting the images an upgrade replaced) landed in #2019; slice 9 (devices report their clock; `clock.disagrees` and `clock.unusable` in the bell; the box records when each clock stop began, and payments restart by themselves, with no cap and one step back per confirmation, once AEAT, two devices from two network addresses or an administrator's own device — never the box's own screen outside development — confirms the clock, each confirmation kept in `clock_confirmations`; the sales dated wrongly listed on the Box status page with `clock.records_misdated`, or that alert saying the box cannot tell; the bell alerts, the managers' emails and the disproof check; the clock-stop email) is open in #2025, revised for the owner's 2026-10-24 answers and parked for the owner. Two slices from those answers are open, each its own later pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([outline](superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)); and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
+  [Q51](compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24),
+  [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21)
   and
-  [Q52](compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21).
+  [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
 
-- **AEAT's time for a restart comes from its QR validation host, not from a `consultar` reply.**
+- **AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply.**
   Whether a certificate-authenticated `consultar` reply carries a `Date` header is not measured;
   the `verifactu` repository's live workflow can measure it without filing. Left open by A798-B
   slice 9 (#2025).
-  [Detail](backlog/box.md#aeats-time-for-a-restart-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
+  [Detail](backlog/box.md#aeats-time-for-a-confirmation-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
 
 - **A clock set back before the mail server's certificate start may not be able to send the
   clock-stop email.** An inference from slice 10's plan P8, not measured. Left open by A798-B
   slice 9 (#2025).
 
-- **Two devices can fake a restart's proof.** A device's clock reading is whatever it sends; the
-  restart still needs a manager's press and a gap of at most 24 hours. Left open by A798-B slice 9
-  (#2025).
+- **A device's or an administrator's time is self-reported.** Whatever their browser sends counts:
+  a scripted request can send any time, and "nobody types a time" is true of the screen only. In
+  slice 9 that can lift a stop, never set the clock. What limits it: devices must be enrolled and
+  come from two different network addresses; an administrator must be signed in and not on the box;
+  every confirmation is kept with its proof; the sales listed as dated wrongly go to the owner.
+  Slice 9b is to add an alert and an email for every clock change the box makes. Left open by
+  A798-B slice 9 (#2025).
 
-- **Two restarts whose named records belong to one sale share a bell alert.** The open-alert index
-  keys a restart's alerts by that sale (slice 9 decision 13), so the second is not recorded while
-  the first is open; the table keeps both. Only an alta and its own anulación share a sale, and no
-  route issues an anulación today. Left open by A798-B slice 9 (#2025).
+- **A second confirmation naming the same record while the first's alerts are open records no
+  second alert.** The bell keys an open alert by the named record's sale, so the second folds into
+  the first; `clock_confirmations` and the Box status page keep both. Left open by A798-B slice 9
+  (#2025).
 
 - **`clock.unusable` in the bell is judged at offset 0**, so in the first hour of 28 October 2024,
   mainland Spanish time, the bell can say the clock is before that day where the till does not.
   Left open by A798-B slice 9 (#2025).
 
-- **The box sends AEAT's QR host a HEAD at every clock-watch check, about once a minute, while its
-  clock reads more than a minute behind the latest sale** — after a manager restarts payments too —
-  on a primary that files records; not while the clock reads a
-  date before 28-10-2024. Left open by A798-B slice 9 (#2025).
+- **The box sends AEAT's QR host a HEAD at most once a minute while its clock reads more than a
+  minute behind the latest sale — during a stop, and under a confirmation that lifted it — or while
+  a clock check whose stop has ended waits for its witness**, on a primary that files records. While
+  the clock reads a date before 28-10-2024 it is sent only if a clock check waits. Left open by
+  A798-B slice 9 (#2025).
 
 - **The clock watch's suspend-aware clock has not been run on Linux.** It reads `/proc/uptime` so
   that a box waking from sleep is not taken for a clock jumping forward; the tests replace the file,
   and nobody has watched it across a real suspend or a setting of the wall clock on a Linux box
   (`docs/developers/conventions-data.md`, "A jump"). Left open by A798-B slice 9 (#2025).
 
-- **An AEAT disagreement blocks a restart for the rest of the stop, even after the clock is
-  stepped** (it is kept in memory, so restarting the server forgets it). The owner may prefer it to
-  lapse at a step (slice 9 decision 4). Left open by A798-B slice 9 (#2025).
+- **AEAT's time outranks the devices.** AEAT agreeing with the box restarts payments even if two
+  devices disagree (the bell still shows their `clock.disagrees`); AEAT disagreeing blocks the
+  devices and an administrator for the rest of the stop, even after a step of the clock that leaves
+  the stop on, since in slice 9 the box cannot set its clock. The disagreement is kept in memory,
+  so restarting the server forgets it. Slice 8's own ways out remain: the clock put right, or real
+  time passing the record. The owner may prefer it to lapse at a step (owner FYI 6). Left open by A798-B slice 9 (#2025).
 
-- **A restart under which no sale was recorded raises no 'disproved' alert** when its clock later
-  proves wrong; the box logs it. Left open by A798-B slice 9 (#2025).
+- **A confirmation under which no sale was recorded raises no 'disproved' alert** when its clock
+  later proves wrong; the box logs it. Left open by A798-B slice 9 (#2025).
 
-- **After a 'disproved' alert, the restart still covers and later sales are not added to the
+- **After a 'disproved' alert, the confirmation still covers and later sales are not added to the
   alert.** Its `{to}` is the latest sale when the disproof was seen; sales made afterwards on the
   same clock appear in no alert. Whether a disproof should stop payments again is for the owner
   (slice 9 decision 14). Left open by A798-B slice 9 (#2025).
 
-- **A malformed restart row covers nothing, for ever.** A row of the append-only `clock_stop_restarts`
+- **A malformed confirmation covers nothing.** A row of the append-only `clock_confirmations`
   whose chain heads are unreadable, not whole numbers of zero or more, or past the chain's current
-  ones lifts no stop, and every later restart on its record is refused `stepped_back`: only setting
-  the clock clears that stop (slice 9 decision 21). Left open by A798-B slice 9 (#2025).
+  ones lifts no stop; a fresh confirmation of the same record can lift it (slice 9 decision 21).
+  Left open by A798-B slice 9 (#2025).
+
+- **A remote administrator reaching the box through the cloud tunnel cannot confirm its clock.**
+  The tunnel delivers requests from the box's own loopback address, so the box takes them for its
+  own screen and refuses them (`same_machine`). It fails closed; how to tell the two apart is open
+  (owner FYI 13). Left open by A798-B slice 9 (#2025).
+
+- **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the
+  go-live migration squash (A760).** Slice 9 kept the shipped append-only table rather than
+  rebuild or drop it; the backup check still checks its links to `nodes` and
+  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left
+  open by A798-B slice 9 (#2025).
+
+- **A future cloud or proxied primary sees every request as the box's own**, so no device would
+  count as a clock witness and no administrator could confirm its clock. Today a venue has one node
+  and no cloud primary; one that exists needs its own rule (design §4.9 h, point 3). Left open by
+  A798-B slice 9 (#2025).
 
 - **The bell's printer check reads every print job.** `EXPLAIN QUERY PLAN` shows `SCAN
   print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant

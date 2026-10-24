@@ -1196,7 +1196,7 @@ backup settings (they cannot be read, or a reload could not open the database). 
 user guide's "never touches … your backups" (`box-status.md#free-space`, English and Spanish) does
 not hold for such a folder. A fix could refuse such a folder when the settings are saved.
 
-## AEAT's time for a restart comes from its QR validation host, not from a `consultar` reply
+## AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply
 
 Whether a certificate-authenticated `consultar` reply carries a `Date` header is not measured. The
 `verifactu` repository's live workflow can measure it without filing: a manual run in its
