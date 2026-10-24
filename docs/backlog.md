@@ -2968,7 +2968,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   sign-in) and is tried again every minute. An optional
   key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
   for slices 10 and 11 `textScale` 100 and `text` `{}`), with no configuration format change.
-  Next: 10, then 9, 11, 12 and 14.
+  Slice 10a landed 2026-10-2x (#PR): a theme has a text size, 100% to 130% in 5% steps, set with a
+  slider on the Look card that shows the four sizes it gives and a till button and bill line in the
+  preview; every screen draws it, while the equipment label, the recovery sheet and Google's sign-in
+  button keep Waitron's sizes. Until 10b, long names break inside a word from 115%.
+  Next: 10b, then 9, 11, 12 and 14.
 
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
@@ -2990,6 +2994,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`apps/dashboard/src/widgets/color-field.ts`, from #783) replaces the focus outline, so a keyboard
   user cannot see focus on that box; A841 slice 5's visual check found focused and unfocused crops
   identical. Every screen using `colorField` is affected.
+
+- **`wt-slider`'s unfilled track is drawn nearly white on a dark screen.** The range is styled with
+  `accent-color` alone (`packages/ui/src/components/wt-slider.ts`, unchanged since #1832) and no
+  `color-scheme`, so Chromium draws its native light track; A841 slice 10's visual check saw it on
+  the Look card's Text size slider in dark, where the design's picture draws a dark grey track
+  (`~/waitron-campaign/a841-10-shots/10a-editor-100-dark-slider-crop.png`, lane A's machine only).
+  Every screen using `wt-slider` is affected: the Look card, Menus and photo framing.
 
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
   to judge from its [screenshots](backlog/mockups/a841-5-theme-editor/): at a 1280 px window with
@@ -5372,7 +5383,9 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **The other sharded packages still use Vitest's file-count split.** Fiscal-verifactu, till, dashboard,
   venue-service, db and provisioning do not pack their shards by measured duration as the server
-  does. Left open by A938.
+  does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
+  shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
+  the fix at the cause.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **Nothing checks, on every CI run, that each server test file ran in exactly one shard.** The

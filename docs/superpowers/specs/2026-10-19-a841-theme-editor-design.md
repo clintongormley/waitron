@@ -2691,6 +2691,17 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **A picture that fails to load** (lane A ruling 2026-10-24, D14): the place draws what it draws
   with no logo, and the box tries the same address again every 60 s. Not taken: trying only on the
   next page load, which a till left running for days would not reach.
+- **Slice 10 in two pull requests** (lane A ruling 2026-10-24, slice 10 plan D1): 10a stores,
+  derives, delivers and edits the text size and keeps the equipment label and the recovery sheet on
+  Waitron's type; 10b adds the till's hyphenation and the layout cases at 130%. Not taken: one pull
+  request of fifteen tasks.
+- **The preview's till sample and the hyphenation case are named in English** (lane A ruling
+  2026-10-24, D13 and D15): the preview's product name comes from the dashboard's strings in the
+  venue's default content language, and the till's hyphenation case uses English dish names under a
+  Spanish content language. Not taken: Spanish dish names in general code.
+- **Where the equipment label and the recovery sheet get Waitron's type** (lane A ruling 2026-10-24,
+  D6): from Waitron's own token file (`WAITRON_DEFAULTS.structure`). Not taken: a theme-sheet
+  selector that skips print frames, which would not reach the recovery sheet.
 
 ## 17. Risks
 
