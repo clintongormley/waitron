@@ -6,6 +6,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { DashboardApi } from "../api/client.js";
 import { NavigationGuard } from "@waitron/ui";
+import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { LoginScreen } from "./login-screen.js";
 
 // Keep the real WebAuthn library; stub only the hardware boundary so an earlier
@@ -3381,6 +3382,29 @@ describe("login-screen: the sign-in card", () => {
       expect([box.width, box.height]).toEqual([20, 20]);
     },
   );
+
+  it("the Google button keeps 14 px and 500 under a theme at 130% and a Medium weight of 800", async () => {
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+    try {
+      const { el, host } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+        api: stubApi(),
+      });
+      host.style.setProperty("--wt-font-weight-medium", "800");
+      await openGoogle(el);
+      await flush(el);
+      const google = el.shadowRoot!.querySelector<HTMLElement>(
+        "wt-button[data-test=google-login]",
+      )!;
+      const style = getComputedStyle(google.shadowRoot!.querySelector("button")!);
+      expect(style.fontSize).toBe("14px");
+      expect(style.fontWeight).toBe("500");
+      expect(getComputedStyle(el.shadowRoot!.querySelector(".screen")!).fontSize).toBe("18px");
+    } finally {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+        (sheet) => sheet !== TEXT_130_SHEET,
+      );
+    }
+  });
 
   it("keeps the space above the Google page's own button that a primary button has", async () => {
     const el = await mountOn(openGoogle);

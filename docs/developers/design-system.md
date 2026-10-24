@@ -562,7 +562,8 @@ section action adds anything to your basket. The dashboard Home preview keeps it
 `--wt-font-family-google` (the Google sign-in button only), `--wt-font-size-sm|md|lg|xl`,
 `--wt-font-weight-normal|medium|bold`, `--wt-google-mark-size` (20px), `--wt-google-mark-gap`
 (10px) and `--wt-google-button-line-height` (20px) (the Google sign-in button's "G", the gap after
-it and its label's line height), `--wt-shadow-1|2`,
+it and its label's line height), `--wt-google-button-font-size` and `--wt-google-button-font-weight`
+(Google's sign-in button's label size and weight, 14px and 500, which no theme writes), `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-compact-width`,
 `--wt-modal-standard-width`, `--wt-modal-max-width`, `--wt-modal-medium-height`, `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
 `--wt-field-max-width`, `--wt-cell-name-max-width`, `--wt-floor-plan-preview-max-height`,

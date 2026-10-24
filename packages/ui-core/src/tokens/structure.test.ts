@@ -38,6 +38,8 @@ test("defines the structural contract", () => {
     "--wt-google-mark-size",
     "--wt-google-mark-gap",
     "--wt-google-button-line-height",
+    "--wt-google-button-font-size",
+    "--wt-google-button-font-weight",
     "--wt-font-size-sm",
     "--wt-font-size-md",
     "--wt-font-size-lg",
@@ -100,7 +102,8 @@ test("the Google button sets Google Sans Medium on 20px lines, with a 20px mark 
   const probe = document.createElement("span");
   probe.style.display = "block";
   probe.style.fontFamily = "var(--wt-font-family-google)";
-  probe.style.fontWeight = "var(--wt-font-weight-medium)";
+  probe.style.fontWeight = "var(--wt-google-button-font-weight)";
+  probe.style.fontSize = "var(--wt-google-button-font-size)";
   probe.style.width = "var(--wt-google-mark-size)";
   probe.style.columnGap = "var(--wt-google-mark-gap)";
   probe.style.lineHeight = "var(--wt-google-button-line-height)";
@@ -109,6 +112,7 @@ test("the Google button sets Google Sans Medium on 20px lines, with a 20px mark 
   expect(style.fontFamily).toMatch(/^"Google Sans", /);
   expect(style.fontFamily.replace(/^"Google Sans", /, "")).toBe(token(el, "--wt-font-family"));
   expect(style.fontWeight).toBe("500");
+  expect(style.fontSize).toBe("14px");
   expect(style.width).toBe("20px");
   expect(style.columnGap).toBe("10px");
   expect(style.lineHeight).toBe("20px");
