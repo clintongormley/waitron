@@ -375,22 +375,23 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * Recorded, never thrown, by `recordRestarted` (./clock-stop-incidents.ts) for each restart of
-     * payments. `person` is the manager's display name when they pressed; `clockAt` and
-     * `lastRecordAt` are ISO 8601 instants; `proof` names what showed the clock right.
+     * Recorded, never thrown, by `recordRestarted` (./clock-stop-incidents.ts) for each confirmation
+     * that lifts a payment stop. `confirmedBy` is the confirmation's source; `person` is the
+     * administrator's display name when their device confirmed, else null; `clockAt` and
+     * `lastRecordAt` are ISO 8601 instants.
      */
     "clock.behind_chain_restarted": {
-      restartId: string;
-      person: string;
+      confirmationId: string;
+      confirmedBy: "authority" | "devices" | "admin";
+      person: string | null;
       clockAt: string;
       lastRecordAt: string;
-      proof: "authority" | "devices" | "authority_and_devices";
     };
 
     /**
-     * Recorded, never thrown, by `recordDisproofs` (./clock-stop-incidents.ts) once per restart
-     * whose clock later proved wrong. `from` and `to` are the earliest and latest generation times,
-     * ISO 8601, among the records written under that restart.
+     * Recorded, never thrown, by `recordDisproofs` (./clock-stop-incidents.ts) once per lift whose
+     * clock later proved wrong; `restartId` is the lifting confirmation's id. `from` and `to` are
+     * the earliest and latest generation times, ISO 8601, among the records written under it.
      */
     "clock.behind_chain_disproved": { restartId: string; from: string; to: string };
   }

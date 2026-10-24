@@ -10,7 +10,8 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { noteClockProvedWrong, restartAfterClockStop } from "./clock-stop-restart.js";
+import { closeClockCheckByItself, openClockCheck } from "./clock-checks.js";
+import { confirmClockStop, noteClockProvedWrong } from "./clock-confirmation.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -19,6 +20,7 @@ const M = 60_000;
 const H = 3_600_000;
 const T = Date.parse("2026-10-19T21:40:00.000Z");
 const R = T - 14.5 * H;
+const BOOT = { ms: 5 * M, id: null };
 const FIRST = "33333333-3333-4333-8333-333333333333";
 const SECOND = "55555555-5555-4555-8555-555555555555";
 
@@ -40,6 +42,10 @@ function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+function reading(ms: number) {
+  return { instant: new Date(ms), offsetMinutes: 60 };
+}
+
 function clockAt(ms: number): TrustedClock {
   return {
     ...steadyClock,
@@ -57,18 +63,32 @@ async function sale(ms: number, on = { nodeId, seriesId }): Promise<void> {
   );
 }
 
-function device(id: string, boxMs: number, differenceMs = 2 * S): ClockWitness {
+function device(id: string, boxMs: number, differenceMs: number, address: string): ClockWitness {
   return {
     kind: "device",
     id,
+    address,
     boxAt: iso(boxMs),
     witnessAt: iso(boxMs + differenceMs),
     uncertaintyMs: 0,
   };
 }
 
+function authority(boxMs: number, differenceMs: number): ClockWitness {
+  return {
+    kind: "authority",
+    id: "authority",
+    boxAt: iso(boxMs),
+    witnessAt: iso(boxMs + differenceMs),
+    uncertaintyMs: S,
+  };
+}
+
 function twoDevices(at: number): ClockWitness[] {
-  return [device("till-1", at - 30 * S), device("till-2", at - 20 * S, -3 * S)];
+  return [
+    device("till-1", at - 30 * S, 2 * S, "10.0.0.1"),
+    device("till-2", at - 20 * S, -3 * S, "10.0.0.2"),
+  ];
 }
 
 function latest(): { id: string; saleId: string } {
@@ -78,20 +98,47 @@ function latest(): { id: string; saleId: string } {
   )[0]!;
 }
 
-function press(
-  ms: number,
-  witnesses: readonly ClockWitness[],
-  options: { personId?: string; personName?: string; recordId?: string } = {},
-) {
+interface Admin {
+  personId: string;
+  personName: string;
+  /** How far the administrator's device reads from the box. */
+  differenceMs?: number;
+}
+
+function confirm(ms: number, witnesses: readonly ClockWitness[], admin?: Admin) {
   return withTransaction(suite.db, (tx) =>
-    restartAfterClockStop(tx, {
-      reading: { instant: new Date(ms), offsetMinutes: 60 },
+    confirmClockStop(tx, {
+      reading: reading(ms),
+      boot: BOOT,
       witnesses,
-      personId: options.personId ?? FIRST,
-      personName: options.personName ?? "Ana",
       nodeId,
-      recordId: options.recordId ?? latest().id,
+      ...(admin === undefined
+        ? {}
+        : {
+            admin: {
+              personId: admin.personId,
+              personName: admin.personName,
+              reading: {
+                boxAt: iso(ms),
+                witnessAt: iso(ms + (admin.differenceMs ?? 2 * S)),
+                uncertaintyMs: 0,
+              },
+            },
+          }),
     }),
+  );
+}
+
+/** A confirmation that lifts the stop at `ms`, naming the latest record. */
+async function lift(ms: number, witnesses: readonly ClockWitness[], admin?: Admin) {
+  const { confirmation } = await confirm(ms, witnesses, admin);
+  expect(confirmation?.recordId).toBe(latest().id);
+  return confirmation!;
+}
+
+function openCheckAt(ms: number) {
+  return withTransaction(suite.db, (tx) =>
+    openClockCheck(tx, { reading: reading(ms), boot: BOOT, nodeId }),
   );
 }
 
@@ -132,11 +179,11 @@ function incidents(code: string): IncidentRow[] {
 const RESTARTED = "clock.behind_chain_restarted";
 const DISPROVED = "clock.behind_chain_disproved";
 
-describe("a restart's alert", () => {
-  it("is recorded once, in the restart's transaction, naming the restart and the record's sale", async () => {
+describe("a lift's alert", () => {
+  it("is recorded once, in the lift's transaction, naming the confirmation and the record's sale", async () => {
     await sale(T);
     const named = latest();
-    const answer = await press(R, twoDevices(R));
+    const confirmation = await lift(R, twoDevices(R));
     expect(incidents(RESTARTED)).toEqual([
       {
         source: "dashboard",
@@ -144,11 +191,11 @@ describe("a restart's alert", () => {
         saleId: named.saleId,
         code: RESTARTED,
         params: {
-          restartId: answer.restart.id,
-          person: "Ana",
+          confirmationId: confirmation.id,
+          confirmedBy: "devices",
+          person: null,
           clockAt: iso(R),
           lastRecordAt: iso(T),
-          proof: "devices",
         },
         severity: "warning",
         detectedAt: iso(R),
@@ -156,50 +203,127 @@ describe("a restart's alert", () => {
     ]);
   });
 
-  it("is not recorded for a refused restart", async () => {
+  it("says the tax agency confirmed the clock, with no person", async () => {
+    await sale(T);
+    const confirmation = await lift(R, [authority(R - 30 * S, 2 * S)]);
+    expect(incidents(RESTARTED).map((row) => row.params)).toEqual([
+      {
+        confirmationId: confirmation.id,
+        confirmedBy: "authority",
+        person: null,
+        clockAt: iso(R),
+        lastRecordAt: iso(T),
+      },
+    ]);
+  });
+
+  it("names the administrator whose device confirmed the clock", async () => {
+    await sale(T);
+    const confirmation = await lift(R, [], { personId: FIRST, personName: "Ana" });
+    expect(incidents(RESTARTED).map((row) => row.params)).toEqual([
+      {
+        confirmationId: confirmation.id,
+        confirmedBy: "admin",
+        person: "Ana",
+        clockAt: iso(R),
+        lastRecordAt: iso(T),
+      },
+    ]);
+  });
+
+  it("is not recorded when nothing confirms the clock", async () => {
     await sale(T);
     const before = count("incidents");
-    await expect(press(R, [])).rejects.toMatchObject({
-      code: "clock.restart_refused",
-      params: { reason: "no_proof" },
-    });
+    expect(await confirm(R, [])).toEqual({ confirmation: null });
     expect(count("incidents")).toBe(before);
   });
 
-  it("control: the same press with proof records it", async () => {
+  it("is not recorded for a refused confirmation", async () => {
+    await sale(T);
+    const before = { incidents: count("incidents"), rows: count("clock_confirmations") };
+    await expect(
+      confirm(R, [], { personId: FIRST, personName: "Ana", differenceMs: 2 * M }),
+    ).rejects.toMatchObject({ code: "clock.confirm_refused", params: { reason: "differs" } });
+    expect(count("incidents")).toBe(before.incidents);
+    expect(count("clock_confirmations")).toBe(before.rows);
+  });
+
+  it("control: the same confirmation with proof records it", async () => {
     await sale(T);
     const before = count("incidents");
-    await press(R, twoDevices(R));
+    await lift(R, twoDevices(R));
     expect(count("incidents")).toBe(before + 1);
   });
 
-  it("is not recorded again for a replay", async () => {
+  it("is not recorded again while the lift covers", async () => {
     await sale(T);
-    await press(R, twoDevices(R));
+    await lift(R, twoDevices(R));
     const before = count("incidents");
-    const replay = await press(R, twoDevices(R), { personId: SECOND, personName: "Berta" });
-    expect(replay.replayed).toBe(true);
+    expect(await confirm(R, twoDevices(R))).toEqual({ confirmation: null });
+    await expect(confirm(R, [], { personId: SECOND, personName: "Berta" })).rejects.toMatchObject({
+      code: "clock.confirm_refused",
+      params: { reason: "not_stopped" },
+    });
     expect(count("incidents")).toBe(before);
     expect(incidents(RESTARTED)).toHaveLength(1);
   });
+});
+
+describe("a closing that names no record", () => {
+  // The stop opens at R and ends by itself when the clock is put right at T + M.
+  async function waitingCheck(): Promise<void> {
+    await sale(T);
+    expect(await openCheckAt(R)).not.toBeNull();
+  }
+
+  it("records no restarted alert when an administrator confirms a check that waits", async () => {
+    await waitingCheck();
+    const before = count("clock_confirmations");
+    const { confirmation } = await confirm(T + M, [], { personId: FIRST, personName: "Ana" });
+    expect(confirmation).toMatchObject({ source: "admin", recordId: null });
+    expect(count("clock_confirmations")).toBe(before + 1);
+    expect(incidents(RESTARTED)).toEqual([]);
+  });
+
+  it.each([
+    ["the tax agency agreeing", 2 * S, "authority"],
+    ["the tax agency disagreeing", 2 * H, "elapsed"],
+  ] as const)(
+    "records no restarted alert when the check closes by itself on %s",
+    async (_name, differenceMs, source) => {
+      await waitingCheck();
+      const before = count("clock_confirmations");
+      const { confirmation } = await withTransaction(suite.db, (tx) =>
+        closeClockCheckByItself(tx, {
+          reading: reading(T + M),
+          boot: BOOT,
+          witnesses: [authority(T + 30 * S, differenceMs)],
+          nodeId,
+        }),
+      );
+      expect(confirmation).toMatchObject({ source, recordId: null });
+      expect(count("clock_confirmations")).toBe(before + 1);
+      expect(incidents(RESTARTED)).toEqual([]);
+    },
+  );
 });
 
 describe("a restarted clock proved wrong", () => {
   async function restartWithThreeSales(): Promise<{ restartId: string; saleId: string }> {
     await sale(T);
     const named = latest();
-    const { restart } = await press(R, twoDevices(R));
+    const confirmation = await lift(R, twoDevices(R));
     await sale(R + M);
     await sale(R + 2 * S);
     await sale(R + 90 * S);
-    return { restartId: restart.id, saleId: named.saleId };
+    return { restartId: confirmation.id, saleId: named.saleId };
   }
 
   it("records one alert from the earliest to the latest time written under the restart", async () => {
     const { restartId, saleId } = await restartWithThreeSales();
     const before = {
       registros: count("registros_facturacion"),
-      restarts: count("clock_stop_restarts"),
+      confirmations: count("clock_confirmations"),
     };
     const answer = await disprove(R + 2 * M);
     expect(answer).toEqual({ recorded: [restartId], unused: [], held: [] });
@@ -215,7 +339,7 @@ describe("a restarted clock proved wrong", () => {
       },
     ]);
     expect(count("registros_facturacion")).toBe(before.registros);
-    expect(count("clock_stop_restarts")).toBe(before.restarts);
+    expect(count("clock_confirmations")).toBe(before.confirmations);
   });
 
   it("records no second alert for the same restart, even once the first is handled", async () => {
@@ -241,9 +365,22 @@ describe("a restarted clock proved wrong", () => {
 
   it("records nothing for a restart with no record written under it, and answers it unused", async () => {
     await sale(T);
-    const { restart } = await press(R, twoDevices(R));
+    const restart = await lift(R, twoDevices(R));
     const before = count("incidents");
     expect(await disprove(R + M)).toEqual({ recorded: [], unused: [restart.id], held: [] });
+    expect(count("incidents")).toBe(before);
+  });
+});
+
+describe("a disproof beside a closing that names no record", () => {
+  it("passes over the closing, which restarted nothing", async () => {
+    await sale(T);
+    expect(await openCheckAt(R)).not.toBeNull();
+    const { confirmation } = await confirm(T + M, [], { personId: FIRST, personName: "Ana" });
+    expect(confirmation?.recordId).toBeNull();
+    await sale(T + 2 * M);
+    const before = count("incidents");
+    expect(await disprove(T + 90 * S)).toEqual({ recorded: [], unused: [], held: [] });
     expect(count("incidents")).toBe(before);
   });
 });
@@ -258,7 +395,7 @@ describe("a disproof over two chains", () => {
       const older = await seedTenantWithSif(suite.db);
       const chains = { "the older chain": older, box: { nodeId, seriesId } };
       await sale(T, older);
-      const { restart } = await press(R, twoDevices(R));
+      const restart = await lift(R, twoDevices(R));
       await sale(R + M, chains[other]);
       await sale(R + 2 * S, chains[holder]);
       await sale(R + 90 * S, chains[holder]);
@@ -278,10 +415,11 @@ describe("a restart whose disproof cannot be told apart", () => {
     await sale(T);
     const restartId = "77777777-7777-4777-8777-777777777777";
     suite.db.run(sql`
-      insert into clock_stop_restarts
-        (id, node_id, person_id, restarted_at, clock_at, registro_id, record_at, proof)
-      values (${restartId}, ${nodeId}, ${FIRST}, ${iso(R)}, ${iso(R)}, ${latest().id}, ${iso(T)},
-              ${proof})`);
+      insert into clock_confirmations
+        (id, seq, node_id, box_clock_at, confirmed_at, step_ms, source, person_id, reason, proof,
+         check_id, registro_id, record_at)
+      values (${restartId}, 1, ${nodeId}, ${iso(R)}, ${iso(R)}, 0, 'devices', null, 'behind_chain',
+              ${proof}, null, ${latest().id}, ${iso(T)})`);
     // Covers nothing, so the record after it is at a forward clock.
     await sale(T + M);
     const before = count("incidents");
@@ -292,7 +430,7 @@ describe("a restart whose disproof cannot be told apart", () => {
   it("answers the restart held while another open disproof holds the named record's sale", async () => {
     await sale(T);
     const { saleId } = latest();
-    const { restart } = await press(R, twoDevices(R));
+    const restart = await lift(R, twoDevices(R));
     await sale(R + M);
     await withTransaction(suite.db, (tx) =>
       recordIncident(tx, {
@@ -314,12 +452,12 @@ describe("two restarts of two records", () => {
   async function twoRestarts() {
     await sale(T);
     const firstNamed = latest();
-    const first = await press(R, twoDevices(R));
+    const first = await lift(R, [], { personId: FIRST, personName: "Ana" });
     await sale(R + 10 * S);
     // The clock set forward past the first record, then a new stop.
     await sale(T + H);
     const secondNamed = latest();
-    const second = await press(R2, twoDevices(R2), { personId: SECOND, personName: "Berta" });
+    const second = await lift(R2, [], { personId: SECOND, personName: "Berta" });
     await sale(R2 + 10 * S);
     await sale(T + 2 * H);
     return { first, second, firstNamed, secondNamed };
@@ -327,26 +465,26 @@ describe("two restarts of two records", () => {
 
   it("records each restart's alert with its own person and times", async () => {
     const { first, second, firstNamed, secondNamed } = await twoRestarts();
-    expect(first.restart.id).not.toBe(second.restart.id);
+    expect(first.id).not.toBe(second.id);
     expect(incidents(RESTARTED).map((row) => [row.saleId, row.params])).toEqual([
       [
         firstNamed.saleId,
         {
-          restartId: first.restart.id,
+          confirmationId: first.id,
+          confirmedBy: "admin",
           person: "Ana",
           clockAt: iso(R),
           lastRecordAt: iso(T),
-          proof: "devices",
         },
       ],
       [
         secondNamed.saleId,
         {
-          restartId: second.restart.id,
+          confirmationId: second.id,
+          confirmedBy: "admin",
           person: "Berta",
           clockAt: iso(R2),
           lastRecordAt: iso(T + H),
-          proof: "devices",
         },
       ],
     ]);
@@ -355,17 +493,14 @@ describe("two restarts of two records", () => {
   it("records a disproof for each restart in force, each with the times written under it alone", async () => {
     const { first, second, firstNamed, secondNamed } = await twoRestarts();
     const answer = await disprove(T - H);
-    expect([...answer.recorded].sort()).toEqual([first.restart.id, second.restart.id].sort());
+    expect([...answer.recorded].sort()).toEqual([first.id, second.id].sort());
     expect(answer.unused).toEqual([]);
     expect(answer.held).toEqual([]);
     const rows = incidents(DISPROVED).map((row) => [row.saleId, row.params]);
     expect(rows).toEqual(
       expect.arrayContaining([
-        [firstNamed.saleId, { restartId: first.restart.id, from: iso(R + 10 * S), to: iso(T + H) }],
-        [
-          secondNamed.saleId,
-          { restartId: second.restart.id, from: iso(R2 + 10 * S), to: iso(T + 2 * H) },
-        ],
+        [firstNamed.saleId, { restartId: first.id, from: iso(R + 10 * S), to: iso(T + H) }],
+        [secondNamed.saleId, { restartId: second.id, from: iso(R2 + 10 * S), to: iso(T + 2 * H) }],
       ]),
     );
     expect(rows).toHaveLength(2);
@@ -378,7 +513,7 @@ describe("two restarts of two records", () => {
     await disprove(T - H);
     const params = incidents(DISPROVED).map((row) => row.params);
     expect(params).toContainEqual({
-      restartId: first.restart.id,
+      restartId: first.id,
       from: iso(R + 10 * S),
       to: iso(T + H),
     });
@@ -388,16 +523,16 @@ describe("two restarts of two records", () => {
     await sale(T);
     const { saleId } = latest();
     await withTransaction(suite.db, async (tx) => {
-      for (const restartId of ["one", "two"]) {
+      for (const confirmationId of ["one", "two"]) {
         await recordIncident(tx, {
           origin: jobOrigin("dashboard"),
           saleId: saleId as SaleId,
           error: new AppError(RESTARTED, {
-            restartId,
-            person: "Ana",
+            confirmationId,
+            confirmedBy: "devices",
+            person: null,
             clockAt: iso(R),
             lastRecordAt: iso(T),
-            proof: "devices",
           }),
           severity: "warning",
           detectedAt: new Date(R),

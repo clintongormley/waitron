@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import { incidents } from "@waitron/db";
@@ -7,11 +7,11 @@ import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin } from "@waitron/shared";
 import type { ErrorParams, NodeId, SaleId } from "@waitron/shared";
 import { chainHeads, storedHeads } from "./clock-behind.js";
-import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
+import { clockConfirmations } from "./schema/clock-confirmations.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
-// Each restart's alerts carry its named record's sale, so the open-incident key (source, device,
-// code, sale) keeps one restart's alerts apart from another's.
+// Each lift's alerts carry its named record's sale, so the open-incident key (source, device, code,
+// sale) keeps one lift's alerts apart from another's.
 async function saleOf(tx: Transaction, recordId: string): Promise<SaleId> {
   const [row] = await tx
     .select({ saleId: registrosFacturacion.saleId })
@@ -82,28 +82,34 @@ async function timesWrittenBetween(
   return from === Infinity ? null : { from: new Date(from), to: new Date(to) };
 }
 
-/** For each restart in force at `trustedUntil` (`restarted_at ≤ trustedUntil < record_at`) with
- * no disproof alert yet, handled or not, records one naming the times written under it. A record
- * written after a later restart's stored heads belongs to that restart. A restart with no record
- * under it gets no alert and is answered in `unused`; one whose alert another open incident on the
- * same sale keeps out is answered in `held`. Each alert is dated `observedAt`, when the disproof
- * was noticed, never by the clock it disproves. */
+/** For each lift in force at `trustedUntil` (`confirmed_at ≤ trustedUntil < record_at`) with no
+ * disproof alert yet, handled or not, records one naming the times written under it. A record
+ * written after a later lift's stored heads belongs to that lift. A lift with no record under it
+ * gets no alert and is answered in `unused`; one whose alert another open incident on the same sale
+ * keeps out is answered in `held`. Each alert is dated `observedAt`, when the disproof was noticed,
+ * never by the clock it disproves. A confirmation naming no record lifted nothing and is passed
+ * over. */
 export async function recordDisproofs(
   tx: Transaction,
   input: { trustedUntil: Date; observedAt: Date },
 ): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
-  const rows = await tx
-    .select({
-      id: clockStopRestarts.id,
-      restartedAt: clockStopRestarts.restartedAt,
-      recordAt: clockStopRestarts.recordAt,
-      registroId: clockStopRestarts.registroId,
-      proof: sql<string>`${clockStopRestarts.proof}`,
-    })
-    .from(clockStopRestarts)
-    .orderBy(asc(clockStopRestarts.restartedAt), asc(clockStopRestarts.id));
+  const rows = (
+    await tx
+      .select({
+        id: clockConfirmations.id,
+        confirmedAt: clockConfirmations.confirmedAt,
+        recordAt: clockConfirmations.recordAt,
+        registroId: clockConfirmations.registroId,
+        proof: sql<string>`${clockConfirmations.proof}`,
+      })
+      .from(clockConfirmations)
+      .where(isNotNull(clockConfirmations.registroId))
+      .orderBy(asc(clockConfirmations.seq))
+  )
+    // A CHECK keeps `record_at` set wherever `registro_id` is.
+    .map((row) => ({ ...row, registroId: row.registroId!, recordAt: row.recordAt! }));
   const withHeads = rows.map((row) => ({ ...row, heads: storedHeads(parsed(row.proof)) }));
-  // Every restart writes its heads after the one before it, so the next by total is the next.
+  // Every lift writes its heads after the one before it, so the next by total is the next.
   const byTotal: { sum: number; heads: Map<string, number> }[] = [];
   for (const row of withHeads)
     if (row.heads !== null) byTotal.push({ sum: total(row.heads), heads: row.heads });
@@ -121,34 +127,34 @@ export async function recordDisproofs(
   const recorded: string[] = [];
   const unused: string[] = [];
   const held: string[] = [];
-  for (const restart of withHeads) {
+  for (const lift of withHeads) {
     // Negated so that an unreadable stored time (NaN) is never in force.
-    if (!(restart.restartedAt.getTime() <= at && at < restart.recordAt.getTime())) continue;
-    if (disproved.has(restart.id)) continue;
-    const heads = restart.heads;
+    if (!(lift.confirmedAt.getTime() <= at && at < lift.recordAt.getTime())) continue;
+    if (disproved.has(lift.id)) continue;
+    const heads = lift.heads;
     if (heads === null) {
-      unused.push(restart.id);
+      unused.push(lift.id);
       continue;
     }
     const own = total(heads);
     const next = byTotal.find((other) => other.sum > own)?.heads ?? null;
     const times = await timesWrittenBetween(tx, current, heads, next);
     if (times === null) {
-      unused.push(restart.id);
+      unused.push(lift.id);
       continue;
     }
     const inserted = await recordIncidentOnce(tx, {
       origin: jobOrigin("fiscal_filing"),
-      saleId: await saleOf(tx, restart.registroId),
+      saleId: await saleOf(tx, lift.registroId),
       error: new AppError("clock.behind_chain_disproved", {
-        restartId: restart.id,
+        restartId: lift.id,
         from: times.from.toISOString(),
         to: times.to.toISOString(),
       }),
       severity: "error",
       detectedAt: input.observedAt,
     });
-    (inserted ? recorded : held).push(restart.id);
+    (inserted ? recorded : held).push(lift.id);
   }
   return { recorded, unused, held };
 }

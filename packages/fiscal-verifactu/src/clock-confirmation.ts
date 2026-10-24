@@ -29,7 +29,7 @@ import {
   waitingCheck,
   writeClosing,
 } from "./clock-checks.js";
-import { recordDisproofs } from "./clock-stop-incidents.js";
+import { recordDisproofs, recordRestarted } from "./clock-stop-incidents.js";
 import { isBeforeFirstIssueDate, refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
@@ -167,7 +167,8 @@ async function closeWaitingAsAdmin(
 }
 
 /** Confirms the box's clock while the stop proper holds, writing one `clock_confirmations` row
- * naming the latest record and closing the open check, which lifts the stop. With no `admin`, only
+ * naming the latest record and closing the open check, which lifts the stop, and records
+ * `clock.behind_chain_restarted` beside it. With no `admin`, only
  * when the witnesses are ready; otherwise it writes nothing and answers null. With `admin`, on the
  * administrator's device unless a witness taken during the stop disagrees; a refusal throws
  * `clock.confirm_refused`, and a reading before 28-10-2024 `clock.unusable`, writing nothing. With
@@ -216,6 +217,17 @@ export async function confirmClockStop(
       recordAt: latest.at,
     })
     .returning({ id: clockConfirmations.id });
+  await recordRestarted(tx, {
+    recordId: latest.id,
+    detectedAt: input.reading.instant,
+    params: {
+      confirmationId: row!.id,
+      confirmedBy: source,
+      person: admin?.personName ?? null,
+      clockAt: input.reading.instant.toISOString(),
+      lastRecordAt: latest.at.toISOString(),
+    },
+  });
   return {
     confirmation: {
       id: row!.id,

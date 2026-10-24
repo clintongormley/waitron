@@ -497,6 +497,18 @@ check), each in the task named:
 - the restarted alert's params: `clock-stop-incidents.test.ts`, `apps/dashboard/src/i18n/alerts.test.ts`,
   `apps/dashboard/src/widgets/alerts-bell.test.ts:129-160`, `apps/dashboard/src/screens/alerts-screen.test.ts:90-106`
   (Tasks R4b2, R4c);
+- `clock-stop-incidents.test.ts`'s setup re-pointed from `restartAfterClockStop` to
+  `confirmClockStop` (Task R4b2; lines at `46afdd9dc` → after): `:159` "is not recorded for a
+  refused restart" (`clock.restart_refused { reason: "no_proof" }`) → `:241` "… refused
+  confirmation" (`clock.confirm_refused { reason: "differs" }`, an administrator 2 minutes out),
+  because the old code and reason are gone (R3), still asserting no incident and no row written;
+  `:176` "is not recorded again for a replay" (`replayed: true`) → `:258` "… while the lift covers"
+  (the automatic path answers `{ confirmation: null }` and an administrator is refused
+  `not_stopped`), because a confirmation has no replay, still asserting one alert; `:198` and `:277`
+  count and insert into `clock_confirmations` instead of `clock_stop_restarts`; `:328` "records each
+  restart's alert with its own person" → `:466`, the two lifts made by two administrators (Ana,
+  Berta), since only an administrator's confirmation carries a person; `:387` the control's params
+  rebuilt to R7's shape;
 - the restart route and code in the dashboard: `apps/dashboard/src/api/client.test.ts:3255-3258`
   (`restartClockPayments`, `/api/box/clock-restart`), `apps/dashboard/src/i18n/codes.test.ts:744-749`
   (`clock.restart_refused`'s words; `codes.ts:1287` moves to `clock.confirm_refused`, CLAUDE.md §3:
