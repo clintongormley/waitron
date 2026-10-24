@@ -5149,8 +5149,8 @@ Not in any track until the standalone primary is done.
 
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles
   all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
-  Cloud #323 publishes G/D133’s amended agreement at `08a2a0d4`; next is one short revised owner design question.
-  A1034’s synthetic AEAT test-service observation is recorded; retained defaults, exact formats, A947 amendments, build and physical runtime acceptance remain open.
+  The owner approved both Harbour Kitchen handovers and retained defaults on 24 October 2026.
+  Exact formats, compatible A947 amendments, separate build authority and physical runtime qualification remain open.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches

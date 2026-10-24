@@ -339,6 +339,16 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### A1018 dependency update: 24 October 2026
+
+At 04:07 the owner approved the [revised handover design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md),
+both Harbour Kitchen examples and the retained defaults. This settles the A1018
+owner design question that the dated intake below still lists as pending.
+After takeover M2 alone handles AEAT; returning M1 transfers only fiscal
+originals and received outcomes. Exact formats, compatible A947 amendments,
+separate A1018 build authority and physical runtime qualification remain open.
+A951's other contract and runtime gates retain their scope.
+
 ### Current response disposition: 23 October 2026, D130/D132
 
 Use this response and the [focused plan amendment](../superpowers/plans/2026-10-22-a951-connection.md#focused-d130d132-amendment-2026-10-23)

@@ -5,6 +5,16 @@ their full text.
 
 ## A1018. Agree and build the hosted writer stop-proof contract
 
+**Owner design approval, 24 October 2026, 04:07.** The owner approved the
+[current design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
+as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`: both Harbour
+Kitchen handovers (§§8–9) and the retained defaults (§§3, 5 and 7). M2 alone handles
+AEAT after either takeover; returning M1 transfers only fiscal originals and
+received AEAT outcomes. The earlier approval-question waits below are historical.
+Keep the remaining work open: exact formats, compatible A947 amendments, separate
+build authority and physical runtime qualification. The approved protocol body
+and Cloud contract bytes are unchanged.
+
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed
 `08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec`, publishes the

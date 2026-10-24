@@ -1,3 +1,15 @@
+> **Owner design approval, 24 October 2026, 04:07.** The owner approved the
+> revised Harbour Kitchen handovers in §§8–9 and the retained defaults in §§3, 5
+> and 7, as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`.
+> After either takeover M2 alone handles AEAT; returning M1 transfers only fiscal
+> originals and received AEAT outcomes. This settles the design question recorded
+> below. Earlier proposal and approval-wait wording retains its dated context.
+> Exact formats, compatible A947 amendments, separate build authority and physical
+> runtime qualification remain open. This approval changes no implementation or
+> Cloud contract bytes.
+
+---
+
 > **Amended Cloud agreement published, 2026-10-23 (D133).** Cloud
 > [PR #323](https://github.com/waitron-io/waitron-cloud/pull/323) publishes the
 > [accepted correction](https://github.com/waitron-io/waitron-cloud/blob/08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018) at
