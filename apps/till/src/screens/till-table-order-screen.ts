@@ -47,6 +47,7 @@ import { sentPanel, type SentSlice } from "../state/sent-panel.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   addDecimal,
+  allowsChangeAfterSending,
   compareDecimal,
   decimal,
   formatMoney,
@@ -1159,7 +1160,6 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) billEdit: BillEditExpected | null = null;
   @property({ attribute: false }) routingRevision: number | null = null;
   @property({ attribute: false }) billEdits: readonly BillEditExpected[] = [];
-  @property({ attribute: false }) editSentLines = true;
   /** Set by the app when a change was refused because the kitchen had started the line: that line's
    * Cancel opens. */
   @property({ attribute: false }) cancelOffer: number | null = null;
@@ -2073,8 +2073,12 @@ export class TillTableOrderScreen extends LitElement {
       this.currentOrders?.groups.some((group) => group.rows.some(served))
     )
       return false;
+    const stationAllows = (row: TabLine) =>
+      row.changesAfterSending === null ||
+      allowsChangeAfterSending(row.changesAfterSending, row.firedAt !== null);
     return (
-      this.editSentLines &&
+      stationAllows(line) &&
+      this.lines.every((extra) => extra.parentLineNo !== line.lineNo || stationAllows(extra)) &&
       !this.#isChild(line) &&
       line.servedAt === null &&
       !isStarted(line) &&

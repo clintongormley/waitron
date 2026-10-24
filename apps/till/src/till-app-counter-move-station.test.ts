@@ -310,8 +310,11 @@ function placedServer() {
     order,
     lines: {
       revision: 7,
-      editSentLines: false,
-      lines: [sentDish("dish-line-1", 1), sentDish("dish-line-2", 2)],
+      editSentLines: true,
+      lines: [
+        sentDish("dish-line-1", 1, { changesAfterSending: "never" }),
+        sentDish("dish-line-2", 2, { changesAfterSending: "never" }),
+      ],
     } as TabLines,
     retrievePlacedOrder: vi.fn(async () => structuredClone(server.order)),
     getTabLines: vi.fn(async () => structuredClone(server.lines)),

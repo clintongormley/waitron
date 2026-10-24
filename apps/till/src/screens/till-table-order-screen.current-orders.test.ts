@@ -503,7 +503,6 @@ describe("Current orders and Sent service", () => {
     const unlisted = row("l-unlisted", "Steak", "2.000", { ...held, workingOrderId: "wo-gone" });
     const onShown = row("l-shown", "Steak", "2.000", { ...held, workingOrderId: "wo-4" });
     const { el } = await mountCurrent({
-      editSentLines: true,
       lines: [{ ...storedDish, id: "l-shown", name: "Steak", groupId: "g3" }],
       currentOrders: current({
         groups: [currentGroup("g3", 3, "held", [onCheck, onPaid, unlisted, onShown])],

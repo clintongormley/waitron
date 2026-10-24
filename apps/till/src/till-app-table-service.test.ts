@@ -1541,14 +1541,16 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(banner(el)).toBeNull();
   });
 
-  it("hands the order's revision and the venue's setting to the drilled-in table screen", async () => {
+  it("hands the order's revision and each line's station choice to the drilled-in table screen", async () => {
     const { screen } = await openBurgerTab({
-      getTabLines: vi
-        .fn()
-        .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: false }),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, changesAfterSending: "never" }],
+        revision: 7,
+        editSentLines: true,
+      }),
     });
     expect(screen.revision).toBe(7);
-    expect(screen.editSentLines).toBe(false);
+    expect(screen.lines.map((line) => line.changesAfterSending)).toEqual(["never"]);
   });
 
   it("hands them to the table screen a handheld mounts as a card too", async () => {
@@ -1581,9 +1583,11 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
       listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
       listStations: vi.fn().mockResolvedValue(stations),
-      getTabLines: vi
-        .fn()
-        .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: false }),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, changesAfterSending: "never" }],
+        revision: 7,
+        editSentLines: true,
+      }),
     });
     await logIn(el);
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -1593,7 +1597,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     const screen = tableOrder(el)!;
     expect(screen.embedded).toBe(true);
     expect(screen.revision).toBe(7);
-    expect(screen.editSentLines).toBe(false);
+    expect(screen.lines.map((line) => line.changesAfterSending)).toEqual(["never"]);
     expect(screen.stations).toEqual(stations);
   });
 
@@ -2491,9 +2495,9 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           new Promise((resolve) => {
             finishReload = () =>
               resolve({
-                lines: [{ ...burgerLine, note: "no onions" }],
+                lines: [{ ...burgerLine, note: "no onions", changesAfterSending: "never" }],
                 revision: 8,
-                editSentLines: false,
+                editSentLines: true,
               });
           }),
       )
@@ -2517,7 +2521,9 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-8");
     expect(tableOrder(el)!.lines.map((line) => line.name)).toEqual(["Tarta"]);
     expect(tableOrder(el)!.revision).toBe(2);
-    expect(tableOrder(el)!.editSentLines).toBe(true);
+    expect(tableOrder(el)!.lines.map((line) => line.changesAfterSending)).toEqual([
+      "held-or-waiting",
+    ]);
   });
 
   it("keeps the opened table's lines when an earlier order's read fails after them", async () => {
@@ -2652,7 +2658,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "Este plato ya ha ido a cocina y en este local no se pueden cambiar los platos enviados. Puedes cancelarlo",
+      "Este plato ya ha ido a cocina y su estación no permite cambios después de enviarlo. Puedes cancelarlo",
     );
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });

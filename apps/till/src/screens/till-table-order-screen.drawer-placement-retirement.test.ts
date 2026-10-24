@@ -20,7 +20,6 @@ it.each(["detailed", "fallback"] as const)(
   async (read) => {
     const { el } = await mount({
       orderId: "wo-4",
-      editSentLines: true,
       lines: [storedDish],
       groups: [{ ...orderGroup("held", 1, "held"), lineIds: [storedDish.id] }],
       currentOrders:

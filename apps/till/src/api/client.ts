@@ -2252,10 +2252,7 @@ export interface OrderLinePatch {
 export interface TabLines {
   lines: TabLine[];
   revision: number;
-  /** The venue's setting. When false the server refuses to change or recall a dish line with
-   * `sentAt !== null && state !== null` (`ticket.already_fired`). Cancelling it as an adjustment
-   * ({@link TillApi.applyAdjustment}) still works; removing it inside an edit is refused like a
-   * change. */
+  /** Read by nothing in the till. */
   editSentLines: boolean;
 }
 
@@ -2269,7 +2266,8 @@ export interface TabLine {
    * {@link OrderGroup.lineIds}; a child extras row never is. */
   id: string;
   stationId: string | null;
-  /** Its own kitchen record's station's choice; null with no record. */
+  /** Its own kitchen record's station's choice; null with no record. Removing the dish is not
+   * limited by it. */
   changesAfterSending: ChangesAfterSending | null;
   movable: boolean;
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent

@@ -86,7 +86,6 @@ it.each(["waiter", "kitchen", "expo"] as const)(
     const { el, button } = await open({
       draftStore: draft,
       ...{ fireControl },
-      editSentLines: false,
       currentOrders: orders,
     });
     const events = collect(el, "reorder-groups");

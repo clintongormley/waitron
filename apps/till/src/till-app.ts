@@ -2902,7 +2902,6 @@ export class TillApp extends LitElement {
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
-  @state() private editSentLines = true;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
   @state() private cancelOffer: number | null = null;
   @state() private editDeadEnds: {
@@ -10666,7 +10665,6 @@ export class TillApp extends LitElement {
       if (read !== this.#tabLinesRead) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
-      this.editSentLines = tab.editSentLines;
     } catch {
       if (read !== this.#tabLinesRead) return;
       this.tabLines = [];
@@ -17860,7 +17858,6 @@ export class TillApp extends LitElement {
       .printProblems=${this.printProblems}
       .reprintSent=${this.reprintSent}
       .revision=${this.tabRevision}
-      .editSentLines=${this.editSentLines}
       .cancelOffer=${this.cancelOffer}
       .products=${this.tableProducts}
       .menus=${this.tableMenus}
@@ -17994,7 +17991,6 @@ export class TillApp extends LitElement {
           .printProblems=${this.printProblems}
           .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}
-          .editSentLines=${this.editSentLines}
           .cancelOffer=${this.cancelOffer}
           .products=${this.tableProducts}
           .menus=${this.tableMenus}

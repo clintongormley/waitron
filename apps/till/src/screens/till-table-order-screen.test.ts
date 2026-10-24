@@ -2676,11 +2676,19 @@ describe("till-table-order-screen", () => {
     });
 
     it.each(["queued", null] as const)(
-      "setting off refuses Recall for held work with state %s",
+      "a Not allowed station refuses Recall for held work with state %s",
       async (state) => {
         const { el } = await mount({
-          editSentLines: false,
-          lines: [{ ...pendingLine, firedAt: null, sentAt: null, state, groupId: "g-held" }],
+          lines: [
+            {
+              ...pendingLine,
+              firedAt: null,
+              sentAt: null,
+              state,
+              groupId: "g-held",
+              changesAfterSending: "never",
+            },
+          ],
           groups: [orderGroup("g-held", "held")],
         });
         await openDrawer(el);
@@ -3347,9 +3355,12 @@ describe("till-table-order-screen", () => {
     });
 
     it("with changes to sent items switched off, Sent offers Void and neither Change nor Recall", async () => {
-      const { el } = await mountLines([burgerLine, recalledLine, noRouteLine, preparingBurger], {
-        editSentLines: false,
-      });
+      const { el } = await mountLines(
+        [burgerLine, recalledLine, noRouteLine, preparingBurger].map((line) => ({
+          ...line,
+          changesAfterSending: "never" as const,
+        })),
+      );
       await openDrawer(el);
       for (const lineNo of [5, 6, 9]) {
         expect(lineAction(el, "change", lineNo)).toBeNull();
