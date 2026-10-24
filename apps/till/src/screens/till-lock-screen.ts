@@ -73,6 +73,10 @@ export class TillLockScreen extends LitElement {
         margin-block-end: var(--wt-space-4);
       }
 
+      .logo-place:has(> wt-venue-logo[failed]) {
+        margin-block-end: 0;
+      }
+
       .powered-by {
         margin-block-start: var(--wt-space-4);
       }

@@ -842,6 +842,9 @@ describe("the venue logo and Powered by on the sign-in", () => {
     expect(logo.children).toHaveLength(0);
     expect(logo.shadowRoot!.querySelector("img")).toBeNull();
     expect(logo.getBoundingClientRect().width).toBe(0);
+    await flush(el);
+    const heading = query(el, ".heading")!.getBoundingClientRect();
+    expect(Math.abs(heading.top - screen(el).getBoundingClientRect().top)).toBeLessThanOrEqual(1);
   });
 
   it("under Dark with one image the logo sits on the plate", async () => {
@@ -929,6 +932,6 @@ describe("the venue logo and Powered by on the sign-in", () => {
     const box = await lineBox(poweredBy(el)!);
     expect(box.left).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(window.innerWidth);
-    expect(box.bottom).toBeLessThanOrEqual(document.documentElement.scrollHeight);
+    expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
   });
 });
