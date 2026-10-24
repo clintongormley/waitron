@@ -2649,8 +2649,7 @@ async function releasedCourses(
  * transaction; held lines do neither. Leave queued_at untouched until a later send or release refreshes it.
  *
  * After the started check, a record whose own station's choice of changes after sending refuses
- * it fails the whole call `ticket.already_fired`: a paper-only kitchen reports nothing, so a recall
- * slip cannot be trusted, and a void is the only correction.
+ * it fails the whole call `ticket.already_fired`.
  */
 export async function recallLines(
   tx: Transaction,

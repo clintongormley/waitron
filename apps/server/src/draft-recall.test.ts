@@ -1138,9 +1138,13 @@ describe("party Recall to draft", () => {
   });
 
   it("a dish at a Not allowed station is refused even while held, changing nothing", async () => {
-    await inTx(venue, (tx) => setChangesAfterSending(tx, "never"));
     try {
       const p = await setup("hold");
+      const [item] = await venue.db
+        .select({ stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, p.line.id));
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "never", [item!.stationId]));
       const before = await frozen(p.partyId);
       expect((await recall(p.partyId, p.line.id)).json).toMatchObject({
         code: "ticket.already_fired",
