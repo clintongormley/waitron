@@ -30,7 +30,7 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
   return Object.hasOwn(BOX_EMAIL_WORDS, code);
 }
 
-/** The alerts the duty reads from the incidents table: each open one is emailed once. */
+/** The alerts the duty emails while they stay open, read from the incidents table. */
 export const CLOCK_INCIDENT_EMAIL_CODES = [
   "clock.behind_chain_restarted",
   "clock.records_misdated",

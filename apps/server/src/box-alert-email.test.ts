@@ -229,6 +229,46 @@ describe("boxEmailMessage for wrongly dated sales", () => {
   });
 });
 
+describe("every clock email", () => {
+  const STOP = {
+    clockAt: "2025-03-14T08:12:00.000Z",
+    offsetMinutes: 60,
+    lastRecordAt: "2026-10-18T21:40:00.000Z",
+    lastRecordOffsetMinutes: 120,
+  };
+  const MISDATED = {
+    confirmationId: "c-1",
+    count: 3,
+    from: "2026-10-18T19:05:00.000Z",
+    fromOffsetMinutes: 120,
+    to: "2026-10-26T09:30:00.000Z",
+    toOffsetMinutes: 60,
+    partial: false,
+    unconfirmed: false,
+  };
+  const EMAILS = [
+    ["clock.behind_chain", STOP],
+    ...(["authority", "devices", "admin", "someone else"] as const).map(
+      (confirmedBy) =>
+        ["clock.behind_chain_restarted", { confirmationId: "c-1", confirmedBy }] as const,
+    ),
+    ["clock.records_misdated", MISDATED],
+    ["clock.records_misdated", { ...MISDATED, count: 1 }],
+    ["clock.records_misdated", { ...MISDATED, partial: true }],
+    ["clock.records_misdated", { ...MISDATED, count: 1, partial: true }],
+    ["clock.records_misdated", { ...MISDATED, count: 0, unconfirmed: true }],
+  ] as const;
+  const EVERY = EMAILS.flatMap(([code, params]) =>
+    LANGUAGES.map((language) => [code, language, params] as const),
+  );
+
+  it.each(EVERY)("leaves no placeholder brace in %s in %s (%o)", (code, language, params) => {
+    const { subject, text } = boxEmailMessage(code, language, "Corner Bistro", params);
+    expect(subject).not.toMatch(/[{}]/);
+    expect(text).not.toMatch(/[{}]/);
+  });
+});
+
 describe("readOpenClockIncidents", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
