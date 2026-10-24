@@ -202,6 +202,15 @@ describe("GET /management-api/me/personal-data/export", () => {
     await refused(await ask(mounted()), 401, "management_session.required");
   });
 
+  it("refuses an ended session sent with a query as an ended session", async () => {
+    await withTransaction(suite.db, (tx) => endManagementSession(tx, martaToken));
+    await refused(
+      await ask(mounted(), martaToken, `?personId=${colleagueId}`),
+      401,
+      "management_session.required",
+    );
+  });
+
   it("refuses a session idle past the limit", async () => {
     setLastSeen(martaToken, new Date(Date.now() - IDLE_TIMEOUT_MS - 60_000));
     await refused(await ask(mounted()), 401, "management_session.expired");

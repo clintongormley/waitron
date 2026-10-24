@@ -91,10 +91,10 @@ export function mountPersonalDataExportApi(
   app.get("/management-api/me/personal-data/export", (c) =>
     withPersonalDataErrors(c, log, () => {
       const token = requireManagementSession(c);
-      if (new URL(c.req.url).search)
-        throw new AppError("management.request_invalid", { field: "query" });
+      const hasQuery = new URL(c.req.url).search !== "";
       return sendPersonalData(c, deps, async (tx) => {
         const viewer = await resolveManagementSession(tx, token, { touch: false });
+        if (hasQuery) throw new AppError("management.request_invalid", { field: "query" });
         return { personId: viewer.personId, label: viewer.displayName };
       });
     }),
