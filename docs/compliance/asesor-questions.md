@@ -706,6 +706,8 @@ name with her time record. It also proposes deleting her PIN, password, two-fact
 enrolments, Google link, passkeys, recovery codes and pending passkey challenges when the account
 is deactivated: the software already deletes exactly these when a manager resets a login or re-invites a suspended person, so this extends existing
 security behaviour (GDPR art. 32) rather than setting a retention period.
+(2026-10-24: built by A980 S4, so the box now deletes these at deactivation; an objection to (b)
+would mean undoing it.)
 
 > **(a)** ¿Es proporcionado conservar el correo electrónico de una extrabajadora durante un año
 > desde la baja (art. 59.1 ET), para atender sus solicitudes y enviarle su registro de jornada, y

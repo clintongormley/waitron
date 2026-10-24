@@ -762,8 +762,8 @@ as the form's bottom message on the dashboard and the setup wizard's Connect, "W
 the PIN is the only thing typed. A refused sign-in marks no field on any sign-in form, the setup
 wizard's Reset form included (`apps/setup/src/screens/reset-screen.ts`); there a field is marked
 only when its value is missing or malformed (owner, 2026-09-30, A153).
-Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey whose
-owner is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
+Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey row that
+still belongs to a person who is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
 `google.invalid` for a Google account linked to nobody or to a person who is not active
 (`loginWithGoogle`, `packages/identity/src/google-oidc.ts`). **One exception, owner-approved
 (2026-09-30, C101): a passkey Waitron holds no row for answers `passkey.not_registered`**, and the

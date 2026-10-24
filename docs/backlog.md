@@ -6451,8 +6451,8 @@ awaits owner and relevant specialist approval under its own gates; the broader p
 remains open. **Scoped 2026-10-22 by A980:** the [data-protection design](superpowers/specs/2026-10-22-a980-data-protection-design.md)
 holds the data map, the controller and processor split and the builds-versus-venue list. Its
 revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
-[build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; nothing
-is built. The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
+[build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; S4 (sign-in
+details deleted at deactivation) is built. The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
 
 ---
 

@@ -69,9 +69,9 @@ pending passkey challenges in the database — and so in every backup copy. _Res
    does. This is the spec's consequence (O2: passkeys are deleted at deactivation), not a choice:
    - change the `passkey.test.ts:704-715` case to expect `passkey.not_registered` after
      `deactivatePerson`, and list it under "Changed test checks";
-   - ADD a case keeping the general refusal for a suspended person who still holds a passkey row
-     (seeded by direct SQL, as `apps/server/src/management-api-passkey.test.ts:664` does — that
-     server test stays valid and unedited);
+   - keep the existing case that refuses a suspended person who still holds a passkey row
+     (`passkey.test.ts`, "refuses a person suspended AFTER enrolling a passkey"); it already covers
+     this, and `apps/server/src/management-api-passkey.test.ts:664` stays valid and unedited;
    - update the conventions-ui.md passage and the comment atop `passkey.ts` (about lines 27-33) to
      say both: no row → `not_registered`; a row on a suspended person → the general refusal.
 6. **Guide and dialog text.** The staff guide's "Account access" section (EN
@@ -97,7 +97,9 @@ pending passkey challenges in the database — and so in every backup copy. _Res
 ## Task 1 — the wipe, test first (packages/identity)
 
 Files: `packages/identity/src/staff.ts`, `packages/identity/src/staff.test.ts`,
-`packages/identity/src/staff-authority.test.ts`.
+`packages/identity/src/staff-authority.test.ts`, `packages/identity/src/staff-lifecycle.test.ts`,
+`packages/identity/src/passkey.ts`, `packages/identity/src/passkey.test.ts`,
+`docs/developers/conventions-ui.md`.
 
 1. Write failing tests in `staff-lifecycle.test.ts` (it resets the database per test, where the
    disable, reset and re-enable tests already live; `staff.test.ts` shares one database). Seed a
@@ -117,7 +119,7 @@ Files: `packages/identity/src/staff.ts`, `packages/identity/src/staff.test.ts`,
      secret leaves none and leaves them `pending` (today's re-enable test checks only the status,
      so without this the refactor could drop re-enable's wipe unnoticed);
    - reset login leaves none of the four ROW kinds (today's reset test checks only the columns).
-   Run `pnpm --filter @waitron/identity exec vitest run src/staff.test.ts` and watch the new cases
+   Run `pnpm --filter @waitron/identity exec vitest run src/staff-lifecycle.test.ts` and watch the new cases
    fail for the right reason (secrets still present).
 2. Add `wipeSignInDetails` and call it from the four places (decision 1, 2). Remove the duplicated
    statements from `resetPersonLogin` and `reactivatePersonForInvitation`. Their existing tests
