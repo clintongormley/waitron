@@ -501,6 +501,7 @@ export class LookCard extends LitElement {
     if (code) this.refusedCode = "";
     if (hand && after !== before) this.refusedHand = "";
     if (after.choices.logo !== before.choices.logo) this.refusedLogo = null;
+    if (after.choices.textScale !== before.choices.textScale) this.refusedTextScale = "";
     if (handNames(after.choices).length === 0) this.showKeptNote = false;
     else if (
       after.choices.brandColor !== before.choices.brandColor ||
@@ -951,7 +952,6 @@ export class LookCard extends LitElement {
                 event.stopPropagation();
                 const { value } = event.detail;
                 if (!isTextScale(value)) return;
-                this.refusedTextScale = "";
                 this.#change((d) => setTextScale(d, value));
               }}
             ></wt-slider>

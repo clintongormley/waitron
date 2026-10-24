@@ -1784,6 +1784,23 @@ describe("the Text size slider", () => {
       .toBe(false);
   });
 
+  it("Use Waitron's look clears a text-size refusal with the size", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await slide(el, 115);
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "textScale", reason: "bad_value" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => slider(el).error).toBe(t("appearance.bad_text_size"));
+    await userEvent.click(button(el, "use-waitron"));
+    await el.updateComplete;
+    expect(slider(el).value).toBe(100);
+    expect(slider(el).error).toBe("");
+    expect(await bottom(el)).toBe("");
+  });
+
   it("a refusal naming textScale is explained under the slider", async () => {
     setLocale("en-GB");
     const { el, saveTheme } = await mountEditing(inUse(lucia));
