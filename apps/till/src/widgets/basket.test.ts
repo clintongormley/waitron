@@ -1220,10 +1220,12 @@ describe("till-basket: a line name's language", () => {
     expect(own.getAttribute("lang")).toBe("en");
     const asEnglish = textBoxes(own);
     expect(asEnglish.length).toBeGreaterThan(1);
-    // Before names carried a language they had none; the English one breaks exactly as that did.
+    // Before this change a name had no language and no hyphenation; the English one breaks as that did.
     own.removeAttribute("lang");
+    own.style.hyphens = "manual";
     expect(textBoxes(own)).toEqual(asEnglish);
     // Control: under Spanish the same word breaks elsewhere, with a hyphen.
+    own.style.hyphens = "";
     own.setAttribute("lang", "es");
     expect(textBoxes(own)).not.toEqual(asEnglish);
   });

@@ -115,6 +115,7 @@ let pageStyle: HTMLStyleElement | undefined;
  * that size, 100 leaves Waitron's. Undo with {@link resetPage}.
  */
 export async function pageAt(width: number, height: number, scale = 100): Promise<void> {
+  pageStyle?.remove();
   if (scale === 130) document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
   await page.viewport(width, height);
   pageStyle = document.createElement("style");
