@@ -5452,7 +5452,7 @@ alert list, and holds no staged input.
   (left out when the payments module is off), Clock and Disk space. Each has a dot, the part's name
   in bold, a line of state, a muted line of detail, the sentence of each bell alert on that row, and
   its actions: a Go to for the row's own screen and its alerts' screens, each once, never this page,
-  and only those the person can open, then Free or Restart payments (below). The rows share one
+  and only those the person can open, then Free or Check with this device's time (below). The rows share one
   grid, so on a wide page the dots, names, words and actions each line up in a column across the
   rows, as picture 4 draws them; where the screen's own area is 600px wide or less the name sits
   above the words and the actions go under them.
@@ -5460,8 +5460,9 @@ alert list, and holds no staged input.
   attention, `--wt-color-danger` for something can't be saved, with the state's words in visually
   hidden text beside it. Red is a staff notice of severity `error` (`storage.disk_full`,
   `clock.unusable`, `clock.behind_chain`); amber is any other notice and any bell alert on that row,
-  whatever the alert's own severity, and the Clock row when a restart names the last sale (the
-  stop's offer is `restarted`) and no red notice is on it, and the Clock row when the box's own read
+  whatever the alert's own severity, and the Clock row when a confirmation covers the clock (the
+  stop's proof is `confirmed`) or a check of the clock waits (`clockCheckWaiting`) and no red notice
+  is on it, and the Clock row when the box's own read
   of AEAT's time is at `warning`, because amber means everything still
   works. The legend says "red: something can't be saved", not "nothing", because an unusable clock
   refuses sales while orders still save.
@@ -5497,14 +5498,28 @@ alert list, and holds no staged input.
   a read whose `noticesUnavailable` is not empty does not count as showing the notice gone. "No
   record was waiting to be tried again." stays until the next press. The Tax agency row's detail is
   "Last accepted {time}" or "None accepted yet", and nothing while `outbox` is `null`.
-- **Restart payments.** On the Clock row, a `primary` "Restart payments" button, drawn only when the
-  box offers a restart (the stop's offer is `offered`) and no `clock.unusable` notice is on the row.
-  It opens a dialog showing the time the box reads, the time the last sale reads, the same proof
-  lines the row shows, and what a restart does, with Cancel (`secondary`) and Restart payments
-  (`primary`, with `loading` while it is sent). Both buttons are disabled and the dialog cannot be
-  dismissed while it is sent. A refusal shows in the dialog, above its buttons; refused or not, the
-  box is read again. An open dialog sends the record the page offers at the moment, and closes once
-  the page offers none.
+- **Check with this device's time.** On the Clock row, a `secondary` "Check with this device's
+  time" button, drawn only for a person with `person.admin` and only while a stop holds that no
+  confirmation covers (the stop's proof is not `confirmed`) or a check of the clock waits. It opens a
+  dialog headed with the same words that asks the box for its time and shows "The box's clock says
+  {box}. This device says {device}.", to the second. When the two agree within a minute, counting
+  half the round trip, it asks "They agree. Confirm that the box's clock is right?" with Cancel
+  (`secondary`) and Confirm (`primary`, with `loading` while it is sent; both disabled, and the
+  dialog not dismissible, while it is sent); Confirm asks the box for a fresh challenge and answers
+  it at once. When they differ it says "Your device and the box differ by more than a minute. If
+  your device is right, the box's clock is wrong: connect the box to the internet so it can correct
+  it." with Close alone. The server judges the answer again. A refusal shows in the dialog's footer,
+  above its buttons, in its own sentence for `same_machine` (this screen is the box itself),
+  `differs`, `challenge` (the check took too long) and `contrary_proof`, and every open read is read
+  again. A confirmation closes the dialog and reads every open read again.
+- **Sales dated wrongly.** Under the rows, a section headed "Sales dated wrongly" for each open
+  `clock.records_misdated` alert, with "Go through these with your tax adviser, then mark the alert
+  as handled in the bell." under the heading. An alert that lists sales draws them in a
+  `wt-data-table` (Invoice, Time recorded), read from `GET /api/box/clock-misdated` only while such
+  an alert is open, with a sentence above it when the list may be short (`partial`); an alert that
+  cannot tell draws its sentence and no table. A failed list read says "The list of sales dated
+  wrongly could not be read." under the section. The section is not drawn while no alert has
+  anything to show and the list read has not failed.
 - **Errors.** A refused Free shows its message above the rows, and a refused Retry now under the
   Tax agency row's words; a failed box read shows the read error above the rows, never replacing a
   press's refusal.

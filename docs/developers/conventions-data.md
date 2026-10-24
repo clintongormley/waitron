@@ -3575,9 +3575,9 @@ opening the folder with `exclusive: false` never files.
 **The comparison.** `clockBehindChain` (`packages/fiscal-verifactu/src/clock-behind.ts`) reads the
 latest `fecha_hora_huso_gen_registro` in `registros_facturacion`, across every chain, and answers
 the four params `clockAt`, `offsetMinutes`, `lastRecordAt` and `lastRecordOffsetMinutes` when the
-reading is more than `CLOCK_BEHIND_MARGIN_MS` (60 000 ms) earlier — unless a manager's restart covers
-the reading ([below](#a-managers-restart-lifts-the-stop-for-one-step-back)), when it answers null or
-names the latest record written under the restart; a database with no record never stops. A reading exactly a minute earlier still sells, a millisecond more stops
+reading is more than `CLOCK_BEHIND_MARGIN_MS` (60 000 ms) earlier — unless a confirmation of the clock
+covers the reading ([below](#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back)), when it
+answers null or names the latest record written under the confirmation; a database with no record never stops. A reading exactly a minute earlier still sells, a millisecond more stops
 (`clock-behind.test.ts`, "sells a reading exactly a minute earlier" and "stops a reading a
 millisecond more than a minute earlier"). `refuseWhileClockBehind` checks the 28-10-2024 rule
 first (`clock.unusable`), then throws `clock.behind_chain` with those params. Only the Veri\*Factu
@@ -3674,108 +3674,195 @@ Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
 `packages/fiscal-verifactu/src/chain.clock-behind.test.ts` — weaker than the rule, because they
 cover the routes they name; a new money route is seen by none.
 
-### A manager's restart lifts the stop for one step back
+### A confirmation of the clock lifts the stop for one step back
 
-Added 2026-10-23 by A798-B slice 9 (#2025); the decisions and measurements named here are in
-[the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md).
-Every Q and S label below is a run made for the plan against a PROTOTYPE of `clock-behind.ts` — the
-Q labels against revision 2's, the S labels against revision 3's — in a throwaway worktree, not
-against this branch's code; the P labels are requests to AEAT's hosts.
-Where a shipped test checks the same sequence on this branch, it is named beside the label; the
-test file is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`.
+Added 2026-10-23 by A798-B slice 9 (#2025) as a manager's "Restart payments", and replaced on
+2026-10-24 by revision 8 of [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md),
+whose decisions and measurements are named here: a confirmation of the clock now lifts the stop by
+itself, with no limit on the gap. Every Q and S label below is a run made for the plan against a
+PROTOTYPE of `clock-behind.ts` — the Q labels against revision 2's, the S labels against revision
+3's, both reading the retired restart row rather than `clock_confirmations` — in a throwaway
+worktree, not against this branch's code; the P labels are requests to AEAT's hosts. Where a
+shipped test checks the same sequence on this branch, it is named beside the label; the test file
+is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` unless another is named.
+
+**The tables** (owner FYI 4). Two append-only `ledger` tables, declared `appendOnly()` in
+`packages/fiscal-verifactu/src/classification.ts` and created by
+`packages/fiscal-verifactu/drizzle/0011_glossy_silhouette.sql`. `clock_checks` holds one row each
+time a check of the clock opens: the reading, the boot-time clock's reading and boot id, the latest
+record and every chain's largest `secuencia` (`detail.heads`). `clock_confirmations` holds one row
+each time a check closes: its `source` (`authority`, `devices`, `admin` or `elapsed`), the person
+for `admin` (a CHECK ties the two), the witnesses and the chain heads as `proof`, the corrected
+start of the stop as `proof.closing`, and, for a closing that lifted a stop, the record it names
+(`registro_id`, `record_at`). A unique index on `check_id` allows one closing per check;
+`registro_id` is indexed but not unique, so a second confirmation of the same record is normal.
+`seq` orders both tables, never a time, because the clock is what is in doubt. Only
+`openClockCheck` (`clock-checks.ts`) inserts into `clock_checks`, always with `reason:
+"behind_chain"`; the CHECK also allows `start`, `change` and `disagrees`, which nothing on this
+branch writes. Only `writeClosing` (`clock-checks.ts`) and `confirmClockStop`
+(`clock-confirmation.ts`) insert into `clock_confirmations` (`git grep -n
+'insert(clockChecks)\|insert(clockConfirmations)'` over the non-test sources, 2026-10-24).
+`clock_stop_restarts`, the restart's table, stays in the schema and the append-only list, written
+by nothing, for the go-live migration squash to drop.
 
 **One latest record** (plan decision 8a). `latestRecord` (`packages/fiscal-verifactu/src/clock-behind.ts`)
-orders by `fecha_hora_huso_gen_registro desc, id desc`, and it is the only way the stop and the
-restart find the latest record: `clockBehindChain` calls it, and so does `judge`
-(`packages/fiscal-verifactu/src/clock-stop-restart.ts`), which both `clockStopState` and
-`restartAfterClockStop` run. The id is a random UUID, so a tie between two records at one instant
-is broken arbitrarily but always the same way. A restart naming the other of two same-instant
-records lifted nothing (plan Q5; shipped: "lifts only for the one of two same-instant records that
-latestRecord names"); ordering one caller by `id asc` picked the other record in all
+orders by `fecha_hora_huso_gen_registro desc, id desc`, and it is the only way the stop and a
+confirmation find the latest record: `clockBehindChain` calls it, and so do `judge`
+(`packages/fiscal-verifactu/src/clock-confirmation.ts`), which both `clockStopState` and
+`confirmClockStop` run, and `openClockCheck`. The id is a random UUID, so a tie between two records
+at one instant is broken arbitrarily but always the same way. A restart naming the other of two
+same-instant records lifted nothing (plan Q5; shipped: "lifts only for the one of two same-instant
+records that latestRecord names"); ordering one caller by `id asc` picked the other record in all
 eight runs (S13).
 
-**The cover** (decisions 8b, 21). A restart row in `clock_stop_restarts` names the latest record
-(`registro_id`, unique). `clockBehindChain` answers `null`, lifting every reader of the stop at once,
-when the raw comparison is behind and that row covers the reading: its `record_at` equals the
+**The cover** (decisions 8b, 21). `clockBehindChain` answers `null`, lifting every reader of the
+stop at once, when the raw comparison is behind and the latest confirmation naming the latest record
+— the one with the largest `seq` (`uncoveredBy`) — covers the reading: its `record_at` equals the
 record's own time; its `proof.heads` is an object of safe integers `≥ 0`, none larger than its
-chain's current largest `secuencia`; and the gap is at most the gap the restart accepted plus a
-minute, never more than 24 hours (`RESTART_CAP_MS`). Anything else covers nothing and throws
-nothing — a proof that is not JSON, JSON `null`, `heads` missing or an array, a value that is not a
-safe integer `≥ 0` or is past its chain's head (S6, S7; the bound check's deletion let a `1e12` row
-cover, S12; shipped: the cases under "a restart whose stored heads a correct writer never stores
-covers nothing"). The row's `node_id` is never read, so a wrong one cannot widen the cover (S9;
-shipped: "answers the same when the row names the other node"). The
-readers that lift together all reach `clockBehindChain`: `refuseWhileClockBehind` (the append's own
-check and every route's named check), the till's staff notice (`staff-notices.ts`), the bell's
-alert (`clock-behind-alerts.ts`), and the seat's `clockBehindLatestRecord`, which the refund paths
-and the AEAT drift alert's suppression (wired in `apps/server/src/boot.ts`) call. `clock-stop-restart.ts` and `clock-stop-incidents.ts` read
-the table too, for the Box status page's Clock row, the restart itself and the disproof alert;
-neither decides whether a sale is refused. `chain.ts` is not edited.
+chain's current largest `secuencia`; and the gap is at most the gap that confirmation accepted
+(`record_at` less `confirmed_at`) plus a minute. There is no upper limit on the gap (shipped: "covers
+a 400-day gap", and in `clock-confirmation.test.ts` "a 400-day gap with proof is confirmed: there is
+no cap"). Anything else covers nothing and throws nothing — a proof that is not JSON, JSON `null`,
+`heads` missing or an array, a value that is not a safe integer `≥ 0` or is past its chain's head
+(S6, S7; the bound check's deletion let a `1e12` row cover, S12; shipped: the cases under "a restart
+whose stored heads a correct writer never stores covers nothing"); a confirmation that names no
+record ("covers nothing with a confirmation that names no record"); and an earlier confirmation of
+the record once a later one fails ("keeps the stop when the later of two confirmations naming the
+latest record fails"). The row's `node_id` is never read, so a wrong one cannot widen the cover
+(S9; shipped: "answers the same when the row names the other node"). The readers that lift
+together all reach `clockBehindChain`: `refuseWhileClockBehind` (the append's own check and every
+route's named check), the till's staff notice (`staff-notices.ts`), the bell's alert
+(`clock-behind-alerts.ts`), and the seat's `clockBehindLatestRecord`, which the refund paths and the
+AEAT drift alert's suppression (wired in `apps/server/src/boot.ts`) call. `clock-confirmation.ts`,
+`clock-checks.ts`, `clock-misdated.ts` and `clock-stop-incidents.ts` read `clock_confirmations` too,
+for the Box status page's Clock row, the checks, the wrongly dated list and the alerts; none of them
+decides whether a sale is refused. `chain.ts` is not edited.
 
 **One step back, then the ordinary rule** (decision 8c). `proof.heads` holds every chain's largest
-`secuencia` at the restart, so a record is "written under it" when its `secuencia` is past its
+`secuencia` at the confirmation, so a record is "written under it" when its `secuencia` is past its
 chain's stored head (a chain the map leaves out counts from 0, which can only narrow the cover,
-S10). Before any record is written under the restart, the first step may go a minute further back
-than accepted. Once one is written, every reading is held to the ordinary minute against the
+S10). Before any record is written under the confirmation, the first step may go a minute further
+back than accepted. Once one is written, every reading is held to the ordinary minute against the
 LATEST TIME among the records written under it, on any chain (`latestWrittenAfter`) — a running
-maximum by time, not the record written last. On the prototype, with a sale at `T = 21:40Z` and a
-restart with `clock_at R = 07:12Z` (Q1 and S1): sales at R + 1 min, R + 10 h, R + 30 min,
-R + 10 h − 59 s and R + 10 h − 2 min answered recorded, recorded, `clock.behind_chain`, recorded,
-`clock.behind_chain` (shipped: "stops again at a second step back of more than a minute"). A clock
-walking back 59 s at a time was refused at its second step (S5; shipped: "stops a clock walking back
-59 s at a time at its second step"); with the read ordered by `secuencia` instead, the walk was
-admitted (S11, a deletion run on the prototype only). Deleting the check against records written
-under the restart recorded all five of Q1's sales (Q7, prototype only). Forward control: R + 1 min,
-R + 10 h, R + 10 h + 5 min all recorded (Q2; shipped: "keeps recording while the clock only moves
-forward"). The first step's margin: R − 61 s refused, R − 59 s recorded (Q3; shipped: "lets the
-first step go a minute further back than accepted, and no later step"). The cap: T − 24 h − 1 s
-refused, T − 24 h recorded (Q4; shipped: "covers a step back of exactly 24 hours and not a second
-more", and "caps the cover at 24 hours even when the accepted gap is wider"). A map leaving out the
-older chain kept the stop (S10; shipped: "keeps the stop when heads leave out the older chain"). The
-fiscal core's suites, the golden huella test and `inmutabilidad` among them, passed unedited with
-the prototype in place (Q8, re-run as S14). Then the Clock row says `stepped_back`, and the refusal names the record holding
-that latest time (decision 8d). A restart under which a later record's time passes the named one no
-longer applies: the stop then compares against a new latest record with no row.
+maximum by time, not the record written last — and the refusal names the record holding that time.
+On the prototype, with a sale at `T = 21:40Z` and a restart with `clock_at R = 07:12Z` (Q1 and S1):
+sales at R + 1 min, R + 10 h, R + 30 min, R + 10 h − 59 s and R + 10 h − 2 min answered recorded,
+recorded, `clock.behind_chain`, recorded, `clock.behind_chain` (shipped: "stops again at a second
+step back of more than a minute"). A clock walking back 59 s at a time was refused at its second
+step (S5; shipped: "stops a clock walking back 59 s at a time at its second step"); with the read
+ordered by `secuencia` instead, the walk was admitted (S11, a deletion run on the prototype only).
+Deleting the check against records written under the restart recorded all five of Q1's sales (Q7,
+prototype only). Forward control: R + 1 min, R + 10 h, R + 10 h + 5 min all recorded (Q2; shipped:
+"keeps recording while the clock only moves forward"). The first step's margin: R − 61 s refused,
+R − 59 s recorded (Q3; shipped: "lets the first step go a minute further back than accepted, and no
+later step", and "covers a reading a minute further back than the confirmed time, not 61 s"). A map
+leaving out the older chain kept the stop (S10; shipped: "keeps the stop when heads leave out the
+older chain"). The fiscal core's suites, the golden huella test and `inmutabilidad` among them,
+passed unedited with the prototype in place (Q8, re-run as S14). A further step back stops payments
+again, and a fresh confirmation lifts them (owner FYI 10; shipped: "lifts a further step back with a
+fresh confirmation"). Once a later record's time passes the named one, the confirmation no longer
+applies: the stop then compares against a new latest record that no confirmation names (shipped:
+"does not lift a new stop once real time has passed the record it names").
 
-**The restart's checks, in order** (decision 9; `restartAfterClockStop`): a reading before
-28-10-2024 is refused `clock.unusable`; then `clock.restart_refused` (409, `box-health-api.ts`) with
-`reason` `not_stopped` (the raw comparison is not behind), `record_changed` (the request's
-`recordId` is not `latestRecord`'s), then, when a restart already names that record, the first
-restart answered again (200, `replayed: true`, no row and no alert) if it covers the reading, else
-`stepped_back` with the first restart's `personId` and `restartedAt`; then `too_far` (a gap over
-86 400 000 ms; exactly 24 h is allowed), `contrary_proof`, `no_proof`. The Box status page's offer
-comes from the same `judge`, so it offers exactly what a press would accept at that moment. The
-route (`POST /api/box/clock-restart`, `apps/server/src/box-health-api.ts`) opens one
-`withTransaction` holding the authorization, the reading, the checks, the row and the alert.
+**When a check opens and how it closes** (plan R5–R7). In this slice a check opens only during a
+stop. The clock watch (`apps/server/src/clock-watch.ts`) looks every 15 seconds (`CLOCK_WATCH_MS`),
+on the primary; on each look during a stop it calls `openClockCheck`, which opens a `behind_chain`
+check while `clockBehindChain` answers and none is open, and answers the open one otherwise. A
+check closes in one of three ways:
+
+- **A lift, during the stop.** `confirmClockStop` (`clock-confirmation.ts`) writes a confirmation
+  naming the latest record and closing this stop's check, and records `clock.behind_chain_restarted`
+  beside it. The watch calls it on a look whose `clockStopState` proof is `ready`; the
+  administrator's route calls it too (below). A confirmation that finds no open check, or one whose
+  stop came back, closes that one and opens one in its own transaction, whose closing is then
+  `partial` (`closingProof`, `clock-checks.ts`).
+- **By itself, after the stop ends** (real time passes the record, or the clock is put right). The
+  check waits (`waitingCheck`) until a witness taken after the stop ended answers, and the Box status
+  page says so (`clockCheckWaiting`). `closeClockCheckByItself` (`clock-checks.ts`), on each look:
+  AEAT disagreeing closes it `elapsed` and unconfirmed — first, so readings that both agree and
+  disagree close it unconfirmed (ruling R4a2-2); AEAT agreeing closes it `authority`; with no AEAT
+  reading, a group of two or more devices from two addresses disagreeing closes it `elapsed`, even
+  beside an agreeing group (ruling C27); else an agreeing group closes it `devices`; with none it
+  waits on. An administrator can close it too (`closeWaitingAsAdmin`, `clock-confirmation.ts`). Such
+  a closing names no record and records no restarted alert.
+- **By the stop coming back** while the check waits, once a record has been written since it opened
+  (a node's head past the check's `detail.heads`): `openClockCheck` closes it `elapsed` and
+  unconfirmed and opens a new one, in one transaction (`clock-checks.ts`, "closes a check whose stop
+  came back after a sale, and opens a new one, in one transaction").
 
 **Which witnesses count** (decisions 4–6). `apps/server/src/clock-witnesses.ts` keeps each device's
-latest reading and every AEAT reading with the box's wall and steady clocks. A device reading, and
-an AEAT reading that agrees or says nothing, is handed out only while it is at most five minutes old
-by the steady clock and the wall clock has moved with the steady clock since, to within 1 000 ms. An
-AEAT reading that disagrees is kept with no age limit and through clock steps until the clock watch
-(`apps/server/src/clock-watch.ts`) finds the raw comparison no longer behind, which calls
-`endStop`; a server restart forgets every witness. `judgeClockWitnesses`
-(`packages/fiscal/src/clock-witnesses.ts`): a witness agrees when `|witnessAt − boxAt| +
-uncertaintyMs ≤ 60 000`, disagrees when `|witnessAt − boxAt| − uncertaintyMs > 60 000`, and
-otherwise says nothing; a device's uncertainty is 0; a group of devices is one in which every pair
-agrees with each other, the largest wins, and among groups of one size the one whose newest `boxAt`
-is latest. A witness counts only when its own `boxAt` was more than a minute earlier than the latest
-record's time — gathered during the stop — and an agreeing one only when taken no later than the
-press's reading (`judge`). Proof is AEAT agreeing, or two or more agreeing devices; contrary proof is
-AEAT disagreeing, or a group of two or more devices that all disagree.
+latest reading, with the network address it came from, and every AEAT reading, with the box's wall
+and steady clocks. `GET /api/device/equipment` notes a device's clock only when the request does not
+come from the box itself (`requestFromBox`, `apps/server/src/device-api.ts`), in development too. A
+device reading, and an AEAT reading that agrees or says nothing, is handed out only while it is at
+most five minutes old by the steady clock and the wall clock has moved with the steady clock since,
+to within 1 000 ms. An AEAT reading that disagrees is kept with no age limit and through clock steps
+until the clock watch finds the raw comparison no longer behind, which calls `endStop`. After a
+confirmation or a closing, the watch, and the administrator's route, call `clear()`, which forgets
+every reading `witnesses()` would hand out (ruling R9b-2); a server restart forgets every witness.
+`judgeClockWitnesses` (`packages/fiscal/src/clock-witnesses.ts`): a witness agrees when
+`|witnessAt − boxAt| + uncertaintyMs ≤ 60 000`, disagrees when `|witnessAt − boxAt| − uncertaintyMs >
+60 000`, and otherwise says nothing, so an AEAT reading too uncertain to decide neither confirms nor
+blocks (ruling R3a-M2); a device's uncertainty is 0. Devices count by their latest reading, one per
+network address (a device with no address counts as itself), so two devices behind one address are
+one witness (`clock-confirmation.test.ts`, "the same two device ids from one address are not
+proof"). A group of devices is one in which every pair agrees with each other; the largest of two or
+more wins, and among groups of one size the one whose newest `boxAt` is latest. During a stop
+(`judge`, `clock-confirmation.ts`) a witness counts only when its own `boxAt` was more than a minute
+earlier than the latest record's time, and an agreeing one only when taken no later than the
+reading. The proof is, in order: AEAT disagreeing is contrary; AEAT agreeing is ready, even beside
+devices that disagree (owner FYI 6); a group of devices disagreeing is contrary; a group agreeing is
+ready; otherwise none.
+
+**An administrator's own device** (owner FYI 7, 8, 13, 14). `POST /api/box/clock-challenge` and then
+`POST /api/box/clock-confirm` (`apps/server/src/box-health-api.ts`), both `person.admin`. Each is
+refused `409 clock.confirm_refused` with `reason: "same_machine"` when the request comes from the box
+(`requestFromBox`), unless the server runs in development mode. A challenge belongs to the
+management session that asked for it, is taken once, and holds for 5 000 ms on the steady clock
+(`CHALLENGE_MS`, `apps/server/src/clock-challenges.ts`); otherwise `challenge`. The box's time is
+taken at the round trip's midpoint, with half the round trip as its uncertainty, and the device
+agrees when the difference plus that uncertainty is at most 60 000 ms (`adminAgrees`); otherwise
+`differs`. During a stop the seat refuses `contrary_proof` when AEAT, or a group of two or more
+devices from two addresses, disagrees — even when AEAT agrees (ruling R3b-1); with no stop it closes
+a waiting check, refused `contrary_proof` on a disagreeing witness taken after the stop ended, or is
+refused `not_stopped`, as it is once a confirmation already covers the reading. The route holds the
+authorization, the reading, the checks, the row and the alerts in one `withTransaction`, and answers
+`{ confirmationId, source, confirmedAt }`. The device's time is whatever its browser sends.
+
+**Sales dated wrongly** (owner FYI 9). `misdatedRecords` (`packages/fiscal-verifactu/src/clock-misdated.ts`)
+lists, for one closing, every record written before its check opened (at most each node's entry in
+the check's `detail.heads`) and stamped more than a minute after the stop's corrected start,
+oldest first. The corrected start, stored in `proof.closing.correctedStart`, is the closing's time
+less the boot-time clock's elapsed time since the check opened, when both readings carry the same
+boot id; otherwise it is the closing's time and the closing is `partial` (`correctedStart`,
+`clock-checks.ts`). The list reads only stored values, so it never changes once written. A closing
+stored unconfirmed, or one whose check, start, flag or heads cannot be read, answers "cannot tell"
+rather than an empty list, and never throws (ruling R4b-1-1). `recordMisdated`
+(`clock-stop-incidents.ts`) records one `clock.records_misdated` for each closing that lists any
+record or cannot tell. Its sale is the earliest listed record's, or, when it cannot tell, the sale of
+the latest record when the check opened (`detail.lastRecordId`). `recordIncident` drops an alert
+whose source, device, code and sale match one still open, so **a later alert on the same sale folds
+into the open one**: a second "cannot tell" ("stays one open alert when a second closing that cannot
+tell names the same sale", `clock-stop-incidents.test.ts`), and also a lift's list whose earliest
+record is the sale an open "cannot tell" names (ruling R4b-2-3). That list's exact count is then
+lost: the open alert already says the box cannot tell, and `GET /api/box/clock-misdated` gives the
+list only for a confirmation an open alert names (`readMisdatedOpen`, `apps/server/src/box-health.ts`).
+Both closings stay in `clock_confirmations`. No case builds that second fold. The managers' email
+duty emails each open `clock.behind_chain_restarted` and `clock.records_misdated` once
+(`CLOCK_INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
 
 **A jump** (decision 14). The clock watch takes the wall clock to have jumped when, between two
 checks, it moved more than 60 000 ms further than an elapsed-time clock; `trustedUntil` is the
-earlier check's wall time plus the elapsed time since. The elapsed-time clock is `elapsedClock`
-(`apps/server/src/clock-watch.ts`): Linux's `/proc/uptime`, and `performance.now()` where that file
-gives no number at start. proc_uptime(5) describes the file's first number as "the uptime of the
+earlier check's wall time plus the elapsed time since. The elapsed-time clock is `bootReader`'s
+(`apps/server/src/boot-reader.ts`), which the watch takes as its steady clock: Linux's
+`/proc/uptime`, and `performance.now()` where that file gives no number when the reader is made. proc_uptime(5) describes the file's first number as "the uptime of the
 system (including time spent in suspend)"; the kernel fills it from `ktime_get_boottime_ts64`, to the
 hundredth of a second (`fs/proc/uptime.c`), the clock clock_gettime(2) calls `CLOCK_BOOTTIME`, "A
 nonsettable system-wide clock that is identical to CLOCK_MONOTONIC, except that it also includes any
 time that the system is suspended." Those three were read on 2026-10-23, not run. `performance.now()` alone read a resume from suspend as a jump: on Linux it follows
 `CLOCK_MONOTONIC`, which clock_gettime(2) says "does not count time that the system is suspended",
 so an hour asleep looked like the wall clock stepping an hour forward and recorded a
-`clock.behind_chain_disproved` for the sales under a restart (the review's simulated timings; the
+`clock.behind_chain_disproved` for the sales under a lift (the review's simulated timings; the
 "sleeps an hour" case in `apps/server/src/clock-watch.elapsed.test.ts`, which failed before this).
 Not measured on Linux: what `/proc/uptime` reads across a real suspend or a setting of the wall
 clock — no Linux machine was reachable when this was written; the tests replace the file. On macOS,
@@ -3789,8 +3876,8 @@ step of the wall clock; a device whose equipment poll runs reports every 15 seco
 `TimestampPresentacion` (`apps/server/src/time-health.ts`, plus 500 ms, its uncertainty half the
 round trip plus 500 ms), and the `Date` header of an HTTPS `HEAD` to the environment's QR validation
 host (`readAuthorityTime`, `packages/fiscal-verifactu/src/authority-time.ts`), which the clock watch
-runs at most once a minute, on the primary, while the raw comparison is behind on a box that files
-records. Measured
+runs at most once a minute, on the primary, on a box that files records, while the raw comparison
+is behind and while a check waits after its stop ended (`askAuthority` and `closeWaiting`). Measured
 on 2026-10-23: `curl -I` to `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR` printed `HTTP/2 200`
 and a `date:` line matching `date -u` to the second, with no `age`, `cache-control` or `x-cache`
 (P3); the repository's own TLS-verified HEAD (`authenticatedHourHead`, no client certificate) to the
@@ -3799,17 +3886,20 @@ the box's midpoint 858, 52 and 229 ms from the header's instant, while the submi
 `302` with no `date` (P5). Not measured: production's QR host, and the `Date` header of a
 certificate-authenticated `consultar` reply (P11) — no AEAT certificate was used for this slice.
 
-Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` and
-`packages/fiscal-verifactu/src/clock-stop-restart.test.ts`, weaker than the rule — they cover the
-readings and the restart presses they name. What nothing checks:
 
-- that the stop reads `clock_stop_restarts` only through `clockBehindChain`. A new file that reads
+Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
+`packages/fiscal-verifactu/src/clock-confirmation.test.ts`, `clock-checks.test.ts`,
+`clock-misdated.test.ts` and `clock-stop-incidents.test.ts` beside them, and
+`apps/server/src/clock-confirm.route.test.ts` — weaker than the rule, because they cover the readings,
+closings and presses they name. What nothing checks:
+
+- that the stop reads `clock_confirmations` only through `clockBehindChain`. A new file that reads
   the table to decide a refusal, or a reader of the stop that bypasses `clockBehindChain`, goes
   unnoticed;
 - that a new reader of the stop lifts with the others: the "answers the same from the stop, the
   staff notice and the bell" case names those three;
-- that only `restartAfterClockStop` writes the table: nothing refuses another writer, and a row it
-  wrote that passes the cover's checks would cover.
+- that only `writeClosing` and `confirmClockStop` write the table: nothing refuses another writer,
+  and a row it wrote that passes the cover's checks would cover.
 
 ## An envío to AEAT carries one taxpayer name
 
