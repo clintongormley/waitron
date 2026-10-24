@@ -6,7 +6,7 @@ and "OWNER ANSWER to Q42 … COMPLETE"). Every owner note is folded in below; §
 and asks **Q51**, only what the notes leave open. **Settled by the notes, buildable without Q51:**
 §8's slices 1–5, 8–9c now (slices 1–3 build the recommended short-name rule and button mark,
 which another Q51 answer changes in one place); 10–11 once A803's slice 3 lands; 12, which A773-2
-builds, and 12b after it. **Waiting on Q51:** slices 6–7, until (c) says where the Ready bar's warning time lives.
+builds, and 12b after it. Slices 6–7 waited on Q51 (c) until 2026-10-24.
 New words wait for (f) and (g) before landing, not before building. The first version (2026-10-18) is kept where it records what was true: §2 is unchanged.
 **Q51 answered 2026-10-24: all recommended; (c)'s Ready warning time in each prep station's editor;
 build plan `docs/superpowers/plans/2026-10-24-a797-device-screens-build.md`.** Nothing waits for
@@ -359,7 +359,7 @@ Nothing about the layout is a setting except what the owner made one in Q42.
 | Device (dashboard, Devices) | which station screen, pass or monitor a kitchen display shows | today |
 | Device (on the device, corner → **Columns**, or the pass header's Columns on a till or handheld; picture 07) | **per screen** (and per station screen): the columns in order with move up / move down, a **Show** switch for each (on a kitchen screen the owner named Overview's; the same switch for every column is this design's call, as A773-2's plan has it, line 101), and on a pass **Other stations' dishes**: Profile setting / Show / Hide | new; the order, shown and collapsed columns are kept in the device's browser (A773-2 plan, line 101, `waitron.kitchenColumns.v1.`); the dishes choice is kept on the server against the device |
 | Device (on the live screen) | which columns are collapsed (tap a heading) | new, remembered on the device |
-| Device (on the device, ☰ → Settings) | **Zones on this device** on a handheld | new on a handheld, following "any device does everything"; a till has it today |
+| Device (on the device, ☰ → Zones on this device) | **Zones on this device** on a handheld | new on a handheld, following "any device does everything"; a till has it today |
 | Device (on the device) | card reader and printer; Merged/Stacked on a several-station kitchen screen; List/Map per zone | today, List/Map now remembered |
 | Venue (dashboard, Venue settings → Kitchen → **Late flags**, `apps/dashboard/src/screens/venue-settings-screen.ts:11`, `kitchen-screen.ts:22-28`; each station may override, `packages/venue-service/src/dashboard/station-editor.ts:54-59`; 2026-10-23, A756 PR 5: that panel and the overrides are gone, each station's three minutes are its own, set in the station editor and Add station) | **Ready warning after (min)**: 3 by default, a fourth field after "Warm after", "Overdue after" and "Forgotten after" | new (Q51 (c)) |
 | Venue (dashboard, floor-plan editor) | each table's **short name** | new (§3.7) |
@@ -452,7 +452,8 @@ named.
    Floor shows no zone tabs, while a manager's phone with the same profile still shows all three.
    (2026-10-24, the build plan's slice 4: in the demo, Luis's Floor has no zone tabs only once he
    also unticks the Upstairs bar, a counter zone his profile allows, because a handheld's Floor
-   keeps every chosen zone, counter zones included.)
+   keeps every chosen zone, counter zones included. On a handheld the entry is ☰ → Zones on this
+   device itself, not under Settings (plan D6).)
 
 ## 5. What the server and data side needs
 
@@ -625,8 +626,8 @@ settle may be built without waiting").
 5. **The Ready bar and remembered List/Map.** LIGHT. Independent; it shows short names once slice 1
    has landed.
 6. **Ready warning time, data.** Migration; the Late flags and station editor field (2026-10-23, A756 PR 5: the Late flags panel is gone; the station editor and Add station hold each station's minutes); each station's
-   entry in the ready signal gains its oldest ready time and its warning minutes. FULL. Waits for
-   Q51 (c), which decides where the value lives.
+   entry in the ready signal gains its oldest ready time and its warning minutes. FULL. Q51 (c),
+   answered 2026-10-24, puts the value in each prep station's editor.
 7. **The Ready bar's warning.** Amber, slow pulse, longest-waiting table first, reduced motion. LIGHT.
    After 5 and 6.
 

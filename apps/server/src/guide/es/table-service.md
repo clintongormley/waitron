@@ -138,7 +138,7 @@ Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como c
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
-## Elige las zonas que muestra este dispositivo {#device-zones}
+## Elegir las zonas que muestra este dispositivo {#device-zones}
 
 Un dispositivo muestra todas las zonas que permite su perfil. Si solo atiendes la terraza, las demás
 zonas estorban, así que puedes elegir cuáles muestra este dispositivo y en cuál se abre. En una

@@ -1017,7 +1017,7 @@ the bill-specific draft handles that race.
   station's editor, so nothing waits for Q51. Slice 4 (zones on a handheld) is in review on
   `feat/a797-4-handheld-zones`, built from the
   [build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md); the lane builds slice
-  5 next, then slices 1–3 once #2037 lands. Build slices (design §8), in the owner's order: (1)
+  5 next, then slices 1–3, now that #2037 has landed. Build slices (design §8), in the owner's order: (1)
   table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits

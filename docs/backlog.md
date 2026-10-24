@@ -122,7 +122,7 @@ come after the list above:
   The handheld, kitchen screen and pass are **A797**: the owner answered Q42 on 2026-10-18 and
   Q51 on 2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so
   nothing waits for Q51. Slice 4 (zones on a handheld) is in review on `feat/a797-4-handheld-zones`;
-  then slice 5, then slices 1–3 after #2037. A773-2 builds the pass's part, and the phone's order
+  then slice 5, then slices 1–3 (#2037 has landed). A773-2 builds the pass's part, and the phone's order
   screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -2728,7 +2728,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Q42 answer; Q51 was answered 2026-10-24 (all recommended; the Ready warning time in each prep
   station's editor), so nothing waits for it. 10–11 wait for A803's slice 3 and 12–12b follow
   A773-2. Build order: slice 4 (zones on a handheld, in review on `feat/a797-4-handheld-zones`),
-  then 5, then 1–3 after #2037, which holds the core-migration slot:
+  then 5, then 1–3 (#2037 has landed):
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate

@@ -891,7 +891,7 @@ No user guide mentions Zones on this device today (ran: `grep -rniE "zones on th
 section together.
 
 - [ ] **Step 1: Guides** — add, after "Clear a service step", `## Choose the zones this device shows {#device-zones}`
-  (English) and `## Elige las zonas que muestra este dispositivo {#device-zones}` (Spanish), each
+  (English) and `## Elegir las zonas que muestra este dispositivo {#device-zones}` (Spanish), each
   three to five sentences: where it is (☰ → Settings → Zones on this device on a till; ☰ → Zones on
   this device on a phone or tablet), what it does (shows a subset of the profile's zones and which
   opens first; with one zone shown the Floor has no zone tabs), that it is kept per device and

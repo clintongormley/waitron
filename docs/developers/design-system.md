@@ -5354,7 +5354,7 @@ contains every selected zone, counter zones included. A handheld opens on its "O
 only once a choice is saved (the zones read's `saved`); before that it opens where it always has,
 on the URL's zone or the first tab. A handheld whose zones read fails at sign-in says so, holds no
 choice and shows every permitted zone until a later read applies one. Floor's pills disappear with
-one zone. The pills, List/Map and zone menu share one toolbar, including at phone width. A device
+one zone. The pills, List/Map and zone menu share one toolbar, including at phone width. A till
 with no permitted zones shows an explanation, Settings and Retry. A table in a zone the device does
 not show takes no new picks and cannot send or change its New order there. Saving a choice that
 hides the open table's zone while it holds unsent dishes is refused; other tables' unsent dishes

@@ -765,7 +765,6 @@ const menuOf = (el: TillShell) =>
   el.shadowRoot!.querySelector('header wt-row-actions[data-test="more-menu"]');
 const triggerOf = (el: TillShell) =>
   menuOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-/** Each of More's children named by its item, read through a `wt-menu-row` wrapper. */
 const moreItems = (el: TillShell) =>
   [...menuOf(el)!.querySelectorAll(":scope > *")].map((child) => {
     const item = child.localName === "wt-menu-row" ? child.firstElementChild! : child;
