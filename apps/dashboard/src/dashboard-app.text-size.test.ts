@@ -77,6 +77,30 @@ function outside(outer: DOMRect, boxes: Record<string, Element>): string[] {
     });
 }
 
+/** Says how `item` cuts off its label, in either direction; empty when the label is whole. */
+function clipped(item: Element): string[] {
+  const label = item.textContent!.trim();
+  const range = document.createRange();
+  range.selectNodeContents(item);
+  const box = rect(item);
+  const lines = [...range.getClientRects()].filter(
+    (line) =>
+      line.left < box.left - 0.5 ||
+      line.right > box.right + 0.5 ||
+      line.top < box.top - 0.5 ||
+      line.bottom > box.bottom + 0.5,
+  );
+  return [
+    ...(item.scrollWidth > item.clientWidth + 1
+      ? [`${label} width ${item.scrollWidth}/${item.clientWidth}`]
+      : []),
+    ...(item.scrollHeight > item.clientHeight + 1
+      ? [`${label} height ${item.scrollHeight}/${item.clientHeight}`]
+      : []),
+    ...lines.map((line) => `${label} text ${line.left},${line.top},${line.right},${line.bottom}`),
+  ];
+}
+
 let width = 0;
 let height = 0;
 
@@ -129,11 +153,7 @@ it.each([
     await el.updateComplete;
     const items = [...root.querySelectorAll(`#nav-group-panel-${OPEN_GROUP} .nav-item`)];
     expect(items.map((item) => item.textContent!.trim())).toEqual(OPEN_GROUP_ITEMS);
-    expect(
-      items
-        .filter((item) => item.scrollWidth > item.clientWidth + 1)
-        .map((item) => `${item.textContent!.trim()} ${item.scrollWidth}/${item.clientWidth}`),
-    ).toEqual([]);
+    expect(items.flatMap(clipped)).toEqual([]);
     expect(sidebar.scrollWidth).toBeLessThanOrEqual(sidebar.clientWidth);
   },
 );
