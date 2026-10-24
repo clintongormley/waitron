@@ -5618,6 +5618,10 @@ _Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
 - **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would
   improve the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
 
+- **Dependabot's `fast-uri` security updater reports an older latest resolvable version.**
+  Diagnose `security_update_not_possible` in [run 40069322027](https://github.com/clintongormley/waitron/actions/runs/40069322027):
+  it reports 3.1.8 even though a targeted pnpm refresh resolves 3.1.9 without an override.
+
 - **Dependabot's Zod security run reported an older latest resolvable version.** Diagnose why the
   updater failed to recognise the new resolution.
   [Detail](backlog/dependencies.md#dependabots-zod-security-run-reported-an-older-latest-resolvable-version)
