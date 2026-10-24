@@ -9154,6 +9154,7 @@ export class TillApp extends LitElement {
   #deviceZoneAllows(zoneId: string): boolean {
     if (!this.#choosesZones()) return true;
     const scope = this.#pendingDeviceZoneSelection ?? this.deviceZoneSelection;
+    if (scope === null && this.formFactor !== "till") return true;
     return scope?.selectedZoneIds.includes(zoneId) === true;
   }
 
@@ -17751,20 +17752,19 @@ export class TillApp extends LitElement {
         .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;
     }
-    if (tab === "floor")
+    if (tab === "floor") {
+      const navigation = this.#deviceNavigation();
       return html`<till-floor-screen
         embedded
         .zones=${
-          this.#deviceNavigation() === null
+          navigation === null
             ? this.zones
-            : this.zones.filter((zone) => this.#deviceNavigation()?.floorZoneIds.includes(zone.id))
+            : this.zones.filter((zone) => navigation.floorZoneIds.includes(zone.id))
         }
         .selectedZoneId=${
           this.formFactor !== "till"
-            ? (this.#deviceNavigation()?.startingZoneId ?? undefined)
-            : this.#deviceNavigation()?.floorZoneIds.includes(
-                  this.deviceZoneSelection?.startingZoneId ?? "",
-                )
+            ? (navigation?.startingZoneId ?? undefined)
+            : navigation?.floorZoneIds.includes(this.deviceZoneSelection?.startingZoneId ?? "")
               ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
               : undefined
         }
@@ -17777,6 +17777,7 @@ export class TillApp extends LitElement {
         .canChangeToday=${this.capabilities.includes("take-orders")}
         .canMarkSteps=${this.capabilities.includes("take-orders")}
       ></till-floor-screen>`;
+    }
     if (tab === "order") return this.#embeddedOrderBody();
     return this.#kitchenBody();
   }
