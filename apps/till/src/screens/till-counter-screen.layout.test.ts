@@ -2,6 +2,8 @@ import { afterEach, expect, it, describe } from "vitest";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { page } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import type { Station, TillProduct, TillZoneMenu } from "../api/client.js";
 import {
   cleanupWidgets,
@@ -20,6 +22,7 @@ import type { TillCounterScreen } from "./till-counter-screen.js";
 const DEFAULT_FRAME = [414, 896] as const;
 
 const originalLocale = currentLocale();
+const originalContentLanguages = currentContentLanguages();
 
 let pageStyle: HTMLStyleElement | undefined;
 
@@ -28,6 +31,10 @@ afterEach(async () => {
   setLocale(originalLocale);
   pageStyle?.remove();
   pageStyle = undefined;
+  document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+    (sheet) => sheet !== TEXT_130_SHEET,
+  );
+  setContentLanguages(originalContentLanguages);
   await page.viewport(...DEFAULT_FRAME);
 });
 
@@ -173,6 +180,222 @@ const allWhole = Object.fromEntries(
 
 const box = (el: HTMLElement, tag: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(tag)!.getBoundingClientRect();
+
+/** The client rects of `node`'s text, which a break inside a word splits. */
+function textRects(node: Node): DOMRect[] {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return [...range.getClientRects()].filter((rect) => rect.width > 0);
+}
+
+// What this browser does with one long word, so a CI log says which browser hyphenated what before
+// the layout cases below rely on it.
+it.each(["es", "en"])("one long word in a 70 px box under lang=%s", async (lang) => {
+  await document.fonts.ready;
+  const word = document.createElement("div");
+  word.lang = lang;
+  word.style.cssText = "width: 70px; font: 16px system-ui; hyphens: auto; overflow-wrap: normal;";
+  word.textContent = "Strawberries";
+  document.body.append(word);
+  try {
+    const rects = textRects(word);
+    const lines = new Set(rects.map((rect) => Math.round(rect.top))).size;
+    const right = Math.round(
+      Math.max(...rects.map((rect) => rect.right)) - word.getBoundingClientRect().left,
+    );
+    expect(lines, `${navigator.userAgent}: ${lines} lines, right edge ${right}px`).toBe(
+      lang === "es" ? 2 : 1,
+    );
+  } finally {
+    word.remove();
+  }
+});
+
+/** Puts the till at `scale`% text: 130 adopts the real theme sheet at that size, 100 leaves Waitron's. */
+async function atScale(scale: number): Promise<void> {
+  if (scale === 130) document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+  await document.fonts.ready;
+}
+
+it.each([100, 130])(
+  "on a 1280 × 800 till at %i%, the basket stays beside the menu, the pay buttons are whole and Park ends above the screen's bottom",
+  async (scale) => {
+    await atScale(scale);
+    const el = await mountCounter(1280, 800, "2");
+    await document.fonts.ready;
+    const hold = inShadow(el.shadowRoot!.querySelector("till-tender-pay"), ".hold");
+    expect(hold.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1280);
+    const browser = box(el, "till-menu-browser");
+    const basket = box(el, "till-basket");
+    expect(basket.left).toBeGreaterThanOrEqual(browser.right);
+    expect(basket.top).toBeLessThan(browser.bottom);
+    const shown = await placement(el);
+    const outsideBasket = ["total", "cash button", "card button", "hold button"];
+    expect(Object.fromEntries(outsideBasket.map((name) => [name, shown[name]]))).toEqual(
+      Object.fromEntries(outsideBasket.map((name) => [name, "whole"])),
+    );
+  },
+);
+
+it.each([100, 130])("at 1024 × 768 and %i%, every selling control is whole", async (scale) => {
+  await atScale(scale);
+  const el = await mountCounter(1024, 768);
+  await document.fonts.ready;
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1024);
+  expect(await placement(el)).toEqual(allWhole);
+});
+
+it.each([100, 130])(
+  "on a 390 px phone at %i%, the basket sits under the menu with every selling control whole",
+  async (scale) => {
+    await atScale(scale);
+    const el = await mountCounter(390, 844);
+    await document.fonts.ready;
+    const browser = box(el, "till-menu-browser");
+    const basket = box(el, "till-basket");
+    expect({ left: basket.left, width: basket.width }).toEqual({
+      left: browser.left,
+      width: browser.width,
+    });
+    expect(basket.top).toBeGreaterThanOrEqual(browser.bottom);
+    expect(await placement(el)).toEqual(allWhole);
+  },
+);
+
+// English words, so the case keeps to English fixtures: Chromium hyphenates them by Spanish rules
+// under lang="es" and not at all under lang="en".
+const LONG_NAMES = [
+  "Cheeseburger",
+  "Strawberries and cream",
+  "Hamburger",
+  "Mushrooms with garlic",
+  "Meatballs",
+  "Aubergines",
+  "Watermelon",
+  "Elderflower lemonade",
+  "Chocolate",
+  "Raspberries",
+  "Blackcurrant",
+  "Gingerbread",
+].map((name, index) => product(`long-name-${index}`, name, "9.50"));
+
+/** The counter at 130% under content language `lang`, the long names on its tiles and the first,
+ * second and fourth on its bill, with every break other than a hyphen switched off. */
+async function mountLongNames(width: number, height: number, lang: string): Promise<HTMLElement> {
+  setContentLanguages({ defaultLanguage: lang, languages: [lang] });
+  await atScale(130);
+  await page.viewport(width, height);
+  const store = new WorkingOrderStore();
+  for (const index of [0, 1, 3]) store.addProduct(LONG_NAMES[index]!, "1");
+  pageStyle = document.createElement("style");
+  pageStyle.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+  document.head.append(pageStyle);
+  const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
+    store,
+    products: LONG_NAMES,
+    menus: servedMenus(
+      [{ id: "drinks", name: "Drinks", isDefault: true, versionId: "drinks-v1" }],
+      LONG_NAMES.map((each) => ({ id: each.menuItemId!, menuId: "drinks", productId: each.id })),
+    ),
+    selectedMenuId: "drinks",
+    makeAtStations: stations,
+    operatorName: "Ana",
+  });
+  const noBreak = new CSSStyleSheet();
+  noBreak.replaceSync(".name, .product-name { overflow-wrap: normal !important; }");
+  for (const tag of ["till-menu-browser", "till-basket"]) {
+    const root = el.shadowRoot!.querySelector(tag)!.shadowRoot!;
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, noBreak];
+  }
+  await document.fonts.ready;
+  return el;
+}
+
+interface DrawnName {
+  name: string;
+  /** The name's own box, which its text must stay inside. */
+  box: HTMLElement;
+  text: HTMLElement;
+}
+
+function drawnNames(el: HTMLElement): DrawnName[] {
+  const browser = el.shadowRoot!.querySelector("till-menu-browser")!.shadowRoot!;
+  const basket = el.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
+  const tiles = [...browser.querySelectorAll<HTMLElement>('[data-kind="product"] .name')];
+  const lines = [...basket.querySelectorAll<HTMLElement>(".line .product-name")];
+  return [
+    ...tiles.map((text) => ({
+      name: `tile ${text.textContent!.trim()}`,
+      box: text,
+      text,
+    })),
+    ...lines.map((text) => ({
+      name: `bill ${text.textContent!.trim()}`,
+      box: text.closest<HTMLElement>(".name")!,
+      text,
+    })),
+  ];
+}
+
+/** Each name whose text runs outside its own box, with that box's width. */
+function overflows(names: DrawnName[]): string[] {
+  return names.flatMap(({ name, box: own, text }) => {
+    const edge = own.getBoundingClientRect();
+    const out = textRects(text).some(
+      (rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5,
+    );
+    return out ? [`${name} (box ${Math.round(edge.width)}px)`] : [];
+  });
+}
+
+/** Each word drawn on more than one line. */
+function brokenWords(names: DrawnName[]): string[] {
+  return names.flatMap(({ name, text }) => {
+    const node = [...text.childNodes].find(
+      (child) => child.nodeType === Node.TEXT_NODE && child.textContent!.trim() !== "",
+    )!;
+    const broken: string[] = [];
+    for (const match of node.textContent!.matchAll(/\S+/g)) {
+      const range = document.createRange();
+      range.setStart(node, match.index);
+      range.setEnd(node, match.index + match[0].length);
+      const tops = new Set(
+        [...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)),
+      );
+      if (tops.size > 1) broken.push(`${name}: ${match[0]}`);
+    }
+    return broken;
+  });
+}
+
+it.each([
+  [1280, 800],
+  [1024, 768],
+])(
+  "at %ix%i and 130%, long names under Spanish break only with a hyphen",
+  async (width, height) => {
+    const el = await mountLongNames(width, height, "es");
+    const names = drawnNames(el);
+    expect(names.length, "tiles and bill lines drawn").toBe(LONG_NAMES.length + 3);
+    const over = overflows(names);
+    const broken = brokenWords(names);
+    const seen = [
+      navigator.userAgent,
+      `overflowing: ${over.join(", ") || "none"}`,
+      `words on two lines: ${broken.join(", ") || "none"}`,
+    ].join("; ");
+    expect(over.length, seen).toBe(0);
+    expect(broken.length, seen).toBeGreaterThan(0);
+  },
+);
+
+it("the same names under English overflow their boxes", async () => {
+  const el = await mountLongNames(1280, 800, "en");
+  const names = drawnNames(el);
+  expect(names.length, "tiles and bill lines drawn").toBe(LONG_NAMES.length + 3);
+  expect(overflows(names).length, navigator.userAgent).toBeGreaterThan(0);
+});
 
 it("on a 390 px phone, puts the basket under the menu at its width, with each line's price and remove button, the total and the pay buttons whole", async () => {
   const el = await mountCounter(390, 844);
