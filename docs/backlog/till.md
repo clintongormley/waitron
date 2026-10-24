@@ -1012,15 +1012,17 @@ the bill-specific draft handles that race.
   Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
   Counter's custom-item residual (A738) and payment window (A739) remain. The handheld, kitchen
   screen and pass are A797: designed 2026-10-18, revised 2026-10-21 for the owner's answer to Q42
-  (approved with changes). Open question **Q51** (lane C's questions file) asks only what the notes
-  left open: the automatic short name, the bar's table button, the Ready bar's warning time, the
-  pass's other-station dishes setting, dashes for unoccupied tables, words with two meanings and
-  the Spanish. Build slices (design §8), in the owner's order: (1) table short names (migration),
-  the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
+  (approved with changes). **Q51** (lane C's questions file), which asked what the notes left open,
+  was answered 2026-10-24: all recommended, with the Ready bar's warning time set in each prep
+  station's editor, so nothing waits for Q51. Slice 4 (zones on a handheld) is in review on
+  `feat/a797-4-handheld-zones`, built from the
+  [build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md); the lane builds slice
+  5 next, then slices 1–3 once #2037 lands. Build slices (design §8), in the owner's order: (1)
+  table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
-  the work). Slices 6–7, the Ready bar's warning, wait for Q51 (c); slices 10–11 wait for A803's
-  slice 3; slices 12 and 12b follow A773-2; the rest build now with the recommended answers:
+  the work). Slices 10–11 wait for A803's slice 3; slices 12 and 12b follow A773-2; the rest build
+  now:
   [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](mockups/a797-device-screens/). Menu Device Home Page, receipt configuration and the floor-plan editor stay
   separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
@@ -1730,6 +1732,19 @@ new day's Lunch with the same name. The department's timetable supplies the next
 or payment in progress keeps its context, with the grid/default change deferred until safe.
 The implementation choices and acceptance cases are in the
 [A740 plan](../superpowers/plans/2026-10-16-a740-zones-on-device.md).
+
+2026-10-24 (A797 slice 4): a handheld has the same choice, under ☰ → Zones on this device. It
+narrows the handheld's Floor, which keeps every chosen zone, counter zones included, and blocks
+work on a hidden zone's tables there as on a till. A handheld opens on its "Opens first" zone only
+once a choice is saved (the zones read's `saved`); its new-order start stays the profile's, from an
+unchanged `GET /api/default-service-zone/offers`. A handheld whose zones read fails at sign-in
+holds no choice and allows every zone until a later read applies one. A live narrowing held back
+by the open table's unsent dishes now says "Send or remove this table's unsent dishes to hide its
+zone." on both device kinds: that table can still send or remove them, but takes no new picks, and
+a table in a zone the device already hides does not hold the narrowing back. Leaving the table
+alone does not let the narrowing apply, because leaving keeps the table's New order on the device
+(found while building). [Build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md),
+slice 4.
 
 
 - **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either

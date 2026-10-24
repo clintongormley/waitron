@@ -134,6 +134,32 @@ A cleared step comes back when the moment it starts from happens again, such as 
 being served. A step that repeats every few minutes after the last order comes back with each
 repeat: **Done** clears the one on show, and another order starts the count again.
 
+## Choose the zones this device shows {#device-zones}
+
+A device shows every zone its profile allows. If you only work the terrace, the other zones get in
+the way, so you can choose which of them this device shows and which one it opens on. On a till,
+open **More** (☰), then **Settings**, then **Zones on this device**. On a phone or tablet, open
+**More** (☰) and choose **Zones on this device**. Tick **Show** for each zone you want, choose the
+one that **Opens first**, and tap **Save**.
+
+The **Floor** then shows only the zones you chose, and with a single zone it shows no zone tabs at
+all. A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A
+phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice, a
+phone or tablet opens where it always has; after that it opens on your **Opens first** zone.
+
+The choice belongs to this device and the profile it is signed in on, so another device on the same
+profile keeps its own, and switching profile brings back that profile's choice. It never gives this
+device a zone its profile does not allow. If a phone or tablet cannot read its choice when you sign
+in, it says so and shows every zone its profile allows until it can.
+
+A table in a zone this device does not show takes no new dishes here, and its unsent dishes cannot
+be sent from this device. So Waitron will not hide the zone of the table you have open while it has
+unsent dishes: send or remove them first. If the zones change while you are at such a table, for
+example because a manager changed the profile, the change waits. You can still send or remove the
+table's unsent dishes, but not add new ones, and the zone hides once they are gone. Hiding a zone
+does not check the tables you are not at, so their unsent dishes wait until you show the zone
+again.
+
 ## Fingerprint check failed {#fingerprint-check-failed}
 
 If Waitron says the fingerprint check failed, ask a manager to arrange a repair before retrying

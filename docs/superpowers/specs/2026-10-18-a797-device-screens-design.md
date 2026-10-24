@@ -8,6 +8,9 @@ and asks **Q51**, only what the notes leave open. **Settled by the notes, builda
 which another Q51 answer changes in one place); 10–11 once A803's slice 3 lands; 12, which A773-2
 builds, and 12b after it. **Waiting on Q51:** slices 6–7, until (c) says where the Ready bar's warning time lives.
 New words wait for (f) and (g) before landing, not before building. The first version (2026-10-18) is kept where it records what was true: §2 is unchanged.
+**Q51 answered 2026-10-24: all recommended; (c)'s Ready warning time in each prep station's editor;
+build plan `docs/superpowers/plans/2026-10-24-a797-device-screens-build.md`.** Nothing waits for
+Q51 any more (§10).
 Backlog entries: `docs/backlog.md` "Design the fixed screens for each kind of device" (two entries) and
 [its detail](../../backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01).
 
@@ -447,6 +450,9 @@ named.
    off on her pass, as by default.
 6. **Luis, terrace only.** In ☰ → Settings → Zones on this device he unticks Inside and Bar; his
    Floor shows no zone tabs, while a manager's phone with the same profile still shows all three.
+   (2026-10-24, the build plan's slice 4: in the demo, Luis's Floor has no zone tabs only once he
+   also unticks the Upstairs bar, a counter zone his profile allows, because a handheld's Floor
+   keeps every chosen zone, counter zones included.)
 
 ## 5. What the server and data side needs
 
@@ -533,7 +539,8 @@ Each point is (read); the plan confirms it before relying on it.
   factor only into a fingerprint of the stored choice (`packages/venue-service/src/device-zone-selection.ts:28`,
   `:98`). Only the till app, and one server reader, `GET /api/default-service-zone/offers`
   (`apps/server/src/till-api.ts:1423-1450` at `9c8c4c08e`), tie it to tills. The plan decides whether
-  that route follows it on a handheld, tracing every reader first.
+  that route follows it on a handheld, tracing every reader first. 2026-10-24: the plan (D5) keeps
+  `/api/default-service-zone/offers` unchanged on a handheld.
 
 ## 6. What is removed or retired
 
@@ -752,3 +759,10 @@ the pass, and Overview first when it is shown (§3.5).
     questions file); "Leave it here" «Dejar aquí» (owner, 2026-10-19 ~00:10, A878, lane B's
     questions file); Columns «Columnas», Move up «Subir», Move down «Bajar», Show «Mostrar».
   Example: Jordi's Spanish screen reads «Resumen · En espera · Esperando · Preparando · Listo».
+
+**Q51, answered 2026-10-24 04:29** (lane C's questions file, "OWNER ANSWER — Q51 (A797 device
+screens): ALL RECOMMENDED"): the owner said "Q51 approved", so every recommendation in (a)–(g)
+stands as written. The one change of place is (c): the Ready warning time, 3 minutes by default, is
+set in each prep station's editor beside its three late-flag times, because A756 PR 5 (#2023)
+removed Venue settings → Kitchen → Late flags. The new words in (f) and (g) may land, and slices
+6–7 no longer wait.

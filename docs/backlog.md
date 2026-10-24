@@ -119,10 +119,12 @@ come after the list above:
   (S3, S6, S10 cover Q27–Q29).**
 - **Design the fixed screens for each kind of device** (A182 part 1, under _The till, devices and
   table service_). The Counter cleanup is built; A738 custom items and A739 paying remain.
-  The handheld, kitchen screen and pass are **A797**: the owner answered Q42 on 2026-10-18 and the
-  design was revised for it on 2026-10-21, asking only **Q51** (lane C's questions file); slices
-  the notes settle may be built now, A773-2 builds the pass's part, and the phone's order screen
-  waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
+  The handheld, kitchen screen and pass are **A797**: the owner answered Q42 on 2026-10-18 and
+  Q51 on 2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so
+  nothing waits for Q51. Slice 4 (zones on a handheld) is in review on `feat/a797-4-handheld-zones`;
+  then slice 5, then slices 1–3 after #2037. A773-2 builds the pass's part, and the phone's order
+  screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
+  [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
@@ -1721,6 +1723,26 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
   adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
 
+- **A1051. Hiding a zone does not check its other tables' unsent dishes, on a till or a
+  handheld.** Read, not run: `#hidesOrderZone` (`apps/till/src/till-app.ts`) checks only the counter
+  basket and the open table, as since A740's #1825 (`c90856059`); ticking the zone again brings the
+  dishes back. Kept as is by A797 slice 4 (its plan's D3b).
+
+- **A1052. A handheld's transfer accept list holds only counter zones.** Read, not run: a handheld
+  fills it from `GET /api/default-service-zone/offers`, whose `zones` are the profile's counter
+  zones (`apps/server/src/till-api.ts`); a till's holds every profile zone. Unchanged by A797 slice
+  4 (its plan's D4).
+
+- **A1053. Two till shell cases leave the screen language as Spanish.** Read, not run: in
+  `apps/till/src/widgets/till-shell.test.ts`, "shows the language's full name at 1280 wide…" never
+  restores it and "updates the chooser's active language…" restores es-ES, not what it found
+  (`fec3797f5`, `5c1a1c2df`). CLAUDE.md §4: such a test restores the language.
+
+- **A1054. A Lit "change-in-update" warning in "live device zones > recovers a floor-only device
+  without needing a counter poll"** (`apps/till/src/till-app-device-zones.test.ts`). The case
+  passes; the build's ledger saw the warning on `dc7ac4b50`, and it prints on A797 slice 4's tip.
+  What sets a property inside the update is not traced.
+
 - **A934. The till's Spanish for parking an order before hiding a zone says «Retén».**
   `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
   reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
@@ -2690,11 +2712,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Counter custom items (A738 residual) and the payment window (A739) remain. The handheld,
   kitchen screen and pass are **A797**, designed 2026-10-18 and revised 2026-10-21 for the owner's
-  Q42 answer; open question **Q51** (lane C's questions file) holds back slices 6–7;
-  10–11 wait for A803's slice 3 and 12–12b follow A773-2.
-  Build slices in four groups (the owner's order): short names, the phone's bar, zones and
-  Ready bar; the kitchen's cards, Overview and columns; the phone's order screen after A803's
-  slice 3; the pass, built by A773-2:
+  Q42 answer; Q51 was answered 2026-10-24 (all recommended; the Ready warning time in each prep
+  station's editor), so nothing waits for it. 10–11 wait for A803's slice 3 and 12–12b follow
+  A773-2. Build order: slice 4 (zones on a handheld, in review on `feat/a797-4-handheld-zones`),
+  then 5, then 1–3 after #2037, which holds the core-migration slot:
+  [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
   durable post-invoice payment-refund path. The screen designer was
