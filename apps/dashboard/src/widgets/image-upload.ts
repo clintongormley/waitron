@@ -40,6 +40,10 @@ export interface ImageUploader {
  * fits every logo inside it, enlarging a small one), with Remove beside it; with none, one
  * "+ Add a logo" box. The picture, or the "+ Add a logo" box, opens the picker; when the picker
  * closes, focus goes to whichever of the two is then drawn.
+ *
+ * As a `venue-logo` it is the logo the venue's screens show, drawn on its plate with Replace and
+ * Remove beside it; with none, one "+ {addLabel}" box. When the picker closes, focus goes to
+ * Replace, or to the box when there is no image.
  */
 @customElement("dashboard-image-upload")
 export class ImageUpload extends LitElement {
@@ -143,6 +147,28 @@ export class ImageUpload extends LitElement {
       .logo[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
       }
+      :host([venue-logo]) {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
+      :host([venue-logo]) .logo .add {
+        inline-size: calc(var(--wt-space-6) * 8);
+        block-size: calc(var(--wt-space-6) * 3);
+      }
+      .plate {
+        padding: var(--wt-space-2);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-logo-plate);
+      }
+      .plate img {
+        display: block;
+        block-size: calc(var(--wt-space-6) * 3);
+        min-inline-size: calc(var(--wt-space-6) * 3);
+        max-inline-size: calc(var(--wt-space-6) * 8);
+        object-fit: contain;
+      }
     `,
   ];
   @property({ attribute: false }) api!: ImageUploader;
@@ -156,6 +182,12 @@ export class ImageUpload extends LitElement {
   @property({ type: Boolean }) invalid = false;
   @property({ type: Boolean, reflect: true }) thumbnail = false;
   @property({ type: Boolean, reflect: true }) logo = false;
+  @property({ type: Boolean, reflect: true, attribute: "venue-logo" }) venueLogo = false;
+  /** The venue logo's empty box reads "+ {addLabel}"; "Add a logo" when empty. */
+  @property() addLabel = "";
+  /** The venue logo's Replace and Remove buttons' accessible names. */
+  @property() replaceName = "";
+  @property() removeName = "";
   /** Nothing can be chosen or removed, and a library left open closes. */
   @property({ type: Boolean, reflect: true }) disabled = false;
   @state() private pickerOpen = false;
@@ -200,7 +232,7 @@ export class ImageUpload extends LitElement {
     this.#writeBusy = false;
     const closing = this.pickerOpen && !open;
     this.pickerOpen = open;
-    if (closing && this.logo) void this.#focusLogo();
+    if (closing && (this.logo || this.venueLogo)) void this.#focusLogo();
     this.dispatchEvent(
       new CustomEvent("image-picker-state", { detail: { open }, bubbles: true, composed: true }),
     );
@@ -244,7 +276,9 @@ export class ImageUpload extends LitElement {
 
   async #focusLogo(): Promise<void> {
     await this.updateComplete;
-    this.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=choose-image]")?.focus();
+    this.shadowRoot!.querySelector<HTMLElement>(
+      "[data-test=replace-image], [data-test=choose-image]",
+    )?.focus();
   }
 
   #renderLogo() {
@@ -286,8 +320,50 @@ export class ImageUpload extends LitElement {
       >`;
   }
 
+  #renderVenueLogo() {
+    const invalid = this.invalid ? "true" : nothing;
+    if (!this.image)
+      return html`<button
+        type="button"
+        class="logo empty"
+        data-test="choose-image"
+        aria-invalid=${invalid}
+        ?disabled=${this.disabled}
+        @click=${() => this.#setOpen(true)}
+      >
+        <span class="add"
+          ><span
+            ><span aria-hidden="true">+ </span>${this.addLabel || t("image.add_logo")}</span
+          ></span
+        >
+      </button>`;
+    return html`<div class="plate">
+        <img src=${liveMediaImage(this.image, "display")} alt="" />
+      </div>
+      <wt-button
+        data-test="replace-image"
+        variant="secondary"
+        aria-label=${this.replaceName || nothing}
+        aria-invalid=${invalid}
+        ?disabled=${this.disabled}
+        @click=${() => this.#setOpen(true)}
+        >${t("appearance.logo_replace")}</wt-button
+      >
+      <wt-button
+        data-test="remove-image"
+        variant="secondary"
+        aria-label=${this.removeName || nothing}
+        ?disabled=${this.disabled}
+        @click=${() => {
+          this.#remove();
+          void this.#focusLogo();
+        }}
+        >${t("image.remove_logo")}</wt-button
+      >`;
+  }
+
   override render() {
-    return html`${this.logo ? this.#renderLogo() : this.thumbnail ? this.#renderThumbnail() : this.#renderFull()}
+    return html`${this.venueLogo ? this.#renderVenueLogo() : this.logo ? this.#renderLogo() : this.thumbnail ? this.#renderThumbnail() : this.#renderFull()}
     ${this.pickerOpen ? this.#renderPicker() : nothing}`;
   }
 

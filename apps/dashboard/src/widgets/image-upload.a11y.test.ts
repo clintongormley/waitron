@@ -164,6 +164,36 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it.each([
+    ["with a logo", { image: "abc.png" }],
+    ["without a logo", {}],
+  ] as const)("renders accessibly as a venue logo %s", async (_, props) => {
+    // The names below are English, so the visible text must be too.
+    setLocale("en-GB");
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      {
+        api: stubApi(),
+        venueLogo: true,
+        replaceName: "Replace the logo",
+        removeName: "Remove the logo",
+        ...props,
+      },
+      theme,
+    );
+    // Without these the scan could pass on a venue logo control that drew no buttons.
+    expect(!!el.shadowRoot!.querySelector("button[data-test=choose-image]")).toBe(
+      !("image" in props),
+    );
+    expect(!!el.shadowRoot!.querySelector("wt-button[data-test=replace-image]")).toBe(
+      "image" in props,
+    );
+    expect(!!el.shadowRoot!.querySelector("wt-button[data-test=remove-image]")).toBe(
+      "image" in props,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly as a thumbnail with its library open", async () => {
     const { el, host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",
