@@ -24,7 +24,16 @@ const FALLBACK = `<span slot="fallback">W</span>`;
 
 const box = (el: WtVenueLogo) => el.shadowRoot!.querySelector<HTMLElement>(".box");
 const images = (el: WtVenueLogo) => [...el.shadowRoot!.querySelectorAll<HTMLImageElement>("img")];
+const requests = (address: string) =>
+  performance.getEntriesByName(new URL(address, location.href).href).length;
+const unique = () => `/no-such-${crypto.randomUUID()}.png`;
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+// vi.waitFor advances faked timers on each check, which would bring a retry forward.
+async function requestsReach(address: string, count: number): Promise<void> {
+  for (let i = 0; i < 300 && requests(address) < count; i++) await frame();
+  expect(requests(address)).toBe(count);
+}
 
 async function logo(attributes: string): Promise<WtVenueLogo> {
   const el = (await mount(
@@ -96,10 +105,12 @@ describe("wt-venue-logo when its image fails", () => {
   });
 
   it("tries the same address again after 60 seconds", async () => {
-    const el = await logo(`light="${MISSING}"`);
+    const address = unique();
+    const el = await logo(`light="${address}"`);
     const first = images(el)[0]!;
     await next(el, "wt-logo-error");
     await rendered(el);
+    await requestsReach(address, 1);
     expect(images(el)).toEqual([]);
     expect(vi.getTimerCount()).toBe(1);
 
@@ -113,7 +124,7 @@ describe("wt-venue-logo when its image fails", () => {
     expect(retries).toHaveLength(1);
     const retry = retries[0]!;
     expect(retry).not.toBe(first);
-    expect(retry.getAttribute("src")).toBe(MISSING);
+    expect(retry.getAttribute("src")).toBe(address);
     expect(retry.hidden).toBe(true);
     expect(getComputedStyle(retry).display).toBe("none");
     expect(retry.alt).toBe("");
@@ -123,12 +134,14 @@ describe("wt-venue-logo when its image fails", () => {
     expect(el.failed).toBe(true);
     expect(box(el)).toBeNull();
     expect(vi.getTimerCount()).toBe(1);
+    await requestsReach(address, 2);
 
     await advance(el, VENUE_LOGO_RETRY_MS);
     const again = images(el);
     expect(again).toHaveLength(1);
     expect(again[0]).not.toBe(retry);
-    expect(again[0]!.getAttribute("src")).toBe(MISSING);
+    expect(again[0]!.getAttribute("src")).toBe(address);
+    await requestsReach(address, 3);
     expect(errors).toBe(0);
   });
 
@@ -169,16 +182,18 @@ describe("wt-venue-logo when its image fails", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("keeps one timer and stops the hidden image's own error at the box", async () => {
+  it("keeps one timer and stops the hidden image's own events at the box", async () => {
     const el = await failed(`light="${MISSING}"`);
     await advance(el, VENUE_LOGO_RETRY_MS);
     await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
     const native: string[] = [];
     el.shadowRoot!.addEventListener("error", (e) => native.push(e.type));
     const retry = images(el)[0]!;
+    el.shadowRoot!.addEventListener("load", (e) => native.push(e.type));
     retry.dispatchEvent(new Event("error", { bubbles: true }));
     retry.dispatchEvent(new Event("error", { bubbles: true }));
     expect(vi.getTimerCount()).toBe(1);
+    retry.dispatchEvent(new Event("load", { bubbles: true }));
     expect(native).toEqual([]);
   });
 
@@ -255,6 +270,22 @@ describe("wt-venue-logo when its image fails", () => {
     el.remove();
     expect(removed).toHaveBeenCalledWith("change", expect.any(Function));
     removed.mockRestore();
+  });
+
+  it("starts no timer for an image that fails after the box was removed", async () => {
+    const address = unique();
+    const el = await logo(`light="${address}"`);
+    const errored = next(el, "wt-logo-error");
+    el.remove();
+    await errored;
+    await rendered(el);
+    expect(el.failed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await advance(el, VENUE_LOGO_RETRY_MS);
+    expect(images(el)).toEqual([]);
+    await requestsReach(address, 1);
+    host.append(el);
+    expect(vi.getTimerCount()).toBe(1);
   });
 
   it("connecting without a failure starts no timer", async () => {

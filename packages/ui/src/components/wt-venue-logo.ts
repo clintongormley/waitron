@@ -134,19 +134,22 @@ export class WtVenueLogo extends LitElement {
 
   readonly #onLoad = (event: Event): void => {
     event.stopPropagation();
-    const image = event.currentTarget as HTMLImageElement;
+    this.#loaded(event.currentTarget as HTMLImageElement);
+  };
+
+  #loaded(image: HTMLImageElement): void {
     const announced = this.ratio > 0;
     this.ratio = image.naturalWidth / image.naturalHeight;
     // A retry's hidden image has already said so for the image drawn after it.
     if (!announced) this.#emit("wt-logo-load");
-  };
+  }
 
   readonly #onError = (event: Event): void => {
     event.stopPropagation();
     this.broken = true;
     this.ratio = 0;
     this.#emit("wt-logo-error");
-    this.#startTimer();
+    if (this.isConnected) this.#startTimer();
   };
 
   // A hidden image removed by an address change can still answer; it no longer speaks for the box.
@@ -155,10 +158,11 @@ export class WtVenueLogo extends LitElement {
   }
 
   readonly #onRetryLoad = (event: Event): void => {
+    event.stopPropagation();
     if (this.#stale(event)) return;
     this.broken = false;
     this.attempt = 0;
-    this.#onLoad(event);
+    this.#loaded(event.currentTarget as HTMLImageElement);
   };
 
   readonly #onRetryError = (event: Event): void => {
