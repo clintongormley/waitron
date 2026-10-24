@@ -76,6 +76,7 @@
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",
     "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
     "fontkit": "2.0.4",
     "hono": "^4.13.13",
     "jose": "^6.1.0",
@@ -107,8 +108,8 @@
     "jsqr": "^1.4.0",
     "otplib": "^13.5.0",
     "pdf-lib": "1.17.1",
-    "playwright": "^1.64.0",
     "pdfjs-dist": "^6.4.299",
+    "playwright": "^1.64.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"

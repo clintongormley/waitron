@@ -2,7 +2,9 @@
 
 **Status: plan, 2026-10-24. Nothing was built when this was written.** 2026-10-24: S4 is built
 ([its plan](2026-10-24-a980-s4-deactivation-wipe.md)); `suspendPerson` and `reactivatePerson` were
-deleted, so S11 has only the two routes that already exist to set its date. Design:
+deleted, so S11 has only the two routes that already exist to set its date. 2026-10-24: S2a1 is
+built ([its plan](2026-10-24-a980-s2a1-own-download.md)): the server route for a person's own
+download, with no dashboard button yet; it declares `fflate` in `@waitron/server` for the ZIP. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in

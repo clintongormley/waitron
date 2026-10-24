@@ -51,6 +51,8 @@ import {
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import type { AccountEmailSender } from "./account-email.js";
+import { modulesNamed } from "./modules.js";
+import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 
 export interface MeApiDeps {
   db: Database;
@@ -67,6 +69,7 @@ export interface MeApiDeps {
   accountActionBaseUrl?: string;
   privacyNoticeUrl?: string;
   sendAccountEmail?: AccountEmailSender;
+  now?: () => Date;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -111,6 +114,12 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     withTransaction(deps.db, async (tx) => {
       return fn(tx);
     });
+
+  mountPersonalDataExportApi(
+    app,
+    { db: deps.db, nodeId: deps.cfg.nodeId, modules: modulesNamed(deps.modules), now: deps.now },
+    log,
+  );
 
   const updateProfile = ownPasswordChanges(deps.db, profileThrottle);
   const textField = (body: Record<string, unknown>, field: string): string => {

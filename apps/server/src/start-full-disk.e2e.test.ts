@@ -57,6 +57,7 @@ import { ALL_ALERT_CLAIMS, ALL_MODULES, enabledAlertSources } from "./modules.js
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
+import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { escapeHtml } from "./recovery-surface.js";
 import {
   createStaffNoticeLog,
@@ -267,6 +268,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       },
       () => {},
     );
+    mountPersonalDataExportApi(app, { db, nodeId: "no-node", modules: ALL_MODULES }, () => {});
   });
 
   afterAll(async () => {
@@ -339,6 +341,24 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     });
     expect(res.status).toBe(200);
     expect(lastSeen()).toBe(before);
+  });
+
+  it("a person's own personal-data download answers on a full disk with a change waiting", async (ctx) => {
+    const small = needDisk(ctx);
+    const before = seenAMinuteAgo();
+    db.run(sql`insert into change_log (id, payload) values ('bs3', '{"resource":"zz","id":"3"}')`);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+
+    const res = await app.request("/management-api/me/personal-data/export", {
+      headers: { cookie: manager.cookie },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    expect(lastSeen()).toBe(before);
+    expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs3'`)).toEqual([
+      { id: "bs3" },
+    ]);
   });
 
   it("free-space deletion frees a rotated log on a full disk, and the stop lifts", async (ctx) => {

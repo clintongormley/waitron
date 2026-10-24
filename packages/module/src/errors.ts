@@ -4,8 +4,8 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "module.operation_invalid": { module: string };
-    /** `reason` is our own English description; it names at most an override's key, never a value
-     * from the file. */
+    /** `reason` is our own English description; it names at most an override's key, a module's
+     * name or a file name a module declares in code, never a value from the file. */
     "module.config_invalid": { reason: string };
     "module.config_unknown": { module: string };
     "module.mandatory_not_disableable": { module: string };
