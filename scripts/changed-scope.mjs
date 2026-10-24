@@ -80,7 +80,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/vitest-duration-sequencer.mjs", ["apps/server"]],
   [
     "scripts/vitest-shard-coverage-merge.mjs",
-    ["apps/dashboard", "apps/till", "packages/venue-service"],
+    ["apps/dashboard", "apps/till", "packages/fiscal-verifactu", "packages/venue-service"],
   ],
 ]);
 
@@ -231,11 +231,6 @@ export const STAFFING_PACKAGE = "@waitron/staffing";
  */
 export const SERVER_PACKAGE = "@waitron/server";
 
-/**
- * The `test-fiscal-verifactu` shard's package: a Node project, a `maxWorkers: 4` suite that
- * oversubscribed its bin-mates when it shared a light shard, and a Chromium project for its
- * dashboard panel.
- */
 export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
 
 /**

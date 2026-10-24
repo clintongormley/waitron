@@ -591,6 +591,34 @@ which took 558 s on run `38241392066`, not the longest db shard (shard 10, 732 s
 To see where the mutation half applies: `ls packages/*/stryker.config.json`, then read its `mutate`
 list.
 
+## Fiscal coverage uses four file shards
+
+Fiscal-verifactu runs its Node and Chromium projects in four file shards, followed by
+`test-fiscal-verifactu-merge`. Each shard builds the self-contained custody tool, collects
+coverage without enforcing partial thresholds and uploads a required blob. The merge uses
+`scripts/vitest-shard-coverage-merge.mjs` and enforces the package's unchanged thresholds.
+The aggregate `ci` check refuses a skipped merge when fiscal coverage was selected.
+
+To reproduce the split locally, first run
+`pnpm --filter @waitron/fiscal-verifactu test:build-custodian`, then run
+`pnpm --filter @waitron/fiscal-verifactu test:shard --shard=1/4 --outputFile=.vitest-reports/blob-1.json`
+for shard numbers 1 through 4. Finish with `pnpm --filter @waitron/fiscal-verifactu test:merge`.
+Do not overlap coverage runs in the same checkout; they share report files.
+
+A1041's baseline was main run
+[40026899167](https://github.com/clintongormley/waitron/actions/runs/40026899167/job/120665480624):
+396 seconds for the job, 321 seconds for its test step, with 196 files and 4,197 tests passing.
+The 29 browser files accounted for 92.790 file-seconds and the slowest Node file for 61.449.
+File-seconds include overlapping execution and do not sum to wall time.
+Main run [40022785909](https://github.com/clintongormley/waitron/actions/runs/40022785909/job/120651571663)
+reached the 420-second command deadline. The split retains the four-worker outer
+cap, sequential browser files, project ordering and 420-second command deadline.
+The four-minute target concerns the whole job.
+
+The workflow guards in `scripts/ci-workflow.test.mjs` read workflow and manifest text;
+they do not establish runtime or coverage completeness. Use the shard and merge results
+on the actual CI head to check those.
+
 ## CI job layout and scheduling
 
 ### CI's test jobs measure coverage, never plain `test`
@@ -604,7 +632,7 @@ scenarios, the rehearsal's send gate and interrupt suites, and the S3 test serve
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
 seven-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
 coverage bars are enforced in the merge job, not in a shard. Then the
-dedicated mixed database/browser jobs (`test-fiscal-verifactu`, `test-bookings`, `test-media`, `test-payments-stripe`,
+dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-payments-stripe`,
 `test-payments-sumup`, `test-adjustments`, `test-staffing`), the unsharded browser jobs (`test-ui`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
 `--shard` splits by FILE COUNT (except `apps/server`, packed by duration since A938: see "The server's
@@ -684,11 +712,8 @@ all browser test steps took 26–237 seconds, read from the jobs API's step time
 
 Browser package test commands run through
 `node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm …`; fiscal-verifactu
-uses 420 seconds. Its later A798 run `39902897605`, job `120248392824`, spent
-332 seconds in the test step and 379 seconds in the job. A six-minute command cap
-would leave only 28 seconds above that test step, so the seven-minute fiscal cap
-leaves 88 seconds. Its runtime above the four-minute target remains
-[separate performance work](../backlog/ci.md#fiscal-coverage-outlasts-the-four-minute-job-target).
+uses 420 seconds. A1041 retains that fiscal diagnostic limit while splitting its
+work across four runners; see [Fiscal coverage uses four file shards](#fiscal-coverage-uses-four-file-shards).
 
 These limits leave room under the ten-minute job limit for a two-second process
 snapshot, the five-second termination grace and artifact uploads on those measured

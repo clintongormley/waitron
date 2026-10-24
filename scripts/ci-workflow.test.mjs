@@ -704,9 +704,9 @@ const THREE_RUNS_TEST_TIMEOUT_MS = 95_000;
 const FOUR_RUNS_TEST_TIMEOUT_MS = 125_000;
 const FIVE_RUNS_TEST_TIMEOUT_MS = 155_000;
 // The merge-job cases run once, or three times, per merge job, and are bounded for this many.
-const MERGE_JOBS_BOUNDED = 6;
-const EIGHTEEN_RUNS_TEST_TIMEOUT_MS = 545_000;
-const SIX_RUNS_TEST_TIMEOUT_MS = 185_000;
+const MERGE_JOBS_BOUNDED = 7;
+const TWENTY_ONE_RUNS_TEST_TIMEOUT_MS = 635_000;
+const SEVEN_RUNS_TEST_TIMEOUT_MS = 215_000;
 // The leftover-call case waits three times for a step of the killed run and makes one other run.
 const LEFTOVER_STEP_WAIT_MS = 15_000;
 const LEFTOVER_CALL_TEST_TIMEOUT_MS = 3 * LEFTOVER_STEP_WAIT_MS + VERDICT_SPAWN_TIMEOUT_MS + 5_000;
@@ -882,7 +882,7 @@ describe("the `ci` aggregate's verdict", () => {
         );
       }
     },
-    SIX_RUNS_TEST_TIMEOUT_MS,
+    SEVEN_RUNS_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -900,7 +900,7 @@ describe("the `ci` aggregate's verdict", () => {
         }
       }
     },
-    EIGHTEEN_RUNS_TEST_TIMEOUT_MS,
+    TWENTY_ONE_RUNS_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -912,7 +912,7 @@ describe("the `ci` aggregate's verdict", () => {
         );
       }
     },
-    SIX_RUNS_TEST_TIMEOUT_MS,
+    SEVEN_RUNS_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -1774,6 +1774,22 @@ describe("the test shards", () => {
     expect(LIGHT_B_PACKAGES).not.toContain(name);
   });
 
+  it("isolates fiscal-verifactu into four coverage shards and requires their merged result", () => {
+    const body = job("test-fiscal-verifactu").body.join("\n");
+    expect(body).toContain("shard: [1, 2, 3, 4]");
+    expect(body).toContain("fail-fast: false");
+    expect(body).toContain('pnpm --filter "@waitron/fiscal-verifactu" test:shard');
+    const build = body.indexOf('pnpm --filter "@waitron/fiscal-verifactu" test:build-custodian');
+    expect(build, "the shard must build the custody tool before its tests").toBeGreaterThan(-1);
+    expect(build).toBeLessThan(
+      body.indexOf('pnpm --filter "@waitron/fiscal-verifactu" test:shard'),
+    );
+    expect(job("test-fiscal-verifactu-merge").body.join("\n")).toContain(
+      'pnpm --filter "@waitron/fiscal-verifactu" test:merge',
+    );
+    expect(job("ci").body.join("\n")).toContain("- test-fiscal-verifactu-merge");
+  });
+
   // The owner's bound (2026-10-09): no test job should run past about four minutes. These limits
   // sit above that so a slow runner is not cut off, and well below GitHub's six hours.
   it("bounds every test job at ten minutes, every merge job at five, and lint and the root guards at eight", () => {
@@ -2182,6 +2198,7 @@ describe("the sharded jobs", () => {
     expect(counts).toEqual({
       "@waitron/dashboard": 4,
       "@waitron/db": 3,
+      "@waitron/fiscal-verifactu": 4,
       "@waitron/provisioning": 6,
       "@waitron/server": 16,
       "@waitron/venue-service": 4,
