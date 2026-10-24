@@ -5630,9 +5630,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 _Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
 [backlog/dependencies.md](backlog/dependencies.md).
 
-- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it** — left
-  behind by the Stryker upgrade (#447, 2026-09-19). The retry removes the Vitest-major ignore in
-  `.github/dependabot.yml` (A779; the Vitest 5 PR #1179 is closed).
+- **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** A retry
+  removes the Vitest-major ignore in `.github/dependabot.yml` (A779).
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
 - **Bundled npm notices stop at a module-type-only package manifest.** Fix the generator to
@@ -5643,34 +5642,30 @@ _Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
   **Next action:** read each claim against the installed 0.45.4, then update the number or the claim.
   [Detail](backlog/dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
 
-- **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7** —
-  left behind by the TypeScript 7 upgrade (#460, 2026-09-20). When a release supports it, the root
-  entry goes back to a plain `^7` range and the alias disappears.
+- **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
+  When a release supports it, the root entry goes back to a plain `^7` range and the alias
+  disappears.
   [Detail](backlog/dependencies.md#collapse-the-two-typescript-entries-back-into-one-once-typescript-eslint-supports-version-7)
 
 - **Whether a declared floor follows the installed version is undecided — one decision for every
-  manifest** — left behind by the dependency refresh (#432, 2026-09-19). The answer goes in
-  `versioning-strategy` in `.github/dependabot.yml`.
+  manifest.** The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
   [Detail](backlog/dependencies.md#whether-a-declared-floor-follows-the-installed-version-is-undecided--one-decision-for-every-manifest)
 
-- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it** at
-  0.25.12. An install that re-resolves the lockfile still warns that the `@esbuild-kit` packages
-  are deprecated.
+- **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it.** An
+  install that re-resolves the lockfile still warns that the `@esbuild-kit` packages are deprecated.
   [Detail](backlog/dependencies.md#one-esbuild-copy-older-than-ours-stays-in-the-tree-drizzle-kits-own-range-holds-it)
 
-- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One
-  line either way; it needs an owner call on whether Node 24 is still supported.
-  Left behind by the Node types upgrade (#441, 2026-09-19).
+- **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** It needs
+  an owner call on whether Node 24 is still supported.
+  [Detail](backlog/dependencies.md#the-supported-node-version)
 
-- **Only the request side of that adapter was compared between the two versions** — left behind
-  by the Hono Node adapter upgrade (#444, 2026-09-19). Re-running the comparison needs a scratch
-  install of 1.19.15.
+- **Only the request side of that adapter was compared between the two versions.** Re-running the
+  comparison needs a scratch install of 1.19.15.
   [Detail](backlog/dependencies.md#only-the-request-side-of-that-adapter-was-compared-between-the-two-versions)
 
-- **`apps/server/src/tls.ts`'s type guarantee is still untested.** It derives its options type
-  from the installed package (`Parameters<typeof serve>[0]`) so that an incompatible reshape
-  fails `tsc`; the Hono Node adapter upgrade (#444) did not exercise that, because the type was
-  otherwise identical across the two versions.
+- **`apps/server/src/tls.ts`'s type guarantee is still untested.** The Hono Node adapter upgrade
+  (#444) did not exercise an incompatible options reshape.
+  [Detail](backlog/dependencies.md#the-tls-options-type-guarantee-is-untested)
 
 - **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.** What
   is missing is anywhere that states a browser floor, so the next bump moves it again silently.
@@ -5684,15 +5679,13 @@ _Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
 - **The dependency-optimizer fix still needs a cold-cache check on Vite 8.**
   [Detail](backlog/dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
 
-- **The till's QR pin compares the code against itself, not an authority.** Giving the till the
-  same reader needs a matrix accessor as well (`qrSvg` returns a string, never the library's
-  `qr` object) and a module-boundary decision about where the helper lives.
+- **The till's QR pin compares the code against itself, not an authority.** Giving the till the same
+  reader needs a matrix accessor and a module-boundary decision.
   [Detail](backlog/dependencies.md#the-tills-qr-pin-compares-the-code-against-itself-not-an-authority)
 
-- **There is no snapshot file anywhere in the repository**, so the till's byte pin is a SHA-256
-  of the output. A file snapshot would fail with a readable diff; whether this repo wants
-  snapshot files at all is an owner decision. Left behind by the till QR library upgrade
-  (qrcode-generator 1 -> 2, 2026-09-20).
+- **There is no snapshot file anywhere in the repository.** Whether this repo wants snapshot files
+  at all is an owner decision.
+  [Detail](backlog/dependencies.md#readable-qr-snapshot-differences)
 
 - **`node-forge` has a high-severity security alert with no fixed version** — OPEN (Dependabot
   alert #20). **Next action:** bump it when a fixed version is published, and run the certificate
@@ -5705,6 +5698,11 @@ _Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
 
 - **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would
   improve the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
+
+- **Dependabot's Zod security run reported an older latest resolvable version.** Diagnose why the
+  updater failed to recognise the new resolution.
+  [Detail](backlog/dependencies.md#dependabots-zod-security-run-reported-an-older-latest-resolvable-version)
+
 
 ### Modules, data and code health
 
