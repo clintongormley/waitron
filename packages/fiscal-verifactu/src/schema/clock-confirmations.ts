@@ -54,7 +54,7 @@ export const clockConfirmations = table(
     check("clock_confirmations_reason_ck", enumCheck(t.reason)),
     check(
       "clock_confirmations_person_ck",
-      sql`(${t.source} = 'admin') = (${t.personId} is not null and length(${t.personId}) > 0)`,
+      sql`(${t.source} = 'admin') = (${t.personId} is not null) and (${t.personId} is null or length(${t.personId}) > 0)`,
     ),
     check(
       "clock_confirmations_record_ck",

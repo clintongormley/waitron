@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2dbf17a4-40ca-47b2-acb9-d6eb3e003aaa",
+  "id": "0afd995a-3b3c-426f-b13e-41c1821697b1",
   "prevId": "e8f76002-b07f-4359-a478-97e805263018",
   "tables": {
     "acks": {
@@ -397,7 +397,7 @@
         },
         "clock_confirmations_person_ck": {
           "name": "clock_confirmations_person_ck",
-          "value": "(\"clock_confirmations\".\"source\" = 'admin') = (\"clock_confirmations\".\"person_id\" is not null and length(\"clock_confirmations\".\"person_id\") > 0)"
+          "value": "(\"clock_confirmations\".\"source\" = 'admin') = (\"clock_confirmations\".\"person_id\" is not null) and (\"clock_confirmations\".\"person_id\" is null or length(\"clock_confirmations\".\"person_id\") > 0)"
         },
         "clock_confirmations_record_ck": {
           "name": "clock_confirmations_record_ck",

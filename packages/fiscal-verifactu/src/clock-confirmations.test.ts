@@ -220,6 +220,11 @@ describe("clock_confirmations", () => {
       check: "clock_confirmations_person_ck",
     },
     {
+      name: "a devices confirmation naming an empty person",
+      overrides: { source: "devices", personId: "" } as Partial<ConfirmationRow>,
+      check: "clock_confirmations_person_ck",
+    },
+    {
       name: "an undeclared source",
       overrides: { source: "clock" as ConfirmationRow["source"] },
       check: "clock_confirmations_source_ck",
