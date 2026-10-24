@@ -293,6 +293,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         clockConfirm: {
           backend: new FakeFiscalBackend(db),
           witnesses: () => [],
+          clearWitnesses: () => {},
           clock: systemClock(),
           nodeId: "node-1",
           steady: () => 0,

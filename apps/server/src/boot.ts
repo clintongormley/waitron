@@ -2300,6 +2300,8 @@ async function bootServer(
     backend: tillBackend,
     store: clockWitnesses,
     clock: tillClock,
+    boot: boxBoot,
+    nodeId: till.nodeId,
     read: (fn) => db.withWriteLock(() => fn(db)),
     transaction: (fn) => withTransaction(db, fn),
     filesRecords,
@@ -2456,6 +2458,7 @@ async function bootServer(
       clockConfirm: {
         backend: tillBackend,
         witnesses: () => clockWitnesses.witnesses(),
+        clearWitnesses: () => clockWitnesses.clear(),
         clock: tillClock,
         nodeId: till.nodeId,
         steady: () => performance.now(),

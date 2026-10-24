@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   AuthorityTimeSample,
+  BootReading,
+  ClockConfirmation,
   ClockProvedWrong,
   ClockStopState,
   ClockWitness,
@@ -19,10 +21,22 @@ const STOPPED: ClockStopState = {
   lastRecordOffsetMinutes: 120,
   recordId: "record-1",
   gapMs: 3_600_000,
-  restart: null,
-  offer: "none" as ClockStopState["offer"],
-  proof: { authority: null, devices: [] },
+  proof: "none",
+  agreeing: { authority: null, devices: [] },
   contrary: { authority: null, devices: [] },
+  confirmation: null,
+};
+
+const BOOT: BootReading = { ms: 9_000_000, id: "boot-watch-test" };
+
+const CONFIRMATION: ClockConfirmation = {
+  id: "confirmation-1",
+  seq: 1,
+  source: "devices",
+  personId: null,
+  confirmedAt: "2026-07-20T18:00:15.000Z",
+  checkId: "check-1",
+  recordId: "record-1",
 };
 
 function harness(
@@ -33,6 +47,8 @@ function harness(
     newAuthority?: ClockWitness[][];
     note?: (tx: Transaction, input: ClockProvedWrong) => Promise<unknown>;
     seat?: "full" | "empty";
+    /** The seat also opens checks and confirms the clock. */
+    checks?: boolean;
   } = {},
 ) {
   let wallMs = START_MS;
@@ -56,12 +72,23 @@ function harness(
       options.note ??
         (async () => ({ recorded: [] as string[], unused: [] as string[], held: [] as string[] })),
     ),
+    ...(options.checks === true
+      ? {
+          openClockCheck: vi.fn<(...args: unknown[]) => Promise<{ id: string } | null>>(
+            async () => ({ id: "check-1" }),
+          ),
+          confirmClockStop: vi.fn<
+            (...args: unknown[]) => Promise<{ confirmation: ClockConfirmation | null }>
+          >(async () => ({ confirmation: CONFIRMATION })),
+        }
+      : {}),
   };
   const store = {
     noteAuthority: vi.fn(),
     witnesses: vi.fn((): ClockWitness[] => []),
     takeNewAuthority: vi.fn((): ClockWitness[] => queued.shift() ?? []),
     endStop: vi.fn(),
+    clear: vi.fn(),
   };
   const read = vi.fn(async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX));
   const transaction = vi.fn(async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX));
@@ -78,6 +105,8 @@ function harness(
     },
     wall: () => wallMs,
     monotonic: () => monoMs,
+    boot: { readBoot: () => BOOT, elapsed: () => monoMs },
+    nodeId: "node-1",
     read: read as never,
     transaction: transaction as never,
     filesRecords: () => files.current,
@@ -172,10 +201,12 @@ describe("startClockWatch", () => {
     const h = harness({
       stop: {
         ...STOPPED,
-        restart: {
+        proof: "confirmed",
+        confirmation: {
+          id: "confirmation-0",
+          source: "admin",
           personId: "p",
-          restartedAt: "2026-07-20T18:00:00.000Z",
-          clockAt: "2026-07-20T18:00:00.000Z",
+          confirmedAt: "2026-07-20T18:00:00.000Z",
         },
       },
     });
@@ -502,6 +533,136 @@ describe("startClockWatch", () => {
     expect(h.timers).toHaveLength(1);
   });
 
+  it("opens a check, in a transaction, at each look during a stop with the reading, the boot reading and the node, and logs a check once", async () => {
+    const h = harness({ checks: true });
+    await h.tick();
+    expect(h.backend.openClockCheck).toHaveBeenCalledExactlyOnceWith(TX, {
+      reading: { instant: new Date(h.wall()), offsetMinutes: 120 },
+      boot: BOOT,
+      nodeId: "node-1",
+    });
+    expect(h.transaction).toHaveBeenCalledTimes(1);
+    await h.tick();
+    expect(h.backend.openClockCheck).toHaveBeenCalledTimes(2);
+    expect(h.logs).toEqual([
+      { level: "info", event: "clock_watch.stop_opened", fields: { checkId: "check-1" } },
+    ]);
+    h.backend.openClockCheck!.mockResolvedValueOnce({ id: "check-2" });
+    await h.tick();
+    expect(h.logs.map((line) => line.fields)).toEqual([
+      { checkId: "check-1" },
+      { checkId: "check-2" },
+    ]);
+  });
+
+  it("opens no check while the clock is not behind, and logs none when the seat opens none", async () => {
+    const h = harness({ checks: true, stop: null });
+    await h.tick();
+    expect(h.backend.openClockCheck).not.toHaveBeenCalled();
+    h.state.stop = STOPPED;
+    h.backend.openClockCheck!.mockResolvedValueOnce(null);
+    await h.tick();
+    expect(h.backend.openClockCheck).toHaveBeenCalledTimes(1);
+    expect(h.logs).toEqual([]);
+  });
+
+  it("confirms the clock once when the witnesses are ready, with what the stop was judged on, and clears the store", async () => {
+    const device: ClockWitness = {
+      kind: "device",
+      id: "device-1",
+      address: "192.168.10.31",
+      boxAt: "2026-07-20T18:00:10.000Z",
+      witnessAt: "2026-07-20T18:00:10.000Z",
+      uncertaintyMs: 0,
+    };
+    const h = harness({ checks: true, stop: { ...STOPPED, proof: "ready" } });
+    h.store.witnesses.mockReturnValue([device]);
+    await h.tick();
+    expect(h.backend.confirmClockStop).toHaveBeenCalledExactlyOnceWith(TX, {
+      reading: { instant: new Date(h.wall()), offsetMinutes: 120 },
+      boot: BOOT,
+      witnesses: [device],
+      nodeId: "node-1",
+    });
+    expect(h.store.clear).toHaveBeenCalledTimes(1);
+    expect(h.logs).toContainEqual({
+      level: "info",
+      event: "clock_watch.confirmed",
+      fields: { confirmationId: "confirmation-1", source: "devices" },
+    });
+  });
+
+  it.each(["none", "contrary", "confirmed"] as const)(
+    "asks for no confirmation when the proof is %s",
+    async (proof) => {
+      const h = harness({ checks: true, stop: { ...STOPPED, proof } });
+      await h.tick();
+      expect(h.backend.confirmClockStop).not.toHaveBeenCalled();
+      expect(h.store.clear).not.toHaveBeenCalled();
+    },
+  );
+
+  it("clears nothing and logs no confirmation when the seat confirms nothing", async () => {
+    const h = harness({ checks: true, stop: { ...STOPPED, proof: "ready" } });
+    h.backend.confirmClockStop!.mockResolvedValueOnce({ confirmation: null });
+    await h.tick();
+    expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(1);
+    expect(h.store.clear).not.toHaveBeenCalled();
+    expect(h.logs.map((line) => line.event)).toEqual(["clock_watch.stop_opened"]);
+  });
+
+  it("logs a failing confirmation and confirms at the next look", async () => {
+    const h = harness({ checks: true, stop: { ...STOPPED, proof: "ready" } });
+    h.backend.confirmClockStop!.mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    await h.tick();
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "clock_watch.check_failed",
+      fields: { errorCode: "storage.disk_full" },
+    });
+    expect(h.store.clear).not.toHaveBeenCalled();
+    await h.tick();
+    expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(2);
+    expect(h.store.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks AEAT at most once a minute by the steady clock during a stop", async () => {
+    const h = harness();
+    await h.tick();
+    await h.tick();
+    await h.tick();
+    await h.tick();
+    expect(h.backend.clockStopState).toHaveBeenCalledTimes(4);
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
+    await h.tick();
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks AEAT again when the steady clock cannot be read", async () => {
+    const h = harness();
+    await h.tick();
+    await h.tick({ monoMs: Number.NaN, wallMs: 15_000 });
+    expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(2);
+  });
+
+  it("stop waits for a confirmation in flight", async () => {
+    const h = harness({ checks: true, stop: { ...STOPPED, proof: "ready" } });
+    let release!: (answer: { confirmation: ClockConfirmation | null }) => void;
+    h.backend.confirmClockStop!.mockImplementationOnce(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    h.timers.at(-1)!.fn();
+    await vi.waitFor(() => expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(1));
+    let stopped = false;
+    const stopping = h.watch.stop().then(() => (stopped = true));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(stopped).toBe(false);
+    release({ confirmation: CONFIRMATION });
+    await stopping;
+    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
+    expect(h.timers).toHaveLength(1);
+  });
+
   it("runs on the real clocks and timer when none are given", async () => {
     const watch = startClockWatch({
       backend: { assertRecordableAt: () => {} },
@@ -510,8 +671,10 @@ describe("startClockWatch", () => {
         witnesses: vi.fn(() => []),
         takeNewAuthority: vi.fn(() => []),
         endStop: vi.fn(),
+        clear: vi.fn(),
       },
       clock: { now: () => ({ instant: new Date(), offsetMinutes: 0 }) as never },
+      nodeId: "node-1",
       read: (fn) => fn(TX),
       transaction: (fn) => fn(TX),
       filesRecords: () => true,

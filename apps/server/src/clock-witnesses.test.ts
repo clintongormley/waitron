@@ -273,6 +273,29 @@ describe("createClockWitnessStore", () => {
     ]);
   });
 
+  it("forgets every reading when cleared, but still hands AEAT's untaken ones to takeNewAuthority", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteDevice("till-1", "192.168.10.31", START_WALL, clock.arrived());
+    const agreeing = { authorityMs: START_WALL, uncertaintyMs: 100, at: clock.arrived() };
+    const disagreeing = {
+      authorityMs: START_WALL + 3_600_000,
+      uncertaintyMs: 100,
+      at: clock.arrived(),
+    };
+    store.noteAuthority(agreeing);
+    store.noteAuthority(disagreeing);
+    expect(store.witnesses()).toHaveLength(3);
+    store.clear();
+    expect(store.witnesses()).toEqual([]);
+    expect(store.takeNewAuthority().map((witness) => witness.witnessAt)).toEqual([
+      iso(START_WALL),
+      iso(START_WALL + 3_600_000),
+    ]);
+    store.noteDevice("till-1", "192.168.10.31", START_WALL, clock.arrived());
+    expect(store.witnesses()).toHaveLength(1);
+  });
+
   it("reads the box's own clocks when none are injected", () => {
     const store = createClockWitnessStore();
     const now = Date.now();

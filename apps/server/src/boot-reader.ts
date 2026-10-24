@@ -50,7 +50,3 @@ export function bootReader(
     elapsed: uptimeMs,
   };
 }
-
-export function elapsedClock(): () => number {
-  return bootReader().elapsed;
-}

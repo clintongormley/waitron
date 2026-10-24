@@ -31,6 +31,9 @@ export interface ClockWitnessStore {
   takeNewAuthority(): ClockWitness[];
   /** The stop has ended: forget the kept AEAT disagreements. */
   endStop(): void;
+  /** The clock was confirmed: forget every reading `witnesses()` would hand out. AEAT readings
+   * not yet taken by `takeNewAuthority` stay, so a disproof among them is still recorded. */
+  clear(): void;
 }
 
 interface Kept {
@@ -108,6 +111,11 @@ export function createClockWitnessStore(
       return taken;
     },
     endStop() {
+      disagreements = [];
+    },
+    clear() {
+      devices.clear();
+      authorities = [];
       disagreements = [];
     },
   };

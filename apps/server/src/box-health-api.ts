@@ -23,6 +23,8 @@ export interface BoxHealthApiDeps {
   clockConfirm: {
     backend: FiscalBackend;
     witnesses: () => readonly ClockWitness[];
+    /** Empties the witness store once a confirmation has committed. */
+    clearWitnesses: () => void;
     clock: TrustedClock;
     nodeId: string;
     /** Times each challenge; never stepped by a change of the wall clock. */
@@ -162,6 +164,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
           throw new AppError("clock.confirm_refused", { reason: "not_stopped" });
         return answer.confirmation;
       });
+      clockConfirm.clearWitnesses();
       return c.json(
         {
           confirmationId: confirmation.id,

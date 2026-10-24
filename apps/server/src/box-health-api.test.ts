@@ -70,6 +70,7 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     clockConfirm: {
       backend: new FakeFiscalBackend(db),
       witnesses: () => [],
+      clearWitnesses: () => {},
       clock: systemClock(),
       nodeId: "node-1",
       steady: () => 0,

@@ -216,6 +216,7 @@ async function stoppedBox(
       clockConfirm: {
         backend,
         witnesses: () => witnesses.witnesses(),
+        clearWitnesses: () => witnesses.clear(),
         clock,
         nodeId: venue.cfg.nodeId,
         steady: () => steadyMs,
@@ -294,7 +295,8 @@ function noteDevice(stop: Stop, offsetMs: number): void {
 let deviceCount = 0;
 
 /** Runs `checks` checks of a clock watch on the stop's clock and witnesses, with no jump, on the
- * real fiscal seat except for AEAT's time, which `readAuthorityTime` answers. */
+ * real fiscal seat except for AEAT's time, which `readAuthorityTime` answers. The steady clock
+ * moves a minute before each check, so each may ask AEAT. */
 async function watchChecks(
   stop: Stop,
   checks: number,
@@ -302,6 +304,7 @@ async function watchChecks(
 ): Promise<void> {
   let fire = (): void => {};
   let armed = 0;
+  let steadyMs = 0;
   const watch = startClockWatch({
     backend: Object.create(venue.backend, {
       readAuthorityTime: { value: readAuthorityTime },
@@ -309,7 +312,9 @@ async function watchChecks(
     store: stop.witnesses,
     clock: stop.clock,
     wall: () => 0,
-    monotonic: () => 0,
+    monotonic: () => steadyMs,
+    boot: { readBoot: () => BOOT, elapsed: () => steadyMs },
+    nodeId: venue.cfg.nodeId,
     read: (fn) => venue.db.withWriteLock(() => fn(venue.db)),
     transaction: (fn) => withTransaction(venue.db, fn),
     filesRecords: () => true,
@@ -323,6 +328,7 @@ async function watchChecks(
     },
   });
   for (let check = 1; check <= checks; check += 1) {
+    steadyMs += MINUTE;
     fire();
     await vi.waitFor(() => expect(armed).toBe(check + 1));
   }
@@ -657,6 +663,20 @@ it("answers a confirmation with its id, its source and when it was confirmed", a
   });
   const row = confirmationRow(confirmed.json.confirmationId as string);
   expect(row).toMatchObject({ source: "admin", person_id: mario.id, registro_id: stop.recordId });
+});
+
+it("empties the witness store after a confirmation, and not after a refusal", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  noteDevice(stop, 0);
+  expect(stop.witnesses.witnesses()).toHaveLength(1);
+
+  const refused = await confirm(stop, mario.cookie, 61_000);
+  expect(refused.json).toEqual(refusal("differs"));
+  expect(stop.witnesses.witnesses()).toHaveLength(1);
+
+  const confirmed = await confirm(stop, mario.cookie);
+  expect(confirmed.status).toBe(200);
+  expect(stop.witnesses.witnesses()).toEqual([]);
 });
 
 it("refuses a second administrator once the first has confirmed", async () => {
