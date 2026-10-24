@@ -21,11 +21,14 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { codeOf } from "@waitron/dashboard-kit";
 import {
   BUMP_MODES,
+  CHANGES_AFTER_SENDING,
   isBumpMode,
+  isChangesAfterSending,
   isStationColour,
   isTicketGrouping,
   TICKET_GROUPINGS,
   type BumpMode,
+  type ChangesAfterSending,
   type StationColour,
   type StationThresholds,
   type TicketGrouping,
@@ -44,6 +47,7 @@ export type StationEditorStation = {
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
   bumpMode: BumpMode;
+  changesAfterSending: ChangesAfterSending;
   printerIds: readonly string[];
 } & StationThresholds;
 export interface StationEditorPrinter {
@@ -61,6 +65,7 @@ export type StationEditorSave = {
   ticketGrouping?: TicketGrouping;
   printHeldWork?: boolean;
   bumpMode?: BumpMode;
+  changesAfterSending?: ChangesAfterSending;
 } & Partial<StationThresholds>;
 
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
@@ -83,6 +88,7 @@ type Draft = {
   ticketGrouping: TicketGrouping;
   printHeldWork: boolean;
   bumpMode: BumpMode;
+  changesAfterSending: ChangesAfterSending;
 } & { [K in TimingField]: string };
 export type StationRefusal = { code: string; params?: Record<string, unknown> };
 type Refusal = StationRefusal;
@@ -117,6 +123,7 @@ const equal = (a: Draft, b: Draft) =>
   a.ticketGrouping === b.ticketGrouping &&
   a.printHeldWork === b.printHeldWork &&
   a.bumpMode === b.bumpMode &&
+  a.changesAfterSending === b.changesAfterSending &&
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
@@ -225,6 +232,16 @@ function bumpOptions() {
   return BUMP_MODES.map((value) => ({ value, label: t(`prep.bump_mode.${value}`) }));
 }
 
+const CHANGES_LABELS = {
+  never: "prep.changes_after_sending.never",
+  held: "prep.changes_after_sending.held",
+  "held-or-waiting": "prep.changes_after_sending.held_or_waiting",
+} as const satisfies Record<ChangesAfterSending, string>;
+
+function changesOptions() {
+  return CHANGES_AFTER_SENDING.map((value) => ({ value, label: t(CHANGES_LABELS[value]) }));
+}
+
 function timingDraft(station: StationThresholds) {
   return Object.fromEntries(TIMING_FIELDS.map((field) => [field, String(station[field])])) as {
     [K in TimingField]: string;
@@ -303,6 +320,7 @@ export class StationEditor extends LitElement {
     ticketGrouping: "combined",
     printHeldWork: false,
     bumpMode: "line",
+    changesAfterSending: "held-or-waiting",
     warmAfterMinutes: "",
     overdueAfterMinutes: "",
     forgottenAfterMinutes: "",
@@ -360,6 +378,7 @@ export class StationEditor extends LitElement {
         ticketGrouping: station.ticketGrouping,
         printHeldWork: station.printHeldWork,
         bumpMode: station.bumpMode,
+        changesAfterSending: station.changesAfterSending,
         ...timingDraft(station),
       };
       this.baseline = copy(this.draft);
@@ -431,7 +450,14 @@ export class StationEditor extends LitElement {
 
   private changed(
     draft: Draft,
-    field: Field | "rest" | "printMovedSlips" | "ticketGrouping" | "printHeldWork" | "bumpMode",
+    field:
+      | Field
+      | "rest"
+      | "printMovedSlips"
+      | "ticketGrouping"
+      | "printHeldWork"
+      | "bumpMode"
+      | "changesAfterSending",
   ) {
     this.draft = draft;
     this.printerDropped = false;
@@ -459,6 +485,9 @@ export class StationEditor extends LitElement {
         : {}),
       ...(draft.printHeldWork !== base.printHeldWork ? { printHeldWork: draft.printHeldWork } : {}),
       ...(draft.bumpMode !== base.bumpMode ? { bumpMode: draft.bumpMode } : {}),
+      ...(draft.changesAfterSending !== base.changesAfterSending
+        ? { changesAfterSending: draft.changesAfterSending }
+        : {}),
       ...Object.fromEntries(
         TIMING_FIELDS.filter((field) => timingText(draft[field]) !== timingText(base[field])).map(
           (field) => [field, Number(draft[field].trim())],
@@ -696,6 +725,19 @@ export class StationEditor extends LitElement {
             }}
           ></wt-switch>
           <p class="note" data-test="held-work-hint">${t("prep.print_held_work_hint")}</p>
+          <wt-combobox
+            name="changesAfterSending"
+            label=${t("prep.changes_after_sending")}
+            search="never"
+            .value=${this.draft.changesAfterSending}
+            .options=${changesOptions()}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (current() && isChangesAfterSending(value))
+                this.changed({ ...this.draft, changesAfterSending: value }, "changesAfterSending");
+            }}
+          ></wt-combobox>
         </div>
         <wt-form-actions
           slot="footer"

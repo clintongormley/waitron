@@ -21,6 +21,7 @@ class StationEditorLeaveApp extends LitElement {
           ticketGrouping: "combined",
           printHeldWork: false,
           bumpMode: "line",
+          changesAfterSending: "held-or-waiting",
           printerIds: ["epson"],
           warmAfterMinutes: 3,
           overdueAfterMinutes: 5,

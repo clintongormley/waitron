@@ -311,6 +311,10 @@ const en = {
   "prep.bump_mode": "Done on the screen",
   "prep.bump_mode.line": "One item at a time",
   "prep.bump_mode.ticket": "Whole ticket at once",
+  "prep.changes_after_sending": "Changes after sending",
+  "prep.changes_after_sending.never": "Not allowed",
+  "prep.changes_after_sending.held": "While held",
+  "prep.changes_after_sending.held_or_waiting": "While held or waiting",
   "prep.print_held_work": "Print held groups in advance",
   "prep.print_held_work_hint":
     "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.",
@@ -1200,6 +1204,10 @@ const es: Record<keyof typeof en, string> = {
   "prep.bump_mode": "Marcado en la pantalla",
   "prep.bump_mode.line": "Un plato cada vez",
   "prep.bump_mode.ticket": "Toda la comanda a la vez",
+  "prep.changes_after_sending": "Cambios tras el envío",
+  "prep.changes_after_sending.never": "No permitidos",
+  "prep.changes_after_sending.held": "Solo en espera",
+  "prep.changes_after_sending.held_or_waiting": "En espera o sin empezar",
   "prep.print_held_work": "Imprimir por adelantado los grupos en espera",
   "prep.print_held_work_hint":
     "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",

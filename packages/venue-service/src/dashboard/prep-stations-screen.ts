@@ -758,6 +758,7 @@ export class PrepStationsScreen extends LitElement {
           ticketGrouping: station.ticketGrouping,
           printHeldWork: station.printHeldWork,
           bumpMode: station.bumpMode,
+          changesAfterSending: station.changesAfterSending,
           printerIds: this.#printersOf(station.id),
           warmAfterMinutes: station.warmAfterMinutes,
           overdueAfterMinutes: station.overdueAfterMinutes,

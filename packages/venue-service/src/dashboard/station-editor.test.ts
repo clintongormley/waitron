@@ -26,6 +26,7 @@ const GRILL: StationEditorStation = {
   ticketGrouping: "combined",
   printHeldWork: false,
   bumpMode: "line",
+  changesAfterSending: "held-or-waiting",
   printerIds: ["epson"],
   warmAfterMinutes: 5,
   overdueAfterMinutes: 12,
@@ -72,6 +73,8 @@ const groupingField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=ticketGrouping]")!;
 const bumpField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=bumpMode]")!;
+const changesField = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=changesAfterSending]")!;
 const heldSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=printHeldWork]")!;
 const saveButton = (el: StationEditor) =>
@@ -680,6 +683,47 @@ it("reads the bump mode in Spanish", async () => {
   expect(bumpField(el).options.map(({ label }) => label)).toEqual([
     "Un plato cada vez",
     "Toda la comanda a la vez",
+  ]);
+});
+
+it("opens on the station's changes after sending, last before the buttons", async () => {
+  const el = await mount({ ...GRILL, changesAfterSending: "held" });
+  expect(changesField(el).label).toBe("Changes after sending");
+  expect(changesField(el).value).toBe("held");
+  expect(changesField(el).options.map(({ value, label }) => [value, label])).toEqual([
+    ["never", "Not allowed"],
+    ["held", "While held"],
+    ["held-or-waiting", "While held or waiting"],
+  ]);
+  expect(changesField(el).previousElementSibling).toBe($(el, "[data-test=held-work-hint]"));
+  expect(changesField(el).nextElementSibling).toBeNull();
+});
+
+it("sends only a changed changes after sending, and nothing for a choice put back", async () => {
+  const el = await mount({ ...GRILL, changesAfterSending: "held" });
+  const seen = saves(el);
+  const pick = async (value: string) => {
+    changesField(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    await el.updateComplete;
+  };
+  await pick("never");
+  expect(saveButton(el).disabled).toBe(false);
+  await pick("held");
+  expect(saveButton(el).disabled).toBe(true);
+  await pick("Held");
+  expect(saveButton(el).disabled).toBe(true);
+  await pick("never");
+  await save(el);
+  expect(seen).toEqual([{ changesAfterSending: "never" }]);
+});
+
+it("reads changes after sending in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es" });
+  expect(changesField(el).label).toBe("Cambios tras el envío");
+  expect(changesField(el).options.map(({ label }) => label)).toEqual([
+    "No permitidos",
+    "Solo en espera",
+    "En espera o sin empezar",
   ]);
 });
 
