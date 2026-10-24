@@ -12,8 +12,8 @@ import { deviceProfileAdmissionPersons } from "./schema/profile-admission.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import { sessions } from "./schema/sessions.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
-import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
-import { passkeyProviderName } from "./passkey-providers.js";
+import { webauthnChallenges } from "./schema/webauthn.js";
+import { readPasskeys } from "./profile.js";
 import { SECRET_HASH_PREFIX } from "./secret-hash.js";
 
 /** True when the column holds a value; a secret's existence is tested in SQL so the secret itself
@@ -76,16 +76,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .where(eq(deviceProfileAdmissionPersons.personId, personId))
       .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
 
-    const passkeys = await tx
-      .select({
-        name: webauthnCredentials.name,
-        aaguid: webauthnCredentials.aaguid,
-        createdAt: webauthnCredentials.createdAt,
-        lastUsedAt: webauthnCredentials.lastUsedAt,
-      })
-      .from(webauthnCredentials)
-      .where(eq(webauthnCredentials.personId, personId))
-      .orderBy(asc(webauthnCredentials.createdAt), asc(webauthnCredentials.id));
+    const passkeys = await readPasskeys(tx, personId);
 
     const [codes] = await tx
       .select({
@@ -166,9 +157,9 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
         twoFactorOn: person.twoFactorOn,
         googleLinked: person.googleLinked,
         passkeyOfferedAt: person.passkeyOfferedAt,
-        passkeys: passkeys.map(({ name, aaguid, createdAt, lastUsedAt }) => ({
+        passkeys: passkeys.map(({ name, provider, createdAt, lastUsedAt }) => ({
           name,
-          provider: passkeyProviderName(aaguid),
+          provider,
           createdAt,
           lastUsedAt,
         })),

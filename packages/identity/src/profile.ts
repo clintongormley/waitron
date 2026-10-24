@@ -199,8 +199,7 @@ async function invalidateLinks(tx: Transaction, personId: string): Promise<void>
     );
 }
 
-export async function readOwnProfile(tx: Transaction, input: Owner) {
-  const person = await ownPerson(tx, input);
+export async function readPasskeys(tx: Transaction, personId: string) {
   const rows = await tx
     .select({
       id: webauthnCredentials.id,
@@ -210,12 +209,17 @@ export async function readOwnProfile(tx: Transaction, input: Owner) {
       aaguid: webauthnCredentials.aaguid,
     })
     .from(webauthnCredentials)
-    .where(eq(webauthnCredentials.personId, person.id))
+    .where(eq(webauthnCredentials.personId, personId))
     .orderBy(webauthnCredentials.createdAt, webauthnCredentials.id);
-  const passkeys = rows.map(({ aaguid, ...passkey }) => ({
+  return rows.map(({ aaguid, ...passkey }) => ({
     ...passkey,
     provider: passkeyProviderName(aaguid),
   }));
+}
+
+export async function readOwnProfile(tx: Transaction, input: Owner) {
+  const person = await ownPerson(tx, input);
+  const passkeys = await readPasskeys(tx, person.id);
   return {
     displayName: person.displayName,
     firstNames: person.firstNames,
