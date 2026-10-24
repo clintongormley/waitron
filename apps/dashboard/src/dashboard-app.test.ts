@@ -1726,7 +1726,6 @@ describe("dashboard-app", () => {
           zones: [],
           hours: [],
           readiness: [],
-          settings: { editSentLines: true },
           releaseReminderMinutesByDepartment: {},
           needsClearingDepartmentIds: [],
           serviceSteps: [],
@@ -4502,7 +4501,6 @@ describe("dashboard URL navigation", () => {
             needsClearingDepartmentIds: [],
             serviceSteps: [],
             courses: [],
-            settings: { editSentLines: true },
           }
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
@@ -4577,7 +4575,6 @@ describe("dashboard URL navigation", () => {
             needsClearingDepartmentIds: [],
             serviceSteps: [],
             courses: [],
-            settings: { editSentLines: true },
           }
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -8066,7 +8063,6 @@ describe("department list links inside dashboard capture", () => {
       floorZones: [],
       readiness: [],
       salePolicies: { departments: [], zones: [] },
-      settings: { editSentLines: true },
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: [],
       serviceSteps: [],
@@ -8183,7 +8179,6 @@ describe("mounted public department dialogs", () => {
         ? [{ code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" }]
         : [],
       salePolicies: { departments: [], zones: [] },
-      settings: { editSentLines: true },
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: [],
       serviceSteps: [],

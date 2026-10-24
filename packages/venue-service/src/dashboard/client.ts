@@ -100,7 +100,6 @@ export interface VenueServiceModel {
   zones: ServiceZone[];
   salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
   readiness: VenueReadinessIssue[];
-  settings: VenueServiceSettings;
   /** By active department id: minutes after the work fired before it is served that staff are
    * reminded to fire the next held group; null when that department's reminder is off. */
   releaseReminderMinutesByDepartment: Record<string, number | null>;
@@ -109,10 +108,6 @@ export interface VenueServiceModel {
   serviceSteps: ServiceStep[];
   courses: { id: string; name: string }[];
 }
-export interface VenueServiceSettings {
-  editSentLines: boolean;
-}
-export type VenueServiceSettingsView = Pick<VenueServiceModel, "settings">;
 export interface VenueServiceChoices {
   floorZones: FloorZone[];
 }
@@ -285,15 +280,6 @@ export class VenueServiceApi {
     return { ...model, floorZones };
   }
 
-  async loadSettings(): Promise<VenueServiceSettingsView> {
-    const model = await this.#read<VenueServiceModel>("/management-api/venue-service");
-    return { settings: model.settings };
-  }
-
-  loadSettingsReadOnly(): Promise<VenueServiceSettingsView> {
-    return this.#read<VenueServiceSettingsView>("/management-api/venue-service/settings");
-  }
-
   async loadDepartmentTransfers(departmentId: string): Promise<DepartmentTransfersView> {
     const path = `/management-api/venue-service/departments/${departmentId}/transfers`;
     const [settings, profiles] = await Promise.all([
@@ -385,9 +371,5 @@ export class VenueServiceApi {
       "PATCH",
       { value },
     );
-  }
-
-  saveSettings(settings: VenueServiceSettings): Promise<void> {
-    return this.request("/management-api/venue-service/settings", "PUT", settings);
   }
 }

@@ -113,7 +113,6 @@ const model: VenueServiceView = {
       },
     ],
   },
-  settings: { editSentLines: true },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
   serviceSteps: [],

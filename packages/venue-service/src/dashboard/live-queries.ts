@@ -94,7 +94,6 @@ export const QUERY_DEPENDENCIES = {
     "floor_today_join_tables",
     "floor_today_joins",
   ],
-  settings: ["service_settings"],
   "floor-plan-sets": [
     "floor_plan_sets",
     "floor_plans",

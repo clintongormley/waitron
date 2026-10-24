@@ -63,7 +63,6 @@ const model: VenueServiceView = {
   ],
   readiness: [],
   salePolicies: { departments: [], zones: [] },
-  settings: { editSentLines: true },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
   serviceSteps: [],

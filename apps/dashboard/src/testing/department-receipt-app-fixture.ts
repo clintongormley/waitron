@@ -41,7 +41,6 @@ export function venueServiceModel(
       })),
       zones: [],
     },
-    settings: { editSentLines: true },
     releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
     serviceSteps: [],

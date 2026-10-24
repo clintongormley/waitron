@@ -525,10 +525,6 @@ const en = {
     "{other} and {name} both fall on {date}. {name} applies; change one to choose.",
   "venue.readiness.menu_empty": "has no products for",
   "venue.readiness.zone_menu_unpublished": "needs an active, published menu.",
-  "venue.kitchen_changes": "Changes after sending",
-  "venue.edit_sent_lines": "Allow changes to items already sent to the kitchen",
-  "venue.edit_sent_lines_hint":
-    "When off, staff cannot change or recall an item the kitchen already has; they cancel it instead.",
   "venue.release_reminder": "Remind to fire the next course after",
   "venue.release_reminder.off": "Off",
   "venue.release_reminder.minutes": "{n} minutes",
@@ -1423,10 +1419,6 @@ const es: Record<keyof typeof en, string> = {
     "{other} y {name} caen el {date}. Se aplica {name}; cambia uno para elegir.",
   "venue.readiness.menu_empty": "no tiene productos para",
   "venue.readiness.zone_menu_unpublished": "necesita una carta activa y publicada.",
-  "venue.kitchen_changes": "Cambios tras el envío",
-  "venue.edit_sent_lines": "Permitir cambios en los artículos ya enviados a cocina",
-  "venue.edit_sent_lines_hint":
-    "Si está desactivado, el personal no puede cambiar ni retirar un artículo que ya tiene la cocina; tiene que cancelarlo.",
   "venue.release_reminder": "Avisar para marchar el siguiente curso tras",
   "venue.release_reminder.off": "Deshabilitado",
   "venue.release_reminder.minutes": "{n} minutos",
