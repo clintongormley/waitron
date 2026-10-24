@@ -889,4 +889,12 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(section(el)).toBeNull();
     expect(qa(el, "ul.rows > li")).toHaveLength(7);
   });
+
+  it("still says a failed list read when the only entry is plain", async () => {
+    const { el } = await mount(withOpen([OPEN], new Error("down")));
+    expect(text(q(el, "[data-test=misdated-unavailable]"))).toBe(
+      t("box_status.misdated.read_error"),
+    );
+    expect(q(el, "[data-test=misdated-entry]")).toBeNull();
+  });
 });
