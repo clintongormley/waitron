@@ -23,12 +23,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  clearRoutingCell,
-  kitchenNotices,
-  serviceSettings,
-  workingLineContexts,
-} from "@waitron/venue-service";
+import { clearRoutingCell, kitchenNotices, workingLineContexts } from "@waitron/venue-service";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
@@ -42,6 +37,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { createPrinter } from "@waitron/printing";
 import { printedLines } from "./testing/decode-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import * as orderWrites from "./working-order.js";
 
 let venue: BillVenue;
@@ -1107,24 +1103,114 @@ describe("party Recall to draft", () => {
     },
   );
 
-  it("the venue setting refuses Recall even when a sent dish has no preparation record", async () => {
+  it("a sent dish no station makes can be recalled whatever the stations allow", async () => {
     const p = await setup("fire");
     await venue.db.delete(ticketItems).where(eq(ticketItems.workingOrderId, p.tabId));
-    await venue.db
-      .insert(serviceSettings)
-      .values({ id: 1, editSentLines: false })
-      .onConflictDoUpdate({ target: serviceSettings.id, set: { editSentLines: false } });
+    await inTx(venue, (tx) => setChangesAfterSending(tx, "never"));
+    try {
+      expect((await recall(p.partyId, p.line.id)).status).toBe(200);
+      expect(
+        await venue.db
+          .select({ id: orderDraftRecalledLines.id })
+          .from(orderDraftRecalledLines)
+          .where(eq(orderDraftRecalledLines.sourceLineId, p.line.id)),
+      ).toHaveLength(1);
+    } finally {
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
+    }
+  });
+
+  it("a held dish at a While held station is recalled; a waiting one is refused, changing nothing", async () => {
+    await inTx(venue, (tx) => setChangesAfterSending(tx, "held"));
+    try {
+      const held = await setup("hold");
+      expect((await recall(held.partyId, held.line.id)).status).toBe(200);
+      const waiting = await setup("fire");
+      const before = await frozen(waiting.partyId);
+      expect((await recall(waiting.partyId, waiting.line.id)).json).toMatchObject({
+        code: "ticket.already_fired",
+        params: { workingOrderId: waiting.tabId },
+      });
+      expect(await frozen(waiting.partyId)).toEqual(before);
+    } finally {
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
+    }
+  });
+
+  it("a dish at a Not allowed station is refused even while held, changing nothing", async () => {
+    await inTx(venue, (tx) => setChangesAfterSending(tx, "never"));
+    try {
+      const p = await setup("hold");
+      const before = await frozen(p.partyId);
+      expect((await recall(p.partyId, p.line.id)).json).toMatchObject({
+        code: "ticket.already_fired",
+        params: { workingOrderId: p.tabId },
+      });
+      expect(await frozen(p.partyId)).toEqual(before);
+    } finally {
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
+    }
+  });
+
+  it("a split-off extra's station can refuse its dish's Recall", async () => {
+    const p = await setup("hold");
+    const sideId = (
+      await inTx(venue, (tx) => createStation(tx, venue.cfg, { name: `Side-${randomUUID()}` }))
+    ).id;
+    const extraId = randomUUID();
+    await venue.db.insert(workingOrderLines).values({
+      id: extraId,
+      workingOrderId: p.tabId,
+      lineNo: 2,
+      parentLineId: p.line.id,
+      name: "Side extra",
+      descriptions: { "es-ES": "Customer extra" },
+      quantity: 1000,
+      unitPriceGross: 100,
+      lineTotal: 100,
+      vatClass: "general",
+      groupId: p.groupId,
+    });
+    await venue.db.insert(ticketItems).values({
+      nodeId: venue.cfg.nodeId,
+      workingOrderId: p.tabId,
+      workingOrderLineId: extraId,
+      stationId: sideId,
+      state: "queued",
+      firedAt: null,
+    });
+    await inTx(venue, (tx) => setChangesAfterSending(tx, "never", [sideId]));
     try {
       const before = await frozen(p.partyId);
       expect((await recall(p.partyId, p.line.id)).json).toMatchObject({
         code: "ticket.already_fired",
+        params: { workingOrderId: p.tabId },
       });
       expect(await frozen(p.partyId)).toEqual(before);
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting", [sideId]));
+      expect((await recall(p.partyId, p.line.id)).status).toBe(200);
     } finally {
-      await venue.db
-        .update(serviceSettings)
-        .set({ editSentLines: true })
-        .where(eq(serviceSettings.id, 1));
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
+    }
+  });
+
+  it("a started dish is refused as started at a While held station and at a Not allowed station", async () => {
+    try {
+      for (const value of ["held", "never"] as const) {
+        const p = await setup("fire");
+        await venue.db
+          .update(ticketItems)
+          .set({ state: "preparing" })
+          .where(eq(ticketItems.workingOrderId, p.tabId));
+        await inTx(venue, (tx) => setChangesAfterSending(tx, value));
+        const before = await frozen(p.partyId);
+        expect((await recall(p.partyId, p.line.id)).json).toMatchObject({
+          code: "ticket.already_started",
+        });
+        expect(await frozen(p.partyId)).toEqual(before);
+      }
+    } finally {
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
     }
   });
 

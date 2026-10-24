@@ -1776,7 +1776,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
   });
 });
 
-describe("with changes to sent items switched off", () => {
+describe("when a station does not allow changes after sending", () => {
   it("refuses to recall a line that was sent to a station, and changes nothing", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
@@ -1795,15 +1795,48 @@ describe("with changes to sent items switched off", () => {
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("still recalls a held line that was never sent", async () => {
+  it("a While held station still lets a held line be recalled", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "held"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
     );
 
     await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
+  });
+
+  it("a Not allowed station refuses a held line's recall, changing nothing", async () => {
+    const { cfg, tableId, cafeOffer } = await setupVenue();
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
+    );
+    const before = await sentState(tabId);
+    const ticket = await ticketOfLine(tabId, 1);
+
+    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
+      code: "ticket.already_fired",
+      params: { workingOrderId: tabId },
+    });
+    expect(await sentState(tabId)).toEqual(before);
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("refuses a started line's recall as started, whatever its station allows", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCafe();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    for (const value of ["held", "never"] as const) {
+      await asApp(cfg, (tx) => setChangesAfterSending(tx, value));
+      const before = await sentState(tabId);
+
+      await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
+        code: "ticket.already_started",
+        params: { ticketItemId: ticket.id },
+      });
+      expect(await sentState(tabId)).toEqual(before);
+    }
   });
 
   it("still voids a sent line: the notice is recorded and the line leaves the bill", async () => {
@@ -1823,7 +1856,7 @@ describe("with changes to sent items switched off", () => {
     ]);
   });
 
-  it("recalls a sent line once the setting is back on", async () => {
+  it("recalls a sent line once its station allows it again", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
@@ -2076,7 +2109,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("with changes to sent items switched off, refuses an edit of a sent line, changing nothing", async () => {
+  it("at a Not allowed station, refuses an edit of a sent line, changing nothing", async () => {
     const { cfg, tabId, ticket, lineId, cafeOffer } = await tabWithFiredCafe();
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const before = await linesOf(tabId);
@@ -2105,6 +2138,102 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await linesOf(tabId)).toEqual(before);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id });
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("a started line is refused as started at a While held and at a Not allowed station", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCafe();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    for (const value of ["held", "never"] as const) {
+      await asApp(cfg, (tx) => setChangesAfterSending(tx, value));
+      const before = await linesOf(tabId);
+
+      await expect(
+        asApp(cfg, async (tx) =>
+          updateOrderLine(
+            tx,
+            cfg,
+            tabId,
+            1,
+            { note: "no onions" },
+            await revisionOf(tabId),
+            OPERATOR,
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "ticket.already_started",
+        params: { ticketItemId: ticket.id },
+      });
+
+      expect(await linesOf(tabId)).toEqual(before);
+      expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
+      expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    }
+  });
+
+  it("at a Not allowed station the whole-order save still removes a held dish and a waiting dish, with the waiting one's VOID notice", async () => {
+    const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1" },
+        { menuItemId: aguaOffer, quantity: "1", hold: true },
+      ]),
+    );
+    const waiting = await ticketOfLine(tabId, 1);
+    const held = await ticketOfLine(tabId, 2);
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      operatorId: OPERATOR,
+      revision: await revisionOf(tabId),
+      lines: [{ menuItemId: aguaOffer, quantity: "1" }],
+    });
+
+    expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([3]);
+    expect(await noticesAt(cfg, waiting.stationId)).toEqual([
+      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
+    ]);
+    if (held.stationId !== waiting.stationId)
+      expect(await noticesAt(cfg, held.stationId)).toEqual([]);
+  });
+
+  it("at a Not allowed station the whole-order save still refuses to remove a started dish", async () => {
+    const { cfg, tabId, ticket, aguaOffer } = await tabWithFiredCafe();
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
+    const before = await linesOf(tabId);
+
+    await expect(
+      updateHeldOrder({ db }, cfg, tabId, {
+        operatorId: OPERATOR,
+        revision: await revisionOf(tabId),
+        lines: [{ menuItemId: aguaOffer, quantity: "1" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "ticket.already_started",
+      params: { ticketItemId: ticket.id },
+    });
+
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+  });
+
+  it("a quantity drop of a waiting dish at a Not allowed station goes through as a void of the difference", async () => {
+    const { cfg, tabId, ticket } = await tabWithFiredCafe("2");
+    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "1" }, await revisionOf(tabId), OPERATOR),
+    );
+
+    expect(await linesOf(tabId)).toEqual([
+      expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
+    ]);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, quantity: 1000 });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
+    ]);
   });
 
   it("edits a recalled line freely: no notice, and its held item carries the change when sent again", async () => {

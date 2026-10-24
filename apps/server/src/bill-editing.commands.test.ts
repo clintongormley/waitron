@@ -557,7 +557,7 @@ describe("bill editor in real save and takeover commands", () => {
       { submissionId: id },
     );
   });
-  it("Recall checks the other editor before the venue's sent-edit restriction", async () => {
+  it("Recall checks the other editor before the station's sent-edit restriction", async () => {
     const p = await fixture();
     const source = await sentDish(p);
     const saved = await save(p.partyId, blank(p.tabId), [fresh()], venue.adminId);
