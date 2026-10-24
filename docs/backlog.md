@@ -5062,27 +5062,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#when-the-key-rename-and-the-put-back-both-fail-the-new-certificate-is-left-beside-the-old-key)
 
 - **Loose ends left by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).**
-  - `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process
-    after 120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on
-    NVMe; box storage has not been measured.
-  - A copy with no `tenants` row reads an empty tax id, which neither the command line nor the
-    setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code
-    names that case.
-  - An interrupted bucket rebuild, archive check or archive download leaves its scratch folder —
-    a full copy of the venue database, or the encrypted archive (`archive-download-`, inside
-    `restore-staging`) — under the state folder; the next run makes a new one and does not remove
-    it. Also left open by A538-5. The same holds for the `archive-validate-` folders (a decrypted
-    `venue.db`) and `restore-admission-` folders made directly in `restore-staging`
-    (`apps/server/src/restore.ts`) when the process is killed partway, the setup wizard's preview
-    included; neither boot nor the start's clean-up removes them, and the restore command uses the
-    same names from another process. Found by reading (A1038's review), not run.
-  - A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start
-    (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other
-    way (the dev stack) does not.
-  - Open question: the first start's pointer read and the bucket rebuild's calls (the command
-    line's `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15
-    seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-    `backup.stream_request_failed`). The code does not say why they differ.
+  `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process
+  after 120 seconds without a timer turn.
+  [Detail](backlog/box.md#loose-ends-left-by-sqlite-slice-2-task-9b-642-waitron-restore-restore---from-bucket)
 
 - **Whether a sale's write waited behind the server's fold-back, rather than landing before it, is
   not observed,** and the fold-back of a 256 MiB file is still timed only by the bench rig (results
