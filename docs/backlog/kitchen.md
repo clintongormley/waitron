@@ -217,6 +217,15 @@ Open points:
 - From PR 6: a printer shared by a recorded and an unrecorded station prints one FIRE-marked
   ticket carrying both stations' dishes (`apps/server/src/kitchen-print.ts:662-666`); ask the
   owner whether FIRE should mark only the recorded station's part.
+- From PR 6: the new core table `order_group_hold_stations` has no row in the retention inventory
+  (`docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md`, its 2026-10-23 line);
+  its retention policy is the owner's to choose.
+- From PR 6's review: four server test files mark a group's HOLD ticket printed by writing its
+  stamp straight to the row, without recording any station in `order_group_hold_stations` —
+  `party-allergy.restart`, `party-allergy.submit`, `party-arriving-dishes` and `kitchen-print`.
+  They pass in CI; nobody has checked whether what they assert still depends on HOLD paper
+  reaching a station. `line-service-projections.test.ts` failed for this reason and now records
+  its stations.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
