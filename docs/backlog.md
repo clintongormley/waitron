@@ -1743,6 +1743,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   passes; the build's ledger saw the warning on `dc7ac4b50`, and it prints on A797 slice 4's tip.
   What sets a property inside the update is not traced.
 
+- **A1055. At phone width, a Floor that opens on a later zone leaves its tab scrolled out of
+  sight.** Seen, 2026-10-24 (A797 slice 4's look, 390 px): a handheld whose "Opens first" is
+  Upstairs bar opens there, but the zone tab strip stays at its start, so no highlighted tab shows;
+  tapping the tab scrolls it into view. A handheld with no saved choice opened on that zone by its
+  address does the same, and `apps/till/src/screens/till-floor-screen.ts` is unchanged by that
+  slice, so I believe it predates it; the slice makes it the usual case. Fix: scroll the selected
+  tab into view when the Floor opens on it.
+
+- **A1056. A zone with no tables shows the till's Floor as a blank page with no message.** Seen,
+  2026-10-24 (A797 slice 4's look): the demo's Upstairs bar, a counter zone with no tables, draws
+  nothing on a handheld's Floor whether it is tapped or opened first. Since that slice a handheld
+  can open there. Fix: say the zone has no tables.
+
 - **A934. The till's Spanish for parking an order before hiding a zone says «Retén».**
   `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
   reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
