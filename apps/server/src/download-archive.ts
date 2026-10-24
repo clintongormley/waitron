@@ -57,7 +57,8 @@ export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8A
   const mtime = zipTime(at);
   for (const file of files) {
     const data = typeof file.content === "string" ? strToU8(file.content) : file.content;
-    entries[file.name] = [data, { mtime }];
+    // A PDF is compressed already; deflating it again costs the thread that serves sales.
+    entries[file.name] = [data, { mtime, level: /\.pdf$/i.test(file.name) ? 0 : 6 }];
   }
   return zipSync(entries);
 }

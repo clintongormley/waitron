@@ -1,4 +1,4 @@
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { archiveFileName, zipArchive } from "./download-archive.js";
 
@@ -43,7 +43,38 @@ function u16(bytes: Uint8Array, at: number): number {
   return bytes[at]! | (bytes[at + 1]! << 8);
 }
 
+/** Each entry's compression method, read from the local headers in order: 0 stored, 8 deflated. */
+function methods(zip: Uint8Array): Record<string, number> {
+  const found: Record<string, number> = {};
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  let at = 0;
+  while (view.getUint32(at, true) === 0x04034b50) {
+    const size = view.getUint32(at + 18, true);
+    const nameLength = u16(zip, at + 26);
+    const extraLength = u16(zip, at + 28);
+    found[strFromU8(zip.subarray(at + 30, at + 30 + nameLength))] = u16(zip, at + 8);
+    at += 30 + nameLength + extraLength + size;
+  }
+  return found;
+}
+
 describe("zipArchive", () => {
+  it("stores a PDF as it is and compresses the other files", () => {
+    const text = "x".repeat(1000);
+    const zip = zipArchive(
+      [
+        { name: "profile.json", content: text },
+        { name: "hours.pdf", content: strToU8(text) },
+        { name: "HOURS.PDF", content: strToU8(text) },
+      ],
+      AT,
+    );
+    expect(methods(zip)).toEqual({ "profile.json": 8, "hours.pdf": 0, "HOURS.PDF": 0 });
+    const entries = unzipSync(zip);
+    expect(strFromU8(entries["hours.pdf"]!)).toBe(text);
+    expect(strFromU8(entries["profile.json"]!)).toBe(text);
+  });
+
   it("holds exactly the names and bytes given, strings as UTF-8", () => {
     const binary = new Uint8Array([0, 1, 2, 255, 128]);
     const zip = zipArchive(
