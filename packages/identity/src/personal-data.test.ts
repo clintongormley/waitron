@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { IDENTITY_PERSONAL_DATA } from "./personal-data.js";
+import { DISABLED_IMPORT_PIN_PREFIX, IDENTITY_PERSONAL_DATA } from "./personal-data.js";
 import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
@@ -60,15 +60,15 @@ async function seedFull(
     credentialIds: [s("credential-id-one"), s("credential-id-two")],
     publicKeys: [s("public-key-one"), s("public-key-two")],
     recoveryHashes: [1, 2, 3, 4, 5].map((n) => hash64(s(`recovery-${n}`))),
-    deviceToken: hash64(s("device-session-token")),
+    deviceTokens: [hash64(s("device-session-token")), hash64(s("device-session-token-two"))],
     dashboardTokens: [hash64(s("dashboard-token-open")), hash64(s("dashboard-token-ended"))],
     actionTokens: ["invitation", "reset", "change"].map((p) => hash64(s(`action-token-${p}`))),
     actionCodes: ["invitation", "reset", "change"].map((p) => hash64(s(`action-code-${p}`))),
-    enrollmentCiphertext: s("enrollment-ciphertext-secret"),
-    challenge: s("passkey-challenge-secret"),
-    stateHash: hash64(s("google-state")),
-    nonce: s("google-nonce-secret"),
-    verifier: s("google-verifier-secret"),
+    enrollmentCiphertexts: [s("enrollment-ciphertext-one"), s("enrollment-ciphertext-two")],
+    challenges: [s("passkey-challenge-one"), s("passkey-challenge-two")],
+    stateHashes: [hash64(s("google-state-one")), hash64(s("google-state-two"))],
+    nonces: [s("google-nonce-one"), s("google-nonce-two")],
+    verifiers: [s("google-verifier-one"), s("google-verifier-two")],
   };
   const [person] = await db
     .insert(persons)
@@ -136,13 +136,27 @@ async function seedFull(
     locationId,
     label: s("Bar tablet"),
   });
-  await db.insert(sessions).values({
-    personId,
-    deviceId,
-    tokenHash: secrets.deviceToken,
-    openedAt: t(13),
-    endedAt: t(14),
+  const { deviceId: secondDeviceId } = await seedDevice(db, {
+    locationId,
+    label: s("Kitchen phone"),
   });
+  // Later-first, as for every list below.
+  await db.insert(sessions).values([
+    {
+      personId,
+      deviceId: secondDeviceId,
+      tokenHash: secrets.deviceTokens[1]!,
+      openedAt: t(34),
+      endedAt: null,
+    },
+    {
+      personId,
+      deviceId,
+      tokenHash: secrets.deviceTokens[0]!,
+      openedAt: t(13),
+      endedAt: t(14),
+    },
+  ]);
 
   await db.insert(managementSessions).values([
     {
@@ -200,23 +214,34 @@ async function seedFull(
     },
   ]);
 
-  await db.insert(totpEnrollments).values({
-    personId,
-    encryptedSecret: secrets.enrollmentCiphertext,
-    createdAt: t(30),
-    expiresAt: t(31),
-  });
-  await db
-    .insert(webauthnChallenges)
-    .values({ personId, challenge: secrets.challenge, createdAt: t(32) });
-  await db.insert(googleOidcStates).values({
-    personId,
-    mode: "link",
-    stateHash: secrets.stateHash,
-    nonce: secrets.nonce,
-    verifier: secrets.verifier,
-    expiresAt: t(33),
-  });
+  await db.insert(totpEnrollments).values([
+    {
+      personId,
+      encryptedSecret: secrets.enrollmentCiphertexts[1]!,
+      createdAt: t(35),
+      expiresAt: t(36),
+    },
+    {
+      personId,
+      encryptedSecret: secrets.enrollmentCiphertexts[0]!,
+      createdAt: t(30),
+      expiresAt: t(31),
+    },
+  ]);
+  await db.insert(webauthnChallenges).values([
+    { personId, challenge: secrets.challenges[1]!, createdAt: t(37) },
+    { personId, challenge: secrets.challenges[0]!, createdAt: t(32) },
+  ]);
+  await db.insert(googleOidcStates).values(
+    [1, 0].map((i) => ({
+      personId,
+      mode: "link",
+      stateHash: secrets.stateHashes[i]!,
+      nonce: secrets.nonces[i]!,
+      verifier: secrets.verifiers[i]!,
+      expiresAt: i === 0 ? t(33) : t(38),
+    })),
+  );
 
   // Named so that the name order is the reverse of the insert order.
   const profileNames = [s("Zone kitchen screens"), s("Zone bar tills")];
@@ -245,8 +270,10 @@ async function seedFull(
       s("Laptop key"),
       s("Phone key"),
       s("Bar tablet"),
+      s("Kitchen phone"),
+      ...(who === "marta" ? [] : ["Bitwarden"]),
       ...profileNames,
-      ...Array.from({ length: 34 }, (_, n) => t(n)),
+      ...Array.from({ length: 39 }, (_, n) => t(n)),
     ],
   };
 }
@@ -308,8 +335,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
   it("builds exactly the files decision 10 describes, with every list in its order", async () => {
     const { marta } = await seedBoth();
     const t = (n: number) => at(2021, n);
-    const { profile, signIn } = await downloadParsed(marta.personId);
-    expect(profile).toEqual({
+    const expectedProfile = {
       id: marta.personId,
       displayName: "marta-Display",
       firstNames: "marta-First",
@@ -326,8 +352,8 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         { deviceProfile: "marta-Zone bar tills", admitted: false },
         { deviceProfile: "marta-Zone kitchen screens", admitted: true },
       ],
-    });
-    expect(signIn).toEqual({
+    };
+    const expectedSignIn = {
       pinSet: true,
       passwordSet: true,
       twoFactorOn: true,
@@ -342,7 +368,10 @@ describe("IDENTITY_PERSONAL_DATA", () => {
         { openedAt: t(15), lastSeenAt: t(16), endedAt: t(19) },
         { openedAt: t(17), lastSeenAt: t(18), endedAt: null },
       ],
-      deviceSessions: [{ device: "marta-Bar tablet", openedAt: t(13), endedAt: t(14) }],
+      deviceSessions: [
+        { device: "marta-Bar tablet", openedAt: t(13), endedAt: t(14) },
+        { device: "marta-Kitchen phone", openedAt: t(34), endedAt: null },
+      ],
       accountEmails: [
         {
           purpose: "invitation",
@@ -374,10 +403,21 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       ],
       unfinishedSetups: [
         { kind: "two-factor", startedAt: t(30), expiresAt: t(31) },
+        { kind: "two-factor", startedAt: t(35), expiresAt: t(36) },
         { kind: "passkey", startedAt: t(32), expiresAt: null },
+        { kind: "passkey", startedAt: t(37), expiresAt: null },
         { kind: "google-link", startedAt: null, expiresAt: t(33) },
+        { kind: "google-link", startedAt: null, expiresAt: t(38) },
       ],
-    });
+    };
+    const { profile, signIn } = await downloadParsed(marta.personId);
+    expect(profile).toEqual(expectedProfile);
+    expect(signIn).toEqual(expectedSignIn);
+    // toEqual ignores key order, which decision 10 fixes as written: compare the text too.
+    expect((await download(marta.personId)).map((f) => f.text)).toEqual([
+      `${JSON.stringify(expectedProfile, null, 2)}\n`,
+      `${JSON.stringify(expectedSignIn, null, 2)}\n`,
+    ]);
   });
 
   it("contains no secret of anyone, while the person's own telephone is found", async () => {
@@ -446,6 +486,20 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       status: "suspended",
     });
     expect(suspended.signIn).toEqual(active.signIn);
+  });
+
+  it("does not count the configuration import's placeholder as a PIN", async () => {
+    await seedBoth();
+    const [row] = await suite.db
+      .insert(persons)
+      .values({
+        displayName: "Imported Person",
+        pinHash: `${DISABLED_IMPORT_PIN_PREFIX}${crypto.randomUUID()}`,
+        status: "suspended",
+      })
+      .returning({ id: persons.id });
+    const { signIn } = await downloadParsed(row!.id);
+    expect(signIn).toMatchObject({ pinSet: false });
   });
 
   it("refuses an id with no person as person.not_found", async () => {

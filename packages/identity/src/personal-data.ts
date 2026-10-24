@@ -20,6 +20,10 @@ import { passkeyProviderName } from "./passkey-providers.js";
 const isSet = (column: AnyColumn) =>
   sql<boolean>`${column} is not null`.mapWith((v: number) => v === 1);
 
+/** The start of the `pin_hash` the configuration import writes for an imported person: a value no
+ * PIN matches, so it is not a PIN. */
+export const DISABLED_IMPORT_PIN_PREFIX = "disabled-import:";
+
 const jsonFile = (name: string, value: unknown): PersonalDataFile => ({
   name,
   content: `${JSON.stringify(value, null, 2)}\n`,
@@ -44,7 +48,10 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
         status: persons.status,
         createdAt: persons.createdAt,
         passkeyOfferedAt: persons.passkeyOfferedAt,
-        pinSet: isSet(persons.pinHash),
+        pinSet:
+          sql<boolean>`${persons.pinHash} is not null and substr(${persons.pinHash}, 1, ${DISABLED_IMPORT_PIN_PREFIX.length}) <> ${DISABLED_IMPORT_PIN_PREFIX}`.mapWith(
+            (v: number) => v === 1,
+          ),
         passwordSet: isSet(persons.passwordHash),
         twoFactorOn: isSet(persons.totpSecret),
         googleLinked: isSet(persons.googleSubject),
