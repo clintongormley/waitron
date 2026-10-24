@@ -120,6 +120,7 @@ import {
   multiplyDecimal,
   perDishOptionQuantity,
   rawCentsToDecimal,
+  type ChangesAfterSending,
   type SaleId,
   type StationThresholds,
   stringToThousandths,
@@ -3905,6 +3906,8 @@ export interface TabLine {
   /** Null when the line has no ticket item. A following extra has none; a split-off extra has its own. */
   state: TicketState | null;
   stationId: string | null;
+  /** The line's own station's choice; null when the line has no kitchen record. */
+  changesAfterSending: ChangesAfterSending | null;
   movable: boolean;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved here from another party's bill. */
@@ -3954,6 +3957,7 @@ export async function readTabLines(
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
+      changesAfterSending: kitchenStations.changesAfterSending,
       madeHere: ticketItems.madeHere,
       groupId: workingOrderLines.groupId,
       note: workingOrderLines.note,
@@ -3962,6 +3966,7 @@ export async function readTabLines(
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -4009,6 +4014,7 @@ export async function readTabLines(
       firedAt: row.firedAt,
       state: row.state,
       stationId: row.stationId,
+      changesAfterSending: row.changesAfterSending,
       movable:
         row.state !== null && stillMovable({ state: row.state, madeHere: row.madeHere! }, row),
       groupId: row.groupId,

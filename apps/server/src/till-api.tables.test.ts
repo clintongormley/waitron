@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setRoutingCell, writeEditSentLines } from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -30,6 +30,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
 import { createTable } from "./testing/live-table.js";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
@@ -47,6 +48,8 @@ let productId: string;
 // lines name the offer.
 let menuItemId: string;
 let tablesZoneId: string;
+// A second product routed to no preparation, so its line has no kitchen record.
+let noPreparationMenuItemId: string;
 // A real `floor_zones` row in the counter location: a table's `zoneId` is a FK to `floor_zones`.
 let seededZoneId: string;
 
@@ -90,8 +93,16 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
+      const bread = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: bebidas.id,
+        name: "Pan",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      });
       await assignCatalogueToLocation(tx, loc!.id, cat.id);
-      return p;
+      return { id: p.id, breadId: bread.id };
     });
     productId = product.id;
     cfg = makeCfg(loc!.id, nodeId);
@@ -100,6 +111,15 @@ const suite = useVenueDb({
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
     menuItemId = offers.offerFor(productId);
     tablesZoneId = offers.zoneId;
+    noPreparationMenuItemId = offers.offerFor(product.breadId);
+    await withTransaction(db, (tx) =>
+      setRoutingCell(
+        tx,
+        cfg,
+        { row: { kind: "product", productId: product.breadId }, zoneId: null },
+        { kind: "no_preparation" },
+      ),
+    );
   },
 });
 
@@ -481,6 +501,75 @@ describe("table + tab routes", () => {
       // The suite shares one venue across its cases.
       await withTransaction(suite.db, (tx) => writeEditSentLines(tx, true));
     }
+  });
+
+  it("each tab line carries its own station's changes after sending, and a line with no kitchen work carries none", async () => {
+    const grill = await seedKitchenStation(suite.db, {
+      locationId: cfg.locationId,
+      name: `Grill ${randomUUID().slice(0, 6)}`,
+      isDefault: false,
+    });
+    const bar = await seedKitchenStation(suite.db, {
+      locationId: cfg.locationId,
+      name: `Bar ${randomUUID().slice(0, 6)}`,
+      isDefault: false,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      await setChangesAfterSending(tx, "held", [grill]);
+      await setChangesAfterSending(tx, "never", [bar]);
+    });
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, cfg, { label: `K-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+    );
+    const { tabId, partyId } = await seat(id);
+    const sent = await request(`/api/parties/${partyId}/groups`, {
+      method: "POST",
+      body: JSON.stringify({
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(partyId),
+        groups: [
+          {
+            lines: [
+              { menuItemId, quantity: "1", makeAt: grill },
+              { menuItemId: noPreparationMenuItemId, quantity: "1" },
+            ],
+            release: "fire",
+          },
+          { lines: [{ menuItemId, quantity: "1", makeAt: bar }], release: "hold" },
+        ],
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      }),
+    });
+    expect(sent.status).toBe(200);
+    const read = async () =>
+      (
+        (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+          lines: {
+            stationId: string | null;
+            firedAt: string | null;
+            changesAfterSending: string | null;
+          }[];
+        }
+      ).lines;
+
+    const lines = await read();
+    expect(lines).toHaveLength(3);
+    const atGrill = lines.find((line) => line.stationId === grill);
+    const atBar = lines.find((line) => line.stationId === bar);
+    const unmade = lines.find((line) => line.stationId === null);
+    expect(atGrill).toMatchObject({ changesAfterSending: "held" });
+    expect(atGrill!.firedAt).not.toBeNull();
+    expect(atBar).toMatchObject({ changesAfterSending: "never", firedAt: null });
+    expect(unmade).toMatchObject({ changesAfterSending: null });
+
+    await withTransaction(suite.db, (tx) => setChangesAfterSending(tx, "held-or-waiting", [grill]));
+    const after = await read();
+    expect(after.find((line) => line.stationId === grill)).toMatchObject({
+      changesAfterSending: "held-or-waiting",
+    });
+    expect(after.find((line) => line.stationId === bar)).toMatchObject({
+      changesAfterSending: "never",
+    });
   });
 
   it("a malformed :id on the lines read route → 409 tab.not_open (not a 500)", async () => {
