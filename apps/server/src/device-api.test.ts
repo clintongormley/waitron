@@ -1057,6 +1057,33 @@ describe("Device API — the device-guarded routes", () => {
     ]);
   });
 
+  it("the station screen gives each station's orders that station's bump mode", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const bar = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Bar", isDefault: false }),
+    );
+    const { orderId, items } = await fireOrder(venue);
+    await moveItemToStation(items[1]!, bar.id);
+    await suite.db
+      .update(kitchenStations)
+      .set({ name: "Grill", bumpMode: "ticket" })
+      .where(eq(kitchenStations.id, venue.defaultStationId));
+    const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, bar.id]);
+
+    const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      stations: { id: string; queue: { orderId: string; bumpMode: string }[] }[];
+    };
+    const modes = (stationId: string) =>
+      body.stations
+        .find((station) => station.id === stationId)!
+        .queue.map((group) => [group.orderId, group.bumpMode]);
+    expect(modes(venue.defaultStationId)).toEqual([[orderId, "ticket"]]);
+    expect(modes(bar.id)).toEqual([[orderId, "line"]]);
+  });
+
   it("a station screen lists its stations in display order, each with its own queue, and a narrowed one unavailable in its place", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
