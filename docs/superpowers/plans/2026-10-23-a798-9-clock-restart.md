@@ -473,7 +473,9 @@ names them.
    and whichever of `packages/fiscal-verifactu/src/outage-upgrade.test.ts` (`:32` filters the table)
    and `apps/server/src/hour-recovery-staged.test.ts` (`:81` drops it) pins a table list. Run them
    after generating; ONLY a failure naming one of the two new tables may be answered with a declared
-   entry. Anything else is a STOP.
+   entry. Anything else is a STOP. It also covers `hour-recovery-staged.test.ts`'s `olderBackup()`
+   undoing the new migration first — a new block dropping both tables and its journal row, not just
+   a list entry (pre-flight ruling C25).
 2. `packages/fiscal-verifactu/src/alerts.test.ts` (`FISCAL_ALERTS` `toEqual`) gains the
    `clock.records_misdated` claim (Task R4b).
 
