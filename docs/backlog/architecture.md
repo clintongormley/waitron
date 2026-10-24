@@ -20,11 +20,6 @@ their full text.
   every active admin (recommended proposal, not approval). Both need the actor's fresh non-Google
   proof; the wider option adds supported recorded enrollment for others, not everyone's fresh proof.
 
-  **Original request and reading receipts, retained from 2026-10-14:** The owner asked for a system
-  section where an administrator installs and configures
-  optional modules, starting from the Profile → Security tab's Google login row, which today only
-  says "Google login becomes available when it is configured for this installation."
-
   **What exists today**, read 2026-10-14, not tried on a box:
   - Google login is part of the identity package, not a module. Its OAuth client ID and secret come
     only from `WAITRON_GOOGLE_CLIENT_ID` and `WAITRON_GOOGLE_CLIENT_SECRET`
@@ -135,9 +130,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same condition by construction"
 
-- Found by the retroactive Codex reviews of #621–#626 and #629 (C3.18.12r, 2026-09-25), outside
-  the files their fixes could change or not changeable in a comments-only PR:
-  `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
+- `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
   condition by construction", the claim #637 removed from `health.ts` (a duty can go stale between
   passes: Codex got a 503 with no log line), and #637's review read its list of 503 causes (near
   line 404) as naming one that answers 200 — read, not run. Test titles:
@@ -153,8 +146,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same live-course definition; `fireCourse` calls `requireCourse`
 
-- Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
-  change. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
+- `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
   live-course definition; `fireCourse` calls `requireCourse`. `packages/provisioning/src/venue-apply.ts`
   names a `till.configure` gate for `createDeviceProfile`; the gate is `layout.configure`
   (`packages/layouts/src/device-profile-store.ts`). `docs/developers/conventions-data.md` names a
@@ -176,16 +168,14 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `apps/server` test titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns now
 
-- Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
-  titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns
+- `apps/server` test titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns
   now. The same family: the remaining "not a 500" titles across the `apps/server` route suites,
   which name no engine and were left unprobed by C127 (#1036, #1042), after which no comment or
   test title names a PostgreSQL SQLSTATE as today's behaviour.
 
 ## Pointers outside `docs/` that #597 made stale
 
-- Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
-  comments-only change. Pointers outside `docs/` that #597 made stale: `apps/server/README.md:82`
+- Pointers outside `docs/` that #597 made stale: `apps/server/README.md:82`
   says `packages/migrations/src/apply.ts` carries the lock races, which now live only in #489;
   `packages/db/src/immutability.sql.md:18` cites `apply.ts:105` for the trigger install, which is
   now the `installAppendOnlyTriggers` call at line 74; and `.github/workflows/ci.yml:401` says
@@ -205,7 +195,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## Nothing now checks at run time that a read returns something other than a Node `Buffer`
 
-- `packages/credentials`, found by #577 and not changed. Nothing now checks at run time that a
+- `packages/credentials`: nothing now checks at run time that a
   read returns something other than a Node `Buffer` (the runtime case went with the PostgreSQL
   suite; a 2026-09-22 measurement read `Uint8Array`, `Buffer.isBuffer` false). Nothing checks
   that a caller other than the application cannot read or list the vault; only the encryption
@@ -216,7 +206,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert
 
-- Found by #581 (`packages/scheduler`). The nested `tx.transaction(...)` in `enqueueSuccessor`
+- The nested `tx.transaction(...)` in `enqueueSuccessor`
   wraps one insert, which SQLite backs out by itself when refused, so it changes nothing today;
   `insertClose` in `packages/reporting/src/record-daily-close.ts` is the same case
   (`docs/developers/conventions-data.md` has the probe). Whether to remove these two nested calls,
@@ -239,7 +229,7 @@ beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## `decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no digit bound
 
-- Found by #579 (`packages/shared`). `decimalToCents` refuses an amount over the bound
+- `decimalToCents` refuses an amount over the bound
   (#583), but `centsToDecimal` itself has no digit bound, so a count past 99999999999999 cents
   that reaches it by another route is still turned into an amount without refusal. Comments
   saying drizzle wraps a failed query remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps
@@ -352,8 +342,6 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## `apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree
 
-**Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).**
-
 - **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree.** #460
   declared `@waitron/print-agent-app` as a test-only dependency of `apps/server` (for
   `apps/server/src/print-agent-e2e.test.ts`) and exported `./tcp-probe.js`. Moving `tcp-probe.ts`
@@ -384,8 +372,6 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## These index and key names still read `tenant`, and the columns they name are gone
 
-**Names left behind by the tenant-column removal (#378, 2026-09-16):**
-
 - **These index and key names still read `tenant`, and the columns they name are gone:**
   `print_agents_tenant_node_key`,
   `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
@@ -401,8 +387,6 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## `server.credential_unusable` names an unusable credential, although `server.*` is reserved for facts about the process itself
 
-**Names left behind by the tenant-column removal (#378, 2026-09-16):**
-
 - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
   facts about the process itself.** It is thrown for AEAT's certificate
   (`packages/fiscal-verifactu/src/aeat-transport.ts`), for Stripe's secret key and webhook secret
@@ -414,8 +398,6 @@ run to install the new trigger. Owner question Q5 of A483.
 
 ## `DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1
 
-**Names left behind by the tenant-column removal (#378, 2026-09-16):**
-
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** The field
   reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off
   `> 0`) and `fiscal-none`. A rename would want to keep that "did this pass attempt work?" meaning
@@ -423,8 +405,6 @@ run to install the new trigger. Owner question Q5 of A483.
   a pass that exercised the certificate and skipped.
 
 ## Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce
-
-**What slice 1 left (#490 and the preparation tasks):**
 
 - **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** On
   `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run the query '<sql>'`),
@@ -569,14 +549,7 @@ until A977).
   stays selected, with the QR caption taken from the existing fiscal invoice fixture. The demo
   seed itself is A972's; script-suite test fixtures belong to A976 below. Low priority; A977
   cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
-- **A976 — remaining test-venue defaults.** The shared script-suite fixture
-  (`apps/server/scripts/testing/venue.ts`) now uses English location, operation, street and
-  administrator text (#2004). The demo-test provisioner
-  (`apps/server/scripts/demo-seed/testing/provision-venue.ts`) has English location, street and
-  administrator and operation labels. Under the owner's 2026-10-23 approval, its practice-sales
-  golden now uses the English operation description. A disposable capture compared every field
-  in the five recorded tables: only the 31 `descripcion_operacion` values differed; all other
-  fields and row counts matched. The golden test itself is unchanged. The bill, party, adjustment,
+- **A976 — remaining test-venue defaults.** The bill, party, adjustment,
   split-extras, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults. Screen tests take translated expectations from their strings file.
@@ -711,6 +684,10 @@ reset and operator gates; this entry does not start that job.
     [Detail](architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
 
 ## Decisions and deliberate limits
+
+**Practice-sales operation descriptions (owner, 2026-10-23).** Under the owner's approval,
+the demo-test provisioner's practice-sales golden now uses the English operation description
+(`apps/server/scripts/demo-seed/testing/provision-venue.ts`).
 
 **Operator procedures survive the go-live planning cleanup (owner, 2026-10-21).**
 Keep operating steps in permanent docs, outside `docs/superpowers/` and `docs/handoffs/`.
