@@ -8,7 +8,7 @@ import {
   type WtTabs,
 } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "./icons.js";
-import { LiveData } from "@waitron/dashboard-kit";
+import { createRequest, LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import { DashboardApp } from "./dashboard-app.js";
@@ -23,12 +23,24 @@ import {
   receiptRoot,
 } from "./testing/department-receipt-editor-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
-import { departmentDialog, mountReceiptTab } from "./testing/department-receipt-app-fixture.js";
+import {
+  departmentDialog,
+  mountReceiptTab,
+  venueServiceModel,
+} from "./testing/department-receipt-app-fixture.js";
 
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
+async function venueServiceReads(path: string) {
+  const model = venueServiceModel();
+  const answers: Record<string, unknown> = {
+    "/management-api/venue-service": model,
+    "/management-api/venue-service/settings": { settings: model.settings },
+  };
+  return Response.json(answers[path] ?? []);
+}
 async function mount(
   path = "/manage/venue-settings/view/kitchen",
   locale = "en-GB",
@@ -73,7 +85,7 @@ async function mount(
           sessionDefault: locale,
           venueName: "Venue",
           permissions,
-          modules: [],
+          modules: ["venue-service"],
         }),
         getLocales: async () => ({
           locales: [
@@ -110,6 +122,7 @@ async function mount(
         },
         ...apiOverrides,
       } as unknown as DashboardApi,
+      request: createRequest({ fetchImpl: venueServiceReads }),
     },
     theme,
   );
@@ -119,18 +132,25 @@ async function mount(
       .toBeTruthy();
     return { app, host, logouts: () => logouts, locales };
   }
+  const ready = permissions.includes("venue.view")
+    ? { panel: "dashboard-venue-details-panel", marker: "[data-test=edit]" }
+    : permissions.includes("venue_service.manage")
+      ? { panel: "dashboard-venue-service-settings", marker: "[data-test=kitchen-changes]" }
+      : undefined;
+  if (ready === undefined) {
+    await expect
+      .poll(() => app.shadowRoot!.querySelector("dashboard-venue-settings-screen"))
+      .toBeTruthy();
+    await app.shadowRoot!.querySelector("dashboard-venue-settings-screen")!.updateComplete;
+    return { app, host, logouts: () => logouts, locales };
+  }
   await expect
-    .poll(() => {
-      const screen = app.shadowRoot!.querySelector("dashboard-venue-settings-screen")?.shadowRoot;
-      return (
-        screen
-          ?.querySelector("dashboard-venue-details-panel")
-          ?.shadowRoot?.querySelector("[data-test=edit]") ??
-        screen
-          ?.querySelector("dashboard-kitchen-screen")
-          ?.shadowRoot?.querySelector("[data-test=bump-line]")
-      );
-    })
+    .poll(() =>
+      app
+        .shadowRoot!.querySelector("dashboard-venue-settings-screen")
+        ?.shadowRoot?.querySelector(ready.panel)
+        ?.shadowRoot?.querySelector(ready.marker),
+    )
     .toBeTruthy();
   return { app, host, logouts: () => logouts, locales };
 }
@@ -564,7 +584,7 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
     sessionDefault: "en-GB",
     venueName: legalName,
     permissions: ["venue.view", "venue.configure"],
-    modules: [],
+    modules: ["venue-service"],
   }));
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
     getMe,
@@ -651,7 +671,7 @@ it("a rename answered after Back and Discard closed its dialog still updates the
     sessionDefault: "en-GB",
     venueName: legalName,
     permissions: ["venue.view", "venue.configure"],
-    modules: [],
+    modules: ["venue-service"],
   }));
   let answer!: () => void;
   const { app } = await mount(undefined, "en-GB", "light", {
@@ -743,7 +763,7 @@ it("the newest banner read wins when two reads finish in the opposite order", as
     sessionDefault: "en-GB",
     venueName,
     permissions: ["venue.view", "venue.configure"],
-    modules: [],
+    modules: ["venue-service"],
   });
   const pending: ((value: ReturnType<typeof response>) => void)[] = [];
   const getMe = vi
@@ -782,7 +802,7 @@ it("a failed banner read keeps the name the banner shows", async () => {
       sessionDefault: "en-GB",
       venueName: "Initial SL",
       permissions: ["venue.view", "venue.configure"],
-      modules: [],
+      modules: ["venue-service"],
     })
     .mockRejectedValue(new Error("network"));
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {

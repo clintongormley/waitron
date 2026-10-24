@@ -18,6 +18,36 @@ export function deep(root: ShadowRoot | Element, selector: string): Element | nu
   }
   return null;
 }
+export function venueServiceModel(
+  departments: { id: string; name?: string }[] = [{ id: "bar", name: "Bar" }],
+) {
+  return {
+    departments: departments.map((department) => ({
+      ...department,
+      tradingName: "Casa",
+      active: true,
+    })),
+    zones: [],
+    floorZones: [],
+    readiness: [],
+    salePolicies: {
+      departments: departments.map(({ id }) => ({
+        departmentId: id,
+        orderStart: "counter",
+        paidWhen: "prepay",
+        collectionNumber: "none",
+        receiptPrintMode: "auto",
+        printTradingName: true,
+      })),
+      zones: [],
+    },
+    settings: { editSentLines: true },
+    releaseReminderMinutesByDepartment: {},
+    needsClearingDepartmentIds: [],
+    serviceSteps: [],
+    courses: [],
+  };
+}
 export async function mountReceiptApp(
   options: {
     permissions?: string[];
@@ -40,32 +70,7 @@ export async function mountReceiptApp(
     "",
     options.path ?? "/manage/venue-operations/department/bar/view/receipt",
   );
-  const model = {
-    departments: (options.departments ?? [{ id: "bar", name: "Bar" }]).map((department) => ({
-      ...department,
-      tradingName: "Casa",
-      active: true,
-    })),
-    zones: [],
-    floorZones: [],
-    readiness: [],
-    salePolicies: {
-      departments: (options.departments ?? [{ id: "bar" }]).map(({ id }) => ({
-        departmentId: id,
-        orderStart: "counter",
-        paidWhen: "prepay",
-        collectionNumber: "none",
-        receiptPrintMode: "auto",
-        printTradingName: true,
-      })),
-      zones: [],
-    },
-    settings: { editSentLines: true },
-    releaseReminderMinutesByDepartment: {},
-    needsClearingDepartmentIds: [],
-    serviceSteps: [],
-    courses: [],
-  };
+  const model = venueServiceModel(options.departments);
   const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {
     const answer = options.respond?.(path, init);
     if (answer) return answer;
