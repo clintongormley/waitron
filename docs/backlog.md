@@ -5552,8 +5552,9 @@ _Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
   removes the Vitest-major ignore in `.github/dependabot.yml` (A779).
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
-- **Bundled npm notices stop at a module-type-only package manifest.** Fix the generator to
-  continue to the owning package and test both module layouts and workspace exclusion.
+- **Bundled npm notices stop at a module-type-only package manifest.** Stripe and Nodemailer
+  carry separate installed licence copies until the generator can reach the owning package.
+  Fix the lookup and test both module layouts and workspace exclusion.
   [Detail](backlog/dependencies.md#npm-notices-and-module-type-only-manifests)
 
 - **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN.

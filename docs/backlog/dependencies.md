@@ -216,9 +216,15 @@ The generator's `packageForModule` returns null at that first manifest
 
 The Stripe 23 upgrade carries its installed licence separately in `deploy/third-party/stripe/`.
 Fix the general lookup to walk past manifests without package identity, retain workspace exclusion,
-and run it on CJS and ESM entry paths and other included packages. No claim is made here about
-which other installed packages are affected. Do not remove the separate Stripe copy before checking
-the emitted server notices through the actual build.
+and run it on CJS and ESM entry paths and other included packages.
+
+A1045 (#2039, 24 October 2026) reproduced the same omission for Nodemailer 10.1.4: passing
+its resolved CJS and ESM entries separately to `bundledNpmNotices` returned
+`No bundled npm packages.` for both. Its installed `LICENSE` is copied unchanged into
+`deploy/third-party/nodemailer/`; the 10.1.1 and 10.1.4 licence SHA-256 values both read
+`4f814dcacd2da618d62829ea1f6238701cf421f18a6b36c91c5d8212245e2c78`.
+Do not remove either separate licence copy before checking the emitted server notices through
+the actual build. Which other installed packages are affected remains unverified.
 
 ## The supported Node version
 
