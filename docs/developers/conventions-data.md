@@ -2950,7 +2950,10 @@ dies leaves its file behind; the next holder overwrites it.
 **Every start takes the venue lock before it deletes backup staging; the holder file decides only
 when the lock cannot be taken.** Whatever the free space, a start deletes the copies a backup run
 leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
-`lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it. On a
+`lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
+The same section deletes `<state>/restore-staging/staged-recovery` whole, where a staged restore
+keeps each uploaded backup as a decrypted venue database; only the server stages one
+(`createSetupRecoveryPreparation`, called only from `apps/server/src/boot.ts`). On a
 box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
 staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.

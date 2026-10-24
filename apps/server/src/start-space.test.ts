@@ -379,6 +379,110 @@ describe("freeSpaceAtStart", () => {
     });
   });
 
+  describe("staged recovery copies", () => {
+    const restoreStaging = () => join(stateDir, "restore-staging");
+    const stagedCopy = () => join(restoreStaging(), "staged-recovery", "upload-1", "venue.db");
+    const download = () => join(restoreStaging(), "archive-download-x", "part");
+
+    it.each([100, 5000])(
+      "deletes the staged folder whole and leaves the rest of restore staging (%i bytes free)",
+      async (free) => {
+        await touch(stagedCopy());
+        await touch(join(restoreStaging(), "staged-recovery", "upload-2", "manifest.json"));
+        await touch(download());
+        const { deps: d, log } = deps({ free });
+        await freeSpaceAtStart(d);
+        expect(existsSync(join(restoreStaging(), "staged-recovery"))).toBe(false);
+        expect(existsSync(download())).toBe(true);
+        if (free >= 1000)
+          expect(log.mock.calls).toEqual([
+            ["info", "storage.start_backup_leftovers_deleted", { deleted: 1 }],
+          ]);
+        else
+          expect(log).toHaveBeenCalledWith(
+            "warn",
+            "storage.start_space_low",
+            expect.objectContaining({ deleted: 1 }),
+          );
+      },
+    );
+
+    it("counts the staged folder beside backup staging", async () => {
+      await touch(stagedCopy());
+      await touch(staging());
+      const { deps: d, log } = deps({ free: 5000 });
+      await freeSpaceAtStart(d);
+      expect(log.mock.calls).toEqual([
+        ["info", "storage.start_backup_leftovers_deleted", { deleted: 2 }],
+      ]);
+    });
+
+    it("keeps the staged folder while another process holds the venue folder", async () => {
+      await touch(stagedCopy());
+      await heldElsewhere();
+      const readVenueHolder = vi.fn(() => null);
+      const { deps: d, log } = deps({ free: 5000, readVenueHolder });
+      await freeSpaceAtStart(d);
+      expect(existsSync(stagedCopy())).toBe(true);
+      expect(log).not.toHaveBeenCalled();
+      expect(readVenueHolder).not.toHaveBeenCalled();
+    });
+
+    it("deletes the staged folder without the lock when this process holds the venue folder", async () => {
+      await touch(stagedCopy());
+      const lockVenue = vi.fn(lockVenueDatabase);
+      const { deps: d } = deps({ free: 5000, venueHeld: true, lockVenue });
+      await freeSpaceAtStart(d);
+      expect(existsSync(stagedCopy())).toBe(false);
+      expect(lockVenue).not.toHaveBeenCalled();
+    });
+
+    it("deletes the staged folder and makes no venue folder when there is none", async () => {
+      await touch(stagedCopy());
+      const absent = join(root, "no-venue");
+      const lockVenue = vi.fn(lockVenueDatabase);
+      const { deps: d } = deps({
+        venueDir: absent,
+        lockVenue,
+        statfs: statfsStub({ [stateDir]: [5000], [absent]: [new Error("ENOENT")] }),
+      });
+      await freeSpaceAtStart(d);
+      expect(existsSync(stagedCopy())).toBe(false);
+      expect(existsSync(absent)).toBe(false);
+      expect(lockVenue).not.toHaveBeenCalled();
+    });
+
+    it("lets the holder's heartbeat decide when the lock fails for another reason", async () => {
+      await touch(stagedCopy());
+      const { deps: fresh } = deps({
+        lockVenue: failingLock,
+        readVenueHolder: () => holder(5_000),
+      });
+      await freeSpaceAtStart(fresh);
+      expect(existsSync(stagedCopy())).toBe(true);
+
+      const { deps: stale } = deps({
+        lockVenue: failingLock,
+        readVenueHolder: () => holder(60_000),
+      });
+      await freeSpaceAtStart(stale);
+      expect(existsSync(stagedCopy())).toBe(false);
+    });
+
+    it("leaves alone a restore staging folder that is a symbolic link, and what it points at", async () => {
+      const elsewhere = join(root, "elsewhere-restore");
+      await touch(join(elsewhere, "staged-recovery", "upload-1", "venue.db"));
+      await mkdir(stateDir, { recursive: true });
+      await symlink(elsewhere, restoreStaging());
+      const { deps: d, log } = deps({ free: 5000 });
+      await freeSpaceAtStart(d);
+      expect(existsSync(join(elsewhere, "staged-recovery", "upload-1", "venue.db"))).toBe(true);
+      expect(log.mock.calls).toEqual([
+        ["warn", "storage.start_cleanup_skipped", { folder: "restore-staging" }],
+      ]);
+    });
+  });
+
   it("deletes when told to, whatever the free space", async () => {
     await touch(rotated(2));
     const { deps: d, log } = deps({ free: 5000, force: true });

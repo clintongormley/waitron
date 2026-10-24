@@ -433,6 +433,30 @@ describe("a start on a real full disk", () => {
     expect([inodeOf(recoveryLock), inodeOf(venueLock)]).toEqual(inodes);
   });
 
+  it("a start whose staged recovery copies fill the disk frees them and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "staged");
+    const restoreStaging = join(stateDir, "restore-staging");
+    const staged = join(restoreStaging, "staged-recovery");
+    mkdirSync(join(staged, "upload-1"), { recursive: true });
+    writeFileSync(join(staged, "upload-1", "venue.db"), Buffer.alloc(4 * 1024 * 1024, 67));
+    writeFileSync(join(staged, "upload-1", "manifest.json"), "{}");
+    const download = join(restoreStaging, "archive-download-x");
+    mkdirSync(download);
+    writeFileSync(join(download, "part"), "x");
+
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+    expect(() => statSync(staged)).toThrow();
+    expect(statSync(restoreStaging).isDirectory()).toBe(true);
+    expect(readFileSync(join(download, "part"), "utf8")).toBe("x");
+  });
+
   let nothingDir: string | undefined;
 
   it("a start with nothing to delete serves the recovery page at once", async (ctx) => {

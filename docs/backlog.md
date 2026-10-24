@@ -4376,14 +4376,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
   should that page also say the disk is full and show the free space?
 
-- **A restore's staged backup copies may fill the disk for good.** The start's clean-up
-  (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) empties `backup-staging` but never
-  `restore-staging/staged-recovery`, where A947 slice 4a keeps each uploaded backup as a decrypted
-  copy; only `bootServer` removes that folder (`clearStagedRecoveries`, `apps/server/src/boot.ts`),
-  after the count check. So if those copies are what filled the disk, the box might show the
-  full-disk page on every start — read in the code, not run. The owner's ruling (2026-10-23): fix it
-  with the small-disk test set-up the full-disk start tests use, test first.
-
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
   a full disk at start only (`fullDiskFailure`, `apps/server/src/boot-failure.ts`), because adding

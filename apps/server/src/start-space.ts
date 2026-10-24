@@ -6,6 +6,7 @@ import { BACKUP_ENCRYPT_DIR_PREFIX, BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
+import { RESTORE_STAGING_DIR, STAGED_RECOVERY_DIR } from "./restore-staging-dirs.js";
 
 export const START_FREE_SPACE_FLOOR = 256 * 1024 * 1024;
 export const CRASH_REPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
@@ -50,8 +51,9 @@ export interface StartSpaceDeps {
 
 /**
  * Every call deletes the dumps and `backup-encrypt-*` folders a backup run leaves in backup staging,
- * unless another process holds the venue folder's lock — or, when the lock cannot be taken for any
- * other reason, the folder's holder heartbeat is fresh. Below `floor` (or when forced) it also
+ * and the staged recovery copies in restore staging, unless another process holds the venue folder's
+ * lock — or, when the lock cannot be taken for any other reason, the folder's holder heartbeat is
+ * fresh. Below `floor` (or when forced) it also
  * deletes rotated logs but the newest and crash reports older than {@link CRASH_REPORT_KEEP_MS}. A
  * folder that is a symbolic link is skipped. Nothing is thrown; a failed listing, deletion or lock is
  * logged, except another holder's refusal.
@@ -79,8 +81,13 @@ export async function freeSpaceAtStart(
       else if (name.startsWith(BACKUP_ENCRYPT_DIR_PREFIX))
         await remove(join(stagingDir, name), true);
     }
+    const restoreDir = join(deps.stateDir, RESTORE_STAGING_DIR);
+    const restoreNames = await entries(restoreDir, RESTORE_STAGING_DIR, deps.log, failed);
+    if (restoreNames?.includes(STAGED_RECOVERY_DIR))
+      await remove(join(restoreDir, STAGED_RECOVERY_DIR), true);
   };
-  // On a box, only the server runs a backup, and it holds the venue folder's lock while it does.
+  // On a box, only the server runs a backup or stages a recovery copy, and it holds the venue
+  // folder's lock while it does.
   const removeBackupStaging = async () => {
     // Taking the lock would create a missing venue folder; with none, no process can hold it.
     if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteBackupStaging();
