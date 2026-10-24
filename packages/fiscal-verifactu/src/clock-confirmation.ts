@@ -1,14 +1,16 @@
 import "./errors.js";
 import { desc, eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { agreeingDeviceGroup, judgeClockWitnesses } from "@waitron/fiscal";
+import { agreeingDeviceGroup, CLOCK_WITNESS_MARGIN_MS, judgeClockWitnesses } from "@waitron/fiscal";
 import type {
+  ClockAdminReading,
   ClockConfirmation,
   ClockConfirmRequest,
   ClockProvedWrong,
   ClockStopState,
   ClockWitness,
 } from "@waitron/fiscal";
+import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import {
   CLOCK_BEHIND_MARGIN_MS,
@@ -19,7 +21,7 @@ import {
 } from "./clock-behind.js";
 import { nextConfirmationSeq, openCheck } from "./clock-checks.js";
 import { recordDisproofs } from "./clock-stop-incidents.js";
-import { isBeforeFirstIssueDate } from "./first-issue-date.js";
+import { isBeforeFirstIssueDate, refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 export interface ClockReading {
@@ -125,18 +127,41 @@ export async function clockStopState(
   };
 }
 
-/** The box's own confirmation of its clock while the stop proper holds and the witnesses are
- * ready: writes one `clock_confirmations` row naming the latest record and closing the open check,
- * which lifts the stop. Otherwise writes nothing and answers null. */
+function refuse(reason: "not_stopped" | "contrary_proof" | "differs"): never {
+  throw new AppError("clock.confirm_refused", { reason });
+}
+
+function adminAgrees(reading: ClockAdminReading): boolean {
+  const differenceMs = Math.abs(Date.parse(reading.witnessAt) - Date.parse(reading.boxAt));
+  // An unreadable time compares false, so it does not agree.
+  return differenceMs + reading.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
+}
+
+/** Confirms the box's clock while the stop proper holds, writing one `clock_confirmations` row
+ * naming the latest record and closing the open check, which lifts the stop. With no `admin`, only
+ * when the witnesses are ready; otherwise it writes nothing and answers null. With `admin`, on the
+ * administrator's device unless a witness taken during the stop disagrees; a refusal throws
+ * `clock.confirm_refused`, and a reading before 28-10-2024 `clock.unusable`, writing nothing. */
 export async function confirmClockStop(
   tx: Transaction,
   input: ClockConfirmRequest,
 ): Promise<{ confirmation: ClockConfirmation | null }> {
+  const { admin } = input;
+  if (admin !== undefined) refuseBeforeFirstIssueDate(input.reading);
   const judged = await judge(tx, input.reading, input.witnesses);
-  if (judged === null || judged.proof !== "ready") return { confirmation: null };
+  if (admin === undefined) {
+    if (judged === null || judged.proof !== "ready") return { confirmation: null };
+  } else {
+    if (judged === null || !judged.stopped) refuse("not_stopped");
+    if (judged.contrary.authority !== null || judged.contrary.devices.length > 0)
+      refuse("contrary_proof");
+    if (!adminAgrees(admin.reading)) refuse("differs");
+  }
   const { latest, agreeing } = judged;
   const check = await openCheck(tx);
-  const source = agreeing.authority === null ? "devices" : "authority";
+  const source =
+    admin !== undefined ? "admin" : agreeing.authority === null ? "devices" : "authority";
+  const personId = admin?.personId ?? null;
   const seq = await nextConfirmationSeq(tx);
   const [row] = await tx
     .insert(clockConfirmations)
@@ -147,7 +172,7 @@ export async function confirmClockStop(
       confirmedAt: input.reading.instant,
       stepMs: 0,
       source,
-      personId: null,
+      personId,
       reason: check?.reason ?? "behind_chain",
       proof: {
         authority:
@@ -164,7 +189,14 @@ export async function confirmClockStop(
           boxAt: witness.boxAt,
           witnessAt: witness.witnessAt,
         })),
-        admin: null,
+        admin:
+          admin === undefined
+            ? null
+            : {
+                boxAt: admin.reading.boxAt,
+                witnessAt: admin.reading.witnessAt,
+                uncertaintyMs: admin.reading.uncertaintyMs,
+              },
         heads: await chainHeads(tx),
       },
       checkId: check?.id ?? null,
@@ -177,7 +209,7 @@ export async function confirmClockStop(
       id: row!.id,
       seq,
       source,
-      personId: null,
+      personId,
       confirmedAt: input.reading.instant.toISOString(),
       checkId: check?.id ?? null,
       recordId: latest.id,

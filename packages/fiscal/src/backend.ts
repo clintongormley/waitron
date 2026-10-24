@@ -214,6 +214,21 @@ export interface ClockConfirmRequest {
   boot: BootReading;
   witnesses: readonly ClockWitness[];
   nodeId: string;
+  admin?: ClockAdminConfirm;
+}
+
+/** An administrator's device's time against the box's: `boxAt` the box's time at the reading,
+ * `uncertaintyMs` how far either way it may be off. */
+export interface ClockAdminReading {
+  boxAt: string;
+  witnessAt: string;
+  uncertaintyMs: number;
+}
+
+export interface ClockAdminConfirm {
+  personId: string;
+  personName: string;
+  reading: ClockAdminReading;
 }
 
 export interface ClockConfirmation {

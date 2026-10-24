@@ -27,6 +27,8 @@ export type {
   AckState,
   AuthorityTimeSample,
   BootReading,
+  ClockAdminConfirm,
+  ClockAdminReading,
   ClockBehindLatestRecord,
   ClockConfirmation,
   ClockConfirmationSource,

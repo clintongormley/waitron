@@ -547,3 +547,228 @@ describe("the stop and the record", () => {
     expect(await sale(R)).toBe("recorded");
   });
 });
+
+const PERSON = "person-1";
+
+/** An administrator's device reading at `boxMs` on the box's clock, `differenceMs` away from it. */
+function adminReading(boxMs: number, differenceMs: number, uncertaintyMs: number) {
+  return {
+    personId: PERSON,
+    personName: "Alex Admin",
+    reading: { boxAt: iso(boxMs), witnessAt: iso(boxMs + differenceMs), uncertaintyMs },
+  };
+}
+
+type AdminInput = ReturnType<typeof adminReading>;
+
+function confirmAsAdmin(ms: number, witnesses: readonly ClockWitness[], admin: AdminInput) {
+  return withTransaction(suite.db, (tx) =>
+    confirmClockStop(tx, { reading: reading(ms), boot: BOOT, witnesses, nodeId, admin }),
+  );
+}
+
+/** The administrator's confirmation at `ms`, after checking it threw `code` with `params` and
+ * wrote no row. */
+async function adminRefused(
+  ms: number,
+  witnesses: readonly ClockWitness[],
+  admin: AdminInput,
+  code: string,
+  params: object,
+): Promise<void> {
+  const before = count("clock_confirmations");
+  const failure = await confirmAsAdmin(ms, witnesses, admin).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(failure).toBeInstanceOf(AppError);
+  expect((failure as AppError).code).toBe(code);
+  expect((failure as AppError).params).toEqual(params);
+  expect(count("clock_confirmations")).toBe(before);
+}
+
+describe("an administrator's device", () => {
+  it("agreeing at exactly a minute, counting its uncertainty, confirms with source admin", async () => {
+    await sale(T - H);
+    await sale(T);
+    const checkId = await openCheck(R);
+    const heads = headsNow();
+    const admin = adminReading(R - 2 * S, 59 * S, S);
+    const answer = await confirmAsAdmin(R, [], admin);
+    const written = await rows();
+    expect(written).toEqual([
+      {
+        id: answer.confirmation!.id,
+        seq: 1,
+        nodeId,
+        boxClockAt: new Date(R),
+        confirmedAt: new Date(R),
+        stepMs: 0,
+        source: "admin",
+        personId: PERSON,
+        reason: "behind_chain",
+        proof: {
+          authority: null,
+          devices: [],
+          admin: {
+            boxAt: admin.reading.boxAt,
+            witnessAt: admin.reading.witnessAt,
+            uncertaintyMs: S,
+          },
+          heads,
+        },
+        checkId,
+        registroId: latestId(),
+        recordAt: new Date(T),
+      },
+    ]);
+    expect(answer).toEqual({
+      confirmation: {
+        id: written[0]!.id,
+        seq: 1,
+        source: "admin",
+        personId: PERSON,
+        confirmedAt: iso(R),
+        checkId,
+        recordId: latestId(),
+      },
+    });
+    expect(await sale(R)).toBe("recorded");
+    expect((await stateAt(R, []))!.confirmation).toEqual({
+      id: written[0]!.id,
+      source: "admin",
+      personId: PERSON,
+      confirmedAt: iso(R),
+    });
+  });
+
+  it("a millisecond over a minute, on either side of the box, differs and writes nothing", async () => {
+    await sale(T);
+    await adminRefused(R, [], adminReading(R, -59 * S - 1, S), "clock.confirm_refused", {
+      reason: "differs",
+    });
+    await adminRefused(R, [], adminReading(R, 59 * S, S + 1), "clock.confirm_refused", {
+      reason: "differs",
+    });
+    expect(await sale(R)).toBe("clock.behind_chain");
+  });
+
+  it("an unreadable time differs and writes nothing", async () => {
+    await sale(T);
+    const admin = adminReading(R, 0, 0);
+    await adminRefused(
+      R,
+      [],
+      { ...admin, reading: { ...admin.reading, witnessAt: "garbage" } },
+      "clock.confirm_refused",
+      { reason: "differs" },
+    );
+  });
+
+  it("keeps agreeing witnesses beside it in the proof", async () => {
+    await sale(T);
+    const aeat = authority(R - M, 10 * S, 500);
+    await confirmAsAdmin(R, [aeat, ...twoDevices(R)], adminReading(R, 0, 0));
+    const [row] = await rows();
+    expect(row!.source).toBe("admin");
+    expect(row!.proof).toMatchObject({
+      authority: { boxAt: aeat.boxAt, witnessAt: aeat.witnessAt, uncertaintyMs: 500 },
+      devices: storedDevices(twoDevices(R)),
+    });
+  });
+
+  it("with AEAT disagreeing during the stop, is refused as contrary proof", async () => {
+    await sale(T);
+    await adminRefused(
+      R,
+      [authority(R - 10 * M, 2 * H, 500)],
+      adminReading(R, 0, 0),
+      "clock.confirm_refused",
+      { reason: "contrary_proof" },
+    );
+    expect(await sale(R)).toBe("clock.behind_chain");
+  });
+
+  it("control: AEAT disagreeing before the stop does not refuse it", async () => {
+    await sale(T);
+    const answer = await confirmAsAdmin(
+      R,
+      [authority(T - 30 * S, 2 * H, 500)],
+      adminReading(R, 0, 0),
+    );
+    expect(answer.confirmation!.source).toBe("admin");
+  });
+
+  it("with two devices from two addresses disagreeing, is refused as contrary proof", async () => {
+    await sale(T);
+    await adminRefused(R, twoDevicesAgainst(R), adminReading(R, 0, 0), "clock.confirm_refused", {
+      reason: "contrary_proof",
+    });
+  });
+
+  it("with two devices disagreeing beside AEAT agreeing, is still refused as contrary proof", async () => {
+    await sale(T);
+    await adminRefused(
+      R,
+      [authority(R - M, 10 * S, 500), ...twoDevicesAgainst(R)],
+      adminReading(R, 0, 0),
+      "clock.confirm_refused",
+      { reason: "contrary_proof" },
+    );
+  });
+
+  it("control: a lone device disagreeing does not refuse it", async () => {
+    await sale(T);
+    const answer = await confirmAsAdmin(
+      R,
+      [device("till-3", R - M, 2 * H, "10.0.0.3")],
+      adminReading(R, 0, 0),
+    );
+    expect(answer.confirmation!.source).toBe("admin");
+  });
+
+  it("an AEAT reading too uncertain to decide does not refuse it", async () => {
+    await sale(T);
+    const answer = await confirmAsAdmin(
+      R,
+      [authority(R - M, 90 * S, 40 * S)],
+      adminReading(R, 0, 0),
+    );
+    expect(answer.confirmation!.source).toBe("admin");
+    const [row] = await rows();
+    expect((row!.proof as { authority: unknown }).authority).toBeNull();
+  });
+
+  it.each([
+    ["at the latest record's time", T],
+    ["a minute behind it", T - M],
+  ])("with no stop %s, is refused as not stopped", async (_name, at) => {
+    await sale(T);
+    await adminRefused(at, [], adminReading(at, 0, 0), "clock.confirm_refused", {
+      reason: "not_stopped",
+    });
+  });
+
+  it("with no records, is refused as not stopped", async () => {
+    await adminRefused(R, [], adminReading(R, 0, 0), "clock.confirm_refused", {
+      reason: "not_stopped",
+    });
+  });
+
+  it("once a confirmation covers the reading, is refused as not stopped", async () => {
+    await sale(T);
+    await confirmAsAdmin(R, [], adminReading(R, 0, 0));
+    await adminRefused(R, [], adminReading(R, 0, 0), "clock.confirm_refused", {
+      reason: "not_stopped",
+    });
+  });
+
+  it("on a clock before 28-10-2024, throws clock.unusable and writes nothing", async () => {
+    await sale(T);
+    const at = Date.parse("2001-01-01T10:00:00.000Z");
+    await adminRefused(at, [], adminReading(at, 0, 0), "clock.unusable", {
+      clockAt: iso(at),
+      offsetMinutes: 60,
+    });
+  });
+});
