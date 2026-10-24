@@ -17,6 +17,7 @@ import {
   symlink,
   writeFile,
   access,
+  unlink,
 } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -439,3 +440,298 @@ it("refuses an unavailable private workspace and leaves a subsequent read usable
   failed.mockRestore();
   expect(await readFirstSetupBackupHistory(f.options)).toMatchObject({ databases: [] });
 });
+
+it("carries a current selected setup independently of a missing preparation journal and marker", async () => {
+  const f = await fixture();
+  await f.host.owner.claimFirstSetup(
+    {
+      environment: "preproduction",
+      request: {
+        ...setupRequest,
+        location: { ...setupRequest.location, operationDescription: "Restaurant" },
+      },
+    },
+    randomBytes(32).toString("base64url"),
+  );
+  let state = (await f.host.store.read())!;
+  const context = firstSetupModuleContext(state, binding.module);
+  const input = hourSetupInput(
+    {
+      binding: context.binding,
+      scope: { taxpayerNif: context.taxId, environment: context.environment },
+      bases: [...context.bases].sort((a, b) => a.code.localeCompare(b.code)),
+      identity: "0CNPH",
+      issuedAt: "2026-10-16T12:01:00.000Z",
+    },
+    context.administratorId,
+  );
+  state = await f.host.store.update(state.frozen.attemptId, state.revision, {
+    kind: "candidates",
+    module: binding.module,
+    request: { kind: "waitron-hour-setup", status: "selected", identity: "0CNPH", input },
+  });
+  await f.host.store.update(state.frozen.attemptId, state.revision, {
+    kind: "input",
+    module: binding.module,
+    input,
+  });
+  await unlink(join(f.roots.stateDir, "module-preparation-state.json"));
+  await unlink(join(f.roots.venueDir, "first-setup-claim.json"));
+  const before = await readFile(join(f.roots.stateDir, "first-setup.json"));
+  const value = await readFirstSetupBackupHistory(f.options);
+  expect(value.documents).toMatchObject({
+    "hour-history": {
+      records: expect.arrayContaining([
+        expect.objectContaining({ identity: "0CNPH", kind: "workspace", taxpayerNif: "50000000R" }),
+      ]),
+    },
+  });
+  expect(JSON.stringify(value)).not.toMatch(/ownerVerifier|capabilityHash|operatorId/);
+  expect(await readFile(join(f.roots.stateDir, "first-setup.json"))).toEqual(before);
+  await expect(access(join(f.roots.venueDir, "first-setup-claim.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("refuses unreadable attempt history during fiscal admission without losing its bytes", async () => {
+  const f = await fixture();
+  const path = join(f.roots.stateDir, "first-setup.json");
+  await writeFile(path, "unreadable retained selection");
+  await expect(readFirstSetupBackupHistory(f.options)).rejects.toMatchObject({
+    code: "module.operation_invalid",
+    params: { module: binding.module },
+  });
+  expect(await readFile(path, "utf8")).toBe("unreadable retained selection");
+});
+
+import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
+import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
+
+async function selectedSetup(f: Awaited<ReturnType<typeof fixture>>) {
+  const claim = await f.host.owner.claimFirstSetup(
+    {
+      environment: "preproduction",
+      request: {
+        ...setupRequest,
+        location: { ...setupRequest.location, operationDescription: "Restaurant" },
+      },
+    },
+    randomBytes(32).toString("base64url"),
+  );
+  let state = (await f.host.store.read())!;
+  const context = firstSetupModuleContext(state, binding.module);
+  const input = hourSetupInput(
+    {
+      binding: context.binding,
+      scope: { taxpayerNif: context.taxId, environment: context.environment },
+      bases: [...context.bases].sort((a, b) => a.code.localeCompare(b.code)),
+      identity: "0CNPH",
+      issuedAt: "2026-10-16T12:01:00.000Z",
+    },
+    context.administratorId,
+  );
+  state = await f.host.store.update(state.frozen.attemptId, state.revision, {
+    kind: "candidates",
+    module: binding.module,
+    request: { kind: "waitron-hour-setup", status: "selected", identity: "0CNPH", input },
+  });
+  state = await f.host.store.update(state.frozen.attemptId, state.revision, {
+    kind: "input",
+    module: binding.module,
+    input,
+  });
+  return {
+    state,
+    owner: {
+      attemptId: state.frozen.attemptId,
+      revision: state.revision,
+      ownerGeneration: state.ownerGeneration,
+      capability: claim.capability,
+    },
+  };
+}
+it("preserves a previous attempt's selected name when the current attempt is still unselected", async () => {
+  const f = await fixture();
+  const held = await selectedSetup(f);
+  await f.host.store.update(held.state.frozen.attemptId, held.state.revision, {
+    kind: "abandoned",
+  });
+  await f.host.owner.claimFirstSetup(
+    {
+      environment: "preproduction",
+      request: {
+        ...setupRequest,
+        location: { ...setupRequest.location, operationDescription: "Restaurant" },
+      },
+    },
+    randomBytes(32).toString("base64url"),
+  );
+  await unlink(join(f.roots.stateDir, "module-preparation-state.json"));
+  const value = await readFirstSetupBackupHistory(f.options);
+  expect(value.documents).toMatchObject({
+    "hour-history": {
+      records: [
+        expect.objectContaining({
+          kind: "workspace",
+          identity: "0CNPH",
+          nodeId: held.state.frozen.nodeId,
+        }),
+      ],
+    },
+  });
+});
+
+it("reads the real current recovery-document manifest through its existing parser and projects only a public floor", async () => {
+  const f = await fixture();
+  const held = await selectedSetup(f);
+  const consuming = await f.host.store.update(held.state.frozen.attemptId, held.state.revision, {
+    kind: "consumption-intent",
+  });
+  const document = await keepHourRecoveryDocument(
+    f.host,
+    { ...held.owner, revision: consuming.revision },
+    setupRequest.admin.password,
+  );
+  const before = await readFile(
+    join(f.roots.stateDir, "first-fiscal-documents", `${binding.module}.recovery.json`),
+  );
+  const value = await readFirstSetupBackupHistory({
+    ...f.options,
+    module: f.host.modules.find((entry) => entry.name === binding.module)!,
+  });
+  expect(value.documents["hour-history"]).toMatchObject({
+    timeFloorMs: Date.parse(document.statement.createdAt),
+    records: expect.arrayContaining([
+      expect.objectContaining({ kind: "workspace", identity: "0CNPH" }),
+    ]),
+  });
+  expect(JSON.stringify(value)).not.toMatch(
+    /Private business|secret|ownerVerifier|capabilityHash|taxpayerName/,
+  );
+  expect(
+    await readFile(
+      join(f.roots.stateDir, "first-fiscal-documents", `${binding.module}.recovery.json`),
+    ),
+  ).toEqual(before);
+});
+
+it("preserves standalone declared public history without exposing its private wrapper", async () => {
+  const f = await fixture();
+  await writeFile(
+    join(f.roots.stateDir, "module-operation-public.json"),
+    JSON.stringify({
+      version: 1,
+      modules: {},
+      history: [
+        {
+          attemptId: "old",
+          revision: 1,
+          ownerGeneration: 1,
+          module: binding.module,
+          current: {
+            format: "waitron-hour-history",
+            scope,
+            sources: [
+              {
+                reference: "public-old",
+                complete: true,
+                records: [
+                  {
+                    reference: "public-old/name",
+                    kind: "intent",
+                    ...scope,
+                    softwareId: "W1",
+                    nodeId: "different-node",
+                    identity: "0CNPH",
+                    recordedAtMs: 1792152060000,
+                  },
+                ],
+              },
+            ],
+            private: "private-wrapper",
+          },
+        },
+      ],
+    }),
+  );
+  const value = await readFirstSetupBackupHistory(f.options);
+  expect(value.documents["hour-history"]).toMatchObject({
+    records: expect.arrayContaining([
+      expect.objectContaining({ reference: "public-old/name", identity: "0CNPH" }),
+    ]),
+  });
+  expect(JSON.stringify(value)).not.toContain("private-wrapper");
+});
+
+it.each(["setup-operation.json", "restore-request.json", "reset-request.json"])(
+  "does not assume an unprojected legacy %s carries no selected name",
+  async (name) => {
+    const f = await fixture();
+    const path = join(f.roots.stateDir, name);
+    await writeFile(path, JSON.stringify({ unknownSelection: "retained-only" }));
+    await expect(readFirstSetupBackupHistory(f.options)).rejects.toMatchObject({
+      code: "module.operation_invalid",
+      params: { module: binding.module },
+    });
+    expect(await readFile(path, "utf8")).toContain("retained-only");
+  },
+);
+
+import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
+
+it("reads retained outside evidence privately from archived snapshots, and refuses unreadable JSON", async () => {
+  const f = await fixture();
+  const held = await selectedSetup(f);
+  const proof = {
+    format: "waitron-hour-history",
+    scope,
+    sources: [{ reference: "old", complete: true, records: [] }],
+  };
+  const original = {
+    name: "outside-file:/private/retained.json",
+    bytes: Buffer.from(JSON.stringify(proof)),
+  };
+  const value = await readFirstSetupBackupSetups(
+    [],
+    [{ state: held.state, originals: [original, { name: "outside-file:/absent", bytes: null }] }],
+    module,
+  );
+  expect(value.publicEvidence).toEqual([proof]);
+  expect(value.setups).toEqual([
+    expect.objectContaining({ input: held.state.inputs[binding.module] }),
+  ]);
+  await expect(
+    readFirstSetupBackupSetups(
+      [],
+      [{ state: held.state, originals: [{ ...original, bytes: Buffer.from("not JSON") }] }],
+      module,
+    ),
+  ).rejects.toMatchObject({ code: "module.operation_invalid" });
+});
+it("does not invent an empty attempt for orphan public document chunks or an unreadable documents directory", async () => {
+  const f = await fixture();
+  const directory = join(f.roots.stateDir, "first-fiscal-documents");
+  await mkdir(directory);
+  await writeFile(join(directory, "orphan.json"), "{}");
+  await expect(readFirstSetupBackupHistory(f.options)).rejects.toMatchObject({
+    code: "module.operation_invalid",
+  });
+  await unlink(join(directory, "orphan.json"));
+  await rm(directory, { recursive: true });
+  await writeFile(directory, "not a directory");
+  await expect(readFirstSetupBackupHistory(f.options)).rejects.toMatchObject({
+    code: "module.operation_invalid",
+  });
+});
+it("does not pass another module's retained setup context to the requested module", async () => {
+  const f = await fixture();
+  const held = await selectedSetup(f);
+  expect(
+    await readFirstSetupBackupSetups([], [{ state: held.state, originals: [] }], {
+      ...module,
+      name: "another-module",
+    }),
+  ).toEqual({ setups: [], publicEvidence: [] });
+});
+import { readFirstSetupBackupSetups } from "./first-setup-backup-setups.js";
+import { rm } from "node:fs/promises";

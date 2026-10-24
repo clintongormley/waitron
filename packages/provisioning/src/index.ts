@@ -36,6 +36,7 @@ export {
   isFirstSetupHostPath,
   createFirstSetupCoordinator,
   createFirstSetupStore,
+  parseState as parseFirstSetupState,
   assertOtherSetupAllowed,
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,

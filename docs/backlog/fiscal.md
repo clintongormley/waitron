@@ -1483,10 +1483,11 @@ outside recovery evidence. Follow [the offline restore procedure](../developers/
 Unresolved first-setup guards currently block restore; the page must say this path is not yet
 available until this item lands. Do not expose retained business records without proof.
 
-Implementation checkpoint, 24 October 2026: backup validation, named-key authentication,
-memory-only repair sessions and retained-database history collection are internal helpers.
-History collection reads private copies of databases and their SQLite sidecars and projects
-the existing preparation journal and retained module documents. No repair API or page is enabled.
-Service integration, complete attempt/history admission, durable evidence carry-forward,
-preparation, isolated placement, exact restart completion and listener/page qualification remain
-open; the plan is `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.
+Implementation checkpoint, 24 October 2026: the internal authenticated service prepares an isolated
+target after writing its V2 journal. Its tests cover retained database and preparation history,
+current and previous setup selections, public documents, persisted evidence readable by the backup
+reader, changed originals/evidence, competing input and an interrupted initial journal write.
+Unprojected legacy operation files refuse admission and remain retained. No repair API or page is
+enabled. Placement, reauthentication after restart, exact completion, listener/page qualification
+and whole-branch review remain open; the plan is
+`docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.

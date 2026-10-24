@@ -15,6 +15,7 @@ import {
 } from "@waitron/provisioning";
 import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
+import { readFirstSetupBackupSetups } from "./first-setup-backup-setups.js";
 
 interface Options extends FirstSetupRoots {
   module: WaitronModule;
@@ -99,6 +100,13 @@ export async function readFirstSetupBackupHistory(options: Options): Promise<{
       }
     }
     const documents: Record<string, unknown> = {};
+    const setupHistory = await readFirstSetupBackupSetups(
+      roots.filter(
+        (root, index) => roots.findIndex((known) => known.stateDir === root.stateDir) === index,
+      ),
+      retired,
+      options.module,
+    );
     const preparations = await readModulePreparationHistory(options, options.module.name);
     for (const source of options.module.backup?.nonDbState ?? []) {
       if (source.kind !== "preparation-history") continue;
@@ -112,7 +120,11 @@ export async function readFirstSetupBackupHistory(options: Options): Promise<{
         );
         if (value !== null) retained.push(value);
       }
-      documents[source.source] = source.project({ preparations, retained });
+      documents[source.source] = source.project({
+        preparations,
+        retained,
+        recovery: { history: [], ...setupHistory },
+      });
     }
     await options.recheck();
     return { databases, documents };

@@ -407,6 +407,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.
   Add the existing archive, bucket and managed-Cloud recovery flow behind real owner proof,
   with the selected backup’s recovery key and current outside evidence.
+  Preparation is internal; placement, restart completion and the repair entry remain open.
   [Detail](backlog/fiscal.md#a731-recover-from-backup-from-the-first-setup-repair-page) · [Implementation plan](superpowers/plans/2026-10-24-a731-repair-backup.md).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
