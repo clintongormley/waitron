@@ -115,8 +115,8 @@ platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se ent
 estaciones y zonas de servicio que tiene asignadas.
 
 Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
-local. Cada estación de preparación fija si su pantalla de cocina marca un plato cada vez o toda la
-comanda a la vez, en **Marcado en la pantalla** al editarla en **Estaciones de preparación**. Cada
+local. Cada estación de preparación fija si su pantalla de cocina avanza la preparación un plato cada vez
+o toda la comanda a la vez, en **Marcado en la pantalla** al editarla en **Estaciones de preparación**. Cada
 estación de preparación fija sus propios avisos de demora al crearla con **Añadir estación**, y en
 **Avisos de demora (minutos)** al editarla en **Estaciones de preparación**. Cada estación de
 preparación fija también cómo se imprimen los platos iguales en sus comandas y si imprime por

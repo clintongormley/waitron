@@ -1819,6 +1819,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
       managerCookie,
     );
     expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "bumpMode" } },
+    });
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
       name,
       bumpMode: "ticket",

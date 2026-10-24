@@ -2245,14 +2245,14 @@ describe("till-station-queue — a merged queue's station labels", () => {
   });
 
   it("a merged queue bumps each order by its own station's mode", async () => {
-    const twoDishes = {
+    const queuedAtBarra = {
       ...groupB,
       items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [
         { ...groupA, stationId: "st-1", bumpMode: "ticket" as const },
-        { ...twoDishes, stationId: "st-2", bumpMode: "line" as const },
+        { ...queuedAtBarra, stationId: "st-2", bumpMode: "line" as const },
       ],
       stationNames,
       view: "rail",

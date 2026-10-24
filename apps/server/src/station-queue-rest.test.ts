@@ -12,17 +12,19 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import type { FiscalBackend } from "@waitron/fiscal";
+import { loginWithPin, persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { listStationQueue } from "./working-order.js";
 import { updateStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
+import { systemClock } from "./till-backend.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { dashboardOrderAt, seedSessionDevice } from "./testing/session-device.js";
 
 const suite = useVenueDb({
@@ -320,28 +322,22 @@ describe("station queue rest of the order", () => {
         firedAt: nowIso(),
       });
     }
-    const clock: TrustedClock = {
-      now: () => ({
-        instant: new Date(),
-        offsetMinutes: 0,
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      }),
-      anchor: () => {
-        throw new Error("not used on the station queue read");
-      },
-      currentAnchor: () => null,
-    };
     const app = new Hono();
     mountTillApi(
       app,
-      { db, backend: {} as FiscalBackend, clock, cfg, secureCookies: false, venueLocale: LOCALE },
+      {
+        db,
+        backend: {} as FiscalBackend,
+        clock: systemClock(),
+        cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+      },
       () => {},
     );
     const [cook] = await db
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning();
     const deviceId = await seedSessionDevice(db, cfg);
     const { token } = await withTransaction(db, (tx) =>

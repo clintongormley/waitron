@@ -147,7 +147,7 @@ const tabKeys = (el: DashboardApp) =>
     ...page(el).shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
   ].map((tab) => tab.getAttribute("data-key"));
 
-it("puts a module's panels on their tab by their stated order, the core panel counting as 0", async () => {
+it("puts a module's panels on their tab by their stated order, the core panels counting as 0", async () => {
   const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
     "test.use",
     "test.details",

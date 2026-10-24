@@ -100,8 +100,8 @@ on the pass until the order is handed over. Each pass still shows only the stati
 zones assigned to it.
 
 You choose when to request cooking from the till; there is no venue-wide firing mode. Each prep
-station sets whether its kitchen screen marks preparation done one item at a time or a whole ticket
-at once, under **Done on the screen** when you edit it in **Prep stations**. Each prep station sets
+station sets whether its kitchen screen moves preparation on one item at a time or a whole
+ticket at once, under **Done on the screen** when you edit it in **Prep stations**. Each prep station sets
 its own late flags when you add it with **Add station**, and under **Late flags (minutes)** when you
 edit it in **Prep stations**. Each prep station also sets how identical dishes print on its tickets
 and whether it prints held groups in advance, under **Identical dishes on a kitchen ticket** and

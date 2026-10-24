@@ -663,6 +663,17 @@ it("sends only a changed bump mode, and nothing for a choice put back", async ()
   expect(seen).toEqual([{ bumpMode: "line" }]);
 });
 
+it("ignores a bump mode the field does not offer", async () => {
+  const el = await mount({ ...GRILL, bumpMode: "ticket" });
+  const seen = saves(el);
+  bumpField(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Ticket" } }));
+  await el.updateComplete;
+  expect([saveButton(el).variant, saveButton(el).disabled]).toEqual(["secondary", true]);
+  await rename(el, "Hot grill");
+  await save(el);
+  expect(seen).toEqual([{ name: "Hot grill" }]);
+});
+
 it("reads the bump mode in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   expect(bumpField(el).label).toBe("Marcado en la pantalla");
