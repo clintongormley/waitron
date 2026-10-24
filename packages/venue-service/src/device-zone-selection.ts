@@ -108,7 +108,15 @@ export async function readDeviceZoneSelection(
       ]),
     )
     .digest("hex");
-  return { profileId: profile.id, snapshot, zones, selectedZoneIds, startingZoneId, adjusted };
+  return {
+    profileId: profile.id,
+    snapshot,
+    zones,
+    selectedZoneIds,
+    startingZoneId,
+    adjusted,
+    saved: stored !== undefined,
+  };
 }
 
 export async function setDeviceZoneSelection(

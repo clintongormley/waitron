@@ -45,13 +45,14 @@ const zones: DeviceZoneSelection["zones"] = [
     serviceMode: "table_tab",
   },
 ];
-const selection = (ids: string[], start: string | null): DeviceZoneSelection => ({
+const selection = (ids: string[], start: string | null, saved = true): DeviceZoneSelection => ({
   profileId: "profile",
   snapshot: "scope",
   zones,
   selectedZoneIds: ids,
   startingZoneId: start,
   adjusted: false,
+  saved,
 });
 const floorZones: FloorZone[] = zones.map((zone) => ({
   ...zone,
@@ -130,6 +131,7 @@ async function mount(
   chosen: DeviceZoneSelection,
   over: Record<string, unknown> = {},
   props: Partial<TillApp> = {},
+  permissions: string[] = [],
 ) {
   setLocale("en-GB");
   const api = {
@@ -185,7 +187,7 @@ async function mount(
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
   el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
     new CustomEvent("logged-in", {
-      detail: { personId: "person", displayName: "Ana", permissions: [], locale: "en-GB" },
+      detail: { personId: "person", displayName: "Ana", permissions, locale: "en-GB" },
       bubbles: true,
       composed: true,
     }),
@@ -1133,4 +1135,861 @@ it("disconnecting the application retires its editor before reconnecting and reo
   ).toBe(true);
   expect(api.getDeviceZones).toHaveBeenCalledTimes(3);
   expect(api.setDeviceZones).not.toHaveBeenCalled();
+});
+
+describe("a handheld's zones", () => {
+  const handhelds = ["phone-portrait", "tablet-landscape"] as const;
+  const orderedFloorZones: FloorZone[] = floorZones.map((zone, index) => ({
+    ...zone,
+    displayOrder: index + 1,
+  }));
+  const tableIn = (id: string, zoneId: string) => ({
+    id,
+    label: id,
+    zoneId,
+    state: "open-tab",
+    hasOpenTab: true,
+    tabLineCount: 0,
+    tabTotal: "0.00",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    timingBand: "fresh",
+    nextReservation: null,
+    today: null,
+    signals: [],
+    party: {
+      kitchenNote: { scope: { partyId: `party-${id}` }, note: null, revision: 0, ownerRevision: 1 },
+      id: `party-${id}`,
+      revision: 1,
+      guestCount: 2,
+      state: "open",
+      mainBillId: `bill-${id}`,
+      outstanding: "0.00",
+      billCount: 1,
+      tableIds: [id],
+      unsentDrafts: [],
+      reminder: null,
+    },
+  });
+  afterEach(() => history.replaceState(null, "", "/"));
+
+  async function mountHandheld(
+    chosen: DeviceZoneSelection,
+    formFactor: string = "phone-portrait",
+    over: Record<string, unknown> = {},
+    permissions: string[] = [],
+  ) {
+    return mount(
+      chosen,
+      {
+        getTill: vi.fn().mockResolvedValue({
+          locale: "en-GB",
+          invoiceLocale: "en-GB",
+          venueName: "Restaurant",
+          nif: "B12345678",
+          orderFlow: "prepay",
+          bumpMode: "line",
+          fireControl: "waiter",
+          courses: [],
+          cardProvider: "none",
+          tipsEnabled: false,
+          formFactor,
+          capabilities: ["take-orders"],
+          inactivityTimeoutSeconds: null,
+          nodeId: "node",
+          servers: [],
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "device",
+          name: "Phone",
+          formFactor,
+          profileId: "profile",
+        }),
+        listZones: vi.fn().mockResolvedValue(orderedFloorZones),
+        ...over,
+      },
+      {},
+      permissions,
+    );
+  }
+  const floor = (el: TillApp) => el.shadowRoot!.querySelector("till-floor-screen")!;
+  async function floorZoneIds(el: TillApp) {
+    await vi.waitFor(() => expect(floor(el)).not.toBeNull());
+    await vi.waitFor(() => expect(floor(el).zones.length).toBeGreaterThan(0));
+    return floor(el).zones.map((zone) => zone.id);
+  }
+  async function activeTab(el: TillApp) {
+    await floorZoneIds(el);
+    await floor(el).updateComplete;
+    return floor(el)
+      .shadowRoot!.querySelector('nav.tabs wt-button.tab[variant="primary"]')
+      ?.getAttribute("data-zone");
+  }
+
+  it.each(handhelds)(
+    "reads the device's zones at sign-in and narrows Floor to them (%s)",
+    async (formFactor) => {
+      const { el, api } = await mountHandheld(
+        selection(["room", "garden"], "room", false),
+        formFactor,
+      );
+      expect(await floorZoneIds(el)).toEqual(["room", "garden"]);
+      expect(api.getDeviceZones).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(handhelds)(
+    "reads the device's zones at sign-in and with every zone chosen keeps every zone (%s)",
+    async (formFactor) => {
+      const { el, api } = await mountHandheld(
+        selection(["bar", "shop", "room", "garden"], "bar", false),
+        formFactor,
+      );
+      expect(await floorZoneIds(el)).toEqual(orderedFloorZones.map((zone) => zone.id));
+      expect(api.getDeviceZones).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(handhelds)(
+    "with one zone chosen the Floor shows no zone tabs (worked example 6) (%s)",
+    async (formFactor) => {
+      const { el } = await mountHandheld(selection(["garden"], "garden"), formFactor);
+      expect(await floorZoneIds(el)).toEqual(["garden"]);
+      await floor(el).updateComplete;
+      expect(floor(el).shadowRoot!.querySelector("nav.tabs")).toBeNull();
+    },
+  );
+
+  it.each(handhelds)(
+    "with two zones chosen the Floor shows their two zone tabs (worked example 6) (%s)",
+    async (formFactor) => {
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"), formFactor);
+      await floorZoneIds(el);
+      await floor(el).updateComplete;
+      expect(
+        [...floor(el).shadowRoot!.querySelectorAll("nav.tabs wt-button.tab")].map((tab) =>
+          tab.getAttribute("data-zone"),
+        ),
+      ).toEqual(["room", "garden"]);
+    },
+  );
+
+  it.each(handhelds)(
+    "keeps a chosen counter zone on the handheld's Floor and drops an unchosen one (%s)",
+    async (formFactor) => {
+      const { el } = await mountHandheld(selection(["bar", "room"], "room"), formFactor);
+      const ids = await floorZoneIds(el);
+      expect(ids).toContain("bar");
+      expect(ids).not.toContain("shop");
+      expect(ids).not.toContain("garden");
+    },
+  );
+
+  it("the More entry opens the zones dialog and a save narrows the Floor", async () => {
+    const { el, api } = await mountHandheld(
+      selection(["bar", "shop", "room", "garden"], "bar", false),
+      "phone-portrait",
+      { setDeviceZones: vi.fn().mockResolvedValue(selection(["garden"], "garden")) },
+    );
+    await floorZoneIds(el);
+    const more = shell(el).shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >('header wt-row-actions[data-test="more-menu"]')!;
+    await more.updateComplete;
+    await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+    await userEvent.click(more.querySelector<HTMLElement>("wt-button.zones")!);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).not.toBeNull(),
+    );
+    const dialog = el.shadowRoot!.querySelector("till-device-zones-dialog")!;
+    await vi.waitFor(() => expect(dialog.loading).toBe(false));
+    dialog.dispatchEvent(
+      new CustomEvent("save-device-zones", {
+        detail: {
+          profileId: "profile",
+          snapshot: "scope",
+          selectedZoneIds: ["garden"],
+          startingZoneId: "garden",
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).toBeNull(),
+    );
+    expect(api.setDeviceZones).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(floor(el).zones.map((zone) => zone.id)).toEqual(["garden"]));
+  });
+
+  it("a profile switch shows the new profile's own zones", async () => {
+    const { el, api } = await mountHandheld(
+      { ...selection(["room", "garden"], "room"), profileId: "profile" },
+      "phone-portrait",
+      {
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "device",
+          name: "Phone",
+          formFactor: "phone-portrait",
+          profileId: "profile",
+          approvedProfiles: [
+            { id: "profile", name: "Waiter" },
+            { id: "other", name: "Terrace" },
+          ],
+        }),
+        switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: "other" }),
+      },
+    );
+    expect(await floorZoneIds(el)).toEqual(["room", "garden"]);
+    api.getDeviceZones.mockResolvedValue({
+      ...selection(["shop", "garden"], "garden"),
+      profileId: "other",
+      snapshot: "other",
+    });
+    shell(el).dispatchEvent(new CustomEvent("open-profile", { bubbles: true, composed: true }));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-profile-dialog")).not.toBeNull(),
+    );
+    el.shadowRoot!.querySelector("till-profile-dialog")!.dispatchEvent(
+      new CustomEvent("profile-switch", {
+        detail: { profileId: "other" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(api.getDeviceZones).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(floor(el).zones.map((zone) => zone.id)).toEqual(["shop", "garden"]),
+    );
+  });
+
+  describe("an unsaved handheld opens as today; a saved one opens on its Opens first zone", () => {
+    const all = ["bar", "shop", "room", "garden"];
+    it.each(handhelds)("unsaved, no URL zone, opens on the first tab (%s)", async (formFactor) => {
+      const { el } = await mountHandheld(selection(all, "garden", false), formFactor);
+      expect(await activeTab(el)).toBe("bar");
+    });
+    it.each(handhelds)("unsaved, with a URL zone, opens on it (%s)", async (formFactor) => {
+      history.replaceState(null, "", "/tabs/floor/zone/room");
+      const { el } = await mountHandheld(selection(all, "garden", false), formFactor);
+      expect(await activeTab(el)).toBe("room");
+    });
+    it.each(handhelds)("saved, opens on its counter Opens first zone (%s)", async (formFactor) => {
+      const { el } = await mountHandheld(selection(all, "shop", true), formFactor);
+      expect(await activeTab(el)).toBe("shop");
+    });
+    it.each(handhelds)(
+      "saved, opens on its Opens first zone over a URL zone (%s)",
+      async (formFactor) => {
+        history.replaceState(null, "", "/tabs/floor/zone/room");
+        const { el } = await mountHandheld(selection(all, "shop", true), formFactor);
+        expect(await activeTab(el)).toBe("shop");
+      },
+    );
+  });
+
+  async function openTable(
+    zoneId: string,
+    over: Record<string, unknown> = {},
+    seeded: boolean | "unavailable" = false,
+    formFactor = "phone-portrait",
+  ) {
+    const table = tableIn(`table-${zoneId}`, zoneId);
+    const drafts = draftServer(() => ({
+      tabId: table.party.mainBillId,
+      revision: 1,
+      groups: [],
+    }));
+    drafts.bills.add(table.party.mainBillId);
+    if (seeded === "unavailable") drafts.unavailable.add("coffee-offer");
+    if (seeded)
+      drafts.drafts.push({
+        id: "draft-ana",
+        partyId: table.party.id,
+        billId: table.party.mainBillId,
+        ownerId: "person",
+        ownerName: "Ana",
+        revision: 1,
+        takenOverFrom: null,
+        lines: [
+          {
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
+            id: "draft-line-1",
+            sourceLineId: null,
+            source: null,
+            menuItemId: "coffee-offer",
+            variantId: null,
+            menuVersionId: null,
+            options: [],
+            extras: [],
+            note: null,
+            quantity: "1",
+            courseId: null,
+            makeAt: "switched-off",
+            noMerge: false,
+            unavailable: false,
+          },
+        ],
+      });
+    const { el } = await mountHandheld(selection(["garden"], "garden"), formFactor, {
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+      getPartyBills: vi.fn().mockResolvedValue([]),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+      ...over,
+    });
+    await vi.waitFor(() => expect(floor(el)?.tables.map((row) => row.id)).toEqual([table.id]));
+    floor(el).dispatchEvent(
+      new CustomEvent("open-table", {
+        detail: { tableId: table.id, seated: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const screen = () => el.shadowRoot!.querySelector("till-table-order-screen")!;
+    await vi.waitFor(() => expect(screen()?.draftStore).toBeTruthy());
+    await el.updateComplete;
+    return { el, screen: screen(), drafts };
+  }
+
+  it.each([
+    ["room", false],
+    ["garden", true],
+  ] as const)(
+    "a hidden zone's table takes no new dishes; a shown one does, whatever the profile's start (%s)",
+    async (zoneId, allowed) => {
+      const { el, screen } = await openTable(zoneId);
+      expect(screen.orderingAllowed).toBe(allowed);
+      const store = screen.draftStore!;
+      store.addProduct(screen.products[0]!, "1");
+      expect(store.lines).toHaveLength(allowed ? 1 : 0);
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    },
+  );
+
+  it.each([
+    ["room", true],
+    ["garden", false],
+  ] as const)(
+    "a hidden zone's table cannot send its saved unsent dishes; a shown one can (%s)",
+    async (zoneId, disabled) => {
+      const { screen } = await openTable(zoneId, {}, true);
+      await vi.waitFor(() => expect(screen.draftStore!.lines).toHaveLength(1));
+      await screen.updateComplete;
+      const sendAll = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        '[data-draft-action="send-all"]',
+      )!;
+      expect(sendAll.disabled).toBe(disabled);
+    },
+  );
+
+  it("a handheld whose zone choice could not be read at sign-in still takes dishes at any table", async () => {
+    const { screen } = await openTable("room", {
+      getDeviceZones: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    expect(screen.orderingAllowed).toBe(true);
+    const store = screen.draftStore!;
+    store.addProduct(screen.products[0]!, "1");
+    expect(store.lines).toHaveLength(1);
+  });
+
+  it("a till whose zone choice could not be read takes no dishes", async () => {
+    const table = tableIn("table-room", "room");
+    const drafts = draftServer(() => ({ tabId: table.party.mainBillId, revision: 1, groups: [] }));
+    drafts.bills.add(table.party.mainBillId);
+    const { el } = await mount(selection(["room"], "room"), {
+      getDeviceZones: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+      getPartyBills: vi.fn().mockResolvedValue([]),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-device-zones-empty]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).toBeNull();
+    shell(el).dispatchEvent(
+      new CustomEvent("open-table", {
+        detail: { tableId: table.id, seated: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const screen = () => el.shadowRoot!.querySelector("till-table-order-screen");
+    await vi.waitFor(() => expect(screen()?.draftStore).toBeTruthy());
+    expect(screen()!.orderingAllowed).toBe(false);
+    const store = screen()!.draftStore!;
+    store.addProduct(screen()!.products[0]!, "1");
+    expect(store.lines).toHaveLength(0);
+  });
+
+  describe("live", () => {
+    beforeEach(() => vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] }));
+    afterEach(() => vi.useRealTimers());
+    async function tick(el: TillApp) {
+      vi.advanceTimersByTime(15_000);
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+      }
+    }
+    const notice = (el: TillApp) =>
+      [...el.shadowRoot!.querySelectorAll('[role="status"]')]
+        .map((node) => node.textContent?.trim() ?? "")
+        .filter((text) => text !== "");
+
+    it("a failed zones read at sign-in keeps the handheld's other setup", async () => {
+      const { el, api } = await mountHandheld(
+        selection(["garden"], "garden"),
+        "phone-portrait",
+        {
+          ...transferApi,
+          getDeviceZones: vi
+            .fn()
+            .mockRejectedValueOnce({ code: "server.internal" })
+            .mockResolvedValue(selection(["garden"], "garden")),
+          listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()),
+        },
+        ["sale.take_payment"],
+      );
+      expect(api.listDefaultZoneOffers).toHaveBeenCalled();
+      expect(await floorZoneIds(el)).toEqual(orderedFloorZones.map((zone) => zone.id));
+      expect(notice(el)).toContain("The zones could not be read. Try again.");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
+      );
+      expect(acceptZones(el)).toEqual(["bar", "shop"]);
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+      await tick(el);
+      await vi.waitFor(() => expect(floor(el).zones.map((zone) => zone.id)).toEqual(["garden"]));
+      expect(notice(el)).not.toContain("The zones could not be read. Try again.");
+    });
+
+    const waiting = (el: TillApp) =>
+      el.shadowRoot!.querySelector("[data-device-zones-pending]")?.textContent?.trim();
+    const savedLines = (drafts: ReturnType<typeof draftServer>) =>
+      drafts.drafts.flatMap((draft) => draft.lines);
+    async function narrowToGarden(el: TillApp) {
+      const api = el.api as unknown as { getDeviceZones: ReturnType<typeof vi.fn> };
+      api.getDeviceZones.mockResolvedValue({
+        ...selection(["garden"], "garden"),
+        snapshot: "narrow",
+      });
+      await tick(el);
+    }
+    async function backToFloor(el: TillApp, formFactor: string, shown = ["garden"]) {
+      if (formFactor === "till")
+        el.shadowRoot!.querySelector("till-table-order-screen")!.dispatchEvent(
+          new CustomEvent("back-to-floor", { bubbles: true, composed: true }),
+        );
+      else
+        await userEvent.click(
+          [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+            (tab) => tab.textContent!.trim() === "Floor",
+          )!,
+        );
+      await vi.waitFor(() => expect(floor(el)?.zones.map((zone) => zone.id)).toEqual(shown));
+    }
+    async function openRoomTable(
+      formFactor = "phone-portrait",
+      seeded: boolean | "unavailable" = false,
+    ) {
+      const opened = await openTable(
+        "room",
+        {
+          getDeviceZones: vi.fn().mockResolvedValue(selection(["room", "garden"], "room")),
+          previewPartyAllergy: vi.fn(async (partyId: string) => ({
+            partyId,
+            snapshot: {
+              answer: "none",
+              guests: [],
+              ticks: [],
+              changedAt: null,
+              changedBy: null,
+              revision: 1,
+            },
+            dishes: [],
+          })),
+        },
+        seeded,
+        formFactor,
+      );
+      opened.drafts.personId = "person";
+      const store = opened.screen.draftStore!;
+      if (seeded === false) store.addProduct(opened.screen.products[0]!, "1");
+      await vi.waitFor(() => expect(store.lines).toHaveLength(1));
+      await vi.waitFor(() => expect(savedLines(opened.drafts)).toHaveLength(1));
+      return opened;
+    }
+    const tableWaiting = "Send or remove this table's unsent dishes to hide its zone.";
+
+    it.each(["phone-portrait", "till"])(
+      "the table holding back a waiting narrowing can send its dishes, and sending applies it with no poll and returns to the Floor (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor);
+        await narrowToGarden(el);
+        expect(waiting(el)).toBe(tableWaiting);
+        expect(savedLines(drafts)).toHaveLength(1);
+        await screen.updateComplete;
+        const sendAll = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          '[data-draft-action="send-all"]',
+        )!;
+        expect(sendAll.disabled).toBe(false);
+        sendAll.click();
+        await vi.waitFor(() => expect(drafts.submitDraft).toHaveBeenCalledOnce());
+        await vi.waitFor(() => expect(waiting(el)).toBeUndefined());
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
+        await vi.waitFor(() => expect(floor(el)?.zones.map((zone) => zone.id)).toEqual(["garden"]));
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "the table holding back a waiting narrowing refuses a new dish while Send stays enabled (%s)",
+      async (formFactor) => {
+        const { el, screen } = await openRoomTable(formFactor);
+        await narrowToGarden(el);
+        await screen.updateComplete;
+        expect(screen.orderingAllowed).toBe(false);
+        expect(
+          screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+            '[data-draft-action="send-all"]',
+          )!.disabled,
+        ).toBe(false);
+        const store = screen.draftStore!;
+        store.addProduct(screen.products[0]!, "1");
+        expect(store.lines.map((line) => line.quantity)).toEqual(["1"]);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "the table holding back a waiting narrowing can remove its dishes, and removing applies it with no poll (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor, "unavailable");
+        await narrowToGarden(el);
+        expect(waiting(el)).toBe(tableWaiting);
+        expect(savedLines(drafts)).toHaveLength(1);
+        await screen.updateComplete;
+        const remove = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          "[data-flag-remove]",
+        )!;
+        expect(remove.disabled).toBe(false);
+        remove.click();
+        await vi.waitFor(() => expect(screen.draftStore!.lines).toHaveLength(0));
+        await vi.waitFor(() => expect(waiting(el)).toBeUndefined());
+        await screen.updateComplete;
+        expect(screen.isConnected).toBe(true);
+        expect(screen.orderingAllowed).toBe(false);
+        await backToFloor(el, formFactor);
+      },
+    );
+
+    async function takeRoomOffProfile(el: TillApp) {
+      const api = el.api as unknown as { getDeviceZones: ReturnType<typeof vi.fn> };
+      api.getDeviceZones.mockResolvedValue({
+        ...selection(["garden"], "garden"),
+        zones: zones.filter((zone) => zone.id !== "room"),
+        snapshot: "off-profile",
+      });
+      await tick(el);
+    }
+    const tableZoneRemoved =
+      "This device can no longer serve this table's zone. Leave the table to hide it.";
+
+    it.each(["phone-portrait", "till"])(
+      "the table whose zone left the profile cannot send its dishes, and leaving it applies the waiting narrowing (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor);
+        await takeRoomOffProfile(el);
+        expect(waiting(el)).toBe(tableZoneRemoved);
+        await screen.updateComplete;
+        expect(screen.orderingAllowed).toBe(false);
+        const sendAll = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          '[data-draft-action="send-all"]',
+        )!;
+        expect(sendAll.disabled).toBe(true);
+        sendAll.click();
+        await el.updateComplete;
+        expect(drafts.submitDraft).not.toHaveBeenCalled();
+        expect(savedLines(drafts)).toHaveLength(1);
+        await backToFloor(el, formFactor);
+        expect(waiting(el)).toBeUndefined();
+        expect(savedLines(drafts)).toHaveLength(1);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "the table whose zone left the profile cannot remove its dishes (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor, "unavailable");
+        await takeRoomOffProfile(el);
+        expect(waiting(el)).toBe(tableZoneRemoved);
+        await screen.updateComplete;
+        const remove = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          "[data-flag-remove]",
+        )!;
+        expect(remove.disabled).toBe(true);
+        remove.click();
+        await el.updateComplete;
+        expect(screen.draftStore!.lines).toHaveLength(1);
+        expect(savedLines(drafts)).toHaveLength(1);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "a send refused with service_zone.not_allowed keeps its unsent dishes (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor);
+        drafts.submitDraft.mockRejectedValueOnce({ code: "service_zone.not_allowed", status: 403 });
+        await screen.updateComplete;
+        screen.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+        await vi.waitFor(() => expect(drafts.submitDraft).toHaveBeenCalledOnce());
+        for (let i = 0; i < 5; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await el.updateComplete;
+        }
+        expect(screen.draftStore!.lines.map((line) => line.quantity)).toEqual(["1"]);
+        expect(savedLines(drafts)).toHaveLength(1);
+        expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBe(screen);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "the zones dialog at a table whose zone left the profile refuses a save in those words (%s)",
+      async (formFactor) => {
+        const { el } = await openRoomTable(formFactor);
+        await takeRoomOffProfile(el);
+        const api = el.api as unknown as { setDeviceZones: ReturnType<typeof vi.fn> };
+        const dialog = await openZones(el);
+        dialog.dispatchEvent(
+          new CustomEvent("save-device-zones", {
+            detail: {
+              profileId: "profile",
+              snapshot: "off-profile",
+              selectedZoneIds: ["garden"],
+              startingZoneId: "garden",
+            },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await vi.waitFor(() =>
+          expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(tableZoneRemoved),
+        );
+        expect(api.setDeviceZones).not.toHaveBeenCalled();
+      },
+    );
+
+    async function openHiddenRoomTable(formFactor: string) {
+      const opened = await openTable(
+        "room",
+        { getDeviceZones: vi.fn().mockResolvedValue(selection(["garden"], "garden")) },
+        true,
+        formFactor,
+      );
+      await vi.waitFor(() => expect(opened.screen.draftStore!.lines).toHaveLength(1));
+      return opened;
+    }
+
+    it.each(["phone-portrait", "till"])(
+      "a table in an already hidden zone does not hold back a widened choice that still hides it (%s)",
+      async (formFactor) => {
+        const { el } = await openHiddenRoomTable(formFactor);
+        const api = el.api as unknown as { getDeviceZones: ReturnType<typeof vi.fn> };
+        api.getDeviceZones.mockResolvedValue({
+          ...selection(["garden", "bar"], "garden"),
+          snapshot: "widen",
+        });
+        await tick(el);
+        expect(waiting(el)).toBeUndefined();
+        await backToFloor(el, formFactor, formFactor === "till" ? ["garden"] : ["bar", "garden"]);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "the zones dialog saves a widened choice at a table in an already hidden zone (%s)",
+      async (formFactor) => {
+        const { el } = await openHiddenRoomTable(formFactor);
+        const api = el.api as unknown as { setDeviceZones: ReturnType<typeof vi.fn> };
+        const dialog = await openZones(el);
+        dialog.dispatchEvent(
+          new CustomEvent("save-device-zones", {
+            detail: {
+              profileId: "profile",
+              snapshot: "scope",
+              selectedZoneIds: ["garden", "bar"],
+              startingZoneId: "garden",
+            },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await vi.waitFor(() => expect(api.setDeviceZones).toHaveBeenCalledOnce());
+        expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error ?? "").toBe("");
+      },
+    );
+
+    it("a hidden zone's table that holds nothing back stays blocked while the counter basket holds the narrowing", async () => {
+      const table = tableIn("table-room", "room");
+      const drafts = draftServer(() => ({
+        tabId: table.party.mainBillId,
+        revision: 1,
+        groups: [],
+      }));
+      drafts.bills.add(table.party.mainBillId);
+      const { el } = await mount(selection(["bar", "room", "garden"], "bar"), {
+        listZones: vi.fn().mockResolvedValue(orderedFloorZones),
+        getTablesState: vi.fn().mockResolvedValue([table]),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+        getPartyBills: vi.fn().mockResolvedValue([]),
+        listDrafts: drafts.listDrafts,
+        saveDraft: drafts.saveDraft,
+        submitDraft: drafts.submitDraft,
+      });
+      counter(el)!.store.addProduct(counter(el)!.products[0]!, "1");
+      await userEvent.click(
+        [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+          (tab) => tab.textContent!.trim() === "Floor",
+        )!,
+      );
+      await vi.waitFor(() => expect(floor(el)?.tables.map((row) => row.id)).toEqual([table.id]));
+      floor(el).dispatchEvent(
+        new CustomEvent("open-table", {
+          detail: { tableId: table.id, seated: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      const screen = () => el.shadowRoot!.querySelector("till-table-order-screen")!;
+      await vi.waitFor(() => expect(screen()?.draftStore).toBeTruthy());
+      expect(screen().orderingAllowed).toBe(true);
+      await narrowToGarden(el);
+      expect(waiting(el)).toBe("Park, send or cancel this order before hiding its zone.");
+      await screen().updateComplete;
+      expect(screen().orderingAllowed).toBe(false);
+    });
+
+    it("the zones dialog refuses to hide the open table's zone in a table's words", async () => {
+      const { el } = await openRoomTable();
+      const api = el.api as unknown as { setDeviceZones: ReturnType<typeof vi.fn> };
+      const dialog = await openZones(el);
+      dialog.dispatchEvent(
+        new CustomEvent("save-device-zones", {
+          detail: {
+            profileId: "profile",
+            snapshot: "scope",
+            selectedZoneIds: ["garden"],
+            startingZoneId: "garden",
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await vi.waitFor(() =>
+        expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+          "Send or remove the unsent dishes before hiding their zone.",
+        ),
+      );
+      expect(api.setDeviceZones).not.toHaveBeenCalled();
+    });
+  });
+
+  const transferApi = {
+    listIncomingDepartmentTransfers: vi.fn(async () => ({
+      receiving: true,
+      count: 0,
+      requests: [],
+    })),
+    listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
+    readDepartmentTransferEvents: vi.fn(
+      (_reload: () => void, { signal }: { signal: AbortSignal }) =>
+        new Promise<void>((resolve) =>
+          signal.addEventListener("abort", () => resolve(), { once: true }),
+        ),
+    ),
+  };
+  const routeOffers = () => {
+    const offers = catalogue("bar");
+    return { ...offers, zones: offers.zones!.filter((zone) => zone.serviceMode !== "table_tab") };
+  };
+  const acceptZones = (el: TillApp) =>
+    el.shadowRoot!.querySelector("till-department-transfers")!.serviceZones.map((zone) => zone.id);
+
+  it("the transfer accept list stays the offers route's zones", async () => {
+    const { el } = await mountHandheld(
+      selection(["garden"], "garden"),
+      "phone-portrait",
+      { ...transferApi, listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()) },
+      ["sale.take_payment"],
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
+    );
+    expect(acceptZones(el)).toEqual(["bar", "shop"]);
+  });
+
+  it("the transfer accept list stays the offers route's zones after a saved choice", async () => {
+    const { el, api } = await mountHandheld(
+      selection(["bar", "shop", "room", "garden"], "bar", false),
+      "phone-portrait",
+      {
+        ...transferApi,
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(routeOffers()),
+        setDeviceZones: vi.fn().mockResolvedValue(selection(["garden"], "garden")),
+      },
+      ["sale.take_payment"],
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
+    );
+    const dialog = await openZones(el);
+    dialog.dispatchEvent(
+      new CustomEvent("save-device-zones", {
+        detail: {
+          profileId: "profile",
+          snapshot: "scope",
+          selectedZoneIds: ["garden"],
+          startingZoneId: "garden",
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(floor(el).zones.map((zone) => zone.id)).toEqual(["garden"]));
+    expect(api.setDeviceZones).toHaveBeenCalledOnce();
+    expect(acceptZones(el)).toEqual(["bar", "shop"]);
+  });
+
+  it("the transfer accept list never takes the choice's zones when the offers read fails", async () => {
+    const { el, api } = await mountHandheld(
+      selection(["garden"], "garden"),
+      "phone-portrait",
+      {
+        ...transferApi,
+        listDefaultZoneOffers: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      },
+      ["sale.take_payment"],
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-department-transfers")).not.toBeNull(),
+    );
+    expect(api.getDeviceZones).toHaveBeenCalledOnce();
+    expect(acceptZones(el)).toEqual([]);
+  });
+
+  it("a kitchen display reads no zones", async () => {
+    const { api } = await mountHandheld(selection(["garden"], "garden"), "kds");
+    expect(api.getDeviceZones).not.toHaveBeenCalled();
+  });
 });

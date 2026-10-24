@@ -5670,6 +5670,7 @@ const deviceZoneSelection = {
   selectedZoneIds: ["22222222-2222-4222-8222-222222222222"],
   startingZoneId: "22222222-2222-4222-8222-222222222222",
   adjusted: false,
+  saved: true,
 };
 it.each(["GET", "PUT"] as const)(
   "device zones %s preserves method, body, signal and the response",

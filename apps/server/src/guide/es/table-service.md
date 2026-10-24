@@ -138,6 +138,35 @@ Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como c
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
+## Elegir las zonas que muestra este dispositivo {#device-zones}
+
+Un dispositivo muestra todas las zonas que permite su perfil. Si solo atiendes la terraza, las demás
+zonas estorban, así que puedes elegir cuáles muestra este dispositivo y en cuál se abre. En una
+caja, abre **Más** (☰), luego **Ajustes** y luego **Zonas en este dispositivo**. En un móvil o una
+tableta, abre **Más** (☰) y elige **Zonas en este dispositivo**. Marca **Mostrar** en cada zona que
+quieras, elige la que **Abre primero** y toca **Guardar**.
+
+Desde entonces, **Sala** muestra solo las zonas que has elegido, y con una sola zona no muestra
+pestañas de zona. Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de
+mostrador elegidas. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra todas las
+zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre;
+después se abre en tu zona de **Abre primero**.
+
+La elección es de este dispositivo y del perfil con el que ha entrado, así que otro dispositivo con
+el mismo perfil conserva la suya, y al cambiar de perfil vuelve la elección de ese perfil. Nunca da a
+este dispositivo una zona que su perfil no permite. Si un móvil o una tableta no puede consultar su
+elección al entrar, lo indica y muestra todas las zonas que permite su perfil hasta que puede.
+
+Una mesa de una zona que este dispositivo no muestra no admite platos nuevos aquí, y sus platos sin
+enviar no se pueden enviar desde este dispositivo. Por eso Waitron no oculta la zona de la mesa que
+tienes abierta mientras tiene platos sin enviar. Si las zonas cambian mientras estás en una mesa
+así, el cambio espera. Aún puedes enviar o quitar los platos sin enviar de la mesa, pero no añadir
+otros nuevos, y la zona se oculta cuando ya no quedan. Si este dispositivo ya no puede atender la
+zona de la mesa, por ejemplo porque un responsable la ha quitado del perfil, tampoco puedes
+enviarlos ni quitarlos: la zona se oculta al salir de la mesa, y sus platos sin enviar se quedan en
+ella. Ocultar una zona no revisa las mesas en las que no estás, así que sus platos sin enviar
+esperan hasta que vuelvas a mostrar la zona.
+
 ## Ha fallado la comprobación de la huella {#fingerprint-check-failed}
 
 Si Waitron indica que ha fallado la comprobación de la huella, avisa a un responsable para que

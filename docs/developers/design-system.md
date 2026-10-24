@@ -5293,7 +5293,8 @@ a transaction receipt keeps the page's tab, query and server page for its own Ba
 
 A handheld keeps the adaptive bar. On a phone it puts secondary actions in More; wider, it moves
 items there only as needed. Find a bill stays in More. Its action priority remains Pass, Kitchen,
-My schedule, Profile, Equipment and Transfers. The tabs stay on the bar while items return as room
+My schedule, Profile, Equipment and Transfers. Zones on this device stays in More, like Find a
+bill, between Profile and Equipment. The tabs stay on the bar while items return as room
 becomes available, and so does the language chooser above phone width; at phone width it moves to
 the end of More when the bar does not fit (see the language chooser paragraph above). Opening More holds its contents steady until it closes.
 
@@ -5344,13 +5345,25 @@ including one with an empty canvas list. No earlier canvas settings are carried 
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.
 
-On a till, Settings → Zones on this device lets you show a subset of the profile's permitted zones
-and choose the starting zone. These choices stay with the device and profile across operators and
-restarts. A display choice grants no permission. Counter is one tab for one counter zone and a
-checked list for several. Floor contains only selected table zones; its pills disappear with one
-zone. The pills, List/Map and zone menu share one toolbar, including at phone width. A device with
-no permitted zones shows an explanation, Settings and Retry. Live narrowing keeps the current
-order or payment in place, refuses new forbidden picks and reconciles navigation when safe.
+Zones on this device lets a till or a handheld show a subset of the profile's permitted zones and
+choose the starting zone: a till's is under ☰ → Settings, a handheld's under ☰ → Zones on this
+device. These choices stay with the device and profile across operators and restarts. A display
+choice grants no permission. On a till, Counter is one tab for one counter zone and a checked list
+for several, and Floor contains only selected table zones. A handheld has no Counter, so its Floor
+contains every selected zone, counter zones included. A handheld opens on its "Opens first" zone
+only once a choice is saved (the zones read's `saved`); before that it opens where it always has,
+on the URL's zone or the first tab. A handheld whose zones read fails at sign-in says so, holds no
+choice and shows every permitted zone until a later read applies one. Floor's pills disappear with
+one zone. The pills, List/Map and zone menu share one toolbar, including at phone width. A till
+with no permitted zones shows an explanation, Settings and Retry. A table in a zone the device does
+not show takes no new picks and cannot send or change its New order there. Saving a choice that
+hides the open table's zone while it holds unsent dishes is refused; other tables' unsent dishes
+are not checked. Live narrowing keeps the current order or payment in place, refuses new
+forbidden picks and reconciles navigation when safe; while the open table's unsent dishes hold it
+back, that table can still send or remove them, and the narrowing applies once they are gone.
+When this device can no longer serve that table's zone (the waiting choice's `zones` leave it out),
+the table cannot send or remove them either, the zones dialog refuses a save there in the status
+line's words, and the narrowing applies once the person leaves the table.
 
 ### The notice strip (till)
 

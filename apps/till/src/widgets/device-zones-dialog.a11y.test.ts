@@ -11,6 +11,7 @@ const selection: DeviceZoneSelection = {
   selectedZoneIds: ["bar", "room"],
   startingZoneId: "bar",
   adjusted: false,
+  saved: true,
   zones: [
     {
       id: "bar",

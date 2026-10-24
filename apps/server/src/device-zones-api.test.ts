@@ -20,6 +20,7 @@ import { VENUE_SERVICE } from "@waitron/venue-service";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import * as tillSession from "./till-session.js";
+import { createZone } from "./testing/service-zone.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -36,11 +37,11 @@ function gate() {
   return { promise, resolve };
 }
 
-async function fixture() {
+async function fixture(formFactor: "till" | "phone-portrait" | "tablet-landscape" = "till") {
   const venue = await setupVenue(suite.db);
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: "Display preferences only", formFactor: "till", capabilities: [] })
+    .values({ name: "Display preferences only", formFactor, capabilities: [] })
     .returning();
   const device = await enrolDeviceForTest(suite.db, venue.cfg, {
     name: "Zone till",
@@ -56,6 +57,9 @@ async function fixture() {
     .returning();
   const session = await run((tx) =>
     loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "4321" }),
+  );
+  const otherSession = await run((tx) =>
+    loginWithPin(tx, { deviceId: other.deviceId, personId: person!.id, pin: "4321" }),
   );
   const app = new Hono();
   mountDeviceApi(
@@ -100,6 +104,7 @@ async function fixture() {
     otherDeviceId: other.deviceId,
     personId: person!.id,
     session,
+    otherSession,
     app,
     request,
     current,
@@ -128,11 +133,40 @@ describe("the device's zone preferences", () => {
     expect(
       (await suite.db.select().from(devices).where(eq(devices.id, f.deviceId)))[0]!.lastSeenAt,
     ).toBe(lastSeenAt);
+    expect((await f.request("GET")).json.saved).toBe(false);
     const saved = await f.request("PUT", { ...f.input, deviceId: f.otherDeviceId });
     expect(saved.status).toBe(200);
+    expect(saved.json.saved).toBe(true);
     expect(saved.json).toMatchObject({
       selectedZoneIds: f.input.selectedZoneIds,
       startingZoneId: f.input.startingZoneId,
+      adjusted: false,
+    });
+    expect(await count(f)).toBe(1);
+    expect(await count(f, f.otherDeviceId)).toBe(0);
+  });
+
+  it("two handhelds on one profile keep their own zones", async () => {
+    const f = await fixture("phone-portrait");
+    const { id: chosen } = await run((tx) => createZone(tx, f.venue.cfg, { name: "Patio" }));
+    const current = await f.request("GET");
+    expect(current.json.zones.length).toBeGreaterThan(1);
+    const saved = await f.request("PUT", {
+      ...f.input,
+      snapshot: current.json.snapshot,
+      selectedZoneIds: [chosen],
+      startingZoneId: chosen,
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.json).toMatchObject({ selectedZoneIds: [chosen] });
+    const other = await f.request(
+      "GET",
+      undefined,
+      `${tillSession.SESSION_COOKIE}=${f.otherSession.token}`,
+    );
+    expect(other.status).toBe(200);
+    expect(other.json).toMatchObject({
+      selectedZoneIds: current.json.zones.map((zone: { id: string }) => zone.id),
       adjusted: false,
     });
     expect(await count(f)).toBe(1);

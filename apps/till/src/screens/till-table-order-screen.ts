@@ -1072,6 +1072,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) api?: TillApi;
   @property() zoneId = "";
   @property({ type: Boolean }) orderingAllowed = true;
+  /** Send, Fire, moving and changing New order lines; unset, they follow `orderingAllowed`. */
+  @property({ attribute: false }) draftActionsAllowed?: boolean;
   @property({ attribute: false }) productSelectable?: (product: TillProduct) => boolean;
   @property() departmentName = "";
   @property({ attribute: false })
@@ -1586,7 +1588,7 @@ export class TillTableOrderScreen extends LitElement {
       !this.busy &&
       !this.groupCommandBusy &&
       !this.currentOrdersUnread &&
-      this.orderingAllowed
+      (this.draftActionsAllowed ?? this.orderingAllowed)
     );
   }
 
@@ -3556,7 +3558,7 @@ export class TillTableOrderScreen extends LitElement {
       !store.editsLocked &&
       !this.groupCommandBusy &&
       this.takeOverSent === null &&
-      this.orderingAllowed
+      (this.draftActionsAllowed ?? this.orderingAllowed)
     );
   }
 
@@ -3593,7 +3595,7 @@ export class TillTableOrderScreen extends LitElement {
       store.sending ||
       store.editsLocked ||
       this.groupCommandBusy ||
-      !this.orderingAllowed
+      !(this.draftActionsAllowed ?? this.orderingAllowed)
     )
       return;
     const lines = this.#draftLayout(store).flatMap((group) =>
@@ -3634,7 +3636,10 @@ export class TillTableOrderScreen extends LitElement {
 
   #draftBar(store: WorkingOrderStore): TemplateResult {
     const busy =
-      store.sending || store.editsLocked || this.groupCommandBusy || !this.orderingAllowed;
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy ||
+      !(this.draftActionsAllowed ?? this.orderingAllowed);
     const sendable = store.lines.filter((line) => this.#draftSendable(line));
     const button = (selectedOnly: boolean, key: StringKey, name: string) => {
       const disabled = busy || !sendable.some((line) => !selectedOnly || this.#selected.has(line));

@@ -27,6 +27,7 @@ export function deviceZonesFixture(
     selectedZoneIds: zones.map((zone) => zone.id),
     startingZoneId: zones[0]?.id ?? null,
     adjusted: false,
+    saved: false,
   };
 }
 
@@ -61,5 +62,6 @@ export function deviceZonesFor(catalogue: {
     selectedZoneIds: zones.map((zone) => zone.id),
     startingZoneId: catalogue.context.zoneId,
     adjusted: false,
+    saved: false,
   };
 }

@@ -97,6 +97,7 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]
           selectedZoneIds: ["counter"],
           startingZoneId: "counter",
           adjusted: false,
+          saved: false,
         }),
         listDefaultZoneOffers: async () => ({
           context: {

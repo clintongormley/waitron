@@ -46,6 +46,7 @@ type BarItem =
   | "expo"
   | "schedule"
   | "profile"
+  | "zones"
   | "equipment"
   | "operator";
 
@@ -482,6 +483,7 @@ export class TillShell extends LitElement {
       expo: this.affordances.includes("expo"),
       schedule: this.affordances.includes("schedule"),
       profile: this.canSwitchProfile,
+      zones: false,
       equipment: true,
       operator: true,
     };
@@ -499,6 +501,7 @@ export class TillShell extends LitElement {
         : fitted,
     );
     if (this.affordances.includes("find-bill")) moved.add("find-bill");
+    moved.add("zones");
     return moved;
   }
 
@@ -713,7 +716,7 @@ export class TillShell extends LitElement {
       here("profile") && this.canSwitchProfile
         ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
         : nothing
-    }${here("equipment") ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment") : nothing}${
+    }${here("zones") ? button("zones", "open-device-zones", t("device_zones.title"), "help.more.zones") : nothing}${here("equipment") ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment") : nothing}${
       here("transfers") && this.transferCount !== undefined
         ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
             >${this.#transferText()}</span
@@ -993,7 +996,7 @@ export class TillShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.formFactor === "till" || this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill") ? nothing : html`<span class="brand">${BRAND}</span>`}
+                  ${this.formFactor === "till" || this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill" && item !== "zones") ? nothing : html`<span class="brand">${BRAND}</span>`}
                   ${
                     this.formFactor === "till"
                       ? html`<div class="till-strip">
