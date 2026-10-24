@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
 import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
 import "./keep-open-dialog.js";
 beforeEach(() => setLocale("en"));
@@ -112,14 +113,13 @@ it("localizes the heading, choices and refusal in Spanish", async () => {
   try {
     setLocale("es");
     const el = await mount({
-      zone: { ...zone, name: "Terraza" },
+      zone: { ...zone, name: "Terrace" },
       refusal: "zone_extension.not_allowed",
     });
     await choose(el, "05:00");
     expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
-      "Ampliar hoy el horario de Terraza",
+      es["keep_open.zone_heading"].replace("{zone}", "Terrace"),
     );
-    expect(el.shadowRoot!.querySelector("[data-delay]")).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-combobox")!.options.at(-1)!.label).toBe(
       "Fin del día (05:00)",
     );

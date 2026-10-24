@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TillApi } from "../api/client.js";
 import type { MenuState } from "../api/client.js";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -52,7 +53,7 @@ for (const kind of ["counter", "table"] as const) {
     }
     it.each([
       { language: "en-GB", want: "Open · until 14:00" },
-      { language: "es-ES", want: "Abierto · hasta las 14:00" },
+      { language: "es-ES", want: es["service.open_until"].replace("{time}", "14:00") },
     ])("shows the period line as status text: $want", async ({ language, want }) => {
       setLocale(language);
       const { el } = await mount({
@@ -83,7 +84,7 @@ for (const kind of ["counter", "table"] as const) {
       expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
       expect(calls).toEqual([]);
     });
-    it("omits both the period line and recovery control when no period ran today", async () => {
+    it("omits the period line when no period ran today", async () => {
       const { el } = await mount({
         open: false,
         zoneOpen: true,

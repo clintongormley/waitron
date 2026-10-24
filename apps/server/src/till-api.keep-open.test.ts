@@ -168,7 +168,7 @@ beforeEach(async () => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe("the till keeps a running period open today", () => {
+describe("the till's keep-open read", () => {
   it("the period extension is no longer a till route", async () => {
     const answer = await call("PUT", `/api/service-zones/${zone}/period-extension`, {
       periodId: lunch,
@@ -176,13 +176,13 @@ describe("the till keeps a running period open today", () => {
     });
     expect(answer.status).toBe(404);
   });
-  it.each(["GET"])("refuses %s for a zone outside the profile department", async (method) => {
-    const answer = await call(method, read(), undefined, deliCookie);
+  it("refuses the read for a zone outside the profile department", async () => {
+    const answer = await call("GET", read(), undefined, deliCookie);
     expect(answer.status).toBe(403);
     expect(answer.json).toMatchObject({ code: "service_zone.not_allowed" });
   });
-  it.each(["GET"])("requires a session for %s", async (method) => {
-    const answer = await call(method, read(), undefined, "");
+  it("requires a session for the read", async () => {
+    const answer = await call("GET", read(), undefined, "");
     expect(answer.status).toBe(401);
     expect(answer.json).toMatchObject({ code: "session.required" });
   });

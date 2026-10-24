@@ -463,7 +463,7 @@ it("reads the clock, the seasons and the special days once for a zone's keep-ope
   });
 });
 
-it("reads a floor closing summary without building period choices", async () => {
+it("reads a floor closing summary without reading menu periods", async () => {
   const f = await zoneFixture();
   await run(async (tx) => {
     const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })

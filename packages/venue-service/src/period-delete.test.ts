@@ -384,7 +384,7 @@ describe("deleting a period", () => {
   const hhmm = (time: string) => time.slice(0, 5);
 
   /** A venue whose No category cell names Lunch alone (Barra), and whose Cocktails cell names
-   *  Lunch (Barra), Afternoon (Cocina) and Dinner (Cocina); Lunch is kept open today. */
+   *  Lunch (Barra), Afternoon (Cocina) and Dinner (Cocina). */
   async function deleteVenue() {
     const v = await venue();
     const [barra] = await db
