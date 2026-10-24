@@ -18875,6 +18875,7 @@ export class TillApp extends LitElement {
                         html`<till-lock-screen
                           .api=${this.api}
                           .deviceName=${this.deviceName}
+                          .legalName=${this.issuer?.venueName ?? ""}
                           .deviceId=${this.deviceId}
                           .devMode=${this.devTab}
                           .serverStatuses=${this.router?.statuses() ?? []}

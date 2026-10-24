@@ -7,7 +7,14 @@ import {
   resolvedDates,
 } from "../test/find-bill-fixtures.js";
 import { page, userEvent } from "vitest/browser";
-import { applyTokens, currentContentLanguages } from "@waitron/ui";
+import {
+  applyTokens,
+  currentContentLanguages,
+  startVenueTheme,
+  VENUE_THEME_STORAGE_KEY,
+} from "@waitron/ui";
+import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
+import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT, watchBuild } from "@waitron/diagnostics";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -375,6 +382,46 @@ describe("till-app session activity", () => {
     expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
     expect(getDevicePassScreen).not.toHaveBeenCalled();
+  });
+
+  it("a kitchen display whose board read fails falls back to the sign-in screen, which shows the logo and Powered by", async () => {
+    const answer = {
+      ...FIXTURE_ANSWER,
+      hash: "logo-hash",
+      logo: { light: png(120, 40), dark: null },
+    };
+    localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
+    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise<Response>(() => {}) });
+    try {
+      const getDeviceStationScreen = vi.fn().mockRejectedValue({ code: "server.internal" });
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "station-device",
+          name: "Grill",
+          formFactor: "kds",
+          kitchenScreens: [kitchenScreen("station")],
+        }),
+        getDeviceStationScreen,
+      });
+      await flush(el);
+      expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
+      expect(el.shadowRoot!.querySelector("till-station-screen")).toBeNull();
+      const screen = lock(el)!;
+      expect(screen).not.toBeNull();
+      await screen.updateComplete;
+      const logo = screen.shadowRoot!.querySelector("wt-venue-logo")!;
+      expect(logo).not.toBeNull();
+      expect(logo.getAttribute("alt")).toBe(till.venueName);
+      expect(screen.shadowRoot!.querySelector("wt-powered-by")).not.toBeNull();
+    } finally {
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+    }
   });
 
   it.each([

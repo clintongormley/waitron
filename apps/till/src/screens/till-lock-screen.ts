@@ -1,7 +1,15 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ThemeChoiceController, baseStyles } from "@waitron/ui";
+import {
+  ThemeChoiceController,
+  VenueLogoController,
+  baseStyles,
+  reportVenueLogoFailure,
+  reportVenueLogoLoaded,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
+import "@waitron/ui/src/components/wt-powered-by.js";
+import "@waitron/ui/src/components/wt-venue-logo.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -57,6 +65,16 @@ export class TillLockScreen extends LitElement {
       .screen {
         max-width: 24rem;
         margin-inline: auto;
+      }
+
+      .logo-place {
+        display: flex;
+        justify-content: center;
+        margin-block-end: var(--wt-space-4);
+      }
+
+      .powered-by {
+        margin-block-start: var(--wt-space-4);
       }
 
       .heading {
@@ -144,6 +162,9 @@ export class TillLockScreen extends LitElement {
 
   @property() deviceName?: string;
 
+  /** Names the venue's logo for a screen reader. */
+  @property() legalName = "";
+
   /** Absent → no remembered operator, read or written: there is nowhere venue-stable to keep one. */
   @property() deviceId?: string;
 
@@ -167,6 +188,7 @@ export class TillLockScreen extends LitElement {
   /** Seconds left on a `pin.throttled` back-off; `0` means not throttled. */
   @state() private throttleRemaining = 0;
 
+  readonly #venueLogo = new VenueLogoController(this);
   #throttleTimer?: ReturnType<typeof setInterval>;
   #connection = 0;
 
@@ -317,7 +339,7 @@ export class TillLockScreen extends LitElement {
         ></wt-language-chooser>
       </div>
       <div class="screen">
-        ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
+        ${this.#renderLogo()} ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
         ${
           this.devMode
             ? html`<wt-button
@@ -330,9 +352,36 @@ export class TillLockScreen extends LitElement {
               </wt-button>`
             : nothing
         }
+        ${this.#renderPoweredBy()}
       </div>
       ${this.#renderServers()}
     `;
+  }
+
+  #renderLogo() {
+    const state = this.#venueLogo.state;
+    if (state.kind === "none") return nothing;
+    if (state.kind === "waiting") {
+      return html`<div class="logo-place"><wt-venue-logo size="sign-in"></wt-venue-logo></div>`;
+    }
+    const { logo } = state;
+    return html`<div class="logo-place">
+      <wt-venue-logo
+        size="sign-in"
+        light=${logo.light}
+        dark=${logo.dark ?? nothing}
+        alt=${this.legalName}
+        @wt-logo-error=${() => reportVenueLogoFailure(logo)}
+        @wt-logo-load=${() => reportVenueLogoLoaded(logo)}
+      ></wt-venue-logo>
+    </div>`;
+  }
+
+  #renderPoweredBy() {
+    const state = this.#venueLogo.state;
+    return state.kind === "logo" && !state.failed
+      ? html`<wt-powered-by class="powered-by" label=${t("login.powered_by")}></wt-powered-by>`
+      : nothing;
   }
 
   /** Shows the operator WHY a till is not selling; a healthy single-primary till shows no line. */

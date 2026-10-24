@@ -1,4 +1,7 @@
 import { afterEach, describe, it, vi } from "vitest";
+import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
+import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
+import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-lock-screen.js";
 import type { TillLockScreen } from "./till-lock-screen.js";
@@ -106,3 +109,53 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "till-lock-screen a11y with a venue logo (%s theme)",
+  (theme) => {
+    afterEach(() => {
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+    });
+
+    async function mountWithLogo() {
+      const answer = {
+        ...FIXTURE_ANSWER,
+        hash: "logo-hash",
+        logo: { light: png(120, 40), dark: null },
+      };
+      localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => new Promise<Response>(() => {}),
+      });
+      const loads = nextLogoLoad();
+      const mounted = await mountWidget<TillLockScreen>(
+        "till-lock-screen",
+        { api: stubApi(), legalName: "Bar Pepe SL" },
+        theme,
+      );
+      await flush(mounted.el);
+      await loads;
+      return mounted;
+    }
+
+    it("has no violations on the staff-picker view with a logo and Powered by", async () => {
+      const { el, host } = await mountWithLogo();
+      await el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "wt-powered-by",
+      )!.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations on the PIN entry view with a logo and Powered by", async () => {
+      const { el, host } = await mountWithLogo();
+      el.shadowRoot!.querySelector<HTMLElement>(
+        'wt-button.operator-button[data-person="p1"]',
+      )!.click();
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+  },
+);

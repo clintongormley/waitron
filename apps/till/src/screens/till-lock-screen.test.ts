@@ -1,6 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { chooseTheme, THEME_STORAGE_KEY, type WtThemeChooser } from "@waitron/ui";
+import {
+  chooseTheme,
+  currentVenueLogo,
+  startVenueTheme,
+  THEME_STORAGE_KEY,
+  VENUE_THEME_STORAGE_KEY,
+  type WtPoweredBy,
+  type WtThemeChooser,
+  type WtVenueLogo,
+} from "@waitron/ui";
+import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
+import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
@@ -682,5 +693,242 @@ describe("till-lock-screen", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-server-status]")).toBeNull();
+  });
+});
+
+describe("the venue logo and Powered by on the sign-in", () => {
+  const LEGAL_NAME = "Bar Pepe SL";
+  const LIGHT = png(120, 40);
+  const WIDE = png(800, 100);
+  const never = () => new Promise<Response>(() => {});
+  const rejecting = () => Promise.reject(new TypeError("Failed to fetch"));
+  const withLogo = (light: string, dark: string | null = null) => ({
+    ...FIXTURE_ANSWER,
+    hash: "logo-hash",
+    logo: { light, dark },
+  });
+
+  /** Starts the venue theme from a stored copy, or with none when `answer` is null (waiting). */
+  function startFrom(answer: unknown): void {
+    if (answer === null) localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+    else localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+  }
+
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const screen = (el: TillLockScreen) => query(el, ".screen")!;
+  const logoOf = (el: TillLockScreen) => query(el, "wt-venue-logo") as WtVenueLogo | null;
+  const poweredBy = (el: TillLockScreen) => query(el, "wt-powered-by") as WtPoweredBy | null;
+  const centre = (r: DOMRect) => (r.left + r.right) / 2;
+
+  /** The box around what the line draws: its words and Waitron's lockup, not its full-width host. */
+  async function lineBox(line: WtPoweredBy): Promise<DOMRect> {
+    await line.updateComplete;
+    const lockup = line.shadowRoot!.querySelector<HTMLImageElement>('[part="lockup"]')!;
+    await expect.poll(() => lockup.complete && lockup.naturalWidth > 0).toBe(true);
+    await frame();
+    const a = line.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
+    const b = lockup.getBoundingClientRect();
+    const left = Math.min(a.left, b.left);
+    const top = Math.min(a.top, b.top);
+    return new DOMRect(
+      left,
+      top,
+      Math.max(a.right, b.right) - left,
+      Math.max(a.bottom, b.bottom) - top,
+    );
+  }
+
+  async function mountWithLogo(props: Partial<TillLockScreen> = {}, theme?: "light" | "dark") {
+    const loads = nextLogoLoad();
+    const mounted = await mountWidget<TillLockScreen>(
+      "till-lock-screen",
+      { api: stubApi(), legalName: LEGAL_NAME, ...props },
+      theme,
+    );
+    await flush(mounted.el);
+    const loaded = await loads;
+    await frame();
+    return { ...mounted, ...loaded };
+  }
+
+  let width = 0;
+  let height = 0;
+  beforeEach(() => {
+    width = window.innerWidth;
+    height = window.innerHeight;
+  });
+  afterEach(async () => {
+    await page.viewport(width, height);
+    localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+    startVenueTheme(document.documentElement, { fetchImpl: rejecting });
+  });
+
+  it("with a venue logo, the logo sits above the heading, centred, named by the legal name", async () => {
+    startFrom(withLogo(LIGHT));
+    const { el, logo, img } = await mountWithLogo();
+    expect(logo).toBe(logoOf(el));
+    expect(logo.getAttribute("size")).toBe("sign-in");
+    expect(logo.getAttribute("light")).toBe(LIGHT);
+    expect(logo.getAttribute("alt")).toBe(LEGAL_NAME);
+    expect(img.alt).toBe(LEGAL_NAME);
+    expect(logo.children).toHaveLength(0);
+    const place = logo.parentElement!;
+    expect(place.classList.contains("logo-place")).toBe(true);
+    expect(screen(el).firstElementChild).toBe(place);
+    const heading = query(el, ".heading")!.getBoundingClientRect();
+    const drawn = img.getBoundingClientRect();
+    expect(img.naturalWidth).toBeGreaterThan(0);
+    expect(drawn.height).toBeCloseTo(96, 0);
+    expect(heading.top - place.getBoundingClientRect().bottom).toBeCloseTo(16, 0);
+    expect(drawn.bottom).toBeLessThanOrEqual(heading.top);
+    expect(
+      Math.abs(centre(drawn) - centre(screen(el).getBoundingClientRect())),
+    ).toBeLessThanOrEqual(1);
+  });
+
+  it("names the logo by a legal name that arrives later", async () => {
+    startFrom(withLogo(LIGHT));
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    expect(logoOf(el)!.getAttribute("alt")).toBe("");
+    el.legalName = LEGAL_NAME;
+    await el.updateComplete;
+    expect(logoOf(el)!.getAttribute("alt")).toBe(LEGAL_NAME);
+  });
+
+  it("with none, no logo and no Powered by, as today", async () => {
+    startFrom(FIXTURE_ANSWER);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      legalName: LEGAL_NAME,
+      devMode: true,
+    });
+    await flush(el);
+    expect(currentVenueLogo().kind).toBe("none");
+    expect(logoOf(el)).toBeNull();
+    expect(query(el, ".logo-place")).toBeNull();
+    expect(poweredBy(el)).toBeNull();
+    expect(screen(el).firstElementChild!.classList.contains("heading")).toBe(true);
+  });
+
+  it("waiting draws an empty 96 px box and no Powered by", async () => {
+    startFrom(null);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      legalName: LEGAL_NAME,
+    });
+    await flush(el);
+    expect(currentVenueLogo().kind).toBe("waiting");
+    const logo = logoOf(el)!;
+    expect(logo.getAttribute("size")).toBe("sign-in");
+    expect(logo.hasAttribute("light")).toBe(false);
+    expect(logo.children).toHaveLength(0);
+    await logo.updateComplete;
+    const box = logo.shadowRoot!.querySelector(".box")!.getBoundingClientRect();
+    expect(box.height).toBeCloseTo(96, 0);
+    expect(box.width).toBe(0);
+    expect(poweredBy(el)).toBeNull();
+  });
+
+  it("a failed logo leaves no logo and no Powered by", async () => {
+    startFrom(withLogo("/no-such.png"));
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      legalName: LEGAL_NAME,
+    });
+    const logo = logoOf(el)!;
+    await expect.poll(() => logo.hasAttribute("failed")).toBe(true);
+    await expect.poll(() => poweredBy(el)).toBeNull();
+    expect(logo.children).toHaveLength(0);
+    expect(logo.shadowRoot!.querySelector("img")).toBeNull();
+    expect(logo.getBoundingClientRect().width).toBe(0);
+  });
+
+  it("under Dark with one image the logo sits on the plate", async () => {
+    startFrom(withLogo(LIGHT));
+    const { el, logo } = await mountWithLogo({}, "dark");
+    expect(logo).toBe(logoOf(el));
+    expect(logo.shadowRoot!.querySelector(".box")!.hasAttribute("data-plate")).toBe(true);
+  });
+
+  async function expectPoweredByLast(el: TillLockScreen, after: Element): Promise<void> {
+    const line = poweredBy(el)!;
+    expect(line).not.toBeNull();
+    expect(screen(el).lastElementChild).toBe(line);
+    expect(line.previousElementSibling).toBe(after);
+    expect(line.getAttribute("label")).toBe(t("login.powered_by"));
+    expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe(
+      t("login.powered_by"),
+    );
+    const box = await lineBox(line);
+    const above = after.getBoundingClientRect();
+    expect(line.getBoundingClientRect().top - above.bottom).toBeCloseTo(16, 0);
+    expect(Math.abs(centre(box) - centre(screen(el).getBoundingClientRect()))).toBeLessThanOrEqual(
+      1,
+    );
+    const status = query(el, "[data-server-status]")!;
+    expect(status.getBoundingClientRect().top).toBeGreaterThanOrEqual(box.bottom);
+  }
+
+  const statuses: ServerStatus[] = [
+    { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
+  ];
+
+  it("Powered by comes last in .screen, after the names and Switch device, 16 px below it, before the server status", async () => {
+    startFrom(withLogo(LIGHT));
+    const { el } = await mountWithLogo({ devMode: true, serverStatuses: statuses });
+    expect(query(el, ".roster")).not.toBeNull();
+    const switchDevice = query(el, "[data-switch-device]")!;
+    expect(
+      query(el, ".roster")!.compareDocumentPosition(switchDevice) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    await expectPoweredByLast(el, switchDevice);
+  });
+
+  it("Powered by comes last after the PIN pad and Switch device", async () => {
+    startFrom(withLogo(LIGHT));
+    const { el } = await mountWithLogo({ devMode: true, serverStatuses: statuses });
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    const pad = query(el, "till-numeric-pad")!;
+    const switchDevice = query(el, "[data-switch-device]")!;
+    expect(pad.compareDocumentPosition(switchDevice) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    await expectPoweredByLast(el, switchDevice);
+  });
+
+  it("without dev mode, Powered by sits 16 px under the names", async () => {
+    startFrom(withLogo(LIGHT));
+    const { el } = await mountWithLogo({ serverStatuses: statuses });
+    await expectPoweredByLast(el, query(el, ".roster")!);
+  });
+
+  it("says Powered by in Spanish from the strings", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      startFrom(withLogo(LIGHT));
+      const { el } = await mountWithLogo();
+      const line = poweredBy(el)!;
+      expect(line.getAttribute("label")).toBe(t("login.powered_by"));
+      expect(line.getAttribute("label")).not.toBe("Powered by");
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("at phone width the logo is at most 320 wide and the line stays in the window", async () => {
+    await page.viewport(390, 844);
+    await frame();
+    startFrom(withLogo(WIDE));
+    const { el, img } = await mountWithLogo({ devMode: true });
+    expect(img.getBoundingClientRect().width).toBeLessThanOrEqual(320);
+    expect(img.getBoundingClientRect().width).toBeGreaterThan(200);
+    const box = await lineBox(poweredBy(el)!);
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(box.bottom).toBeLessThanOrEqual(document.documentElement.scrollHeight);
   });
 });
