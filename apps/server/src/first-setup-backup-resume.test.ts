@@ -487,10 +487,11 @@ it.each(["private-material", "originals", "target-verifier", "dispose"] as const
     const service = recovery(f.options);
     const original = f.host.resolution.withVenueExclusion;
     let turns = 0;
+    let stopping: Promise<void> | undefined;
     f.host.resolution.withVenueExclusion = (run) =>
       original(async () => {
         if (++turns === 2) {
-          if (change === "dispose") await service.dispose();
+          if (change === "dispose") stopping = service.dispose();
           else if (change === "private-material")
             await unlink(
               join(dirname(dirname(f.record.target.target.stateDir)), "publication.json"),
@@ -516,6 +517,7 @@ it.each(["private-material", "originals", "target-verifier", "dispose"] as const
     await expect(service.resume(f.resumeRequest, { onBox: false })).rejects.toMatchObject({
       code: change === "dispose" ? "setup.owner_required" : "setup.attempt_conflict",
     });
+    await stopping;
     await expect(
       access(join(f.record.target.target.stateDir, "trading.env")),
     ).rejects.toMatchObject({ code: "ENOENT" });
@@ -663,6 +665,7 @@ it.each([
   async (change) => {
     const f = await interruptedRepair();
     const service = recovery(f.options);
+    let stopping: Promise<void> | undefined;
     if (change === "module-check")
       f.options.modules = ALL_MODULES.map((module) =>
         module.name === "fiscal-verifactu"
@@ -695,7 +698,7 @@ it.each([
       const original = f.host.resolution.withVenueExclusion;
       f.host.resolution.withVenueExclusion = (run) =>
         original(async () => {
-          await service.dispose();
+          stopping = service.dispose();
           return run();
         });
     }
@@ -706,6 +709,7 @@ it.each([
           ? "setup.owner_required"
           : "setup.attempt_conflict",
     });
+    await stopping;
     expect((await f.workspace.read()).at(-1)!.phase).toBe("placement-started");
     await expect(
       access(join(f.record.target.target.stateDir, "trading.env")),
