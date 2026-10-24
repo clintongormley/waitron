@@ -4036,7 +4036,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 - **Saved, its rows are** Theme in use, Logo (A841 slice 8, D11: "None", or the image in a
   `wt-venue-logo` `size="banner"` box with alt `""`, then "Dark screens: own version" or "Dark
   screens: on a light plate" in `--wt-color-text-muted`; the box follows the page's own Theme
-  setting, so a dark dashboard draws the plate), Brand colour (a chip and the value, "Custom · " before a
+  setting, so a dark dashboard draws the dark image, or the light one on its plate), Brand colour (a chip and the value, "Custom · " before a
   colour that is not a swatch, then for each kind of screen, light before dark, " · {light
   screens / dark screens}" with a chip and either its Main buttons colour set by hand followed by
   ", set by hand" or the shade of its taken fix — A841 slice 6, D14; a kind of screen cannot hold

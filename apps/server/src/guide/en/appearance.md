@@ -73,8 +73,8 @@ by side; otherwise the light version sits above the dark one.
 
 Nothing else on the page, and no other screen, changes until you save. **Use Waitron's look**
 removes the logo and sets every choice back to Waitron's: Waitron's brand colour, Neutral, Standard
-corners, and no colours set by hand. It saves nothing by itself, and it is greyed out while the
-choices already are Waitron's look. **Cancel** closes the editor without saving. If you have
+corners, and no colours set by hand. It saves nothing by itself, and it is greyed out while there is
+no logo and the choices already are Waitron's look. **Cancel** closes the editor without saving. If you have
 changed something, Cancel, leaving the page, and opening another theme from the Themes card ask you
 first.
 
@@ -99,7 +99,8 @@ name: the main logo on the light version, and on the dark version the version fo
 the main logo on its light plate. With no logo, the strip shows Waitron's own logo.
 
 **Save** and **Cancel** treat the logo as they do the other choices. The logo is saved with the
-theme. Showing it on the dashboard and the tills comes in a later update.
+theme. Showing it in the dashboard's banner, on the tills and on the sign-in screens comes in a
+later update.
 
 ## Set colours by hand {#advanced}
 

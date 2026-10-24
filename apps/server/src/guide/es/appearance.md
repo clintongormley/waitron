@@ -79,14 +79,14 @@ las dos versiones quedan una al lado de la otra; si no, la versión clara queda 
 Nada más en la página, ni ninguna otra pantalla, cambia hasta que guardas. **Usar el aspecto de
 Waitron** quita el logotipo y devuelve todas las elecciones a las de Waitron: el color de marca de
 Waitron, Neutro, esquinas Estándar y ningún color fijado a mano. No guarda nada por sí solo, y
-aparece desactivado mientras las elecciones ya son el aspecto de Waitron. **Cancelar** cierra el
+aparece desactivado mientras no hay logotipo y las elecciones ya son el aspecto de Waitron. **Cancelar** cierra el
 editor sin guardar. Si has cambiado algo, Cancelar, salir de la página y abrir otro tema desde la
 tarjeta Temas te lo preguntan antes.
 
 ## Añade tu logotipo {#logo}
 
 Sin logotipo, el campo **Logotipo** muestra **+ Añadir un logotipo**, que abre la biblioteca de
-imágenes: sube allí una imagen o busca una que ya esté, y elige **Usar imagen** en ella. Un
+imágenes: sube allí una imagen o busca una que ya esté allí, y elige **Usar imagen** en ella. Un
 logotipo es un archivo PNG, JPEG o WebP, como todas las imágenes de la biblioteca; un archivo SVG se
 rechaza. La pista bajo el campo dice «PNG, JPEG o WebP. Queda mejor con fondo transparente y al
 menos 200 píxeles de alto.»
@@ -98,7 +98,7 @@ la biblioteca de imágenes.
 
 Cuando hay un logotipo, **Para pantallas oscuras (opcional)** ofrece **+ Añadir una versión para
 pantallas oscuras**: una segunda imagen, como un dibujo claro de tu logotipo, que las pantallas
-oscuras muestran en lugar de la principal. Hasta que añades una, la pista dice «Sin ella, las
+oscuras muestran en lugar de la principal. Hasta que añadas una, la pista dice «Sin ella, las
 pantallas oscuras muestran tu logotipo sobre una placa clara.» La versión para pantallas oscuras
 tiene sus propios Sustituir y Quitar.
 
@@ -108,7 +108,8 @@ pantallas oscuras o el logotipo principal sobre su placa clara. Sin logotipo, la
 logotipo propio de Waitron.
 
 **Guardar** y **Cancelar** tratan el logotipo igual que las demás elecciones. El logotipo se guarda
-con el tema. Mostrarlo en el panel y en las cajas llegará en una actualización posterior.
+con el tema. Mostrarlo en la franja superior del panel, en las cajas y en las pantallas de inicio de sesión
+llegará en una actualización posterior.
 
 ## Fija colores a mano {#advanced}
 
