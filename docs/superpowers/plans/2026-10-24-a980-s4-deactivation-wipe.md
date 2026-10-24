@@ -30,12 +30,18 @@ pending passkey challenges in the database — and so in every backup copy. _Res
    Each caller keeps its own status write (`pending` for reset and re-enable, `suspended` for
    disable) and its own `emailVerifiedAt` handling: reset and re-enable clear it as today;
    disabling leaves it (it is not a sign-in secret, and re-enabling clears it anyway).
-2. **Every save or disable that leaves a person suspended wipes.** The edit route wipes whenever
-   the saved status is `suspended` (`staff.ts:206-208` already refuses every other status change),
-   and `deactivatePerson`'s early return for an already-suspended person (`staff.ts:288`) becomes
-   "wipe, then return" (no session work: their sessions ended when they were first disabled). This
-   is simpler than wiping only on the change, and it lets an admin clear the leftovers of a person
-   disabled before this ships, or brought in by an import, by pressing Disable or saving again.
+2. **The change into suspended wipes, and so does Disable on a person already suspended.** The edit
+   route wipes only when it changes the status to `suspended` (`input.status === "suspended" &&
+   person.status !== "suspended"`), a change that already needs `person.admin`. Saving an already
+   suspended person's details does not wipe: a manager without `person.admin` may save a person's
+   names with the status and email unchanged, and wiping there would let them delete an admin's
+   PIN and passkeys (found in review: before `{pin_hash:"scrypt$…", passkeys:1}`, after
+   `{pin_hash:null, passkeys:0}`). `deactivatePerson`'s early return for an already-suspended
+   person (`staff.ts:288`) becomes "wipe, then return" (no session work: their sessions ended when
+   they were first disabled); it checks `person.admin` before that branch, so pressing Disable is
+   the admin's way to clear the leftovers of a person disabled before this ships, or brought in by
+   an import. Amended 2026-10-24 after review; the first version wiped on every save that left a
+   person suspended.
 3. **The two unused functions go.** `suspendPerson` (`staff.ts:567-577`) writes `suspended`
    without a wipe and `reactivatePerson` (`staff.ts:579-588`) writes `active` straight back,
    keeping the old PIN; neither is exported from `packages/identity/src/index.ts` nor called by any
@@ -104,7 +110,7 @@ Files: `packages/identity/src/staff.ts`, `packages/identity/src/staff.test.ts`,
      unchanged;
    - after `updatePersonDetails` with `status: "suspended"`, the same;
    - a person ALREADY suspended (by SQL) who still holds every secret: `deactivatePerson` wipes
-     them, and so does saving their details with status `suspended` (decision 2);
+     them; saving their details with status `suspended` keeps them (decision 2, amended);
    - another person's secrets are untouched by each (the wipe is keyed by the right id);
    - re-enabling (`reactivatePersonForInvitation`) a person suspended by SQL who still holds every
      secret leaves none and leaves them `pending` (today's re-enable test checks only the status,

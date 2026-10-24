@@ -560,10 +560,11 @@ describe("deactivatePerson refusals", () => {
   it("deactivates another person whose id arrived in upper case", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff");
+    await seedSignInDetails(target, "upper-case@example.com");
     await run((tx) =>
       deactivatePerson(tx, { managementSessionId: token, personId: target.toUpperCase() }),
     );
-    expect(await statusOf(target)).toBe("suspended");
+    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
   });
 
   it("refuses a staff actor with authorization.not_permitted, leaving the person active", async () => {
@@ -595,7 +596,7 @@ describe("deactivatePerson refusals", () => {
     expect(await statusOf(admin)).toBe("suspended");
   });
 
-  it("does nothing to an account that is already inactive, its sessions included", async () => {
+  it("leaves an already inactive account inactive and its sessions as they were", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const { personId, tillSessionId } = await seedStaffWithSession("inactive@example.com");
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
@@ -977,14 +978,20 @@ describe("disabling a person deletes their sign-in details", () => {
       expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
       expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
     });
-
-    it(`${name} deletes the sign-in details an already inactive person still holds`, async () => {
-      const { token, target, bystander } = await seedPair("suspended");
-      await act(token, target);
-      expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
-      expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
-    });
   }
+
+  it("the Disable action deletes the sign-in details an already inactive person still holds", async () => {
+    const { token, target, bystander } = await seedPair("suspended");
+    await disable["the Disable action"](token, target);
+    expect(await signInDetailsOf(target)).toEqual(withNoSignInDetails("suspended", VERIFIED_AT));
+    expect(await signInDetailsOf(bystander)).toEqual(withEverySignInDetail(bystander, "active"));
+  });
+
+  it("saving an already inactive person's edit form keeps their sign-in details, because only the change into inactive or the Disable action deletes them", async () => {
+    const { token, target } = await seedPair("suspended");
+    await disable["saving the edit form as inactive"](token, target);
+    expect(await signInDetailsOf(target)).toEqual(withEverySignInDetail(target, "suspended"));
+  });
 
   it("re-enabling deletes the sign-in details an inactive person still holds", async () => {
     const { token, target, bystander } = await seedPair("suspended");

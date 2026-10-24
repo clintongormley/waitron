@@ -265,7 +265,8 @@ export async function updatePersonDetails(
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
-  if (input.status === "suspended") await wipeSignInDetails(tx, person.id);
+  if (input.status === "suspended" && person.status !== "suspended")
+    await wipeSignInDetails(tx, person.id);
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
   else if (input.role !== person.role && (input.role === "admin" || person.role === "admin"))

@@ -773,9 +773,10 @@ signature check, so the id plus a challenge, which anyone can fetch without sign
 (`POST /management-api/passkey/auth/options`), is enough to ask. A credential row has no status of
 its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`), so a row that
 still belongs to a suspended person answers the generic refusal. Disabling a person (the Disable
-action, `deactivatePerson`, or saving their details as inactive, `updatePersonDetails`), an admin's
-login reset and a reactivation delete the person's passkeys (`packages/identity/src/staff.ts`), so
-afterwards an old passkey answers `passkey.not_registered` like one the person removed.
+action, `deactivatePerson`, or changing their status to inactive in the edit form,
+`updatePersonDetails`), an admin's login reset and a reactivation delete the person's passkeys
+(`packages/identity/src/staff.ts`), so afterwards an old passkey answers `passkey.not_registered`
+like one the person removed.
 Guards: the unknown, wiped-install, login-reset, disabled and suspended-with-a-row cases in
 `packages/identity/src/passkey.test.ts` (the wiped-install case runs the same lookup as the unknown
 one, since the lookup never reads the user handle), the deletion cases in
