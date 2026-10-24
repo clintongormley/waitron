@@ -3499,13 +3499,15 @@ at the top. The menu and page content belong underneath the banner. The
 banner shows the venue's logo when one is set (`wt-venue-logo`, `size="banner"`, alt empty,
 Waitron's lockup in its fallback slot), else the canonical Waitron lockup, and then the deployment
 tenant's legal name, not a location name: one deployment database represents one tenant, while
-that tenant can contain several locations. Before the first answer about the theme in use, the
-logo's place is an empty `wt-venue-logo` box of the banner's height.
+that tenant can contain several locations. While a browser with no saved copy of the venue's theme
+waits for its first theme read, the logo's place is an empty `wt-venue-logo` `size="banner"` box; a
+read that fails or passes its 5-second limit (`VENUE_THEME_TIME_LIMIT_MS`) ends the wait with the
+lockup.
 Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
 holding Account settings, Theme, Language and Log out — at the banner's trailing (right-hand in the shipped locales)
 edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
-two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
-space runs short, and the legal name and Live mode pill take the second in full. The floor plan
+two rows: the menu toggle, the logo (the venue's, or Waitron's lockup) and the menus share the
+first, with the logo shrinking when space runs short, and the legal name and Live mode pill take the second in full. The floor plan
 editor covers the banner and the menu with its full-window modal; its Undo, Redo, Cancel and Save
 keep one row down to 320 px (A502). Signed out, the Theme chooser (`wt-theme-chooser`) and then
 the language chooser (`wt-language-chooser`) sit at the trailing edge, with nothing after them (see

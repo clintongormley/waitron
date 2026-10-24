@@ -114,13 +114,13 @@ The logo of the theme in use shows in these places:
 - **"Powered by Waitron"**, a line under the dashboard's sign-in form and at the foot of a till's or
   handheld's sign-in screen, which shows while a logo is set.
 
-A cash register's top bar shows no logo yet.
+A till's top bar shows no logo yet.
 
 Each screen shows the light or the dark image by its own **Theme** setting. A dark screen, when the
 theme has no version for dark screens, shows the main logo on a white plate.
 
 Screens follow a new or removed logo when they follow a change of colours, as **Save a theme**
-above describes.
+below describes.
 
 When a screen cannot load the picture, the dashboard's banner shows Waitron's logo, a handheld's bar
 shows the word "Waitron", and a till's or handheld's sign-in screen shows no logo, with no gap where

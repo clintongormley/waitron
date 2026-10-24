@@ -120,19 +120,19 @@ El logotipo del tema en uso se ve en estos lugares:
   primero que la barra deja fuera cuando le falta sitio, y una pantalla estrecha, como la de un
   teléfono, lo deja fuera del todo, como hacía con la palabra.
 - **La pantalla de inicio de sesión de una caja o de un terminal de camarero**, encima del nombre
-  del equipo y de la lista de nombres.
+  del dispositivo y de la lista de nombres.
 - **«Con la tecnología de Waitron»**, una línea bajo el formulario de inicio de sesión del panel y
   al pie de la pantalla de inicio de sesión de una caja o de un terminal de camarero, que se ve
   mientras hay un logotipo.
 
-La barra superior de una caja registradora todavía no muestra ningún logotipo.
+La barra superior de una caja todavía no muestra ningún logotipo.
 
 Cada pantalla muestra la imagen clara o la oscura según su propio ajuste de **Tema**. Una pantalla
 oscura, cuando el tema no tiene versión para pantallas oscuras, muestra el logotipo principal sobre
 una placa blanca.
 
-Las pantallas siguen un logotipo nuevo o quitado cuando siguen un cambio de colores, como describe
-**Guarda un tema** más arriba.
+Las pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan un
+cambio de colores, como describe **Guarda un tema** más abajo.
 
 Cuando una pantalla no puede cargar la imagen, la franja superior del panel muestra el logotipo de
 Waitron, la barra de un terminal de camarero muestra la palabra «Waitron» y la pantalla de inicio
