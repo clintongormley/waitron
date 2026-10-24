@@ -6,15 +6,17 @@
 
 **Revisions, 2026-10-24.** Revised three times for fresh-context reviews, all with probes run on main: `~/waitron-campaign/item-a1042-plan-review.md` (round 1: 4 high, 4 medium, 8 low), `item-a1042-plan-review-2.md` (round 2: 2 high, 6 medium, 4 low) and `item-a1042-plan-review-3.md` (round 3: 3 high, 6 medium, 7 low). The PR description lists each finding and what changed. Round 2 corrected the plan's account of `node.db`: it holds no tables at all. Round 3 corrected the recovery-page wording to the owner's never-reset rule and covered the record store's nested step folders.
 
-**Goal:** when the owner presses **Start again** on an unused first setup, the box checks once that the attempt never activated, filed or sold anything, deletes the attempt, and keeps one small note: the last invoice series name any attempt chose. From then on the box never issues a series name at or before that note.
+**Revision 4, 2026-10-24 (the owner's seven answers).** The answers are in "Owner answers (2026-10-24)" below. What changed: a Start again on a missing venue database now **asks** the person and proceeds only on a confirmation recorded before anything is deleted (D3a, Task 3a); the note is **never deleted** by anything but `waitron.sh reset --all`, and is only ever replaced by a later name (D1); a reinstall from the USB stick should **keep** the note, drafted as a change to B3's design ("Proposed change to B3's design"); a plain `waitron.sh reset` keeps it (Task 6b). The items of "Existing assertions this plan changes" that the owner already approved are marked so; the ones these answers change are rewritten and marked "REVISED — needs owner approval", and go back to the owner with the screen wording ("For the owner: the repair page's words when the database is missing") and the B3 change **before any build**. Every file and line this revision cites was re-read at main 69a7e2ae3; `git diff --stat db4e0a6bf..69a7e2ae3` over the files the assertion list names prints nothing (it prints only three `packages/provisioning` configuration-transfer files, none of them cited).
 
-**Architecture:** the note is one small file in the box's own settings folder (the "state folder", `WAITRON_STATE_DIR`), written only by Start again, only ever raised, and never carried in or written by a backup. Every place that picks a new production series name — first setup, a restore, a re-registration and a promotion — adds the note to the history it already checks, as a "time floor" (the earliest moment a new name may be taken). A second small file, written before any deletion and removed after it, names exactly what Start again is deleting, so a deletion cut off by a power cut is finished safely or refused with a page that says what to do. The kept copies of abandoned attempts ("retirement archives") and the separate folder each new attempt used to get (a "workspace") are removed.
+**Goal:** when the owner presses **Start again** on an unused first setup, the box checks once that the attempt never activated, filed or sold anything — or, when the venue database is missing and nothing can be checked, asks the person and records their answer — deletes the attempt, and keeps one small note: the last invoice series name any attempt chose. From then on the box never issues a series name at or before that note.
+
+**Architecture:** the note is one small file in the box's own settings folder (the "state folder", `WAITRON_STATE_DIR`), written only by Start again, only ever replaced by a later name, never deleted except by `waitron.sh reset --all`, and never carried in or written by a backup. Every place that picks a new production series name — first setup, a restore, a re-registration and a promotion — adds the note to the history it already checks, as a "time floor" (the earliest moment a new name may be taken). A second small file, written before any deletion and removed after it, names exactly what Start again is deleting, so a deletion cut off by a power cut is finished safely or refused with a page that says what to do. When the venue database is missing, a third kind of small file — one per confirmation, kept beside the note — records who confirmed that nothing was filed or sold, when, and what the attempt's own record showed them. The kept copies of abandoned attempts ("retirement archives") and the separate folder each new attempt used to get (a "workspace") are removed.
 
 **Tech stack:** TypeScript, Node's `node:sqlite`, Vitest (real databases through `useVenueDb`), Lit and Chromium for the setup screens.
 
 **Spec:** the owner's ruling of 2026-10-24 04:39 (`~/waitron-campaign/questions.md`, "OWNER ANSWER — A1037's open question: neither; replace the archive with one small note") and the queue entry A1042 (`~/waitron-campaign/queue.md`). Read both with this plan. The ruling supersedes "Preserve the original attempt and artifacts" in `docs/superpowers/specs/2026-10-16-a679-hour-coded-series-design.md:157`.
 
-**Before the build:** the owner answers the open questions and approves the section "Existing assertions this plan changes" in one answer. Until then no implementer is dispatched.
+**Before the build:** the owner answered the seven questions on 2026-10-24. Three things go back to the owner before any implementer is dispatched: the items marked "REVISED — needs owner approval" in "Existing assertions this plan changes", the screen wording for a missing database, and the proposed B3 change — together with the three points in "Points for the owner in this revision". Lane E's A731 must also have landed (Task 0).
 
 ## Words used in this plan
 
@@ -25,6 +27,9 @@
 - **Workspace:** the fresh pair of folders under `<state>/first-setup-workspaces/<id>/` that Start again moves the box into today. The box's original folders are the **anchor**.
 - **Kept picks file:** `module-preparation-state.json`, which keeps every name the chooser has picked on this box, in the anchor state folder.
 - **Empty-database proof:** the one-time check that the venue database holds no business rows and the attempt never reached activation.
+- **The ask:** what the repair page shows instead of the empty-database proof when the venue database is missing — the box says it cannot check, shows what the attempt's own record says it reached, and offers recovery from a backup or a confirmed Start again (D3a).
+- **Confirmation record:** the small file the ask writes, before anything is deleted, naming who confirmed, when, and what the record showed (D3a).
+- **Setup password:** the administrator password chosen during first setup. The repair page's password step ("ownership recovery", `recover` in the attempt's history) proves the person holds it.
 - **Time floor:** a moment before which no new series name may be taken. The name chooser already takes several (`packages/fiscal-verifactu/src/hour-history.ts:20,72-73`).
 - **Module seat:** a hook in the shared module contract that a module fills in, so shared code can ask the fiscal module a question without knowing fiscal rules (`CLAUDE.md` §3, composition list rule).
 - **Throwaway naming:** the naming used by Demo, Preparation, a development box's Live, and the readiness test run before a production Live; it has no history check (`apps/server/src/setup-api.ts:585,598-605`, `packages/provisioning/src/fiscal-readiness-runner.ts:40`).
@@ -38,9 +43,10 @@
 - Fiscal: invoice series names. Review path FULL. The PR ends `needs-owner-review`; the owner lands it.
 - The golden huella test and the inmutabilidad suite pass **unedited**. No change to `registerSif`, fiscal writers, hashes, numbering, SQL, migrations or `registros_facturacion`.
 - No migration. No backwards-compatibility code (`CLAUDE.md` §3).
-- The empty-database proof is never loosened. Who may Start again (`apps/server/src/first-setup-resolution.ts:233-299`) stays as it is, except where an approved open question narrows it; **no implementer changes those rules to make a test reach its scenario.** This plan only narrows them (Q1, the `node.db` rule, outside evidence, an unfinished deletion).
+- The empty-database proof is never loosened. Who may Start again (`apps/server/src/first-setup-resolution.ts:233-299`) stays as it is, except where this plan says otherwise; **no implementer changes those rules to make a test reach its scenario.** This plan narrows them (the missing-database confirmation, the `node.db` rule, outside evidence, an unfinished deletion) and widens them in one place, pending the owner's approval: with the database missing and the confirmation given, the attempt's status may be any status except `complete` (D3a, point 2 of "Points for the owner in this revision").
+- **The note is never deleted, and never lowered** (owner, Q3 and Q4). No code path removes `first-setup-start-again.json` — not a read, a start, Start again, a restore, the in-app reset, or a plain `waitron.sh reset`; the one deliberate way is `waitron.sh reset --all`. A write replaces it only with a later floor, through `writeDurableHostJson`'s write-to-a-temporary-file-then-rename (`packages/provisioning/src/durable-host-json.ts:44-90`), so a cut write leaves the old note whole. The same holds for the confirmation records.
 - Missing, partial, corrupt or unreadable never counts as empty, **with one stated exception:** a missing `node.db` counts as nothing to check, because no migration set is ever applied to it (`packages/migrations/src/apply.ts:33`, "`node.db` stays empty (#548)"; `packages/db/src/client.ts:56`). A missing note file, or a missing state folder, means "no floor" (`readDurableHostJson` returns `null` for both, `packages/provisioning/src/durable-host-json.ts:22-26`); a note that exists but is empty, partial, has unknown keys, or holds an empty string is refused, never read as "no floor" (`CLAUDE.md` §3, "An empty value is a valid value").
-- The note and the deletion marker are written only inside Start again's existing turn — `host.resolution.withVenueExclusion` (holding `venue.lock`, which refuses a second process) and `host.coordinator.run` (one action at a time in this process) — and the marker is removed by the start under `lockVenueDatabase`. Writes go through `writeDurableHostJson` (`durable-host-json.ts:44-90`: temporary file, file sync, rename, folder sync; it sets the folder to `0700`, as the claim marker already does, `packages/provisioning/src/first-setup-state.ts:558`). Never unlink `venue.lock`, `venue.holder.json`, `migrations.lock` or `recovery.lock`.
+- The note, the confirmation records and the deletion marker are written only inside Start again's existing turn — `host.resolution.withVenueExclusion` (holding `venue.lock`, which refuses a second process) and `host.coordinator.run` (one action at a time in this process) — and the marker is removed by the start under `lockVenueDatabase`. Writes go through `writeDurableHostJson` (`durable-host-json.ts:44-90`: temporary file, file sync, rename, folder sync; it sets the folder to `0700`, as the claim marker already does, `packages/provisioning/src/first-setup-state.ts:558`). Never unlink `venue.lock`, `venue.holder.json`, `migrations.lock` or `recovery.lock`.
 - Each new provisioning file has `import "./errors.js";`.
 - Error codes. Reused: `sif.allocation_invalid` with `{ reason: "minute_not_later", allowedFromMs }` for a name refused because of the note, which the setup and restore screens already explain in English and Spanish (`packages/fiscal-verifactu/src/setup/clock-wait.ts:100-111,263-269`); `setup.attempt_invalid` for a damaged note (the setup screen shows "The saved setup cannot be read. Contact support.", `apps/setup/src/i18n/strings/shell.ts:8`); `setup.not_ready` for a Start again that is not allowed. **New, two:** `setup.start_again_incomplete` (a Start again deletion is unfinished, or cannot be finished safely) and `setup.workspace_unsupported` (the box holds a first setup kept by an earlier Waitron, D4). Each is registered in `packages/provisioning/src/errors.ts` with no params, imported where thrown, given recovery-page operator text (D5), and given setup-app wording in English and Spanish through both `apps/setup/src/i18n/strings/shell.ts` and the code-to-text map `FIRST_SETUP_ERROR_MESSAGES` (`apps/setup/src/setup-app.ts:194-199`, read at `:749,1152,1442`; without the map entry nothing reads the strings). Why new codes and not `setup.attempt_uncertain`: the recovery page picks its advice by code, and `setup.attempt_uncertain` is also thrown on committed paths (`apps/server/src/first-setup-publication.ts:27-34`, `first-fiscal-activation.ts:31-33`, `packages/provisioning/src/first-setup-state.ts:513`), so its text must stay general.
 - **The recovery page never suggests wiping or resetting anything** (owner decision 2026-09-10, `apps/server/src/recovery-surface.ts:247-249`: "the action is always restore or reinstall"). The test that pins it is `apps/server/src/recovery-surface.test.ts:386-394`, "never suggests wiping anything, in either language". Every task that touches recovery-page text runs `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts` whole, not only its new cases.
@@ -50,9 +56,16 @@
 - **Any change to an existing assertion that is not in "Existing assertions this plan changes" is a STOP.** The implementer reports it; it does not make it.
 - A run with no `Tests` count is no evidence (`CLAUDE.md` §4). Run each command from the worktree root.
 
-## Current behaviour (read at db4e0a6bf, with runs named)
+## Current behaviour (read at db4e0a6bf, with runs named; re-checked at 69a7e2ae3)
 
-What was run. By me: `pnpm --filter @waitron/server exec vitest run src/first-setup-retired-assignments.test.ts` (36 passed), and the sweep commands in "How the assertion list was built". By the reviewers, in throwaway worktrees at the same commit:
+What was run for revision 4, at 69a7e2ae3:
+
+- `pnpm --filter @waitron/server exec vitest run src/first-setup-resolution.route.test.ts src/first-fiscal-hour-finish.test.ts src/first-setup-unused-pdf.test.ts src/first-setup-resolution-inspection.test.ts -t "missing"`: 13 passed, 75 skipped. These are today's missing-database Start again cases (S5, S10, S13, S14's `:176-221` among them), all succeeding with the password and no other question.
+- `pnpm --filter @waitron/setup exec vitest run src/first-setup-retirement.test.ts src/setup-app-missing-database.test.ts`: 32 passed (A2, A3 as they stand).
+- The plain-reset clean-up of `deploy/waitron.sh:745`, run as written against a scratch state folder holding `tls/ca.crt`, the note, a confirmation folder, `first-setup.json` and `trading.env` (script `/tmp/a1042rev/reset-probe.sh`, outside the repo): it left only `tls/ca.crt`, so **today a plain reset deletes the note**. The same expression with `! -name first-setup-start-again.json ! -name first-setup-start-again-confirmations` added left `tls/`, the note and the confirmation folder. The failing case would have shown the note gone in the second run.
+- The existing pin `scripts/waitron-sh.test.mjs:1487-1491` (`/^run\b.*--entrypoint sh app -c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls/`) run in `node` against the command with the two added clauses: matches; against the command with `! -name tls` removed (control): does not match. So Task 6b changes no existing assertion there.
+
+What was run earlier. By me: `pnpm --filter @waitron/server exec vitest run src/first-setup-retired-assignments.test.ts` (36 passed), and the sweep commands in "How the assertion list was built". By the reviewers, in throwaway worktrees at the same commit:
 
 - Turning off the kept-picks history source moves today's refusals to the archive check (`setup.attempt_conflict`, HTTP 409).
 - Start again on an attempt that has chosen a name, with the `no-current-master` answer, is refused `setup.not_ready`. With the `current-master` answer, a new attempt whose clock is 10 minutes behind is refused `minute_not_later` with `allowedFromMs` 1792150980000 (the start of the minute after the abandoned name), and the kept picks file is still there afterwards.
@@ -70,7 +83,7 @@ Everything else in this section was read.
 
 **Who may Start again today.**
 - With no password: an attempt with no history beyond claiming (`unused`, `first-setup-resolution.ts:40-51`) plus a confirmed `no-current-master` answer (`:276-282`); or an attempt that chose a name but never used it (`apps/server/src/first-setup-unused-assignment.ts:9-140`) with a `current-master` answer or none (`:253-258`).
-- With the original password: also a missing database (`:296-298`). On that route only the status is checked (`:233`); history and result are not read. In production any status except `complete` and `abandoned` can be abandoned through `POST /setup-api/first-setup/abandon` (`setup-first-fiscal-api.ts:555-561`, `packages/provisioning/src/first-setup-owner.ts:171-185`, `first-setup-state.ts:720-722,799-801`), so an attempt whose fiscal commit finished can be started again with its database missing (reviewer's probe). This is not a live defect today: Start again deletes nothing, it archives the attempt with its frozen request and inputs, the next attempt's names are checked against the archives and the kept picks file, and the database was already gone before Start again ran (round-2 review, item M5, read). Q1 decides it for the new design.
+- With the original password: also a missing database (`:296-298`). On that route only the status is checked (`:233`); history and result are not read. In production any status except `complete` and `abandoned` can be abandoned through `POST /setup-api/first-setup/abandon` (`setup-first-fiscal-api.ts:555-561`, `packages/provisioning/src/first-setup-owner.ts:171-185`, `first-setup-state.ts:720-722,799-801`), so an attempt whose fiscal commit finished can be started again with its database missing (reviewer's probe). This is not a live defect today: Start again deletes nothing, it archives the attempt with its frozen request and inputs, the next attempt's names are checked against the archives and the kept picks file, and the database was already gone before Start again ran (round-2 review, item M5, read). The owner's Q1 answer decides it for the new design: the box asks (D3a).
 
 **Every reader of the archives.**
 
@@ -98,6 +111,14 @@ Everything else in this section was read.
 4. It carries archive-based floors into the restore target's module history file and requires that "a second backup/recovery still sees the later floor" (plan `:102`); its tests race its commit against "normal empty start-again" (`:120`).
 5. Its restore runs `createSelectedRecoveryPreparation` on the nested target's folders (`:102`).
 6. It preserves old databases and never deletes (`:21`).
+7. Read in PR #2043's diff at its head def03078a (`gh pr diff 2043`, 2026-10-24): the repair page gains a **Recover from backup** button (`data-test="recover-backup"`, strings key `recoverBackup`, "Recover from backup" / «Recuperar desde una copia», in `apps/setup/src/screens/initial-owner-strings.ts`), drawn whenever an inspection is shown and no restart is pending, next to Start again; it opens a screen `first-backup`. Its routes live under `/setup-api/first-setup/resolution/backup/` and refuse anything but same-origin HTTPS (`setup-first-backup-api.ts`, its `transport` check); its open step takes the backup and the recovery key, not the setup password. Its journal is `<state>/first-setup-resolutions/backup-recovery/<id>/` with a `current.json` beside it. The ask (D3a) offers this button as its option (a); Task 0 re-checks every point of this item on the landed code.
+
+**Where the missing-database Start again is offered today, and why the ask belongs there.** Two different pages exist:
+
+- The **repair page** is the setup app's `screen-first-owner` (`#renderFirstOwner`, `apps/setup/src/setup-app.ts:2106-2281`), served by the repair listener when the start finds an interrupted first setup (`resolveFirstSetupEntry`, `apps/server/src/first-setup-entry.ts:45-110`, `kind: "resolution"`). Anyone on the venue's network can open it, but its missing-database Start again is drawn enabled only after the setup password step: `authenticatedMissing` needs a recovered session (`setup-app.ts:2111-2115`), and the server refuses that Start again unless the request carries an owner whose latest event is a fresh `recover` (`apps/server/src/first-setup-resolution.ts:284-299`) and arrives over HTTPS (`apps/server/src/setup-first-fiscal-api.ts:817-819`, `setup.owner_required` otherwise).
+- The **recovery page** (`recoveryApp`, `apps/server/src/recovery-surface.ts`) is served when a start fails. It needs no password, its title and action are fixed strings chosen by error code, its only action is Try again, and its wording "never suggests wiping or resetting anything" (`recovery-surface.ts:247-249`, pinned by `apps/server/src/recovery-surface.test.ts:386-394`; `docs/developers/conventions-ui.md:1053-1056`).
+
+So the ask lives on the **repair page, after the setup password step**. It cannot live on the recovery page: it offers a deletion, which that page's rule forbids, and that page has no password step and no form. The recovery page's never-wipe rule does not bind the setup app: the setup app's wording already offers to abandon an attempt (`initialOwnerStrings.abandon`, `apps/setup/src/screens/initial-owner-strings.ts:26`).
 
 ## Decisions
 
@@ -121,17 +142,22 @@ The note is `first-setup-start-again.json` in the box's own state folder, found 
 
 A restore cannot overwrite it: a restore archive writes only its database dump and state-folder secrets (`restore.ts:221-241`), and its secret entries are filtered through `isFirstSetupHostPath` (`:236-241`, reached from all three archive readers at `:190`, `:208`, `:866`). The note's name joins `FIRST_SETUP_HOST_FILES` (`first-setup-state.ts:137-151`), so an archive carrying it is refused as an unexpected entry, and a recovery bundle carrying it is refused `recovery.bundle_invalid` (`apps/server/src/state-secrets.ts:87`). Task 2 checks whether the bucket-stream restore (`apps/server/src/restore-stream.ts`) writes state files by another path.
 
-When the restored backup has its own history, the latest floor wins: the note sits beside the backup's history and its `backup-created` floor on every restore, re-registration and promotion (Task 6).
+When the restored backup has its own history, the latest floor wins: the note sits beside the backup's history and its `backup-created` floor on every restore, re-registration and promotion (Task 6). A backup never carries the note: the state files a backup takes are a fixed list (`collectStateSecrets`, `apps/server/src/state-secrets.ts:26-46`, reading `RECOVERY_FILES`), and the note is not on it.
 
-**Ways the note is lost, and what each means for reusing a name.** Every new production name still needs the box's clock and a second clock to agree within 30 seconds (`CLAUDE.md` §5), so after any of these a repeated name needs both clocks to read earlier than the forgotten name.
+**The write rule (owner, Q3).** The note is only ever **replaced by a later one**: `raiseStartAgainNote` writes only when the new `floorMs` is strictly greater, so an equal or earlier floor writes nothing; the write goes to a temporary file that is synced and then renamed over the note (`durable-host-json.ts:44-90`), so at every moment the file holds either the old note or the new one, never nothing. **No code path deletes it**: there is no delete function; D3's deletion list never names it, and `deleteMarkedAttempt` refuses a marker that names it or the confirmation folder (Task 3b). Read today, the app's other state-folder deletions name their files one by one and do not reach it — the in-app reset (`apps/server/src/reset-request.ts:104-108`), restore staging (`apps/server/src/restore-request.ts:324-331`), the configuration import (`packages/provisioning/src/configuration-import.ts:115-118`) and the start's space clean-up, which deletes only backup staging, staged recovery copies, rotated logs and crash reports (`apps/server/src/start-space.ts:53-60`); this was read, not run, and Task 2 runs it. The failure the owner named — a step that reads the note and then deletes it, followed by a restart that finds none — therefore has no path. A root guard (Task 2) fails if any source file other than the note's own module and `deploy/waitron.sh` names `first-setup-start-again.json`.
 
-| Event | What happens to the note | Owner question |
+**Where the note is kept, event by event.** Every new production name still needs the box's clock and a second clock to agree within 30 seconds (`CLAUDE.md` §5), so after any event that loses the note, a repeated name needs both clocks to read earlier than the forgotten name.
+
+| Event | What happens to the note | Where decided |
 | --- | --- | --- |
-| `waitron.sh reset` | deleted today: it empties the state folder except `tls/` (`deploy/waitron.sh:739-745`, the `find` at `:744`). Its production check (`is_production`, `:521-583`) reads two signals, `trading.env` and the venue database's deployment stamp; whether a part-way first setup has the stamp was not traced, and Q4's answer does not depend on it | Q4 |
-| `waitron.sh reset --all` | deleted with the whole state volume (`deploy/waitron.sh:738`) | Q4 (the way out of a damaged note) |
-| reinstall from the USB stick | deleted with the disk | Q3 |
-| A950's upgrade rollback (not built) | rolled back with every volume to the snapshot (`docs/backlog/box.md:80-96`) | Q5 |
-| reinstall from the dashboard (B3's revision, not on main — no mention in `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md`) | depends on B3 | none: Task 7 adds to B3's backlog entry that the reinstall carries the note with the saved configuration and puts it back before first setup |
+| a read, a start, Start again, a restore, the in-app reset | kept | Q3; Task 2 tests each |
+| `waitron.sh reset` (plain) | **kept**. Today it is deleted: the clean-up empties the state folder except `tls/` (`deploy/waitron.sh:738-746`, the `find` at `:745`; run, see Current behaviour). Task 6b adds the note and the confirmation folder to what it keeps. Its production check (`is_production`, `:521-583`) is unchanged | Q4, Task 6b |
+| `waitron.sh reset --all` | **removed**, with the whole state volume (`deploy/waitron.sh:739`). The one deliberate way to remove it, and the way out of a damaged note on a box that has `waitron.sh` | Q4 |
+| reinstall from the USB stick (B3, not built) | **kept**, once B3 takes the change drafted in "Proposed change to B3's design": today B3's installer erases the whole disk (B3 design §5.5, `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:322-324`) and keeps no venue data (§17 item 5, `:1038-1039`), and the state folder sits inside the encrypted container (§6 table, `:356` and `:359`) | Q3, Task 7 |
+| a disk the stick cannot read (B3's «BORRAR» path, §5.2, `:252-257`) | lost: nothing on the disk can be read | stated in the B3 change |
+| A950's upgrade rollback (not built) | must keep the newer note (A950 rolls every volume back to its snapshot, `docs/backlog/box.md:67-123`); an ordinary upgrade never writes the note | Q5, Task 7 |
+| reinstall from the dashboard (B3's revision, not on main — no mention in the B3 design) | carried, like the stick's reinstall | Task 7 adds it to B3's backlog entry |
+| a second node in the venue (not built) | each new note the primary writes is written on every secondary too | Q3, Task 7 records it as a failover requirement |
 
 ### D2. The note is read as a time floor, everywhere a production name is chosen
 
@@ -142,7 +168,7 @@ The history reader applies `timeFloorMs` from every source with no taxpayer or e
 **Invariant:** Start again runs only on the repair listener, where the venue store is not open (Current behaviour). A change that offers it in ordinary setup must first close the store; Task 3c pins the route's absence from ordinary setup with a test.
 
 **Refused before anything is written** (`setup.not_ready` unless named otherwise):
-- the database is missing (Q1 A);
+- the database is missing and the request does not carry a confirmation that matches the box's own summary of the attempt (D3a; a mismatch is `setup.attempt_conflict`);
 - `node.db` exists and its `sqlite_schema` has any row whose name does not start with `sqlite_`. A missing `node.db` is not opened (opening it read-only throws) and counts as nothing to check (Global constraints). `firstSetupDatabaseIsEmpty` is never called on `node.db`: it answers `false` for an untouched one;
 - any of `trading.env`, `setup-operation.json`, `restore-request.json`, `reset-request.json`, `modules.json`, `cloud-replacement.json` is present (the inspection's own artifact list, `first-setup-resolution-inspection.ts:287-297`);
 - `.venue.db-litestream/` is present in the venue folder. The stream runs only once backup settings exist (`apps/server/src/stream-host.ts:155`, read), so an unused attempt never has it, and a streamed folder is never half-emptied (`CLAUDE.md` §3);
@@ -178,17 +204,20 @@ startAgainFloor?(input: {
 
 A folder is removed only with `rmdir` once empty, never recursively, so a file that appeared after the marker was written makes the removal fail and is never swept away.
 
+**Never on the list:** the note `first-setup-start-again.json`, the confirmation folder `first-setup-start-again-confirmations/`, `tls/`, and anything else in the state folder not named above. A marker naming the note or the confirmation folder is refused as damaged (`setup.start_again_incomplete`) by both the writer and the finisher (Task 3b).
+
 **Order of writes:**
-1. The existing proof, unchanged, plus the refusals above.
-2. Raise the note, only if the seat gives a floor.
-3. Write the deletion marker `first-setup-deleting.json` in the **venue** folder, whether or not the attempt chose a name. Exact keys:
+1. The existing proof, unchanged, plus the refusals above — or, when the database is missing, the confirmation check of D3a in its place.
+2. When the database is missing: write the confirmation record (D3a). Nothing has been deleted yet.
+3. Raise the note, only if the seat gives a floor.
+4. Write the deletion marker `first-setup-deleting.json` in the **venue** folder, whether or not the attempt chose a name. Exact keys:
    - `version: 1`, `attemptId`, `frozenDigest` (from `first-setup.json`), and canonical `venueDir` and `stateDir`;
    - `files`: one entry for every present file of the list at every level (record folders and their `step-*` subfolders included), `{ root: "venue" | "state", name: <relative path, no "..">, size: <bytes>, sha256: <hex> }`;
    - `wal`: for `venue.db-wal` and `node.db-wal`, either `null` (absent) or `{ size, sha256 }`. These cannot change while Start again holds `venue.lock`, and a read-only reader does not write to a `-wal` (round 3's probe left it at 0 bytes).
 
    `-shm` files are never recorded. The limit is 1 MiB: `first-fiscal-documents/` holds at most 1024 names before the inspection refuses (`first-setup-resolution-inspection.ts:308-309`), an entry is under 300 bytes, and the record folders of one attempt hold far fewer.
-4. Delete in the list's order, syncing each parent folder.
-5. Remove the marker; sync the venue folder.
+5. Delete in the list's order, syncing each parent folder.
+6. Remove the marker; sync the venue folder.
 
 **Side files.**
 - A `-shm` file is never fingerprinted. A read-only open rewrites it, and the repair page's poll opens `venue.db` read-only with no lock (`setup-first-fiscal-api.ts:611-615`); a hash of it would go stale after a harmless read and strand the box after a power cut.
@@ -220,6 +249,51 @@ Then it deletes the present items in the list's order and removes the marker.
 **Not covered, and safe:** `waitron-rejoin` (`apps/server/src/rejoin-command.ts:89-136`), `waitron-break-glass` and `packages/credentials/src/bin.ts` do not check the marker. Each changes `venue.db` or its `-wal`, which makes the finisher refuse rather than delete. Task 3d reads `rejoin-command.ts:89-136`; if a rejoin can remove or overwrite the marker itself, it adds the marker check there.
 
 The marker's name also joins `FIRST_SETUP_HOST_FILES`. That follows `first-setup-claim.json`'s precedent, and is harmless rather than needed: nothing a restore carries reaches the venue folder except `venue.db` (`restore.ts:221-241`).
+
+### D3a. When the venue database is missing: ask, then proceed only on a recorded confirmation (owner, Q1)
+
+With `venue.db` missing, the empty-database proof has nothing to read, so the box cannot tell whether this attempt filed anything to AEAT or made a sale. The owner's answer: neither refuse nor proceed silently — **ask**. Maybe there is no backup; maybe the database was deleted while trying to make Start again work.
+
+**Where, and for whom.** On the repair page only, after the setup password step, over HTTPS only — the same gates as today's missing-database Start again ("Where the missing-database Start again is offered today", above). D3's other refusals all still apply (a `node.db` holding a table, `trading.env` and the other artifacts, a Litestream folder, outside evidence, an A731 journal, an existing marker). **Statuses:** any except `complete`, widened from today's `claimed`, `consumption-intent` and `abandoned` (`first-setup-resolution.ts:233`), because the owner's own example is an attempt that "finished the fiscal step", and the page today offers no way to abandon one: its abandon button is drawn only when the database is present and the status is not one of the finishing ones (`setup-app.ts:2135-2141,2263`). This widening needs the owner's approval (point 2 of "Points for the owner in this revision").
+
+**The summary: what the attempt's own record says it reached.** Built by the server, never by the page:
+
+```ts
+// packages/provisioning, beside the note
+type StartAgainSummary = {
+  readonly reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
+  readonly lastName: string | null;
+};
+```
+
+- `reached` is read by shared code from the event kinds of the attempt and of every attempt in its `previous` (`history`, `packages/provisioning/src/first-setup-state.ts:94`; events appended at `:807-811`): `fiscal-finished` if any has a `result` or a `committed`, `publication` or `complete` event; otherwise `fiscal-started` if any has `activation-started` or `uncertain`; otherwise `named` if any has `candidates`, `import` or `consumption-intent`; otherwise `claimed`. (`consumption-intent` is written straight after the last module's name is chosen, `packages/provisioning/src/first-setup-preparation.ts:238-256`; `activation-started` just before the fiscal step runs and `committed` once its result is checked, `packages/provisioning/src/first-setup-activation.ts:116-145`.)
+- `lastName` is the `lastName` the module seat `startAgainFloor` gives for the attempt (D3), or `null` when it gives none. Shared code and the page never read a series name themselves.
+- Served by a new route, `POST /setup-api/first-setup/resolution/start-again/summary`, taking the same body (`inspectionId`, `revision`, `ownerGeneration`) and owner headers as Start again, HTTPS only, answering `{ reached, lastName }`, and refused `setup.not_ready` when the database is not missing. A POST because, like Start again, it needs the owner headers.
+
+**The confirmation.** The Start again request gains `confirmMissingDatabase: { nothingFiledOrSold: true, shown: StartAgainSummary }` — required when the database is missing and refused (`setup.attempt_conflict`) when it is not; the route's exact-keys check (`setup-first-fiscal-api.ts:820-826`) gains the key. Inside Start again's turn the server rebuilds the summary; if `shown` differs, it refuses `setup.attempt_conflict` and writes nothing. The request's inspection ids already refuse a record that changed since the page read it (`first-setup-resolution.ts:222-229`).
+
+**The confirmation record.** One small file per confirmation, in the box's own state folder (found by `boxFolders`, Task 0b): `first-setup-start-again-confirmations/<server time in ms>-<attemptId>.json`, written by `writeDurableHostJson`, limit 16 KiB (the claim marker's limit, `first-setup-state.ts:153`). Exact keys:
+
+```json
+{
+  "version": 1,
+  "at": "2026-10-24T13:50:12.000Z",
+  "attemptId": "6f0c…",
+  "database": "missing",
+  "administrator": { "displayName": "Elena García", "email": "elena@example.com" },
+  "ownerGeneration": 3,
+  "shown": { "reached": "fiscal-finished", "lastName": "0CNQT" }
+}
+```
+
+- **Who:** the attempt's administrator as its frozen request names them (`state.frozen.request.admin`, checked at `first-setup-state.ts:252-277`), whose setup password the person has just proved, and the ownership generation that password step produced. The box knows no other identity at this point.
+- **When:** the server's clock.
+- **What the record showed:** the summary as the server rebuilt it — which equals what the page showed, or Start again refused.
+- **Written before anything is deleted:** step 2 of D3's order of writes, before the note, the marker and every deletion. A cut after it leaves a record beside an attempt that is still there; a retry writes a second record.
+- **Kept like the note:** never deleted except by `waitron.sh reset --all`; kept by a plain reset (Task 6b); never in a backup (not on `RECOVERY_FILES`); its folder name joins `FIRST_SETUP_HOST_FILES`, so no restore archive or recovery bundle carries one. Nothing reads these records to decide anything; they are for people. Not carried by a reinstall from the stick (point 3 for the owner).
+- **Not logged with the name or email:** `waitron.log`'s tail is shown on the recovery page to anyone on the venue's network (`docs/developers/conventions-ui.md:1099,1110-1115`), so no log line carries the record.
+
+**Then Start again proceeds as D3 says:** the note (the seat's floor over the attempt's frozen requests, inputs, kept picks and public evidence — all in the state folder, so all still there), the marker, the deletion. A missing `venue.db` is simply absent from the marker's file list.
 
 ### D4. Boxes that already hold archives: refused, not read
 
@@ -272,25 +346,131 @@ Setup-app wording for the same two codes (`shell.ts`, through `FIRST_SETUP_ERROR
 | `setup.start_again_incomplete` | Start again has not finished. Restart the box, then try again. | «Empezar de nuevo» aún no ha terminado. Reinicia el equipo y vuelve a intentarlo. |
 | `setup.workspace_unsupported` | This box holds a first setup kept by an older Waitron. Reinstall Waitron on it. | Este equipo guarda una configuración inicial de una versión anterior de Waitron. Reinstala Waitron en él. |
 
-A damaged note is not a start refusal. It is read only when a name is chosen, so the setup or restore screen shows `setup.attempt_invalid`'s existing text, and the installer's way out is `waitron.sh reset --all` (Q4).
+A damaged note is not a start refusal. It is read only when a name is chosen, so the setup or restore screen shows `setup.attempt_invalid`'s existing text. On a box with `waitron.sh` the way out is `waitron.sh reset --all` (Q4); on a box the USB stick installed, which has no `waitron.sh` (B3 design §17 item 3, `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:1031-1033`), the way out is in "Proposed change to B3's design".
 
 ## Review focus
 
 1. **Clock set back by more than 150 seconds behind the note**, with a second clock that agrees: refused `minute_not_later` with `allowedFromMs` equal to the note's floor; nothing recorded. Task 1b.
-2. **Power lost at each step of Start again** — after the note, after the marker, after each deletion, with a repair-page read in between: the next start finishes exactly the marked deletion, or serves the recovery page and deletes nothing; a restored or newly placed database, and rows written into a `-wal` after the cut, are never deleted. Tasks 3b, 3c.
+2. **Power lost at each step of Start again** — after the confirmation record, after the note, after the marker, after each deletion, with a repair-page read in between: the next start finishes exactly the marked deletion, or serves the recovery page and deletes nothing; a restored or newly placed database, and rows written into a `-wal` after the cut, are never deleted. Tasks 3b, 3c.
 3. **An attempt that never chose a name, or whose owner recovered the password twice (a `step-000003/` record subfolder), interrupted mid-deletion:** the next start finishes it and leaves nothing behind. Tasks 3b, 3c.
 4. **A damaged note** (empty file, `{}`, `"lastName": ""`, an extra key, a lower floor): refused wherever it is read; a second Start again never lowers it. Task 2.
 5. **The abandoned attempt's `node.db`** is never reused by the next attempt, and a `node.db` that holds a table refuses Start again. Task 3c.
+6. **The missing-database ask:** no Start again without the confirmation; a `shown` summary that differs from the server's own refuses with nothing written; the confirmation record exists before the first deletion (inject a failure into the first deletion and read it); a finished-fiscal-step attempt shows that line and is still deletable on confirmation; the note still holds the attempt's name. Task 3a, 3c.
+7. **The note is never deleted or lowered:** after Start again (both paths), a restart, a restore, the in-app reset, a plain `waitron.sh reset` and a cut note write, the note's bytes are the same or a later note's; only `reset --all` removes it. Tasks 2, 3b, 6b.
 
-## Open questions for the owner (each with a recommended answer)
+## Owner answers (2026-10-24)
 
-1. **Start again when the venue database is missing.** Today the original password allows it, and only the attempt's status is checked (`first-setup-resolution.ts:233,296-298`). Because any status except `complete` and `abandoned` can be abandoned, this admits even an attempt whose fiscal commit finished (`committed`), as the store allows (reviewer's probe: resolved; with the database present: refused). It is not a live defect today, because Start again deletes nothing and the next attempt is checked against the kept archive and picks file. **A (recommended): refuse Start again when the database is missing; the repair page points to recovery from a backup (A731) or a reinstall.** B: allow it with the original password and delete anyway — then Start again would delete the archive and kept picks of an attempt that may have committed, with no database to prove anything, and the route must first learn to read the attempt's history. The tasks follow A.
-2. **One floor for the whole box, whatever the tax number.** Example: an attempt for NIF B12345678 (typed wrongly) chose `0CNQT` and was abandoned; the next attempt, for NIF B87654321, must choose a name later than `0CNQT`. **A (recommended): yes — "the box never issues a series name at or before that record".** B: one floor per tax number and environment, as today's archive check does. A changes items S7c and S7k below.
-3. **A full reinstall from the USB stick forgets the note.** **A (recommended): accept it** — the note only guards names never used, a trading box's backup carries a later name, and every new production name needs two agreeing clocks. B: keep the note somewhere the stick does not erase (a B3 design change).
-4. **`waitron.sh reset` forgets the note**, and D4 recommends that reset for old boxes. **A (recommended): a plain `waitron.sh reset` keeps the note, as it keeps `tls/`; `reset --all` still removes everything** and is the way out of a damaged note. The note holds one time and one name. B: the reset deletes it, as today. Task 6b builds A.
-5. **A950's upgrade rollback** (not built) would roll the note back with every volume, forgetting a name chosen after the snapshot. **A (recommended): add to A950's backlog entry that its rollback must keep the newer note.** Nothing is built here. B: accept the loss.
-6. **Throwaway naming stays outside the floor** (Demo, Preparation, a development box's Live, the readiness run). **A (recommended): leave it outside.** Those are preproduction names in databases never promoted to production (`CLAUDE.md` §5), and the note guards names that never reached the tax agency. B: make the throwaway path (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`) respect the note too.
-7. **Approve "Existing assertions this plan changes"** below in one answer. **A (recommended): approve as listed.** B: name the items to keep, and the plan is revised.
+The owner's verbatim answers are in `~/waitron-campaign/questions.md` (the sections headed "OWNER ANSWER — A1042 question …" and "OWNER CHANGE — A1042 question 3 REPLACED, and question 4 answered"). What each means for this plan:
+
+1. **Start again when the venue database is missing — neither refuse nor proceed silently: ask.** Owner: "If we can't check the dB to see where we got to then we need to ask. Maybe there is no backup, maybe deleting the dB was an attempt to get the start again working properly." The repair page says plainly the box cannot check whether this attempt filed or sold anything, shows what the attempt's own record says it reached, and offers (a) recovery from a backup (A731) and (b) "nothing was filed or sold — start again", the latter still behind the setup password. The confirmation is recorded (who, when, what the record showed) before anything is deleted, and the note is still raised. **Built by:** D3a, Task 3a, Task 5f; the wording is in "For the owner: the repair page's words when the database is missing".
+2. **One note per box, whatever the tax number (A).** D2 as written; items S7c and S7k as approved.
+3. **The note is never deleted in normal operation, and survives a reinstall from the USB stick (changed from A to B).** Owner: "Leave the note on disk. Imagine we start, write the note, restart read and delete the note, restart, no note to read, reuse the old note. So we only write the new note on top of the old, the note stays there. And when we get a new note from the primary we write it on the secondary as well, so there is distributed knowledge of the current note." Confirmed: "Yes, but reset --all wipes". No read, restart, Start again, recovery or plain `waitron.sh reset` removes it; a write only replaces it with a later name, never an earlier one and never nothing; a stick reinstall keeps it (a change to B3's design, drafted below, not edited into B3's spec); copies to a second node are a requirement on the failover work, not built here. **Built by:** D1's write rule, Global constraints, Tasks 2, 3b and 6b; Task 7 records the B3 change and the failover requirement.
+4. **A plain `waitron.sh reset` keeps the note; `reset --all` removes it.** Task 6b.
+5. **A950's rollback keeps the newer note (A).** Owner: "But normally we wouldn't update the note on an upgrade. It would be exceptional, eg changing the name of the software provider." Task 7 adds to A950's entry: its rollback never takes the note backwards, an ordinary upgrade never writes it, and it moves only when a new installation name is picked. See point 1 of "Points for the owner in this revision" for what this build does about the moments it names.
+6. **Practice databases stay outside the note (A)** — Demo, Prepare, a development box's Live, the readiness test run. D2 as written.
+7. **"Existing assertions this plan changes" approved as written, except the items the answers to 1 and 3 change.** Those are rewritten below and marked "REVISED — needs owner approval"; every other item is marked "approved 2026-10-24 (Q7)". The golden huella test and the inmutabilidad suite stay untouched.
+
+## For the owner: the repair page's words when the database is missing
+
+**Where this appears, and why there.** On the setup app's repair page, which the box serves after an interrupted first setup — not on the recovery page the box serves after a failed start. Evidence and reasons: "Where the missing-database Start again is offered today, and why the ask belongs there" (Current behaviour). Before the setup password is entered, anyone on the venue's network sees only the first line below, the password field and A731's Recover from backup button; the rest appears after the password step, as today's Start again does (`setup-app.ts:2111-2122`).
+
+**The words.** Keys in `apps/setup/src/screens/initial-owner-strings.ts` (Spanish goes only in that file when built). `{name}` is the series name the server sends; the page never works it out.
+
+| Key | English | Spanish |
+| --- | --- | --- |
+| `missingDatabase` (replaces today's, `:11-12`, `:47-48`) | The setup database is missing. | Falta la base de datos de la configuración. |
+| `missingAsk` | This box cannot check whether this setup filed anything to AEAT or made a sale. Its record says it: | Este equipo no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que: |
+| `reachedName` | chose the invoice series name {name} | eligió el nombre de serie de facturas {name} |
+| `reachedNoName` | chose no invoice series name | no eligió ningún nombre de serie de facturas |
+| `reachedFiscalStarted` | started the fiscal step, with no record that it finished | empezó el paso fiscal, sin constancia de que terminara |
+| `reachedFiscalFinished` | finished the fiscal step | terminó el paso fiscal |
+| `missingBackup` | If you have a backup, recover from it. | Si tienes una copia, recupera desde ella. |
+| `recoverBackup` (A731's, unchanged) | Recover from backup | Recuperar desde una copia |
+| `startAgain` (unchanged) | Start again | Empezar de nuevo |
+| `startAgainHelp` (also used when the database is present) | Deletes this attempt. Its invoice series names are never used again. | Borra este intento. Sus nombres de serie de facturas no se vuelven a usar. |
+| `missingConfirm` (the tick box; Start again stays disabled until it is ticked) | Nothing was filed to AEAT and nothing was sold. | No se envió nada a la AEAT ni se vendió nada. |
+| `restarting` (also used when the database is present) | The old attempt is deleted. Reconnect to continue. | El intento anterior se ha borrado. Reconecta para continuar. |
+
+The list under `missingAsk` has one or two lines: `reachedName` (or `reachedNoName` when the server sends no name), then `reachedFiscalStarted` or `reachedFiscalFinished` when the record reached that far. "The fiscal step" is the owner's phrase; elsewhere the setup app says "activating production" (`apps/setup/src/i18n/strings/shell.ts:46`), so "activation" is the alternative if the owner prefers it.
+
+**Worked example 1 — an attempt that only chose a series name** (it chose `0CNQT`; its record shows `candidates` and `consumption-intent`, no `activation-started`). After the password step:
+
+> **First setup was interrupted**
+> The setup database is missing.
+> This box cannot check whether this setup filed anything to AEAT or made a sale. Its record says it:
+> - chose the invoice series name 0CNQT
+>
+> If you have a backup, recover from it.
+> [Recover from backup] [Start again]
+
+Pressing Start again opens the confirmation:
+
+> Deletes this attempt. Its invoice series names are never used again.
+> ☐ Nothing was filed to AEAT and nothing was sold.
+> [Cancel] [Start again] ← disabled until ticked
+
+Spanish:
+
+> **La configuración inicial se interrumpió**
+> Falta la base de datos de la configuración.
+> Este equipo no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que:
+> - eligió el nombre de serie de facturas 0CNQT
+>
+> Si tienes una copia, recupera desde ella.
+> [Recuperar desde una copia] [Empezar de nuevo]
+>
+> Borra este intento. Sus nombres de serie de facturas no se vuelven a usar.
+> ☐ No se envió nada a la AEAT ni se vendió nada.
+> [Cancelar] [Empezar de nuevo]
+
+The confirmation record written before anything is deleted: `"shown": { "reached": "named", "lastName": "0CNQT" }`, with the administrator's name and email, the time and the attempt's id (D3a). The note then holds `0CNQT`.
+
+**Worked example 2 — an attempt that finished the fiscal step** (it chose `0CNQT`; its record shows `activation-started` and `committed`):
+
+> **First setup was interrupted**
+> The setup database is missing.
+> This box cannot check whether this setup filed anything to AEAT or made a sale. Its record says it:
+> - chose the invoice series name 0CNQT
+> - finished the fiscal step
+>
+> If you have a backup, recover from it.
+> [Recover from backup] [Start again]
+
+Spanish:
+
+> **La configuración inicial se interrumpió**
+> Falta la base de datos de la configuración.
+> Este equipo no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que:
+> - eligió el nombre de serie de facturas 0CNQT
+> - terminó el paso fiscal
+>
+> Si tienes una copia, recupera desde ella.
+> [Recuperar desde una copia] [Empezar de nuevo]
+
+The confirmation is the same as in example 1. The record: `"shown": { "reached": "fiscal-finished", "lastName": "0CNQT" }`.
+
+**After Start again** the page shows `restarting` and the box restarts into a new first setup (Task 3c). A refused Start again shows its code's existing text (`FIRST_SETUP_ERROR_MESSAGES`, `apps/setup/src/setup-app.ts:194-199`) and asks for the password again, as today (`apps/setup/src/setup-app-missing-database.test.ts:70-90`).
+
+## Proposed change to B3's design (for the owner; B3's spec is not edited here)
+
+**Where the note lives on a box the stick installed.** The note is `first-setup-start-again.json` in the state folder. On a box the stick installed, the state folder is the `waitron_state` Docker volume, inside the `@volumes` subvolume, inside the encrypted container (B3 design §6, `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:356,359`). A reinstall erases the whole disk (§5.5, `:322-324`), and B3 proposes no reinstall that keeps venue data (§17 item 5, `:1038-1039`). So, as B3 is designed today, a reinstall erases the note.
+
+**The change: a copy of the note travels in the container's header, beside the name tag.** B3 already keeps one thing the installer reads before erasing: the venue's name tag, "a record of Waitron's own kind in the container's header — readable and writable without the key" (§7.6, `:605-613`), which the reinstall screen reads (§5.1 guard 3, `:223-227`). The note goes there too. Proposed wording, to add to B3 §7.6 after its first paragraph:
+
+> **The series-name note travels with the name tag** (owner, A1042, 2026-10-24). Beside the name tag, the container's header holds a second record of Waitron's own kind: a copy of the box's series-name note (`first-setup-start-again.json`, the last invoice series name an abandoned first setup chose and the earliest moment a later one may be taken). The box's host service (§8) copies the note there whenever it changes, and only ever replaces the copy with a later one. Like the name tag it is readable without the key; it holds nothing secret, because a series name is printed on every invoice. **A reinstall carries it:** when the installer reads the disk (§5 step 2) it reads this copy with the name tag, keeps it in memory, and writes it into the new disk's state folder when it writes the box's setup code (§5.5), so the reinstalled box never issues a series name at or before it. A copy that cannot be read, or that fails the note's own checks, is not carried, and the reinstall screen says so in one line: «No se puede leer la nota del último nombre de serie; no se conservará.» A disk the installer cannot recognise (§5.2) carries nothing. **At every start** the host service compares the two copies and writes the header's back into the state folder when it is later or the state folder's cannot be read — which is also how a rollback of `@volumes` by A950 (§6) never takes the note backwards.
+
+And one sentence at the end of §17 item 5: "The series-name note is the one exception: a reinstall carries it (§7.6)."
+
+What this leaves: a box the stick installed has no `waitron.sh`, so no `reset --all` (§17 item 3, `:1031-1033`); nothing removes its note except a header copy that cannot be read. Point 4 below asks the owner to accept that. The confirmation records (D3a) are not carried (point 3).
+
+## Points for the owner in this revision
+
+Each comes with a recommendation; none is built until the owner answers.
+
+1. **When the note moves.** The owner's Q5 remark names the moments a new installation name is picked: setup, restore, re-registration, promotion, and rare changes such as the software provider's name. **This build writes the note only at Start again**, as approved. Writing it at the moment each of those paths picks its name would make the name chooser refuse that same request's own name for up to a minute: the chooser takes the request's existing pick (`packages/fiscal-verifactu/src/hour-selection.ts:326-328`) and refuses it with `minute_not_later` while the clock is before any recorded time floor (`:409-416`) — read, not run. The consequence of writing it only at Start again: a stick reinstall carries the names of abandoned setups, not the name the box was trading under; that name comes back with a backup, and without one the two-clock check guards it, as today. **A (recommended): build Start again only now; Task 7 adds a backlog entry to move the note whenever a name is put into use** (setup's fiscal step finishing, a restore finishing, a re-registration, a promotion), designed so the chooser never refuses its own request — that entry is also what makes the failover copy "the current note". B: add it to this plan now, as its own task, after a trace of those four paths.
+2. **Statuses on a missing database.** To show "finished the fiscal step" as the owner's example does, the ask is offered for every status except `complete` — wider than today's `claimed`, `consumption-intent` and `abandoned` (D3a). **A (recommended): approve.** B: keep today's three statuses; an attempt past them then has no way forward on the page but recovery from a backup or a reinstall.
+3. **Where the confirmation records live.** In the box's state folder, beside the note, kept like it (plain reset keeps them, `reset --all` removes them), never in a backup, and **not carried by a stick reinstall** — only the note is. **A (recommended): accept.** B: carry them in the header copy too (they hold a name and an email, readable there without the key).
+4. **On a box the stick installed, nothing removes the note** except a header copy that cannot be read. A damaged state-folder copy is put back from the header at the next start. **A (recommended): accept.** B: give the reinstall screen a way to drop the note.
 
 ## How the assertion list was built
 
@@ -311,72 +491,86 @@ A damaged note is not a start refusal. It is read only when a name is chosen, so
 
 ## Existing assertions this plan changes — owner approval needed before the build
 
-Line numbers at db4e0a6bf; Task 0 re-reads them after A731. "Subject gone" means the case tests something this change removes — archives, workspaces, workspace selection, the missing-database Start again (Q1 A) — and has no successor. The task named makes the change. Tests whose expected screen text comes from the strings file follow the new wording without an assertion change and are not listed.
+Line numbers at db4e0a6bf; none of these files changed between db4e0a6bf and 69a7e2ae3 (`git diff --stat` over them prints nothing), and the REVISED items were re-read at 69a7e2ae3. Task 0 re-reads them all after A731. "Subject gone" means the case tests something this change removes — archives, workspaces, workspace selection — and has no successor. The task named makes the change. Tests whose expected screen text comes from the strings file follow the new wording without an assertion change and are not listed.
+
+**Status, 2026-10-24.** The owner approved this list as written (Q7) **except** the items the answers to Q1 and Q3 change. Each approved item ends "Approved 2026-10-24 (Q7)." The seven items below marked **REVISED — needs owner approval** (S5, S10, S12, S13, S14, A2, A3) replace the versions the owner saw; nothing in them is built before the owner approves them. A sweep for items the never-deleted note or the USB change touch found no other: the one existing pin on the reset's state clean-up, `scripts/waitron-sh.test.mjs:1487-1491`, still matches the changed command (run, see Current behaviour), and the list's other items concern archives, workspaces and the record store, not the note's lifetime.
 
 **Wire body**
-- **W1.** `apps/server/src/setup-first-fiscal-api.ts:846-850`, the Start again answer: `{ workspaceId, selectionGeneration, restarting: true }` → `{ restarting: true }` (keys removed; no workspace). Pinned at `apps/server/src/first-fiscal-hour-finish.test.ts:489`. The setup app's client already types the answer as `{ restarting: true }` (`apps/setup/src/api/client.ts:579-583`), and `apps/setup/src/first-setup-retirement.test.ts:112-120` is the incomplete-answer case, unchanged. The stubs that send the old shape change with it: `apps/setup/test/missing-database-browser.ts:61-65` and `apps/setup/src/setup-app-resolution.test.ts:52` (A4). Task 3e.
+- **W1.** `apps/server/src/setup-first-fiscal-api.ts:846-850`, the Start again answer: `{ workspaceId, selectionGeneration, restarting: true }` → `{ restarting: true }` (keys removed; no workspace). Pinned at `apps/server/src/first-fiscal-hour-finish.test.ts:489`. The setup app's client already types the answer as `{ restarting: true }` (`apps/setup/src/api/client.ts:579-583`), and `apps/setup/src/first-setup-retirement.test.ts:112-120` is the incomplete-answer case, unchanged. The stubs that send the old shape change with it: `apps/setup/test/missing-database-browser.ts:61-65` and `apps/setup/src/setup-app-resolution.test.ts:52` (A4). Task 3e. **Approved 2026-10-24 (Q7).**
 
 **Server — `apps/server/src/first-setup-unused-pdf.test.ts`**
-- **S1.** `:84-119` "a never-activated box with a delivered PDF can start again after answering %s". Old: the new folders differ (`:90`); the records are `retire`/`select-workspace` (`:95-101`); the register is kept (`:102`); `readOriginals` equals the snapshot (`:103`); every old file is byte-for-byte unchanged (`:104-110`); `readForRepair().consumptionIntent` is true (`:111`); the new venue has no `venue.db` (`:112-114`); the old owner's status is `setup.attempt_uncertain` (`:115-117`). New: the same folders hold nothing on D3's list; no marker remains; the note's `lastName` is the PDF's name; the old owner's status is refused (Task 3e records the code; STOP if it succeeds). Why: deleted, not kept. Task 3e.
-- **S2.** `:120-165` "retiring the unused PDF excludes hour $identity …": `assertFreshAssignment` → `setup.attempt_conflict` for spent rows becomes the next selection → `minute_not_later` at or before the note; the unspent row's name is selected. Why: the after-the-fact archive check goes. Task 4c.
-- **S3.** `:178-184`: resolves `{ selectionGeneration: 1 }` → resolves, note written. Task 3e.
-- **S4.** `:186-203` "successive never-activated PDFs retain every old block while allowing a third replacement": the third Start again's `selectionGeneration: 3` under the same anchor → three Start agains in the same folders succeed and the note's floor is the latest name. Task 3e.
-- **S5.** `:205-238` "an earlier abandoned activation with a missing database does not become empty …": the password Start again on a missing database succeeds → refused `setup.not_ready` (Q1 A). A row shaped like the reviewer's `committed` probe is added and refused too. Task 3a.
-- **S6.** `:279-281` (`first-setup-retirement.json` absent): passes whatever the code does once that file no longer exists → replaced by "no deletion marker and no note change". Task 3e.
-- **S7.** `:325-355` and `:357-…` (interrupted unused-PDF selection resumes; HTTPS fresh answer for the same selection): deleted, subject gone. Task 5d.
+- **S1.** `:84-119` "a never-activated box with a delivered PDF can start again after answering %s". Old: the new folders differ (`:90`); the records are `retire`/`select-workspace` (`:95-101`); the register is kept (`:102`); `readOriginals` equals the snapshot (`:103`); every old file is byte-for-byte unchanged (`:104-110`); `readForRepair().consumptionIntent` is true (`:111`); the new venue has no `venue.db` (`:112-114`); the old owner's status is `setup.attempt_uncertain` (`:115-117`). New: the same folders hold nothing on D3's list; no marker remains; the note's `lastName` is the PDF's name; the old owner's status is refused (Task 3e records the code; STOP if it succeeds). Why: deleted, not kept. Task 3e. **Approved 2026-10-24 (Q7).**
+- **S2.** `:120-165` "retiring the unused PDF excludes hour $identity …": `assertFreshAssignment` → `setup.attempt_conflict` for spent rows becomes the next selection → `minute_not_later` at or before the note; the unspent row's name is selected. Why: the after-the-fact archive check goes. Task 4c. **Approved 2026-10-24 (Q7).**
+- **S3.** `:178-184`: resolves `{ selectionGeneration: 1 }` → resolves, note written. Task 3e. **Approved 2026-10-24 (Q7).**
+- **S4.** `:186-203` "successive never-activated PDFs retain every old block while allowing a third replacement": the third Start again's `selectionGeneration: 3` under the same anchor → three Start agains in the same folders succeed and the note's floor is the latest name. Task 3e. **Approved 2026-10-24 (Q7).**
+- **S5. REVISED — needs owner approval.** `apps/server/src/first-setup-unused-pdf.test.ts:205-239` "an earlier abandoned activation with a missing database does not become empty because a replacement has an unused PDF". Old: an attempt taken to `activation-started` and abandoned, its `venue.db` removed, the password recovered; the password Start again succeeds (`:221-232`), and a replacement attempt built in the new workspace is refused `setup.not_ready` at `start()` (`:233-238`). The version the owner saw: refused `setup.not_ready` (Q1 A) — withdrawn. New, Task 3a: the same Start again without a confirmation is refused `setup.not_ready` and nothing changes; with a confirmation whose `shown` is `{ reached: "fiscal-started", lastName: <the attempt's name> }` it succeeds and a confirmation record holding that summary is in the box's state folder; a `shown` that differs is refused `setup.attempt_conflict` with nothing written; an added row takes an attempt through `committed` before abandoning it and gets `fiscal-finished`. New, Task 3e: `:233-238` — no replacement is built in a new workspace; a fresh attempt in the same folders, with both clocks before the note's floor, is refused `minute_not_later` at selection, and the note holds the abandoned attempt's name. Why: Q1's answer is ask, not refuse.
+- **S6.** `:279-281` (`first-setup-retirement.json` absent): passes whatever the code does once that file no longer exists → replaced by "no deletion marker and no note change". Task 3e. **Approved 2026-10-24 (Q7).**
+- **S7.** `:325-355` and `:357-…` (interrupted unused-PDF selection resumes; HTTPS fresh answer for the same selection): deleted, subject gone. Task 5d. **Approved 2026-10-24 (Q7).**
 
 **Server — `apps/server/src/first-setup-retired-assignments.test.ts`** (the fixture retires through `records.prepare` and `selectFirstSetupWorkspace`, `:281-302`; rebuilt on Start again in Task 4b)
-- **S7a.** `:359-368` "fresh events cannot reuse a retired hour …": `assertFreshAssignment` → `setup.attempt_conflict` becomes the selection → `minute_not_later`. Task 4b.
-- **S7b.** `:369-381` "retirement still permits a %s": the `later-hour` row stays permitted. Task 4b.
-- **S7c.** the same case's `other-taxpayer` and `other-environment` rows: permitted → refused `minute_not_later` (Q2 A). Task 4b.
-- **S7d.** `:382-428` "the real hour candidate route protects a retired hour before freezing hour offset %s": offset 1 answers 400 `minute_not_later` with `allowedFromMs: instant(1) + 180_000` → refused or waiting, then a name later than the note; the exact answer is recorded by the task (the old value came from the kept picks file). STOP if a name at or before the note is ever given. Offset 2 is unchanged. Task 4b.
-- **S7e.** `:430-447` "activation refuses a retired hour even when a caller bypassed the candidate route": deleted. Activation no longer re-checks. A frozen request is written only by `select` (`packages/provisioning/src/first-setup-preparation.ts:242`, which runs the chooser with the note) and by `import`, which accepts only an input equal to that request (`:266`, through `packages/fiscal-verifactu/src/initial-hour-setup.ts:79`). Task 4b re-runs `/usr/bin/grep -rn 'kind: "candidates"\|kind: "import"' --include='*.ts' apps packages`; a new non-test writer is a STOP.
-- **S7f.** `:449-455` "a retired hour at offset42 bounds fresh offset%s": `assertFreshAssignment` refusal → selection refusal for 1, 41, 42; 43 permitted. Task 4b.
-- **S7g.** `:457-476` "an empty replacement cannot erase inherited spent hours": Start again refused `setup.not_ready` → Start again succeeds, and the note keeps the inherited floor. Task 4c.
-- **S7h.** `:478-507` "password recovery retires an unused replacement …": `selectionGeneration: 2`, two retirements with `register: null`, and the second retirement's state equal to the old → Start again with the password succeeds in the same folders, and the note holds the later of the two names. Task 4c.
-- **S7i.** `:509-520` and `:544-553` (retained public hour42; retained recovery document): `assertFreshAssignment` refusal → the name is folded into the note from the attempt's own public evidence, and the next selection is refused at or before it. `:570-582`'s outside row (`source: "outside"`): → Start again refused `setup.not_ready` while outside evidence is configured. Task 4c.
-- **S7j.** `:522-528` "a retained hour under another software ID still consumes that taxpayer's hour": the same, through the note. Task 4c.
-- **S7k.** `:530-543` "retained public hour facts preserve the %s namespace": permitted → refused (Q2 A). Task 4c.
-- **S7l.** `:555-568` "damaged retired recovery document %s never becomes absence of history" and `:584-592` "invalid retained public evidence fails with a domain refusal": the damage now refuses Start again itself (`setup.attempt_invalid` or the seat's `sif.allocation_invalid`), never "no floor". Task 4c.
-- **S7m.** `:594-680` "ordinary hour preparation retains earlier abandoned events for %s": `reuse` keeps its refusal, from the note; `later` keeps `0CR6J`, and the assertions on the old kept picks file (`:619-620`) move to the new attempt's file. Task 4c.
-- **S7n.** `:683-…` "a live outside history may %s without releasing its archived hour42": → Start again refused `setup.not_ready` while outside evidence is configured (outside evidence is no longer folded). Task 4c.
+- **S7a.** `:359-368` "fresh events cannot reuse a retired hour …": `assertFreshAssignment` → `setup.attempt_conflict` becomes the selection → `minute_not_later`. Task 4b. **Approved 2026-10-24 (Q7).**
+- **S7b.** `:369-381` "retirement still permits a %s": the `later-hour` row stays permitted. Task 4b. **Approved 2026-10-24 (Q7).**
+- **S7c.** the same case's `other-taxpayer` and `other-environment` rows: permitted → refused `minute_not_later` (Q2 A). Task 4b. **Approved 2026-10-24 (Q7).**
+- **S7d.** `:382-428` "the real hour candidate route protects a retired hour before freezing hour offset %s": offset 1 answers 400 `minute_not_later` with `allowedFromMs: instant(1) + 180_000` → refused or waiting, then a name later than the note; the exact answer is recorded by the task (the old value came from the kept picks file). STOP if a name at or before the note is ever given. Offset 2 is unchanged. Task 4b. **Approved 2026-10-24 (Q7).**
+- **S7e.** `:430-447` "activation refuses a retired hour even when a caller bypassed the candidate route": deleted. Activation no longer re-checks. A frozen request is written only by `select` (`packages/provisioning/src/first-setup-preparation.ts:242`, which runs the chooser with the note) and by `import`, which accepts only an input equal to that request (`:266`, through `packages/fiscal-verifactu/src/initial-hour-setup.ts:79`). Task 4b re-runs `/usr/bin/grep -rn 'kind: "candidates"\|kind: "import"' --include='*.ts' apps packages`; a new non-test writer is a STOP. **Approved 2026-10-24 (Q7).**
+- **S7f.** `:449-455` "a retired hour at offset42 bounds fresh offset%s": `assertFreshAssignment` refusal → selection refusal for 1, 41, 42; 43 permitted. Task 4b. **Approved 2026-10-24 (Q7).**
+- **S7g.** `:457-476` "an empty replacement cannot erase inherited spent hours": Start again refused `setup.not_ready` → Start again succeeds, and the note keeps the inherited floor. Task 4c. **Approved 2026-10-24 (Q7).**
+- **S7h.** `:478-507` "password recovery retires an unused replacement …": `selectionGeneration: 2`, two retirements with `register: null`, and the second retirement's state equal to the old → Start again with the password succeeds in the same folders, and the note holds the later of the two names. Task 4c. **Approved 2026-10-24 (Q7).**
+- **S7i.** `:509-520` and `:544-553` (retained public hour42; retained recovery document): `assertFreshAssignment` refusal → the name is folded into the note from the attempt's own public evidence, and the next selection is refused at or before it. `:570-582`'s outside row (`source: "outside"`): → Start again refused `setup.not_ready` while outside evidence is configured. Task 4c. **Approved 2026-10-24 (Q7).**
+- **S7j.** `:522-528` "a retained hour under another software ID still consumes that taxpayer's hour": the same, through the note. Task 4c. **Approved 2026-10-24 (Q7).**
+- **S7k.** `:530-543` "retained public hour facts preserve the %s namespace": permitted → refused (Q2 A). Task 4c. **Approved 2026-10-24 (Q7).**
+- **S7l.** `:555-568` "damaged retired recovery document %s never becomes absence of history" and `:584-592` "invalid retained public evidence fails with a domain refusal": the damage now refuses Start again itself (`setup.attempt_invalid` or the seat's `sif.allocation_invalid`), never "no floor". Task 4c. **Approved 2026-10-24 (Q7).**
+- **S7m.** `:594-680` "ordinary hour preparation retains earlier abandoned events for %s": `reuse` keeps its refusal, from the note; `later` keeps `0CR6J`, and the assertions on the old kept picks file (`:619-620`) move to the new attempt's file. Task 4c. **Approved 2026-10-24 (Q7).**
+- **S7n.** `:683-…` "a live outside history may %s without releasing its archived hour42": → Start again refused `setup.not_ready` while outside evidence is configured (outside evidence is no longer folded). Task 4c. **Approved 2026-10-24 (Q7).**
 
 **Server — `apps/server/src/first-fiscal-hour-finish.test.ts`**
-- **S8.** `:267-366` "empty never-activated hour restart retains originals and burns the entire hour on every base". Old: new folders (`:290`), `resolveFirstSetupWorkspace` equals the binding (`:291-…`), `readOriginals` equals the snapshot (`:304`), files unchanged (`:305-322`), the kept picks file byte-for-byte unchanged (`:323`, read at `:276`), the old owner refused (`:325-…`). New: the kept picks file is gone after Start again (Task 1b); then, in Task 3e, the folders hold nothing on D3's list and the note holds the abandoned name. The case's subject — every base's name is burnt — is kept: the next selection is refused at or before the note (`:348-…`) and a later name is selected (`:354-…`). Tasks 1b and 3e.
-- **S9.** `:368-421` (Start again refused for a non-empty database): the refusal stays; the vacuous `first-setup-retirement.json` absence check (`:416`) → "no marker and no note change". Task 3e.
-- **S10.** `:498-535` "a missing hour database needs freshly recovered ownership before retirement": → refused `setup.not_ready` whatever the ownership (Q1 A). Task 3a.
-- **S11.** `:712-756` "hour restart can resume an interrupted workspace selection …": deleted, subject gone. Task 5d.
+- **S8.** `:267-366` "empty never-activated hour restart retains originals and burns the entire hour on every base". Old: new folders (`:290`), `resolveFirstSetupWorkspace` equals the binding (`:291-…`), `readOriginals` equals the snapshot (`:304`), files unchanged (`:305-322`), the kept picks file byte-for-byte unchanged (`:323`, read at `:276`), the old owner refused (`:325-…`). New: the kept picks file is gone after Start again (Task 1b); then, in Task 3e, the folders hold nothing on D3's list and the note holds the abandoned name. The case's subject — every base's name is burnt — is kept: the next selection is refused at or before the note (`:348-…`) and a later name is selected (`:354-…`). Tasks 1b and 3e. **Approved 2026-10-24 (Q7).**
+- **S9.** `:368-421` (Start again refused for a non-empty database): the refusal stays; the vacuous `first-setup-retirement.json` absence check (`:416`) → "no marker and no note change". Task 3e. **Approved 2026-10-24 (Q7).**
+- **S10. REVISED — needs owner approval.** `apps/server/src/first-fiscal-hour-finish.test.ts:498-535` "a missing hour database needs freshly recovered ownership before retirement". Old: after a fresh password recovery, Start again with no register answer resolves `{ selectionGeneration: 1 }` (`:513-514`); the record store holds four records, each `{ database: "missing", authority: "original-password", register: null }` (`:515-532`); its stored originals equal the snapshot (`:533`). The version the owner saw: refused whatever the ownership — withdrawn. New, Task 3a: without the confirmation → `setup.not_ready`; with it (its `shown` as the fixture's record gives, which Task 3a writes into the commit message) → succeeds, and the confirmation record holds the administrator's name and email from the frozen request, `ownerGeneration`, `database: "missing"` and that summary; an added row whose owner's latest event is not a fresh `recover` is refused `setup.owner_required` even with the confirmation — the subject the title names, which the case never tested. New, Task 3e: the record-store assertions (`:515-533`) go, because Start again deletes the record folders; the case asserts that no marker remains and the note holds the attempt's name. Why: Q1's answer.
+- **S11.** `:712-756` "hour restart can resume an interrupted workspace selection …": deleted, subject gone. Task 5d. **Approved 2026-10-24 (Q7).**
 
 **Server — other files**
-- **S12.** `apps/server/src/first-fiscal-hour.e2e.test.ts:23-193` (six rows: a trusted HTTPS password Start again on a missing database, writing `restore-request.json` and `reset-request.json` at `:75-76`, and binding fields at `:101-129`): → each row refused `setup.not_ready` (Q1 A); the binding assertions go. Task 3a.
-- **S13.** `apps/server/src/first-setup-resolution.route.test.ts:12-114` (missing-database recovery and retirement over HTTPS, binding at `:95`): → refused `setup.not_ready` (Q1 A). Task 3a.
-- **S14.** `apps/server/src/first-setup-resolution-inspection.test.ts`: `:96-111` "Start again retires a qualified unused workspace …" (`assertVenueFirstSetupAllowed` refuses afterwards) → after a finished deletion it passes, and the folders are empty of D3's list; `:176-221` (authenticated missing-database retirement) → refused (Q1 A, Task 3a); `:285-338` (two browsers; `selectionGeneration: 2` at `:325`) → one deletion, the second request refused `setup.start_again_incomplete` or `setup.not_ready` (recorded); the vacuous `first-setup-retirement.json` absence checks at `:122,171,230,280,415` → "no marker and no note change". Task 3e unless noted.
-- **S15.** `apps/server/src/first-setup-recovery-delivery.test.ts:488-492`: the recovery document's bytes stay in place after Start again → the document is deleted with `first-fiscal-documents/`. Task 3e.
-- **S16.** `apps/server/src/first-setup-workspace.test.ts` (three cases — raw boot `:25-39`, the restore command, staged restore and reset — refusing an old witness with `setup.attempt_uncertain`): refusal kept, code → `setup.workspace_unsupported` (D4). Task 5c.
-- **S17.** `apps/server/src/first-setup-resolution.boot.test.ts` (workspace-selection cases built on `:56`): replaced by the legacy-refusal and unfinished-deletion cases served on the recovery page (D5). Subject gone. Task 5c.
-- **S18.** `apps/server/src/first-setup-retirement-reads.test.ts` (whole suite; `:78` counts archive file opens): deleted, subject gone. Task 4c.
-- **S19.** `apps/server/src/first-setup-empty-selection.route.test.ts` (whole suite, `:205-400`): deleted, subject gone. Its HTTPS refusal (`:271`) moves to the Start again route; its "a file appears after retirement" rows (`:338-353`) are succeeded by Task 3c's marker cases. Task 5d.
-- **S20.** `apps/server/src/first-setup-selection.route.test.ts` (whole suite, `:145-336`): deleted, subject gone. Its password-throttling case (`:297`) moves to ownership recovery unless a case there already checks it (Task 5d greps first). Task 5d.
-- **S21.** `apps/server/src/hour-backup-state.test.ts:207-316` ("captures the original anchor journal and restored floor after workspace retirement") and `apps/server/src/recovery-document-evidence.test.ts:106-158` ("retains the anchor's journal and both public floors after workspace selection"): deleted, subject gone; the anchor reads become reads of the folders given. Task 5e.
-- **S22.** `apps/server/src/node-entry.full-disk.test.ts:424-503` ("a start that first setup moved to a workspace") and `apps/server/src/start-full-disk.e2e.test.ts:493-532`: deleted, subject gone (the start no longer cleans a workspace's staging). Task 5e.
+- **S12. REVISED — needs owner approval.** `apps/server/src/first-fiscal-hour.e2e.test.ts:23-194` (six rows: `src/bin.ts` and `src/node-entry.ts`, each with three selection states). Old: a trusted HTTPS password Start again on a missing database, with `restore-request.json` and `reset-request.json` written first (`:75-76`), answers `{ workspaceId, selectionGeneration: 1, restarting: true }` (`:99-103`); the box restarts into the new workspace (`:106-112`); two rows interrupt and resume the workspace selection (`:113-157`); later starts serve `{ claimed: false }` in the workspace with a new certificate (`:158-172`); the old claim files, `restore-request.json` and `reset-request.json` are unchanged and `venue.db` is still missing in the original folders (`:173-186`). The version the owner saw: each row refused `setup.not_ready` — withdrawn. New, Task 3a: each row reads the summary and sends the confirmation (one more request, no assertion changed), and an added request without it is refused `setup.not_ready`. New, Task 3e: two rows, one per script — the selection-state rows' subject, resuming a workspace selection, is gone (Task 5d). Each: with `restore-request.json` and `reset-request.json` present, the confirmed Start again is refused `setup.not_ready` (D3's refusal list) and both files are unchanged; after removing them, it answers `{ restarting: true }`, the process exits to restart, the next two starts serve `{ claimed: false }` in the same folders, `tls/ca.crt` is unchanged, the note and one confirmation record are present, and `first-setup.json` and `first-setup-claim.json` are gone. Why: Q1's answer, and Start again now deletes in place.
+- **S13. REVISED — needs owner approval.** `apps/server/src/first-setup-resolution.route.test.ts:12-115` "trusted HTTPS recovers a missing-database attempt and retires it after %s" (three register answers). Old: the password Start again answers 200 `{ workspaceId, selectionGeneration: 1, restarting: true }` (`:92-97`), names no folder (`:98`) and requests a restart (`:99`); `first-setup.json` keeps `consumptionIntent: true` and its frozen request (`:100-102`); `venue.db` is still missing (`:103`); `/retry` answers 404 (`:104-107`). The version the owner saw: refused `setup.not_ready` — withdrawn. New, Task 3a: the case reads the summary route (200, `{ reached: "named", lastName: <the fixture's name> }`); a Start again without the confirmation is refused `setup.not_ready` with `first-setup.json` unchanged; with it, 200, and the confirmation record holds that summary. New, Task 3e: the answer is `{ restarting: true }` (W1); `:100-102` → `first-setup.json` is gone; `:98`, `:99`, `:103` and `:104-107` unchanged. Why: Q1's answer.
+- **S14. REVISED — needs owner approval** (only `:176-222` differs in substance from the version the owner saw). `apps/server/src/first-setup-resolution-inspection.test.ts`, Task 3e unless noted:
+  - unchanged from the version the owner saw: `:96-111` "Start again retires a qualified unused workspace …" (`assertVenueFirstSetupAllowed` refuses afterwards, `:108-110`) → after a finished deletion it passes, and the folders hold nothing on D3's list; `:285-297` (two browsers) → one deletion, the second request refused `setup.start_again_incomplete` or `setup.not_ready` (recorded); `:299-337` (`selectionGeneration: 2` at `:325`) → two Start agains in the same folders each delete, and the note holds the later name; the vacuous `first-setup-retirement.json` absence checks at `:122,171,230,280,415` → "no marker and no note change".
+  - **changed:** `:176-222` "an authenticated missing-database retirement preserves spent intent and all document bytes". Old: the Start again succeeds; `first-setup.json` is byte-for-byte unchanged with `consumptionIntent: true` (`:211-214`); `venue.db` is missing (`:215`); the malformed `first-fiscal-documents/orphan.json` keeps its bytes (`:216-218`); the new workspace has no `venue.db` (`:219-221`). The version the owner saw: refused (Q1 A) — withdrawn. New, Task 3a: without the confirmation → `setup.not_ready`, nothing changed; with it, the outcome is recorded in the commit message: either it succeeds, with a confirmation record whose `shown` is `{ reached: "named", lastName: null }` (this fixture's frozen request names no module, `:40`), or the malformed chunk refuses it (`setup.attempt_invalid` or `sif.allocation_invalid`; S7l's rule: damage refuses, never "no floor") with nothing written. Anything else is a STOP. New, Task 3e, if it succeeded: `:211-214` → `first-setup.json` is gone; `:216-218` → `first-fiscal-documents/` is gone; `:215` unchanged; `:219-221` go.
+- **S15.** `apps/server/src/first-setup-recovery-delivery.test.ts:488-492`: the recovery document's bytes stay in place after Start again → the document is deleted with `first-fiscal-documents/`. Task 3e. **Approved 2026-10-24 (Q7).**
+- **S16.** `apps/server/src/first-setup-workspace.test.ts` (three cases — raw boot `:25-39`, the restore command, staged restore and reset — refusing an old witness with `setup.attempt_uncertain`): refusal kept, code → `setup.workspace_unsupported` (D4). Task 5c. **Approved 2026-10-24 (Q7).**
+- **S17.** `apps/server/src/first-setup-resolution.boot.test.ts` (workspace-selection cases built on `:56`): replaced by the legacy-refusal and unfinished-deletion cases served on the recovery page (D5). Subject gone. Task 5c. **Approved 2026-10-24 (Q7).**
+- **S18.** `apps/server/src/first-setup-retirement-reads.test.ts` (whole suite; `:78` counts archive file opens): deleted, subject gone. Task 4c. **Approved 2026-10-24 (Q7).**
+- **S19.** `apps/server/src/first-setup-empty-selection.route.test.ts` (whole suite, `:205-400`): deleted, subject gone. Its HTTPS refusal (`:271`) moves to the Start again route; its "a file appears after retirement" rows (`:338-353`) are succeeded by Task 3c's marker cases. Task 5d. **Approved 2026-10-24 (Q7).**
+- **S20.** `apps/server/src/first-setup-selection.route.test.ts` (whole suite, `:145-336`): deleted, subject gone. Its password-throttling case (`:297`) moves to ownership recovery unless a case there already checks it (Task 5d greps first). Task 5d. **Approved 2026-10-24 (Q7).**
+- **S21.** `apps/server/src/hour-backup-state.test.ts:207-316` ("captures the original anchor journal and restored floor after workspace retirement") and `apps/server/src/recovery-document-evidence.test.ts:106-158` ("retains the anchor's journal and both public floors after workspace selection"): deleted, subject gone; the anchor reads become reads of the folders given. Task 5e. **Approved 2026-10-24 (Q7).**
+- **S22.** `apps/server/src/node-entry.full-disk.test.ts:424-503` ("a start that first setup moved to a workspace") and `apps/server/src/start-full-disk.e2e.test.ts:493-532`: deleted, subject gone (the start no longer cleans a workspace's staging). Task 5e. **Approved 2026-10-24 (Q7).**
 
 **Provisioning**
-- **P1.** `packages/provisioning/src/first-setup-workspace.test.ts` (whole suite, 44 cases): deleted, replaced by the legacy-refusal cases. Subject gone. Task 5a.
-- **P2.** `packages/provisioning/src/first-setup-state.test.ts:994-1160` (`retiredFixture`; claim refuses ids reused from retired attempts, `:1154`): deleted; the check against earlier attempts in `previous` stays. Task 4a.
-- **P3.** `packages/provisioning/src/first-setup-preparation.test.ts:307-…, 402-…, 428-…` and `first-setup-command.test.ts:463-…` (conflicts driven by `readRetiredSetup`): deleted; Task 1b's cases check the floor. Task 4a.
-- **P4.** `packages/provisioning/src/cli-first-setup.test.ts:277-334` "a command without a retired-evidence adapter refuses a successor workspace" (the `first-setup-runtime.ts:88` refusal): deleted with that refusal. Its other workspace fixtures are re-pointed to plain folders, assertions unchanged. Task 4a.
-- **P5.** `packages/provisioning/src/first-setup-state.test.ts:975-992` "a retired root cannot be claimed again or accept a delayed state update": refusal kept, code `setup.attempt_uncertain` → `setup.workspace_unsupported`. Task 5a.
-- **P6.** `packages/provisioning/src/first-setup-owner.test.ts:573-593` "retirement refuses existing owner capabilities …": the same code change. Task 5a.
-- **P7.** `packages/provisioning/src/module-preparation-state.test.ts:243` (workspace fixture) and `:274-278` (`expect(await firstSetupAnchorFor(next))…`): the fixture becomes plain folders and the anchor assertion goes. Task 5a.
+- **P1.** `packages/provisioning/src/first-setup-workspace.test.ts` (whole suite, 44 cases): deleted, replaced by the legacy-refusal cases. Subject gone. Task 5a. **Approved 2026-10-24 (Q7).**
+- **P2.** `packages/provisioning/src/first-setup-state.test.ts:994-1160` (`retiredFixture`; claim refuses ids reused from retired attempts, `:1154`): deleted; the check against earlier attempts in `previous` stays. Task 4a. **Approved 2026-10-24 (Q7).**
+- **P3.** `packages/provisioning/src/first-setup-preparation.test.ts:307-…, 402-…, 428-…` and `first-setup-command.test.ts:463-…` (conflicts driven by `readRetiredSetup`): deleted; Task 1b's cases check the floor. Task 4a. **Approved 2026-10-24 (Q7).**
+- **P4.** `packages/provisioning/src/cli-first-setup.test.ts:277-334` "a command without a retired-evidence adapter refuses a successor workspace" (the `first-setup-runtime.ts:88` refusal): deleted with that refusal. Its other workspace fixtures are re-pointed to plain folders, assertions unchanged. Task 4a. **Approved 2026-10-24 (Q7).**
+- **P5.** `packages/provisioning/src/first-setup-state.test.ts:975-992` "a retired root cannot be claimed again or accept a delayed state update": refusal kept, code `setup.attempt_uncertain` → `setup.workspace_unsupported`. Task 5a. **Approved 2026-10-24 (Q7).**
+- **P6.** `packages/provisioning/src/first-setup-owner.test.ts:573-593` "retirement refuses existing owner capabilities …": the same code change. Task 5a. **Approved 2026-10-24 (Q7).**
+- **P7.** `packages/provisioning/src/module-preparation-state.test.ts:243` (workspace fixture) and `:274-278` (`expect(await firstSetupAnchorFor(next))…`): the fixture becomes plain folders and the anchor assertion goes. Task 5a. **Approved 2026-10-24 (Q7).**
 
 **Fiscal** (the historical dispatcher)
-- **F1.** `packages/fiscal-verifactu/src/declared-paper-standby.test.ts:514,565,589,625,657`, `initial-cloud-setup.test.ts:335` and `declared-paper-consumers.test.ts:374` (each supplies `readRetiredSetup` and asserts its refusal): deleted with the retired-archive block of `allocation-configuration.ts:58-119`, which production does not use. Subject gone. Neither `allocation-configuration.test.ts` mentions retired setup (round-2 grep printed nothing), so neither is listed. Task 4d.
+- **F1.** `packages/fiscal-verifactu/src/declared-paper-standby.test.ts:514,565,589,625,657`, `initial-cloud-setup.test.ts:335` and `declared-paper-consumers.test.ts:374` (each supplies `readRetiredSetup` and asserts its refusal): deleted with the retired-archive block of `allocation-configuration.ts:58-119`, which production does not use. Subject gone. Neither `allocation-configuration.test.ts` mentions retired setup (round-2 grep printed nothing), so neither is listed. Task 4d. **Approved 2026-10-24 (Q7).**
 
 **Setup app** (Task 5f)
-- **A1.** `apps/setup/src/setup-app-workspace-selection.test.ts` (whole suite, `:22-369`), `setup-app-workspace-selection.a11y.test.ts` and `apps/setup/test/workspace-selection-browser.ts`: deleted, subject gone.
-- **A2.** `apps/setup/src/setup-app-missing-database.test.ts` (whole suite, `:20-131`) and `setup-app-missing-database.a11y.test.ts`: replaced (Q1 A) by "no Start again on a missing database" and its a11y case.
-- **A3.** `apps/setup/src/first-setup-retirement.test.ts`: the file tests `retireMissingDatabase()` throughout (six calls), so Q1 A removes most of it; the remaining Start again cases from `claimed`, `consumption-intent` and `abandoned` (`:62-84`) keep their assertions.
-- **A4.** `apps/setup/src/setup-app-resolution.test.ts:52` (a Start again stub sending the old answer) → sends `{ restarting: true }`; `:333`, `:338` and `:362` pin the literal "The old attempt is retained." (`:338` fails under the new wording; `:333` and `:362` would pass whatever happens) → read `restarting` from the strings file.
+- **A1.** `apps/setup/src/setup-app-workspace-selection.test.ts` (whole suite, `:22-369`), `setup-app-workspace-selection.a11y.test.ts` and `apps/setup/test/workspace-selection-browser.ts`: deleted, subject gone. **Approved 2026-10-24 (Q7).**
+- **A2. REVISED — needs owner approval.** `apps/setup/src/setup-app-missing-database.test.ts` (whole suite, `:20-171`) and `setup-app-missing-database.a11y.test.ts` (`:25-68`). The version the owner saw: replaced by "no Start again on a missing database" — withdrawn; the suite stays and follows the ask (Task 5f):
+  - `:20-34` (repair page kept after the password step) and `:131-171` (a late inspection): unchanged.
+  - `:36-55` "retires only after password recovery, confirmation and a fresh owner-bound missing inspection": the page shows the summary's lines (expected text read from the strings file, both languages); the tick box is `missingConfirm`; the sent body (`:47`) gains `confirmMissingDatabase: { nothingFiledOrSold: true, shown: <the stubbed summary> }`; `:45`'s literal "The old attempt is retained." → the strings file's `restarting`; `:52` (`requests.at(-2)` is the inspection) → the recorded order, with the summary request before it. Headers (`:48-51`), `:53` and `:54` unchanged.
+  - `:57-68` "does not offer missing-database retirement for %s work" (`activation-started`, `committed`, `publication`, `complete`, `uncertain`): → the ask **is** offered for every one but `complete`, showing `reachedFiscalStarted` or `reachedFiscalFinished`; `complete` keeps all five assertions. Needs point 2's answer.
+  - `:70-90` (a refused Start again asks for the password again) and `:106-129` (duplicate clicks): `:89` and `:128`'s literal "The old attempt is retained." → the strings file's `restarting`; every other assertion unchanged.
+  - `:92-104` (cancel): unchanged.
+  - The a11y suite's assertions are unchanged; its states gain one showing the ask with both summary lines.
+- **A3. REVISED — needs owner approval.** `apps/setup/src/first-setup-retirement.test.ts` (`:62-157`, the session's `retireMissingDatabase()`). The version the owner saw: Q1 A removes most of it — withdrawn; the file stays (Task 5f):
+  - `:62-84`: `retireMissingDatabase()` takes the summary it confirms; the request paths (`:67-71`) gain the summary request; the body (`:72-76`) gains `confirmMissingDatabase`; the answer (`:66`) and the second call's `setup.owner_required` (`:79-83`) unchanged.
+  - `:85-101` (changed evidence refused before Start again): unchanged.
+  - `:102-111` "refuses %s work before inspection": `activation-started`, `committed`, `publication` and `uncertain` now proceed to the inspection and summary; `complete` keeps its refusal and its one-request assertion. Needs point 2's answer.
+  - `:112-121` (incomplete restart answer) and `:122-157` (late answers): unchanged; `:122`'s rows gain a `summary` stage.
+- **A4.** `apps/setup/src/setup-app-resolution.test.ts:52` (a Start again stub sending the old answer) → sends `{ restarting: true }`; `:333`, `:338` and `:362` pin the literal "The old attempt is retained." (`:338` fails under the new wording; `:333` and `:362` would pass whatever happens) → read `restarting` from the strings file. **Approved 2026-10-24 (Q7).**
 
 **A731's landed cases** (Task 0 lists them by `file:line`): its archive-based floor carry-forward and its race against the old Start again change to the note. Each is added here, and to the owner's approval, before Task 4b.
 
@@ -391,7 +585,8 @@ Line numbers at db4e0a6bf; Task 0 re-reads them after A731. "Subject gone" means
 | 1a | The note file and the fiscal module's floor |
 | 1b | Setup never issues a name at or before the note; Start again writes it and deletes the kept picks file |
 | 2 | The note cannot be lowered, damaged into "no floor", or carried in by a restore |
-| 3a | Start again is refused when the database is missing (Q1 A) |
+| 3a | The summary and the confirmation record (provisioning) |
+| 3a2 | A missing database: Start again asks, then proceeds on a recorded confirmation (Q1) |
 | 3b | The deletion marker, and finishing an interrupted deletion safely |
 | 3c | Start again deletes the attempt in place under the marker |
 | 3d | Every other write and entry point refuses while a deletion is unfinished |
@@ -405,10 +600,12 @@ Line numbers at db4e0a6bf; Task 0 re-reads them after A731. "Subject gone" means
 | 5c | The start serves that page for an old archive or an unfinishable deletion |
 | 5d | The server's repair routes forget workspace selection |
 | 5e | The anchor readers and the workspace clean-up go |
-| 5f | The setup screens |
+| 5f | The setup screens: Start again with the database present |
+| 5g | The setup screens: the ask on a missing database |
 | 6 | Restores, re-registrations and promotions honour the note |
-| 6b | `waitron.sh reset` keeps the note (Q4 A) |
-| 7 | Documentation, backlog and the A679 pointer |
+| 6b | A plain `waitron.sh reset` keeps the note and the confirmation records; `reset --all` removes them (Q4) |
+| 6c | Nothing deletes the note (Q3) |
+| 7 | Documentation, backlog (A950, the failover requirement, B3) and the A679 pointer |
 | 8 | Final qualification and parking for the owner |
 
 **Push groups.** Tasks 3c–3e are pushed together, because 3c changes the Start again answer that 3e's suites still pin. Tasks 5a–5e are pushed together, because 5a leaves the server's type check red until 5e. Every other task ends green.
@@ -419,9 +616,9 @@ Line numbers at db4e0a6bf; Task 0 re-reads them after A731. "Subject gone" means
 
 - [ ] **Step 1:** In the build worktree (`python3 ~/workspace/tools/worktree.py new waitron feat/a1042-start-again-note --headless`, from current main), confirm A731 is on main: `git log --oneline --grep=A731 -5`. If not, stop.
 - [ ] **Step 2:** `/usr/bin/grep -rn "readFirstSetupRetirementArchives\|readFirstSetupRetirements\|readRetiredFirstSetupStates\|readRetiredSetup\|selectFirstSetupWorkspace\|resolveFirstSetupWorkspace\|firstSetupAnchorFor\|startAgainFirstSetup\|assertVenueFirstSetupAllowed" --include='*.ts' apps packages scripts`. Put each A731 caller beside the task that changes it.
-- [ ] **Step 3:** For A731, record by `file:line`: (a) where it carries archive-based floors into its restore target's module history file, and its "a second backup/recovery still sees the later floor" case; (b) its tests that race its commit against Start again; (c) its calls of `firstSetupAnchorFor`; (d) how it finds the box's own folders from inside its nested target (its discovery file and resolver), for Task 0b; (e) its journal folder's name (D3's refusal list); (f) whether its observation fingerprint covers files D3 deletes; (g) whether it added `apps/server/src/guide/{en,es}/backup-recovery.md` mentioning Start again; (h) its repair-open entry point (D3's marker refusals); (i) how its new entry admission orders against D5's refusals.
+- [ ] **Step 3:** For A731, record by `file:line`: (a) where it carries archive-based floors into its restore target's module history file, and its "a second backup/recovery still sees the later floor" case; (b) its tests that race its commit against Start again; (c) its calls of `firstSetupAnchorFor`; (d) how it finds the box's own folders from inside its nested target (its discovery file and resolver), for Task 0b; (e) its journal folder's name (D3's refusal list); (f) whether its observation fingerprint covers files D3 deletes; (g) whether it added `apps/server/src/guide/{en,es}/backup-recovery.md` mentioning Start again; (h) its repair-open entry point (D3's marker refusals); (i) how its new entry admission orders against D5's refusals; (j) its Recover from backup button on the repair page — its `data-test`, its strings key and words, when it is drawn, and whether it is drawn beside the ask after the password step (D3a and the wording section assume `recover-backup`, `recoverBackup`, "Recover from backup" / «Recuperar desde una copia», drawn whenever an inspection is shown, as at #2043's head def03078a); (k) whether its open step needs the setup password (at def03078a it takes the backup and the recovery key, not the password) and whether the ask's wording still fits; (l) whether it writes anything into the box's state folder that D3's deletion list or the note's "never deleted" rule must know about.
 - [ ] **Step 4:** Check whether lane B's #2025 (clock check at every start) has landed; this plan does not depend on it.
-- [ ] **Step 5:** Re-run both sweeps of "How the assertion list was built"; correct moved line numbers; add every new hit, and (a) and (b), to the list. Send the additions to the owner before Task 4b.
+- [ ] **Step 5:** Re-run both sweeps of "How the assertion list was built"; correct moved line numbers; add every new hit, and (a) and (b), to the list. Send the additions to the owner before Task 4b. If (j)–(l) change the ask's wording or the REVISED items, send those to the owner too, before Task 3a2.
 - [ ] **Step 6:** Dispatch a fresh-context review of the updated plan against main (high effort, not an implementer), with probes where a claim can be run. Fold its findings into the plan; any change to the owner questions or the assertion list goes back to the owner. No implementer is dispatched before this review is folded in.
 - [ ] **Step 7:** Commit `git add docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md && git commit -s -m "docs: re-check A1042's plan against main after A731"`.
 
@@ -470,29 +667,60 @@ Start again still makes a workspace here; Task 3c makes it delete in place.
   - `"at the abandoned name's own minute, setup waits and then chooses a later name"`: clock at the start of `M`'s minute; `selectPastWaits` resolves to a name whose `decodeMinuteIdentity` is greater than `M`'s.
   - `"a clock past the note chooses a later name at once"`: clock 5 minutes after `F`; the name decodes later than `M`.
 - [ ] **Step 2: Run it and read the failure.** `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again-note.test.ts`. **The refusal assertions already pass on today's code**, because the kept picks file refuses the clock-behind case. The test fails today only on the note assertions: it prints that `readStartAgainNote` returned `null` where the note object was expected (or the missing export, if Task 1a has not landed), and the kept picks file still exists. What makes the check count is the deletion proof in Step 5, and again in Task 4c. **Do not change Start again's rules to make the test reach its scenario.** If the fixture is refused `setup.not_ready`, the fixture is wrong: STOP and report.
-- [ ] **Step 3: Implement.** In `startAgainFirstSetup`, after the proof and before `records.prepare`: for each frozen module with a seat, collect `[state, ...state.previous]` contexts and inputs (`firstSetupModuleContext`), `readModulePreparationHistory(anchor, module)` and the attempt's own public evidence from `snapshot.originals` (D3's readers, without `outside-file:`); take the latest floor; `raiseStartAgainNote(anchor.stateDir, …)` when there is one; remove `<anchor state>/module-preparation-state.json`. If `host.modules` is missing, refuse `setup.not_ready` as `:256` does.
+- [ ] **Step 3: Implement.** In `startAgainFirstSetup`, after the proof and before `records.prepare`: for each frozen module with a seat, collect `[state, ...state.previous]` contexts and inputs (`firstSetupModuleContext`), `readModulePreparationHistory(anchor, module)` and the attempt's own public evidence from `snapshot.originals` (D3's readers, without `outside-file:`); take the latest floor; `raiseStartAgainNote(anchor.stateDir, …)` when there is one; remove `<anchor state>/module-preparation-state.json`. If the frozen request names a module and `host.modules` is missing, refuse `setup.not_ready` as `:256` does; an attempt whose frozen request names no module (as `first-setup-resolution-inspection.test.ts`'s fixture, `:40`) needs no seat and gets no floor.
 - [ ] **Step 4:** Run the new file (PASS, non-zero count), the six stub files, and `pnpm --filter @waitron/server exec vitest run src/first-fiscal-hour-finish.test.ts src/first-setup-unused-pdf.test.ts src/first-setup-recovery-delivery.test.ts src/first-setup-resolution-inspection.test.ts`. Only S8's `:323` change is expected; anything else is a STOP. `first-setup-retired-assignments.test.ts` is unaffected here (its fixture retires without Start again, `:281-302`).
 - [ ] **Step 5: Prove the check by deletion.** In a scratch commit, remove `...facts.floors` from `hour-preparation.ts:173` and re-run the new file. Written before running: a broken check shows as `setup.attempt_conflict` (the archive check still exists until Task 4c) or a given name, instead of `minute_not_later`. Record the output in the commit message; restore; re-run green.
 - [ ] **Step 6:** Commit `git commit -s -m "Start again records the last series name; setup never issues one at or before it (A1042; item S8 part 1)"`.
 
-### Task 2: The note cannot be lowered, damaged into "no floor", or carried in by a restore
+### Task 2: The note cannot be lowered, emptied, damaged into "no floor", or carried in by a restore
 
 **Files:** `packages/provisioning/src/first-setup-start-again-note.ts` and its test; `apps/server/src/first-setup-entry.test.ts:334-365` (gains two rows); `apps/server/src/first-setup-start-again-note.test.ts`.
 
-- [ ] **Step 1: Failing cases.** Provisioning, one `it.each` row each, all `setup.attempt_invalid`: empty file; `{}`; `"lastName": ""`; an extra key; `floorMs` as a string; `floorMs: 1.5`; `floorMs` before the name epoch; `module: ""`; a symbolic link in place of the file. `first-setup-entry.test.ts:334-365` gains the rows `first-setup-start-again.json` and `first-setup-deleting.json`: a bundle naming either is refused `recovery.bundle_invalid` and `validateDatabaseEntries` refuses a `secrets/` entry naming either. Server: `"two Start again requests at once raise the note once"` (barriers, not sleeps).
+- [ ] **Step 1: Failing cases.** Provisioning, one `it.each` row each, all `setup.attempt_invalid`: empty file; `{}`; `"lastName": ""`; an extra key; `floorMs` as a string; `floorMs: 1.5`; `floorMs` before the name epoch; `module: ""`; a symbolic link in place of the file. `first-setup-entry.test.ts:334-365` gains the rows `first-setup-start-again.json` and `first-setup-deleting.json`: a bundle naming either is refused `recovery.bundle_invalid` and `validateDatabaseEntries` refuses a `secrets/` entry naming either. Server: `"two Start again requests at once raise the note once"` (barriers, not sleeps). The write rule (owner, Q3): `"an equal floor writes nothing"` (the file's bytes and modification time unchanged); `"a later floor replaces the note whole"`; `"a write cut before its rename leaves the old note readable"` and `"a write cut after its rename leaves the new one"` (inject through `writeDurableHostJson`'s `io` argument, `durable-host-json.ts:44-49`; `raiseStartAgainNote` takes an optional `io` for tests only).
 - [ ] **Step 2:** Read `apps/server/src/restore-stream.ts`. If the bucket-stream restore writes state files by a path that does not reach `validateEntryMetadata`, add a case for it; otherwise put the receipt (`file:line`) in the commit message.
 - [ ] **Step 3:** Run the three files; expected FAIL only where Task 1a's store does not refuse yet.
-- [ ] **Step 4:** Implement the remaining validation: integers only, `floorMs` at or after the name epoch, `lastName` 1–64 characters, `module` matching `/^[a-z][a-z0-9-]*$/`.
+- [ ] **Step 4:** Implement the remaining validation: integers only, `floorMs` at or after the name epoch, `lastName` 1–64 characters, `module` matching `/^[a-z][a-z0-9-]*$/`. The module exports no function that deletes the note.
 - [ ] **Step 5:** Run the three files and `pnpm exec vitest run scripts/errors-reachable.test.ts`; PASS.
 - [ ] **Step 6:** Commit `git commit -s -m "Refuse a damaged or lowered start-again note; restores never carry one (A1042)"`.
 
-### Task 3a: Start again is refused when the database is missing (Q1 A)
+### Task 3a: The summary and the confirmation record (provisioning)
 
-**Files:** `apps/server/src/first-setup-resolution.ts:233-299` (refuse `setup.not_ready` when `inspection.database === "missing"`, before any authority branch); tests S5, S10, S12, S13 and S14's `:176-221`.
+Unit work; nothing calls it yet.
 
-- [ ] **Step 1:** Rewrite those cases as their items say, including S5's added `committed` row. Run `pnpm --filter @waitron/server exec vitest run src/first-setup-unused-pdf.test.ts src/first-fiscal-hour-finish.test.ts src/first-fiscal-hour.e2e.test.ts src/first-setup-resolution.route.test.ts src/first-setup-resolution-inspection.test.ts`; expected FAIL on the rewritten cases (Start again still succeeds).
-- [ ] **Step 2:** Implement; re-run; PASS.
-- [ ] **Step 3:** Commit `git commit -s -m "Start again is refused on a missing database (A1042, owner Q1; items S5, S10, S12, S13, S14 part)"`.
+**Files:** Create `packages/provisioning/src/first-setup-start-again-confirmation.ts` and its test; modify `packages/provisioning/src/first-setup-state.ts:137-148` (`FIRST_SETUP_HOST_FILES` gains `first-setup-start-again-confirmations`), `packages/provisioning/src/index.ts`.
+
+**Interfaces — produces:**
+- `type StartAgainSummary` as in D3a.
+- `startAgainSummary(state: FirstSetupState, lastName: string | null): StartAgainSummary` — D3a's rule over `[state, ...state.previous]`.
+- `writeStartAgainConfirmation(stateDir: string, record: Omit<StartAgainConfirmation, "version">): Promise<string>` — writes `first-setup-start-again-confirmations/<at ms>-<attemptId>.json` with D3a's exact keys through `writeDurableHostJson` (16 KiB), refuses `setup.attempt_conflict` if that file already exists (checked with `lstat` first), and returns its name. Exports no delete.
+
+- [ ] **Step 1: Failing cases:** one `it.each` row per rule of D3a's summary — no events past claiming → `claimed`; `candidates`, `import`, `consumption-intent` → `named`; `activation-started`, `uncertain` → `fiscal-started`; `committed`, `publication`, `complete`, a non-null `result` → `fiscal-finished`; an event found only in a `previous` attempt counts; `lastName` passes through unread. Then: "a confirmation record round-trips with exactly D3a's keys"; "two confirmations for one attempt are two files"; "an existing file of the same name is refused, not overwritten"; "a record over 16 KiB is refused `setup.attempt_invalid` and writes nothing"; `first-setup-host-path.test.ts` (its pin only gains the entry).
+- [ ] **Step 2:** Run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-start-again-confirmation.test.ts src/first-setup-host-path.test.ts`; expected FAIL (missing module).
+- [ ] **Step 3:** Implement; run; PASS; also `pnpm exec vitest run scripts/errors-reachable.test.ts`.
+- [ ] **Step 4:** Commit `git commit -s -m "The missing-database summary and confirmation record (A1042, owner Q1)"`.
+
+### Task 3a2: A missing database: Start again asks, then proceeds on a recorded confirmation (Q1)
+
+Start again still makes a workspace here; Task 3c makes it delete in place, after the confirmation record.
+
+**Files:**
+- `apps/server/src/first-setup-resolution.ts:210-345`: on `inspection.database === "missing"`, allow every status but `complete` (D3a; point 2 for the owner), require `confirmMissingDatabase`, rebuild the summary (`startAgainSummary` with the seat's `lastName`, gathered as Task 1b gathers the floor), compare it with `shown` (`setup.attempt_conflict` on a difference), and write the confirmation record before `records.prepare`; refuse `confirmMissingDatabase` when the database is present. A `summary` action beside `startAgainFirstSetup` takes the same request and owner and answers the summary, `setup.not_ready` when the database is present.
+- `apps/server/src/setup-first-fiscal-api.ts:813-851`: the route's exact-keys list (`:820-826`) gains `confirmMissingDatabase` (`{ nothingFiledOrSold: true, shown: { reached, lastName } }`, exact keys, `reached` one of D3a's four, `lastName` a string of 1–64 characters or `null`); the new route `POST …/resolution/start-again/summary`, HTTPS only as `:817-819`, owner headers read by `firstFiscalOwner` as `:841-843` does.
+- `apps/server/src/first-setup-entry.ts:165-166`: wire the summary action beside `startAgain`.
+- Tests: `apps/server/src/first-setup-start-again-note.test.ts`; the 3a parts of S5, S10, S12, S13 and S14.
+
+- [ ] **Step 1: Failing cases** in `first-setup-start-again-note.test.ts`, each with `venue.db` removed after a fresh password recovery:
+  - "a missing database: Start again without the confirmation is refused, and nothing changes" (`setup.not_ready`; the attempt's files byte-for-byte unchanged; no confirmation folder);
+  - "a confirmation whose summary differs from the box's own is refused, and nothing is written" (`setup.attempt_conflict`; one row with a different `reached`, one with a different `lastName`);
+  - "a confirmed Start again writes the confirmation record with who, when and what the record showed" (administrator from the frozen request, `ownerGeneration`, `database: "missing"`, `at` from the injected clock, `shown` equal to the summary route's answer);
+  - "an attempt that finished the fiscal step shows it and can be started again on confirmation, and the note holds its name" (an attempt taken through `committed`; summary `{ reached: "fiscal-finished", lastName: M }`; the note's `lastName` is `M`);
+  - "the summary route refuses when the database is present", "…without the owner headers" (`setup.owner_required`) and "…over plain HTTP";
+  - "a confirmation sent while the database is present is refused";
+  - "a `complete` attempt is still refused".
+- [ ] **Step 2:** Rewrite the 3a parts of S5, S10, S12, S13 and S14 exactly as their items say. Run `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again-note.test.ts src/first-setup-unused-pdf.test.ts src/first-fiscal-hour-finish.test.ts src/first-fiscal-hour.e2e.test.ts src/first-setup-resolution.route.test.ts src/first-setup-resolution-inspection.test.ts`; expected FAIL on the new and rewritten cases (Start again proceeds without a confirmation). **Do not change who may Start again beyond D3a to make a case reach its scenario**; a fixture refused for another reason is a STOP.
+- [ ] **Step 3:** Implement; re-run; PASS. Write S10's and S14's recorded outcomes into the commit message.
+- [ ] **Step 4: Prove the confirmation check by deletion.** In a scratch commit, remove the requirement for `confirmMissingDatabase`. Written before running: the "without the confirmation" case then shows Start again succeeding. Record the output; restore; re-run green.
+- [ ] **Step 5:** Commit `git commit -s -m "A missing database: Start again asks, and records the confirmation first (A1042, owner Q1; items S5, S10, S12, S13, S14 part)"`.
 
 ### Task 3b: The deletion marker, and finishing an interrupted deletion safely
 
@@ -521,7 +749,8 @@ Unit work in provisioning; nothing calls it yet.
     - **a row written into `venue.db-wal` after the cut** (the main file's bytes unchanged);
     - a marker naming other folders;
     - a file newly added inside `first-fiscal-documents/` (the `rmdir` fails);
-  - "a marker over 1 MiB is refused `setup.not_ready` before anything is written".
+  - "a marker over 1 MiB is refused `setup.not_ready` before anything is written";
+  - "a marker that names the note, or anything in the confirmation folder, is refused by the writer and by the finisher, and nothing is deleted" (`setup.start_again_incomplete`; the note's bytes unchanged).
 - [ ] **Step 2:** Run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-start-again-note.test.ts`; expected FAIL (missing exports).
 - [ ] **Step 3:** Implement; run; PASS.
 - [ ] **Step 4:** Commit `git commit -s -m "A deletion marker that names exactly what Start again deletes, and a safe finisher (A1042)"`.
@@ -540,7 +769,9 @@ Unit work in provisioning; nothing calls it yet.
   - "an attempt whose owner recovered the password twice can start again, and the next start finds nothing left";
   - "a deletion that throws part-way answers `setup.start_again_incomplete` and requests a restart, and the restart finishes it";
   - "the start-again route is not served by ordinary setup";
-  - "a repair-page inspection read between deletions, then a cut, still lets the next start finish" (the GET route's inspection, then `finishStartAgainDeletion`).
+  - "a repair-page inspection read between deletions, then a cut, still lets the next start finish" (the GET route's inspection, then `finishStartAgainDeletion`);
+  - "on a missing database, the confirmation record is on disk before the first deletion" (fail the first deletion through `remove`; the confirmation record and the note are there, the marker is there, nothing is deleted);
+  - "Start again leaves the note and the confirmation folder in place" (their bytes, before and after).
 - [ ] **Step 3:** Run `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again-note.test.ts`; expected FAIL (a workspace is still made).
 - [ ] **Step 4: Implement.** Keep `:211-299` (request check, status check, proof, authority) apart from D3's added refusals. Invalidate the host's caches as `:339-341` do.
 - [ ] **Step 5:** Run the file; PASS. The suites of Task 3e are expected red until it lands; nothing else may fail.
@@ -566,11 +797,11 @@ Unit work in provisioning; nothing calls it yet.
 
 ### Task 3e: The existing Start again suites follow the deletion
 
-**Files (tests and stubs only):** `apps/server/src/first-setup-unused-pdf.test.ts` (S1, S3, S4, S6), `first-fiscal-hour-finish.test.ts` (W1, S8 part 2, S9), `first-setup-resolution-inspection.test.ts` (S14 except `:176-221`), `first-setup-recovery-delivery.test.ts` (S15), `apps/setup/test/missing-database-browser.ts:61-65` (W1).
+**Files (tests and stubs only):** `apps/server/src/first-setup-unused-pdf.test.ts` (S1, S3, S4, S5's Task 3e part, S6), `first-fiscal-hour-finish.test.ts` (W1, S8 part 2, S9, S10's Task 3e part), `first-fiscal-hour.e2e.test.ts` (S12's Task 3e part), `first-setup-resolution.route.test.ts` (S13's Task 3e part), `first-setup-resolution-inspection.test.ts` (S14, including its `:176-222` Task 3e part), `first-setup-recovery-delivery.test.ts` (S15), `apps/setup/test/missing-database-browser.ts:61-65` (W1).
 
 - [ ] **Step 1:** Change each case exactly as its item says; anything else is a STOP. Write each value an item says is "recorded" into the commit message.
 - [ ] **Step 2:** Run each file with `pnpm --filter <package> exec vitest run <file>`.
-- [ ] **Step 3:** Commit `git commit -s -m "Start again suites follow the deletion in place (A1042; items W1, S1, S3, S4, S6, S8 part 2, S9, S14, S15)"`, then push 3c–3e together.
+- [ ] **Step 3:** Commit `git commit -s -m "Start again suites follow the deletion in place (A1042; items W1, S1, S3-S6, S8 part 2, S9, S10, S12-S15)"`, then push 3c–3e together. S12 spawns the server twice per row; check free memory first (`memory_pressure | grep free`).
 
 ### Task 4a: Remove the retirement readers — module contract and provisioning
 
@@ -670,23 +901,33 @@ Unit work in provisioning; nothing calls it yet.
 - [ ] **Step 2:** Apply S21 and S22; run `pnpm --filter @waitron/server exec vitest run src/hour-backup-state.test.ts src/recovery-document-evidence.test.ts src/node-entry.full-disk.test.ts`. The `start-full-disk.e2e.test.ts` case needs a small real filesystem (`hdiutil` on macOS; `WAITRON_FULL_DISK_DIR` on Linux); a skip is not a pass (`CLAUDE.md` §4).
 - [ ] **Step 3:** Commit `git commit -s -m "Server: no anchor lookups or workspace clean-up (A1042; items S21, S22)"`, then push 5a–5e together.
 
-### Task 5f: The setup screens
+### Task 5f: The setup screens: Start again with the database present
 
-**Files:** `apps/setup/src/screens/initial-owner-strings.ts:11-28,50-62`, `apps/setup/src/setup-app.ts:1244-1265,2188-2239`, `apps/setup/src/first-setup-session.ts:558`, `apps/setup/src/api/client.ts` (the workspace-selection and missing-database retirement methods go); tests A1–A4, `setup-app-resolution.unsaved.test.ts`, `setup-app-resolution.a11y.test.ts`.
+**Files:** `apps/setup/src/screens/initial-owner-strings.ts:2-37,38-75` (the keys below), `apps/setup/src/setup-app.ts:1244-1265,2188-2239`, `apps/setup/src/api/client.ts` (the workspace-selection methods go); tests A1 and A4, `setup-app-resolution.unsaved.test.ts`, `setup-app-resolution.a11y.test.ts`.
 
-Wording (concise, as the owner prefers):
+Wording (concise, as the owner prefers; `startAgainHelp` and `restarting` are shared with Task 5g's ask):
 
 | Key | English | Spanish |
 | --- | --- | --- |
-| `startAgainHelp` | Deletes this unused attempt. The invoice series names it chose are never used again. | Borra este intento sin usar. Los nombres de serie que eligió no se vuelven a usar. |
+| `startAgainHelp` | Deletes this attempt. Its invoice series names are never used again. | Borra este intento. Sus nombres de serie de facturas no se vuelven a usar. |
 | `retireConfirmed` | Delete the old attempt and start again. | Borrar el intento anterior y empezar de nuevo. |
 | `restarting` | The old attempt is deleted. Reconnect to continue. | El intento anterior se ha borrado. Reconecta para continuar. |
-| `missingDatabase` (Q1 A) | The setup database is missing. Recover from a backup or reinstall the box. | Falta la base de datos de la configuración. Recupera desde una copia o reinstala el equipo. |
 
-- [ ] **Step 1: Failing cases** in `setup-app-resolution.test.ts`, reading expected text from the strings file in both languages: the confirmation shows the new help and label; after Start again the page shows `restarting`; with a missing database no Start again button is drawn.
+- [ ] **Step 1: Failing cases** in `setup-app-resolution.test.ts`, reading expected text from the strings file in both languages: the confirmation shows the new help and label; after Start again the page shows `restarting`.
 - [ ] **Step 2:** Check free memory (`memory_pressure | grep free`), then `pnpm --filter @waitron/setup exec vitest run src/setup-app-resolution.test.ts`; expected FAIL on the old text.
-- [ ] **Step 3:** Implement; apply A1–A4; run the files above and `pnpm --filter @waitron/setup build`. Open the repair page and look at it in light and dark, at phone width, in both languages.
-- [ ] **Step 4:** Commit `git commit -s -m "Setup: Start again says it deletes the attempt (A1042; items A1-A4)"`.
+- [ ] **Step 3:** Implement; apply A1 and A4; run the files above and `pnpm --filter @waitron/setup build`.
+- [ ] **Step 4:** Commit `git commit -s -m "Setup: Start again says it deletes the attempt (A1042; items A1, A4)"`.
+
+### Task 5g: The setup screens: the ask on a missing database
+
+**Files:** `apps/setup/src/screens/initial-owner-strings.ts` (the wording section's keys: `missingDatabase` replaced, `missingAsk`, `reachedName`, `reachedNoName`, `reachedFiscalStarted`, `reachedFiscalFinished`, `missingBackup`, `missingConfirm` added), `apps/setup/src/setup-app.ts:2106-2281` (`#renderFirstOwner`: after the password step on a missing database, the summary list, A731's Recover from backup button, and `missingConfirm` as the tick box; `authenticatedMissing`, `:2111-2115`, takes every status but `complete`) and `:1244-1276` (`#startAgainFirstSetup` passes the summary), `apps/setup/src/first-setup-session.ts:537-574` (`retireMissingDatabase(shown)`: reads the summary, then sends the confirmation; its status check `:541-545` allows every status but `complete`), `apps/setup/src/api/client.ts` (a `startAgainSummary` method; `startAgainFirstSetup` takes the optional confirmation), `apps/setup/test/missing-database-browser.ts` (stubs answer the summary route); tests A2, A3.
+
+- [ ] **Step 1: Failing cases**, reading expected text from the strings file in both languages:
+  - in `setup-app-missing-database.test.ts`: the ask shows `missingAsk` and one `reachedName` line for a `named` summary; `reachedNoName` when the name is `null`; both `reachedName` and `reachedFiscalFinished` for a `fiscal-finished` one (the owner's two worked examples); Start again stays disabled until `missingConfirm` is ticked; the Recover from backup button is drawn beside it; before the password step only `missingDatabase` is shown.
+  - in `first-setup-retirement.test.ts`: the session reads the summary before sending the confirmation, and sends exactly the summary it read.
+- [ ] **Step 2:** Check free memory, then `pnpm --filter @waitron/setup exec vitest run src/setup-app-missing-database.test.ts src/first-setup-retirement.test.ts`; expected FAIL.
+- [ ] **Step 3:** Implement; apply A2 and A3 exactly as their items say (anything else is a STOP); run both files, `src/setup-app-missing-database.a11y.test.ts` and `pnpm --filter @waitron/setup build`. Open the repair page with a stubbed missing database and look at both worked examples in light and dark, at phone width, in both languages.
+- [ ] **Step 4:** Commit `git commit -s -m "Setup: on a missing database the repair page asks, and shows what the attempt reached (A1042, owner Q1; items A2, A3)"`.
 
 ### Task 6: Restores, re-registrations and promotions honour the note
 
@@ -697,49 +938,60 @@ Wording (concise, as the owner prefers):
 - [ ] **Step 3:** Implement; run; PASS. Prove each addition by deletion as in Task 1b Step 5, recording the output.
 - [ ] **Step 4:** Commit `git commit -s -m "Restore, re-register and promote honour the start-again note (A1042)"`.
 
-### Task 6b: `waitron.sh reset` keeps the note (Q4 A)
+### Task 6b: A plain `waitron.sh reset` keeps the note and the confirmation records; `reset --all` removes them (Q4)
 
-**Files:** `deploy/waitron.sh:744` (`! -name tls ! -name first-setup-start-again.json`), `scripts/waitron-sh.test.mjs`.
+**Files:** `deploy/waitron.sh:745` (`! -name tls ! -name first-setup-start-again.json ! -name first-setup-start-again-confirmations`; `wipe_box`, `:726-747`, serves both `reset` and `--reset install`), `scripts/waitron-sh.test.mjs`.
 
 - [ ] **Step 1: Failing cases** in `scripts/waitron-sh.test.mjs`:
-  - beside the existing text match at `:1485-1491`: "a plain reset's state clean-up spares the start-again note". This is weaker than its name — under stubbed Docker it can only match the command text.
-  - "the reset's state clean-up keeps tls/ and the note and removes the rest": extract the `sh -c` expression and run it with `WAITRON_STATE_DIR` set to a temporary folder holding `tls/`, the note and two other files.
-  - "reset --all removes the state volume": the existing `rm_volume waitron_state` match.
+  - beside the existing text match at `:1487-1491`: "a plain reset's state clean-up spares the start-again note and the confirmation records". Weaker than its name — under stubbed Docker it can only match the command text.
+  - "the reset's state clean-up keeps tls/, the note and the confirmation records and removes the rest": extract the `sh -c` expression from `deploy/waitron.sh` and run it with `WAITRON_STATE_DIR` set to a temporary folder holding `tls/`, the note, a confirmation folder with one record, `first-setup.json` and `trading.env` (the experiment in Current behaviour, as a test).
+  - "`--reset install` keeps them too": the same text match on the `--reset install` path.
+  - "reset --all removes the state volume, note included": the existing `rm_volume waitron_state` match, and no `! -name first-setup-start-again.json` call on that path.
 
-  Run `pnpm exec vitest run scripts/waitron-sh.test.mjs`; expected FAIL.
+  The existing assertions at `:1487-1491`, `:1583` and `:1600` are unchanged (Current behaviour: the `:1489` pattern still matches the changed command). Run `pnpm exec vitest run scripts/waitron-sh.test.mjs`; expected FAIL on the new cases.
 - [ ] **Step 2:** Implement; run; PASS.
-- [ ] **Step 3:** Commit `git commit -s -m "waitron.sh reset keeps the start-again note (A1042)"`.
+- [ ] **Step 3:** Commit `git commit -s -m "waitron.sh reset keeps the start-again note and confirmation records; reset --all removes them (A1042, owner Q4)"`.
 
-### Task 7: Documentation, backlog and the A679 pointer
+### Task 6c: Nothing deletes the note (owner, Q3)
+
+**Files:** Create `scripts/start-again-note-writers.test.ts` (root guard); `apps/server/src/first-setup-start-again-note.test.ts`.
+
+- [ ] **Step 1: Failing guard.** `scripts/start-again-note-writers.test.ts`: no tracked non-test source file names `first-setup-start-again.json` or `START_AGAIN_NOTE_FILE` except `packages/provisioning/src/first-setup-start-again-note.ts`, `packages/provisioning/src/first-setup-state.ts` (the host-file list) and `deploy/waitron.sh`. Weaker than its name: it reads text, so a path built from pieces escapes it; it never checks what an allowed file does with the name. Prove it by adding the name to a scratch source file: the guard fails naming that file; remove it.
+- [ ] **Step 2: Lifetime cases** in `first-setup-start-again-note.test.ts`, each starting from a note and one confirmation record and ending with their bytes unchanged: a Start again with the database present; a confirmed Start again on a missing database whose attempt chose no name (the note is not rewritten); a start that finishes an interrupted deletion (`finishStartAgainDeletion`); a staged restore placed and discarded; the in-app reset (`apps/server/src/reset-request.ts`); a restart of the repair listener. And one where a later name raises it: the bytes change, the floor is later, the file is never absent (read it between the temporary write and the rename through the `io` hook).
+- [ ] **Step 3:** Run `pnpm exec vitest run scripts/start-again-note-writers.test.ts` and `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again-note.test.ts`; PASS (these pin behaviour the earlier tasks built; a failure is a defect in them, fixed at its task's file).
+- [ ] **Step 4:** Commit `git commit -s -m "Nothing deletes the start-again note: lifetime cases and a guard (A1042, owner Q3)"`.
+
+### Task 7: Documentation, backlog (A950, the failover requirement, B3) and the A679 pointer
 
 **Files:**
-- `docs/backlog/setup.md:307-326`: move "Owner decision: should a setup request stop re-checking every old 'start again' archive in full?" into `## Decisions and deliberate limits` (`:328`) as "DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database proof and keeps one small note of the last series name (A1042)". Give D1's file, D2's floor and the owner's answers to Q1–Q6 one sentence each.
-- `docs/backlog.md:571-574`: delete the open-decision entry, and an A1042 entry if one exists by then.
-- B3's entry, `docs/backlog.md:4535`: the dashboard reinstall carries the note.
-- A950's entry, `docs/backlog/box.md:80-96`: Q5's answer.
+- `docs/backlog/setup.md:307-326`: move "Owner decision: should a setup request stop re-checking every old 'start again' archive in full?" into `## Decisions and deliberate limits` (`:328`) as "DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database proof (or, with the database missing, after the person's recorded confirmation) and keeps one small note of the last series name, which nothing but `waitron.sh reset --all` deletes (A1042)". Give D1's file, D2's floor and the owner's answers to Q1–Q6 one sentence each.
+- `docs/backlog.md:573-576`: delete the open-decision entry, and an A1042 entry if one exists by then.
+- **B3**, `docs/backlog.md:4672-4688` (index) and its detail in `docs/backlog/box.md` ("Box image constraints (B3)", `:382`): one paragraph — "Owner, 2026-10-24 (A1042 Q3): a reinstall from the stick, and the dashboard's reinstall, keep the box's series-name note. Proposed change to the design, waiting for the owner's review of B3: `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`, 'Proposed change to B3's design'." The B3 spec itself is not edited here (lane A owns it; the owner reviews B3).
+- **A950**, `docs/backlog/box.md:67-123` and its index line `docs/backlog.md:4720`: "Owner, 2026-10-24 (A1042 Q5): a rollback never takes the start-again note backwards — it keeps the newer one. An ordinary upgrade never writes the note; it moves only when a new installation name is picked (setup, restore, re-registration, promotion, or an exceptional change such as the software provider's name)."
+- **The failover requirement**, `docs/backlog/replication-cloud.md:372-…` ("Replication, membership & failover — residuals"), as a requirement for what failover is rebuilt into: "Owner, 2026-10-24 (A1042 Q3): every new start-again note the primary writes is written on each secondary too, so every node knows the current note; a secondary joining a venue takes the primary's note first. Not built: a venue has one node." The index line `docs/backlog.md:5261-5264` gains nothing (it points at the detail).
 - New backlog entries:
   - "The recovery page's never-wipe test misses Spanish subjunctive forms": `apps/server/src/recovery-surface.test.ts:386-394` matches `\brestablece` but not `restablezca` or `restablezcas`. Tightening it changes an existing assertion, so the owner approves that change.
   - "The first-setup record store still accepts the `retire` and `select-workspace` actions and `nextWorkspace`, which nothing writes since A1042" (D4).
-  - Only if the owner answers Q1 B: "The password Start again on a missing database checks only the attempt's status, and admits an attempt whose fiscal commit finished".
+  - If the owner answers point 1 with A: "Move the start-again note whenever a series name is put into use" — setup's fiscal step finishing, a restore finishing, a re-registration, a promotion — designed so the name chooser never refuses its own request (`packages/fiscal-verifactu/src/hour-selection.ts:326-328,409-416`); the failover requirement above depends on it.
 - `docs/superpowers/specs/2026-10-16-a679-hour-coded-series-design.md`: a dated pointer at the top and beside `:157` — "Dated pointer, 2026-10-24: 'Preserve the original attempt and artifacts' is superseded by A1042 — Start again deletes the attempt and keeps one small note; see `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`".
-- `docs/operations/first-live-fiscal-setup.md:84-87`; `docs/developers/conventions-data.md:2964-2967,3078-3083`; `docs/developers/testing-guide.md:1307`; `deploy/README.md` where it describes the reset (Q4).
+- `docs/operations/first-live-fiscal-setup.md:84-87` (including what the repair page asks when the database is missing); `docs/developers/conventions-data.md:2964-2967,3078-3083`; `docs/developers/testing-guide.md:1307`; `deploy/README.md:341-347` (what a plain `reset` keeps: `tls/`, the note and the confirmation records; what `--all` removes).
 - `CLAUDE.md` §5's installation-name rule: one clause naming the note, and only if "every name in the history it can read" no longer covers it.
 
-User guide: none at db4e0a6bf (`/usr/bin/grep -rn -i "start again\|empezar de nuevo" apps/server/src/guide` finds nothing). If Task 0 found A731's `backup-recovery.md` mentioning Start again, change both languages with the same `{#id}`s.
+User guide: none at db4e0a6bf or 69a7e2ae3 (`/usr/bin/grep -rn -i "start again\|empezar de nuevo" apps/server/src/guide` finds nothing), and A731's `backup-recovery.md` at #2043's head def03078a does not mention Start again (read in `gh pr diff 2043`). If Task 0 finds that changed, change both languages with the same `{#id}`s.
 
-- [ ] **Step 1:** Read the whole base-to-tip range for claims about kept attempts, workspaces or archives: `/usr/bin/grep -rn -i "workspace\|retire\|retain.*attempt\|archive" docs/operations docs/developers README.md apps/server/README.md deploy/README.md`, reviewing every hit (`CLAUDE.md` §1). Historical documents get a dated pointer, never a rewrite.
+- [ ] **Step 1:** Read the whole base-to-tip range for claims about kept attempts, workspaces or archives, and about what a reset or a reinstall erases: `/usr/bin/grep -rn -i "workspace\|retire\|retain.*attempt\|archive\|reset --all\|except tls" docs/operations docs/developers README.md apps/server/README.md deploy/README.md`, reviewing every hit (`CLAUDE.md` §1). Historical documents get a dated pointer, never a rewrite.
 - [ ] **Step 2:** Make the edits.
 - [ ] **Step 3:** Run `pnpm exec vitest run scripts/claude-md-pointers.test.ts` and, if a guide changed, `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`. For each changed `.md` outside `docs/`, `pnpm exec prettier --check <file>`; inside `docs/`, `pnpm exec prettier --file-info <file>` shows it is ignored.
-- [ ] **Step 4:** Commit `git commit -s -m "Docs: Start again keeps one small note; A1037's question settled (A1042)"`.
+- [ ] **Step 4:** Commit `git commit -s -m "Docs: Start again keeps one small note; A1037's question settled; A950, B3 and failover requirements (A1042)"`.
 
 ### Task 8: Final qualification and parking for the owner
 
 - [ ] **Step 1:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts src/hour-selection.test.ts src/hour-clock.test.ts src/minute-selection-unknown-name.test.ts`; `git diff main -- packages/fiscal-verifactu/src/write-path.e2e.test.ts packages/fiscal-verifactu/src/inmutabilidad.test.ts` prints nothing.
-- [ ] **Step 2:** `pnpm exec vitest run scripts/module-seams.test.ts scripts/errors-reachable.test.ts scripts/english-only.test.ts scripts/coverage-thresholds.test.ts scripts/waitron-sh.test.mjs`, and `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts` whole.
+- [ ] **Step 2:** `pnpm exec vitest run scripts/module-seams.test.ts scripts/errors-reachable.test.ts scripts/english-only.test.ts scripts/coverage-thresholds.test.ts scripts/waitron-sh.test.mjs scripts/start-again-note-writers.test.ts`, and `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts` whole.
 - [ ] **Step 3:** Coverage once for the touched non-shard packages, reading the per-file table: `pnpm --filter @waitron/provisioning test:coverage`, `pnpm --filter @waitron/fiscal-verifactu test:coverage`, `pnpm --filter @waitron/module test:coverage` (server and setup are left to CI's shards).
 - [ ] **Step 4:** Compare the branch's changed assertions with "Existing assertions this plan changes": `git diff main --stat -- '*.test.ts' '*.test.mjs' 'apps/*/test/*.ts'` and read each hunk; re-run both sweeps on the branch. Anything not on the list is a STOP.
-- [ ] **Step 5:** `/finish-branch` on the worktree — FULL path, the Codex run-it seat as two reviews side by side (the second sets the checklist aside). Brief both with Review focus 1–5 and the owner's answers to Q1–Q7.
-- [ ] **Step 6:** Open the PR. First line: "Reset any development or demo box that holds a first-setup workspace or start-again archive (`wa-wt reset demo <name>`): such a box now refuses to start and says so." State the owner's answers as built, and list each finding of the plan reviews (three rounds, and Task 0's) with what changed. Watch CI on the current head; park `needs-owner-review` (fiscal: series names); post the landing note to `~/waitron-campaign/questions.md`.
+- [ ] **Step 5:** `/finish-branch` on the worktree — FULL path, the Codex run-it seat as two reviews side by side (the second sets the checklist aside). Brief both with Review focus 1–7, the owner's answers to Q1–Q7 and the owner's answers to the four points of this revision.
+- [ ] **Step 6:** Open the PR. First line: "Reset any development or demo box that holds a first-setup workspace or start-again archive (`wa-wt reset demo <name>`): such a box now refuses to start and says so." State the owner's answers as built (the seven questions and the four points of revision 4), and list each finding of the plan reviews (three rounds, revision 4's review, and Task 0's) with what changed. Watch CI on the current head; park `needs-owner-review` (fiscal: series names); post the landing note to `~/waitron-campaign/questions.md`.
 
 ## Self-review
 
@@ -749,9 +1001,12 @@ User guide: none at db4e0a6bf (`/usr/bin/grep -rn -i "start again\|empezar de nu
   - Never at or before it: D2, Tasks 1b and 6.
   - Readers replaced: Tasks 4a–4d; the workspace machinery: Tasks 5a–5e.
   - A1037's question moved to Decisions, and the A679 pointer: Task 7.
-  - Survives a reinstall and a restore, and the named ways it is lost: D1, Tasks 2, 6b and 7, Q3–Q5.
+  - Never deleted, never lowered, only `reset --all` removes it (Q3, Q4): D1's write rule, Global constraints, Tasks 2, 3b, 6b and 6c.
+  - Survives a restore (D1, Tasks 2 and 6), a plain reset (Task 6b), a stick reinstall (the B3 change, Task 7), A950's rollback and a second node (Task 7's backlog requirements).
+  - The missing-database ask, its confirmation recorded before any deletion, and its wording: D3a, Tasks 3a, 3a2, 3c and 5g; "For the owner: the repair page's words when the database is missing".
   - Old boxes: D4, D5, Tasks 5a–5c.
   - Failing test first, proved by deletion: Task 1b Steps 1, 2 and 5; re-proved in Task 4c Step 2.
   - Waits for A731 and re-checks: Tasks 0 and 0b.
-- **Names across tasks:** `boxFolders`, `readStartAgainNote`, `raiseStartAgainNote`, `startAgainFloorSources`, `writeStartAgainMarker`, `readStartAgainMarker`, `deleteMarkedAttempt`, `finishStartAgainDeletion`, `assertNoStartAgainDeletion`, `assertNoLegacyFirstSetupWorkspace`, `START_AGAIN_NOTE_FILE`, seat `startAgainFloor`, facts field `floors`, admission kind `refused`, recovery flag `refusedAtStart` and helper `refusedAtStart`, `markerSize`, codes `setup.start_again_incomplete` and `setup.workspace_unsupported`, files `first-setup-start-again.json` (state folder) and `first-setup-deleting.json` (venue folder).
-- **Assumptions to watch:** A731's shape (Task 0 Step 3); S7d's exact answer (Task 4b records it); whether `rejoin` can remove the marker (Task 3d Step 3).
+- **Names across tasks:** `boxFolders`, `readStartAgainNote`, `raiseStartAgainNote`, `startAgainFloorSources`, `StartAgainSummary`, `startAgainSummary`, `writeStartAgainConfirmation`, request field `confirmMissingDatabase`, route `…/resolution/start-again/summary`, folder `first-setup-start-again-confirmations/` (state folder), guard `scripts/start-again-note-writers.test.ts`, `writeStartAgainMarker`, `readStartAgainMarker`, `deleteMarkedAttempt`, `finishStartAgainDeletion`, `assertNoStartAgainDeletion`, `assertNoLegacyFirstSetupWorkspace`, `START_AGAIN_NOTE_FILE`, seat `startAgainFloor`, facts field `floors`, admission kind `refused`, recovery flag `refusedAtStart` and helper `refusedAtStart`, `markerSize`, codes `setup.start_again_incomplete` and `setup.workspace_unsupported`, files `first-setup-start-again.json` (state folder) and `first-setup-deleting.json` (venue folder).
+- **Assumptions to watch:** A731's shape, including its Recover from backup button (Task 0 Step 3); S7d's exact answer (Task 4b records it); S10's and S14's recorded outcomes (Task 3a2); whether `rejoin` can remove the marker (Task 3d Step 3); the owner's answers to the four points of revision 4 — point 2 decides A2's and A3's status rows and D3a's status rule.
+- **Not verified in this revision:** everything about B3 is design text, not code (B3 is not built); the chooser's own-request refusal behind point 1 was read, not run; the claim that no other app path deletes a state-folder file by listing the folder was read (the grep in D1), and Task 6c runs it.
