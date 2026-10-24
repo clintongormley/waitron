@@ -307,3 +307,21 @@ it("a changed held printing choice asks before closing, and choosing back the op
   expect(unload()).toBe(false);
   expect(await modal(el).requestClose("cancel")).toBe(true);
 });
+
+it("a changed changes after sending choice asks before closing, and choosing back the opened one does not", async () => {
+  const el = await mount();
+  const pickChanges = async (value: string) => {
+    el.shadowRoot!.querySelector("wt-combobox[name=changesAfterSending]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+    await el.updateComplete;
+  };
+  await pickChanges("never");
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await pickChanges("held-or-waiting");
+  expect(unload()).toBe(false);
+  expect(await modal(el).requestClose("cancel")).toBe(true);
+});

@@ -29,7 +29,7 @@ async function stations(values: readonly ChangesAfterSending[]): Promise<string[
   await seedTenant(db);
   const [loc] = await db
     .insert(locations)
-    .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Venue" })
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Venue" })
     .returning({ id: locations.id });
   const ids: string[] = [];
   for (const [i, changesAfterSending] of values.entries()) {

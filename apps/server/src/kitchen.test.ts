@@ -312,7 +312,7 @@ describe("kitchen-station config", () => {
 
   it("a new station allows changes while held or waiting", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Grill" }));
     expect(
       (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
     ).toMatchObject({ changesAfterSending: "held-or-waiting" });

@@ -22,3 +22,12 @@ export async function setChangesAfterSending(
   if (updated.length === 0)
     throw new Error("setChangesAfterSending: the database has no station yet");
 }
+
+export async function readChangesAfterSending(
+  tx: Transaction,
+): Promise<ReadonlyMap<string, ChangesAfterSending>> {
+  const rows = await tx
+    .select({ id: kitchenStations.id, value: kitchenStations.changesAfterSending })
+    .from(kitchenStations);
+  return new Map(rows.map((row) => [row.id, row.value]));
+}

@@ -96,7 +96,7 @@ const suite = useVenueDb({
       const bread = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        name: "Pan",
+        name: "Bread",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
