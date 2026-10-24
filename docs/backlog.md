@@ -2976,6 +2976,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   hyphenates the venue's default content language (Spanish, not English).
   Next: 10b, then 9, 11, 12 and 14.
 
+- **The theme delete dialog does not say the tills' text changes size (A841 slice 10a's review,
+  #2045).** Deleting the theme in use puts Waitron's theme, at 100%, on every screen; the switch
+  dialog says "Text on the tills changes size too." when the size changes, the delete dialog says
+  nothing. Owner to decide: give the delete dialog the same line when the deleted theme is not at
+  100%, or record the difference as a decision.
+
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
   2026-10-21).** A till learns of a new theme only through the setup revision its 15-second menu
   check returns, and that check asks about the counter zone plus the zone of a table whose order is
