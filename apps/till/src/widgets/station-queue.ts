@@ -52,10 +52,6 @@ const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
 
 const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
 
-/** `line` advances the one tapped item; `ticket` (the venue's `bump_mode` setting) advances the whole
- *  order at the station. */
-export type BumpMode = "line" | "ticket";
-
 interface FlatItem {
   item: StationQueueItem;
   group: StationQueueGroup;
@@ -615,7 +611,6 @@ export class TillStationQueue extends LitElement {
   /** Unacknowledged corrections for this station, oldest first as the server sends them. */
   @property({ attribute: false }) notices: KitchenNotice[] = [];
   @property() view: "kanban" | "rail" = "kanban";
-  @property() bumpMode: BumpMode = "line";
   /** The station these items are AT; a bump without one (its own or its group's) sends nothing. */
   @property() stationId?: string;
   /** Set for a merged queue: each dish and notice is labelled with its station's name. */
@@ -636,7 +631,7 @@ export class TillStationQueue extends LitElement {
   #bump(group: MergedQueueGroup, item: StationQueueItem, to: Exclude<TicketState, "queued">): void {
     const stationId = group.stationId ?? this.stationId;
     if (stationId === undefined) return;
-    if (this.bumpMode === "ticket") {
+    if (group.bumpMode === "ticket") {
       this.dispatchEvent(
         new CustomEvent("advance-ticket", {
           detail: { orderId: group.orderId, stationId, to },
@@ -1152,7 +1147,7 @@ export class TillStationQueue extends LitElement {
   }
 
   #bumpLabel(group: StationQueueGroup): string {
-    const verb = this.bumpMode === "ticket" ? t("station.bump_ticket") : t("station.advance");
+    const verb = group.bumpMode === "ticket" ? t("station.bump_ticket") : t("station.advance");
     return `${verb} #${group.orderNumber}`;
   }
 }

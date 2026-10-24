@@ -879,9 +879,8 @@ describe("till-station-queue", () => {
 
   it("ticket mode: tapping a line emits advance-ticket { orderId, stationId, to } (whole-ticket)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
+      groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })),
       stationId: "st-1",
-      bumpMode: "ticket",
     });
     const item = vi.fn();
     const ticket = vi.fn();
@@ -894,8 +893,7 @@ describe("till-station-queue", () => {
 
   it("ticket mode without a stationId cannot fire a whole-ticket bump (the route is station-keyed)", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups,
-      bumpMode: "ticket", // no stationId
+      groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })), // no stationId
     });
     const spy = vi.fn();
     el.addEventListener("advance-ticket", (e) => spy((e as CustomEvent).detail));
@@ -2236,15 +2234,45 @@ describe("till-station-queue — a merged queue's station labels", () => {
 
   it("a whole-ticket bump carries the group's own station, not the widget's", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-      groups: merged,
+      groups: merged.map((g) => ({ ...g, bumpMode: "ticket" as const })),
       stationNames,
       stationId: "st-2",
-      bumpMode: "ticket",
     });
     const ticket = vi.fn();
     el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+  });
+
+  it("a merged queue bumps each order by its own station's mode", async () => {
+    const twoDishes = {
+      ...groupB,
+      items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+    };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        { ...groupA, stationId: "st-1", bumpMode: "ticket" as const },
+        { ...twoDishes, stationId: "st-2", bumpMode: "line" as const },
+      ],
+      stationNames,
+      view: "rail",
+    });
+    const item = vi.fn();
+    const ticket = vi.fn();
+    el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
+    el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
+    expect(ticket).toHaveBeenCalledOnce();
+    expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
+    expect(item).not.toHaveBeenCalled();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-4"]')!.click();
+    expect(item).toHaveBeenCalledOnce();
+    expect(item).toHaveBeenCalledWith({ itemId: "ti-4", stationId: "st-2", to: "preparing" });
+    expect(ticket).toHaveBeenCalledOnce();
+    const bumpLabel = (itemId: string) =>
+      el.shadowRoot!.querySelector(`button[data-item="${itemId}"] .visually-hidden`)?.textContent;
+    expect(bumpLabel("ti-1")).toBe("Advance ticket #5");
+    expect(bumpLabel("ti-4")).toBe("Advance #6");
   });
 
   it("each notice names its station", async () => {

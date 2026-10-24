@@ -476,7 +476,11 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   it("whole-ticket bump mode has no violations", async () => {
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
-      { groups, stationId: "st-1", view: "rail", bumpMode: "ticket" },
+      {
+        groups: groups.map((g) => ({ ...g, bumpMode: "ticket" as const })),
+        stationId: "st-1",
+        view: "rail",
+      },
       theme,
     );
     await expectNoA11yViolations(host);
