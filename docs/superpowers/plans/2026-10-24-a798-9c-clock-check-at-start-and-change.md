@@ -1,217 +1,115 @@
-# A798-B slice 9c — a clock check at every start and after every change, with selling stopped while it waits
+# A798-B slice 9c — a clock check at every start and after every change, with selling stopped while it waits (OUTLINE)
 
-> **Revision 1 (2026-10-24).** Planned beside slice 9's revision 4
-> ([2026-10-23-a798-9-clock-restart.md](2026-10-23-a798-9-clock-restart.md), whose "Owner FYI
-> defaults" cover this slice too: items 18–21) and slice 9b
-> ([2026-10-24-a798-9b-box-sets-its-clock.md](2026-10-24-a798-9b-box-sets-its-clock.md)). Design:
-> revision 7, §4.9 a, b, f, h. **Depends on slices 9 and 9b being on `main`**: this slice adds stops,
-> and lands only once the box can confirm and correct its clock. Its own branch and pull request:
-> `python3 ~/workspace/tools/worktree.py new waitron feat/a798-9c-clock-check --headless`.
+> **An outline, not a plan to dispatch** (round 1, I9). When slice 9c is taken, this file becomes a
+> full plan — tasks sized for one implementer each, exact files and focused commands, its "Changed
+> test checks" — and gets its own fresh-context plan review against the spec before its first
+> dispatch. Design: revision 7, §4.9 a, b, f, h. **Depends on slices 9 and 9b being on `main`**:
+> this slice adds stops, and lands only once the box can confirm and correct its clock. Its own
+> branch: `python3 ~/workspace/tools/worktree.py new waitron feat/a798-9c-clock-check --headless`.
 > **Parked for the owner** (it stops every record while a check waits). Review path: FULL, two
 > Codex run-it reviews side by side.
->
-> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development. Implementers
-> are dispatched as `subagent_type: "implementer"`; each task is test-first and well under 100 tool
-> calls; one past about 150 stops at a passing or cleanly red point, commits, and hands over.
 
-**Goal:** the box checks its clock at every start and whenever its clock changes by more than a
-minute in either direction; while a check waits, everything slice 8's stop refuses is refused with
-`clock.unconfirmed`, staff see the red strip, managers the bell and (after five minutes) an email;
-AEAT's time, two agreeing tills or handhelds, or an administrator's own device confirm it (and, by
-slice 9b, correct the clock); a confirmation after a change lists the records the wrong clock may
-have dated.
+**Goal.** The box checks its clock at every start and whenever its clock changes by more than a
+minute in either direction; while a check waits, everything slice 8's stop refuses is refused, staff
+see the red strip, managers the bell and (after five minutes) an email; AEAT's time, two agreeing
+tills or handhelds, or an administrator's own device confirm it (and, by slice 9b, correct the
+clock); a confirmation lists the records the wrong clock may have dated. **No check may stop selling
+where nothing on the venue's network could lift it** (design §4.9 h).
 
-## What this rests on
+## Owner FYI defaults for 9c
 
-- **The check's state is in the database**, so the check inside the record append sees it without
-  touching `chain.ts`: `attemptAppend` already calls `refuseWhileClockBehind(tx, reading)` from
-  `clock-behind.ts` (`packages/fiscal-verifactu/src/chain.ts:137`, read), which this slice extends.
-  The tables were made by slice 9's migration (`clock_checks`; `clock_confirmations.check_id`):
-  **no migration here**.
-- **Which check is open** is decided by order of writing, never by time: the check with the largest
-  `seq` is open while no confirmation names it. A restored database's old open check is older than
-  the start check this node writes, so it never governs (slice 9 revision 4, R1).
-- **A change of the clock** is read as slice 9's clock watch reads a jump: the wall clock against
-  `CLOCK_BOOTTIME` through `/proc/uptime` ("A nonsettable system-wide clock … also includes any
-  time that the system is suspended", `clock_gettime(2)`; `elapsedClock` in
-  `apps/server/src/clock-watch.ts`). As built it counts only forward jumps (slice 9 plan, revision
-  4, T3). Whether `/proc/uptime` stays put across a set of the wall clock on Linux is slice 9b's
-  Task 0 line M3; **this slice may not start until M3 printed its expected line**.
-- **Tests that boot a whole server and sell** will meet the start check. A count on 2026-10-24:
-  `grep -l 'bootServer\|serverFixture\|startServer' apps/server/src/*.test.ts` names 73 files, 35 of
-  which also name Veri\*Factu, `recordSale`, `/api/sales` or `/api/pay`. Task 5 handles them with a
-  seam, never by weakening the check.
+1. **A clock change of up to a minute in total since the last confirmation is not a check**; more
+   than a minute, either way, is. A time service's small steps would otherwise stop the venue.
+2. **The start opens its check before the server serves, and tries AEAT once (five seconds at most)
+   before serving**, so a box with internet sells at once.
+3. **The managers' email goes out when a check has waited five minutes.**
+4. **Only the Veri\*Factu module stops** (design decision 16 stands).
+5. **Where the box cannot correct its clock, a check is an alert, not a stop**: when the host service
+   does not answer (a box upgraded without re-running the install, a host without systemd), a start
+   or change check raises `clock.sync_off` (`unreachable`) telling the operator to re-run the
+   install, and selling goes on (round 1, I4.2).
+6. **When AEAT disagrees and the box cannot set its clock** (synchronised, or no host service), an
+   administrator's confirmation still closes a 9c check; AEAT's disagreement is kept in the proof
+   and raises `clock.disagrees` (round 1, I4.1).
+7. **A developer's laptop** (`WAITRON_ENV=dev`, round 1, I7): no start or change checks at all (the
+   laptop's clock is its operating system's); `/proc/uptime` is missing on macOS, where
+   `elapsedClock` falls back to `performance.now()`, which stops during sleep, so the change guard is
+   off wherever that fallback is in use — on every system, not only in development. A preproduction
+   demo box (`wa-wt demo` on Linux, a Prepare box) checks like a live one.
+8. **An AEAT disagreement during normal trading opens a check** (reason `disagrees`, declared in
+   slice 9's migration, round 1 M6), stopping selling until the box sets its clock to AEAT's time
+   (9b) — or, where it cannot, an alert only (FYI 5, 6). The full plan's review may overturn it.
+9. **A future cloud or proxied primary**, where every request looks like the box's own: today a
+   venue has one node and there is no cloud primary (CLAUDE.md §5); such a node gets its own rule
+   before it exists. A backlog entry.
 
-## Decisions
+## What it rests on
 
-1. **What opens a check** (seat method `openClockCheck(tx, { reason, at, detail })`, writes a
-   `clock_checks` row unless the latest check is already open, in which case it answers that one):
-   - `start`: `bootServer` in trading mode, on the primary, when the fiscal seat has the method —
-     before `serve()`, so no request is served before the check exists;
-   - `change`: the clock guard (decision 3) sees the wall clock off by more than 60 000 ms, either
-     way, from where the boot-time clock says it should be since the last confirmation or start;
-     `detail` `{ stepMs, wallBefore, wallAfter, heads }` (`heads` as slice 9's decision 10);
-   - a promotion that makes this node the seller: if it restarts the server, the start covers it;
-     if not, it opens a `start` check (Task 6 finds out which, and tests it).
-2. **The stop.** `refuseWhileClockBehind` (`clock-behind.ts`) refuses, after the 28-10-2024 rule and
-   before the chain comparison, `clock.unconfirmed { since, reason, stepMs? }` while a check is
-   open. Every reader of the stop already goes through it or `clockBehindChain` (slice 9 plan R1
-   read; re-check by grep in Task 1): the named check on every money route, the chain's check, the
-   staff notice, the bell's source, the Box status read, the tender-refund recovery loop's pause and
-   the clock-stop email. New code `clock.unconfirmed` in the Veri\*Factu registry, error severity,
-   area `box`, `system.manage`.
+- **The check's state is in the database** (`clock_checks`, slice 9's migration): `attemptAppend`
+  calls `refuseWhileClockBehind(tx, reading)` from `clock-behind.ts` (`chain.ts:136-137`), which this
+  slice extends; no edit to `chain.ts`. At most one check is open (slice 9, Words).
+- **A change of the clock** is read against `CLOCK_BOOTTIME` through `/proc/uptime`, as slice 9's
+  watch does. As built the watch counts only forward jumps (slice 9 plan, T3); this slice builds a
+  separate guard for both directions and leaves the watch's forward-jump disproof alone. **9b's M3
+  must have printed its expected line first.**
+- **Tests that boot a whole server**: on 2026-10-24, 73 files under `apps/server/src` name
+  `startServer` (every one; `bootServer` is internal, `boot.ts:842`), 24 of them `serverFixture`;
+  7 name `recordSale`, `/api/sales` or `/api/pay`, and more may sell through the `testing/` helpers
+  (claim check W3; the earlier "35" counted any case-insensitive mention of Veri\*Factu). The full
+  plan measures which fail, and handles them with a start seam, never by weakening the check.
+
+## Decisions the full plan builds from
+
+1. **What opens a check** (seat `openClockCheck`, slice 9): `start` in `startServer`'s trading mode,
+   on the primary, before `serve()`; `change` from the clock guard; `disagrees` (FYI 8); a promotion
+   that makes this node the seller (find whether the server restarts after one).
+2. **One refusal code, with a reason** (round 1, C2; the runner's ruling): while a `start`, `change`
+   or `disagrees` check is open, `refuseWhileClockBehind` throws **`clock.behind_chain`** with
+   `reason: "unconfirmed"` and `since`, `checkReason`, `stepMs` — not a new code — so every place that
+   matches the code by name keeps working. Each is named and tested in the full plan, from
+   `/usr/bin/grep -rn '"clock.behind_chain"' apps packages` (round 1, experiment 4):
+   `apps/server/src/bill-payments.ts:1262-1266` (`notRecordedReason`: a refusal after a card was
+   charged becomes `sale.charged_not_recorded`), the status maps `apps/server/src/payments-api.ts:179`
+   and `apps/server/src/till-api.ts:455`, `apps/till/src/till-app.ts:574`, `:847`, `:922`, `:1547`,
+   `:1554`, `apps/till/src/widgets/pay-refusal.ts:82`, `:88`,
+   `apps/dashboard/src/screens/box-status-rows.ts:50`, `:59`, `:150`, `:262`, and the words files
+   (the till's refusal and strip, the bell, the email: each words the new reason). **The mid-payment
+   test:** a check opens (an injected guard tick) between a payment route's pre-check and the record
+   append after a card is charged → `sale.charged_not_recorded` with the reason, the card not charged
+   again. The readers that go through `clockBehindChain` rather than `refuseWhileClockBehind` (the
+   staff notice, the bell's source, `clockStopState`) are changed too; "every reader goes through one
+   function" was false and is not repeated.
 3. **The clock guard** (`apps/server/src/clock-guard.ts`): an anchor `{ wall, boot }` set at the
-   start, after each confirmation and after each set the box makes (slice 9b); every second it
-   compares `(wall − anchor.wall) − (boot − anchor.boot)`; past ±60 000 ms it opens a `change`
-   check in a transaction and re-anchors. Cheap (two clock reads a second), unref'd, stopped on
-   `undoOnFailure` and on close like the clock watch. A change of up to a minute in total is not a
-   check (FYI 18).
-4. **The start's first try** (FYI 19): right after opening the start check, before serving, one AEAT
-   read (5 s at most) and, if it agrees, a confirmation; if it disagrees, slice 9b's correction;
-   otherwise the check waits for the watch, the tills and an administrator.
-5. **What closes a check**: any confirmation (slice 9's three sources, slice 9b's corrections) while
-   a check is open writes `check_id` = the open check and `reason` = its reason. The confirmation
-   rules are slice 9's, with "the stop" widened to "a stop or an open check"; for a check with no
-   clock-behind stop, "taken during the stop" means a witness noted after the check opened (by the
-   steady clock: the witness store is cleared when a check opens).
-6. **Wrongly dated after a change** (design §4.9 f): when a confirmation closes a `change` check and
-   applies no step of more than a minute (so the changed clock was right and the clock before it
-   wrong), every record written after the previous confirmation's `heads` and up to the check's
-   `heads` is listed, with slice 9's "ahead" rule beside it; when it steps the clock back by the
-   change (the change was wrong), only slice 9's "ahead" rule applies (records stamped behind more
-   than a minute were refused when made, slice 8). `misdatedRecords` gains the second rule; the
-   alert and the email are slice 9's.
-7. **What staff and managers see.** Staff: the red strip "No se puede cobrar: comprobando la hora
-   del equipo · Avisa al encargado" / "Payments stopped: checking the box's clock · Tell a manager",
-   and every refused action "No se puede cobrar hasta que se compruebe la hora del equipo. Avisa al
-   encargado." / "Payments are stopped until the box's clock is checked. Tell a manager." Managers:
-   the bell's error "Payments are stopped until the box's clock is confirmed ({reason:clock_check_reason}).
-   The box asks the tax agency and the tills; an administrator can confirm it with their own phone on
-   the Box status page." with reasons "the box has just started" / "its clock changed by
-   {stepMinutes} minutes"; the email when a check has waited five minutes (FYI 20), once per check.
-8. **Only the Veri\*Factu module stops** (FYI 21). Clock-ins, orders and the kitchen carry on, as in
-   slice 8.
+   start, after each confirmation and before and after each set the box makes (9b's order, round 1
+   M7); every second, `(wall − anchor.wall) − (boot − anchor.boot)` past ±60 000 ms opens a `change`
+   check (`detail { stepMs, wallBefore, wallAfter, heads, bootMs, bootId }`) and re-anchors. A failed
+   write is retried with a back-off, not every second (round 1, M5). Off where `elapsedClock` fell
+   back to `performance.now()` (FYI 7).
+4. **The start's first try** (FYI 2), and **a full disk at start** (round 1, M5): if the check cannot
+   be written, the start still serves, every sale is refused (the full-disk stop already does), and
+   nothing loops; compare `fullDiskFailure` and `start-full-disk.e2e.test.ts`.
+5. **What closes a check**: slice 9's confirmations with "the stop" widened to "a stop or an open
+   check"; a witness counts only if noted after the check opened (the witness store is cleared when
+   one opens).
+6. **Wrongly dated after a change** (round 1, I8, the runner's ruling): with e₀ the clock's error
+   before the change, Δ the change and s the step the confirmation applies, e₀ = −(Δ + s) and the
+   clock after the change was off by −s. List the records written since the previous confirmation
+   and before the change when |Δ + s| > 60 s, and the records written between the change and the
+   check's `heads` when |s| > 60 s — beside slice 9's rule for the stop's start. Tests: a forward
+   change endorsed; a forward change undone; a backward wrong change; a partial correction; records
+   written in the gap between the change and the check opening.
+7. **What staff and managers see**: the strip "No se puede cobrar: comprobando la hora del equipo ·
+   Avisa al encargado" / "Payments stopped: checking the box's clock · Tell a manager"; the bell's
+   error naming why (just started; changed by n minutes; the tax agency disagrees) and the three ways
+   out; the Clock row "Checking the clock since …"; the email at five minutes.
+8. **Demo and seed scripts that record sales** (`apps/server/scripts/demo-seed/seed-sales.ts`,
+   `record-one-sale.ts`, `daily-close*-demo.ts`, round 1 I7) are callers of the record append: on a
+   box with an open check they are refused like a till. On a laptop (FYI 7) no check opens. Each is
+   named in the full plan with a test of one of them against an open check.
 
-## Behaviour this slice changes
+## Review notes for the full plan
 
-After every start, and after every clock change of more than a minute, payments and records stop
-until the clock is confirmed — seconds with internet, about fifteen seconds with two tills on,
-otherwise until an administrator confirms. This is the owner's decision (2026-10-24, answers 1 and
-"check its clock at every start"); CLAUDE.md §5's "nothing external" holds because the
-administrator's path needs nothing outside the venue (design §4.9 h).
-
-## Global constraints
-
-As slice 9 revision 4's: the fiscal core untouched, `chain.ts`, the golden huella test and
-`inmutabilidad` unedited and green after every task in `packages/fiscal-verifactu`; **no
-migration**; no time from a device or AEAT stamped on a record; refusals assert the code and params
-with row counts; English only outside translation files; Chromium runs after a memory check.
-
-## Tasks
-
-### Task 1: The open check stops every record and money route
-
-**Files:** `packages/fiscal-verifactu/src/clock-checks.ts` (`openClockCheck`, `openCheck(tx)`),
-`clock-behind.ts` (decision 2), `errors.ts`, `staff-notices.ts`, `clock-behind-alerts.ts`,
-`backend.ts`; `packages/fiscal/src/backend.ts` (optional `openClockCheck`); tests
-`clock-checks.test.ts`, `chain.clock-unconfirmed.test.ts`.
-- [ ] **Failing tests**: a `start` check open → `recordSale` through `VerifactuBackend` refused
-  `clock.unconfirmed { reason: "start" }`, no record; `refuseWhileClockBehind` the same; the staff
-  notice and the bell source answer it; a confirmation naming the check → the sale recorded; a
-  second `openClockCheck` while one is open → the same row, count 1; an older open check below a
-  newer confirmed one (a restored database) → not stopped; before 28-10-2024 → `clock.unusable`
-  first. Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-checks.test.ts
-  src/chain.clock-unconfirmed.test.ts inmutabilidad src/write-path.e2e.test.ts`; then
-  `pnpm exec vitest run scripts/staff-notice-codes.test.ts scripts/alert-codes.test.ts
-  scripts/ongoing-alert-codes.test.ts scripts/errors-reachable.test.ts`. The fiscal-core check
-  prints nothing. Commit.
-
-### Task 2: A confirmation closes the open check, and lists what a change dated wrongly
-
-**Files:** `clock-confirmation.ts`, `clock-misdated.ts` and their tests.
-- [ ] **Failing tests**: a `start` check closed by AEAT, by two devices noted after it opened, by an
-  administrator; devices noted BEFORE it opened do not count; a `change` check of +2 h endorsed (no
-  step) → every record written between the previous confirmation's `heads` and the check's listed;
-  the same change undone (a step of −2 h) → none of them listed, slice 9's ahead rule only; a
-  confirmation with no open check and no stop → refused `not_stopped`. Commands as Task 1. Commit.
-
-### Task 3: The clock guard
-
-**Files:** `apps/server/src/clock-guard.ts` (+ test), `apps/server/src/boot.ts` (start, stop on
-`undoOnFailure` and on close), `apps/server/src/boot.clock-guard.test.ts` (the shape of
-`boot.clock-watch.test.ts`).
-- [ ] **Failing tests** (injected wall, boot clock and timer): +61 s → one `change` check, `stepMs`
-  61 000; −61 s → one; +59 s → none; +30 s then +31 s → one at the second (cumulative); a suspend of
-  an hour (wall and boot both +1 h) → none; after a confirmation the anchor moves; after a set the
-  box made (slice 9b tells it) → none; a failing write logs `clock_guard.check_failed` and retries
-  next second; `stop` waits for a write in flight. `pnpm --filter @waitron/server exec vitest run
-  src/clock-guard.test.ts src/boot.clock-guard.test.ts src/boot.failed-start.test.ts`. Commit.
-
-### Task 4: The start opens a check before serving, and tries AEAT once
-
-**Files:** `apps/server/src/boot.ts` (decision 1 `start`, decision 4; seam
-`seams.clockCheckAuthority?: () => Promise<AuthorityTimeSample | null>` replacing the seat's reader
-at start only), `apps/server/src/boot.clock-check.test.ts`.
-- [ ] **Failing tests** (`serverFixture`): with a fake AEAT agreeing → `/api/sales` cash 200 at
-  once and one closed `start` check; with none → 409 `clock.unconfirmed`, the bell shows it, the
-  strip shows on an equipment read; then an administrator off the box confirms → 200; a fake AEAT
-  that never answers → the boot still serves within 6 s, stopped; a demo-mode boot (no filing)
-  checks too. `pnpm --filter @waitron/server exec vitest run src/boot.clock-check.test.ts`. Commit.
-
-### Task 5: Test fixtures that boot a server confirm at start
-
-**Files:** `apps/server/src/testing/server-fixture.ts`, `apps/server/src/testing/boot-harness.ts`
-and any other helper that calls `bootServer`; tests that boot `bootServer` directly.
-- [ ] Give the shared fixtures the Task 4 seam with a fake AEAT that answers the box's own time.
-  Then run `pnpm --filter @waitron/server test:coverage` (memory first; it is long) and read every
-  failure: one whose cause is `clock.unconfirmed` gets the seam in its setup (a setup change, no
-  assertion); **any other failure, or one that would need an assertion changed, is a STOP**. Commit
-  with the list of files in the message. Proof: remove the seam from `serverFixture` and name three
-  files that fail with `clock.unconfirmed`.
-  If more than about fifteen files need the seam, stop at a green point, commit, and hand the rest
-  to a fresh implementer as Task 5b with the list of files still failing.
-
-### Task 6: A promotion
-
-Find how a node becomes the seller (`apps/server/src/promote-api.ts`, `promotion-operation.ts`): if
-the server restarts after it, add a test that the restarted node opens a `start` check; if not, open
-one at the promotion and test that. Commit.
-
-### Task 7: The watch confirms checks; the administrator's dialog works for them
-
-**Files:** `apps/server/src/clock-watch.ts` (15 s while a check is open; the witness store cleared
-when one opens), `apps/server/src/box-health.ts` (`clockCheck: { since, reason, stepMs } | null`),
-`box-health-api.ts` (the confirm route accepts an open check as well as a stop),
-`apps/dashboard/src/screens/box-status-rows.ts`, `box-status-screen.ts`, strings; tests.
-- [ ] **Failing tests**: an open check and two LAN devices → closed within a watch check; the Clock
-  row "Checking the clock since {time}: the box has just started" / "…its clock changed by {n}
-  minutes"; the administrator's button shown for a check with no stop; the dialog refused on the box.
-  Commit.
-
-### Task 8: The till's words
-
-**Files:** `apps/till/src/i18n/staff-notices.ts`, `apps/till/src/i18n/codes.ts` (EN and ES),
-the till's tests for a refused payment and the strip. `pnpm --filter @waitron/till exec vitest run`
-on the files touched (Chromium: memory first); `pnpm exec vitest run
-scripts/staff-notice-codes.test.ts`. Commit.
-
-### Task 9: The email after five minutes
-
-**Files:** `apps/server/src/box-alert-email.ts`, `apps/server/src/i18n/box-emails.ts`, tests: no email
-for a check closed within five minutes; one per manager at five minutes; none again for the same
-check. Words: subject "Payments stopped at {venue}: the box's clock needs checking" / "No se puede
-cobrar en {venue}: hay que comprobar la hora del equipo"; text says what started it and the three
-ways out. Commit.
-
-### Task 10: Docs, guides and LOOK
-
-CLAUDE.md §5: a new rule line — "Every start, and every change of the box's clock by more than a
-minute, opens a clock check; while one is open no record is written and no money moves
-(`clock.unconfirmed`), until AEAT's time, two devices off the box or an administrator's device off
-the box confirms it." Guards named, weaker than their names; `docs/developers/conventions-data.md`
-receipt; guides EN/ES (`box-status.md`, `till-notices.md`) with shared `{#id}`s; the backlog
-(A798-B done; open entries: a venue with no internet, under two tills and no administrator present
-cannot sell after a start; slow drift of an unsynchronised clock is not a change and is caught only
-by AEAT's comparison); asesor Q51's interim treatment gains the start and change checks. LOOK: the
-till's strip and refusal, the Clock row and the bell during a `start` and a `change` check, light and
-dark, 1280 and 390 (dashboard) and the till's sizes. Commit.
+Codex seat 1: boot with no AEAT and no devices → stopped; an administrator off the box confirms →
+selling; the clock moved +2 h by hand → stopped again with `reason: "unconfirmed"`; the mid-payment
+case through a real route. Seat 2: a check that can never be closed (host service gone, AEAT
+disagreeing, the time service synchronised) — expected: never a stop with no way out.

@@ -503,7 +503,8 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
   - `clock.behind_chain_restarted` (warning) and `clock.behind_chain_disproved` (error), recorded
     alerts in the same area as the stop: a manager restarted payments, and a clock a restart
     accepted later proved wrong (§4.8 b, c). _Revision 7: payments restart by themselves; new beside
-    them, `clock.records_misdated`, `clock.unconfirmed` and `clock.sync_off` (§4.9)._
+    them, `clock.records_misdated` and `clock.sync_off`, and `clock.behind_chain` gains a reason for
+    a waiting clock check (§4.9)._
   - `reader.offline` (warning): "{reader} está sin conexión." / "{reader} is offline." — the check
     already gets this answer and ignores it (§2.4).
 - **The Box status page** (picture 4), under Ajustes beside Diagnóstico, for people with
@@ -792,7 +793,7 @@ What does fix it:
      power cut goes back months or years — and the owner's "until the clock is fixed" governs. The
      cap also bounds the one backward step a restart puts in the chain to a day.
    - **Who:** _Revision 7: nobody presses; payments restart by themselves, and only an administrator
-     (`node.clock`) may confirm the time by hand (§4.9 c, e)._ Anyone holding `system.manage` — managers and admins
+     (`person.admin`) may confirm the time by hand (§4.9 c, e)._ Anyone holding `system.manage` — managers and admins
      (`packages/identity/src/permissions.ts:56-76`) — the permission the Box status page already
      needs (§4.3) and that the Veri*Factu module's dashboard already uses
      (`packages/fiscal-verifactu/src/dashboard/index.ts:15`). No new permission.
@@ -1045,7 +1046,9 @@ time agrees with ours), or asking a human to confirm the time. Regardless of the
 we need to restart selling using the correct time, and to deal with any invoices with the incorrect
 future date." The answers that followed it, verbatim, are in
 `~/waitron-campaign-b/a798-9-rev/OWNER-ANSWERS.md`; this section is what they mean for the box.
-Where an earlier sentence of this design disagrees, this section governs.
+Where an earlier sentence of this design disagrees, this section governs. (Folded the round-1 plan
+review and its claim check, `~/waitron-campaign-b/a798-9-rev/round1.md`, `claim-check.md`, under the
+runner's rulings, `RULINGS-1.md`.)
 
 #### a. What starts a clock check
 
@@ -1053,124 +1056,170 @@ Where an earlier sentence of this design disagrees, this section governs.
    start").
 2. **A change of the box's clock** after start — a time-sync correction or a manual change, in
    either direction — of more than a minute in total since the clock was last confirmed. The box
-   compares its wall clock with the kernel's boot-time clock, which no one can set and which keeps
-   counting through a suspend (`clock_gettime(2)`: `CLOCK_BOOTTIME`, "A nonsettable system-wide
-   clock"; read through `/proc/uptime` as slice 9's clock watch already does), every second.
-   Changes up to a minute in total are the margin the whole design uses (§4.5 item 2) and are not a
-   check; a time sync's routine small steps would otherwise stop the venue.
+   compares its wall clock every second with the kernel's boot-time clock, which `settimeofday` and
+   `timedatectl` do not move and which keeps counting through a suspend (`clock_gettime(2)`:
+   `CLOCK_BOOTTIME`, "A nonsettable system-wide clock … also includes any time that the system is
+   suspended"; read through `/proc/uptime`, as slice 9's clock watch already does). A time namespace
+   can offset that clock (`time_namespaces(7)`); Docker makes none by default. Changes up to a
+   minute in total are the design's margin (§4.5 item 2) and are not a check.
 3. **Records dated later than the box's clock** by more than a minute: slice 8's stop (§4.8), as
-   built.
+   built. From slice 9 the box also writes down when that stop began (part f).
+4. **AEAT disagreeing with the box during normal trading** may open a check too; slice 9c's own plan
+   decides (the reason is declared in slice 9's migration so that deciding later needs no rebuild).
 
 #### b. While a check waits, selling stops
 
-"No, we must first correct the clock." Every action slice 8 stops is refused while a check started
-by 1 or 2 waits, with a new code, `clock.unconfirmed` (the same named check on every money route
-and the same check inside the record append, §4.8 e), the red strip on every till and handheld, an
-error in the bell, and an email to the managers when a check has waited five minutes. Orders, the
-kitchen and clock-ins carry on, as in §4.8 e. The check's state is kept in the database
-(`clock_checks`, part i), so the check inside the record append sees it without any change to the
-chain code.
+"No, we must first correct the clock." Everything slice 8 stops is refused while a check started by
+a.1, a.2 or a.4 waits — **with slice 8's own code, `clock.behind_chain`, carrying a new `reason`**,
+not a new code: the code is matched by name after a card is charged (`apps/server/src/bill-payments.ts`'s
+"charged but not recorded" path), in two routes' status maps and in five places in the till, and a
+second code would miss them while money is mid-payment (round 1, C2). The red strip on every till
+and handheld, an error in the bell, and an email to the managers when a check has waited five
+minutes. Orders, the kitchen and clock-ins carry on, as in §4.8 e. The check's state is kept in the
+database (`clock_checks`, part i), so the check inside the record append sees it without any change
+to the chain code. Where a check could never be confirmed, it does not stop selling (part h).
 
 #### c. Who confirms the time, in order
 
 1. **AEAT's time over the internet**, automatically: the `Date` header of AEAT's QR validation site,
    or a submission reply's timestamp (slice 9 as built).
 2. **Two tills or handhelds that agree with each other**, automatically, each having reported its
-   clock in the last five minutes.
+   clock in the last five minutes, **from two different connection addresses** (two browsers on one
+   phone share one clock, so they count once).
 3. **Otherwise an administrator confirms their own phone's or computer's time in the dashboard**:
    "The box's clock says 1 Jan 2025 08:12. Your phone says 24 Oct 2026 09:03. Use your phone's
-   time?" The browser sends its own clock; **nobody types a time**. Only an administrator may: the
-   permission is a new admin-only `node.clock` (the dashboard's own test for an administrator is
-   `person.admin`; `system.manage`, which the old restart used, is held by managers too —
-   `packages/identity/src/permissions.ts`). The box records who confirmed, when, and both readings.
+   time?" The browser sends its own clock; **nobody types a time on the screen**. "An administrator"
+   is whoever holds `person.admin`, the permission the dashboard itself treats as admin
+   (`apps/dashboard/src/dashboard-app.ts`'s `canAdminister`); only the `admin` role holds it
+   (`packages/identity/src/permissions.ts`). The box records who confirmed, when, and both readings.
+
+**These clocks are claims.** A device's clock, and an administrator's, are whatever their browser
+sends: a scripted request can send any time. "Nobody types a time" is true of the screen, not a
+security property. What limits the harm: a device must be enrolled and an administrator signed in;
+two devices must come from two addresses; every confirmation is kept in an append-only table with
+its proof; every clock change the box makes raises a bell alert and an email (slice 9b); and records
+it lists as wrongly dated go to the owner.
 
 **A witness clock is never the box's own.** A till or dashboard on the box's own screen (B3's «Usar
-esta pantalla como caja», or any browser on the box) reads the box's clock. The box recognises such
-a request by its connection's source address — loopback, or any address of the box's own network
-interfaces, Docker's bridges included — never by anything the browser sends. That is the rule A947
-already uses for its second clock (`apps/server/src/request-from-box.ts`). Its readings never count
-as one of the two devices, and an administrator confirming from it is refused: "This screen is the
-box itself, so its clock is the box's own. Confirm from your phone or another computer." Measured
-for the plan (experiment 8, §12): a request the Mac made to its own LAN address arrived from that
-address, not loopback, so a loopback-only test would have counted the box's own browser as another
-device; an `X-Forwarded-For` header made no difference. A request through the cloud tunnel arrives
-from loopback (`packages/tunnel/src/client.ts`, read), so a remote administrator is refused too,
-which fails safe.
+esta pantalla como caja», or any browser on the box) reads the box's clock. With the app on the
+host's network (`deploy/compose.yml`: `network_mode: host`), the box recognises such a request by
+its connection's source address — loopback, or any address of the box's own network interfaces,
+Docker's bridges included — never by anything the browser sends. That is the rule A947 already uses
+for its second clock (`apps/server/src/request-from-box.ts`). Its readings never count as a device,
+and an administrator confirming from it is refused: "This screen is the box itself, so its clock is
+the box's own. Confirm from your phone or another computer." Measured (experiment 8, §12, and the
+claim check's re-run with and without forwarding headers): a request the Mac made to its own LAN
+address arrived from that address, so a loopback-only test would have counted the box's own browser
+as another device; `X-Forwarded-For`, `Forwarded` and `X-Real-IP` changed nothing. That another
+machine counts as "not the box" rests on the unit tests with a supplied socket address, not on a
+second machine. A request through the cloud tunnel arrives from loopback (`packages/tunnel/src/client.ts`,
+read), so a remote administrator is refused too, which fails safe. On a developer's laptop (`WAITRON_ENV=dev`)
+the administrator may confirm from the same machine; nowhere else.
 
 #### d. The box corrects its own clock
 
 The confirming source both checks and corrects: when AEAT, two agreeing devices or the
 administrator's device disagree with the box by more than a minute, the box sets its clock to that
 time, then confirms. The server holds no clock-setting capability (experiment 6) and gets none: a
-small service on the host, installed by `waitron.sh install` and by B3's image, listens on a socket
-mounted into the app's container and takes two requests, "how is the time service?" and "set the
-clock to this instant". It sets the clock with `timedatectl set-time`, which "will also update the
-RTC time accordingly" (`timedatectl(1)`), switching the time service off around the set because
-systemd refuses a set while it runs ("Automatic time synchronization is enabled",
-`src/timedate/timedated.c`, systemd main, read 2026-10-24), and back on after, so a reachable time
-server still has the last word. **While the time service reports itself synchronised, the box never
-sets its clock from devices or an administrator**: they can only agree with it; a disagreement is
-`clock.disagrees`. This is the first request of the host service B3 plans (`waitron-box`, B3 §8),
-built narrowly now. None of it was measured on Linux for this revision; slice 9b measures it first
-and stops if it fails (§8, slice 9b).
+small service on the host, installed by `waitron.sh install` and by B3's image, takes two requests
+over a socket mounted into the app's container — "how is the time service?" and "set the clock to
+this instant". It sets the clock with `timedatectl set-time`, which "will also update the RTC time
+accordingly" (`timedatectl(1)`). systemd refuses that while a time service it knows of is active —
+one listed in `ntp-units.d`, or in `$SYSTEMD_TIMEDATED_NTP_SERVICES` ("Automatic time
+synchronization is enabled", `src/timedate/timedated.c`, systemd main, read 2026-10-24) — so the
+service is switched off around the set (`set-ntp false` stops only those listed services) and back
+on after, so a reachable time server still has the last word. A time service not on that list is
+invisible to both, which slice 9b measures. **While the time service reports itself synchronised,
+the box never sets its clock from devices or an administrator**: they can only agree with it. Every
+clock change the box makes is alerted and emailed. Moving the clock by days moves everything that
+reads it — backups pruned by the age in their names, the stream's generation pruning, sessions,
+certificate reminders, day closes — and slice 9b makes each safe or says why it is. None of this was
+run on Linux for this revision; slice 9b measures it first and stops if it fails.
 
 #### e. Payments restart by themselves, whatever the gap
 
-Once the clock is confirmed, a clock-behind stop (part a.3) lifts by itself, with the same rule
-slice 9 built for a restart — the next record may carry a time earlier than the record before it,
-and every later one is held to a minute against the latest time written since — but with **no
-24-hour cap** and **no button**. The lift is a row of `clock_confirmations` naming the latest
-record; if the clock steps back again later, payments stop again and a fresh confirmation lifts
-them. Every manager with `system.manage` is told by the bell and by email. With no proof, or with
-proof the other way, payments stay stopped exactly as before.
+Once the clock is confirmed, a clock-behind stop (part a.3) lifts by itself, with the rule slice 9
+built for a restart — the next record may carry a time earlier than the record before it, and every
+later one is held to a minute against the latest time written since — but with **no 24-hour cap**
+and **no button**. The lift is a row of `clock_confirmations` naming the latest record; if the clock
+steps back again later, payments stop again and a fresh confirmation lifts them. Every manager with
+`system.manage` is told by the bell and by email. With no proof, or with proof the other way,
+payments stay stopped as before (and slice 8's own ways out remain: the clock fixed, or real time
+passing the record).
 
 #### f. Wrongly dated records go to the owner
 
-"Invoices with incorrect past dates also need correction." At each confirmation the box lists:
-- every record dated more than a minute after the confirmed time (stamped while the clock was
-  ahead); and
-- once checks after a change exist (slice 9c), when the confirmation shows the change was a
-  correction, every record written since the clock was last confirmed (stamped while it was wrong,
-  ahead or behind).
+The owner (04:00): "the records later than the time the corrected clock showed when the stop
+began". So the box writes down when a stop began — a `clock_checks` row with the box's reading and
+the boot-time clock at that moment — and, when the check closes (a confirmation, or the stop ending
+by itself because real time caught up or the clock was put right), works out the corrected time at
+the start: the time at closing, which is right, less the boot-time clock's elapsed time since. Every
+record written before the closing and stamped more than a minute after that time is listed. If the
+machine restarted during the stop, the elapsed time is unknown and the list falls back to records
+stamped more than a minute after the closing time; the alert says the list may be short.
+
+After a change of the clock (slice 9c), with e₀ the clock's error before the change, Δ the change
+and s the step the confirmation applies (e₀ = −(Δ + s)): records written since the last
+confirmation and before the change are listed when |Δ + s| is over a minute, and records written
+between the change and the check when |s| is over a minute.
 
 The list is on the Box status page, and a recorded alert, `clock.records_misdated`, stays open as
 the owner's task until it is marked handled: "go through these with your tax adviser". Nothing is
-rewritten; `registros_facturacion` is append-only. Most records stamped behind are refused when made
-(slice 8's rule); the list catches the rest.
+rewritten; `registros_facturacion` is append-only.
 
 #### g. The time service is watched
 
 "We must ensure that ntp is up and running." The host service reports whether a time service is
 enabled and running and whether the system counts itself synchronised (systemd's
-`NTPSynchronized`: the kernel's maximum error under 16 seconds, `timedated.c`, read). When it is
-not, the bell shows `clock.sync_off` (warning) and the Box status page says so. The server cannot
-read this today: the app's image has no `timedatectl` (`deploy/Dockerfile`'s runtime stage installs
-only `ca-certificates` and `libcap2-bin`, read), so on a box today's probe should answer "unavailable" (an inference from that reading; not run).
+`NTPSynchronized`: on systemd main, the kernel's maximum error under 16 seconds, `timedated.c`,
+read; the box's own systemd version was not read). When it is not, the bell shows `clock.sync_off`
+(warning) and the Box status page says so. The server cannot read the service's state from inside
+its container (no `timedatectl`, no system bus: `deploy/Dockerfile`'s runtime stage installs only
+`ca-certificates` and `libcap2-bin`, read, not run); the "synchronised" half alone is a kernel call
+an unprivileged process may make (`adjtimex`, general knowledge, not run).
 
-#### h. Nothing external blocks a sale
+#### h. Nothing external blocks a sale — and where an administrator cannot help
 
-CLAUDE.md §5's rule holds: the stop is the box's own state, and the way out always includes an
-administrator on the venue's own network with their own phone, which needs nothing outside the
-venue. AEAT and the devices only make it quicker. The cost the owner accepted: a venue with no
-internet, fewer than two tills switched on and no administrator present cannot take payment after
-a start until one arrives.
+CLAUDE.md §5's rule holds because every stop this revision adds can be lifted on the venue's own
+network. The earlier wording, "an administrator can always confirm", was wider than the plans; the
+cases where an administrator alone cannot, and what the box does in each:
+1. **AEAT disagrees and the box cannot set its clock** (the time service reports itself synchronised,
+   or the host service does not answer): for a check slice 9c opens, AEAT's disagreement then does
+   not block an administrator's confirmation; it is kept in the proof and raises `clock.disagrees`.
+   During slice 8's clock-behind stop it still blocks, since that stop keeps its own ways out (the
+   clock put right, or real time passing the record).
+2. **The host service does not answer** (a box upgraded without re-running `waitron.sh install`, or
+   a host without systemd): a start or change check is a bell alert, not a stop, because nothing
+   could correct a wrong clock; `clock.sync_off` says to re-run the install.
+3. **A primary in the cloud or behind a proxy**, where every request looks like the box's own:
+   today a venue has one node and there is no cloud primary (CLAUDE.md §5); when one exists it needs
+   its own rule, and the backlog says so.
+4. **A developer's laptop**: covered in part c and slice 9c's plan.
+Slice 8's stop keeps its own ways out (the clock fixed, or real time passing the record). The cost
+the owner accepted: a venue with no internet, fewer than two tills switched on and no administrator
+present cannot take payment after a start until one arrives.
 
 #### i. Storage
 
 One more migration in the Veri*Factu module's set, in slice 9: two append-only `ledger` tables.
-`clock_checks` holds each check opened (start or change), and `clock_confirmations` each
-confirmation — the source, the administrator for a hand confirmation, the box's reading and the
-time adopted, any step applied, the proof, the check it closes and, for a lift, the record it names.
-Neither table can be corrected. `clock_stop_restarts` (slice 8) stays, written by nothing: its
-`person_id` cannot be empty (measured, experiment 9), and dropping or rebuilding a shipped
+`clock_checks` holds each check opened (a start, a change, a clock-behind stop, an AEAT
+disagreement), with when it began; `clock_confirmations` each closing of one — the source (AEAT,
+devices, an administrator, or the stop ending by itself), the administrator for a hand confirmation,
+the box's reading and the time adopted, any step applied, the proof, the check it closes and, for a
+lift, the record it names. Neither table can be corrected. `clock_stop_restarts` (slice 8) stays,
+written by nothing: it allows one row per record (`clock_stop_restarts_registro_uq`), and a second
+lift of the same record is now normal; and its `person_id` cannot be empty (measured, experiment 9;
+a sentinel string would insert, since it has no foreign key). Rebuilding or dropping a shipped
 append-only table is avoided; the go-live migration squash removes it.
 
 #### j. Slices
 
 Three pull requests, so that selling never stops for a check before the box can be confirmed and
 corrected: **9** (the automatic restart, the administrator's confirmation of an agreeing clock, the
-wrongly dated list, the migration), **9b** (the host service: the box sets its clock and watches its
-time service), **9c** (the check at every start and after every change). §8 lists them.
+start of each stop recorded, the wrongly dated list, the migration), **9b** (the host service: the
+box sets its clock and watches its time service), **9c** (the check at every start and after every
+change). 9b and 9c are outlines; each gets its own full plan and plan review when taken. §8 lists
+them.
 
 ---
 
@@ -1263,7 +1312,8 @@ Each is a default, not a question; the owner may overrule any.
     shows staff a red strip (the reversal below).
 13. **The box never corrects its own time** (§4.5). _Revision 7: superseded — it corrects its clock
     from a confirmed source through a service on the host, never from a typed time (§4.9 d)._
-14. **Devices are witnesses, never a source of time** — the precedent of D7 (owner, 2026-10-03).
+14. **Devices are witnesses, never a source of time** — the precedent of D7 (owner, 2026-10-03; D7
+    concerns devices as witnesses of invoice numbers, not of time).
     _Revision 7: the owner reversed this for the box's clock (2026-10-24): two tills or handhelds
     that agree with each other, or an administrator's own device, may set it (§4.9 c, d). A device
     still never stamps a record; the box's clock does._
@@ -1432,29 +1482,35 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    their clock; `clock.disagrees` and `clock.unusable` in the bell; AEAT's time from its QR
    validation host's `Date` header and from submission replies; a device or browser on the box itself
    never counts (§4.9 c); during a clock-behind stop the box restarts payments by itself on AEAT's
-   time or two agreeing devices, or when an administrator (`node.clock`) confirms their own device
+   time or two agreeing devices, or when an administrator (`person.admin`) confirms their own device
    agrees with the box, with no cap; every confirmation kept in the new `clock_confirmations` table
-   (with `clock_checks`, the slice's one migration); the wrongly dated records listed on the Box
-   status page with an owner's task (`clock.records_misdated`); the restart and the list told to
+   (with `clock_checks`, which records when each clock-behind stop began; the slice's one
+   migration, and the backup check learns both tables' links); the wrongly dated records — stamped
+   more than a minute after the corrected time at the stop's start, also when the stop ends by
+   itself — listed on the Box status page with an owner's task (`clock.records_misdated`); the restart and the list told to
    managers by bell and email; the clock-stop email. The box does not set its clock yet. Tests: no
    proof, no restart; contrary proof, no restart; a 400-day gap restarts once proved; a second step
    back stops again and a fresh confirmation lifts it; a device on the box is no witness and an
    administrator on the box is refused; marking the bell's alert handled leaves payments running.
-   _Risk: fiscal invariants (lifts the stop), auth (`node.clock`), migrations (two append-only
+   _Risk: fiscal invariants (lifts the stop), auth (`person.admin`), migrations (two append-only
    tables)._
 9b. **The box sets its own clock, and watches its time synchronisation** (§4.9 d, g): a service on
    the host, installed by `waitron.sh install`, that reports the time service's state and sets the
    clock (and the battery clock) on request; the server asks it to set the clock to AEAT's time, two
    agreeing devices' time or an administrator's device's time when they disagree with the box ("Use
    your phone's time?"), never while the time service reports itself synchronised; `clock.sync_off`
-   when the time service is off or not synchronised. _Risk: auth (`node.clock`), fiscal invariants
+   when the time service is off or not synchronised; a bell alert and an email for every clock
+   change the box makes; every job that reads the wall clock (backup pruning by age first) made safe
+   for a change of days. An outline until taken. _Risk: auth (`person.admin`), fiscal invariants
    (the clock that stamps records), cross-package contract (server ↔ host service)._
 9c. **A clock check at every start and after every change** (§4.9 a, b): the start opens a check
    before the server serves; a change of the box's clock by more than a minute in either direction
-   opens one; while one waits every money route and every record is refused `clock.unconfirmed`,
+   opens one; while one waits every money route and every record is refused `clock.behind_chain`
+   with `reason: "unconfirmed"`,
    with the red strip, the bell and an email; a confirmation closes it and lists the records the
-   change may have dated wrongly. _Risk: fiscal invariants (stops every record), concurrency (the
-   start's ordering), cross-package contract (a new refusal on every till)._
+   change may have dated wrongly; never a stop that nothing on the venue's network could lift
+   (§4.9 h). An outline until taken. _Risk: fiscal invariants (stops every record), concurrency
+   (the start's ordering), cross-package contract (a new reason on every till's refusal)._
 10. **Emails for the red conditions and the 2 GB disk warning**, `reader.offline`, the printer notice
     (question 2), and in `deploy/waitron.sh`: deleting old Docker images after an upgrade, and
     switching on the host's time synchronisation at install where the system provides it, printing a
@@ -1736,7 +1792,9 @@ All in scratch folders outside the repository (`mktemp -d`); nothing was committ
    each with `X-Forwarded-For: 192.0.2.7`. Printed: via `127.0.0.1` → peer `127.0.0.1`, on the box
    `true`, loopback-only `true`; via `192.168.10.101` → peer `192.168.10.101`, on the box `true`,
    loopback-only **`false`**. The failing case — a loopback-only test — is the last line: it would
-   count the box's own browser as another device. The header changed nothing. Script and log:
+   count the box's own browser as another device. The header changed nothing; the round-1 claim
+   check re-ran it with no header, `X-Forwarded-For` of a LAN and a loopback address, and
+   `Forwarded` with `X-Real-IP`, both ways, with the same answers (`claim-check/onbox-rerun.log`). Script and log:
    `~/waitron-campaign-b/a798-9-rev/probe/` (`zz-onbox-probe.test.ts`, `onbox-peer.log`). macOS
    only; not run through Docker's host network.
 9. **Whether `clock_stop_restarts` can hold an automatic restart** (revision 7). `node:sqlite`,
@@ -1744,3 +1802,7 @@ All in scratch folders outside the repository (`mktemp -d`); nothing was committ
    printed `NOT NULL constraint failed: clock_stop_restarts.person_id`. In the same run, a unique
    index took two NULLs and refused a second `x` (`UNIQUE constraint failed`). Log:
    `~/waitron-campaign-b/a798-9-rev/probe/sqlite-probe.log`.
+   The round-1 claim check re-ran it against the real `0010_clock_stop.sql`
+   (`~/waitron-campaign-b/a798-9-rev/claim-check/sqlite-rerun.log`): a second row naming the same
+   record printed `UNIQUE constraint failed: clock_stop_restarts.registro_id` — the real blocker,
+   since a second lift of one record is now normal — and a sentinel `person_id` string inserted.
