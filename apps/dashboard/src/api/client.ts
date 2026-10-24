@@ -39,6 +39,7 @@ import {
   createRequest,
   LiveData,
   type DashboardRequest,
+  type DownloadedFile,
   type FetchLike,
 } from "@waitron/dashboard-kit";
 import type {
@@ -2264,6 +2265,14 @@ export class DashboardApi {
 
   getProfile(): Promise<OwnProfile> {
     return this.#request<OwnProfile>("/management-api/session/me/profile", "GET");
+  }
+  downloadOwnPersonalData(): Promise<DownloadedFile> {
+    return this.#request<DownloadedFile>(
+      "/management-api/me/personal-data/export",
+      "GET",
+      undefined,
+      { as: "file" },
+    );
   }
   getGoogleConfig(): Promise<{ configured: boolean; privacyNoticeUrl?: string }> {
     return this.#request<{ configured: boolean; privacyNoticeUrl?: string }>(
