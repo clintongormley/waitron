@@ -307,6 +307,30 @@ describe("profile-screen copy of your data help", () => {
   });
 });
 
+describe("profile-screen copy of your data help placement", () => {
+  it("hangs the help badge over the label's top trailing corner, inside its row", async () => {
+    setHelpMode(true);
+    try {
+      const { el } = await mount(stubApi());
+      await document.fonts.ready;
+      const help = tooltip(el)!;
+      const badge = help.getBoundingClientRect();
+      const label = row(el).querySelector(".text .field-value")!.getBoundingClientRect();
+      const box = row(el).getBoundingClientRect();
+      const download = button(el).getBoundingClientRect();
+      expect(badge.width).toBeGreaterThan(0);
+      expect(badge.bottom).toBeGreaterThan(box.top);
+      expect(badge.top).toBeLessThan(box.bottom);
+      const [x, y] = [badge.left + badge.width / 2, badge.top + badge.height / 2];
+      expect(Math.abs(x - label.right)).toBeLessThanOrEqual(1);
+      expect(Math.abs(y - label.top)).toBeLessThanOrEqual(1);
+      expect(badge.right).toBeLessThanOrEqual(download.left);
+    } finally {
+      setHelpMode(false);
+    }
+  });
+});
+
 describe.each(["light", "dark"] as const)(
   "profile-screen copy of your data help a11y (%s)",
   (theme) => {

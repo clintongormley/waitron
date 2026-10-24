@@ -20,8 +20,9 @@ invitación. Los gerentes no ven estas acciones.
 
 ## Tu propia cuenta {#own-account}
 
-Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus propios datos de acceso. Puedes
-seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en dos pasos.
+Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus propios datos de
+acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en
+dos pasos.
 
 ## Descargar tus datos {#own-data}
 

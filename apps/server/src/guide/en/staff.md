@@ -19,8 +19,8 @@ Google link. Re-enabling it sends a new invitation. Managers do not see these ac
 
 ## Your own account {#own-account}
 
-Open **Account settings** from the account menu to change your own sign-in details. Your own email,
-password, PIN, passkeys and two-factor settings remain yours to manage.
+Open **Account settings** from the account menu to change your own sign-in details. Your own
+email, password, PIN, passkeys and two-factor settings remain yours to manage.
 
 ## Download your data {#own-data}
 

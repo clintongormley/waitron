@@ -158,6 +158,10 @@ export class ProfileScreen extends LitElement {
         gap: var(--wt-space-1);
         min-width: 0;
       }
+      .action-row .labelled {
+        position: relative;
+        align-self: flex-start;
+      }
       .field-label {
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
@@ -892,13 +896,15 @@ export class ProfileScreen extends LitElement {
           </div>
           <div class="action-row">
             <div class="text">
-              <span class="field-value">${t("profile.data_copy")}</span>
-              <wt-help-tooltip
-                mode="help-mode"
-                aria-label=${t("profile.data_copy_help_label")}
-                guide-href=${guideHref("staff.own-data")}
-                guide-label=${t("profile.data_copy_help_guide")}
-                >${t("profile.data_copy_help")}</wt-help-tooltip
+              <span class="labelled"
+                ><span class="field-value">${t("profile.data_copy")}</span
+                ><wt-help-tooltip
+                  mode="help-mode"
+                  aria-label=${t("profile.data_copy_help_label")}
+                  guide-href=${guideHref("staff.own-data")}
+                  guide-label=${t("profile.data_copy_help_guide")}
+                  >${t("profile.data_copy_help")}</wt-help-tooltip
+                ></span
               >
               <span class="field-meta">${t("profile.data_copy_hint")}</span>
             </div>
