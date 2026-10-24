@@ -4,6 +4,8 @@ import { live } from "lit/directives/live.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
+const MAX_MARKS = 101;
+
 /** A labelled whole-number range that shows its value. */
 @customElement("wt-slider")
 export class WtSlider extends LitElement {
@@ -32,11 +34,13 @@ export class WtSlider extends LitElement {
         align-self: center;
       }
       [part="marks"] {
-        display: flex;
-        justify-content: space-between;
-        padding-inline: calc(var(--wt-space-4) / 2);
+        position: relative;
+        height: var(--wt-space-2);
       }
       [part="mark"] {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
         width: var(--wt-field-line-width);
         height: var(--wt-space-2);
         background-color: var(--wt-color-text-muted);
@@ -116,6 +120,19 @@ export class WtSlider extends LitElement {
     dispatchWtChange(this, event, { value });
   }
 
+  /**
+   * Where each step sits along the thumb's travel, from 0 at `min`. None when the range has no
+   * travel, the step cannot advance, or there would be more than `MAX_MARKS`.
+   */
+  #markFractions(): number[] {
+    const span = this.max - this.min;
+    if (!(span > 0)) return [];
+    // A step of 0 counts to Infinity, and a negative one to no marks.
+    const count = Math.floor(span / this.step) + 1;
+    if (count > MAX_MARKS) return [];
+    return Array.from({ length: count }, (_, i) => (i * this.step) / span);
+  }
+
   override render() {
     const errorId = `${this.#id}-error`;
     const hintId = `${this.#id}-hint`;
@@ -143,9 +160,12 @@ export class WtSlider extends LitElement {
           <div class="range">
             ${input}${value}
             <div part="marks" aria-hidden="true">
-              ${Array.from(
-                { length: Math.floor((this.max - this.min) / this.step) + 1 },
-                () => html`<span part="mark"></span>`,
+              ${this.#markFractions().map(
+                (at) =>
+                  html`<span
+                    part="mark"
+                    style="left: calc(var(--wt-space-4) / 2 + ${at} * (100% - var(--wt-space-4)))"
+                  ></span>`,
               )}
             </div>
           </div>`

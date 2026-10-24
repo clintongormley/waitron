@@ -516,8 +516,50 @@ describe("step marks", () => {
     marksOf(el).forEach((mark, i) => {
       const box = mark.getBoundingClientRect();
       const centre = box.left + box.width / 2;
-      expect(Math.abs(centre - (r.left + 8 + (i * (r.width - 16)) / 6))).toBeLessThanOrEqual(1);
+      expect(Math.abs(centre - (r.left + 8 + (i * (r.width - 16)) / 6))).toBeLessThanOrEqual(0.1);
     });
+  });
+
+  test("on a range a step does not divide, each mark sits under its value and none at max", async () => {
+    const el = (await mount(
+      '<wt-slider label="Columns" min="2" max="9" step="3" value="5" marks></wt-slider>',
+    )) as WtSlider;
+    host.style.width = "300px";
+    host.style.setProperty("--wt-field-max-width", "300px");
+    await document.fonts.ready;
+    const r = inputOf(el).getBoundingClientRect();
+    const centres = marksOf(el).map((mark) => {
+      const box = mark.getBoundingClientRect();
+      return box.left + box.width / 2;
+    });
+    expect(centres).toHaveLength(3);
+    centres.forEach((centre, i) => {
+      expect(Math.abs(centre - (r.left + 8 + ((i * 3) / 7) * (r.width - 16)))).toBeLessThanOrEqual(
+        0.1,
+      );
+    });
+  });
+
+  test.each([
+    ["a step of 0", 'min="100" max="130" step="0"'],
+    ["a negative step", 'min="100" max="130" step="-5"'],
+    ["max below min", 'min="130" max="100" step="5"'],
+    ["max equal to min", 'min="100" max="100" step="5"'],
+    ["more than 101 steps", 'min="0" max="1010" step="10"'],
+  ])("with %s it draws its label and range but no marks", async (_, range) => {
+    const el = (await mount(
+      `<wt-slider label="Text size" ${range} value="100" marks></wt-slider>`,
+    )) as WtSlider;
+    expect(partOf(el, "label").textContent).toBe("Text size");
+    expect(inputOf(el).type).toBe("range");
+    expect(marksOf(el)).toHaveLength(0);
+  });
+
+  test("draws up to 101 marks", async () => {
+    const el = (await mount(
+      '<wt-slider label="Percent" min="0" max="1000" step="10" value="0" marks></wt-slider>',
+    )) as WtSlider;
+    expect(marksOf(el)).toHaveLength(101);
   });
 
   test("draws the value at the end of the range's row", async () => {
