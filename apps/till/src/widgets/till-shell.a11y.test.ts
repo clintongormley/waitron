@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
+import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
+import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import "./till-shell.js";
 import type { ShellAffordance, TillShell } from "./till-shell.js";
 
@@ -252,6 +255,32 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
       }
     },
   );
+
+  it("the handheld bar with a venue logo has no violations", async () => {
+    localStorage.setItem(
+      VENUE_THEME_STORAGE_KEY,
+      JSON.stringify({ ...FIXTURE_ANSWER, logo: { light: png(120, 40), dark: null } }),
+    );
+    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    try {
+      await atViewport(1280, 844, async () => {
+        const loads = nextLogoLoad();
+        const { el, host } = await mountWidget<TillShell>(
+          "till-shell",
+          { formFactor: "tablet-landscape", operatorName: "Ana", legalName: "Bar Pepe SL" },
+          theme,
+        );
+        const { logo } = await loads;
+        expect(logo.parentElement).toBe(el.shadowRoot!.querySelector(".head"));
+        await expectNoA11yViolations(host);
+      });
+    } finally {
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+    }
+  });
 
   it("kiosk mode with its language chooser has no violations", async () => {
     const { host } = await mountWidget<TillShell>(

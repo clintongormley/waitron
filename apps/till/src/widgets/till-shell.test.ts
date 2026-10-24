@@ -937,7 +937,7 @@ describe("till-shell at phone width", () => {
           expect(header.height).toBeLessThanOrEqual(64);
           const visible = [
             ...el.shadowRoot!.querySelectorAll<HTMLElement>(
-              "header .brand, header .tab, header wt-language-chooser, header wt-row-actions, header .session > *",
+              "header .brand, header wt-venue-logo, header .tab, header wt-language-chooser, header wt-row-actions, header .session > *",
             ),
           ]
             .map((c) => c.getBoundingClientRect())
@@ -1256,7 +1256,7 @@ describe("till-shell above phone width", () => {
     const box = header.getBoundingClientRect();
     const parts = [
       ...header.querySelectorAll<HTMLElement>(
-        ":scope > .brand, :scope > .tabs, :scope > .session > *",
+        ":scope > .brand, :scope > wt-venue-logo, :scope > .tabs, :scope > .session > *",
       ),
     ]
       .map((part) => ({ name: part.className || part.localName, r: part.getBoundingClientRect() }))

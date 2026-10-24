@@ -3,11 +3,15 @@ import { customElement, property, queryAssignedElements, state } from "lit/decor
 import {
   THEME_SELECTED_EVENT,
   ThemeChoiceController,
+  VenueLogoController,
   baseStyles,
   currentThemeChoice,
   themeChoices,
+  reportVenueLogoFailure,
+  reportVenueLogoLoaded,
   themeChoicesStyles,
   visuallyHiddenStyles,
+  type VenueLogoState,
 } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
@@ -26,6 +30,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
+import "@waitron/ui/src/components/wt-venue-logo.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
@@ -82,7 +87,14 @@ const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "clockAvailable",
   "clockBusy",
   "clockError",
+  "legalName",
 ];
+
+function logoKey(state: VenueLogoState): string {
+  return state.kind === "logo"
+    ? JSON.stringify([state.logo.light, state.logo.dark, state.failed])
+    : state.kind;
+}
 
 /**
  * Presentational: `till-app` owns data, active screen state and the drill-in stack; the shell only emits
@@ -95,6 +107,7 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
+    this.addEventListener("wt-logo-load", () => this.#refit());
     this.addEventListener("wt-guide-open", (event) =>
       this.#onGuideOpen(event as CustomEvent<{ href: string }>),
     );
@@ -144,6 +157,10 @@ export class TillShell extends LitElement {
         gap: var(--wt-space-3);
         padding: var(--wt-space-3) var(--wt-space-4);
         border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      .head > wt-venue-logo {
+        flex: none;
       }
 
       .brand {
@@ -393,6 +410,8 @@ export class TillShell extends LitElement {
   @property({ attribute: false }) activeOrderList: "parked" | "waiting" | null = null;
   @property({ type: Boolean }) testingKitchen = false;
   @property() operatorName = "";
+  /** Names the venue's logo for a screen reader. */
+  @property() legalName = "";
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;
   @property({ type: Boolean }) hoursBusy = false;
@@ -443,6 +462,10 @@ export class TillShell extends LitElement {
   @state() private chooserInMore = false;
   #run = 0;
   #stepBackOwed = false;
+  readonly #venueLogo = new VenueLogoController(this);
+  // Compared in `updated`, not taken from the controller's `onChange`: a host coming back to the
+  // page redraws a changed logo with no `onChange`.
+  #drawnLogo?: string;
   #fittedWidth = 0;
   #fittedLocale?: string;
   #observer?: ResizeObserver;
@@ -515,13 +538,22 @@ export class TillShell extends LitElement {
     super.updated(changed);
     if (this.formFactor === "till") return;
     this.#observe();
+    const logo = logoKey(this.#venueLogo.state);
+    const logoChanged = logo !== this.#drawnLogo;
+    this.#drawnLogo = logo;
     const contentChanged = CONTENT_PROPERTIES.some((key) => changed.has(key));
-    if (contentChanged || currentLocale() !== this.#fittedLocale) {
+    if (contentChanged || logoChanged || currentLocale() !== this.#fittedLocale) {
       this.#stepBackOwed = true;
       void this.#fit();
     } else if (changed.has("transferCount")) {
       void this.#fit();
     }
+  }
+
+  /** The bar's logo changes width once its image arrives, after the render. */
+  #refit(): void {
+    this.#stepBackOwed = true;
+    void this.#fit();
   }
 
   /** Observes the host, not the header: its width comes from its container, so a fit does not
@@ -572,7 +604,7 @@ export class TillShell extends LitElement {
   async #settled(): Promise<void> {
     await this.updateComplete;
     const children = this.renderRoot.querySelectorAll(
-      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge, .head wt-help-switch",
+      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge, .head wt-help-switch, .head wt-venue-logo",
     );
     await Promise.all([...children].map((child) => (child as Partial<LitElement>).updateComplete));
   }
@@ -626,6 +658,22 @@ export class TillShell extends LitElement {
       this.steps += 1;
       if (await stale()) return;
     }
+  }
+
+  #brandMark(): TemplateResult {
+    const state = this.#venueLogo.state;
+    if (state.kind === "waiting") return html`<wt-venue-logo size="bar"></wt-venue-logo>`;
+    if (state.kind === "none") return html`<span class="brand">${BRAND}</span>`;
+    const { logo } = state;
+    return html`<wt-venue-logo
+      size="bar"
+      light=${logo.light}
+      dark=${logo.dark ?? nothing}
+      alt=${this.legalName}
+      @wt-logo-error=${() => reportVenueLogoFailure(logo)}
+      @wt-logo-load=${() => reportVenueLogoLoaded(logo)}
+      ><span class="brand" slot="fallback">${BRAND}</span></wt-venue-logo
+    >`;
   }
 
   #emit(type: string, detail?: unknown): void {
@@ -996,7 +1044,7 @@ export class TillShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.formFactor === "till" || this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill" && item !== "zones") ? nothing : html`<span class="brand">${BRAND}</span>`}
+                  ${this.formFactor === "till" || this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill" && item !== "zones") ? nothing : this.#brandMark()}
                   ${
                     this.formFactor === "till"
                       ? html`<div class="till-strip">
