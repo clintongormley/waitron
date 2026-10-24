@@ -59,9 +59,9 @@ describe("wt-powered-by", () => {
     expect(label(el).textContent).toBe("Powered by");
     expect(lockup(el).alt).toBe("Waitron");
     expect(label(el).nextElementSibling).toBe(lockup(el));
-    el.label = "Con la tecnología de";
+    el.label = "Made with";
     await el.updateComplete;
-    expect(label(el).textContent).toBe("Con la tecnología de");
+    expect(label(el).textContent).toBe("Made with");
   });
 
   it("draws no label part without a label, and centres the lockup alone", async () => {
