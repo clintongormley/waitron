@@ -153,6 +153,7 @@ it.each(GUIDE_LANGUAGES)(
       "staff-details",
       "account-access",
       "own-account",
+      "own-data",
       "delete-staff-role",
     ]);
   },
