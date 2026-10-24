@@ -330,7 +330,7 @@ describe("collectBoxHealth", () => {
   });
 
   it("passes the clock stop reader's answer through, asking it with the database", async () => {
-    const view = { offer: "no_proof" } as ClockStopView;
+    const view = { proof: "none" } as ClockStopView;
     const asked: unknown[] = [];
     const health = await collectBoxHealth(
       suite.db,

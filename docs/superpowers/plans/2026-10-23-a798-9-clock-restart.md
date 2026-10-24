@@ -522,6 +522,9 @@ check), each in the task named:
   `toMatchObject({ proof: "none", confirmation: null })`: with no witness and no confirmation, the
   running server's read still says payments are stopped with nothing proving the clock and nobody
   having confirmed it, which is what `no_proof` and a null restart said;
+  `box-health.test.ts:333` `{ offer: "no_proof" } as ClockStopView` → `{ proof: "none" } as
+  ClockStopView`: the case passes the reader's answer through by identity (`toBe(view)`), so the
+  stub only has to be a value of the view's type, and `offer` is no longer one of its fields;
 - the Box status view's old shape in `apps/server/src/clock-confirm.route.test.ts` (Task R10,
   controller addition after the R8b review; lines at `4f704c235` → after). The view no longer has
   `offer`, `restart` or witness lists under `proof`: `proof` is now the seat's status
