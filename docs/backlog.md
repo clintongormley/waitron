@@ -4278,11 +4278,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   block. Decision 13 of the [A720 plan](superpowers/plans/2026-10-15-a720-calendar-year-month.md),
   [mockup](backlog/mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
 
-- **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
-  hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and
-  scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
-  numbers; needs public holidays for every year it pays (today only 2026 exists), national,
-  regional and local. Gated on the labour advisor; not fiscal.
+- **Wages / labour cost (SP16).** Gated on the labour advisor; not fiscal.
+  [Detail](backlog/workforce.md#wages--labour-cost-sp16).
 
 - **Inspector remote access to working-time records.** Add authenticated read-only access when
   Cloud can reach the box. Until then, download the record on request.

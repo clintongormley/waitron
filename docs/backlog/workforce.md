@@ -39,9 +39,8 @@ The special-day staffing painter draws every date's column, and the blocks in it
 date. Each date's opening hours behind the paint (`resolveDepartmentsDays`) and the month's slot
 count (`slotsForDay` in `packages/staffing/src/month.ts`, given `day.dayCutover`) use that date's
 own changeover. So when a changeover change is scheduled, a block can be drawn longer than the
-slots it produces: A585-4's review reported a 02:00–04:00 block drawn as 120 minutes against 60 in
-slots, on a date with a 03:00 changeover and a 06:00 baseline. Opening hours' special-day painter
-draws from the first date's changeover and says so when the dates' changeovers differ. Needs a
+slots it produces. Opening hours' special-day painter draws from the first date's changeover and
+says so when the dates' changeovers differ. Needs a
 decision on how one grid with one time ruler shows dates with different changeovers. Left open by
 A585-4.
 
@@ -248,21 +247,12 @@ second read.
 
 ## A702. Opening hours' season chip is clipped on a season name that is one long word
 
-Measured
-on the A721 branch at 390 px on 2026-10-18: the page does not scroll sideways (scrollWidth 390 =
-innerWidth) and a name with spaces wraps, but one unbroken 46-letter word runs to x=402.9 and its
-chip is cut off (`packages/venue-service/src/dashboard/season-chips.ts`). Next: wrap the chip's
-text with `overflow-wrap: anywhere`.
+Next: wrap the chip's text with `overflow-wrap: anywhere` (`packages/venue-service/src/dashboard/season-chips.ts`).
 
 ## At 390 px the staff role dialog's open colour panel covers its own Colour field
 
-Seen by
-A783's look on 2026-10-18 at 390 × 844: the panel, now eight rows of two, is 462 px tall, too tall
-to fit below the field, so it is moved up to top 374 (the window's height less its own and
-8 px), over the field at about 376–432. Picking a colour still works. The period, station and
-season choosers at 390 px still open below their field (`role-chooser-new-*-390*.png` and
-`role-chooser-edit-host-*-390*.png` in `~/waitron-campaign-b/a783-shots/`; `positionPopup` in
-`packages/ui/src/components/wt-colour-chooser.ts`). Left open by A783.
+Picking a colour still works. See `positionPopup` in
+`packages/ui/src/components/wt-colour-chooser.ts`. Left open by A783.
 
 ## A colour chooser left open while its window narrows may hide the chosen colour
 
@@ -300,6 +290,14 @@ owner's choice of engine is Google's OR-Tools (its CP-SAT solver, Apache 2.0 lic
 takes rules that must hold and preferences to honour where it can. What the box sends is staff
 personal data, so it belongs in A980's data map. Waitron Cloud's backlog needs the matching
 entry. After A587.
+
+## Wages / labour cost (SP16)
+
+A per-person pay-rule set (hourly or fixed salary for N contracted
+hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and
+scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
+numbers; needs public holidays for every year it pays (today only 2026 exists), national,
+regional and local. Gated on the labour advisor; not fiscal.
 
 ## Decisions and deliberate limits
 
