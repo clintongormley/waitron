@@ -259,16 +259,18 @@ describe("station queue rest of the order", () => {
       },
     ]);
   });
+});
 
+describe("station queue bump mode", () => {
   it("each order in a station's queue carries that station's bump mode", async () => {
     const db = suite.db;
     await seedTenant(db);
     const locationId = randomUUID();
     await db.insert(locations).values({
       id: locationId,
-      name: "Barra",
+      name: "Bar",
       invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "Dine-in sale",
     });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     const cfg: TillConfig = {

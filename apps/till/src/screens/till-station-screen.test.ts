@@ -1918,7 +1918,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     });
 
     it("a merged device screen bumps a whole order at one station and a single dish at another", async () => {
-      const wholeOrderAtCocina: StationQueueGroup[] = [
+      const wholeOrderAtKitchen: StationQueueGroup[] = [
         {
           ...cocinaQueue[0]!,
           bumpMode: "ticket",
@@ -1930,7 +1930,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       ];
       const { el, api } = await mountFor("dev-1", {
         stations: [
-          available("st-1", "Cocina", wholeOrderAtCocina),
+          available("st-1", "Cocina", wholeOrderAtKitchen),
           available("st-2", "Barra", barraOlder),
         ],
       });

@@ -913,7 +913,7 @@ describe("routing cells in a staged import", () => {
     expect(await readdir(stateDir)).toEqual([]);
   });
 
-  it("refuses a bundle exported before A756 PR 7 by its core version, before any write", async () => {
+  it("refuses a bundle exported before station bump modes by its core version, before any write", async () => {
     const { bundle, versions } = await exported();
     const journal = JSON.parse(
       await readFile(
@@ -921,8 +921,8 @@ describe("routing cells in a staged import", () => {
         "utf8",
       ),
     ) as { entries: { tag: string }[] };
-    const stationBumpMode = journal.entries.findIndex(
-      (entry) => entry.tag === "0188_station_bump_mode",
+    const stationBumpMode = journal.entries.findIndex((entry) =>
+      entry.tag.endsWith("_station_bump_mode"),
     );
     expect(stationBumpMode).toBeGreaterThan(0);
     expect(versions.core).toBe(journal.entries.length);

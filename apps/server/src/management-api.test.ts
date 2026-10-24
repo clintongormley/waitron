@@ -1985,7 +1985,11 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(malformed.status).toBe(404);
   });
 
-  it("no longer serves the venue's bump mode", async () => {
+  it("the retired venue bump mode routes answer 404 and change no location row", async () => {
+    const before = await suite.db
+      .select()
+      .from(locations)
+      .where(eq(locations.id, venue.locationId));
     const read = await req("/bump-mode", { method: "GET" }, managerCookie);
     expect(read.status).toBe(404);
     const write = await req(
@@ -1994,6 +1998,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
       managerCookie,
     );
     expect(write.status).toBe(404);
+    expect(
+      await suite.db.select().from(locations).where(eq(locations.id, venue.locationId)),
+    ).toEqual(before);
   });
 
   it("lets a manager read both station output lists", async () => {
