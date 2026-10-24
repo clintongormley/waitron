@@ -2142,7 +2142,9 @@ it("shows a theme's logo use as 'Logo of theme {name}', linking to the Appearanc
       ES["image.theme_logo"].replace("{name}", "Bar Lucía"),
     ),
   );
-  expect(entries()[0]!.textContent?.trim()).toBe("Logotipo del tema Bar Lucía");
+  expect(entries()[0]!.textContent?.trim()).toBe(
+    ES["image.theme_logo"].replace("{name}", "Bar Lucía"),
+  );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   expect(client.deleteImage).not.toHaveBeenCalled();
 });

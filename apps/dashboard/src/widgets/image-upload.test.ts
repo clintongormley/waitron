@@ -8,6 +8,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ImageUpload, type ImageUploader } from "./image-upload.js";
 import { focusFirstInvalid, setContentLanguages } from "@waitron/ui";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es-ES"));
@@ -800,7 +801,7 @@ describe("image-upload as a venue logo", () => {
 
   it.each([
     ["en-GB", "", "Add a logo"],
-    ["es-ES", "", "Añadir un logotipo"],
+    ["es-ES", "", es["image.add_logo"]],
     ["en-GB", "Add a dark-screen logo", "Add a dark-screen logo"],
   ] as const)(
     "without an image, in %s with the label %j, is one dashed button reading + %s",
@@ -823,7 +824,7 @@ describe("image-upload as a venue logo", () => {
 
   it.each([
     ["en-GB", "Replace", "Remove"],
-    ["es-ES", "Sustituir", "Quitar"],
+    ["es-ES", es["appearance.logo_replace"], es["image.remove_logo"]],
   ] as const)(
     "with an image, in %s, draws it on the plate with %s and %s beside it",
     async (locale, replaceText, removeText) => {
