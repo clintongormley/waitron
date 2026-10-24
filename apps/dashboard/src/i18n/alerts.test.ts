@@ -256,10 +256,10 @@ describe("an invoice the office printer is holding", () => {
   });
 });
 
-it("names only registered word lists in its word-list slots, variants included", () => {
+it("names only registered word lists in its word-list slots, variants and words for one included", () => {
   const unknown = Object.entries(ALERT_MESSAGES).flatMap(([code, entry]) =>
-    [entry, ...Object.values(entry.variants ?? {})]
-      .flatMap(({ en, es }) => [en, es])
+    [entry, entry.one, ...Object.values(entry.variants ?? {})]
+      .flatMap((words) => (words ? [words.en, words.es] : []))
       .flatMap((text) =>
         [...text.matchAll(/\{[A-Za-z0-9_]+:([a-z_]+)\}/g)]
           .filter(

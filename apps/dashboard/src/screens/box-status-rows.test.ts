@@ -822,6 +822,45 @@ describe("the Clock row while payments are stopped for the clock", () => {
     ]);
   });
 
+  it("names each clock once, by its latest answer, while the proof is against the box", () => {
+    const LATER = "2026-10-22T19:42:00.000Z";
+    const laterAuthority = { ...AUTHORITY, boxAt: LATER, witnessAt: LATER };
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: {
+          authority: AUTHORITY,
+          devices: [device("d1", CHECKED, "Bar till"), device("d2", CHECKED, "Kitchen")],
+        },
+        contrary: { authority: laterAuthority, devices: [device("d1", LATER, "Bar till")] },
+      }),
+    });
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      fill("box_status.clock.proof.device_one", { time: formatIsoMinute(CHECKED) }),
+      `Tax agency: does not match (checked ${formatIsoMinute(LATER)})`,
+      `Bar till: does not match (read ${formatIsoMinute(LATER)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+    const agreedLater = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: { authority: laterAuthority, devices: [] },
+        contrary: { authority: AUTHORITY, devices: [device("d3", CHECKED, "Terrace")] },
+      }),
+    });
+    expect(agreedLater.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      fill("box_status.clock.proof.authority", { time: formatIsoMinute(LATER) }),
+      `Terrace: does not match (read ${formatIsoMinute(CHECKED)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+  });
+
   it("names no disagreeing clock once the proof is no longer against the box", () => {
     const contrary = { authority: AUTHORITY, devices: [device("d4", DEVICE_READ, "Terrace")] };
     const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop({ contrary }) });

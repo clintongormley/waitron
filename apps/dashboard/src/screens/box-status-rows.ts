@@ -294,10 +294,15 @@ function clockDetails(clock: BoxHealth["clock"]): string[] {
   return details;
 }
 
-/** The agreeing witnesses' lines of a payment stop, and the disagreeing ones while they win. */
+/** The agreeing witnesses' lines of a payment stop, and the disagreeing ones while they win; a
+ * clock that answered both ways is named once, by its latest answer. */
 function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
   const details: string[] = [];
-  const { authority, devices } = stop.agreeing;
+  const { agreeing, contrary } =
+    stop.proof === "contrary"
+      ? latestAnswers(stop.agreeing, stop.contrary)
+      : { agreeing: stop.agreeing, contrary: null };
+  const { authority, devices } = agreeing;
   if (authority !== null)
     details.push(
       fill("box_status.clock.proof.authority", { time: formatIsoMinute(authority.boxAt) }),
@@ -311,8 +316,7 @@ function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
         : fill("box_status.clock.proof.devices", { count: String(devices.length), time }),
     );
   }
-  if (stop.proof !== "contrary") return details;
-  const contrary = stop.contrary;
+  if (contrary === null) return details;
   if (contrary.authority !== null)
     details.push(
       fill("box_status.clock.contrary.authority", {
@@ -327,6 +331,36 @@ function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
       }),
     );
   return details;
+}
+
+type Witnesses = NonNullable<BoxHealth["clockStop"]>["agreeing"];
+
+function latestAnswers(
+  agreeing: Witnesses,
+  contrary: Witnesses,
+): { agreeing: Witnesses; contrary: Witnesses } {
+  const later = <W extends { witnessAt: string }>(a: W, b: W) => a.witnessAt > b.witnessAt;
+  const agreed = agreeing.authority;
+  const disagreed = contrary.authority;
+  const agreedWins = agreed !== null && (disagreed === null || later(agreed, disagreed));
+  const contraryDevices = new Map(contrary.devices.map((device) => [device.id, device]));
+  const agreedDevices = new Map(agreeing.devices.map((device) => [device.id, device]));
+  return {
+    agreeing: {
+      authority: agreedWins ? agreed : null,
+      devices: agreeing.devices.filter((device) => {
+        const other = contraryDevices.get(device.id);
+        return other === undefined || later(device, other);
+      }),
+    },
+    contrary: {
+      authority: agreedWins ? null : disagreed,
+      devices: contrary.devices.filter((device) => {
+        const other = agreedDevices.get(device.id);
+        return other === undefined || !later(other, device);
+      }),
+    },
+  };
 }
 
 function clockStopDetails(health: BoxHealth): string[] {

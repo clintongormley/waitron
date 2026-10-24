@@ -3288,11 +3288,12 @@ export const en = {
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.agree": "They agree. Confirm that the box's clock is right?",
   "box_status.clock.admin.differ":
-    "Your device and the box differ by more than a minute. If your device is right, the box's clock is wrong: connect the box to the internet so it can correct it.",
+    "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
   "box_status.clock.admin.refused.same_machine":
     "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
   "box_status.clock.admin.refused.challenge": "The check took too long. Try again.",
-  "box_status.clock.admin.refused.not_stopped": "The box's clock has already been confirmed.",
+  "box_status.clock.admin.refused.not_stopped":
+    "There is nothing left to confirm. See the Clock row.",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -6663,12 +6664,12 @@ export const es: Record<StringKey, string> = {
     "El reloj del equipo marca {box}. Este dispositivo marca {device}.",
   "box_status.clock.admin.agree": "Coinciden. ¿Confirmas que la hora del equipo es correcta?",
   "box_status.clock.admin.differ":
-    "Tu dispositivo y el equipo se diferencian en más de un minuto. Si tu dispositivo tiene la hora bien, la del equipo está mal: conecta el equipo a internet para que la corrija.",
+    "El equipo no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el equipo a internet para que corrija la hora.",
   "box_status.clock.admin.refused.same_machine":
     "Esta pantalla es el propio equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.",
   "box_status.clock.admin.refused.challenge":
     "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
-  "box_status.clock.admin.refused.not_stopped": "La hora del equipo ya está confirmada.",
+  "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",

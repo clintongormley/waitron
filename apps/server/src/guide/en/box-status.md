@@ -169,7 +169,8 @@ Sometimes the other clocks say the opposite: two or more tills or handhelds agre
 that the box's clock is more than a minute off, or the tax agency's time disagrees with it during
 the stop. The row then lists each clock that disagrees, for example **Tax agency: does not match
 (checked 2026-10-23 21:12)** or **Bar till: does not match (read 2026-10-23 21:13)**, and says
-**Other clocks say the box's clock is wrong.** Nothing can confirm
+**Other clocks say the box's clock is wrong.** A clock that has answered both ways is listed once,
+by its latest answer. Nothing can confirm
 the clock, not even an administrator. The tax agency's answer counts first: when it agrees with the
 box, disagreeing devices do not hold payments back. The box keeps the tax agency's disagreement
 only in its memory, so it forgets it if the box itself restarts during the stop; while the tax
@@ -180,15 +181,19 @@ use, an administrator can confirm the clock from this page on their own phone or
 stop, the **Clock** row shows administrators a **Check with this device's time** button. It opens a
 dialog that shows both times: **The box's clock says … This device says …**
 
-- When the two are within a minute of each other, the dialog asks **They agree. Confirm that the
-  box's clock is right?** Press **Confirm**, and payments restart.
-- When they differ by more than a minute, it says **Your device and the box differ by more than a
-  minute. If your device is right, the box's clock is wrong: connect the box to the internet so it
-  can correct it.** and offers only **Close**.
+- When the two are within a minute of each other, counting half the time the box took to answer,
+  the dialog asks **They agree. Confirm that the box's clock is right?** Press **Confirm**, and
+  payments restart.
+- Otherwise it says **The box could not show that its clock is within a minute of your device's.
+  Check that your device's time is right; if it is, connect the box to the internet so it can
+  correct its clock.** and offers only **Close**. Because of the time the answer takes, two times a
+  little under a minute apart can still get this message.
 
-When you press **Confirm**, the box reads its own time again. If the two then differ by more than a
-minute, the dialog shows the new times with the same message and only **Close**. If the clock has
-been confirmed in the meantime, it says **The box's clock has already been confirmed.**
+When you press **Confirm**, the box reads its own time again and judges the two once more. If it
+cannot show that they agree, the dialog shows the new times with the same message and only
+**Close**. If by then payments are not stopped and no check waits, for example because something
+else confirmed the clock or other clocks said it is wrong, it says **There is nothing left to
+confirm. See the Clock row.**
 
 The box takes your device's word for the time, so check that your phone or computer shows the
 right time first. For the same reason this never works from the box's own screen: there, the

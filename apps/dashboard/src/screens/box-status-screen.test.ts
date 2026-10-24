@@ -802,12 +802,12 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     ]);
   });
 
-  it("says when the two differ by more than a minute and offers only Close", async () => {
+  it("says when the two cannot be shown to agree within a minute and offers only Close", async () => {
     deviceNow("2026-10-22T18:11:01.000Z");
     const el = await mountClock(clockApi());
     await open(el);
     expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-      "Your device and the box differ by more than a minute. If your device is right, the box's clock is wrong: connect the box to the internet so it can correct it.",
+      "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
     );
     expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
   });
@@ -865,6 +865,27 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(confirm.getAttribute("variant")).toBe("primary");
   });
 
+  it("words a differs refusal truthfully when the fresh times are under a minute apart", async () => {
+    // The box adds half the round trip to the difference, so it can refuse times 20 s apart.
+    deviceNow("2026-10-22T18:10:20.000Z");
+    const el = await mountClock(
+      clockApi(
+        { clockStop: STOPPED },
+        { clockConfirm: vi.fn().mockRejectedValue(REFUSED("differs")) },
+      ),
+    );
+    await open(el);
+    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
+    await flush(el);
+    expect(text(q(el, "[data-test=clock-check-times]"))).toBe(
+      `The box's clock says ${atSeconds(BOX_AT)}. This device says ${atSeconds("2026-10-22T18:10:20.000Z")}.`,
+    );
+    expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
+      "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
+    );
+    expect(text(q(el, "[data-test=clock-check-verdict]"))).not.toContain("more than a minute");
+  });
+
   it("shows the fresh reading as differing, with only Close, when the box refuses it as differs", async () => {
     deviceNow("2026-10-22T18:10:20.000Z");
     const FRESH = "2026-10-22T18:08:00.000Z";
@@ -892,7 +913,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(api.liveData.refresh).toHaveBeenCalled();
   });
 
-  it("says the clock is already confirmed when the box finds nothing left to confirm, in each language", async () => {
+  it("says there is nothing left to confirm when the box finds no stop and no waiting check, in each language", async () => {
     for (const locale of ["en", "es"]) {
       setLocale(locale);
       deviceNow("2026-10-22T18:10:20.000Z");
@@ -907,7 +928,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       await flush(el);
       expect(footerMessage(el)).toBe(
         locale === "en"
-          ? "The box's clock has already been confirmed."
+          ? "There is nothing left to confirm. See the Clock row."
           : es["box_status.clock.admin.refused.not_stopped"],
       );
       cleanupWidgets();

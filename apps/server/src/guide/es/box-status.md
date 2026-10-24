@@ -179,7 +179,9 @@ A veces los otros relojes dicen lo contrario: dos o más cajas o terminales coin
 el reloj del equipo va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
 la parada. Entonces la fila muestra cada reloj que no coincide, por ejemplo **Hacienda: no coincide
 (comprobado 2026-10-23 21:12)** o **Barra: no coincide (marcó 2026-10-23 21:13)**, y dice **Otros
-relojes dicen que la hora del equipo está mal.** Nada puede confirmar la hora, ni siquiera un administrador. La respuesta de Hacienda cuenta primero: cuando
+relojes dicen que la hora del equipo está mal.** Un reloj que ha respondido de las dos formas
+aparece una sola vez, con su última respuesta. Nada puede confirmar la hora, ni siquiera un
+administrador. La respuesta de Hacienda cuenta primero: cuando
 coincide con el equipo, los dispositivos que no coinciden no paran los cobros. El equipo solo guarda
 el desacuerdo de Hacienda en su memoria, así que lo olvida si el propio equipo se reinicia durante
 la parada; mientras Hacienda siga sin coincidir, vuelve con la siguiente respuesta.
@@ -190,15 +192,19 @@ ordenador. Durante una parada, la fila **Reloj** muestra a los administradores u
 **Comprobar con la hora de este dispositivo**. Abre un diálogo que muestra las dos horas: **El reloj
 del equipo marca … Este dispositivo marca …**
 
-- Cuando las dos están a menos de un minuto, el diálogo pregunta **Coinciden. ¿Confirmas que la hora
-  del equipo es correcta?** Pulsa **Confirmar** y los cobros se reanudan.
-- Cuando se diferencian en más de un minuto, dice **Tu dispositivo y el equipo se diferencian en más
-  de un minuto. Si tu dispositivo tiene la hora bien, la del equipo está mal: conecta el equipo a
-  internet para que la corrija.** y solo ofrece **Cerrar**.
+- Cuando las dos están a menos de un minuto, contando la mitad del tiempo que tardó el equipo en
+  responder, el diálogo pregunta **Coinciden. ¿Confirmas que la hora del equipo es correcta?** Pulsa
+  **Confirmar** y los cobros se reanudan.
+- Si no, dice **El equipo no ha podido comprobar que su hora está a menos de un minuto de la de tu
+  dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el equipo a
+  internet para que corrija la hora.** y solo ofrece **Cerrar**. Por el tiempo que tarda la
+  respuesta, dos horas separadas por algo menos de un minuto también pueden recibir este mensaje.
 
-Al pulsar **Confirmar**, el equipo vuelve a leer su hora. Si entonces se diferencian en más de un
-minuto, el diálogo muestra las horas nuevas con el mismo mensaje y solo **Cerrar**. Si mientras tanto
-ya se ha confirmado la hora, dice **La hora del equipo ya está confirmada.**
+Al pulsar **Confirmar**, el equipo vuelve a leer su hora y vuelve a comparar las dos. Si no puede
+comprobar que coinciden, el diálogo muestra las horas nuevas con el mismo mensaje y solo **Cerrar**.
+Si para entonces los cobros no están parados y no hay ninguna comprobación pendiente, por ejemplo
+porque otra cosa confirmó la hora o porque otros relojes dijeron que está mal, dice **No queda nada
+que confirmar. Mira la fila Reloj.**
 
 El equipo da por buena la hora de tu dispositivo, así que comprueba antes que tu móvil u ordenador
 tiene la hora bien. Por la misma razón, nunca funciona desde la pantalla del propio equipo: ahí la
