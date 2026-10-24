@@ -3264,6 +3264,92 @@ it("carries a department's Needs clearing switch to the importing venue", async 
   expect(imported).toEqual({ needsClearing: true });
 });
 
+describe("a department's late-send manager setting in a configuration transfer", () => {
+  it("carries it on the exported departments row and to the importing venue", async () => {
+    const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { locationId: brandLocationId(source.locationId) },
+        { name: "Late send terrace" },
+      );
+      await tx
+        .update(departments)
+        .set({ lateSendNeedsManager: true })
+        .where(eq(departments.id, department.id));
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-19T12:00:00Z"),
+      versions,
+    );
+    const exported = transferred.tables.departments!.find(
+      (row) => row.name === "Late send terrace",
+    );
+    expect(exported?.late_send_needs_manager).toBe(1);
+    await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const [imported] = await withTransaction(targetSuite.db, (tx) =>
+      tx
+        .select({ lateSendNeedsManager: departments.lateSendNeedsManager })
+        .from(departments)
+        .where(eq(departments.name, "Late send terrace")),
+    );
+    expect(imported).toEqual({ lateSendNeedsManager: true });
+  });
+
+  it("refuses a bundle exported before the setting existed, as an older venue-service schema", async () => {
+    const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-19T12:00:00Z"),
+      versions,
+    );
+    const journal = JSON.parse(
+      await readFile(
+        new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { entries: { tag: string }[] };
+    expect(journal.entries.map((entry) => entry.tag)).toContain("0071_late_send");
+    expect(versions["venue-service"]).toBe(journal.entries.length);
+    const older: ConfigurationBundle = {
+      ...transferred,
+      modules: { ...transferred.modules, "venue-service": versions["venue-service"]! - 1 },
+      tables: {
+        ...transferred.tables,
+        departments: transferred.tables.departments!.map((row) =>
+          Object.fromEntries(
+            Object.entries(row).filter(([column]) => column !== "late_send_needs_manager"),
+          ),
+        ),
+      },
+    };
+    expect(() => validateConfigurationBundle(older, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "module:venue-service" },
+      }),
+    );
+  });
+});
+
 it("carries a department's reminder minutes to the importing venue", async () => {
   const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,

@@ -838,6 +838,12 @@ export interface VenueServiceContribution {
     orderableMenuIds: readonly string[];
     endedMenus: readonly { menuId: string; periodName: string }[];
   }>;
+  /** Whether a dish sent after its period ended in this department needs a manager's PIN. */
+  readLateSendNeedsManager(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    departmentId: string,
+  ): Promise<boolean>;
   readKeepOpen(
     tx: Transaction,
     cfg: { locationId: LocationId },

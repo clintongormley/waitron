@@ -230,6 +230,7 @@ export async function updateDepartment(
     tradingName?: string;
     orderStart?: OrderStart;
     needsClearing?: boolean;
+    lateSendNeedsManager?: boolean;
     releaseReminderMinutes?: number | null;
   },
 ): Promise<void> {
@@ -239,6 +240,7 @@ export async function updateDepartment(
     input.name !== undefined ||
     input.tradingName !== undefined ||
     input.needsClearing !== undefined ||
+    input.lateSendNeedsManager !== undefined ||
     input.releaseReminderMinutes !== undefined
   )
     await tx
@@ -247,6 +249,9 @@ export async function updateDepartment(
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
         ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
+        ...(input.lateSendNeedsManager === undefined
+          ? {}
+          : { lateSendNeedsManager: input.lateSendNeedsManager }),
         ...(input.releaseReminderMinutes === undefined
           ? {}
           : { releaseReminderMinutes: input.releaseReminderMinutes }),
@@ -762,6 +767,7 @@ export interface DepartmentEditInput extends Pick<
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   needsClearing?: boolean;
+  lateSendNeedsManager?: boolean;
   releaseReminderMinutes?: number | null;
   serviceSteps?: readonly ServiceStepInput[];
 }
@@ -776,6 +782,9 @@ export async function saveDepartmentEditSettings(
     name: input.name,
     tradingName: input.tradingName,
     ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
+    ...(input.lateSendNeedsManager === undefined
+      ? {}
+      : { lateSendNeedsManager: input.lateSendNeedsManager }),
     ...(input.releaseReminderMinutes === undefined
       ? {}
       : { releaseReminderMinutes: input.releaseReminderMinutes }),
