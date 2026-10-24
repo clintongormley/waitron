@@ -331,9 +331,8 @@ describe("the wrongly dated sales' alert", () => {
     );
   }
 
-  it("stays one open alert when a second closing that cannot tell names the same sale", async () => {
+  it("stays one open alert, naming no sale, when a second closing cannot tell", async () => {
     await sale(T);
-    const named = latest();
     // A stop opens at R and ends by itself; AEAT disagrees, so the box cannot tell.
     await openCheckAt(R);
     const first = (await closesByItself(T + M, [authority(T + 30 * S, 2 * H)])).confirmation!;
@@ -350,7 +349,7 @@ describe("the wrongly dated sales' alert", () => {
       {
         source: "dashboard",
         deviceId: null,
-        saleId: named.saleId,
+        saleId: null,
         code: MISDATED,
         params: {
           confirmationId: first.id,
@@ -363,6 +362,20 @@ describe("the wrongly dated sales' alert", () => {
         severity: "error",
         detectedAt: iso(T + M),
       },
+    ]);
+  });
+
+  it("folds a second closing that cannot tell into the open one when a sale came between them", async () => {
+    await sale(T);
+    await openCheckAt(R);
+    const first = (await closesByItself(T + M, [authority(T + 30 * S, 2 * H)])).confirmation!;
+    // A sale on the corrected clock, so the next stop's opening names another sale.
+    await sale(T + 2 * M);
+    await openCheckAt(R + H);
+    const second = (await closesByItself(T + 3 * M, [authority(T + 150 * S, 2 * H)])).confirmation!;
+    expect([first.source, second.source]).toEqual(["elapsed", "elapsed"]);
+    expect(incidents(MISDATED).map((row) => [row.saleId, row.params])).toEqual([
+      [null, expect.objectContaining({ confirmationId: first.id, from: iso(R) })],
     ]);
   });
 });

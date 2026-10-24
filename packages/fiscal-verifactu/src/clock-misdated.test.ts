@@ -642,9 +642,8 @@ describe("the closings list and alert what they find", () => {
     expect(count("incidents")).toBe(1);
   });
 
-  it("a stop that ends by itself cannot tell once AEAT disagrees, naming the opening's sale (case 2)", async () => {
+  it("a stop that ends by itself cannot tell once AEAT disagrees, naming no sale (case 2)", async () => {
     await aheadSales();
-    const opening = rows().at(-1)!;
     await watchLooks(X);
     const at = X + 2 * H + 10 * S;
     const { confirmation } = await closesByItself(at, [authority(at, 20 * M)]);
@@ -654,7 +653,7 @@ describe("the closings list and alert what they find", () => {
       {
         source: "dashboard",
         severity: "error",
-        saleId: saleOf(opening.id),
+        saleId: null,
         params: {
           confirmationId: confirmation!.id,
           count: 0,
@@ -670,7 +669,6 @@ describe("the closings list and alert what they find", () => {
 
   it("the stop back while a check waited: the old check cannot tell, the new one lists its own (case 7)", async () => {
     await aheadSales();
-    const opening = rows().at(-1)!;
     await watchLooks(X);
     // Real time passes 12:00 with no witness: the check waits, and a sale is recorded at 12:00:30.
     await sale(X + 2 * H + 30 * S);
@@ -690,7 +688,7 @@ describe("the closings list and alert what they find", () => {
       {
         source: "dashboard",
         severity: "error",
-        saleId: saleOf(opening.id),
+        saleId: null,
         params: {
           confirmationId: old!.id,
           count: 0,
@@ -715,7 +713,6 @@ describe("the closings list and alert what they find", () => {
 
   it("the stop back and an administrator confirming before the watch looks: the old check cannot tell, the lift lists the new stop", async () => {
     await aheadSales();
-    const opening = rows().at(-1)!;
     const old = await watchLooks(X);
     await sale(X + 2 * H + 30 * S);
     await sale(X + 4 * H + 5 * M);
@@ -747,7 +744,7 @@ describe("the closings list and alert what they find", () => {
       {
         source: "dashboard",
         severity: "error",
-        saleId: saleOf(opening.id),
+        saleId: null,
         params: {
           confirmationId: closings[0]!.id,
           count: 0,

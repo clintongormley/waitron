@@ -3842,17 +3842,20 @@ boot id; otherwise it is the closing's time and the closing is `partial` (`corre
 stored unconfirmed, or one whose check, start, flag or heads cannot be read, answers "cannot tell"
 rather than an empty list, and never throws (ruling R4b-1-1). `recordMisdated`
 (`clock-stop-incidents.ts`) records one `clock.records_misdated` for each closing that lists any
-record or cannot tell. Its sale is the earliest listed record's, or, when it cannot tell, the sale of
-the latest record when the check opened (`detail.lastRecordId`). `recordIncident` drops an alert
-whose source, device, code and sale match one still open, so **a later alert on the same sale folds
-into the open one**: a second "cannot tell" ("stays one open alert when a second closing that cannot
-tell names the same sale", `clock-stop-incidents.test.ts`), and also a lift's list whose earliest
-record is the sale an open "cannot tell" names (ruling R4b-2-3). That list's exact count is then
-lost: the open alert already says the box cannot tell, and `GET /api/box/clock-misdated` gives the
-list only for a confirmation an open alert names (`readMisdatedOpen`, `apps/server/src/box-health.ts`).
-Both closings stay in `clock_confirmations`. No case builds that second fold. The managers' email
-duty emails each open `clock.behind_chain_restarted` and `clock.records_misdated` once
-(`CLOCK_INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
+record or cannot tell. A list's alert names the earliest listed record's sale; a "cannot tell" alert
+names no sale. `recordIncident` drops an alert whose source, device, code and sale match one still
+open, so **a second "cannot tell" folds into the open one**, whatever sales the two checks opened
+on, because the open one's earlier start already asks for every sale since then to be checked
+("stays one open alert, naming no sale, when a second closing cannot tell" and "folds a second
+closing that cannot tell into the open one when a sale came between them",
+`clock-stop-incidents.test.ts`). A list never folds into a "cannot tell": it has a sale and the
+"cannot tell" has none ("lists a later closing's wrongly dated sales beside an open alert that
+cannot tell, whatever sale each names", `apps/server/src/clock-confirm.route.test.ts`). A list
+still folds into an open list whose earliest record is the same sale; `GET /api/box/clock-misdated`
+gives a list only for a confirmation an open alert names (`readMisdatedOpen`,
+`apps/server/src/box-health.ts`), so the later list is then not shown. Every closing stays in
+`clock_confirmations`. The managers' email duty emails each open `clock.behind_chain_restarted` and
+`clock.records_misdated` once (`CLOCK_INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
 
 **A jump** (decision 14). The clock watch takes the wall clock to have jumped when, between two
 checks, it moved more than 60 000 ms further than an elapsed-time clock; `trustedUntil` is the

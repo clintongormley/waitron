@@ -25,6 +25,7 @@ import {
   type BoxHealthReaders,
   type ClockStopView,
 } from "./box-health.js";
+import { readOpenClockIncidents } from "./box-alert-email.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
@@ -1436,4 +1437,69 @@ it("names no person for a confirmation no administrator made", async () => {
 it("says no check waits on a seat that keeps no checks", async () => {
   const read = clockCheckWaitingReader({ backend: {}, clock: systemClock() });
   expect(await read(venue.db)).toBeNull();
+});
+
+it("lists a later closing's wrongly dated sales beside an open alert that cannot tell, whatever sale each names", async () => {
+  // Just over a minute behind, so the stop's own sale is the only one its list can name.
+  const stop = await stoppedBox(MINUTE + 1);
+  // A check opens on this stop, whose latest record is the stop's own sale, and closes by itself
+  // with AEAT disagreeing, so the box cannot tell.
+  await withTransaction(venue.db, (tx) =>
+    venue.backend.openClockCheck!(tx, {
+      reading: stop.clock.now(),
+      boot: BOOT,
+      nodeId: venue.cfg.nodeId,
+    }),
+  );
+  // After the opening, which may close an earlier case's check that cannot tell.
+  handOpenMisdated(stop.behind);
+  const endedAt = nowMs() + MINUTE;
+  const cannotTell = await withTransaction(venue.db, (tx) =>
+    venue.backend.closeClockCheckByItself!(tx, {
+      reading: { instant: new Date(endedAt), offsetMinutes: 60 },
+      boot: BOOT,
+      nodeId: venue.cfg.nodeId,
+      witnesses: [
+        {
+          kind: "authority",
+          id: "authority",
+          boxAt: new Date(endedAt).toISOString(),
+          witnessAt: new Date(endedAt + 20 * MINUTE).toISOString(),
+          uncertaintyMs: 0,
+        },
+      ],
+    }),
+  );
+  expect(cannotTell.confirmation?.source).toBe("elapsed");
+
+  // An administrator then confirms the stop, whose list's first sale is that same latest record.
+  const confirmed = await confirm(stop, mario.cookie);
+  expect(confirmed.status).toBe(200);
+  const confirmationId = confirmed.json.confirmationId as string;
+  const answer = await withTransaction(venue.db, (tx) =>
+    venue.backend.misdatedRecords!(tx, confirmationId),
+  );
+  expect(answer).toEqual({
+    known: true,
+    records: [expect.objectContaining({ recordId: stop.recordId })],
+  });
+
+  const open = (await healthOf(stop)).misdatedOpen.map((entry) => [
+    entry.confirmationId,
+    entry.unconfirmed,
+  ]);
+  // Dated by the readings that wrote them, which here run backwards.
+  expect(open).toEqual([
+    [confirmationId, false],
+    [cannotTell.confirmation!.id, true],
+  ]);
+  expect((await misdatedOf(stop.app)).lists).toEqual([
+    { confirmationId, records: [expect.objectContaining({ recordId: stop.recordId })] },
+  ]);
+  // The managers' email duty reads the same open alerts.
+  expect(
+    (await readOpenClockIncidents(venue.db))
+      .filter((incident) => incident.code === "clock.records_misdated")
+      .map((incident) => incident.params["confirmationId"]),
+  ).toEqual([confirmationId, cannotTell.confirmation!.id]);
 });

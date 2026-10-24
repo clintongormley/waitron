@@ -40,8 +40,9 @@ export async function recordRestarted(
 
 /** Records `clock.records_misdated` for the closing just written as `confirmationId`, when
  * `misdatedRecords` finds any record or cannot tell; a closing that finds none records nothing.
- * Its sale is the earliest listed record's, or, when it cannot tell, the latest record's when the
- * check opened, so a second such closing on the same sale folds into the open alert. */
+ * A list's alert names its earliest listed record's sale. One that cannot tell names no sale, so it
+ * folds into any open one that cannot tell, whose earlier start already covers it, and never into a
+ * list's alert, which would hide that list. */
 export async function recordMisdated(
   tx: Transaction,
   input: {
@@ -72,9 +73,7 @@ export async function recordMisdated(
       unconfirmed: false,
     };
   } else {
-    const detail = input.check.detail as { lastRecordId?: unknown; offsetMinutes?: unknown } | null;
-    const opening = detail?.lastRecordId;
-    saleId = typeof opening === "string" ? await saleOf(tx, opening) : undefined;
+    const detail = input.check.detail as { offsetMinutes?: unknown } | null;
     params = {
       confirmationId,
       count: 0,
