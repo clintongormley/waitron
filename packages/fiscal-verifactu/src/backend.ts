@@ -9,8 +9,6 @@ import type {
   AuthorityTimeSample,
   ClockBehindLatestRecord,
   ClockProvedWrong,
-  ClockRestart,
-  ClockRestartRequest,
   ClockStopState,
   ClockWitness,
   Counterparty,
@@ -49,11 +47,7 @@ import {
   clockBehindChain,
   refuseWhileClockBehind as refuseWhileClockBehindChain,
 } from "./clock-behind.js";
-import {
-  clockStopState,
-  noteClockProvedWrong,
-  restartAfterClockStop,
-} from "./clock-stop-restart.js";
+import { clockStopState, noteClockProvedWrong } from "./clock-confirmation.js";
 import { readAuthorityTime } from "./authority-time.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
@@ -193,13 +187,6 @@ export class VerifactuBackend implements FiscalBackend {
     witnesses: readonly ClockWitness[],
   ): Promise<ClockStopState | null> {
     return clockStopState(tx, reading, witnesses);
-  }
-
-  restartAfterClockStop(
-    tx: Transaction,
-    input: ClockRestartRequest,
-  ): Promise<{ restart: ClockRestart; replayed: boolean }> {
-    return restartAfterClockStop(tx, input);
   }
 
   noteClockProvedWrong(

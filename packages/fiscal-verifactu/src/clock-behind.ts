@@ -11,9 +11,6 @@ import { registrosFacturacion } from "./schema/registros.js";
 /** A reading exactly this much earlier than the latest record still sells. */
 export const CLOCK_BEHIND_MARGIN_MS = 60_000;
 
-/** No restart is offered for a gap wider than this. */
-export const RESTART_CAP_MS = 86_400_000;
-
 export interface LatestRecord {
   id: string;
   at: Date;

@@ -174,14 +174,16 @@ export interface ClockBehindLatestRecord {
   readonly lastRecordOffsetMinutes: number;
 }
 
-/** What a restart of payments would meet now, while the clock reads behind the latest record. */
-export type ClockRestartOffer =
-  "offered" | "no_proof" | "contrary_proof" | "too_far" | "stepped_back" | "restarted";
-
 export type ClockRestartProofKind = "authority" | "devices" | "authority_and_devices";
 
-/** A clock reading more than a minute earlier than the latest record, the restart that names that
- * record if one does, and the witnesses for and against the reading. */
+/** What the witnesses say about a stop: nothing either way, against the box, enough to confirm
+ * it, or a confirmation already covers the reading. */
+export type ClockStopProof = "none" | "contrary" | "ready" | "confirmed";
+
+export type ClockConfirmationSource = "authority" | "devices" | "admin" | "elapsed";
+
+/** A clock reading more than a minute earlier than the latest record, what the witnesses say about
+ * it, and the confirmation that covers it if one does. */
 export interface ClockStopState {
   clockAt: string;
   offsetMinutes: number;
@@ -189,10 +191,39 @@ export interface ClockStopState {
   lastRecordOffsetMinutes: number;
   recordId: string;
   gapMs: number;
-  restart: { personId: string; restartedAt: string; clockAt: string } | null;
-  offer: ClockRestartOffer;
-  proof: { authority: ClockWitness | null; devices: ClockWitness[] };
+  proof: ClockStopProof;
+  agreeing: { authority: ClockWitness | null; devices: ClockWitness[] };
   contrary: { authority: ClockWitness | null; devices: ClockWitness[] };
+  confirmation: {
+    id: string;
+    source: ClockConfirmationSource;
+    personId: string | null;
+    confirmedAt: string;
+  } | null;
+}
+
+/** The box's boot-time clock: milliseconds since boot, and the boot's id when the milliseconds
+ * come from a source that has one. */
+export interface BootReading {
+  ms: number;
+  id: string | null;
+}
+
+export interface ClockConfirmRequest {
+  reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  boot: BootReading;
+  witnesses: readonly ClockWitness[];
+  nodeId: string;
+}
+
+export interface ClockConfirmation {
+  id: string;
+  seq: number;
+  source: ClockConfirmationSource;
+  personId: string | null;
+  confirmedAt: string;
+  checkId: string | null;
+  recordId: string | null;
 }
 
 export interface ClockRestart {
