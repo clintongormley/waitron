@@ -21,6 +21,8 @@ choices it is made of:
 - **Background**: **Neutral** keeps Waitron's greys, and **Tinted** gives the page, field fills
   and borders a faint cast of the brand colour.
 - **Corners**: **Square**, **Standard** or **Round**, for buttons, fields and cards.
+- **Text size**: how big the theme makes every screen's text: "100% (standard)", or a larger
+  step such as "115%".
 - **Colours set by hand**: any of the theme's colours that were given a value of their own rather
   than worked out from the brand colour, or **None**. The editor's **Advanced** section sets them,
   as "Set colours by hand" below describes.
@@ -49,13 +51,15 @@ reads "Not in use. Saving changes no screen until you use it.", and the card's h
 theme, or reads **Add theme**.
 
 The editor opens with the theme's **Logo** first, as "Add your logo" below describes, then the
-theme's three choices:
+theme's four choices:
 
 - **Brand colour**: pick **Waitron's**, one of the swatches, or **Custom** to choose any colour.
   You can also type a code such as `#1e5b3a` into the box beside **Custom**. A code must be `#`
   followed by six digits or letters a to f, or Save tells you so under the field.
 - **Background**: **Neutral** or **Tinted**.
 - **Corners**: **Square**, **Standard** or **Round**.
+- **Text size**: a slider from 100% to 130% in steps of 5%, with the four sizes it gives under it,
+  such as "Text on screens: small 12 px · normal 14 px · large 18 px · largest 22 px" at 100%.
 
 Under the brand colour, **Pick a different colour for dark screens** gives the dark version's main
 buttons a colour of their own: it opens Advanced and puts the cursor in the code box of **Main
@@ -66,17 +70,34 @@ again, so dark screens work their buttons out from the brand colour once more.
 Beside or below the choices, the **Preview** paints a small sample of the dashboard in the look you
 are building: a **Light version** and a **Dark version**, each headed by a strip with the logo and
 the venue's legal name, then a selected menu item, a field, Save and Cancel buttons, a switch, a
-link and a Light and Dark choice. It is a picture, so its buttons do nothing. The editor arranges
-itself by the width of the card rather than of the window. On a wide card the preview sits beside
-the choices, and on a narrow one below them. When the preview has room, the two versions sit side
-by side; otherwise the light version sits above the dark one.
+link and a Light and Dark choice, then a till's product button and a bill line. The whole preview
+is drawn at the text size you have chosen. The product's name is in the venue's main language for
+menu content when the dashboard has one, else in the dashboard's language. It is a picture, so its
+buttons do nothing. The editor arranges itself by the width of the card rather than of the window.
+On a wide card the preview sits beside the choices, and on a narrow one below them. When the
+preview has room, the two versions sit side by side; otherwise the light version sits above the
+dark one.
 
 Nothing else on the page, and no other screen, changes until you save. **Use Waitron's look**
 removes the logo and sets every choice back to Waitron's: Waitron's brand colour, Neutral, Standard
-corners, and no colours set by hand. It saves nothing by itself, and it is greyed out while there is
-no logo and the choices already are Waitron's look. **Cancel** closes the editor without saving. If you have
-changed something, Cancel, leaving the page, and opening another theme from the Themes card ask you
-first.
+corners, text size 100%, and no colours set by hand. It saves nothing by itself, and it is greyed
+out while there is no logo and the choices already are Waitron's look. **Cancel** closes the editor
+without saving. If you have changed something, Cancel, leaving the page, and opening another theme
+from the Themes card ask you first.
+
+## Make text bigger {#text-size}
+
+The **Text size** slider makes the text of every dashboard, till, handheld and kitchen screen
+bigger: each of the four text sizes grows by the same percentage, to the nearest pixel. 100% is
+Waitron's size, and 130% the largest. Spacing stays as it is, and so does the smallest size of a
+button, a till's product buttons included, so a long name that no longer fits takes another line.
+
+A saved text size reaches the dashboards and tills as a saved theme's colours do (see
+[Save a theme](appearance.md#save)). A kitchen screen that nobody signs in on takes it when it next
+starts.
+
+Printed paper keeps Waitron's sizes: receipts, kitchen tickets, the equipment label and the node
+recovery pack. Google's sign-in button keeps Google's size.
 
 ## Add your logo {#logo}
 
@@ -279,7 +300,8 @@ renaming a theme changes no screen's look.
 
 **Use on every screen** asks first, with a question such as "Use Terrace on every screen?" When
 the theme has colours that are hard to read, the question lists them under "Hard to read:".
-**Use it** puts the theme in use, and **Back** changes nothing.
+When the theme's text size differs from the one in use, the dialog also says "Text on the tills
+changes size too." **Use it** puts the theme in use, and **Back** changes nothing.
 
 Once a theme is in use, the dashboard you are using changes to it at once and other dashboards
 open at the same time follow on their own. Signed-in tills follow as they do when you save the
