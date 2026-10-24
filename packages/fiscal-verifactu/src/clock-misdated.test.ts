@@ -9,7 +9,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { correctedStart, openCheck, openClockCheck } from "./clock-checks.js";
+import { correctedStart, openCheck, openClockCheck, writeClosing } from "./clock-checks.js";
 import { misdatedRecords } from "./clock-misdated.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
@@ -96,7 +96,7 @@ async function aheadSales(): Promise<void> {
 async function insertCheck(input: {
   openedAt: number;
   boot: BootReading;
-  heads: Record<string, number>;
+  heads: Record<string, unknown>;
 }): Promise<{ id: string; detail: unknown }> {
   const detail = {
     clockAt: new Date(input.openedAt).toISOString(),
@@ -120,7 +120,7 @@ async function insertCheck(input: {
 }
 
 async function insertClosing(input: {
-  check: { id: string };
+  check: { id: string } | null;
   confirmedAt: number;
   source?: ClockConfirmationSource;
   closing?: Record<string, unknown>;
@@ -146,7 +146,7 @@ async function insertClosing(input: {
         ...(input.proofHeads === undefined ? {} : { heads: input.proofHeads }),
         ...(input.closing === undefined ? {} : { closing: input.closing }),
       },
-      checkId: input.check.id,
+      checkId: input.check?.id ?? null,
       registroId: null,
       recordAt: null,
     })
@@ -168,8 +168,16 @@ function closingFor(check: { detail: unknown }, confirmedAt: number, boot: BootR
   };
 }
 
-function list(confirmationId: string) {
+function answer(confirmationId: string) {
   return withTransaction(suite.db, (tx) => misdatedRecords(tx, confirmationId));
+}
+
+/** The records of a closing the box can judge. */
+async function list(confirmationId: string) {
+  const found = await answer(confirmationId);
+  if (found === null || !found.known)
+    throw new Error(`expected a list, got ${JSON.stringify(found)}`);
+  return found.records;
 }
 
 const after = (ms: number) => (row: Row) => Date.parse(row.at) > ms;
@@ -306,31 +314,73 @@ describe("misdatedRecords", () => {
     expect(first).toHaveLength(24);
   });
 
-  it("lists nothing for an elapsed closing", async () => {
+  it("lists the same from a closing the real writer stored", async () => {
     await aheadSales();
-    const check = await insertCheck({ openedAt: X, boot: BOOT, heads: heads() });
-    const closing = {
-      ...closingFor(check, X + 90 * M, { ms: BOOT_MS + 90 * M, id: "boot-1" }),
-      unconfirmed: true,
-    };
-    const id = await insertClosing({ check, confirmedAt: X + 90 * M, source: "elapsed", closing });
-    expect(await list(id)).toEqual([]);
+    await insertCheck({ openedAt: X, boot: BOOT, heads: heads() });
+    const confirmation = await withTransaction(suite.db, async (tx) =>
+      writeClosing(tx, {
+        check: (await openCheck(tx))!,
+        reading: { instant: new Date(X + 90 * M), offsetMinutes: 60 },
+        boot: { ms: BOOT_MS + 90 * M, id: "boot-1" },
+        nodeId,
+        source: "authority",
+        personId: null,
+        witnesses: { authority: null, devices: [], admin: null },
+        unconfirmed: false,
+      }),
+    );
+    expect(await list(confirmation.id)).toEqual(listed(after(X + M)));
+    expect(await list(confirmation.id)).toHaveLength(24);
   });
 
-  it("lists nothing for a confirmation it cannot read a stop from", async () => {
+  it("cannot tell for a closing stored unconfirmed, whatever its source", async () => {
     await aheadSales();
-    const check = await insertCheck({ openedAt: X, boot: BOOT, heads: heads() });
-    const id = await insertClosing({
-      check,
-      confirmedAt: X + 90 * M,
-      closing: { correctedStart: "not a time" },
-    });
-    expect(await list(id)).toEqual([]);
-    const withoutClosing = await insertClosing({
-      check: await insertCheck({ openedAt: X, boot: BOOT, heads: heads() }),
-      confirmedAt: X + 90 * M,
-    });
-    expect(await list(withoutClosing)).toEqual([]);
-    expect(await list("no-such-confirmation")).toEqual([]);
+    for (const source of ["elapsed", "admin"] as const) {
+      const check = await insertCheck({ openedAt: X, boot: BOOT, heads: heads() });
+      const closing = {
+        ...closingFor(check, X + 90 * M, { ms: BOOT_MS + 90 * M, id: "boot-1" }),
+        unconfirmed: true,
+      };
+      const id = await insertClosing({ check, confirmedAt: X + 90 * M, source, closing });
+      expect(await answer(id)).toEqual({ known: false });
+    }
+  });
+
+  it("cannot tell for a closing whose stored values cannot be read", async () => {
+    await aheadSales();
+    const good = (check: { detail: unknown }) =>
+      closingFor(check, X + 90 * M, { ms: BOOT_MS + 90 * M, id: "boot-1" });
+    const cases: { name: string; id: string }[] = [];
+    const add = async (
+      name: string,
+      closing: (check: { detail: unknown }) => Record<string, unknown> | undefined,
+      checkHeads: Record<string, unknown> = heads(),
+      withCheck = true,
+    ) => {
+      const check = await insertCheck({ openedAt: X, boot: BOOT, heads: checkHeads });
+      cases.push({
+        name,
+        id: await insertClosing({
+          check: withCheck ? check : null,
+          confirmedAt: X + 90 * M,
+          closing: closing(check),
+        }),
+      });
+    };
+    await add("start not a time", (check) => ({ ...good(check), correctedStart: "not a time" }));
+    await add("no start", (check) => ({ ...good(check), correctedStart: undefined }));
+    await add("no unconfirmed flag", (check) => ({ ...good(check), unconfirmed: undefined }));
+    await add("no closing", () => undefined);
+    await add("unreadable heads", good, { [nodeId]: -1 });
+    await add("no check", good, heads(), false);
+    for (const { name, id } of cases)
+      expect({ name, answer: await answer(id) }).toEqual({
+        name,
+        answer: { known: false },
+      });
+  });
+
+  it("answers null for an id no confirmation has", async () => {
+    expect(await answer("no-such-confirmation")).toBeNull();
   });
 });
