@@ -612,6 +612,28 @@ describe("the logo in the editor", () => {
     expect(field(el).logo).toEqual({ light: L });
   });
 
+  it("the Logo field is busy while a save is in flight", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    await pick(el, "light", L);
+    let answer!: () => void;
+    saveTheme.mockImplementationOnce(
+      (id, choices) =>
+        new Promise((resolve) => {
+          answer = () => resolve(saved(id, "Bar Lucía", choices));
+        }),
+    );
+    expect(field(el).busy).toBe(false);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    await el.updateComplete;
+    expect(field(el).busy).toBe(true);
+    answer();
+    await expect
+      .poll(() => q(el, "section.settings-card")!.hasAttribute("data-editing"))
+      .toBe(false);
+  });
+
   it("a refused logo is explained under its field and Save stays enabled", async () => {
     setLocale("en-GB");
     const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L, dark: D })));
@@ -710,7 +732,8 @@ describe("the logo in the editor", () => {
       await userEvent.click(button(el, "save"));
       const english = "This photo has changed. Reload it before saving again.";
       const expected = locale === "en-GB" ? english : codeMessage("image.changed");
-      if (locale === "es-ES") expect(expected).not.toBe(english);
+      expect(codeMessage("image.changed")).not.toBe(codeMessage("no.such_code"));
+      expect(expected !== english).toBe(locale === "es-ES");
       await expect.poll(() => bottom(el)).toBe(expected);
       expect(field(el).errors).toEqual({});
       expect(upload(el, "light").invalid).toBe(false);
