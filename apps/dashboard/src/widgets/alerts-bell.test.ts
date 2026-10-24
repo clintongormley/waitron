@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, timesAcrossLines } from "./test-helpers.js";
 import type { AlertView } from "../api/client.js";
 import "./alerts-bell.js";
 import type { AlertsBell } from "./alerts-bell.js";
@@ -122,6 +122,42 @@ describe("dashboard-alerts-bell", () => {
     expect(qa(el, "li")).toHaveLength(5);
     expect(qa(el, "li")[0]!.textContent).toContain("A card payment of €12.50 taken while offline");
     expect(q(el, "[data-test=alerts-see-all]")).not.toBeNull();
+  });
+
+  it("never breaks a written time across two lines", async () => {
+    setLocale("en-GB");
+    const restarted = (n: number): AlertView => ({
+      key: `incident:r${n}`,
+      kind: "event",
+      code: "clock.behind_chain_restarted",
+      params: {
+        person: "x".repeat(n),
+        clockAt: "2026-10-19T09:14:00.000Z",
+        lastRecordAt: "2026-10-19T23:40:00.000Z",
+        proof: "devices",
+      },
+      severity: "warning",
+      since: "2026-10-19T09:16:00.000Z",
+      area: "box",
+    });
+    const broken: string[] = [];
+    let checked = 0;
+    // The bell lists five at a time; forty names slide the times along the whole line.
+    for (let first = 1; first <= 40; first += 5) {
+      const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+        alerts: Array.from({ length: 5 }, (_, n) => restarted(first + n)),
+      });
+      el.open();
+      await el.updateComplete;
+      const found = timesAcrossLines(
+        qa(el, "[data-test=alert-item]").map((item) => item.firstElementChild!),
+      );
+      checked += found.checked;
+      broken.push(...found.broken);
+      cleanupWidgets();
+    }
+    expect(checked).toBe(80);
+    expect(broken).toEqual([]);
   });
 
   it("shows an empty message when nothing is open", async () => {

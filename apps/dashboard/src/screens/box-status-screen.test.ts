@@ -1,5 +1,5 @@
-import { userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData, formatBytes } from "@waitron/dashboard-kit";
 import type {
   AlertView,
@@ -11,8 +11,9 @@ import type {
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
 import { goToLabel } from "../widgets/alert-format.js";
+import { formatIsoMinute } from "../date-utils.js";
 import { guideHref } from "../help-guide.js";
 import "./box-status-screen.js";
 import type { BoxStatusScreen } from "./box-status-screen.js";
@@ -60,6 +61,7 @@ function health(overrides: Partial<BoxHealth> = {}, disk: Partial<BoxHealth["dis
       reclaimable: { bytes: 45_000_000, backupRunning: false },
       ...disk,
     },
+    clockStop: null,
   } satisfies BoxHealth;
 }
 
@@ -557,5 +559,496 @@ describe("dashboard-box-status-screen's layout", () => {
     const line = box(el, "[data-test=row-disk] .line");
     const aside = box(el, "[data-test=row-disk] [data-test=read-only]");
     expect(aside.top - detail.bottom).toBe(detail.top - line.bottom);
+  });
+});
+
+describe("dashboard-box-status-screen's restart of payments", () => {
+  const STOP: NonNullable<BoxHealth["clockStop"]> = {
+    clockAt: "2026-10-22T18:10:00.000Z",
+    offsetMinutes: 120,
+    lastRecordAt: "2026-10-22T19:30:00.000Z",
+    lastRecordOffsetMinutes: 120,
+    recordId: "rec-42",
+    gapMs: 4_800_000,
+    restart: null,
+    offer: "offered",
+    proof: {
+      authority: {
+        kind: "authority",
+        id: "aeat",
+        boxAt: "2026-10-22T18:05:00.000Z",
+        witnessAt: "2026-10-22T18:05:01.000Z",
+        uncertaintyMs: 500,
+      },
+      devices: [
+        {
+          kind: "device",
+          id: "d1",
+          label: "Bar till",
+          boxAt: "2026-10-22T18:01:00.000Z",
+          witnessAt: "2026-10-22T18:01:00.000Z",
+          uncertaintyMs: 200,
+        },
+        {
+          kind: "device",
+          id: "d2",
+          label: null,
+          boxAt: "2026-10-22T18:08:00.000Z",
+          witnessAt: "2026-10-22T18:08:00.000Z",
+          uncertaintyMs: 200,
+        },
+      ],
+    },
+    contrary: { authority: null, devices: [] },
+  };
+  const BEHIND = {
+    key: "clock.behind_chain",
+    code: "clock.behind_chain",
+    severity: "error" as const,
+    params: {},
+    owner: "fiscal",
+  };
+
+  function stopped(
+    stop: Partial<NonNullable<BoxHealth["clockStop"]>> = {},
+    notices: BoxHealth["notices"] = [BEHIND],
+  ): BoxHealth {
+    return { ...health({ notices }), clockStop: { ...STOP, ...stop } };
+  }
+
+  const restartButton = (el: BoxStatusScreen) =>
+    q(el, "[data-test=row-clock] [data-test=restart]") as HTMLElement | null;
+  const dialog = (el: BoxStatusScreen) =>
+    q(el, "[data-test=restart-dialog]") as HTMLElement & {
+      open: boolean;
+    };
+  const confirm = (el: BoxStatusScreen) => q(el, "[data-test=restart-confirm]") as HTMLElement;
+  const footerMessage = (el: BoxStatusScreen) =>
+    dialog(el).shadowRoot!.querySelector(".footer [data-error]");
+
+  function closed(el: BoxStatusScreen): Promise<void> {
+    return new Promise((resolve) =>
+      dialog(el).addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+  }
+
+  async function open(el: BoxStatusScreen): Promise<void> {
+    await userEvent.click(restartButton(el)!);
+    await flush(el);
+  }
+
+  it("offers the restart only while the box offers it and the clock is usable", async () => {
+    for (const offer of ["no_proof", "contrary_proof", "too_far", "stepped_back"] as const) {
+      const { el } = await mount(stubApi({}, stopped({ offer })));
+      expect(restartButton(el)).toBeNull();
+      cleanupWidgets();
+    }
+    const unusable = await mount(
+      stubApi(
+        {},
+        stopped({}, [
+          BEHIND,
+          {
+            key: "clock.unusable",
+            code: "clock.unusable",
+            severity: "error",
+            params: {},
+            owner: "fiscal",
+          },
+        ]),
+      ),
+    );
+    expect(restartButton(unusable.el)).toBeNull();
+    cleanupWidgets();
+    const { el } = await mount(stubApi({}, stopped()));
+    expect(text(restartButton(el))).toBe(t("box_status.clock.restart.open"));
+    expect(text(restartButton(el))).toBe("Restart payments");
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("shows both times and the proof in the dialog", async () => {
+    const { el } = await mount(stubApi({}, stopped()));
+    await open(el);
+    expect(dialog(el).open).toBe(true);
+    expect(dialog(el).getAttribute("heading")).toBe("Restart payments?");
+    const rows = qa(el, "[data-test=restart-dialog] dl > div").map(text);
+    expect(rows).toEqual([
+      `${t("box_status.clock.restart.box_reads")} ${formatIsoMinute(STOP.clockAt)}`,
+      `${t("box_status.clock.restart.last_sale_reads")} ${formatIsoMinute(STOP.lastRecordAt)}`,
+    ]);
+    expect(qa(el, "[data-test=restart-proof]").map(text)).toEqual([
+      fill("box_status.clock.proof.authority", {
+        time: formatIsoMinute("2026-10-22T18:05:00.000Z"),
+      }),
+      fill("box_status.clock.proof.devices", {
+        count: "2",
+        time: formatIsoMinute("2026-10-22T18:08:00.000Z"),
+      }),
+    ]);
+    expect(text(q(el, "[data-test=restart-body]"))).toBe(
+      "If you restart, the next sales carry the box's clock, earlier than the last sale's. No recorded sale is changed. It is noted that you did it.",
+    );
+    expect(text(confirm(el))).toBe("Restart payments");
+    expect(confirm(el).getAttribute("variant")).toBe("primary");
+  });
+
+  it("words the dialog in Spanish from the words file", async () => {
+    setLocale("es");
+    const { el } = await mount(stubApi({}, stopped()));
+    await open(el);
+    expect(dialog(el).getAttribute("heading")).toBe(t("box_status.clock.restart.title"));
+    expect(text(q(el, "[data-test=restart-body]"))).toBe(t("box_status.clock.restart.body"));
+    expect(text(confirm(el))).toBe(t("box_status.clock.restart.confirm"));
+    expect(text(q(el, "[data-test=restart-cancel]"))).toBe(t("action.cancel"));
+  });
+
+  it("sends the page's record once, disabled and loading while sent, then closes and reads the box again", async () => {
+    const sent = deferred<void>();
+    const api = stubApi({ restartClockPayments: vi.fn().mockReturnValue(sent.promise) }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    const reads = vi.mocked(api.getBoxHealth).mock.calls.length;
+
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+    expect(confirm(el).hasAttribute("disabled")).toBe(true);
+    expect(confirm(el).hasAttribute("loading")).toBe(true);
+    confirm(el).click();
+    await el.updateComplete;
+    expect(api.restartClockPayments).toHaveBeenCalledTimes(1);
+    expect(api.restartClockPayments).toHaveBeenCalledWith("rec-42");
+
+    const close = closed(el);
+    sent.resolve();
+    await close;
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(api.getBoxHealth).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("shows a refusal's reason above the buttons, keeps the button enabled and reads the box again", async () => {
+    const api = stubApi(
+      {
+        restartClockPayments: vi.fn().mockRejectedValue({
+          code: "clock.restart_refused",
+          params: { reason: "record_changed" },
+        }),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    const reads = vi.mocked(api.getBoxHealth).mock.calls.length;
+
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(text(footerMessage(el))).toBe(t("box_status.clock.refused.record_changed"));
+    expect(text(footerMessage(el))).toBe("The last sale changed. Look at the page again.");
+    expect(dialog(el).open).toBe(true);
+    expect(confirm(el).hasAttribute("disabled")).toBe(false);
+    expect(api.getBoxHealth).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("words any other refusal by its code", async () => {
+    const api = stubApi(
+      {
+        restartClockPayments: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(text(footerMessage(el))).toBe(codeMessage("authorization.not_permitted"));
+  });
+
+  it("opens again without the last refusal", async () => {
+    const api = stubApi(
+      {
+        restartClockPayments: vi
+          .fn()
+          .mockRejectedValue({ code: "clock.restart_refused", params: { reason: "not_stopped" } }),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(text(footerMessage(el))).toBe(t("box_status.clock.refused.not_stopped"));
+    const close = closed(el);
+    await userEvent.click(q(el, "[data-test=restart-cancel]") as HTMLElement);
+    await close;
+    await open(el);
+    expect(footerMessage(el)).toBeNull();
+  });
+
+  it("forgets an open dialog once a read shows no stop, so the next stop does not open it", async () => {
+    const restartClockPayments = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "clock.restart_refused", params: { reason: "not_stopped" } })
+      .mockResolvedValue(undefined);
+    const api = stubApi(
+      {
+        restartClockPayments,
+        getBoxHealth: vi
+          .fn()
+          .mockResolvedValueOnce(stopped())
+          .mockResolvedValueOnce(health())
+          .mockResolvedValue(stopped({ recordId: "rec-43" })),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(footerMessage(el)).toBeNull();
+
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-43");
+  });
+
+  it("closes an open dialog when a read shows no stop, with the bell's read failing", async () => {
+    const api = stubApi(
+      {
+        listAlerts: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
+        getBoxHealth: vi.fn().mockResolvedValueOnce(stopped()).mockResolvedValue(health()),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    expect(dialog(el).open).toBe(true);
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped());
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("stays open through a read that still offers the restart", async () => {
+    const api = stubApi({}, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped());
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+  });
+
+  it("forgets the dialog when its request ends after the stop did, even if the next read fails", async () => {
+    const sent = deferred<void>();
+    const restartClockPayments = vi.fn().mockReturnValueOnce(
+      sent.promise.then(() => {
+        throw { code: "clock.restart_refused", params: { reason: "not_stopped" } };
+      }),
+    );
+    const api = stubApi({ restartClockPayments }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+
+    vi.mocked(api.getBoxHealth).mockResolvedValue(health());
+    api.liveData.refresh();
+    await flush(el);
+    vi.mocked(api.getBoxHealth).mockRejectedValue({ code: "server.internal" });
+    sent.resolve();
+    await flush(el);
+
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped());
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(footerMessage(el)).toBeNull();
+
+    restartClockPayments.mockResolvedValue(undefined);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenCalledTimes(2);
+  });
+
+  it("follows a read that offers a different record, so it sends the record it shows", async () => {
+    const api = stubApi({ restartClockPayments: vi.fn().mockResolvedValue(undefined) }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    vi.mocked(api.getBoxHealth).mockResolvedValue(
+      stopped({ recordId: "rec-43", lastRecordAt: "2026-10-22T19:40:00.000Z" }),
+    );
+    api.liveData.refresh();
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+    expect(text(qa(el, "[data-test=restart-dialog] dl > div")[1]!)).toBe(
+      `${t("box_status.clock.restart.last_sale_reads")} ${formatIsoMinute("2026-10-22T19:40:00.000Z")}`,
+    );
+
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(api.restartClockPayments).toHaveBeenCalledWith("rec-43");
+  });
+
+  it("keeps a record_changed refusal through the read that brings the new record, then sends it", async () => {
+    const restartClockPayments = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "clock.restart_refused",
+        params: { reason: "record_changed" },
+      })
+      .mockResolvedValue(undefined);
+    const api = stubApi(
+      {
+        restartClockPayments,
+        getBoxHealth: vi
+          .fn()
+          .mockResolvedValueOnce(stopped())
+          .mockResolvedValue(stopped({ recordId: "rec-43" })),
+      },
+      stopped(),
+    );
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-42");
+    expect(dialog(el).open).toBe(true);
+    expect(text(footerMessage(el))).toBe(t("box_status.clock.refused.record_changed"));
+
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-43");
+  });
+
+  it("takes up a record offered while a refused request was sent, with no later read to bring it", async () => {
+    const sent = deferred<void>();
+    const restartClockPayments = vi
+      .fn()
+      .mockReturnValueOnce(
+        sent.promise.then(() => {
+          throw { code: "clock.restart_refused", params: { reason: "record_changed" } };
+        }),
+      )
+      .mockResolvedValue(undefined);
+    const api = stubApi({ restartClockPayments }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+
+    vi.mocked(api.getBoxHealth).mockResolvedValue(stopped({ recordId: "rec-43" }));
+    api.liveData.refresh();
+    await flush(el);
+    vi.mocked(api.getBoxHealth).mockRejectedValue({ code: "server.internal" });
+    vi.mocked(api.listAlerts).mockRejectedValue({ code: "server.internal" });
+    sent.resolve();
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-42");
+    expect(dialog(el).open).toBe(true);
+    expect(text(footerMessage(el))).toBe(t("box_status.clock.refused.record_changed"));
+
+    await userEvent.click(confirm(el));
+    await flush(el);
+    expect(restartClockPayments).toHaveBeenCalledTimes(2);
+    expect(restartClockPayments).toHaveBeenLastCalledWith("rec-43");
+  });
+
+  it("stays open on Escape while the request is sent", async () => {
+    const sent = deferred<void>();
+    const api = stubApi({ restartClockPayments: vi.fn().mockReturnValue(sent.promise) }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    await userEvent.click(confirm(el));
+    await el.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+    const close = closed(el);
+    sent.resolve();
+    await close;
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("never breaks a written time across two lines, on the Clock row or in the dialog", async () => {
+    const { innerWidth, innerHeight } = window;
+    onTestFinished(() => page.viewport(innerWidth, innerHeight));
+    // With no notice the row's line is its first alert, and the second is drawn beneath it.
+    const { el } = await mount(
+      stubApi(
+        {},
+        stopped(
+          {
+            offer: "restarted",
+            restart: {
+              personName: "Ana García",
+              restartedAt: "2026-10-22T18:12:00.000Z",
+              clockAt: STOP.clockAt,
+            },
+          },
+          [],
+        ),
+        [
+          alert("clock.behind_chain_restarted", "box", {
+            kind: "event",
+            params: {
+              person: "Ana García",
+              clockAt: STOP.clockAt,
+              lastRecordAt: STOP.lastRecordAt,
+              proof: "devices",
+            },
+          }),
+          alert("clock.disagrees", "box", {
+            params: { count: 3, deviceAt: STOP.lastRecordAt, boxAt: STOP.clockAt },
+          }),
+        ],
+      ),
+    );
+    const offered = await mount(stubApi({}, stopped()));
+    await open(offered.el);
+    const broken: string[] = [];
+    let checked = 0;
+    for (let width = 320; width <= 1280; width += 8) {
+      await page.viewport(width, 900);
+      await el.updateComplete;
+      const lines = [
+        ...qa(el, "[data-test=row-clock] .words p"),
+        ...qa(offered.el, "[data-test=restart-proof], [data-test=restart-dialog] dd"),
+      ];
+      const found = timesAcrossLines(lines);
+      checked += found.checked;
+      broken.push(...found.broken.map((time) => `${width}px: ${time}`));
+    }
+    // Each width checks the row's line, alert, proof and restart times, and the dialog's four.
+    expect(checked).toBeGreaterThanOrEqual(121 * 10);
+    expect(broken).toEqual([]);
+  });
+
+  it("closes on Cancel and on Escape without sending", async () => {
+    const api = stubApi({ restartClockPayments: vi.fn() }, stopped());
+    const { el } = await mount(api);
+    await open(el);
+    let close = closed(el);
+    await userEvent.click(q(el, "[data-test=restart-cancel]") as HTMLElement);
+    await close;
+    expect(dialog(el).open).toBe(false);
+
+    await open(el);
+    expect(dialog(el).open).toBe(true);
+    close = closed(el);
+    await userEvent.keyboard("{Escape}");
+    await close;
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(api.restartClockPayments).not.toHaveBeenCalled();
   });
 });

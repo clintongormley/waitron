@@ -891,7 +891,8 @@ browser test** — most of these rules exist because a test passed while proving
   or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
   only, and only the tables the start migrated.
 - **While the box's clock reads more than a minute earlier than the latest fiscal record, no record
-  is written and no route takes or gives back new money.** The append refuses on its own
+  is written and no route takes or gives back new money, unless a manager's restart covers the
+  reading (below).** The append refuses on its own
   (`clock.behind_chain`, `packages/fiscal-verifactu/src/chain.ts`); a money route calls the fiscal
   seat's `refuseWhileClockBehind` after its replay answer and before any reader, refund or drawer,
   and both refund recovery loops pause. A card refund's send and outcome are judged again in the
@@ -901,6 +902,12 @@ browser test** — most of these rules exist because a test passed while proving
   `packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover the
   routes they name; a new money route is seen by none. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
+  **A manager's restart (`clock_stop_restarts`) lifts this stop for one step back**, then holds every
+  reading to the minute against the latest time written under it; the stop reads the table only
+  through `clockBehindChain`. Guard: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
+  weaker than the rule — nothing checks that the stop reads the table only through
+  `clockBehindChain`. Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md#a-managers-restart-lifts-the-stop-for-one-step-back).
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.

@@ -1743,12 +1743,38 @@ export interface BoxHealth {
     lowSince: string | null;
     reclaimable: { bytes: number; backupRunning: boolean };
   };
+  clockStop: ClockStopView | null;
 }
 
 /** LOCAL copy of the Retry now route's answer (`packages/fiscal-verifactu/src/routes.ts`). */
 export interface FiscalRetryView {
   waiting: number;
 }
+
+/** LOCAL copy of the server's `ClockWitness` (`packages/fiscal/src/clock-witnesses.ts`). */
+export interface ClockWitnessView {
+  kind: "authority" | "device";
+  id: string;
+  boxAt: string;
+  witnessAt: string;
+  uncertaintyMs: number;
+}
+
+/** LOCAL copy of the server's `ClockStopView` (`apps/server/src/box-health.ts`). */
+export interface ClockStopView {
+  clockAt: string;
+  offsetMinutes: number;
+  lastRecordAt: string;
+  lastRecordOffsetMinutes: number;
+  recordId: string;
+  gapMs: number;
+  restart: { personName: string | null; restartedAt: string; clockAt: string } | null;
+  offer: "offered" | "no_proof" | "contrary_proof" | "too_far" | "stepped_back" | "restarted";
+  proof: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
+  contrary: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
+}
+
+export type ClockStopDeviceView = ClockWitnessView & { label: string | null };
 
 /** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
 export interface FreedSpaceView {
@@ -4181,6 +4207,10 @@ export class DashboardApi {
 
   freeBoxSpace(): Promise<FreedSpaceView> {
     return this.#request<FreedSpaceView>("/api/box/free-space", "POST", {});
+  }
+
+  restartClockPayments(recordId: string): Promise<void> {
+    return this.#request<void>("/api/box/clock-restart", "POST", { recordId });
   }
 
   exportConfiguration(passphrase: string): Promise<Blob> {

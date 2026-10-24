@@ -7,7 +7,7 @@ import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, DEMO_READER_ID, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { collectBoxHealth, type BoxHealthReaders } from "./box-health.js";
+import { collectBoxHealth, type BoxHealthReaders, type ClockStopView } from "./box-health.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
 
 const NOW = new Date("2026-10-22T10:00:00.000Z");
@@ -121,6 +121,7 @@ describe("collectBoxHealth", () => {
         lowSince: null,
         reclaimable: { bytes: 700_000, backupRunning: false },
       },
+      clockStop: null,
     });
   });
 
@@ -326,6 +327,22 @@ describe("collectBoxHealth", () => {
     );
     expect(health.disk.freeBytes).toBe(123);
     expect(health.disk.totalBytes).toBe(1_000);
+  });
+
+  it("passes the clock stop reader's answer through, asking it with the database", async () => {
+    const view = { offer: "no_proof" } as ClockStopView;
+    const asked: unknown[] = [];
+    const health = await collectBoxHealth(
+      suite.db,
+      stubReaders({
+        clockStop: async (db) => {
+          asked.push(db);
+          return view;
+        },
+      }),
+    );
+    expect(health.clockStop).toBe(view);
+    expect(asked).toEqual([suite.db]);
   });
 
   it("settles the notice log, so an owner that stops failing is logged as recovered", async () => {

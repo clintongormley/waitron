@@ -417,7 +417,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
-Four hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor
+Four hedges worth carrying. `packages/fiscal`'s `mutate` list names only some of its source files, so its floor
 is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: one file is out of its
 `mutate` set — `src/english-only.ts`, whose only suite lives in the root vitest project and which
 nothing under `packages/db` imports, so every one of its mutants survives by construction. The

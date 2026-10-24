@@ -3457,6 +3457,21 @@ describe("TillApi", () => {
     expect(r).toEqual(equipment);
   });
 
+  it("getDeviceEquipment sends the device's clock at the call in x-waitron-device-clock, with no body", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ roles: [] }));
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_792_000_123_456);
+    try {
+      await new TillApi("", fetchStub).getDeviceEquipment();
+    } finally {
+      now.mockRestore();
+    }
+
+    const init = fetchStub.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("GET");
+    expect(init.headers).toEqual({ "x-waitron-device-clock": "1792000123456" });
+    expect(init.body).toBeUndefined();
+  });
+
   it("setDeviceEquipment PUTs the role, selection, way and takeover to /api/device/equipment and returns the equipment", async () => {
     const equipment = { roles: [] };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(equipment));

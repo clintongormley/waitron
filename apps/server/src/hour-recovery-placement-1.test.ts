@@ -820,7 +820,7 @@ describe("selected-hour admission before archive placement", () => {
         }
         return outcome;
       }`;
-      const internet = `export async function observeInternetHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
+      const internet = `export async function authenticatedHourHead() { throw new Error("this test makes no network request"); } export async function observeInternetHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
       const release = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
       const source = `import { registerHooks } from "node:module";
       const RealDate = Date;

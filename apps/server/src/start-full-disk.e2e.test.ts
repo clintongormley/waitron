@@ -36,6 +36,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { loadKeyRing } from "@waitron/credentials";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
@@ -68,6 +69,7 @@ import {
 import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
+import { systemClock } from "./till-backend.js";
 
 /** When set, first-setup resolution answers that the box runs from these folders instead. */
 const workspace = vi.hoisted(() => ({
@@ -288,6 +290,12 @@ describe("the Box status read and free-space deletion on a real full disk", () =
             canFree: () => true,
           }),
         freeSpace: createSpaceFreer({ ...leftoverDeps, venueDir, space, disk: diskState }),
+        clockRestart: {
+          backend: new FakeFiscalBackend(db),
+          witnesses: () => [],
+          clock: systemClock(),
+          nodeId: "node-1",
+        },
       },
       () => {},
     );

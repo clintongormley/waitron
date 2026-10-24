@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
-import { printers, sales, type Database } from "@waitron/db";
-import type { TrustedClock } from "@waitron/fiscal";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { devices, printers, sales, type Database, type Transaction } from "@waitron/db";
+import type { ClockStopState, ClockWitness, FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { persons } from "@waitron/identity";
 import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
 import type { StreamView } from "@waitron/stream";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -18,6 +19,18 @@ import type { FiscalOutboxState } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { sql } from "drizzle-orm";
+
+/** A clock witness on the Box status page; a device's `label` is null when no device row has its
+ * id. */
+export type ClockStopWitness = ClockWitness & { label: string | null };
+
+/** The fiscal seat's clock stop as the Box status page shows it: the restart names its person, and
+ * each device witness carries its label. */
+export interface ClockStopView extends Omit<ClockStopState, "restart" | "proof" | "contrary"> {
+  restart: { personName: string | null; restartedAt: string; clockAt: string } | null;
+  proof: { authority: ClockWitness | null; devices: ClockStopWitness[] };
+  contrary: { authority: ClockWitness | null; devices: ClockStopWitness[] };
+}
 
 export interface BoxHealth {
   /** The box's clock when the read was made. */
@@ -41,6 +54,8 @@ export interface BoxHealth {
     lowSince: string | null;
     reclaimable: LeftoverSurvey;
   };
+  /** Null when payments are not stopped for the clock, or the fiscal seat never stops them. */
+  clockStop: ClockStopView | null;
 }
 
 export interface BoxHealthReaders {
@@ -69,6 +84,68 @@ export interface BoxHealthReaders {
   /** Boot's own test of whether the payments migration set is applied. */
   paymentsEnabled: boolean;
   canFree: () => boolean;
+  /** Called inside a write-lock turn. Absent, `clockStop` is null. */
+  clockStop?: (db: Database) => Promise<ClockStopView | null>;
+}
+
+/** The person's display name; null when no person row has the id. */
+export async function displayNameOf(tx: Transaction, personId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ displayName: persons.displayName })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  return row?.displayName ?? null;
+}
+
+/** The seat's raw clock stop at the box's reading; null when the seat has no `clockStopState`. */
+export async function readClockStopState(
+  tx: Transaction,
+  deps: {
+    backend: Pick<FiscalBackend, "clockStopState">;
+    witnesses: () => readonly ClockWitness[];
+    clock: Pick<TrustedClock, "now">;
+  },
+): Promise<ClockStopState | null> {
+  if (deps.backend.clockStopState === undefined) return null;
+  // Before the reading: a witness noted after it would be left out as taken after it.
+  const witnesses = deps.witnesses();
+  const { instant, offsetMinutes } = deps.clock.now();
+  return deps.backend.clockStopState(tx, { instant, offsetMinutes }, witnesses);
+}
+
+/** Reads the seat's clock stop at the box's reading, with device labels and the restart's person
+ * named. A seat with no `clockStopState` has none. */
+export function clockStopReader(deps: {
+  backend: Pick<FiscalBackend, "clockStopState">;
+  witnesses: () => readonly ClockWitness[];
+  clock: Pick<TrustedClock, "now">;
+}): (db: Database) => Promise<ClockStopView | null> {
+  return async (db) => {
+    const state = await readClockStopState(db, deps);
+    if (state === null) return null;
+    const ids = [...state.proof.devices, ...state.contrary.devices].map((witness) => witness.id);
+    const labelRows =
+      ids.length === 0
+        ? []
+        : await db
+            .select({ id: devices.id, label: devices.label })
+            .from(devices)
+            .where(inArray(devices.id, ids));
+    const labels = new Map(labelRows.map((row) => [row.id, row.label]));
+    const labelled = (list: ClockWitness[]): ClockStopWitness[] =>
+      list.map((witness) => ({ ...witness, label: labels.get(witness.id) ?? null }));
+    let restart: ClockStopView["restart"] = null;
+    if (state.restart !== null) {
+      const { personId, restartedAt, clockAt } = state.restart;
+      restart = { personName: await displayNameOf(db, personId), restartedAt, clockAt };
+    }
+    return {
+      ...state,
+      restart,
+      proof: { authority: state.proof.authority, devices: labelled(state.proof.devices) },
+      contrary: { authority: state.contrary.authority, devices: labelled(state.contrary.devices) },
+    };
+  };
 }
 
 const OUTBOX_WROTE = new Error("the fiscal outbox read changed rows");
@@ -105,6 +182,10 @@ export async function collectBoxHealth(
       : null;
     return { lastAt: last?.issuedAt ?? null, printers: printerRows, readers: readerRows };
   });
+
+  const readClockStop = readers.clockStop;
+  const clockStop =
+    readClockStop === undefined ? null : await db.withWriteLock(() => readClockStop(db));
 
   const filing = readers.notices.filing();
   const noticeLog = readers.notices.log;
@@ -171,5 +252,6 @@ export async function collectBoxHealth(
       lowSince: readers.space.current().lowSince?.toISOString() ?? null,
       reclaimable,
     },
+    clockStop,
   };
 }
