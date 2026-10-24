@@ -72,6 +72,7 @@ export interface BackupRepairSession {
   recoveryId: string;
   preview: RecoveryBackupPreview;
   binding: OperationBinding;
+  input?: unknown;
 }
 export interface BackupRepairResumeSession extends BackupRepairSession {
   input: unknown;
@@ -112,6 +113,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     discard(): Promise<void>;
     request: BackupRepairOpenRequest | BackupRepairResumeRequest;
     resumed?: boolean;
+    sourceReopened?: boolean;
     publicationDigest?: string;
     rebuildSource?: "archive" | "stream";
     selected: Selected;
@@ -127,7 +129,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     evidence?: Record<string, unknown>;
   };
   let active: Entry | undefined;
-  const scopes = new AsyncLocalStorage<{ hold: FirstSetupHold; db: Database }>();
+  const scopes = new AsyncLocalStorage<{ hold: FirstSetupHold; db: Database; placing?: true }>();
   let expiry: NodeJS.Timeout | undefined;
   const drop = async () => {
     const old = active;
@@ -205,6 +207,26 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       conflict(),
     );
     if (!info.isFile() || info.isSymbolicLink()) conflict();
+  };
+  const emptyTarget = async (record: NonNullable<Entry["record"]>) => {
+    for (const directory of Object.values(record.target.target))
+      if ((await canonicalFirstSetupDirectory(directory)) !== directory) conflict();
+    const allowedVenue = new Set([
+      "venue.lock",
+      "venue.lock-journal",
+      "venue.holder.json",
+      "venue.holder.json.partial",
+      "first-setup-resolutions",
+    ]);
+    if ((await readdir(record.target.target.venueDir)).some((name) => !allowedVenue.has(name)))
+      conflict();
+    const allowedState = new Set([
+      "module-preparation-state.json",
+      "module-evidence",
+      "first-setup-resolutions",
+    ]);
+    if ((await readdir(record.target.target.stateDir)).some((name) => !allowedState.has(name)))
+      conflict();
   };
   const evidence = async (
     entry: Entry,
@@ -289,9 +311,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       sourceId: entry.selected.sourceId,
       activationSourceId: entry.selected.copy.sourceId!,
       binding: entry.session.binding,
-      input: null,
+      input: entry.record?.input ?? null,
       retainedEvidenceDigest: createHash("sha256").update(JSON.stringify(documents)).digest("hex"),
-      phase: "prepared" as const,
+      phase: entry.record?.phase ?? ("prepared" as const),
     };
     if (entry.record !== undefined && !isDeepStrictEqual(entry.record, next)) conflict();
     entry.record = next;
@@ -329,6 +351,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       database: () => scopes.getStore()?.db ?? ownerRequired(),
       readRecoveryFacts: async (binding, db) => {
         await recheck(entry);
+        if (entry.sourceReopened && scopes.getStore()?.placing !== true)
+          await emptyTarget(entry.record!);
         await evidence(entry, false);
         const current = await module.operations!.readRecoveryState!(db, node, binding);
         return {
@@ -366,13 +390,28 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         });
       if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
         throw new AppError("module.operation_invalid", { module: "core" });
-      if (request.recoveryId !== undefined) conflict();
-      const recoveryId = randomUUID();
+      const recoveryId = request.recoveryId ?? randomUUID();
       const before = await turn(async () => {
         if (disposed) ownerRequired();
         if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
-        if ((await options.workspace.read()).length !== 0) conflict();
-        return { digest: await options.workspace.inspect(recoveryId), generation: ++generation };
+        const records = await options.workspace.read();
+        const record = records.at(-1);
+        if (
+          request.recoveryId === undefined
+            ? records.length !== 0
+            : record === undefined ||
+              record.target.recoveryId !== recoveryId ||
+              !["prepared", "placement-started"].includes(record.phase) ||
+              !isDeepStrictEqual(request.observation, {
+                inspectionId: record.observation.inspectionId,
+                revision: record.observation.revision,
+                ownerGeneration: record.observation.ownerGeneration,
+              })
+        )
+          conflict();
+        const digest = await options.workspace.inspect(recoveryId);
+        if (record !== undefined && digest !== record.observation.originalsDigest) conflict();
+        return { digest, generation: ++generation, record };
       });
       // Decrypted copies and key derivation stay outside the retained roots and their action lock.
       const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
@@ -401,7 +440,13 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             target: options.environment,
           });
         const { node } = readArtifactIdentity(selected.copy.secretEntries);
-        const proofBinding: OperationBinding = {
+        if (
+          before.record !== undefined &&
+          (selected.sourceId !== before.record.sourceId ||
+            selected.copy.sourceId !== before.record.activationSourceId)
+        )
+          conflict();
+        const proofBinding: OperationBinding = before.record?.binding ?? {
           module: "core",
           action: "restore",
           eventId: randomUUID(),
@@ -419,6 +464,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         if (preview.fiscalSelection === undefined)
           throw new AppError("module.operation_invalid", { module: "core" });
         const binding = { ...proofBinding, module: preview.fiscalSelection.module };
+        if (before.record !== undefined && !isDeepStrictEqual(binding, before.record.binding))
+          conflict();
         return await turn(async () => {
           if (disposed) ownerRequired();
           if (
@@ -427,7 +474,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             (await options.workspace.inspect(recoveryId)) !== before.digest ||
             (await fingerprint(selected!)) !== sourceDigest ||
             (await verifier(selected!)) !== provedVerifier ||
-            (await options.workspace.read()).length !== 0
+            !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record)
           )
             conflict();
           await drop();
@@ -436,6 +483,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             recoveryId,
             binding,
             preview,
+            ...(before.record === undefined ? {} : { input: structuredClone(before.record.input) }),
           };
           const entry: Entry = {
             session,
@@ -448,9 +496,62 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             provedVerifier,
           };
           active = entry;
-          touch(entry);
-          owned = false;
-          return structuredClone(session);
+          try {
+            if (before.record !== undefined) {
+              const { version, sequence, previousRecordDigest, recordedAt, ...record } =
+                before.record;
+              void version;
+              void sequence;
+              void previousRecordDigest;
+              void recordedAt;
+              entry.record = record;
+              entry.sourceReopened = true;
+              await emptyTarget(record);
+              await preparation(entry);
+              const path = join(
+                dirname(dirname(record.target.target.stateDir)),
+                "publication.json",
+              );
+              if (
+                await lstat(path).then(
+                  () => true,
+                  (error: unknown) => {
+                    if (
+                      typeof error === "object" &&
+                      error !== null &&
+                      "code" in error &&
+                      error.code === "ENOENT"
+                    )
+                      return false;
+                    throw new AppError("setup.attempt_uncertain", {});
+                  },
+                )
+              ) {
+                const saved = await readBackupRepairPublication(record);
+                const published = await openBackupRepairPublication(
+                  record,
+                  saved.ciphertext,
+                  request.nodeRecoverySecret,
+                  entry.selected.copy.databasePath,
+                  {
+                    ...options.sources,
+                    environment: options.environment,
+                    stateDir: join(scratch, "publication-state"),
+                    stagingDir: join(scratch, "publication-staging"),
+                  },
+                );
+                if (!isDeepStrictEqual(published.preview, session.preview)) conflict();
+                entry.publicationDigest = saved.digest;
+              }
+              await recheck(entry);
+            }
+            touch(entry);
+            owned = false;
+            return structuredClone(session);
+          } catch (error) {
+            await drop();
+            throw error;
+          }
         });
       } finally {
         if (owned) await discard();
@@ -618,8 +719,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       return turn(async (hold) => {
         const entry = await admitted(sessionId);
         if (
-          entry.publicationDigest !== undefined ||
-          (entry.record !== undefined && entry.record.phase !== "prepared")
+          (entry.publicationDigest !== undefined && !entry.sourceReopened) ||
+          (entry.record !== undefined &&
+            entry.record.phase !== "prepared" &&
+            !(entry.sourceReopened && entry.record.phase === "placement-started"))
         )
           conflict();
         const service = await preparation(entry);
@@ -636,6 +739,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             result.status === "selected" &&
             "input" in result
           ) {
+            if (
+              entry.publicationDigest !== undefined &&
+              !isDeepStrictEqual(result.input, entry.record!.input)
+            )
+              conflict();
             const next = { ...entry.record!, input: structuredClone(result.input) };
             await options.workspace.append(next);
             entry.record = next;
@@ -657,7 +765,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           entry.record === undefined ||
           (entry.resumed
             ? !["placement-started", "restored"].includes(entry.record.phase)
-            : entry.record.phase !== "prepared") ||
+            : entry.record.phase !== "prepared" &&
+              !(entry.sourceReopened && entry.record.phase === "placement-started")) ||
           entry.record.input === null ||
           !isDeepStrictEqual(entry.record.input, input)
         )
@@ -672,20 +781,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         await evidence(entry, false, false, !entry.resumed);
         const target = entry.record.target.target;
         if (!entry.resumed) {
-          const allowed = new Set([
-            "venue.lock",
-            "venue.lock-journal",
-            "venue.holder.json",
-            "venue.holder.json.partial",
-            "first-setup-resolutions",
-          ]);
-          if ((await readdir(target.venueDir)).some((name) => !allowed.has(name))) conflict();
-          const allowedState = new Set([
-            "module-preparation-state.json",
-            "module-evidence",
-            "first-setup-resolutions",
-          ]);
-          if ((await readdir(target.stateDir)).some((name) => !allowedState.has(name))) conflict();
+          await emptyTarget(entry.record);
           await refuseIfArchiveSourceLive({
             validated: entry.selected.copy,
             stateDir: target.stateDir,
@@ -707,9 +803,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           );
           entry.publicationDigest = material.digest;
           await recheck(entry);
-          const started = { ...entry.record, phase: "placement-started" as const };
-          await options.workspace.append(started);
-          entry.record = started;
+          if (entry.record.phase !== "placement-started") {
+            const started = { ...entry.record, phase: "placement-started" as const };
+            await options.workspace.append(started);
+            entry.record = started;
+          }
         } else {
           await existingTarget(entry.record);
           const current = await openVenueDatabase(target.venueDir);
@@ -735,7 +833,16 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         }
         const store = await openVenueDatabase(entry.working!);
         try {
-          await scopes.run({ hold, db: store.venue }, async () => {
+          await scopes.run({ hold, db: store.venue, placing: true }, async () => {
+            const runner = entry.preparation!.runner(
+              input,
+              entry.resumed ? undefined : { refresh: true },
+            );
+            const check = runner.checkBeforePlacement;
+            runner.checkBeforePlacement = async (context) => {
+              if (!entry.resumed) await emptyTarget(entry.record!);
+              await check?.(context);
+            };
             await writeValidated(entry.selected.copy, {
               ...target,
               stagingDir: dirname(entry.selected.copy.databasePath),
@@ -744,10 +851,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               environment: options.environment,
               log: options.log,
               rebuildSource: entry.rebuildSource,
-              withModuleOperations: entry.preparation!.runner(
-                input,
-                entry.resumed ? undefined : { refresh: true },
-              ),
+              withModuleOperations: runner,
               ...(entry.resumed ? { resumeOperation: entry.session.binding } : {}),
             });
           });

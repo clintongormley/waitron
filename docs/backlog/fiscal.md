@@ -1489,7 +1489,10 @@ backup keeps that history. Unknown files at either target root refuse placement.
 and page remain disabled. The internal archive and bucket restart path requires new named-node
 proof and exact module commitment, then replays the same operation without replacing counters
 advanced after proof. Encrypted publication material retains the original secret entries without
-saving the node proof. Uncommitted or unreadable targets remain retained and refused. Recovery of
-uncommitted work after restart, Cloud placement, listener/page qualification and whole-branch review
+saving the node proof. A prepared operation without a target database can reopen the same archive
+or signed bucket generation with fresh named-node proof. It keeps the saved event and target,
+checks clocks again and preserves any sealed selection. This also covers a placement-started
+record whose target folders contain no database or unrecognised top-level file. A database or
+unrecognised top-level file is retained and refuses this path. Cloud placement, listener/page qualification and whole-branch review
 remain open. The plan is
 `docs/superpowers/plans/2026-10-24-a731-repair-backup.md`.
