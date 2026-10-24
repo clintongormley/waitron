@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { commands, page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
@@ -12,7 +12,7 @@ import {
 } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, serveLogos, servedLogo } from "./test-helpers.js";
 import "./theme-preview.js";
 
 declare module "vitest/browser" {
@@ -40,39 +40,7 @@ const panel = (el: Preview, mode: "light" | "dark") =>
 
 const L = mediaTestReference("lucia.png");
 const D = mediaTestReference("lucia-dark.png");
-// A 400x100 image the test server serves from apps/dashboard. The presentation route only answers
-// addresses under /media/; the browser drops the "..", so the image really loads and the box can
-// measure and plate it.
-const WIDE = "/media/../test/images/wide-logo.svg";
-const served: Record<string, string> = { [L]: WIDE, [D]: `${WIDE}?dark` };
-
-beforeEach(() => {
-  const original = globalThis.fetch.bind(globalThis);
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
-    const url = new URL(String(input), location.origin);
-    if (url.pathname !== "/media/presentations") return original(input, options);
-    const references = (url.searchParams.get("references") ?? "").split(",");
-    const images = Object.fromEntries(
-      references
-        .filter((reference) => served[reference] !== undefined)
-        .map((reference) => {
-          const address = served[reference]!;
-          return [
-            reference,
-            {
-              id: reference,
-              revision: 1,
-              source: address,
-              square: address,
-              till: address,
-              display: address,
-            },
-          ];
-        }),
-    );
-    return new Response(JSON.stringify({ images }));
-  });
-});
+serveLogos([L, D]);
 
 const strip = (el: Preview, mode: "light" | "dark") =>
   panel(el, mode).querySelector<HTMLElement>(".strip")!;
@@ -321,19 +289,34 @@ it("each panel starts with a banner strip: the logo, then the legal name", async
   }
   const light = await loaded(el, "light");
   const dark = await loaded(el, "dark");
-  expect(light.getAttribute("light")).toBe(served[L]);
-  expect(dark.getAttribute("light")).toBe(served[L]);
+  expect(light.getAttribute("light")).toBe(servedLogo(L, "display"));
+  expect(dark.getAttribute("light")).toBe(servedLogo(L, "display"));
   expect(dark.hasAttribute("dark")).toBe(false);
   expect(boxOf(dark).hasAttribute("data-plate")).toBe(true);
   expect(boxOf(light).hasAttribute("data-plate")).toBe(false);
+});
+
+it("the strip's divider runs from one edge of the panel to the other", async () => {
+  const { el } = await mountWithLogo({ light: L });
+  for (const mode of ["light", "dark"] as const) {
+    const box = panel(el, mode);
+    const outer = box.getBoundingClientRect();
+    const line = strip(el, mode).getBoundingClientRect();
+    expect([line.left, line.right]).toEqual([
+      outer.left + box.clientLeft,
+      outer.right - box.clientLeft,
+    ]);
+  }
 });
 
 it("with a dark image the dark panel draws it, unplated", async () => {
   const { el } = await mountWithLogo({ light: L, dark: D });
   const dark = await loaded(el, "dark");
   const light = await loaded(el, "light");
-  expect(dark.shadowRoot!.querySelector("img")!.getAttribute("src")).toBe(served[D]);
-  expect(light.shadowRoot!.querySelector("img")!.getAttribute("src")).toBe(served[L]);
+  expect(dark.shadowRoot!.querySelector("img")!.getAttribute("src")).toBe(servedLogo(D, "display"));
+  expect(light.shadowRoot!.querySelector("img")!.getAttribute("src")).toBe(
+    servedLogo(L, "display"),
+  );
   expect(boxOf(dark).hasAttribute("data-plate")).toBe(false);
 });
 

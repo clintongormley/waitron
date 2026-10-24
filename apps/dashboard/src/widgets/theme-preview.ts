@@ -75,7 +75,8 @@ export class ThemePreview extends LitElement {
         align-items: center;
         gap: var(--wt-space-3);
         min-width: 0;
-        padding-block-end: var(--wt-space-3);
+        margin-inline: calc(-1 * var(--wt-space-3));
+        padding: 0 var(--wt-space-3) var(--wt-space-3);
         border-bottom: 1px solid var(--wt-color-border);
       }
       .lockup {

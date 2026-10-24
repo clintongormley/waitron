@@ -296,6 +296,16 @@ describe("the saved card's Logo row", () => {
     },
   );
 
+  it("draws the Dark screens line in the muted text colour", async () => {
+    setLocale("en-GB");
+    const el = await mount(withLogo({ light: L }));
+    const line = q(el, "[data-test=saved-logo] .logo-note")!;
+    expect(text(line)).toBe(t("appearance.logo_dark_plate"));
+    const muted = computedColour(el.shadowRoot!, "var(--wt-color-text-muted)");
+    expect(getComputedStyle(line).color).toBe(muted);
+    expect(getComputedStyle(q(el, "[data-test=saved-theme]")!).color).not.toBe(muted);
+  });
+
   it("a saved logo the library no longer resolves still reads its Dark screens line", async () => {
     setLocale("en-GB");
     const asked = vi

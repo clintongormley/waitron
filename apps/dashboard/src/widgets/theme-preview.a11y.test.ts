@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, type ThemeChoices, type ThemeLogo } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { en, es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget, serveLogos } from "./test-helpers.js";
 import "./theme-preview.js";
 
 type Preview = HTMLElementTagNameMap["dashboard-theme-preview"];
@@ -28,9 +28,6 @@ const drafts: Record<string, ThemeChoices> = {
 
 const L = mediaTestReference("lucia.png");
 const D = mediaTestReference("lucia-dark.png");
-// A 400x100 image the test server serves from apps/dashboard; the browser drops the "..".
-const WIDE = "/media/../test/images/wide-logo.svg";
-const served: Record<string, string> = { [L]: WIDE, [D]: `${WIDE}?dark` };
 const logos: Record<string, ThemeLogo | null> = {
   "no logo": null,
   "a logo": { light: L },
@@ -48,27 +45,9 @@ const logoCases = (["light", "dark"] as const).flatMap((mode) =>
   ),
 );
 
-beforeEach(() => {
-  const original = globalThis.fetch.bind(globalThis);
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
-    const url = new URL(String(input), location.origin);
-    if (url.pathname !== "/media/presentations") return original(input, options);
-    const references = (url.searchParams.get("references") ?? "").split(",");
-    const images = Object.fromEntries(
-      references
-        .filter((reference) => served[reference] !== undefined)
-        .map((reference) => {
-          const address = served[reference]!;
-          const shapes = { source: address, square: address, till: address, display: address };
-          return [reference, { id: reference, revision: 1, ...shapes }];
-        }),
-    );
-    return new Response(JSON.stringify({ images }));
-  });
-});
+serveLogos([L, D]);
 
 afterEach(() => {
-  vi.restoreAllMocks();
   cleanupWidgets();
   setLocale("en-GB");
 });

@@ -127,7 +127,9 @@ function logoRow(logo: ThemeLogo | null): TemplateResult | string {
       light=${liveMediaImage(logo.light, "display")}
       dark=${logo.dark ? liveMediaImage(logo.dark, "display") : nothing}
     ></wt-venue-logo>
-    ${t(logo.dark ? "appearance.logo_dark_own" : "appearance.logo_dark_plate")}`;
+    <span class="logo-note"
+      >${t(logo.dark ? "appearance.logo_dark_own" : "appearance.logo_dark_plate")}</span
+    >`;
 }
 
 const HAND_FIELDS: ReadonlySet<unknown> = new Set(
@@ -196,6 +198,9 @@ export class LookCard extends LitElement {
         margin: var(--wt-space-4) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .logo-note {
+        color: var(--wt-color-text-muted);
       }
       .kept {
         margin: 0;
