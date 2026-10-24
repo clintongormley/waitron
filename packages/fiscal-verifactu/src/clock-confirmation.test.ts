@@ -267,6 +267,46 @@ describe("two agreeing devices from two addresses", () => {
   });
 });
 
+describe("agreeing devices must also agree with each other", () => {
+  it("one a minute behind the box and one a minute ahead are no proof, and write nothing", async () => {
+    await sale(T);
+    const witnesses = [
+      device("till-1", R - 30 * S, -M, "10.0.0.1"),
+      device("till-2", R - 20 * S, M, "10.0.0.2"),
+    ];
+    const state = await stateAt(R, witnesses);
+    expect(state!.proof).toBe("none");
+    expect(state!.agreeing).toEqual({ authority: null, devices: [] });
+    await confirmsNothing(R, witnesses);
+    expect(await sale(R)).toBe("clock.behind_chain");
+  });
+
+  it("control: half a minute behind and half a minute ahead are proof", async () => {
+    await sale(T);
+    const witnesses = [
+      device("till-1", R - 30 * S, -30 * S, "10.0.0.1"),
+      device("till-2", R - 20 * S, 30 * S, "10.0.0.2"),
+    ];
+    expect((await stateAt(R, witnesses))!.proof).toBe("ready");
+    expect((await confirm(R, witnesses)).confirmation!.source).toBe("devices");
+    expect(await sale(R)).toBe("recorded");
+  });
+
+  it("of three at a minute behind, level and a minute ahead, two that agree are the proof", async () => {
+    await sale(T);
+    const behind = device("till-1", R - 40 * S, -M, "10.0.0.1");
+    const level = device("till-2", R - 30 * S, 0, "10.0.0.2");
+    const ahead = device("till-3", R - 20 * S, M, "10.0.0.3");
+    const witnesses = [behind, level, ahead];
+    const state = await stateAt(R, witnesses);
+    expect(state!.proof).toBe("ready");
+    expect(state!.agreeing.devices).toEqual([level, ahead]);
+    await confirm(R, witnesses);
+    const [row] = await rows();
+    expect((row!.proof as { devices: unknown }).devices).toEqual(storedDevices([level, ahead]));
+  });
+});
+
 describe("devices at one address", () => {
   it("the same two device ids from one address are not proof", async () => {
     await sale(T);

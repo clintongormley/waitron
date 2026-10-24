@@ -105,13 +105,24 @@ function witnessesOf(readings: readonly Reading[]): ClockWitness[] {
   return readings.map((reading) => reading.witness);
 }
 
+function latestDevices(readings: readonly Reading[]): Reading[] {
+  return latestPerAddress(
+    latestPerId(readings.filter((reading) => reading.witness.kind === "device")),
+  );
+}
+
+/** The largest group of two or more devices, one per address, that each agree with the box and
+ * every pair of which agree with each other; chosen as `devicesDisagreeing` is, else empty. */
+export function agreeingDeviceGroup(witnesses: readonly ClockWitness[]): ClockWitness[] {
+  const readings = witnesses.flatMap((witness) => readable(witness) ?? []);
+  return witnessesOf(largestDeviceGroup(latestDevices(readings).filter(agrees)));
+}
+
 /** A witness whose times are unreadable, or whose uncertainty is negative or not finite, counts
  * neither way. */
 export function judgeClockWitnesses(witnesses: readonly ClockWitness[]): ClockWitnessVerdict {
   const readings = witnesses.flatMap((witness) => readable(witness) ?? []);
-  const devices = latestPerAddress(
-    latestPerId(readings.filter((reading) => reading.witness.kind === "device")),
-  );
+  const devices = latestDevices(readings);
   const authorities = readings.filter((reading) => reading.witness.kind === "authority");
   return {
     agreeing: witnessesOf([...devices.filter(agrees), ...latestPerId(authorities.filter(agrees))]),

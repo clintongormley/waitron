@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ClockWitness } from "./clock-witnesses.js";
-import { CLOCK_WITNESS_MARGIN_MS, judgeClockWitnesses } from "./clock-witnesses.js";
+import {
+  agreeingDeviceGroup,
+  CLOCK_WITNESS_MARGIN_MS,
+  judgeClockWitnesses,
+} from "./clock-witnesses.js";
 
 const BOX_AT_MS = Date.parse("2027-03-14T10:00:00.000Z");
 const HOUR_MS = 3_600_000;
@@ -376,6 +380,88 @@ describe("devices at one address", () => {
       "10.0.0.5",
       "10.0.0.6",
     ]);
+  });
+});
+
+describe("the group of agreeing devices", () => {
+  it("is empty for two devices each a minute off the box, one either way", () => {
+    expect(agreeingDeviceGroup([device("behind", -60_000), device("ahead", 60_000)])).toEqual([]);
+  });
+
+  it("holds two devices each half a minute off the box, one either way", () => {
+    expect(ids(agreeingDeviceGroup([device("behind", -30_000), device("ahead", 30_000)]))).toEqual([
+      "ahead",
+      "behind",
+    ]);
+  });
+
+  it("holds two devices exactly a minute apart, and not two a millisecond more", () => {
+    expect(ids(agreeingDeviceGroup([device("a", -30_000), device("b", 30_000)]))).toHaveLength(2);
+    expect(agreeingDeviceGroup([device("a", -30_000), device("b", 30_001)])).toEqual([]);
+  });
+
+  it("of three a minute behind, level and a minute ahead, takes the pair seen latest", () => {
+    const behind = device("behind", -60_000, -10_000);
+    const level = device("level", 0);
+    const ahead = device("ahead", 60_000, 10_000);
+    expect(ids(agreeingDeviceGroup([behind, level, ahead]))).toEqual(["ahead", "level"]);
+    const behindLatest = device("behind", -60_000, 10_000);
+    const aheadEarly = device("ahead", 60_000, -10_000);
+    expect(ids(agreeingDeviceGroup([aheadEarly, level, behindLatest]))).toEqual([
+      "behind",
+      "level",
+    ]);
+  });
+
+  it("takes the larger group over a smaller one", () => {
+    expect(
+      ids(
+        agreeingDeviceGroup([
+          device("x", -55_000, 50_000),
+          device("y", -55_000, 50_000),
+          device("a", 30_000),
+          device("b", 30_000),
+          device("c", 30_000),
+        ]),
+      ),
+    ).toEqual(["a", "b", "c"]);
+  });
+
+  it("needs two: one agreeing device is no group", () => {
+    expect(agreeingDeviceGroup([device("a", 0)])).toEqual([]);
+  });
+
+  it("leaves out devices that disagree with the box and every authority reading", () => {
+    expect(agreeingDeviceGroup([device("a", 0), device("far", 61_000), authority(0, 500)])).toEqual(
+      [],
+    );
+  });
+
+  it("counts devices at one address once", () => {
+    expect(
+      agreeingDeviceGroup([at("10.0.0.5", device("a", 0)), at("10.0.0.5", device("b", 0, 1_000))]),
+    ).toEqual([]);
+    expect(
+      ids(agreeingDeviceGroup([at("10.0.0.5", device("a", 0)), at("10.0.0.6", device("b", 0))])),
+    ).toEqual(["a", "b"]);
+  });
+
+  it("lets a tie at one address keep the disagreeing reading, in either order", () => {
+    const agreed = at("10.0.0.5", device("a", 0));
+    const contrary = at("10.0.0.5", device("b", HOUR_MS));
+    const elsewhere = at("10.0.0.6", device("c", 0));
+    for (const tie of [
+      [agreed, contrary],
+      [contrary, agreed],
+    ]) {
+      expect(agreeingDeviceGroup([...tie, elsewhere])).toEqual([]);
+    }
+  });
+
+  it("does not count a device whose latest reading disagrees", () => {
+    expect(
+      agreeingDeviceGroup([device("a", 0, -10_000), device("a", 61_000, 10_000), device("b", 0)]),
+    ).toEqual([]);
   });
 });
 

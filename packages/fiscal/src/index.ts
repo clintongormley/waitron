@@ -8,7 +8,11 @@ export type {
   TrustedTimeAnchor,
   TrustedTimeSource,
 } from "./clock.js";
-export { CLOCK_WITNESS_MARGIN_MS, judgeClockWitnesses } from "./clock-witnesses.js";
+export {
+  agreeingDeviceGroup,
+  CLOCK_WITNESS_MARGIN_MS,
+  judgeClockWitnesses,
+} from "./clock-witnesses.js";
 export type { ClockWitness, ClockWitnessVerdict } from "./clock-witnesses.js";
 export type {
   FiscalBackendDeps,

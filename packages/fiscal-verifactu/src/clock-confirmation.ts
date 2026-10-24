@@ -1,7 +1,7 @@
 import "./errors.js";
 import { desc, eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { judgeClockWitnesses } from "@waitron/fiscal";
+import { agreeingDeviceGroup, judgeClockWitnesses } from "@waitron/fiscal";
 import type {
   ClockConfirmation,
   ClockConfirmRequest,
@@ -62,10 +62,10 @@ async function judge(
   const taken = verdict.agreeing.filter(
     (witness) => Date.parse(witness.boxAt) <= reading.instant.getTime(),
   );
-  const devices = taken.filter((witness) => witness.kind === "device");
+  const group = new Set(agreeingDeviceGroup(taken));
   const agreeing = {
     authority: taken.find((witness) => witness.kind === "authority") ?? null,
-    devices: devices.length >= 2 ? [...devices] : [],
+    devices: taken.filter((witness) => group.has(witness)),
   };
   const contrary = {
     authority: verdict.authorityDisagrees[0] ?? null,
