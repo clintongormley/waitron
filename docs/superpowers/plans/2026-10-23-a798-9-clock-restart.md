@@ -518,6 +518,35 @@ check), each in the task named:
   `box-status-screen.test.ts` and `box-status-screen.a11y.test.ts` (Tasks R12a, R12b);
 - `apps/server/src/boot.box-health.test.ts:160` and `apps/server/src/box-health.test.ts:333`: the
   old `offer` (Task R10);
+- the Box status view's old shape in `apps/server/src/clock-confirm.route.test.ts` (Task R10,
+  controller addition after the R8b review; lines at `4f704c235` → after). The view no longer has
+  `offer`, `restart` or witness lists under `proof`: `proof` is now the seat's status
+  (`none | contrary | ready | confirmed`), the agreeing witnesses are `agreeing`, and the covering
+  confirmation is `confirmation { id, source, personName, confirmedAt }`. Each old `offer` value
+  maps to the status that shows the same state: `no_proof` → `"none"`, `offered` → `"ready"`,
+  `restarted` → `"confirmed"`, and `restart` → `confirmation`. `:915` "shows devices with no row of
+  their own with no label": `proof.devices` → `agreeing.devices`, the same two `null` labels.
+  `:949` and `:957` "stops payments again, and says the clock stepped back…": `offer "restarted"`
+  → `proof "confirmed"`; `offer "stepped_back"` → `{ proof: "none", confirmation: null }`.
+  `stepped_back` is gone. The behaviour it pinned, that a stop behind a sale made after the
+  confirmation is no longer covered by it, is now shown by the view: the stop has no covering
+  confirmation and no proof. The refused sale and its `clock.behind_chain` code are kept.
+  `:977-1010` "shows no proof, then the two tills…, then who restarted payments": the first
+  `toMatchObject` swaps `offer: "no_proof"`, `restart: null` and `proof: {authority, devices}` for
+  `proof: "none"`, `confirmation: null` and `agreeing: {authority, devices}`; every other key is
+  unchanged. The tills' step goes from `offer "offered"` and `restart` null to `proof "ready"` and
+  `confirmation` null, with the same two labelled devices read from `agreeing.devices`. The
+  administrator's step goes from `offer "restarted"` and `restart { personName: "Mario",
+  restartedAt, clockAt }` to `proof "confirmed"` and `confirmation { id: the route's
+  confirmationId, source: "admin", personName: "Mario", confirmedAt }`, the same instant as before.
+  `:1029-1030` "reads the clock stop on a full disk…": `offer "offered"` → `proof "ready"` and
+  `proof.devices` → `agreeing.devices`, the same labels and the change still waiting.
+  `:1060-1091` "shows a restart whose person has no row with no name": the stub state is rebuilt in
+  the seat's new shape (a covering `confirmation` whose `personId` has no row, in place of
+  `restart`), and `.restart` `{ personName: null, restartedAt, clockAt }` → `.confirmation`
+  `{ id, source: "admin", personName: null, confirmedAt }`. The person still has no name. The
+  brief did not name this fifth case, because it was green until the view stopped reading
+  `restart`.
 - `packages/fiscal-verifactu/src/backup-verification-history.test.ts`: two new "rejects internally
   damaged" rows, nothing changed (Task R1b).
 - a lift's row now stores `proof.closing` and records `clock.records_misdated` (Task R4b, R5; lines

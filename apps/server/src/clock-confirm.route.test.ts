@@ -912,7 +912,7 @@ it("shows devices with no row of their own with no label", async () => {
   noteDevice(stop, 0);
   noteDevice(stop, 0);
   // Devices with no row of their own are still shown, with no label.
-  expect((await clockStopOf(stop))?.proof.devices.map((device) => device.label)).toEqual([
+  expect((await clockStopOf(stop))?.agreeing.devices.map((device) => device.label)).toEqual([
     null,
     null,
   ]);
@@ -946,7 +946,7 @@ it("stops payments again, and says the clock stepped back, when the clock reads 
   expect((await confirm(stop, mario.cookie)).status).toBe(200);
   const sold = await cashSale(venue.appAt(clockAt(stop.behind)));
   expect(sold.status).toBe(200);
-  expect((await clockStopOf(stop))?.offer).toBe("restarted");
+  expect((await clockStopOf(stop))?.proof).toBe("confirmed");
 
   const back = stop.behind - 30 * MINUTE;
   stop.setClock(back);
@@ -954,7 +954,7 @@ it("stops payments again, and says the clock stepped back, when the clock reads 
 
   expect(refused.status).toBe(409);
   expect(refused.json).toMatchObject({ code: "clock.behind_chain" });
-  expect((await clockStopOf(stop))?.offer).toBe("stepped_back");
+  expect(await clockStopOf(stop)).toMatchObject({ proof: "none", confirmation: null });
 });
 
 it("drops the till's clock notice once payments are restarted", async () => {
@@ -974,38 +974,40 @@ it("shows no proof, then the two tills that proved the clock, then who restarted
 
   const none = await clockStopOf(stop);
   expect(none).toMatchObject({
-    offer: "no_proof",
+    proof: "none",
     recordId: stop.recordId,
     clockAt: new Date(stop.behind).toISOString(),
     lastRecordAt: record.at.toISOString(),
     gapMs: 10 * MINUTE,
-    restart: null,
-    proof: { authority: null, devices: [] },
+    confirmation: null,
+    agreeing: { authority: null, devices: [] },
     contrary: { authority: null, devices: [] },
   });
 
   for (const cookie of [venue.cookie, venue.cookie2])
     expect((await equipmentRead(stop, cookie, stop.behind)).status).toBe(200);
   const offered = await clockStopOf(stop);
-  expect(offered?.offer).toBe("offered");
-  expect(offered?.restart).toBeNull();
+  expect(offered?.proof).toBe("ready");
+  expect(offered?.confirmation).toBeNull();
   expect(
-    offered?.proof.devices
+    offered?.agreeing.devices
       .map(({ id, label }) => ({ id, label }))
       .sort((a, b) => a.label!.localeCompare(b.label!)),
   ).toEqual([
     { id: venue.deviceId, label: "Barra" },
     { id: venue.device2Id, label: "Terraza" },
   ]);
-  expect(offered?.proof.devices[0]).toMatchObject({ kind: "device" });
+  expect(offered?.agreeing.devices[0]).toMatchObject({ kind: "device" });
 
-  expect((await confirm(stop, mario.cookie)).status).toBe(200);
+  const confirmed = await confirm(stop, mario.cookie);
+  expect(confirmed.status).toBe(200);
   const restarted = await clockStopOf(stop);
-  expect(restarted?.offer).toBe("restarted");
-  expect(restarted?.restart).toEqual({
+  expect(restarted?.proof).toBe("confirmed");
+  expect(restarted?.confirmation).toEqual({
+    id: confirmed.json.confirmationId,
+    source: "admin",
     personName: "Mario",
-    restartedAt: new Date(stop.behind).toISOString(),
-    clockAt: new Date(stop.behind).toISOString(),
+    confirmedAt: new Date(stop.behind).toISOString(),
   });
 });
 
@@ -1026,8 +1028,8 @@ it("reads the clock stop on a full disk with a change waiting, and leaves the ch
 
     const health = await stop.health(db);
 
-    expect(health.clockStop).toMatchObject({ offer: "offered", recordId: stop.recordId });
-    expect(health.clockStop?.proof.devices.map((device) => device.label).sort()).toEqual([
+    expect(health.clockStop).toMatchObject({ proof: "ready", recordId: stop.recordId });
+    expect(health.clockStop?.agreeing.devices.map((device) => device.label).sort()).toEqual([
       "Barra",
       "Terraza",
     ]);
@@ -1066,14 +1068,15 @@ it("shows a restart whose person has no row with no name", async () => {
     lastRecordOffsetMinutes: 60,
     recordId: "record-1",
     gapMs: 10 * MINUTE,
-    restart: {
-      personId: randomUUID(),
-      restartedAt: "2026-10-22T09:00:00.000Z",
-      clockAt: "2026-10-22T09:00:00.000Z",
-    },
-    offer: "restarted" as const,
-    proof: { authority: null, devices: [] },
+    proof: "confirmed" as const,
+    agreeing: { authority: null, devices: [] },
     contrary: { authority: null, devices: [] },
+    confirmation: {
+      id: "confirmation-1",
+      source: "admin" as const,
+      personId: randomUUID(),
+      confirmedAt: "2026-10-22T09:00:00.000Z",
+    },
   };
   const read = clockStopReader({
     backend: { clockStopState: async () => state },
@@ -1081,10 +1084,11 @@ it("shows a restart whose person has no row with no name", async () => {
     clock: systemClock(),
   });
 
-  expect((await read(venue.db))?.restart).toEqual({
+  expect((await read(venue.db))?.confirmation).toEqual({
+    id: "confirmation-1",
+    source: "admin",
     personName: null,
-    restartedAt: "2026-10-22T09:00:00.000Z",
-    clockAt: "2026-10-22T09:00:00.000Z",
+    confirmedAt: "2026-10-22T09:00:00.000Z",
   });
 });
 
