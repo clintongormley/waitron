@@ -1,6 +1,6 @@
 # A980 slice S2a1: a staff member downloads their own data (server side)
 
-**Status: plan, 2026-10-24. Nothing is built.** Revised the same day after the plan review (its
+**Status: plan, 2026-10-24. Nothing was built when this was written.** Revised the same day after the plan review (its
 rulings I1–I3, M4–M10, W1–W4 are folded in below). 2026-10-24: built on
 `feat/a980-s2a1-own-download`. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4.2 (the
@@ -194,7 +194,9 @@ Left for later, on purpose:
      (`fflate/esm/index.mjs:1902-1905` uses `getHours()` and friends; in the experiment a `10:15Z`
      time read back as `12:15` on a machine in Madrid summer time). The box's process zone is not
      the venue's, and we do not correct it: the entry time is cosmetic, and the file name carries
-     the venue's date (decision 8).
+     the venue's date (decision 8). 2026-10-24, after review: a `.pdf` entry is stored uncompressed
+     (level 0), and the entry time is held within 1980–2099, fflate's range, while the file name
+     keeps the real date.
 
 7. **The route, its address and its answer.**
    - `GET /management-api/me/personal-data/export`, beside the existing self-service reads under
@@ -269,7 +271,7 @@ Left for later, on purpose:
      (`nodes.location_id → locations.time_zone`; `nodes.location_id` is
      `packages/db/src/schema/nodes.ts:22-25`) by `civilDateOf` (`packages/reporting/src/business-day.ts:122-135`,
      already a dependency of the server). A missing node row or an unknown zone falls back to UTC,
-     the same fallback as `readVenueTimeZone` (`apps/server/src/venue-time-zone.ts:5-19`); a missing
+     the same fallback as `readVenueTimeZone` (`knownZone` in `apps/server/src/venue-time-zone.ts`); a missing
      node row also leaves the subject's `locationId` null. The location and zone are read in the
      snapshot transaction. On a mirror the node is the mirror's own (`boot.ts:2062`); if the copied
      database holds no row for it, the download is dated in UTC.
@@ -528,7 +530,10 @@ export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8A
 ```
 
 `archiveFileName` validates `timeZone` the way `readVenueTimeZone` does and uses UTC when it is
-unknown; S3 reuses both functions for an invoice customer.
+unknown; S3 reuses both functions for an invoice customer. 2026-10-24, after review:
+`archiveFileName` no longer checks the zone; its caller passes it through `knownZone`
+(`apps/server/src/venue-time-zone.ts`), as the route does, and the unknown-zone case is a route
+test.
 
 1. Tests first:
    - the names of decision 8, one case each, including `person` for an empty result and the
