@@ -3189,19 +3189,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](backlog/printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
 
 - **A department's receipt logo save re-checks only the image's revision, not its id** — found in
-  A841 slice 7's review, read, not run. The theme logo save compares both, because an image deleted
-  and uploaded again under the same name during a save is a different image
-  (`apps/server/src/theme-logo.ts`, `recheckThemeLogo`); `apps/server/src/department-receipt-api.ts`
-  compares `revision` alone.
+  A841 slice 7's review, read, not run.
+  [Detail](backlog/printers.md#a-departments-receipt-logo-save-re-checks-only-the-images-revision-not-its-id)
 
 - **A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split
   its two readers** — believed from A841 slice 7's review, not run through a receipt.
-  `packages/media/src/images.ts` reads a department's logo with SQLite's `json_extract`, which takes
-  the first of two equal keys, while JavaScript takes the last, and reads a key spelled `logo` plus
-  a NUL character as `$.logo` (measured: SQLite 3.54.0, `{"logo\u0000":"fake","logo":"real"}` gives
-  `fake` there and `real` in JavaScript), and `validateReceiptFields` (`packages/venue-service/src/configuration-transfer.ts`) does
-  not look at the logo. A copied theme with a repeated key is refused
-  (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
+  [Detail](backlog/printers.md#a-copied-department-receipt-that-names-logo-twice-or-once-more-as-logou0000-may-split-its-two-readers)
 
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.

@@ -651,6 +651,25 @@ only the app keeps from deletion; no trigger protects it either.
   - The printer name dialog is titled "Add a printer" when its button says Enable — seen and not
     changed.
 
+## A department's receipt logo save re-checks only the image's revision, not its id
+
+- **A department's receipt logo save re-checks only the image's revision, not its id** — found in
+  A841 slice 7's review, read, not run. The theme logo save compares both, because an image deleted
+  and uploaded again under the same name during a save is a different image
+  (`apps/server/src/theme-logo.ts`, `recheckThemeLogo`); `apps/server/src/department-receipt-api.ts`
+  compares `revision` alone.
+
+## A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split its two readers
+
+- **A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split
+  its two readers** — believed from A841 slice 7's review, not run through a receipt.
+  `packages/media/src/images.ts` reads a department's logo with SQLite's `json_extract`, which takes
+  the first of two equal keys, while JavaScript takes the last, and reads a key spelled `logo` plus
+  a NUL character as `$.logo` (measured: SQLite 3.54.0, `{"logo\u0000":"fake","logo":"real"}` gives
+  `fake` there and `real` in JavaScript), and `validateReceiptFields` (`packages/venue-service/src/configuration-transfer.ts`) does
+  not look at the logo. A copied theme with a repeated key is refused
+  (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
+
 ## Decisions and deliberate limits
 
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
