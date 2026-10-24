@@ -231,10 +231,13 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
   describe("the check of the box's clock with this device", () => {
     const STOPPED = health({ clockStop: { ...PROOF_READY.clockStop!, proof: "none" } });
 
-    async function mountCheck(clockChallenge: ReturnType<typeof vi.fn>) {
+    async function mountCheck(
+      clockChallenge: ReturnType<typeof vi.fn>,
+      clockConfirm: ReturnType<typeof vi.fn> = vi.fn(),
+    ) {
       const spy = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-22T18:10:20.000Z"));
       onTestFinished(() => spy.mockRestore());
-      const api = Object.assign(stubApi(STOPPED), { clockChallenge, clockConfirm: vi.fn() });
+      const api = Object.assign(stubApi(STOPPED), { clockChallenge, clockConfirm });
       const mounted = await mountWidget<BoxStatusScreen>(
         "dashboard-box-status-screen",
         { api, canOpen: () => true, canConfirmClock: true },
@@ -256,6 +259,11 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     it.each([
       ["agreeing times", challenged, "clock-check-confirm"],
       [
+        "differing times",
+        () => vi.fn().mockResolvedValue({ challengeId: "ch-1", boxAt: "2026-10-22T18:05:00.000Z" }),
+        "clock-check-close",
+      ],
+      [
         "the box's own screen refused",
         () =>
           vi.fn().mockRejectedValue({
@@ -271,6 +279,30 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
       await expectNoA11yViolations(host);
     });
+
+    it.each([
+      ["contrary_proof", "clock-check-confirm"],
+      ["differs", "clock-check-close"],
+    ] as const)(
+      "renders the dialog accessibly after Confirm is refused %s",
+      async (reason, drawn) => {
+        const refused = vi
+          .fn()
+          .mockRejectedValue({ code: "clock.confirm_refused", params: { reason } });
+        const { el, host } = await mountCheck(challenged(), refused);
+        await userEvent.click(
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-check]")!,
+        );
+        await flush(el);
+        await userEvent.click(
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-check-confirm]")!,
+        );
+        await flush(el);
+        expect(refused).toHaveBeenCalledOnce();
+        expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
+        await expectNoA11yViolations(host);
+      },
+    );
   });
 
   it("renders accessibly with a stop whose proof is found", async () => {

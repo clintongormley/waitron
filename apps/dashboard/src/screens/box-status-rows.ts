@@ -101,7 +101,7 @@ export function boxStatusRows(
         : notices.length > 0 ||
             rowAlerts.length > 0 ||
             clockOff(id, health) ||
-            clockUnconfirmed(id, health)
+            clockAfterStop(id, health)
           ? "attention"
           : "ok";
     return {
@@ -122,7 +122,7 @@ function clockOff(id: PartId, health: BoxHealth): boolean {
 }
 
 /** Payments go on, but on a clock a confirmation covers or nothing has confirmed yet. */
-function clockUnconfirmed(id: PartId, health: BoxHealth): boolean {
+function clockAfterStop(id: PartId, health: BoxHealth): boolean {
   return (
     id === "clock" && (health.clockStop?.proof === "confirmed" || health.clockCheckWaiting !== null)
   );
@@ -167,13 +167,16 @@ function factLine(id: PartId, health: BoxHealth, notices: readonly Notice[]): st
         : t("box_status.no_problems");
     case "clock": {
       const authority = health.clock.authority;
-      if (authority.state === "unknown") return t("box_status.clock.unknown");
-      return authority.state === "warning"
-        ? alertMessage(
-            "fiscal.clock_drift",
-            { seconds: Math.abs(authority.driftSeconds) },
-            currentLocale(),
-          )
+      if (authority.state === "warning")
+        return alertMessage(
+          "fiscal.clock_drift",
+          { seconds: Math.abs(authority.driftSeconds) },
+          currentLocale(),
+        );
+      // The tax agency's last comparison can predate the stop, so it cannot vouch for the clock.
+      if (health.clockCheckWaiting !== null) return t("box_status.clock.unconfirmed");
+      return authority.state === "unknown"
+        ? t("box_status.clock.unknown")
         : t("box_status.clock.ok");
     }
     default:
@@ -291,7 +294,7 @@ function clockDetails(clock: BoxHealth["clock"]): string[] {
   return details;
 }
 
-/** The agreeing witnesses' lines of a payment stop. */
+/** The agreeing witnesses' lines of a payment stop, and the disagreeing ones while they win. */
 function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
   const details: string[] = [];
   const { authority, devices } = stop.agreeing;
@@ -308,6 +311,21 @@ function clockStopProof(stop: NonNullable<BoxHealth["clockStop"]>): string[] {
         : fill("box_status.clock.proof.devices", { count: String(devices.length), time }),
     );
   }
+  if (stop.proof !== "contrary") return details;
+  const contrary = stop.contrary;
+  if (contrary.authority !== null)
+    details.push(
+      fill("box_status.clock.contrary.authority", {
+        time: formatIsoMinute(contrary.authority.boxAt),
+      }),
+    );
+  for (const device of contrary.devices)
+    details.push(
+      fill("box_status.clock.contrary.device", {
+        name: device.label ?? t("box_status.clock.contrary.unnamed_device"),
+        time: formatIsoMinute(device.witnessAt),
+      }),
+    );
   return details;
 }
 

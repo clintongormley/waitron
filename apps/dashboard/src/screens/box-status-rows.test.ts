@@ -785,6 +785,49 @@ describe("the Clock row while payments are stopped for the clock", () => {
     ]);
   });
 
+  it("names each clock that disagrees while the proof is against the box", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: NO_WITNESS,
+        contrary: {
+          authority: AUTHORITY,
+          devices: [device("d4", DEVICE_READ, "Terrace"), device("d5", CHECKED, null)],
+        },
+      }),
+    });
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      `Tax agency: does not match (checked ${formatIsoMinute(CHECKED)})`,
+      `Terrace: does not match (read ${formatIsoMinute(DEVICE_READ)})`,
+      `A device: does not match (read ${formatIsoMinute(CHECKED)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+    setLocale("es");
+    const spanish = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: NO_WITNESS,
+        contrary: { authority: AUTHORITY, devices: [device("d5", CHECKED, null)] },
+      }),
+    });
+    expect(spanish.details.slice(2, 4)).toEqual([
+      es["box_status.clock.contrary.authority"].replace("{time}", formatIsoMinute(CHECKED)),
+      es["box_status.clock.contrary.device"]
+        .replace("{name}", es["box_status.clock.contrary.unnamed_device"])
+        .replace("{time}", formatIsoMinute(CHECKED)),
+    ]);
+  });
+
+  it("names no disagreeing clock once the proof is no longer against the box", () => {
+    const contrary = { authority: AUTHORITY, devices: [device("d4", DEVICE_READ, "Terrace")] };
+    const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop({ contrary }) });
+    expect(clock.details.join(" ")).not.toContain("does not match");
+  });
+
   it("says other clocks disagree while the proof is against the box", () => {
     const clock = clockRow({
       notices: [CLOCK_BEHIND],
@@ -819,6 +862,9 @@ describe("the Clock row while payments are stopped for the clock", () => {
         }),
       );
     }
+    expect(clockRow({ clockStop: confirmedStop("elapsed") }).details.at(-1)).toBe(
+      `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by a check recorded on the box.`,
+    );
   });
 
   it("says a check waits, amber, once a stop has ended with nothing confirming the clock", () => {
@@ -828,6 +874,24 @@ describe("the Clock row while payments are stopped for the clock", () => {
       compared(),
       `The payment stop that began at ${formatIsoMinute(STOP_BEGAN)} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.`,
     ]);
+  });
+
+  it("does not call the clock correct while a check waits, in each language", () => {
+    expect(clockRow({ clockCheckWaiting: { since: STOP_BEGAN } }).line).toBe(
+      "Not confirmed since the payment stop",
+    );
+    expect(
+      clockRow({ clockStop: confirmedStop("admin"), clockCheckWaiting: { since: STOP_BEGAN } })
+        .line,
+    ).toBe("Not confirmed since the payment stop");
+    setLocale("es");
+    expect(clockRow({ clockCheckWaiting: { since: STOP_BEGAN } }).line).toBe(
+      es["box_status.clock.unconfirmed"],
+    );
+  });
+
+  it("still calls a confirmed clock correct when no check waits", () => {
+    expect(clockRow({ clockStop: confirmedStop("devices") }).line).toBe("Correct");
   });
 
   it("shows the waiting check alone in place of a confirmed stop's line", () => {

@@ -177,8 +177,9 @@ en unos 15 segundos.
 
 A veces los otros relojes dicen lo contrario: dos o más cajas o terminales coinciden entre sí en que
 el reloj del equipo va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
-la parada. Entonces la fila dice **Otros relojes dicen que la hora del equipo está mal.**, y nada
-puede confirmar la hora, ni siquiera un administrador. La respuesta de Hacienda cuenta primero: cuando
+la parada. Entonces la fila muestra cada reloj que no coincide, por ejemplo **Hacienda: no coincide
+(comprobado 2026-10-23 21:12)** o **Barra: no coincide (marcó 2026-10-23 21:13)**, y dice **Otros
+relojes dicen que la hora del equipo está mal.** Nada puede confirmar la hora, ni siquiera un administrador. La respuesta de Hacienda cuenta primero: cuando
 coincide con el equipo, los dispositivos que no coinciden no paran los cobros. El equipo solo guarda
 el desacuerdo de Hacienda en su memoria, así que lo olvida si el propio equipo se reinicia durante
 la parada; mientras Hacienda siga sin coincidir, vuelve con la siguiente respuesta.
@@ -194,6 +195,10 @@ del equipo marca … Este dispositivo marca …**
 - Cuando se diferencian en más de un minuto, dice **Tu dispositivo y el equipo se diferencian en más
   de un minuto. Si tu dispositivo tiene la hora bien, la del equipo está mal: conecta el equipo a
   internet para que la corrija.** y solo ofrece **Cerrar**.
+
+Al pulsar **Confirmar**, el equipo vuelve a leer su hora. Si entonces se diferencian en más de un
+minuto, el diálogo muestra las horas nuevas con el mismo mensaje y solo **Cerrar**. Si mientras tanto
+ya se ha confirmado la hora, dice **La hora del equipo ya está confirmada.**
 
 El equipo da por buena la hora de tu dispositivo, así que comprueba antes que tu móvil u ordenador
 tiene la hora bien. Por la misma razón, nunca funciona desde la pantalla del propio equipo: ahí la
@@ -226,7 +231,8 @@ lista ni aviso.
 
 La parada también puede terminar sola, porque se puso bien la hora o el reloj llegó a la hora de la
 última venta. El equipo sigue necesitando una confirmación para saber qué ventas tienen la fecha
-mal, así que hasta que la tiene, la fila **Reloj** sigue en ámbar y dice **La parada de cobros que
+mal, así que hasta que la tiene, la fila **Reloj** sigue en ámbar, su línea dice **Sin confirmar desde
+la parada de cobros**, y dice **La parada de cobros que
 empezó a las 2026-10-23 21:10 ha terminado, pero nada ha confirmado aún la hora del equipo. El
 equipo pregunta a Hacienda cada minuto si le envía registros; también pueden confirmarla dos cajas o
 terminales, o el dispositivo de un administrador.** Mientras tanto se sigue cobrando. Un equipo que

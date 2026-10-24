@@ -167,7 +167,9 @@ within about 15 seconds.
 
 Sometimes the other clocks say the opposite: two or more tills or handhelds agree with each other
 that the box's clock is more than a minute off, or the tax agency's time disagrees with it during
-the stop. The row then says **Other clocks say the box's clock is wrong.**, and nothing can confirm
+the stop. The row then lists each clock that disagrees, for example **Tax agency: does not match
+(checked 2026-10-23 21:12)** or **Bar till: does not match (read 2026-10-23 21:13)**, and says
+**Other clocks say the box's clock is wrong.** Nothing can confirm
 the clock, not even an administrator. The tax agency's answer counts first: when it agrees with the
 box, disagreeing devices do not hold payments back. The box keeps the tax agency's disagreement
 only in its memory, so it forgets it if the box itself restarts during the stop; while the tax
@@ -183,6 +185,10 @@ dialog that shows both times: **The box's clock says … This device says …**
 - When they differ by more than a minute, it says **Your device and the box differ by more than a
   minute. If your device is right, the box's clock is wrong: connect the box to the internet so it
   can correct it.** and offers only **Close**.
+
+When you press **Confirm**, the box reads its own time again. If the two then differ by more than a
+minute, the dialog shows the new times with the same message and only **Close**. If the clock has
+been confirmed in the meantime, it says **The box's clock has already been confirmed.**
 
 The box takes your device's word for the time, so check that your phone or computer shows the
 right time first. For the same reason this never works from the box's own screen: there, the
@@ -213,7 +219,8 @@ was dated wrongly, there is no list and no alert.
 
 The stop can also end by itself, because the clock was set right or reached the time of the last
 sale. The box still needs a confirmation to know which sales were dated wrongly, so until it gets
-one the **Clock** row stays amber and says **The payment stop that began at 2026-10-23 21:10 has
+one the **Clock** row stays amber, its line says **Not confirmed since the payment stop**, and it
+says **The payment stop that began at 2026-10-23 21:10 has
 ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when
 it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.**
 Payments carry on meanwhile. A box that sends records to the tax agency keeps asking it for its time

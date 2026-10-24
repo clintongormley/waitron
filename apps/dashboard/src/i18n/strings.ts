@@ -3260,6 +3260,7 @@ export const en = {
   "box_status.readers.none": "No card readers set up",
   "box_status.no_problems": "No problems reported",
   "box_status.clock.ok": "Correct",
+  "box_status.clock.unconfirmed": "Not confirmed since the payment stop",
   "box_status.clock.unknown": "Not yet compared with the tax agency",
   "box_status.clock.compared": "Compared with the tax agency at {time} · {seconds} s apart",
   "box_status.clock.compared_ahead":
@@ -3272,6 +3273,9 @@ export const en = {
   "box_status.clock.stop.none":
     "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), or two tills or handhelds.",
   "box_status.clock.stop.contrary": "Other clocks say the box's clock is wrong.",
+  "box_status.clock.contrary.authority": "Tax agency: does not match (checked {time})",
+  "box_status.clock.contrary.device": "{name}: does not match (read {time})",
+  "box_status.clock.contrary.unnamed_device": "A device",
   "box_status.clock.stop.ready": "Proof found: payments restart within a few seconds.",
   "box_status.clock.stop.confirmed": "Payments restarted at {time}, confirmed by {who}.",
   "box_status.clock.check_waiting":
@@ -3288,6 +3292,7 @@ export const en = {
   "box_status.clock.admin.refused.same_machine":
     "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
   "box_status.clock.admin.refused.challenge": "The check took too long. Try again.",
+  "box_status.clock.admin.refused.not_stopped": "The box's clock has already been confirmed.",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -3311,6 +3316,7 @@ export const en = {
   "box_status.other_alerts_one": "1 other alert",
   "box_status.read_error": "The box's status could not be read.",
   "box_status.misdated.title": "Sales dated wrongly",
+  "box_status.misdated.table_range": "Sales dated wrongly from {from} to {to}",
   "box_status.misdated.line":
     "Go through these with your tax adviser, then mark the alert as handled in the bell.",
   "box_status.misdated.col_invoice": "Invoice",
@@ -6628,6 +6634,7 @@ export const es: Record<StringKey, string> = {
   "box_status.readers.none": "No hay lectores configurados",
   "box_status.no_problems": "Sin problemas",
   "box_status.clock.ok": "Correcto",
+  "box_status.clock.unconfirmed": "Sin confirmar desde la parada de cobros",
   "box_status.clock.unknown": "Aún no se ha comparado con Hacienda",
   "box_status.clock.compared": "Comparado con Hacienda el {time} · diferencia {seconds} s",
   "box_status.clock.compared_ahead":
@@ -6640,6 +6647,9 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.stop.none":
     "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.",
   "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del equipo está mal.",
+  "box_status.clock.contrary.authority": "Hacienda: no coincide (comprobado {time})",
+  "box_status.clock.contrary.device": "{name}: no coincide (marcó {time})",
+  "box_status.clock.contrary.unnamed_device": "Un dispositivo",
   "box_status.clock.stop.ready": "Hay prueba: los cobros se reanudan en unos segundos.",
   "box_status.clock.stop.confirmed": "Cobros reanudados a las {time}, confirmado por {who}.",
   "box_status.clock.check_waiting":
@@ -6658,6 +6668,7 @@ export const es: Record<StringKey, string> = {
     "Esta pantalla es el propio equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.",
   "box_status.clock.admin.refused.challenge":
     "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
+  "box_status.clock.admin.refused.not_stopped": "La hora del equipo ya está confirmada.",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",
@@ -6683,6 +6694,7 @@ export const es: Record<StringKey, string> = {
   "box_status.other_alerts_one": "1 aviso más",
   "box_status.read_error": "No se ha podido leer el estado del equipo.",
   "box_status.misdated.title": "Ventas con fecha incorrecta",
+  "box_status.misdated.table_range": "Ventas con fecha incorrecta de {from} a {to}",
   "box_status.misdated.line": "Revísalas con tu asesor y después marca el aviso como resuelto.",
   "box_status.misdated.col_invoice": "Factura",
   "box_status.misdated.col_at": "Hora registrada",

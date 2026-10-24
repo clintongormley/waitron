@@ -40,6 +40,7 @@ const CONFIRM_REFUSALS = {
   contrary_proof: "box_status.clock.stop.contrary",
   differs: "box_status.clock.admin.differ",
   challenge: "box_status.clock.admin.refused.challenge",
+  not_stopped: "box_status.clock.admin.refused.not_stopped",
 } as const satisfies Record<string, StringKey>;
 
 interface ClockReading {
@@ -394,14 +395,20 @@ export class BoxStatusScreen extends LitElement {
     if (this.confirmingClock) return;
     this.confirmingClock = true;
     this.clockCheckError = "";
+    let fresh: ClockReading | null = null;
     try {
       // A fresh challenge, answered at once: the one the dialog opened with may have expired.
-      const { challengeId } = await this.#readBoxTime();
+      const { challengeId, reading } = await this.#readBoxTime();
+      fresh = reading;
       await this.api.clockConfirm({ challengeId, deviceAt: Date.now() });
       this.clockCheckOpen = false;
       this.api.liveData.refresh();
     } catch (error) {
-      this.#clockRefused(error);
+      if (fresh !== null && refusalReason(error) === "differs") {
+        // The verdict under the fresh times says it, so the footer does not say it twice.
+        this.clockReading = { ...fresh, agrees: false };
+        this.api.liveData.refresh();
+      } else this.#clockRefused(error);
     } finally {
       this.confirmingClock = false;
     }
@@ -689,7 +696,7 @@ export class BoxStatusScreen extends LitElement {
     return open.partial && partial !== undefined ? pickLocale(partial, currentLocale()) : null;
   }
 
-  #renderMisdatedEntry(open: MisdatedOpenView): TemplateResult | null {
+  #renderMisdatedEntry(open: MisdatedOpenView, severalTables: boolean): TemplateResult | null {
     const sentence = this.#misdatedSentence(open);
     const records = open.unconfirmed ? undefined : this.misdatedLists?.get(open.confirmationId);
     // The answer leaves out a list it cannot give; a failed read is said once, under the section.
@@ -710,7 +717,14 @@ export class BoxStatusScreen extends LitElement {
           ? nothing
           : html`<wt-data-table
               data-test="misdated-table"
-              aria-label=${t("box_status.misdated.title")}
+              aria-label=${
+                severalTables && open.to !== undefined
+                  ? fill("box_status.misdated.table_range", {
+                      from: formatIsoMinute(open.from),
+                      to: formatIsoMinute(open.to),
+                    })
+                  : t("box_status.misdated.title")
+              }
               .rows=${records}
               .columns=${this.#misdatedColumns()}
               .rowKey=${(record: MisdatedRecordView) => record.recordId}
@@ -720,8 +734,11 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #renderMisdated(health: BoxHealth): TemplateResult | typeof nothing {
+    const tables = health.misdatedOpen.filter(
+      (open) => !open.unconfirmed && this.misdatedLists?.has(open.confirmationId) === true,
+    ).length;
     const entries = health.misdatedOpen
-      .map((open) => this.#renderMisdatedEntry(open))
+      .map((open) => this.#renderMisdatedEntry(open, tables > 1))
       .filter((entry) => entry !== null);
     if (entries.length === 0 && !this.misdatedFailed) return nothing;
     return html`<section class="misdated" data-test="misdated">
@@ -827,14 +844,17 @@ function atSeconds(ms: number): string {
   return `${formatIsoMinute(at.toISOString())}:${String(at.getSeconds()).padStart(2, "0")}`;
 }
 
-function clockRefusal(error: unknown): string {
-  const code = codeOf(error);
+function refusalReason(error: unknown): string | null {
+  if (codeOf(error) !== "clock.confirm_refused") return null;
   const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
-  return code === "clock.confirm_refused" &&
-    typeof reason === "string" &&
-    Object.hasOwn(CONFIRM_REFUSALS, reason)
+  return typeof reason === "string" ? reason : null;
+}
+
+function clockRefusal(error: unknown): string {
+  const reason = refusalReason(error);
+  return reason !== null && Object.hasOwn(CONFIRM_REFUSALS, reason)
     ? t(CONFIRM_REFUSALS[reason as keyof typeof CONFIRM_REFUSALS])
-    : codeMessage(code);
+    : codeMessage(codeOf(error));
 }
 
 declare global {

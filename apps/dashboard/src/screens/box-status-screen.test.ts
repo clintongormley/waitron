@@ -15,6 +15,7 @@ import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
 import { goToLabel } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
@@ -864,29 +865,101 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(confirm.getAttribute("variant")).toBe("primary");
   });
 
-  it.each([
-    ["differs", "box_status.clock.admin.differ"],
-    ["challenge", "box_status.clock.admin.refused.challenge"],
-  ] as const)("words a %s refusal", async (reason, key) => {
+  it("shows the fresh reading as differing, with only Close, when the box refuses it as differs", async () => {
     deviceNow("2026-10-22T18:10:20.000Z");
-    const el = await mountClock(
-      clockApi(
-        { clockStop: STOPPED },
-        { clockConfirm: vi.fn().mockRejectedValue(REFUSED(reason)) },
-      ),
+    const FRESH = "2026-10-22T18:08:00.000Z";
+    const api = clockApi(
+      { clockStop: STOPPED },
+      {
+        clockChallenge: vi
+          .fn()
+          .mockResolvedValueOnce({ challengeId: "ch-1", boxAt: BOX_AT })
+          .mockResolvedValue({ challengeId: "ch-2", boxAt: FRESH }),
+        clockConfirm: vi.fn().mockRejectedValue(REFUSED("differs")),
+      },
     );
+    const el = await mountClock(api);
     await open(el);
     await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
     await flush(el);
-    expect(footerMessage(el)).toBe(t(key));
+    expect(dialog(el).open).toBe(true);
+    expect(text(q(el, "[data-test=clock-check-times]"))).toBe(
+      `The box's clock says ${atSeconds(FRESH)}. This device says ${atSeconds("2026-10-22T18:10:20.000Z")}.`,
+    );
+    expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(t("box_status.clock.admin.differ"));
+    expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+    expect(footerMessage(el)).toBe("");
+    expect(api.liveData.refresh).toHaveBeenCalled();
   });
+
+  it("says the clock is already confirmed when the box finds nothing left to confirm, in each language", async () => {
+    for (const locale of ["en", "es"]) {
+      setLocale(locale);
+      deviceNow("2026-10-22T18:10:20.000Z");
+      const el = await mountClock(
+        clockApi(
+          { clockStop: STOPPED },
+          { clockConfirm: vi.fn().mockRejectedValue(REFUSED("not_stopped")) },
+        ),
+      );
+      await open(el);
+      await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
+      await flush(el);
+      expect(footerMessage(el)).toBe(
+        locale === "en"
+          ? "The box's clock has already been confirmed."
+          : es["box_status.clock.admin.refused.not_stopped"],
+      );
+      cleanupWidgets();
+    }
+  });
+
+  it.each([
+    [20_000, 40_000, true],
+    [20_000, 40_001, false],
+    [120_000, -60_000, true],
+    [120_002, -60_001, false],
+  ] as const)(
+    "judges a %i ms round trip sent %i ms after the box's time by the difference plus half the trip",
+    async (roundTripMs, sentAfterBoxMs, agrees) => {
+      let now = Date.parse(BOX_AT) + sentAfterBoxMs;
+      const spy = vi.spyOn(Date, "now").mockImplementation(() => now);
+      onTestFinished(() => spy.mockRestore());
+      const clockChallenge = vi.fn(async () => {
+        now += roundTripMs;
+        return { challengeId: "ch-1", boxAt: BOX_AT };
+      });
+      const el = await mountClock(clockApi({ clockStop: STOPPED }, { clockChallenge }));
+      await open(el);
+      expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
+        t(agrees ? "box_status.clock.admin.agree" : "box_status.clock.admin.differ"),
+      );
+    },
+  );
+
+  it.each([["challenge", "box_status.clock.admin.refused.challenge"]] as const)(
+    "words a %s refusal",
+    async (reason, key) => {
+      deviceNow("2026-10-22T18:10:20.000Z");
+      const el = await mountClock(
+        clockApi(
+          { clockStop: STOPPED },
+          { clockConfirm: vi.fn().mockRejectedValue(REFUSED(reason)) },
+        ),
+      );
+      await open(el);
+      await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
+      await flush(el);
+      expect(footerMessage(el)).toBe(t(key));
+    },
+  );
 
   it("words any other refusal by its code", async () => {
     deviceNow("2026-10-22T18:10:20.000Z");
     const el = await mountClock(
       clockApi(
         { clockStop: STOPPED },
-        { clockConfirm: vi.fn().mockRejectedValue(REFUSED("not_stopped")) },
+        { clockConfirm: vi.fn().mockRejectedValue(REFUSED("a_new_reason")) },
       ),
     );
     await open(el);
@@ -1046,6 +1119,49 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       [t("box_status.misdated.title"), t("box_status.misdated.line"), sentence].join(" "),
     );
     expect(api.clockMisdated).not.toHaveBeenCalled();
+  });
+
+  it("labels each table by its times when two are drawn, and by the title when one is", async () => {
+    const SECOND = {
+      ...OPEN,
+      confirmationId: "c3",
+      from: "2026-10-22T20:00:00.000Z",
+      to: "2026-10-22T20:10:00.000Z",
+    };
+    const lists: ClockMisdatedView = {
+      lists: [
+        ...LISTS.lists,
+        {
+          confirmationId: "c3",
+          records: [
+            { recordId: "r3", series: "T1", number: 9, at: SECOND.from, offsetMinutes: 120 },
+          ],
+        },
+      ],
+    };
+    const labels = (el: BoxStatusScreen) =>
+      qa(el, "[data-test=misdated-table]").map((table) => table.getAttribute("aria-label"));
+    const one = await mount(withOpen([OPEN], lists));
+    expect(labels(one.el)).toEqual(["Sales dated wrongly"]);
+    cleanupWidgets();
+    const two = await mount(withOpen([OPEN, SECOND], lists));
+    const range = (open: MisdatedOpenView) => [
+      formatIsoMinute(open.from),
+      formatIsoMinute(open.to!),
+    ];
+    expect(labels(two.el)).toEqual(
+      [OPEN, SECOND].map((open) => {
+        const [from, to] = range(open);
+        return `Sales dated wrongly from ${from} to ${to}`;
+      }),
+    );
+    cleanupWidgets();
+    setLocale("es");
+    const spanish = await mount(withOpen([OPEN, SECOND], lists));
+    const [from, to] = range(OPEN);
+    expect(labels(spanish.el)[0]).toBe(
+      es["box_status.misdated.table_range"].replace("{from}", from!).replace("{to}", to!),
+    );
   });
 
   it("draws a table for a found list beside a sentence for one that cannot tell", async () => {
