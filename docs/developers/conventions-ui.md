@@ -1533,7 +1533,7 @@ stops it" in the same file.
 `servers`, and `setupRevision`, a hash of every field but `servers` (`setupRevisionOf`).
 `/api/menu-state` names the same revision. When a poll names one the till has not applied,
 `#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values:
-receipt languages and invoice language, venue name and tax id, onboarding intent, bump mode,
+receipt languages and invoice language, venue name and tax id, onboarding intent,
 courses, card provider, card readers and the default reader, tips, the simplified-invoice
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
 once a read sent after it has been applied. A draft line keeps the course it was given, name
@@ -1570,17 +1570,19 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
   till offers; applied mid-session they could take away the screen the person is on, and at those
   three points the till already lays itself out again (the default A768 chose; whether to change it is backlog A787).
 - A kitchen screen in device mode: nothing, the theme included. Nobody signs in on it, so it runs
-  no poll (backlog A785); it takes the theme in use when it starts.
+  no poll (backlog A785); it takes the theme in use when it starts. A station's bump mode is not a
+  setup value: each order of its queue carries it (`StationQueueGroup.bumpMode`), read every 15 s
+  in both modes (`REFRESH_MS`, `apps/till/src/screens/till-station-screen.ts`).
 
 Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup
-revision"): courses reach an open table, bump mode reaches the station screen, the
+revision"): courses reach an open table, the
 same revision reads nothing, a failed read is tried again, and an older read never undoes a newer
 one across a poll, a profile switch, a change of zones and a server switch. The default reader is
 checked only beside a profile switch. No test checks the refresh of the other values in the list
 above; they ride on the same assignment in `#applyVenueSetup`. On the server,
 `apps/server/src/till-api.setup-revision.test.ts` checks that the revision is the same on both
-reads, stays while nothing changes, and moves when a course is added or renamed, when bump mode
-changes, when the theme in use is switched or saved with new choices, and when its logo's light
+reads, stays while nothing changes, and moves when a course is added or renamed, when the
+theme in use is switched or saved with new choices, and when its logo's light
 image is reframed.
 
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till

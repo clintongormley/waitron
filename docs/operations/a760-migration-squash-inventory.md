@@ -383,6 +383,8 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 
 **2026-10-23 (A756 PR 6):** core 0187 adds `order_group_hold_stations` and two `kitchen_stations` columns; venue-service 0068 drops three `service_settings` columns by a rebuild. A squash writes the end state.
 
+**2026-10-24 (A756 PR 7):** core 0188 adds `kitchen_stations.bump_mode`. `locations.bump_mode` is read and written by nothing and is left in place, because dropping it rebuilds `locations`; a squash leaves it out.
+
 ## Removed and superseded material
 
 The applied SQL, rather than a union of historical CREATE statements, determines survival. The following trigger names occurred in CREATE/DROP history and were absent at the end: `category_details_media_image_fk_insert`, `category_details_media_image_fk_update`, `category_details_media_image_fk_parent_delete`, `category_details_media_image_fk_parent_rename`, `device_binding_rule_insert`, `device_binding_rule_update`, `visits_clear_table_status`, `working_orders_clear_table_status`. Do not revive them. Category-image triggers are removed in catalogue `0013` / media `0004`; device binding is removed by core `0119`; party status supersedes the visit/tab forms in core `0020` / `0036`.

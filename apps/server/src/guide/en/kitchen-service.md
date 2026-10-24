@@ -99,12 +99,13 @@ slip when its **Print a slip when sent dishes move table** setting is **Print**;
 on the pass until the order is handed over. Each pass still shows only the stations and service
 zones assigned to it.
 
-You choose when to request cooking from the till. In **Venue settings**, the **Kitchen** tab
-lets you choose whether to mark preparation ready by line or by whole ticket; you no longer choose
-a venue-wide firing mode there. Each prep station sets its own late flags when you add it with
-**Add station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. Each
-prep station also sets how identical dishes print on its tickets and whether it prints held groups
-in advance, under **Identical dishes on a kitchen ticket** and **Print held groups in advance**.
+You choose when to request cooking from the till; there is no venue-wide firing mode. Each prep
+station sets whether its kitchen screen marks preparation done one item at a time or a whole ticket
+at once, under **Done on the screen** when you edit it in **Prep stations**. Each prep station sets
+its own late flags when you add it with **Add station**, and under **Late flags (minutes)** when you
+edit it in **Prep stations**. Each prep station also sets how identical dishes print on its tickets
+and whether it prints held groups in advance, under **Identical dishes on a kitchen ticket** and
+**Print held groups in advance**.
 
 ## Request cooking from the till {#request-cooking}
 

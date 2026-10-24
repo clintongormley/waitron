@@ -114,13 +114,14 @@ mostrador, e imprime un ticket **MOVIDO** si su ajuste **Imprimir un aviso al ca
 platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
 estaciones y zonas de servicio que tiene asignadas.
 
-Tú decides cuándo pedir la preparación desde el terminal. En **Configuración del local**, la
-pestaña **Cocina** permite elegir si se marca como listo cada plato o la comanda completa; ya no se
-elige allí un modo de marcha para todo el local. Cada estación de preparación fija sus propios
-avisos de demora al crearla con **Añadir estación**, y en **Avisos de demora (minutos)** al
-editarla en **Estaciones de preparación**. Cada estación de preparación fija también cómo se
-imprimen los platos iguales en sus comandas y si imprime por adelantado los grupos en espera, en
-**Platos iguales en una comanda de cocina** e **Imprimir por adelantado los grupos en espera**.
+Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
+local. Cada estación de preparación fija si su pantalla de cocina marca un plato cada vez o toda la
+comanda a la vez, en **Marcado en la pantalla** al editarla en **Estaciones de preparación**. Cada
+estación de preparación fija sus propios avisos de demora al crearla con **Añadir estación**, y en
+**Avisos de demora (minutos)** al editarla en **Estaciones de preparación**. Cada estación de
+preparación fija también cómo se imprimen los platos iguales en sus comandas y si imprime por
+adelantado los grupos en espera, en **Platos iguales en una comanda de cocina** e **Imprimir por
+adelantado los grupos en espera**.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 

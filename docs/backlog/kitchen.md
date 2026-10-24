@@ -145,10 +145,9 @@ What is left. The starting decisions are in the plan,
 2026-10-23: A773-1 landed on 2026-10-19 (#1897), so PRs 5–8 are buildable and the #1854 rename
 under Open points is due. PR 5 (late flags on each station) landed on 2026-10-23 (#2023).
 
-- **PR 7 — done on the screen on each station.**
 - **PR 8 — changes after sending, three values, on each station.**
-- **The Kitchen tab goes** in whichever change removes its last control: after PRs 4–8 only fire
-  control is left, which A773-2 removes with `locations.fire_control`.
+- **The Kitchen tab goes** with PR 8, which moves its last setting, Changes after sending (venue
+  service's panel); PR 7 removed its core panel.
 
 The Courses page's "Held until fired" column comes with A773-1 Task 1, which adds it to the shared
 course list widget; nothing is left for A756 there.
@@ -226,6 +225,15 @@ Open points:
   They pass in CI; nobody has checked whether what they assert still depends on HOLD paper
   reaching a station. `line-service-projections.test.ts` failed for this reason and now records
   its stations.
+- From PR 7: the station editor labels the bump mode "Done on the screen", "One item at a time"
+  and "Whole ticket at once" (pictures 04 and 10); the Kitchen tab said "Bump mode", "Per item"
+  and "Whole ticket". Owner FYI, not a blocker: the Spanish is new and built as «Marcado en la
+  pantalla», «Un plato cada vez», «Toda la comanda a la vez» (the coordinator's choice of
+  2026-10-24); say if other words read better.
+- From PR 7: Add station sets no bump mode; a new station starts at one item at a time.
+- From PR 7: on a merged kitchen screen nothing visible says which order bumps as a whole ticket
+  and which one dish at a time — the "Advance ticket" label is read out but not shown; before PR 7
+  every card on one screen behaved alike.
 
 ## A long word in a routing-grid row name still splits at 390 px
 
