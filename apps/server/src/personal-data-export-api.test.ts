@@ -207,6 +207,11 @@ describe("GET /management-api/me/personal-data/export", () => {
     await refused(await ask(mounted()), 403, "person.suspended");
   });
 
+  it("refuses a pending person's live session", async () => {
+    suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, martaId)).run();
+    await refused(await ask(mounted()), 401, "management_session.required");
+  });
+
   it("writes nothing: the session's last-seen time is left as it was", async () => {
     setLastSeen(martaToken, new Date(Date.now() - 5 * 60_000));
     const before = session(martaToken).lastSeenAt;

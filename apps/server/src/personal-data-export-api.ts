@@ -11,7 +11,7 @@ import {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
-import { archiveFileName, zipArchive } from "./download-archive.js";
+import { archiveFileName, knownZone, zipArchive } from "./download-archive.js";
 import type { Logger } from "./logger.js";
 
 export interface PersonalDataExportDeps {
@@ -36,8 +36,6 @@ export const withPersonalDataErrors = createErrorBoundary(
   "personal_data.failed",
 );
 
-/** This node's location and its zone; UTC and no location when the node has no row, UTC when the
- * stored zone is unknown. */
 async function venuePlace(tx: Transaction, nodeId: string) {
   const [row] = await tx
     .select({ locationId: nodes.locationId, timeZone: locations.timeZone })
@@ -45,13 +43,7 @@ async function venuePlace(tx: Transaction, nodeId: string) {
     .innerJoin(locations, eq(locations.id, nodes.locationId))
     .where(eq(nodes.id, nodeId));
   if (row === undefined) return { locationId: null, timeZone: "UTC" };
-  try {
-    const timeZone = new Intl.DateTimeFormat("en-GB", { timeZone: row.timeZone }).resolvedOptions()
-      .timeZone;
-    return { locationId: row.locationId, timeZone };
-  } catch {
-    return { locationId: row.locationId, timeZone: "UTC" };
-  }
+  return { locationId: row.locationId, timeZone: knownZone(row.timeZone) };
 }
 
 /** Does not catch: wrap the call in `withPersonalDataErrors`. */
@@ -83,7 +75,7 @@ export async function sendPersonalData(
   );
   c.header("Cache-Control", "no-store");
   c.header("X-Content-Type-Options", "nosniff");
-  return c.body(Uint8Array.from(body));
+  return c.body(body);
 }
 
 export function mountPersonalDataExportApi(

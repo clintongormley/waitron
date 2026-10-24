@@ -28,7 +28,7 @@ function safeName(label: string): string {
   return safe === "" ? "person" : safe;
 }
 
-function knownZone(timeZone: string): string {
+export function knownZone(timeZone: string): string {
   try {
     return new Intl.DateTimeFormat("en-GB", { timeZone }).resolvedOptions().timeZone;
   } catch {
@@ -41,7 +41,7 @@ export function archiveFileName(label: string, at: Date, timeZone: string): stri
   return `${safeName(label)}-${civilDateOf(at, knownZone(timeZone))}.zip`;
 }
 
-export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8Array {
+export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8Array<ArrayBuffer> {
   const entries: Zippable = {};
   for (const file of files) {
     const data = typeof file.content === "string" ? strToU8(file.content) : file.content;
