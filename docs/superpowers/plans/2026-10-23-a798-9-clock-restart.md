@@ -554,6 +554,11 @@ check), each in the task named:
   `{ id, source: "admin", personName: null, confirmedAt }`. The person still has no name. The
   brief did not name this fifth case, because it was green until the view stopped reading
   `restart`.
+- `apps/server/src/box-health.test.ts:98-125` "answers an empty venue with nothing read and the
+  stubs' values passed through" (Task R10, lines at `4f704c235`): this whole-shape `toEqual` gains
+  `clockCheckWaiting: null` and `misdatedOpen: []` after `clockStop: null`, and every other key is
+  unchanged. It is a whole-shape list gaining entries, the owner's standing exception of
+  2026-09-27. Its `clockStop: null` line is itself branch-only.
 - `packages/fiscal-verifactu/src/backup-verification-history.test.ts`: two new "rejects internally
   damaged" rows, nothing changed (Task R1b).
 - a lift's row now stores `proof.closing` and records `clock.records_misdated` (Task R4b, R5; lines
