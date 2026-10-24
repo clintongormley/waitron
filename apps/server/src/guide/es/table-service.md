@@ -160,10 +160,12 @@ elección al entrar, lo indica y muestra todas las zonas que permite su perfil h
 Una mesa de una zona que este dispositivo no muestra no admite platos nuevos aquí, y sus platos sin
 enviar no se pueden enviar desde este dispositivo. Por eso Waitron no oculta la zona de la mesa que
 tienes abierta mientras tiene platos sin enviar: envíalos o quítalos antes. Si las zonas cambian
-mientras estás en una mesa así, por ejemplo porque un responsable ha cambiado el perfil, el cambio
-espera. Aún puedes enviar o quitar los platos sin enviar de la mesa, pero no añadir otros nuevos, y
-la zona se oculta cuando ya no quedan. Ocultar una zona no revisa las mesas en las que no estás, así
-que sus platos sin enviar esperan hasta que vuelvas a mostrar la zona.
+mientras estás en una mesa así, el cambio espera. Aún puedes enviar o quitar los platos sin enviar
+de la mesa, pero no añadir otros nuevos, y la zona se oculta cuando ya no quedan. Si se ha quitado
+la zona de la mesa del perfil de este dispositivo, tampoco puedes enviarlos ni quitarlos: la zona
+se oculta al salir de la mesa, y sus platos sin enviar se quedan en ella. Ocultar una zona no
+revisa las mesas en las que no estás, así que sus platos sin enviar esperan hasta que vuelvas a
+mostrar la zona.
 
 ## Ha fallado la comprobación de la huella {#fingerprint-check-failed}
 

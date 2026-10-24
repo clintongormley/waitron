@@ -9141,18 +9141,27 @@ export class TillApp extends LitElement {
   }
 
   #hidesOrderZone(
-    input: Pick<DeviceZoneSelectionInput, "selectedZoneIds">,
+    input: Pick<DeviceZoneSelectionInput, "selectedZoneIds"> &
+      Partial<Pick<DeviceZoneSelection, "zones">>,
   ): "counter" | "table" | undefined {
     if (this.#store.lines.length > 0 && !input.selectedZoneIds.includes(this.counterServiceZoneId))
       return "counter";
     return this.#tableHoldsZone(input) ? "table" : undefined;
   }
 
-  #tableHoldsZone(input: Pick<DeviceZoneSelectionInput, "selectedZoneIds">): boolean {
+  /** A zone the profile no longer allows waits only while its table is on screen: the server refuses
+   * that table's sends and removals, and leaving a table keeps its draft rather than releasing it. */
+  #tableHoldsZone(
+    input: Pick<DeviceZoneSelectionInput, "selectedZoneIds"> &
+      Partial<Pick<DeviceZoneSelection, "zones">>,
+  ): boolean {
     return (
       (this.#partylessDraft.lines.length > 0 || (this.#draftSync?.store.lines.length ?? 0) > 0) &&
       this.#tableZoneId !== undefined &&
       !input.selectedZoneIds.includes(this.#tableZoneId) &&
+      (input.zones === undefined ||
+        this.#tableZoneOnProfile(input.zones) ||
+        this.#orderScreenShown()) &&
       (this.deviceZoneSelection === null
         ? this.formFactor !== "till"
         : this.deviceZoneSelection.selectedZoneIds.includes(this.#tableZoneId))
@@ -9164,8 +9173,18 @@ export class TillApp extends LitElement {
     const inTheWay = pending ? this.#hidesOrderZone(pending) : undefined;
     if (inTheWay === undefined) return nothing;
     return html`<p role="status" data-device-zones-pending>
-      ${t(inTheWay === "table" ? "device_zones.table_order_pending" : "device_zones.order_in_zone")}
+      ${t(
+        inTheWay === "counter"
+          ? "device_zones.order_in_zone"
+          : this.#tableZoneOnProfile(pending!.zones)
+            ? "device_zones.table_order_pending"
+            : "device_zones.table_zone_removed",
+      )}
     </p>`;
+  }
+
+  #tableZoneOnProfile(zones: DeviceZoneSelection["zones"]): boolean {
+    return zones.some((zone) => zone.id === this.#tableZoneId);
   }
 
   #choosesZones(): boolean {
@@ -9180,7 +9199,8 @@ export class TillApp extends LitElement {
     if (!this.#choosesZones()) return true;
     const pending = this.#pendingDeviceZoneSelection;
     const scope =
-      pending && !(holdingTable && this.#tableHoldsZone(pending))
+      pending &&
+      !(holdingTable && this.#tableHoldsZone(pending) && this.#tableZoneOnProfile(pending.zones))
         ? pending
         : this.deviceZoneSelection;
     if (scope === null && this.formFactor !== "till") return true;

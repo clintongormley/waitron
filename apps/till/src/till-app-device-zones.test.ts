@@ -1694,6 +1694,76 @@ describe("a handheld's zones", () => {
       },
     );
 
+    async function takeRoomOffProfile(el: TillApp) {
+      const api = el.api as unknown as { getDeviceZones: ReturnType<typeof vi.fn> };
+      api.getDeviceZones.mockResolvedValue({
+        ...selection(["garden"], "garden"),
+        zones: zones.filter((zone) => zone.id !== "room"),
+        snapshot: "off-profile",
+      });
+      await tick(el);
+    }
+    const tableZoneRemoved =
+      "This table's zone is no longer on this device's profile. Leave the table to hide it.";
+
+    it.each(["phone-portrait", "till"])(
+      "the table whose zone left the profile cannot send its dishes, and leaving it applies the waiting narrowing (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor);
+        await takeRoomOffProfile(el);
+        expect(waiting(el)).toBe(tableZoneRemoved);
+        await screen.updateComplete;
+        expect(screen.orderingAllowed).toBe(false);
+        const sendAll = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          '[data-draft-action="send-all"]',
+        )!;
+        expect(sendAll.disabled).toBe(true);
+        sendAll.click();
+        await el.updateComplete;
+        expect(drafts.submitDraft).not.toHaveBeenCalled();
+        expect(savedLines(drafts)).toHaveLength(1);
+        await backToFloor(el, formFactor);
+        expect(waiting(el)).toBeUndefined();
+        expect(savedLines(drafts)).toHaveLength(1);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "the table whose zone left the profile cannot remove its dishes (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor, "unavailable");
+        await takeRoomOffProfile(el);
+        expect(waiting(el)).toBe(tableZoneRemoved);
+        await screen.updateComplete;
+        const remove = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          "[data-flag-remove]",
+        )!;
+        expect(remove.disabled).toBe(true);
+        remove.click();
+        await el.updateComplete;
+        expect(screen.draftStore!.lines).toHaveLength(1);
+        expect(savedLines(drafts)).toHaveLength(1);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "a send refused because the table's zone left the profile keeps its unsent dishes (%s)",
+      async (formFactor) => {
+        const { el, screen, drafts } = await openRoomTable(formFactor);
+        drafts.submitDraft.mockRejectedValueOnce({ code: "service_zone.not_allowed", status: 403 });
+        await screen.updateComplete;
+        screen.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+        await vi.waitFor(() => expect(drafts.submitDraft).toHaveBeenCalledOnce());
+        for (let i = 0; i < 5; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await el.updateComplete;
+        }
+        expect(screen.draftStore!.lines.map((line) => line.quantity)).toEqual(["1"]);
+        expect(savedLines(drafts)).toHaveLength(1);
+        expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBe(screen);
+      },
+    );
+
     async function openHiddenRoomTable(formFactor: string) {
       const opened = await openTable(
         "room",

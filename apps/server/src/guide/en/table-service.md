@@ -154,11 +154,12 @@ in, it says so and shows every zone its profile allows until it can.
 
 A table in a zone this device does not show takes no new dishes here, and its unsent dishes cannot
 be sent from this device. So Waitron will not hide the zone of the table you have open while it has
-unsent dishes: send or remove them first. If the zones change while you are at such a table, for
-example because a manager changed the profile, the change waits. You can still send or remove the
-table's unsent dishes, but not add new ones, and the zone hides once they are gone. Hiding a zone
-does not check the tables you are not at, so their unsent dishes wait until you show the zone
-again.
+unsent dishes: send or remove them first. If the zones change while you are at such a table, the
+change waits. You can still send or remove the table's unsent dishes, but not add new ones, and the
+zone hides once they are gone. If the table's zone was taken off this device's profile, you cannot
+send or remove them either: the zone hides when you leave the table, and its unsent dishes stay on
+it. Hiding a zone does not check the tables you are not at, so their unsent dishes wait until you
+show the zone again.
 
 ## Fingerprint check failed {#fingerprint-check-failed}
 

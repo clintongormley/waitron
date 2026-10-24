@@ -5361,6 +5361,8 @@ hides the open table's zone while it holds unsent dishes is refused; other table
 are not checked. Live narrowing keeps the current order or payment in place, refuses new
 forbidden picks and reconciles navigation when safe; while the open table's unsent dishes hold it
 back, that table can still send or remove them, and the narrowing applies once they are gone.
+When the waiting choice's profile no longer offers that table's zone, the table cannot send or
+remove them either, and the narrowing applies once the person leaves the table.
 
 ### The notice strip (till)
 
