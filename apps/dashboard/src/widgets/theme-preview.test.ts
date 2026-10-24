@@ -228,6 +228,12 @@ const SWEEPS = (["en-GB", "es-ES"] as const).flatMap((locale) => [
   { locale, label: "no logo", logo: null, legalName: "" },
   {
     locale,
+    label: "no logo and a long legal name",
+    logo: null,
+    legalName: "THE CORNER OF GRANDMOTHER LUCÍA'S RESTAURANT LTD",
+  },
+  {
+    locale,
     label: "a 4:1 logo and a long legal name",
     logo: { light: L },
     legalName: "THE CORNER OF GRANDMOTHER LUCÍA'S RESTAURANT LTD",
@@ -251,11 +257,23 @@ it.each(SWEEPS)(
       setLocale(locale);
       const { el, host } = await mountWithLogo(logo, legalName);
       if (logo !== null) await Promise.all([loaded(el, "light"), loaded(el, "dark")]);
+      const lockups = [...el.shadowRoot!.querySelectorAll<HTMLImageElement>("img.lockup")];
+      expect(lockups).toHaveLength(logo === null ? 2 : 0);
+      await Promise.all(lockups.map((image) => image.decode()));
       const found: string[] = [];
       for (let previewWidth = 220; previewWidth <= 900; previewWidth += 8) {
         host.style.width = `${previewWidth}px`;
         await new Promise((resolve) => requestAnimationFrame(resolve));
         found.push(...overflowing(el).map((line) => `${previewWidth}px ${line}`));
+        for (const image of lockups) {
+          const box = image.getBoundingClientRect();
+          const drawn = box.width / box.height;
+          const natural = image.naturalWidth / image.naturalHeight;
+          if (Math.abs(drawn - natural) > 0.05)
+            found.push(
+              `${previewWidth}px lockup drawn ${drawn.toFixed(2)}:1, not ${natural.toFixed(2)}:1`,
+            );
+        }
       }
       expect(found).toEqual([]);
       const besideAt = (previewWidth: number) => {

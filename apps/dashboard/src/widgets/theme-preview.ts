@@ -81,9 +81,8 @@ export class ThemePreview extends LitElement {
       }
       .lockup {
         display: block;
+        flex: none;
         height: var(--wt-space-6);
-        max-width: 100%;
-        min-width: 0;
       }
       .legal-name {
         min-width: 0;
