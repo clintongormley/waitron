@@ -92,11 +92,9 @@ import { listTables, listZones, updateZone } from "./tables.js";
 import {
   createCourse,
   createStation,
-  getBumpMode,
   listCourses,
   moveCourse,
   listStations,
-  setBumpMode,
   setDefaultStation,
   setProductCourse,
   updateCourse,
@@ -1718,29 +1716,6 @@ export function mountManagementApi(
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
       await withVenueAuth(deps, sessionId, (tx) => setDefaultStation(tx, cfg, id));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.get("/management-api/bump-mode", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const mode = await withVenueReadAuth(deps, sessionId, (tx) => getBumpMode(tx, cfg));
-      return c.json({ mode });
-    }),
-  );
-
-  app.put("/management-api/bump-mode", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ mode?: unknown }>(c);
-      if (body.mode !== "line" && body.mode !== "ticket") {
-        throw new AppError("management.request_invalid", { field: "mode" });
-      }
-      const mode: BumpMode = body.mode;
-      await withVenueAuth(deps, sessionId, (tx) => setBumpMode(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );

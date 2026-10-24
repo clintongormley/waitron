@@ -225,17 +225,6 @@ export async function setDefaultStation(
   await tx.update(kitchenStations).set({ isDefault: true }).where(eq(kitchenStations.id, id));
 }
 
-export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMode): Promise<void> {
-  await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
-}
-
-export async function getBumpMode(tx: Transaction, cfg: TillConfig): Promise<BumpMode> {
-  const { rows } = await tx.execute<{ bump_mode: BumpMode }>(
-    sql`select bump_mode from locations where id = ${cfg.locationId}`,
-  );
-  return rows[0]!.bump_mode;
-}
-
 // ── Kitchen courses ──────────────────────────────────────────────────────────────────────────────
 // Like the station verbs, minus the default: a line with no course fires earliest.
 

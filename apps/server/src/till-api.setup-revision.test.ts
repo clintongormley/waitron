@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { customThemes, deviceProfiles, locations, withTransaction } from "@waitron/db";
+import { customThemes, deviceProfiles, withTransaction } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
 import { Hono } from "hono";
 import { readCurrentImage, renderRendition, saveImage, uploadImage } from "@waitron/media";
@@ -178,7 +178,7 @@ describe("the till's setup revision", () => {
     expect(await menuStateRevision(till)).toBe(first);
   });
 
-  it("the revision moves when a course is added, when one is renamed, and when bump mode changes", async () => {
+  it("the revision moves when a course is added and when one is renamed", async () => {
     const till = await setupTill();
     const seen = [await menuStateRevision(till)];
     const course = await withTransaction(suite.db, (tx) =>
@@ -187,10 +187,6 @@ describe("the till's setup revision", () => {
     seen.push(await menuStateRevision(till));
     await withTransaction(suite.db, (tx) =>
       updateCourse(tx, till.cfg, course.id, { name: "Primeros" }),
-    );
-    seen.push(await menuStateRevision(till));
-    await withTransaction(suite.db, (tx) =>
-      tx.update(locations).set({ bumpMode: "ticket" }).where(eq(locations.id, till.cfg.locationId)),
     );
     seen.push(await menuStateRevision(till));
     expect(seen.every((revision) => typeof revision === "string")).toBe(true);
