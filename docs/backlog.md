@@ -204,7 +204,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   on 2026-10-22 (A940's second-revision question 2, about 02:55), with one addition: in that stuck
   case the page the box shows instead of trading also accepts a phone's or a till's clock under
   A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
-  picture 6). Needs A947's slice 4a (pull request #1990, open; A940's slice 1 landed as #2000); its plan comes
+  picture 6). A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its plan comes
   after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
   until the first non-Veri\*Factu mode.
   [Design](superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
@@ -5077,9 +5077,9 @@ Not in any track until the standalone primary is done.
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
 outstanding on code that exists.
 
-- **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a is
-  [PR #1990](https://github.com/clintongormley/waitron/pull/1990), open for the owner to land.
-  The remaining slices are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+- **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a landed as
+  [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24. Slices 3a onwards
+  are still open; slice 3a's plan is next. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 The membership, promotion and rejoin arc remains in the tree. What remains, largest first:
 

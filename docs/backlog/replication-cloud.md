@@ -596,8 +596,8 @@ mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/20
 ## A947. Go-live on two local boxes
 
 The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
-03:12 direction. Slice 4a is [PR #1990](https://github.com/clintongormley/waitron/pull/1990), open for
-the owner to land. The remaining slices are still open.
+03:12 direction. Slice 4a landed as [#1990](https://github.com/clintongormley/waitron/pull/1990) on
+2026-10-24. Slices 3a onwards are still open; slice 3a's plan is next.
 
 The owner, 2026-10-21: "For go live I want one box with failover to another
 local box." The [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts
@@ -608,10 +608,10 @@ tail receipt). All four questions are answered (§12): a manager switches from a
 in with a passkey or a password plus authenticator code when enrolled — no recovery sheet; the
 switch never waits for the next hour, because every series name is five symbols for the UTC
 minute (`A-0CZZW`, §6.5; the owner's 22:25 follow-up), with no "last hour" question anywhere;
-the recovery sheet and the restore form would drop the installation code once slice 4a's test
-passes. Once slice 4a lands, every name a box takes would refuse a box
-clock more than 30 seconds behind or ahead of another device's, and a setup or restore would wait
-90–150 seconds before naming (§6.5, §6.7). Any device, even a reloaded one, reaches the
+since slice 4a the recovery sheet and the restore form have no installation code, every name a
+box takes outside the preproduction throwaway refuses a box clock more than 30 seconds behind or
+ahead of another device's, and a setup or restore waits 90–150 seconds before naming (§6.5,
+§6.7). Any device, even a reloaded one, reaches the
 switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
 (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
 the membership chart, so a till's router sees one server (§2).
