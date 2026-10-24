@@ -2954,7 +2954,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Slice 10a landed 2026-10-24 (#2045): a theme has a text size, 100% to 130% in 5% steps, set with a
   slider on the Look card that shows the four sizes it gives and a till button and bill line in the
   preview; every screen draws it, while the equipment label, the recovery sheet and Google's sign-in
-  button keep Waitron's sizes. Slice 10b landed 2026-10-25 (#PR): on the tills, product button and
+  button keep Waitron's sizes. Slice 10b landed 2026-10-25 (#2048): on the tills, product button and
   bill line names break words of eight letters or more with a hyphen in the venue's default content
   language (shorter words stay whole, so a short word that fits a line is never split), and layout
   cases at 130% hold the counter, the floor, a kitchen queue, the dashboard's shell and the Look
