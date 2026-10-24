@@ -1078,6 +1078,10 @@ export const en = {
   "profile.remove_passkey_name": "Remove {name}",
   "profile.passkey_last_used": "Last used {time}",
   "profile.passkey_never_used": "Never used",
+  "profile.data_copy": "Copy of your data",
+  "profile.data_copy_hint": "A ZIP file with your data and what it is used for.",
+  "profile.data_copy_download": "Download a copy of your data",
+  "profile.data_copy_busy": "Preparing…",
   "account.offer_passkey": "Set up a passkey?",
   "account.passkey_optional":
     "A passkey lets you log in using your device or security key. You can also add one later in your profile.",
@@ -4384,6 +4388,10 @@ export const es: Record<StringKey, string> = {
   "profile.remove_passkey_name": "Eliminar {name}",
   "profile.passkey_last_used": "Último uso: {time}",
   "profile.passkey_never_used": "Nunca usada",
+  "profile.data_copy": "Copia de tus datos",
+  "profile.data_copy_hint": "Un archivo ZIP con tus datos y para qué se usan.",
+  "profile.data_copy_download": "Descargar una copia de tus datos",
+  "profile.data_copy_busy": "Preparando…",
   "account.offer_passkey": "¿Configurar una passkey?",
   "account.passkey_optional":
     "Una passkey te permite iniciar sesión con tu dispositivo o llave de seguridad. También puedes añadirla más tarde en tu perfil.",
