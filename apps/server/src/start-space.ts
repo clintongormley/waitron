@@ -75,7 +75,7 @@ export async function freeSpaceAtStart(
       failed(error);
     }
   };
-  const deleteBackupStaging = async () => {
+  const deleteStagingLeftovers = async () => {
     const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
     for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
       if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
@@ -89,9 +89,9 @@ export async function freeSpaceAtStart(
   };
   // On a box, only the server runs a backup or stages a recovery copy, and it holds the venue
   // folder's lock while it does.
-  const removeBackupStaging = async () => {
+  const removeStagingLeftovers = async () => {
     // Taking the lock would create a missing venue folder; with none, no process can hold it.
-    if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteBackupStaging();
+    if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteStagingLeftovers();
     let hold: VenueLock;
     try {
       hold = await deps.lockVenue(deps.venueDir);
@@ -102,17 +102,17 @@ export async function freeSpaceAtStart(
       // The time is read again: the deletions before this can outlast VENUE_HOLDER_STALE_MS, and a
       // live heartbeat judged against the start of them reads as one from the future.
       if (holder !== null && isVenueHolderFresh(holder, deps.now())) return;
-      return deleteBackupStaging();
+      return deleteStagingLeftovers();
     }
     try {
-      await deleteBackupStaging();
+      await deleteStagingLeftovers();
     } finally {
       hold.release();
     }
   };
 
   if (!deps.force && (before === null || before >= deps.floor)) {
-    await removeBackupStaging();
+    await removeStagingLeftovers();
     if (deleted > 0) deps.log("info", "storage.start_leftovers_deleted", { deleted });
     return { freeBytes: before, belowFloor: false };
   }
@@ -143,7 +143,7 @@ export async function freeSpaceAtStart(
     }
   }
 
-  await removeBackupStaging();
+  await removeStagingLeftovers();
 
   const after = await lowestFreeBytes(dirs, deps.statfs);
   deps.log("warn", "storage.start_space_low", {

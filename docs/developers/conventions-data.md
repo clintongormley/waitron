@@ -2729,8 +2729,9 @@ turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
 whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n>` with `n ≥ 2`,
 so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
 `holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). That is the start's forced
-clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses),
-minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
+clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses)
+minus the staged recovery copies in `<state>/restore-staging/staged-recovery`, which only the start
+deletes, and minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
 the link and its size is not space freed. Also minus a configured backup folder: a `backup-encrypt-`
 folder that is a `local-fs` backup destination's folder, or holds one, is skipped. The destinations
 are read from the backup supervisor (`current()`) at every survey and every press, and compared both
@@ -2955,15 +2956,16 @@ The same section deletes `<state>/restore-staging/staged-recovery` whole. That i
 wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
 `apps/server/src/recovery-preparation.ts`) keeps the uploaded backup it is checking as a decrypted
 venue database, with a working copy of it, one backup at a time: staging another deletes the one it
-replaces once nothing reads it. Only the server stages a copy, after its store has taken the lock:
-the long-lived open at `apps/server/src/boot.ts:962` comes before the only call of
-`createSetupRecoveryPreparation`, at `boot.ts:1085`. When first-setup resolution has moved the box
-into a workspace (`<state>/first-setup-workspaces/<id>/`), the start runs the same clean-up on the
-workspace's folders as well, under the workspace's own venue lock, before it judges the floor; it
-cleans the logs once, in the folder it was given (`runEntry`, `apps/server/src/node-entry.ts`). On a
+replaces once nothing reads it. Only the server stages a copy, after its store has taken the lock: in
+`bootServer` (`apps/server/src/boot.ts`) the long-lived `openVenueDatabase` comes before the only call
+of `createSetupRecoveryPreparation`. On a
 box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
 staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.
+When first-setup resolution has moved the box into a workspace (`<state>/first-setup-workspaces/<id>/`),
+the start runs the same clean-up on the workspace's folders as well, under the workspace's own venue
+lock, before it judges the floor; it cleans the logs once, in the folder it was given (`runEntry`,
+`apps/server/src/node-entry.ts`).
 Measured 2026-10-21, Node v26.11.1, macOS, on the 32 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
 makes, with a second process holding `venue.lock` by `begin immediate`: `lockVenueDatabase` was
 refused `provisioning.database_in_use` with 0, 4 KiB and 16 KiB left. The control, with no other

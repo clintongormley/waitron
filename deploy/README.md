@@ -269,9 +269,9 @@ left in `backup-staging` in the state folder, found by the names a backup run gi
 them while another process, such as a running server, holds the database folder. When the start
 cannot find that out, as on a disk with no room left for the note it writes while it holds the
 folder, it keeps them while that folder's holder note shows a heartbeat less than 30 seconds old.
-One exception, read in the code but not tried: on a box whose first setup was moved into a new
-workspace, an ordinary start does not clean that workspace's `backup-staging`; only a start that
-fails on a full disk does.
+In the same step it deletes `restore-staging/staged-recovery` in the state folder, where the setup
+wizard keeps a backup uploaded for checking. On a box whose first setup was moved into a new
+workspace, the start does the same in the workspace's folders.
 
 Every start also checks the free space in the state folder and in the database's folder. Below
 256 MiB, it deletes as well:
@@ -282,7 +282,8 @@ Every start also checks the free space in the state folder and in the database's
 
 It deletes nothing else: never the database, the lock files, `recovery.json` or a finished backup,
 even one whose local backup folder was set inside `backup-staging`. If `logs`, its `crash-reports`
-folder or `backup-staging` is a symbolic link, the start leaves it and what it points at alone.
+folder, `backup-staging` or `restore-staging` is a symbolic link, the start leaves it and what it
+points at alone.
 
 If that frees enough, the box starts as usual. If the start still cannot write, the page appears at
 once, without counting the start, and says "The box has deleted what it could make again, and that

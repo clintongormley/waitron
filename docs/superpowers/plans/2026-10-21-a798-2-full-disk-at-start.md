@@ -367,7 +367,8 @@ The owner confirms or overrides these when reviewing the plan. Each has the DEFA
     workspace's state folder is not deleted. DEFAULT: accepted for this slice; a backlog line
     (Task 7). The count check of decision 2 uses the resolved roots (`admission.roots`), so it
     holds for such a box too. (2026-10-21: it did not: the decision read only the given folders'
-    free space; `323f0b2cf` also reads the chosen workspace's.)
+    free space; `323f0b2cf` also reads the chosen workspace's.) (2026-10-24, A1038: `runEntry` now
+    cleans the workspace's folders too.)
 16. **The cut-off backup's plaintext dump** (backlog, "A backup run that is cut off leaves a
     plaintext copy…"). The start now deletes it, but only below the floor, as the design scopes it.
     DEFAULT: keep the design's scope; the backlog entry says so. Owner question below.
