@@ -35,7 +35,6 @@ import {
   setZoneSalePolicyOverride,
   updateDepartment,
 } from "./operations.js";
-import { readEditSentLines, writeEditSentLines } from "./kitchen-notices.js";
 import {
   readOpeningHoursModel,
   replaceMenuWeek,
@@ -748,37 +747,12 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               ? await listDepartmentReceiptReadiness(tx, ctx.cfg)
               : []),
           ],
-          settings: { editSentLines: await readEditSentLines(tx) },
           releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx, ctx.cfg),
           needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
           serviceSteps: await listServiceSteps(tx, ctx.cfg),
           courses: await listStepCourses(tx, ctx.cfg),
         }));
         return c.json(result);
-      }),
-    );
-
-    app.get("/management-api/venue-service/settings", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const settings = await withTransaction(ctx.db, async (tx) => {
-          await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
-          return { settings: { editSentLines: await readEditSentLines(tx) } };
-        });
-        return c.json(settings);
-      }),
-    );
-
-    app.put("/management-api/venue-service/settings", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const editSentLines = body.editSentLines;
-        if (typeof editSentLines !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "editSentLines" });
-        }
-        await gated(sessionId, (tx) => writeEditSentLines(tx, editSentLines));
-        return c.body(null, 204);
       }),
     );
 

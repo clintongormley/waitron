@@ -9,7 +9,6 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
-import { serviceSettings } from "./schema/settings.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
@@ -179,11 +178,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           startingZoneId: zoneId,
         });
       }
-      await tx
-        .insert(serviceSettings)
-        .values({ id: 1 })
-        .onConflictDoNothing({ target: serviceSettings.id });
-      return "default department, counter zone and service settings ready";
+      return "default department and counter zone ready";
     },
   },
 };

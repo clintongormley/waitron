@@ -16,7 +16,6 @@ import {
   kitchenNoticeKind,
   kitchenNotices,
 } from "./schema/kitchen-notices.js";
-import { serviceSettings } from "./schema/settings.js";
 import "./errors.js";
 
 export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];
@@ -311,20 +310,4 @@ export async function acknowledgeKitchenNotice(
     .update(kitchenNotices)
     .set({ acknowledgedAt: nowIso() })
     .where(eq(kitchenNotices.id, id));
-}
-
-/** Whether staff may change an item already sent to the kitchen. A venue with no row reads ON. */
-export async function readEditSentLines(tx: Transaction): Promise<boolean> {
-  const [row] = await tx
-    .select({ editSentLines: serviceSettings.editSentLines })
-    .from(serviceSettings)
-    .where(eq(serviceSettings.id, 1));
-  return row?.editSentLines ?? true;
-}
-
-export async function writeEditSentLines(tx: Transaction, value: boolean): Promise<void> {
-  await tx
-    .insert(serviceSettings)
-    .values({ id: 1, editSentLines: value })
-    .onConflictDoUpdate({ target: serviceSettings.id, set: { editSentLines: value } });
 }

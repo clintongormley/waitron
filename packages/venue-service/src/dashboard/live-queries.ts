@@ -235,7 +235,6 @@ export const QUERY_DEPENDENCIES = {
     "menu_periods",
     "menu_period_staff_menus",
     "routing_cells",
-    "service_settings",
     "catalogues",
     "categories",
     "kitchen_stations",

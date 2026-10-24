@@ -1,6 +1,5 @@
 import { kitchenStations, type Transaction } from "@waitron/db";
 import type { ChangesAfterSending } from "@waitron/shared";
-import { writeEditSentLines } from "@waitron/venue-service";
 import { inArray } from "drizzle-orm";
 
 export async function setChangesAfterSending(
@@ -19,8 +18,6 @@ export async function setChangesAfterSending(
       );
     return;
   }
-  // Writes the venue's switch too until A756 PR 8 Task 63.
-  if (value !== "held") await writeEditSentLines(tx, value === "held-or-waiting");
   const updated = await update.returning({ id: kitchenStations.id });
   if (updated.length === 0)
     throw new Error("setChangesAfterSending: the database has no station yet");

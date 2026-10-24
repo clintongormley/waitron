@@ -254,7 +254,7 @@ describe("applyVenue", () => {
       },
       {
         module: "venue-service",
-        report: "default department, counter zone and service settings ready",
+        report: "default department and counter zone ready",
       },
       {
         module: "fiscal-verifactu",

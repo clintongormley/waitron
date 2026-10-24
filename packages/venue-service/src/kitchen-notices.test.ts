@@ -28,14 +28,11 @@ import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { kitchenNotices } from "./schema/kitchen-notices.js";
 import { workingLineContexts } from "./schema/service.js";
-import { serviceSettings } from "./schema/settings.js";
 import {
   acknowledgeKitchenNotice,
   listStationNotices,
   listStationsNotices,
-  readEditSentLines,
   recordKitchenNotices,
-  writeEditSentLines,
   type KitchenNoticeItem,
 } from "./kitchen-notices.js";
 
@@ -1475,23 +1472,6 @@ describe("acknowledgeKitchenNotice for one station", () => {
 
     await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, atGrill, { stationId: v.grill }));
     expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
-  });
-});
-
-describe("the edit-sent-lines setting", () => {
-  it("reads ON when the venue has no settings row", async () => {
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);
-  });
-
-  it("reads what was written, creating the row when it is missing", async () => {
-    await inTx((tx) => writeEditSentLines(tx, false));
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-    await inTx((tx) => writeEditSentLines(tx, true));
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);
-    expect(await db.select().from(serviceSettings)).toEqual([{ id: 1, editSentLines: true }]);
-    // Raw SQL, so the stored value is read without the column's boolean mapping.
-    await db.execute(sql`update service_settings set edit_sent_lines = 0`);
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
   });
 });
 
