@@ -1588,17 +1588,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its
   fields** (they end at about x 951, the fields at about 905, measured in Chromium by A756 PRs 5 and
-  8's looks). The row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (#1837). At
-  390 px every field is full width.
+  8's looks). The row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (#1837); the
+  note has no width rule of its own, and why the fields stop narrower was not traced. At 390 px
+  every field is full width. Left open by A756 PR 5.
 
 - **A1062. Ask whether picture 10's Held courses dropdown, "Print when sent", replaces the station
   editor's switch "Print held groups in advance"** (left open by A756 PR 6).
 
 - **A1063. Picture 10 lists Identical dishes and Held courses above MOVED slips; the station editor
   puts them after it.** Owner FYI from A756 PR 6; say if the editor should follow the picture.
-
-- **A1064. The station editor's ticket-grouping hint is never seen.** Ask whether it should be a
-  visible note. [Detail](backlog/kitchen.md#a1064-the-station-editors-ticket-grouping-hint-is-never-seen)
 
 - **A1065. A printer shared by a station recorded for a held group and one not recorded prints one
   FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:662-666`);
@@ -2164,7 +2162,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   leaves PRs B–D: Requested, scoped pass release, station
   settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
-  Recheck A756 and other lanes' reservations before each slice. A797's revised design, pictures
+  Recheck other lanes' reservations before each slice. A797's revised design, pictures
   and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
@@ -4169,6 +4167,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   «Retrasado», «Olvidado» (`prep.health.*`), the error's «aviso < atraso < olvido»
   (`prep.threshold_invalid`) and Add station's «Aviso / Atraso / Olvido a partir de (min)»
   (`packages/venue-service/src/dashboard/strings.ts`); English says warm, overdue and forgotten.
+  Left open by A756 PR 5.
 
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)

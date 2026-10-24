@@ -120,16 +120,6 @@ does not exist.
   stays, counting, until the screen is opened again; long outages are counted in minutes, never
   hours.
 
-## A1064. The station editor's ticket-grouping hint is never seen
-
-"Applies to new kitchen tickets and to reprints." is the "Identical dishes on a kitchen ticket"
-dropdown's hint. `wt-combobox` always draws its hint visually hidden
-(`packages/ui-core/src/field-styles.ts:153-155`) for screen readers
-(`packages/ui/src/components/wt-combobox.ts:1100`), and shows it in the box only while nothing is
-chosen and there is no placeholder (`wt-combobox.ts:1102`); a station always has a grouping. The
-owner kept it as a hint on the old Kitchen tab (dashboard.md → Decisions, 2026-10-17); left open by
-A756 PR 6, which moved it to the station editor. Ask the owner whether it should be a visible note.
-
 ## A1066. Four server test files mark a HOLD ticket printed without recording a station
 
 `party-allergy.restart`, `party-allergy.submit`, `party-arriving-dishes` and `kitchen-print` write a
@@ -306,7 +296,8 @@ Built by A756 PRs 1–8 (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-ta
 
 ### Add station sets a station's name, colour, printers and late flags only (A756 PRs 6–8)
 
-Every other choice starts at its default and is changed in the station editor: one line for
+This records the built default (plans A756 PRs 6–8), not an owner ruling; owner FYI, say if Add
+station should offer more. Every other choice starts at its default and is changed in the station editor: one line for
 identical dishes, no held printing, MOVED slips printed, one item at a time on the screen, and
 changes allowed while held or waiting.
 
@@ -314,7 +305,8 @@ changes allowed while held or waiting.
 
 Owner FYIs, built this way; say if any should change. A dish the kitchen has started is refused
 first. Otherwise the dish's own station and the station of each extra routed elsewhere must all
-allow the change. A dish no station makes can be recalled whatever the stations allow (A773-1 open
+allow the change. A dish with no kitchen record, on it or on any of its extras, can be recalled whatever the
+stations allow (A773-1 open
 point 4's answer A said so). A "Not allowed" station also refuses changes to a held dish, which the
 venue switch allowed through line edits. At a "Not allowed" station, removing a waiting dish or
 lowering its quantity through an order edit goes through, as a Void with its notice (with the venue

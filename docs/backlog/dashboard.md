@@ -697,7 +697,9 @@ registered as `venue-service:week`, and the others register theirs when they exi
   **2026-10-23 (A756 PR 4):** the reminder's dropdown, with its hint, moved to the department
   dialog's Service tab, under Courses and the kitchen; it is still a hint. Its placeholder is
   "Off", drawn before the hint (`packages/ui/src/components/wt-combobox.ts:1102`), so the hint is
-  never on screen; reopen only if this decision changes (A756 PR 4's look).
+  never on screen; reopen only if this decision changes (A756 PR 4's look). **2026-10-23 (A756
+  PR 6):** the ticket-grouping dropdown, with its hint, moved to each station's editor as
+  "Identical dishes on a kitchen ticket"; it is still a hint, and a station always has a grouping.
 
 - **A dialog's height is chosen separately from its width (A734, owner 2026-10-15).** `wt-modal`'s
   shorter height is a fixed medium one, not one that follows its content, so a dialog given it does
