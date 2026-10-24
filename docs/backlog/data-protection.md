@@ -62,6 +62,31 @@ compliance”. This file holds their full text.
   The legal advisor is asked (`docs/compliance/action-plan.md`, 2026-10-16). **Next action:** add
   the licence text and source notice the answer calls for.
 
+## A980 — data protection, Waitron's side
+
+[Design, revision 2](../superpowers/specs/2026-10-22-a980-data-protection-design.md) (2026-10-24)
+and its [build plan](../superpowers/plans/2026-10-24-a980-data-protection-build.md). The owner
+answered all ten questions on 2026-10-22 (design §8). Nothing is built. Slices, by the design's
+numbers (S5, S7 and S8 were dropped by the answers):
+
+- **S4** — deactivating a person deletes their PIN, password, two-factor details, Google link,
+  passkeys and recovery codes. Still a live defect; build first.
+- **S2** — a staff member downloads their own data from their profile; an admin downloads another
+  person's under a new admin-only permission, `personal_data.export`. Planned as S2a1, S2a2, S2b, S2c.
+- **S3** — an admin finds an invoice customer by tax number and downloads what the box holds.
+- **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
+  checklist.
+- **S10** — check that logged errors carry no names or email addresses; mask them if they do.
+- **S1** — a dashboard setting for the address of the venue's own privacy-notice page, replacing an
+  environment setting a box cannot set. Adds a migration, so while lane B builds it, it waits for
+  lane B's parked pull requests (#2025, #2030) to close: lane B's own rule, and neither carries a
+  migration.
+- **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
+- **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
+  migration; waits for the labour and privacy specialists (A664 G2, G3).
+- **Receipts and invoices** — a privacy line waits for the O4 research and the specialist's answer
+  (design §4.1.1).
+
 ## Decisions and deliberate limits
 
 - **A664, 2026-10-17:** you adopted the revised retention proposal for specialist review.
@@ -69,3 +94,12 @@ compliance”. This file holds their full text.
   waits for relevant fiscal/commercial, labour and privacy design agreement. G4/G5 remain
   required; this decision authorises no removal or fiscal invariant change. See the
   [dated decision](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review).
+- **A980, 2026-10-22:** the owner's ten data-protection answers. A former employee's email is kept
+  a year after she leaves, then cleared, keeping her name (O1); sign-in details are deleted at
+  deactivation (O2); the full privacy notice lives on the venue's own web page (O3); staff download
+  their own data, and anything else needs an admin-only permission (O5); a privacy line on receipts
+  waits for research and the specialist (O4); no allergy-note hint (O6), no requests list (O7), no
+  backup-storage check (O8); bug reports carry only what O9 (a) allows (in the A9 entry,
+  `docs/backlog/alerts.md`); EN/ES guide templates for the record of processing and breach
+  checklist (O10). See the design's
+  [§8](../superpowers/specs/2026-10-22-a980-data-protection-design.md#8-owner-decisions-answered-2026-10-22).

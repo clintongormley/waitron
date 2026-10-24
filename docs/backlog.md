@@ -6261,6 +6261,16 @@ _Formerly entries spread across the old sections._
   confirm it (`docs/compliance/action-plan.md`, 2026-09-23).
   [Detail](backlog/data-protection.md#libvips-is-lgpl-30-or-later)
 
+- **A980 — data protection, Waitron's side.** Design revision 2 (2026-10-24) records the owner's
+  ten answers; eight small slices are planned, nothing is built. Build S4 (delete sign-in secrets at
+  deactivation, a live defect) first; S1 waits, while lane B builds it, for lane B's parked pull
+  requests (its own rule); S9 and S11 wait for the specialists.
+  [Detail](backlog/data-protection.md#a980--data-protection-waitrons-side)
+
+- **A privacy-notice page hosted by Waitron Cloud.** For a Cloud-connected venue, a page Cloud
+  serves from the venue's own notice text, instead of a page on the venue's own website. The owner
+  chose the venue's own page for now (A980 O3, 2026-10-22), so this is not in A980's plan.
+
 - **cairo, built into that libvips, is listed under the Mozilla Public License, and `/app/third-party/`
   carries neither its licence text nor a source offer for it**.
   **Next action:** add the licence text and source notice the answer calls for.
@@ -6440,9 +6450,10 @@ _operate_. Blocks nothing today; the retention/erasure/export mechanics become b
 scoped. A664’s [proposed retention map](superpowers/specs/2026-10-16-a664-data-retention-design.md)
 awaits owner and relevant specialist approval under its own gates; the broader privacy programme
 remains open. **Scoped 2026-10-22 by A980:** the [data-protection design](superpowers/specs/2026-10-22-a980-data-protection-design.md)
-holds the data map, the controller and processor split, the builds-versus-venue list and the
-proposed go-live slices; its owner questions O1 to O10 and the privacy-specialist questions Q54 to
-Q58 are open, and nothing is built. The Cloud half is lane D's D101.
+holds the data map, the controller and processor split and the builds-versus-venue list. Its
+revision 2 (2026-10-24) records the owner's answers to O1 to O10, and the
+[build plan](superpowers/plans/2026-10-24-a980-data-protection-build.md) orders the slices; nothing
+is built. The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
 
 ---
 

@@ -1,12 +1,14 @@
 # Questions for the asesor
 
+**Owner, 2026-10-22 (what has been sent):** The [shortened list (2026-10-09)](#the-shortened-list-2026-10-09) went to the adviser about a week before this note, around 2026-10-15. That date is the owner's estimate, not a recorded one. Everything added after the shortened list, from [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31)(d) and [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) onward, is the next batch. The owner will send it later. No lane sends questions.
+
 **2026-10-17, A664:** You adopted the [revised proposal](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review) for specialist review. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) awaits the relevant fiscal/commercial, labour and privacy decisions. You will send it; no enquiry has been sent by this campaign. The historical Word copies have not been changed.
 
 **2026-10-18, A793 (tips):** [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31) gained an open part (d) on suggested tip percentages and a default service charge; [Q49](#q49-card-tips-in-the-venues-books--income-or-money-owed-to-staff-added-2026-10-18) (how card tips are booked) and [Q50](#q50-a-fixed-service-charge-on-the-bill--allowed-by-consumer-law-added-2026-10-18) (a fixed "service" charge under consumer law) were added after Q13. The research behind them is [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md). None is in the shortened list or the Word copies yet, and no enquiry has been sent.
 
 **2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21) (a chain whose record times step back once, when a manager restarts payments) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
 
-**2026-10-22, A980 (data protection):** [Q54 to Q58](#data-protection-questions-for-a-privacy-specialist-added-2026-10-22) were added for a privacy specialist, not the asesor fiscal, from the [A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md) §9. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) still carries the Article 9 basis for allergy notes. None is in the shortened list or the Word copies, and no enquiry has been sent.
+**2026-10-22, A980 (data protection):** [Q54 to Q58](#data-protection-questions-for-a-privacy-specialist-added-2026-10-22) were added for a privacy specialist, not the asesor fiscal, from the [A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md) §9. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) still carries the Article 9 basis for allergy notes. [Q59](#q59-a-privacy-line-on-receipts-and-full-invoices-added-2026-10-24) (a privacy line on receipts and full invoices) joined them on 2026-10-24, from the design's §4.1.1. None is in the shortened list or the Word copies, and no enquiry has been sent.
 
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
@@ -794,6 +796,54 @@ digital devices, in whose drafting «deberán participar los representantes de l
 >
 > **(c)** ¿Basta con mencionarlo en el aviso de privacidad del personal, como proponemos, o hace
 > falta una información previa específica?
+
+---
+
+### Q59. A privacy line on receipts and full invoices (added 2026-10-24)
+
+**Why we ask.** The owner doubts that receipts or invoices usually carry a privacy notice, and we
+found nothing that requires one. A simplified receipt names only the venue (RD 1619/2012 art.
+7.1.d), so it normally collects no personal data. The exceptions are a customer who asks for their
+tax number and address on it: a business customer (art. 7.2), or a private customer who needs them
+«para el ejercicio de cualquier derecho de naturaleza tributaria» (art. 7.3). A full invoice
+carries the customer's name, tax number and address (art. 6.1.c–e). For a private customer those
+are plainly personal data, and so they are for a sole trader; LOPDGDD art. 19.2's presumption of a
+lawful basis covers only sole traders and professionals acting as such. For a company they are
+not: GDPR recital 14 leaves out data «relativos a personas jurídicas». GDPR art. 13.1 requires
+the notice «en el momento en que estos se obtengan», that is, when staff take the details down.
+LOPDGDD art. 11.1 allows «la información básica» plus «una dirección electrónica u otro medio» that
+leads to the rest. The AEPD's duty-to-inform guide puts that first layer «en el mismo momento y en
+el mismo medio en que se recojan los datos». Under the old law, a business told the AEPD that «en
+las facturas y tickets no se dispone de espacio suficiente» and asked whether a sign in the shop
+would do; Informe 0029/2011 said yes, if the sign carries the information the law then required and is
+visible and readable, following earlier reports including a 2007 one
+that the clause need not appear on a card-payment ticket. No text we read requires a line: RD
+1619/2012 arts. 6.1 and 7.1 permit «cualesquiera otras menciones», and the same sentence of art. 7.1
+(art. 6.1's is nearly alike) opens «sin perjuicio de los datos o requisitos que puedan resultar
+obligatorios a otros efectos», which is the data-protection question we put to you. Waitron already
+prints a footer text the venue types on every receipt the till prints, full invoices included. It builds nothing more until this is answered. The sources are in the
+[A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md) §4.1.1. (a) and (b)
+ask you to confirm our reading; (c) is open.
+
+> Un restaurante emite tiques (facturas simplificadas) sin datos del cliente y, cuando el cliente
+> lo pide, facturas completas con su nombre, NIF y domicilio, que el personal anota en el TPV en
+> ese momento. El programa permite imprimir al pie de cada tique un texto libre que escribe el
+> restaurante.
+>
+> **(a)** Confírmenos que una factura simplificada sin datos del cliente no obliga a informar
+> conforme al art. 13 RGPD, porque no se obtienen datos personales, y que por tanto no necesita
+> ninguna leyenda de protección de datos.
+>
+> **(b)** Cuando se recogen el nombre, el NIF y el domicilio de un cliente particular o autónomo
+> para una factura completa (o para una simplificada con los datos de los apartados 2 o 3 del
+> art. 7 del Reglamento de facturación), confírmenos que basta con una primera capa (art. 11
+> LOPDGDD) en el momento de la recogida, por ejemplo un cartel junto a la caja o una línea al pie
+> de la factura con un enlace o dirección a la información completa, y que no es obligatorio
+> imprimir en la factura el aviso completo del art. 13 RGPD.
+>
+> **(c)** ¿Recomienda incluir esa línea al pie de las facturas completas aunque el cliente sea una
+> sociedad, cuyos datos no son datos personales (considerando 14 RGPD)? En su caso, ¿qué texto
+> breve propone, también para la factura en PDF que se envía por correo?
 
 ---
 

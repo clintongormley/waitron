@@ -61,6 +61,10 @@ server-log access. The older slice descriptions and decisions below retain their
   - **The repository is public**, so the public issue carries only the stack, the Waitron version and
     the error code. The venue's identity and anything a person typed stay private in Cloud, linked
     from the issue.
+  - **What a report may carry (owner, 2026-10-22, A980 O9 (a)).** An automatic report carries only
+    the error, the Waitron version and log lines with personal details masked. Anything a person
+    typed travels only in a report a manager has read and chosen to send. See the
+    [A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md), §5.3.
   - **Automatic reports as well as the manual button.** A crash that reaches the recovery page, an
     unexpected server error, and a frozen process stopped by its watchdog (A18d writes one JSON
     report file per event on a persistent volume, outside the venue database) each become a
