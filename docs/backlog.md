@@ -583,9 +583,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
-  Several small wizard leftovers remain: a fiscal-test banner that may outlive its screen, an
-  earlier attempt's message a cloud restore may show, a mistyped adopt answer, the mode screen's
-  text about live filing, test titles and gaps, and a non-`wt-*` event name.
+  Several small wizard leftovers remain.
   [Detail](backlog/setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
 
 - **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
@@ -621,16 +619,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Removing or disabling it until slice 3 lands the replacement is a product call, not a wording one.
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
-- **Open owner call — setup always stores a language on the account.** If the browser sends no
-  language, or one Waitron does not ship, the account gets the venue's language saved as though
-  chosen — so the stored value cannot tell "chose Spanish" from "said nothing", and it does not
-  follow a later change to the venue default. Keep this, or store a language only when the browser
-  asked for one?
+- **Open owner call — setup always stores a language on the account.** Keep this, or store a
+  language only when the browser asked for one?
   [Detail](backlog/setup.md#open-owner-call--setup-always-stores-a-language-on-the-account)
 
 - **The configuration preview names what it will copy by database table** — left open by C42
-  (#837). The names come from each module's `configuration-transfer.ts` list; about fifty can
-  arrive. Give them operator words, grouped, or keep the table names.
+  (#837). Give them operator words, grouped, or keep the table names.
   [Detail](backlog/setup.md#the-configuration-preview-names-what-it-will-copy-by-database-table)
 
 - **The Cloud restore screen shows capture and expiry times as the server's raw ISO text** in both
@@ -658,8 +652,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A fiscal test or a provision that answers after the wizard has been removed from the page
   leaves it stuck when it is put back** — found while bringing `apps/setup` to the coverage bar
-  (2026-09-23), left unfixed. The app mounts the wizard once and never removes it, so this may be
-  unreachable in use.
+  (2026-09-23), left unfixed.
   [Detail](backlog/setup.md#a-fiscal-test-or-a-provision-that-answers-after-the-wizard-has-been-removed-from-the-page-leaves-it-stuck-when-it-is-put-back)
 
 - **Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.**
@@ -675,20 +668,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   `aria-invalid` but has no style for it.
 
 - **A venue's time zone must come from its country pack's list (A166, owner 2026-10-01)** — OPEN.
-  Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
-  emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
-  and creation/provisioning writers refuse a zone not on its country's list.
+  **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary), and
+  creation/provisioning writers refuse a zone not on its country's list.
   [Detail](backlog/setup.md#a-venues-time-zone-must-come-from-its-country-packs-list-a166-owner-2026-10-01)
 
-- **Remaining "?" buttons that should be hints (A237, owner 2026-10-03)** — OPEN. The rule — a
-  short explanation is the field's hint, and the "?" button is only for one too long for a hint or a
-  field that starts filled in — was applied to the setup wizard's first four screens only, and
-  nothing enforces it. Other screens' "?" buttons were not reviewed against the rule.
+- **Remaining "?" buttons that should be hints (A237, owner 2026-10-03)** — OPEN. Other screens'
+  "?" buttons were not reviewed against the rule.
   [Detail](backlog/setup.md#remaining--buttons-that-should-be-hints-a237-owner-2026-10-03)
 
 - **No test covers the setup review screen's value cell's own centring** — left open by A243
-  (W33, #1143). Removing it alone leaves all 31 review-screen tests green, because it changes
-  nothing until a label is taller than its value (a label wrapping onto two lines).
+  (W33, #1143).
   [Detail](backlog/setup.md#no-test-covers-the-setup-review-screens-value-cells-own-centring)
 
 - **The demo venue's departments' internal names still follow the seed language.** Left open by
@@ -704,10 +693,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
 
 - **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)** — OPEN, partly designed,
-  not to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing. A
-  walk-through that teaches a new user what to set up and in what order — devices, printers, device
-  profiles, and the other settings a venue needs before it trades — shown in Demo and Preparation
-  (`onboardingIntent` `demo` and `prepare`).
+  not to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.
   [Detail](backlog/setup.md#a-guided-tutorial-for-demo-and-preparation-a250-owner-2026-10-03)
 
 - What A2's rework left as constraints on the next change to the wizard is under [Setup wizard — the
@@ -5270,6 +5256,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **Investigate the table-name reset's main-CI failure.** In
+  `apps/server/src/floor-today-name.test.ts`, “a new business day clears a free table's name
+  (reset clears)” retained a name instead of null (CI 40055003794, server shard 11). Cause
+  unverified; reproduce with the business-day clock and keep the reset assertion.
 
 - **A backlog detail link still names the old five-handler heading.** The till entry’s
   `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
