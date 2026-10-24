@@ -108,7 +108,8 @@ function behind(clockMs: number, lastMs: number) {
   };
 }
 
-/** Every chain's node and its largest secuencia, read as the restart's writer reads them. */
+/** Every chain's node and its largest secuencia, read as `chainHeads` reads them for a
+ * confirmation. */
 function headsNow(): Record<string, number> {
   return Object.fromEntries(
     suite.db
@@ -122,8 +123,8 @@ function headsNow(): Record<string, number> {
   );
 }
 
-/** Stands in for the other callers that find the latest record (the restart's writer, the Clock
- * row's state): they must pick the record `latestRecord` picks. */
+/** Stands in for the other callers that find the latest record (the confirmation's writer, the
+ * Clock row's state): they must pick the record `latestRecord` picks. */
 function latestId(): string {
   return suite.db.all<{ id: string }>(
     sql`select id from registros_facturacion order by fecha_hora_huso_gen_registro desc, id desc limit 1`,
@@ -136,7 +137,7 @@ function nextSeq(): number {
   )[0]!.n;
 }
 
-/** A confirmation as the clock watch writes one when devices agree during a stop. */
+/** A devices confirmation naming a record, with no `check_id`. */
 function restart(
   options: {
     proof?: unknown;
@@ -189,8 +190,8 @@ function stepWalk(): number[] {
   return times;
 }
 
-describe("a restart lifts the stop for one step back", () => {
-  it("records the sale after a restart, linked to the record it names", async () => {
+describe("a confirmation lifts the stop for one step back", () => {
+  it("records the sale after a lift, linked to the record it names", async () => {
     await attempt(T);
     expect(await attempt(R)).toBe("clock.behind_chain");
     expect(refusals[0]!.params).toEqual(behind(R, T));
@@ -389,7 +390,7 @@ describe("a restart lifts the stop for one step back", () => {
   });
 });
 
-describe("a restart whose stored heads a correct writer never stores covers nothing", () => {
+describe("a confirmation whose stored heads a correct writer never stores covers nothing", () => {
   const NODE = "NODE";
   const proofs: [string, unknown][] = [
     ["a proof that is a string", "heads"],
@@ -469,7 +470,7 @@ describe("a restart whose stored heads a correct writer never stores covers noth
   });
 });
 
-describe("a restart over two chains", () => {
+describe("a lift over two chains", () => {
   it("counts the older chain's records and the box's as written under it", async () => {
     const older = await seedTenantWithSif(suite.db);
     await attempt(T, older);
@@ -486,7 +487,7 @@ describe("a restart over two chains", () => {
     expect(headsNow()).toEqual({ [older.nodeId]: 1, [nodeId]: 3 });
   });
 
-  it("holds the box to the latest time written under the restart on any chain", async () => {
+  it("holds the box to the latest time written under the lift on any chain", async () => {
     const older = await seedTenantWithSif(suite.db);
     await attempt(T, older);
     await restart();

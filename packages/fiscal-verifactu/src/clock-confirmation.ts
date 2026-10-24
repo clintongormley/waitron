@@ -26,10 +26,10 @@ import {
   nextConfirmationSeq,
   openCheck,
   openClockCheck,
-  witnessProof,
   storedWitnesses,
   takenDuringStop,
   waitingCheck,
+  witnessProof,
   writeClosing,
 } from "./clock-checks.js";
 import { recordDisproofs, recordMisdated, recordRestarted } from "./clock-stop-incidents.js";
@@ -167,12 +167,13 @@ async function closeWaitingAsAdmin(
  * naming the latest record and closing this stop's check, which lifts the stop, and records
  * `clock.behind_chain_restarted` and, through `recordMisdated`, `clock.records_misdated` beside it.
  * This stop's check is the one the watch's look answers: the open check, or one opened now (after
- * closing an open check whose stop came back), whose closing is then `partial`. With no `admin`, only
- * when the witnesses are ready; otherwise it writes nothing and answers null. With `admin`, on the
- * administrator's device, refused `contrary_proof` when AEAT, or a group of devices from two
+ * closing an open check whose stop came back), whose closing is then `partial`. With no `admin`,
+ * only when the witnesses are ready; otherwise it writes nothing and answers null. With `admin`, on
+ * the administrator's device, refused `contrary_proof` when AEAT, or a group of devices from two
  * addresses, taken during the stop disagrees, and `differs` when that device does not agree with
  * the box. A refusal throws `clock.confirm_refused`, and a reading before 28-10-2024
- * `clock.unusable`, writing nothing. With `admin` and no stop, it closes a check that waits instead. */
+ * `clock.unusable`, writing nothing. With `admin` and no stop, it closes a check that waits
+ * instead. */
 export async function confirmClockStop(
   tx: Transaction,
   input: ClockConfirmRequest,

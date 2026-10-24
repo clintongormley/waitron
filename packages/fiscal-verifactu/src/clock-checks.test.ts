@@ -370,7 +370,8 @@ describe("correctedStart", () => {
   });
 });
 
-/** The clock right until 10:00, sales every five minutes, then set 30 minutes back by mistake; the stop ends by itself once the wrong clock reaches the last sale. */
+/** The clock right until 10:00, sales every five minutes, then set 30 minutes back by mistake;
+ * the stop ends by itself once the wrong clock reaches the last sale. */
 const TEN = Date.parse("2026-10-19T10:00:00.000Z");
 const WRONG = 30 * M;
 

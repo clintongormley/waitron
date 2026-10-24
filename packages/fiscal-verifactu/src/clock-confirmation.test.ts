@@ -914,6 +914,17 @@ describe("an administrator's device while a check waits", () => {
     );
   });
 
+  it("two devices disagreeing beside two agreeing, with no AEAT, refuse it as contrary proof", async () => {
+    await waitingCheck();
+    await adminRefused(
+      T,
+      [...twoDevices(T), ...twoDevicesAgainst(T)],
+      adminReading(T, 0, 0),
+      "clock.confirm_refused",
+      { reason: "contrary_proof" },
+    );
+  });
+
   it("control: a lone device disagreeing after the stop ended does not refuse it", async () => {
     const checkId = await waitingCheck();
     const answer = await confirmAsAdmin(
