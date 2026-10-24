@@ -9,8 +9,8 @@ import type { DeploymentEnvironment } from "./config.js";
 import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
+import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
-  RESTORE_STAGING_DIR,
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,

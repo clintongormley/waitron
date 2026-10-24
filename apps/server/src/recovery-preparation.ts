@@ -44,6 +44,7 @@ import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.j
 import { parseRecoveryKit } from "@waitron/stream";
 import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { VENUE_FILE } from "@waitron/store";
+import { STAGED_RECOVERY_DIR } from "./restore-staging-dirs.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
@@ -374,8 +375,6 @@ export function createInteractiveRecoveryPreparation(options: {
   };
 }
 
-/** Inside `stagingDir`; boot removes it whole, since each copy in it is a decrypted venue database. */
-export const STAGED_RECOVERY_DIR = "staged-recovery";
 export const STAGED_RECOVERY_UNUSED_MS = 60 * 60_000;
 export async function clearStagedRecoveries(stagingDir: string): Promise<void> {
   await rm(join(stagingDir, STAGED_RECOVERY_DIR), { recursive: true, force: true });

@@ -7,7 +7,8 @@ import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { createCloudReplacement } from "../src/cloud-replacement.js";
 import { stageRestoreRequest, runStagedRestore } from "../src/restore-request.js";
-import { RESTORE_STAGING_DIR, validateArtifact } from "../src/restore.js";
+import { validateArtifact } from "../src/restore.js";
+import { RESTORE_STAGING_DIR } from "../src/restore-staging-dirs.js";
 import { ALL_MODULES } from "../src/modules.js";
 import { parseEnvFile } from "../src/env-file.js";
 

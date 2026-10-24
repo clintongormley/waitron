@@ -275,7 +275,8 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  *    holding the only copy. The clearing runs before the ahead check because that check's open
  *    creates a missing `venue.db`.
  * 6. Below the floor, the start deletes what it can make again before first-setup resolution, whose
- *    inspection opens the database.
+ *    inspection opens the database. When resolution chose other folders, it then runs the same
+ *    clean-up on them, whatever the free space, before judging the floor.
  * 7. Still below it, or below it in the folders first-setup resolution chose instead, the start
  *    writes the count back unchanged before resolution's app or the page is served: a finished
  *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
@@ -297,16 +298,19 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
 
   const now = deps.now ?? (() => new Date());
   const floor = deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR;
-  const space = await freeSpaceAtStart({
-    stateDir: deps.stateDir,
-    venueDir: deps.venueDir,
-    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+  const cleanUp = {
     floor,
     now,
     statfs: deps.statfs,
     lockVenue: deps.lockVenue ?? lockVenueDatabase,
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
+  };
+  const space = await freeSpaceAtStart({
+    ...cleanUp,
+    stateDir: deps.stateDir,
+    venueDir: deps.venueDir,
+    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
   });
 
   const admission = await resolveFirstSetupEntry(
@@ -348,8 +352,18 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   };
   const dirs = [rooted.stateDir, rooted.venueDir];
   const moved = rooted.stateDir !== deps.stateDir || rooted.venueDir !== deps.venueDir;
-  const belowFloor =
-    space.belowFloor || (moved && ((await lowestFreeBytes(dirs, deps.statfs)) ?? floor) < floor);
+  let belowFloor = space.belowFloor;
+  if (moved) {
+    // The logs folder is the given folders' (`resolveLogDir` in `bootThisProcess`), cleaned above.
+    await freeSpaceAtStart({
+      ...cleanUp,
+      stateDir: rooted.stateDir,
+      venueDir: rooted.venueDir,
+      logDir: null,
+    });
+    const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
+    belowFloor = (lowest ?? floor) < floor;
+  }
   let check: CountCheck;
   if (belowFloor && !(check = await countWritable(rooted)).written) {
     const exit = deps.exit ?? DEFAULT_EXIT;

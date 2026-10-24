@@ -210,7 +210,8 @@ import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
 import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
-import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
+import { validateArtifact } from "./restore.js";
+import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import {

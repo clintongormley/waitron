@@ -4377,25 +4377,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   a planned "re-trust every device" event — devices pair again in place of their old entries, and the
   old name only points at the new one for 14 days. Five slices; no migration.
 
-- **A box whose first setup was retired into a new workspace keeps that workspace's backup staging
-  through the clean-up before the count.** Since A978 that keeps a cut-off backup run's plaintext
-  copy there through every ordinary start; not yet put to the owner.
-  [Detail](backlog/box.md#a-box-whose-first-setup-was-retired-into-a-new-workspace-keeps-that-workspaces-backup-staging-through-the-clean-up-before-the-count)
-
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
   with no word of the full disk.** The connection-bootstrap branch (`needsConnectionBootstrap`,
   `apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
   decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
   folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
   should that page also say the disk is full and show the free space?
-
-- **A restore's staged backup copies may fill the disk for good.** The start's clean-up
-  (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) empties `backup-staging` but never
-  `restore-staging/staged-recovery`, where A947 slice 4a keeps each uploaded backup as a decrypted
-  copy; only `bootServer` removes that folder (`clearStagedRecoveries`, `apps/server/src/boot.ts`),
-  after the count check. So if those copies are what filled the disk, the box might show the
-  full-disk page on every start — read in the code, not run. The owner's ruling (2026-10-23): fix it
-  with the small-disk test set-up the full-disk start tests use, test first.
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
@@ -4988,7 +4975,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   - An interrupted bucket rebuild, archive check or archive download leaves its scratch folder —
     a full copy of the venue database, or the encrypted archive (`archive-download-`, inside
     `restore-staging`) — under the state folder; the next run makes a new one and does not remove
-    it. Also left open by A538-5.
+    it. Also left open by A538-5. The same holds for the `archive-validate-` folders (a decrypted
+    `venue.db`) and `restore-admission-` folders made directly in `restore-staging`
+    (`apps/server/src/restore.ts`) when the process is killed partway, the setup wizard's preview
+    included; neither boot nor the start's clean-up removes them, and the restore command uses the
+    same names from another process. Found by reading (A1038's review), not run.
   - A `.venue.db-replaced-` folder left in the venue folder is removed by the box's next start
     (`clearReplacedDatabases`, A31) only from the container's entry: a server started any other
     way (the dev stack) does not.

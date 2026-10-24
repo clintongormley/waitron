@@ -69,6 +69,39 @@ import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 
+/** When set, first-setup resolution answers that the box runs from these folders instead. */
+const workspace = vi.hoisted(() => ({
+  roots: undefined as { stateDir: string; venueDir: string } | undefined,
+}));
+
+vi.mock("./first-setup-entry.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./first-setup-entry.js")>();
+  const { lockVenueDatabase } = await import("@waitron/db");
+  type Admission = Awaited<ReturnType<typeof original.resolveFirstSetupEntry>>;
+  return {
+    ...original,
+    resolveFirstSetupEntry: async (
+      ...args: Parameters<typeof original.resolveFirstSetupEntry>
+    ): Promise<Admission> => {
+      const roots = workspace.roots;
+      if (roots === undefined) return original.resolveFirstSetupEntry(...args);
+      // As the real admission does, the workspace's venue folder is held for the whole start.
+      return {
+        kind: "normal",
+        roots: { ...roots, binding: { stateDir: roots.stateDir, venueDir: roots.venueDir } },
+        async run<T>(body: (venueHeld: boolean) => Promise<T>): Promise<T> {
+          const hold = await lockVenueDatabase(roots.venueDir);
+          try {
+            return await body(true);
+          } finally {
+            hold.release();
+          }
+        },
+      } as unknown as Admission;
+    },
+  };
+});
+
 const FLOOR = 8 * 1024 * 1024;
 const TITLE = escapeHtml("The box's disk is full, so Waitron cannot save anything.");
 const DELETED = escapeHtml(
@@ -108,8 +141,8 @@ function entryDeps(stateDir: string, over: Partial<Parameters<typeof runEntry>[0
     readRecoveryState,
     writeRecoveryState,
     // Proof the database is usable: a table created and a row written.
-    startServer: vi.fn<StartServer>(async () => {
-      const store = await openVenueDatabase(venueDir);
+    startServer: vi.fn<StartServer>(async (env) => {
+      const store = await openVenueDatabase(env.WAITRON_VENUE_DIR ?? venueDir);
       try {
         store.venue.run(sql`create table if not exists start_probe (id integer primary key)`);
         store.venue.run(sql`insert into start_probe default values`);
@@ -431,6 +464,69 @@ describe("a start on a real full disk", () => {
     // The setup start counted one, and its stayed-up clear is a stub that never fires.
     expect((await readRecoveryState(stateDir)).failures).toBe(2);
     expect([inodeOf(recoveryLock), inodeOf(venueLock)]).toEqual(inodes);
+  });
+
+  it("a start whose staged recovery copies fill the disk frees them and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "staged");
+    const restoreStaging = join(stateDir, "restore-staging");
+    const staged = join(restoreStaging, "staged-recovery");
+    mkdirSync(join(staged, "upload-1"), { recursive: true });
+    writeFileSync(join(staged, "upload-1", "venue.db"), Buffer.alloc(4 * 1024 * 1024, 67));
+    writeFileSync(join(staged, "upload-1", "manifest.json"), "{}");
+    const download = join(restoreStaging, "archive-download-x");
+    mkdirSync(download);
+    writeFileSync(join(download, "part"), "x");
+
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+    expect(d.startServer).toHaveBeenCalledTimes(1);
+    expect(() => statSync(staged)).toThrow();
+    expect(statSync(restoreStaging).isDirectory()).toBe(true);
+    expect(readFileSync(join(download, "part"), "utf8")).toBe("x");
+  });
+
+  it("a start that first setup moved to a workspace frees the workspace's staged recovery copy and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const anchor = await startedBefore(small, "moved");
+    const base = join(anchor, "first-setup-workspaces", "0b6f3c1e-5d2a-4c8e-9f1a-7e2d4b6a8c90");
+    const roots = { stateDir: join(base, "state"), venueDir: join(base, "venue") };
+    mkdirSync(roots.stateDir, { recursive: true });
+    mkdirSync(roots.venueDir);
+    await writeRecoveryState(roots.stateDir, FRESH);
+    workspace.roots = roots;
+    try {
+      const room = entryDeps(anchor);
+      await runEntry(room);
+      expect(room.startServer).toHaveBeenCalledTimes(1);
+      const staged = join(roots.stateDir, "restore-staging", "staged-recovery");
+      mkdirSync(join(staged, "upload-1"), { recursive: true });
+      writeFileSync(join(staged, "upload-1", "venue.db"), Buffer.alloc(4 * 1024 * 1024, 67));
+      mkdirSync(join(roots.stateDir, "backup-staging"));
+      const dump = join(
+        roots.stateDir,
+        "backup-staging",
+        dumpFileName(new Date("2026-10-20T00:00:00Z")),
+      );
+      writeFileSync(dump, Buffer.alloc(1024 * 1024, 66));
+
+      small.fill();
+      expect(small.free()).toBeLessThan(65_536);
+
+      const d = entryDeps(anchor);
+      await runEntry(d);
+      expect(d.serveRecovery).not.toHaveBeenCalled();
+      expect(d.startServer).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(d.startServer).mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
+      expect(() => statSync(staged)).toThrow();
+      expect(() => statSync(dump)).toThrow();
+    } finally {
+      workspace.roots = undefined;
+    }
   });
 
   let nothingDir: string | undefined;
