@@ -140,7 +140,13 @@ describe("till-shell's menu badges", () => {
   it.each([
     [
       "handheld",
-      ["expo.open", "profile.open", "equipment.open", "department_transfer.short"],
+      [
+        "expo.open",
+        "profile.open",
+        "device_zones.title",
+        "equipment.open",
+        "department_transfer.short",
+      ],
       ["find_bill.open", "schedule.open", "station.open", "shell.logout"],
     ],
     [
@@ -170,7 +176,7 @@ describe("till-shell's menu badges", () => {
     const el = await mountShell({ ...handheld, affordances: [], transferAvailable: false }, 1500);
     const profile = el.shadowRoot!.querySelector<Lit>(".session > wt-button.profile");
     expect(profile).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-menu-row")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".session > wt-menu-row")).toBeNull();
   });
 
   it.each([
@@ -274,6 +280,7 @@ describe("till-shell's menu badges", () => {
     expect(await badged(more)).toEqual([
       t("expo.open"),
       t("profile.open"),
+      t("device_zones.title"),
       t("equipment.open"),
       t("department_transfer.short"),
     ]);

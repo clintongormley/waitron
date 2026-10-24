@@ -34,6 +34,8 @@ export const helpEn = {
     "Switches this device to another profile it is approved for. Park or clear the order in progress first.",
   "help.more.settings":
     "Opens this device's equipment and the zones it shows. In the zones, choose which ones appear on this till and which opens first.",
+  "help.more.zones":
+    "Chooses which of this profile's zones this device shows, and which opens first.",
   "help.more.equipment":
     "Chooses what this device prints receipts, payment slips and invoices on, which card reader it uses and which cash drawer it opens. Pick each from the list; a printer or card reader can also be scanned by its label.",
   "help.more.transfers":
@@ -78,6 +80,8 @@ export const helpEs: Record<HelpKey, string> = {
     "Cambia este dispositivo a otro perfil para el que está aprobado. Antes, aparca o vacía el pedido en curso.",
   "help.more.settings":
     "Abre el equipo de este dispositivo y las zonas que muestra. En las zonas, elige cuáles aparecen en esta caja y cuál se abre primero.",
+  "help.more.zones":
+    "Elige qué zonas de este perfil muestra este dispositivo y cuál se abre primero.",
   "help.more.equipment":
     "Elige dónde imprime este dispositivo los tickets, los justificantes de pago y las facturas, qué lector de tarjetas usa y qué cajón abre. Elige cada uno de la lista; una impresora o un lector de tarjetas también se puede escanear por su etiqueta.",
   "help.more.transfers":
