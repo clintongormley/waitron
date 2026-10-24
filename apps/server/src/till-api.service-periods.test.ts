@@ -111,10 +111,14 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
   endsAt,
 });
 
-async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
+async function setupVenue(options: {
+  timetable: boolean;
+  simulatorCard?: boolean;
+}): Promise<Venue> {
   return provisionSignedInTill(suite.db, {
     taxId: nextNif(),
     dayCutover: "05:00",
+    simulatorCard: options.simulatorCard,
     seed: async (tx, cfg) => {
       const restaurant = await createBareDepartment(tx, cfg, "Restaurant", MONDAY_10_00);
       const deli = await createBareDepartment(tx, cfg, "Deli", MONDAY_10_00);
@@ -370,8 +374,8 @@ describe("ordering uses period membership while browsing follows the timetable",
   });
 });
 
-async function mealVenue(weekdays: readonly number[] = [1]): Promise<Venue> {
-  const v = await setupVenue({ timetable: true });
+async function mealVenue(weekdays: readonly number[] = [1], simulatorCard = false): Promise<Venue> {
+  const v = await setupVenue({ timetable: true, simulatorCard });
   await withTransaction(suite.db, async (tx) => {
     const periods = await tx
       .select()
@@ -1353,6 +1357,87 @@ describe("a dish whose period ended earlier today", () => {
     expect(await marksOf(held.id)).toEqual([
       { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
     ]);
+  });
+
+  describe("on a counter sale", () => {
+    const counterVenue = async () => {
+      at(mondayAt("14:05"));
+      return mealVenue([1], true);
+    };
+    const toast = (v: Venue) => [{ menuItemId: v.toast.almuerzo, quantity: "1" }];
+    const cashSale = (v: Venue, id: string, extra: Record<string, unknown>) =>
+      sendAsTill(v, "POST", "/api/sales", {
+        workingOrderId: id,
+        zoneId: v.diningZone,
+        lines: toast(v),
+        tender: { method: "cash", amount: "5.00" },
+        ...extra,
+      });
+    const cardSale = (v: Venue, id: string, extra: Record<string, unknown>) =>
+      sendAsTill(v, "POST", "/api/pay", {
+        id,
+        zoneId: v.diningZone,
+        lines: toast(v),
+        simulationOutcome: "captured",
+        ...extra,
+      });
+
+    it("refuses an unconfirmed cash sale at 14:05 and writes no order", async () => {
+      const v = await counterVenue();
+      const id = randomUUID();
+      expect(await cashSale(v, id, {})).toMatchObject(
+        periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
+      );
+      expect(await orderRows(id)).toEqual([]);
+    });
+
+    it("takes a confirmed cash sale at 14:05 at its published 4.00, marked by the signed-in person", async () => {
+      const v = await counterVenue();
+      const id = randomUUID();
+      const paid = await cashSale(v, id, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+      expect(paid.status).toBe(200);
+      expect(paid.body).toMatchObject({
+        total: "4.00",
+        tender: { method: "cash", change: "1.00" },
+      });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+      ]);
+    });
+
+    it("refuses an unconfirmed simulator card pay at 14:05 and writes no order", async () => {
+      const v = await counterVenue();
+      const id = randomUUID();
+      expect(await cardSale(v, id, {})).toMatchObject(
+        periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
+      );
+      expect(await orderRows(id)).toEqual([]);
+    });
+
+    it("takes a confirmed simulator card pay at 14:05 at its published 4.00, marked by the signed-in person", async () => {
+      const v = await counterVenue();
+      const id = randomUUID();
+      const paid = await cardSale(v, id, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+      expect(paid.status).toBe(200);
+      expect(paid.body).toMatchObject({ outcome: "captured", ticket: { total: "4.00" } });
+      expect(await marksOf(id)).toEqual([
+        { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+      ]);
+    });
+
+    it.each(["/api/sales", "/api/pay"])(
+      "refuses %s with a lateSend that is null and writes no order",
+      async (path) => {
+        const v = await counterVenue();
+        const id = randomUUID();
+        const sent = path === "/api/sales" ? cashSale : cardSale;
+        expect(await sent(v, id, { lateSend: null })).toMatchObject({
+          status: 400,
+          body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
+        });
+        expect(await orderRows(id)).toEqual([]);
+      },
+    );
   });
 
   describe("when the restaurant asks for a manager", () => {

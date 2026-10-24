@@ -1761,6 +1761,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const guests = readGuestsChoice(body.guests);
+      const lateSend = parseLateSend(body.lateSend);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
@@ -1775,25 +1776,29 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ),
       );
       const saleCfg = sendingCfg(cfg, c, session.device);
-      const result = await recordTillSale(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          clock: deps.clock,
-          log,
-          attendance: deps.attendance,
-          disk: deps.disk,
-        },
-        saleCfg,
-        { ...body, zoneId, guests },
-        { personId, sessionId: session.sessionId },
+      const result = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        recordTillSale(
+          {
+            db: deps.db,
+            backend: deps.backend,
+            clock: deps.clock,
+            log,
+            attendance: deps.attendance,
+            disk: deps.disk,
+          },
+          saleCfg,
+          { ...body, zoneId, guests, lateSend: late },
+          { personId, sessionId: session.sessionId },
+        ),
       );
       return c.json(result);
     }),
   );
 
   // A payment outcome (declined, network unavailable) is neither a client nor a server fault, so it
-  // answers 200 with the outcome as data, even a decline.
+  // answers 200 with the outcome as data, even a decline. A late send's manager PIN holds its turn
+  // for the whole card payment, which runs inside the pay; only another override for the same
+  // manager on this device, which is busy with the payment, waits for it.
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "sale.take_payment" });
@@ -1819,6 +1824,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
       const guests = readGuestsChoice(body.guests);
+      const lateSend = parseLateSend(body.lateSend);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1837,22 +1843,24 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const saleCfg = sendingCfg(cfg, c, device);
 
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, body.readerId);
-      const outcome = await payWorkingOrderIntegrated(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          clock: deps.clock,
-          provider,
-          ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
-          deviceProfileId: device.deviceProfileId,
-          log,
-          attendance: deps.attendance,
-          disk: deps.disk,
-          sayCardChargedNotRecorded: true,
-        },
-        saleCfg,
-        { ...body, zoneId, guests },
-        { personId, sessionId: session.sessionId },
+      const outcome = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        payWorkingOrderIntegrated(
+          {
+            db: deps.db,
+            backend: deps.backend,
+            clock: deps.clock,
+            provider,
+            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
+            deviceProfileId: device.deviceProfileId,
+            log,
+            attendance: deps.attendance,
+            disk: deps.disk,
+            sayCardChargedNotRecorded: true,
+          },
+          saleCfg,
+          { ...body, zoneId, guests, lateSend: late },
+          { personId, sessionId: session.sessionId },
+        ),
       );
       return c.json(outcome); // 200 with the discriminated outcome — even a decline.
     }),
