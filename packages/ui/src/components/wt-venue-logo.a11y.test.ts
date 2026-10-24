@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { WtVenueLogo } from "./wt-venue-logo.js";
@@ -43,6 +43,14 @@ describe.each(["light", "dark"] as const)("wt-venue-logo a11y (%s theme)", (them
 
   test("a logo with one image, on its plate on a dark screen", async () => {
     const el = await logo(`light="${LIGHT}" alt="Bar Lucía"`, theme);
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector<HTMLElement>(".box")!
+          .style.getPropertyValue("--wt-venue-logo-ratio"),
+      ).toBe("4"),
+    );
+    await el.updateComplete;
     expect(plated(el)).toBe(theme === "dark");
     await expectNoA11yViolations(host);
   });

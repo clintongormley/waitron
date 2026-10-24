@@ -78,6 +78,7 @@ afterEach(async () => {
 describe("wt-venue-logo", () => {
   it("paints its plate from its token", async () => {
     const el = await logo(`light="${LIGHT}"`, "dark");
+    await loaded(el);
     el.style.setProperty("--wt-color-logo-plate", "rgb(1, 2, 3)");
     expect(getComputedStyle(box(el)).backgroundColor).toBe("rgb(1, 2, 3)");
   });
@@ -92,6 +93,7 @@ describe("wt-venue-logo", () => {
 
   it("draws the light image on a white plate on dark screens with one image", async () => {
     const dark = await logo(`light="${LIGHT}"`, "dark");
+    await loaded(dark);
     expect(img(dark)!.src).toBe(LIGHT);
     expect(box(dark).hasAttribute("data-plate")).toBe(true);
     const style = getComputedStyle(box(dark));
@@ -100,6 +102,7 @@ describe("wt-venue-logo", () => {
     expect(style.paddingInlineStart).toBe("4px");
 
     const light = await logo(`light="${LIGHT}"`, "light");
+    await loaded(light);
     expect(box(light).hasAttribute("data-plate")).toBe(false);
     expect(getComputedStyle(box(light)).paddingTop).toBe("0px");
   });
@@ -117,8 +120,57 @@ describe("wt-venue-logo", () => {
     sheets.push(sheet);
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     const el = await logo(`light="${LIGHT}"`, "dark");
+    await loaded(el);
+    expect(box(el).hasAttribute("data-plate")).toBe(true);
     expect(getComputedStyle(host).getPropertyValue("--wt-color-surface")).toBe("#0000ff");
     expect(getComputedStyle(box(el)).backgroundColor).toBe("rgb(255, 255, 255)");
+  });
+
+  it("shows no plate on a dark screen until the image has loaded", async () => {
+    const el = await logo("", "dark");
+    el.light = png(400, 100);
+    await el.updateComplete;
+    expect(img(el)).not.toBeNull();
+    expect(box(el).style.getPropertyValue("--wt-venue-logo-ratio")).toBe("0");
+    expect(box(el).hasAttribute("data-plate")).toBe(false);
+    expect(box(el).getBoundingClientRect().width).toBe(0);
+    await loaded(el);
+    expect(box(el).hasAttribute("data-plate")).toBe(true);
+  });
+
+  it("shows no plate on a dark screen for an image that failed", async () => {
+    const el = await logo(`light="/no-such.png"`, "dark");
+    await new Promise<void>((resolve) => el.addEventListener("wt-logo-error", () => resolve()));
+    await el.updateComplete;
+    expect(box(el).hasAttribute("data-plate")).toBe(false);
+    const frame = box(el).getBoundingClientRect();
+    expect(frame.width).toBe(0);
+    expect(frame.height).toBeCloseTo(40, 1);
+  });
+
+  it("draws a plated 4:1 banner logo 4 px inside its box", async () => {
+    const el = await logo(`light="${png(400, 100)}"`, "dark");
+    await loaded(el);
+    expect(box(el).hasAttribute("data-plate")).toBe(true);
+    const drawn = img(el)!.getBoundingClientRect();
+    const frame = box(el).getBoundingClientRect();
+    expect(Math.abs(drawn.width - 128)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(drawn.height - 32)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(drawn.left - frame.left - 4)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(drawn.top - frame.top - 4)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(frame.width - 136)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(frame.height - 40)).toBeLessThanOrEqual(0.5);
+  });
+
+  it("keeps its sizes to itself", async () => {
+    const el = await logo(`light="${png(400, 100)}"`, "light");
+    el.style.setProperty("--wt-venue-logo-height", "200px");
+    el.style.setProperty("--wt-venue-logo-width", "10px");
+    el.style.setProperty("--wt-venue-logo-inset", "30px");
+    await loaded(el);
+    const drawn = img(el)!.getBoundingClientRect();
+    expect(Math.abs(drawn.width - 160)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(box(el).getBoundingClientRect().height - 40)).toBeLessThanOrEqual(0.5);
   });
 
   describe.each(SIZES)("keeps each logo's shape in a $size box", ({ size, height, width }) => {
@@ -238,22 +290,26 @@ describe("wt-venue-logo", () => {
   it("reports a failed and a loaded image", async () => {
     const errors: CustomEvent<{ src: string }>[] = [];
     const loads: CustomEvent<{ src: string }>[] = [];
-    document.addEventListener("wt-logo-error", (e) => errors.push(e as CustomEvent), {
-      once: true,
-    });
-    document.addEventListener("wt-logo-load", (e) => loads.push(e as CustomEvent), { once: true });
+    const onError = (e: Event) => errors.push(e as CustomEvent<{ src: string }>);
+    const onLoad = (e: Event) => loads.push(e as CustomEvent<{ src: string }>);
+    document.addEventListener("wt-logo-error", onError);
+    document.addEventListener("wt-logo-load", onLoad);
+    try {
+      const failing = await logo(`light="/no-such.png"`, "light");
+      await vi.waitFor(() => expect(errors).toHaveLength(1));
+      expect(errors[0]!.detail).toEqual({ src: "/no-such.png" });
+      expect(errors[0]!.bubbles && errors[0]!.composed).toBe(true);
+      expect(errors[0]!.target).toBe(failing);
 
-    const failing = await logo(`light="/no-such.png"`, "light");
-    await vi.waitFor(() => expect(errors).toHaveLength(1));
-    expect(errors[0]!.detail).toEqual({ src: "/no-such.png" });
-    expect(errors[0]!.bubbles && errors[0]!.composed).toBe(true);
-    expect(errors[0]!.target).toBe(failing);
-
-    const good = await logo(`light="${LIGHT}"`, "light");
-    await vi.waitFor(() => expect(loads).toHaveLength(1));
-    expect(loads[0]!.detail).toEqual({ src: LIGHT });
-    expect(loads[0]!.bubbles && loads[0]!.composed).toBe(true);
-    expect(loads[0]!.target).toBe(good);
+      const good = await logo(`light="${LIGHT}"`, "light");
+      await vi.waitFor(() => expect(loads).toHaveLength(1));
+      expect(loads[0]!.detail).toEqual({ src: LIGHT });
+      expect(loads[0]!.bubbles && loads[0]!.composed).toBe(true);
+      expect(loads[0]!.target).toBe(good);
+    } finally {
+      document.removeEventListener("wt-logo-error", onError);
+      document.removeEventListener("wt-logo-load", onLoad);
+    }
   });
 
   it("stops the image's own load and error events at the box", async () => {

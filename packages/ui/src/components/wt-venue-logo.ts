@@ -19,32 +19,32 @@ export class WtVenueLogo extends LitElement {
     css`
       :host {
         --wt-venue-logo-ratio: 0;
-        --wt-venue-logo-height: calc(var(--wt-space-6) + var(--wt-space-2));
-        --wt-venue-logo-width: calc(var(--wt-space-6) * 5);
-        --wt-venue-logo-inset: 0px;
         display: inline-flex;
         min-inline-size: 0;
         max-inline-size: 100%;
         vertical-align: middle;
       }
 
-      :host([size="bar"]) {
-        --wt-venue-logo-height: var(--wt-space-6);
-        --wt-venue-logo-width: calc(var(--wt-space-6) * 4);
-      }
-
-      :host([size="sign-in"]) {
-        --wt-venue-logo-height: calc(var(--wt-space-6) * 3);
-        --wt-venue-logo-width: calc(var(--wt-space-6) * 10);
-      }
-
       .box {
+        --wt-venue-logo-height: calc(var(--wt-space-6) + var(--wt-space-2));
+        --wt-venue-logo-width: calc(var(--wt-space-6) * 5);
+        --wt-venue-logo-inset: 0px;
         display: inline-flex;
         align-items: center;
         block-size: var(--wt-venue-logo-height);
         min-inline-size: 0;
         max-inline-size: 100%;
         padding: var(--wt-venue-logo-inset);
+      }
+
+      :host([size="bar"]) .box {
+        --wt-venue-logo-height: var(--wt-space-6);
+        --wt-venue-logo-width: calc(var(--wt-space-6) * 4);
+      }
+
+      :host([size="sign-in"]) .box {
+        --wt-venue-logo-height: calc(var(--wt-space-6) * 3);
+        --wt-venue-logo-width: calc(var(--wt-space-6) * 10);
       }
 
       .box[data-plate] {
@@ -113,7 +113,7 @@ export class WtVenueLogo extends LitElement {
 
   override render() {
     const src = this.#drawn;
-    const plate = this.#scheme.dark && !this.dark && src !== "";
+    const plate = this.#scheme.dark && !this.dark && this.ratio > 0;
     return html`<span
       class="box"
       part="box"
