@@ -5178,18 +5178,10 @@ For browser storage checks, inspect the operation's own entry and every write, c
 values rather than PIN substrings inside random IDs. See the
 [testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
 
-- **Qualify the first Live recovery-PDF browser test at a UTC-hour boundary.**
-  `apps/server/src/first-fiscal-document-download.e2e.test.ts` timed out waiting for setup to
-  finish after `clock_unconfirmed` in [CI 39897714432](https://github.com/clintongormley/waitron/actions/runs/39897714432/job/120232029808).
-  Its boundary dependence remains an end-to-end hypothesis; both locale cases passed locally
-  away from the boundary. Keep every recovery-PDF assertion and the clock admission guard.
-  Recheck after the overlapping clock work in owner-held PR #1990 lands or releases this file.
-
 - **Tests that read a built command's error output fail under Claude Code.** The command's stderr
   begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-launch.test.ts` and
   seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8
   plan, E8 and E13). Found while planning A798-B slice 8.
-
 
 - **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
   tests.** The park, place and fire-all clock cases (A798-B slice 8, Task 13b) failed that way and
