@@ -119,7 +119,7 @@ export function agreeingDeviceGroup(witnesses: readonly ClockWitness[]): ClockWi
 }
 
 /** A witness whose times are unreadable, or whose uncertainty is negative or not finite, counts
- * neither way. */
+ * neither way; so does an authority reading too uncertain to agree or disagree. */
 export function judgeClockWitnesses(witnesses: readonly ClockWitness[]): ClockWitnessVerdict {
   const readings = witnesses.flatMap((witness) => readable(witness) ?? []);
   const devices = latestDevices(readings);

@@ -365,6 +365,18 @@ describe("AEAT's time", () => {
     expect(await sale(R)).toBe("clock.behind_chain");
   });
 
+  it("too uncertain to agree or disagree, is no witness: two agreeing devices still confirm", async () => {
+    await sale(T);
+    const vague = authority(R - M, 90 * S, 40 * S);
+    const witnesses = [vague, ...twoDevices(R)];
+    const state = await stateAt(R, witnesses);
+    expect(state!.proof).toBe("ready");
+    expect(state!.agreeing).toEqual({ authority: null, devices: twoDevices(R) });
+    expect(state!.contrary).toEqual({ authority: null, devices: [] });
+    expect((await confirm(R, witnesses)).confirmation!.source).toBe("devices");
+    expect(await sale(R)).toBe("recorded");
+  });
+
   it("an unreadable boxAt on a disagreement counts neither way", async () => {
     await sale(T);
     const witnesses = [...twoDevices(R), { ...authority(R - M, 2 * H, 500), boxAt: "garbage" }];
@@ -426,6 +438,17 @@ describe("witnesses taken before the stop", () => {
     await sale(T);
     const witnesses = [...twoDevices(R), authority(T - 30 * S, 2 * H, 500)];
     expect((await stateAt(R, witnesses))!.proof).toBe("ready");
+  });
+
+  it("two disagreeing devices taken before the stop are no contrary proof", async () => {
+    await sale(T);
+    const before = [
+      device("till-3", T - 30 * S, 2 * H, "10.0.0.3"),
+      device("till-4", T - 30 * S, 2 * H, "10.0.0.4"),
+    ];
+    const state = await stateAt(R, [...twoDevices(R), ...before]);
+    expect(state!.proof).toBe("ready");
+    expect(state!.contrary).toEqual({ authority: null, devices: [] });
   });
 });
 
