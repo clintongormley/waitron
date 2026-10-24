@@ -18,7 +18,7 @@ import { loadCloudOrigin } from "./cloud-client.js";
 import { DEFAULT_MIGRATIONS_ROOT } from "./boot.js";
 import { isUnset } from "./env-value.js";
 import { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
-import { RESTORE_STAGING_DIR } from "./restore.js";
+import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import type { Logger } from "./logger.js";
