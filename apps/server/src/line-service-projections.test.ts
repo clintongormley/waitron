@@ -18,6 +18,7 @@ import {
   listOrderGroups,
   readCurrentOrders,
   readReleaseReminders,
+  recordHeldPaper,
   snoozeReminder,
   unsnoozeReminder,
 } from "./order-groups.js";
@@ -369,6 +370,7 @@ describe("charged cancellation read projections", () => {
         .update(orderGroups)
         .set({ holdPrintedAt: AT })
         .where(eq(orderGroups.id, order.parent.groupId!));
+      await recordHeldPaper(tx, order.parent.groupId!, new Set([venue.stationId, extraStationId]));
       await correctJoin(tx, venue.cfg, order.parent.groupId!, [order.parent.id]);
     });
     const notices = await inTx(venue, async (tx) => {
