@@ -1,4 +1,732 @@
-# A798-B slice 9 — devices report their clock, `clock.disagrees`, `clock.unusable` in the bell, the manager's restart, and the clock-stop email
+# A798-B slice 9 — payments restart by themselves once the clock is confirmed, and wrongly dated records go to the owner
+
+> **Revision 4 (2026-10-24): the owner's clock answers.** This block governs. Everything below the
+> line "As built before revision 4" is the plan slice 9's code was built from (revisions 1–3, kept
+> for their receipts); where it disagrees with this block, this block wins. The owner's answers are
+> in `~/waitron-campaign-b/a798-9-rev/OWNER-ANSWERS.md`; the design is revision 7
+> (`docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md` §4.9). The branch
+> (`feat/a798-9-clock-restart`, PR #2025, worktree `waitron-feat-a798-9-clock-restart`) is rebased
+> on `main` `d647f9288` and holds slice 9 as built (`9ab6751c8`, `faeedfb0b`); this revision changes
+> that code, it does not start over.
+>
+> **The owner's answers are three pull requests' worth of work**, split so that selling never stops
+> for a clock check before the box can be confirmed and corrected:
+> - **Slice 9, this PR (#2025)** — this plan: during a clock-behind stop, payments restart by
+>   themselves on AEAT's time or two agreeing tills or handhelds, or when an administrator confirms
+>   that their own device agrees with the box; no button, no 24-hour cap; every confirmation kept;
+>   the wrongly dated records listed with an owner's task; managers told by bell and email; devices
+>   and browsers on the box itself never count. The box does not set its clock yet. **The slice's
+>   one migration** (both new tables) is here.
+> - **Slice 9b** — [2026-10-24-a798-9b-box-sets-its-clock.md](2026-10-24-a798-9b-box-sets-its-clock.md):
+>   a service on the host lets the box set its own clock from those sources, and the box watches
+>   its time service.
+> - **Slice 9c** — [2026-10-24-a798-9c-clock-check-at-start-and-change.md](2026-10-24-a798-9c-clock-check-at-start-and-change.md):
+>   a clock check at every start and after every change of the clock, with selling stopped while it
+>   waits. Depends on 9 and 9b.
+>
+> Each leaves `main` green and the box no worse than today: slice 9 only adds ways OUT of slice 8's
+> stop; 9b adds the clock correction, still only inside a stop; 9c adds new stops only once both
+> ways out exist.
+
+## Owner FYI defaults (revision 4 and the two slices after it)
+
+Every point the owner's answers left open, the default built, and why. Each can be overridden.
+
+1. **Three pull requests (9, 9b, 9c), not one.** Why: each is large, and the stop at start must not
+   land before the box can confirm and correct its clock.
+2. **"An administrator" is a new admin-only permission, `node.clock`.** The dashboard's own test for
+   an administrator is `person.admin`; `system.manage`, which the old restart button used, is held
+   by managers too (`packages/identity/src/permissions.ts`). Why: the house gates on a permission,
+   never a role, and names machine permissions `node.*`.
+3. **Managers (`system.manage`) are the ones told**, by bell and email, as for the stop itself.
+4. **Every confirmation is kept in a new append-only table, `clock_confirmations`** (source, the
+   administrator for a hand confirmation, the box's reading and the time adopted, any step applied,
+   the proof, and the record it lifts past); the checks of slice 9c go in `clock_checks`. Both are
+   created now, in one migration. `clock_stop_restarts` stays, written by nothing, for the go-live
+   migration squash to drop. Why: its `person_id` cannot be empty (measured, T2), and rebuilding or
+   dropping a shipped append-only table is avoided.
+5. **Payments restart on the clock watch, which checks every 15 seconds during a stop**; AEAT is
+   still asked at most once a minute. Why: tills report their clock every 15 seconds.
+6. **AEAT's time outranks the devices.** AEAT agreeing with the box restarts payments even if two
+   devices disagree (they get `clock.disagrees`); AEAT disagreeing blocks devices and the
+   administrator for the rest of the stop (slice 9b sets the clock to AEAT's time instead). Why: the
+   owner put AEAT first.
+7. **An administrator confirms in two quick steps the browser makes by itself** — the box hands out a
+   challenge, the browser answers with its own clock within five seconds — the pattern A679 and A947
+   use. The device agrees when it is within a minute after allowing half the round trip. Why: the
+   time shown in a dialog is stale by the time someone presses Confirm.
+8. **Until slice 9b, an administrator whose device disagrees with the box is told so and cannot
+   confirm**: "Your device and the box differ by more than a minute. If your device is right, the
+   box's clock is wrong: connect the box to the internet so it can correct it."
+9. **Wrongly dated means:** every record dated more than a minute after the confirmed time; and, from
+   slice 9c, after a confirmed change of the clock, every record written since the clock was last
+   confirmed. One owner's task (`clock.records_misdated`, open until marked handled) per
+   confirmation that finds any; the list (invoice number and recorded time) on the Box status page.
+   A record can appear in two lists if two confirmations contradict each other.
+10. **A further step back after a restart no longer stops payments for good**: payments stop again,
+    and a fresh confirmation restarts them. Why: "regardless of the time difference, we need to
+    restart selling".
+11. **A second confirmation naming the same record while the first's alerts are open records no
+    second alert** (the bell's open-alert key is the record's sale); the table and the page keep both.
+12. **A remote administrator reaching the box through the cloud tunnel is refused**, like the box's
+    own screen: the tunnel delivers requests from loopback (`packages/tunnel/src/client.ts`, read).
+    Why: fail closed. A backlog entry asks how to tell them apart.
+13. **The `clock.behind_chain_disproved` alert stays as built** (slice 9c turns a later clock change
+    into a check of its own).
+14. **No new picture.** The LOOK tasks screenshot the built screens; picture 9 gets a dated pointer.
+15. **(9b) The host service is the first request of B3's planned `waitron-box` service**, installed
+    by `waitron.sh install`; the container gets no clock capability.
+16. **(9b) While the time service reports itself synchronised, the box never sets its clock from
+    devices or an administrator** — they can only agree with it. Why: an internet time server is a
+    better source than two tablets, and the two would undo each other.
+17. **(9b) `clock.sync_off` is a warning in the bell only, no email.** A production box whose host
+    service does not answer also raises it; elsewhere (a laptop) it stays silent, as today.
+18. **(9c) A clock change of up to a minute in total since the last confirmation is not a check**;
+    more than a minute, either way, is. Why: the house's one-minute margin; a time service's small
+    steps would otherwise stop the venue.
+19. **(9c) The start opens its check before the server serves, and tries AEAT once (five seconds at
+    most) before serving**, so a box with internet sells at once.
+20. **(9c) The managers' email goes out when a check has waited five minutes**, so a start AEAT
+    confirms in a second sends none.
+21. **(9c) Only the Veri\*Factu module stops** (design decision 16 stands): a box whose fiscal seat
+    writes no records never stops for a clock check.
+
+## Measured for revision 4
+
+Run on 2026-10-24, macOS (Darwin 25.6.0), Node v26.11.1, in this worktree at `faeedfb0b`. Logs and
+scripts under `~/waitron-campaign-b/a798-9-rev/probe/`.
+
+- **T1 — what the server sees for a browser on the box itself** (`onbox-peer.log`,
+  `zz-onbox-probe.test.ts`, a throwaway Vitest case in `apps/server`, deleted after). A real
+  `@hono/node-server` on `0.0.0.0` answered each request with `getConnInfo(c).remote.address`,
+  `requestFromBox(c)` and the same check given only a loopback interface; fetched from the same Mac
+  with `X-Forwarded-For: 192.0.2.7`. Printed:
+  `via 127.0.0.1: {"peer":"127.0.0.1","xff":"192.0.2.7","onBox":true,"onBoxIfOnlyLoopbackCounted":true}`
+  and
+  `via 192.168.10.101: {"peer":"192.168.10.101","xff":"192.0.2.7","onBox":true,"onBoxIfOnlyLoopbackCounted":false}`;
+  `Tests 1 passed (1)`. The failing case is the last field: a loopback-only check counts the box's
+  own browser as another device. The header changed nothing. Not run inside Docker's host network.
+- **T2 — `clock_stop_restarts` cannot hold an automatic restart** (`sqlite-probe.log`,
+  `sqlite-probe.mjs`). The table as `0010_clock_stop.sql` creates it; an insert with `person_id` NULL
+  printed `NOT NULL constraint failed: clock_stop_restarts.person_id`. Same run: a unique index took
+  two NULLs (`ok`, `ok`) and refused a second `x` (`UNIQUE constraint failed: c.registro_id`).
+- **T3 — the built watch ignores a backward step** (`backward-jump.log`):
+  `pnpm --filter @waitron/server exec vitest run src/clock-watch.test.ts -t "backward"` →
+  `Tests 1 passed | 27 skipped (28)`: the case "does not report a backward jump" passes, so as built
+  only a forward jump counts. Slice 9c changes that.
+- **T4 — nothing could be measured on Linux.** `docker info` answered `failed to connect to the
+  docker API at unix:///Users/clintongormley/.docker/run/docker.sock`; `open -a Docker` failed with
+  `-1712`; `docker desktop start` said "Docker Desktop is already running" and the socket stayed
+  absent for two minutes. No Linux machine was reachable, and the owner's box was not touched. So
+  everything slice 9b says about the host's clock rests on the reads below and is measured first in
+  9b's Task 0.
+- **Reads, saved in `probe/man/`** (fetched 2026-10-24 from man7.org and systemd's `main`):
+  `capabilities(7)`: CAP_SYS_TIME "Set system clock … set real-time (hardware) clock";
+  `time_namespaces(7)`: "time namespaces do not virtualize the CLOCK_REALTIME clock";
+  `clock_gettime(2)`: `CLOCK_BOOTTIME` "A nonsettable system-wide clock … also includes any time that
+  the system is suspended"; `timedatectl(1)` `set-time`: "This will also update the RTC time
+  accordingly"; `systemd.time(7)`: "an integer prefixed with "@" is evaluated relative to the UNIX
+  epoch"; `src/timedate/timedated.c:878-879`: SetTime answers "Automatic time synchronization is
+  enabled" while an NTP service is active, `:572-582`: `NTPSynchronized` is `adjtimex`'s maximum
+  error under 16 s. The design's experiment 6 (Docker Desktop, 2026-10-20) already printed a default
+  container's bounding set without `cap_sys_time`.
+
+## What stays as built, and what changes
+
+**Stays** (Tasks 1–4, 7's disproof, 10a, 11, 15 below the line): judging witnesses
+(`packages/fiscal/src/clock-witnesses.ts`), the witness store, tills sending their clock, AEAT's
+time from the QR host and from replies, `clock.disagrees`, `clock.unusable` in the bell, the
+clock-stop email, `clock.behind_chain_disproved`, the cover's one-step rule with its running maximum
+and fail-closed `heads` (decisions 8 and 21), and the backup verifier's links.
+
+**Changes:**
+1. The cover reads `clock_confirmations` instead of `clock_stop_restarts`, takes the latest
+   confirmation (largest `seq`) naming the latest record, and has **no cap** (`RESTART_CAP_MS`,
+   `too_far` and departure 6 go).
+2. There is **no button and no route** `POST /api/box/clock-restart`. The clock watch confirms by
+   itself when proof exists; an administrator (`node.clock`) may confirm that their own device
+   agrees with the box (`POST /api/box/clock-challenge`, `POST /api/box/clock-confirm`).
+3. `stepped_back` goes: after a further step back the stop is simply on again, and a fresh
+   confirmation (a new row, a larger `seq`) lifts it.
+4. Devices and browsers on the box itself never count, and an administrator on it is refused.
+5. Each confirmation that finds records dated more than a minute after its time records
+   `clock.records_misdated`, lists them on the Box status page, and both the restart and the list
+   are emailed to managers.
+
+## Words used in revision 4
+
+- A **confirmation** is one row of `clock_confirmations`. Its **source** is `authority` (AEAT),
+  `devices` (two or more tills or handhelds that agree with each other) or `admin` (an
+  administrator's own device). It **names** a record when the confirmed clock read more than a
+  minute behind the latest record; that row is the **lift** (the old "restart").
+- A **check** is one row of `clock_checks` (slice 9c writes them). A check is **open** while the
+  check with the largest `seq` has no confirmation pointing at it.
+- **On the box**: a request whose connection comes from loopback or one of the box's own interface
+  addresses (`requestFromBox`, `apps/server/src/request-from-box.ts`).
+- **Wrongly dated** (this slice): a record written before a confirmation (its `secuencia` at most its
+  node's entry in the confirmation's `heads`) whose generation time is more than 60 000 ms after
+  the confirmation's `confirmed_at`.
+
+## Decisions revision 4 makes
+
+R1. **The tables** (Veri\*Factu set, one generated migration after `0010_clock_stop.sql`), both
+    `appendOnly(…, "ledger", LEDGER)` in `classification.ts`, both in
+    `packages/migrations/migrations.manifest.json`'s append-only list:
+    - `clock_checks`: `id` (`newId`), `seq` integer not null (unique), `node_id` → `nodes`,
+      `opened_at` ts, `reason` text (`start` | `change`, CHECK), `detail` json.
+    - `clock_confirmations`: `id`, `seq` integer not null (unique), `node_id` → `nodes`,
+      `box_clock_at` ts (the box's reading when judged, before any step), `confirmed_at` ts (the time
+      adopted; equal to `box_clock_at` until 9b), `step_ms` integer not null (0 until 9b),
+      `source` text (CHECK in `authority`, `devices`, `admin`), `person_id` text null (no foreign
+      key, as `clock_stop_restarts.person_id`: `persons` is in identity's set), `reason` text (CHECK
+      in `behind_chain`, `unusable`, `start`, `change`), `proof` json, `check_id` → `clock_checks`
+      null (unique), `registro_id` → `registros_facturacion` null (plain index), `record_at` ts null.
+      CHECKs: `(source = 'admin') = (person_id is not null)`; `(registro_id is null) = (record_at is
+      null)`. All four reasons are declared now so 9b and 9c add no CHECK (a later CHECK change is a
+      table rebuild, CLAUDE.md §3's drizzle-kit traps).
+    - `seq` is `coalesce(max(seq), 0) + 1` read in the writing transaction; one write transaction at
+      a time makes it unique, and the unique index refuses a duplicate loudly. Why not time order:
+      the clock is exactly what is in doubt.
+R2. **The cover** (`clock-behind.ts` `uncoveredBy`): the confirmation with the largest `seq` whose
+    `registro_id` is the latest record's; then decision 21's `heads` checks, `record_at` equal to the
+    latest record's time, `gap ≤ (record_at − confirmed_at) + 60 000`, and the running maximum
+    (decision 8c), exactly as built. No cap.
+R3. **When the box confirms by itself** (the clock watch, every 15 s during a stop; AEAT HEAD at most
+    once a minute): the stop is on (raw comparison behind, not before 28-10-2024); no AEAT witness
+    taken during the stop disagrees; and either an AEAT witness agrees (source `authority`, devices
+    attached if two agree too) or, with no AEAT witness at all, two or more devices that agree with
+    each other agree with the box and no group of two disagrees (source `devices`). Witnesses as
+    built: fresh (five minutes, no step since), taken during the stop, after the reading's own
+    `boxAt`. After a confirmation the witness store is cleared, so the next stop needs fresh proof.
+R4. **When an administrator may confirm**: `node.clock`; not on the box (refused `same_machine`
+    before anything else, at the challenge and at the confirm); the stop is on; no AEAT witness
+    taken during the stop disagrees, and no group of two devices disagrees (`contrary_proof`); a
+    fresh challenge (≤ 5 000 ms by the steady clock, used once, kept per management session as
+    `createSetupHourClock` keeps its challenges); the device's time agrees (`|deviceAt −
+    boxAtMidpoint| + elapsed/2 ≤ 60 000`), else `differs`. Refusals are
+    `clock.confirm_refused { reason }`, HTTP 409, except a missing permission (403
+    `authorization.not_permitted`). The admin's reading goes into `proof.admin` as `{ boxAt,
+    witnessAt, uncertaintyMs }`.
+R5. **The row** (both paths): `seq`, the node, `box_clock_at = confirmed_at =` the one reading,
+    `step_ms 0`, the source, `person_id` for `admin` only, `reason: "behind_chain"`, `proof` =
+    `{ authority, devices, admin, heads }` (`heads` as decision 10), `check_id` null, `registro_id`
+    and `record_at` the latest record's. In the same transaction: `clock.behind_chain_restarted` and,
+    when any record is wrongly dated, `clock.records_misdated`.
+R6. **The alerts.** `clock.behind_chain_restarted` (warning, as built) gets params `{ confirmationId,
+    confirmedBy, person, clockAt, lastRecordAt }`, `confirmedBy` worded by a list registered as
+    `clock_confirmed_by`: `authority` "the tax agency's time" / "la hora de Hacienda", `devices` "two
+    tills or handhelds" / "dos cajas o terminales", `admin` "an administrator's own device" / "el
+    dispositivo de un administrador". `clock.records_misdated` (error; origin
+    `jobOrigin("dashboard")`; `saleId` the earliest wrongly dated record's sale; params
+    `{ confirmationId, count, from, to }`), area `box`, `system.manage`: the module claims the prefix
+    `clock.records_misdated` beside `clock.behind_chain`.
+R7. **The emails.** The managers' email duty also sends, once per incident id per process, an
+    email for each open `clock.behind_chain_restarted` and `clock.records_misdated`. Words in Task
+    R11.
+R8. **On the box.** `GET /api/device/equipment` notes a device's clock only when the request is
+    not on the box; the admin routes refuse one that is. Both read `requestFromBox`, injectable
+    (`DeviceApiDeps.requestFromBox`, `BoxHealthApiDeps.requestFromBox`), as `promote-api.ts` does.
+R9. **The seat** (`packages/fiscal/src/backend.ts`): `restartAfterClockStop` is replaced by
+    `confirmClockStop(tx, { reading, witnesses, nodeId, admin? })` and gains
+    `misdatedRecords(tx, confirmationId)`; `clockStopState` answers `proof: "none" | "contrary" |
+    "ready" | "confirmed"` instead of `offer`, plus the confirmation that covers (source, person,
+    `confirmedAt`) and its wrongly dated count. All optional; only Veri\*Factu has them.
+R10. **The Box status page**: the Clock row's words (no button); "Check with this device's time"
+    for `node.clock` holders during a stop; the dialog; and a "Sales dated wrongly" section per open
+    `clock.records_misdated`, listing invoice number and recorded time, read by `GET
+    /api/box/clock-misdated` (`system.manage`, write-lock turn with no drain, like the health read).
+
+## Changed test checks (revision 4)
+
+Each goes in a commit of its own whose message begins `Changed test checks (A798 slice 9 r4):` and
+lists each `file:line` with before and after; the PR names them.
+
+**On `main` already** (a whole-shape list gaining entries, the owner's standing exception
+2026-09-27, or a check the owner's answers change):
+1. `packages/identity/src/permissions.test.ts` (the `PERMISSIONS` list, about `:10-40`) gains
+   `"node.clock"`; a new case pins it admin-only (Task R7).
+2. The append-only and schema guards that list tables gain `clock_checks` and `clock_confirmations`
+   (Task R1). Expected from a grep for `clock_stop_restarts`: `scripts/append-only-triggers.test.ts`,
+   `scripts/schema-constraints.test.ts`, `packages/fiscal-verifactu/src/schema-ownership.test.ts`,
+   and whichever of `packages/fiscal-verifactu/src/outage-upgrade.test.ts` and
+   `apps/server/src/hour-recovery-staged.test.ts` pins the table list. Run them after generating;
+   ONLY a failure naming one of the two new tables may be answered with a declared entry. Anything
+   else is a STOP.
+3. `packages/fiscal-verifactu/src/alerts.test.ts` (`FISCAL_ALERTS` `toEqual`) gains the
+   `clock.records_misdated` claim (Task R4).
+
+**On this branch only** (slice 9 as built, never on `main`; the owner's answers change what they
+check): the 24-hour cap cases (`clock-behind.restart.test.ts` case 5, `clock-stop-restart.test.ts`
+"refuses 24 hours and one second" and its 25-hour case, `clock-restart.route.test.ts` "refuses a
+restart 25 hours behind…"); every `too_far` and `stepped_back` offer case in
+`apps/dashboard/src/screens/box-status-rows.test.ts` and `box-status-screen.test.ts`; the restart
+button and dialog cases in `box-status-screen.test.ts` and `box-status-screen.a11y.test.ts`;
+`clock-restart.route.test.ts` (the route is gone; its still-true cases move to the new route file,
+Task R8); `clock-stop-restart.test.ts` (becomes `clock-confirmation.test.ts`, Task R3);
+`backend.clock-stop.test.ts` (Task R5); the restarted alert's params in
+`clock-stop-incidents.test.ts` and `apps/dashboard/src/i18n/alerts.test.ts` (Task R4). Each task
+lists its own.
+
+**Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
+and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed
+above is a STOP.
+
+## Global constraints (revision 4, beside the ones below the line)
+
+- **The fiscal core is untouched**: `computeHuella`, `chain.ts`, `registro-row.ts`, invoice-number
+  and series allocation, `registros_facturacion`'s immutability, `recordSale`, `recordCorrection`,
+  `recordSubstitution`, A679's `hour-*.ts`. After every task touching `packages/fiscal-verifactu`,
+  `packages/fiscal` or `packages/core`: `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+  inmutabilidad src/write-path.e2e.test.ts` passes, and
+  `git diff main -- packages/fiscal-verifactu/src/chain.ts packages/fiscal-verifactu/src/write-path.e2e.test.ts packages/fiscal-verifactu/src/inmutabilidad.test.ts packages/fiscal-verifactu/src/registro-row.ts packages/core/src 'packages/fiscal-verifactu/src/hour-*' ':!packages/core/src/*.test.ts'`
+  prints nothing.
+- **One migration** (Task R1). After it, `git diff main --name-only -- '*/drizzle/*'
+  packages/migrations` names only that migration, its snapshot, the journal and the manifest.
+  `0010_clock_stop.sql` is never edited (CLAUDE.md §3).
+- **No time from a device or AEAT is stamped on a record**: the box's clock stamps every record, and
+  this slice sets no clock.
+- **Nothing external blocks a sale** (CLAUDE.md §5): this slice adds only ways out of slice 8's stop.
+- Every refusal test asserts the domain code and params, with a row count before and after; every
+  refusal has a control that goes through. Server tests that record sales follow slice 8 decision 13
+  (`docs/developers/testing-guide.md`).
+- English only outside translation files (`scripts/english-only.test.ts`; review greps the diff).
+- `apps/dashboard` runs in real headless Chromium: `memory_pressure | grep free` first.
+- Implementers are dispatched as `subagent_type: "implementer"`; each task well under 100 tool calls;
+  one past about 150 stops at a passing or cleanly red point, commits, and hands over.
+
+## Review focus (revision 4)
+
+1. **No proof, no lift; contrary proof, no lift; AEAT outranks devices** (Tasks R3, R9).
+2. **A 400-day gap lifts once proved; a further step back stops again; a fresh confirmation lifts
+   again** (Tasks R2, R3) — with the running maximum and fail-closed `heads` still proved by
+   deletion.
+3. **The box's own clock never counts**: a device on the box is not a witness; an administrator on
+   the box is refused, both at the challenge and at the confirm (Tasks R6, R8).
+4. **Only `node.clock` confirms by hand**; a manager gets 403 (Tasks R7, R8).
+5. **Wrongly dated lists are exact**: records written after the confirmation are never listed; a
+   record within a minute of the confirmed time is not listed (Task R4).
+6. **The fiscal core and the golden huella untouched.**
+
+**Codex seat 1 (with this checklist).** Boot a server (`serverFixture`) on a venue whose clock is 400
+days behind its latest sale: `GET /api/box/health` → stopped, `proof: "none"`; two equipment reads
+from two LAN devices (`requestFromBox` seam false) at the box's time → within one watch check the
+stop lifts, one `clock_confirmations` row (`source: "devices"`), `clock.behind_chain_restarted` and
+`clock.records_misdated` open; `POST /api/pay` cash → 200; the misdated list names the 400-day-ahead
+sale. Then: as a manager, `POST /api/box/clock-challenge` → 403; as an admin from the box (seam
+true) → 409 `same_machine`. Delete, one at a time, the on-box check in `device-api.ts`, the
+`node.clock` gate, the AEAT-disagrees block, the `seq` ordering in the cover; name the failing test.
+
+**Codex seat 2 (checklist set aside).** Make the box lift without proof, or list a record wrongly:
+one device's header sent from two browsers; a challenge replayed or answered after six seconds; an
+admin request carrying `X-Forwarded-For` from a LAN address while connected over loopback; a
+confirmation row hand-inserted with `registro_id` set and `record_at` null; a step back after a
+lift, then two devices; two confirmations racing.
+
+## Tasks (revision 4)
+
+Run in order. Each: failing test first, watch it fail for the stated reason, minimal code, run
+again, guards, commit (`git commit -s`, plain-English message; explicit paths, never `git add -A`).
+
+### Task R1: The migration — `clock_checks` and `clock_confirmations`
+
+**Files:** create `packages/fiscal-verifactu/src/schema/clock-checks.ts`,
+`packages/fiscal-verifactu/src/schema/clock-confirmations.ts`,
+`packages/fiscal-verifactu/src/clock-confirmations.test.ts`; modify the schema index the module's
+migration descriptor reads (find it beside `schema/clock-stop-restarts.ts`'s export),
+`packages/fiscal-verifactu/src/classification.ts`, `packages/migrations/migrations.manifest.json`;
+generated: `packages/fiscal-verifactu/drizzle/0011_*.sql`, its snapshot and `_journal.json`.
+
+- [ ] **Step 1: Failing tests** (`useVenueDb`, the module's migration set, the shape of
+  `clock-stop-restarts.test.ts`): a full row of each table inserts; an `update` and a `delete` of
+  each is refused by the append-only trigger (assert the code the existing restarts test asserts);
+  `source: "admin"` with no `person_id`, `source: "devices"` with one, `source: "clock"`,
+  `reason: "later"`, `registro_id` without `record_at` → each refused (CHECK), row count unchanged;
+  a second row with the same `seq` → `UNIQUE constraint failed`; two confirmations with
+  `registro_id` the same record → both kept; `check_id` naming no check, `node_id` naming no node →
+  refused at the insert (foreign key; CLAUDE.md §3: a key is proved by writing through it). Control:
+  a valid row of each after each refusal inserts.
+- [ ] **Step 2: Run, watch them fail** (`Cannot find module './schema/clock-confirmations.js'`):
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-confirmations.test.ts`.
+- [ ] **Step 3: Schema in TypeScript** (every key, unique index and CHECK declared there, CLAUDE.md
+  §3), then `pnpm --filter @waitron/fiscal-verifactu db:generate`. Read the generated SQL: it must
+  only CREATE two tables and their indexes — no rebuild of an existing table. Anything else: STOP.
+- [ ] **Step 4: Run** the new test → PASS; then the migration guards CLAUDE.md §3 names for a
+  regeneration — `pnpm exec vitest run scripts/schema-constraints.test.ts
+  scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
+  scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts
+  scripts/append-only-migration-sets.test.ts scripts/classification-complete.test.ts
+  scripts/apply-migrations-callers.test.ts scripts/two-file-foreign-keys.test.ts
+  scripts/id-columns-are-references.test.ts scripts/module-graph-honesty.test.ts
+  scripts/migration-upgrade.test.ts` and `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+  inmutabilidad src/schema-ownership.test.ts src/outage-upgrade.test.ts src/clock-stop-restarts.test.ts`
+  and `pnpm --filter @waitron/composition exec vitest run`. Read every failure: only a list missing
+  one of the two new tables may be answered (declared change 2, its own commit); `person_id`'s
+  missing foreign key gets the same treatment `clock_stop_restarts.person_id` has in
+  `id-columns-are-references.test.ts` (read how that table passes first, and say so in the commit).
+- [ ] **Step 5: Commit** (implementation; then declared change 2 alone).
+  `git commit -s -m "Two append-only tables keep every clock check and every confirmation of the box's clock"`.
+
+### Task R2: The cover reads the confirmations, with no cap
+
+**Files:** modify `packages/fiscal-verifactu/src/clock-behind.ts` (`uncoveredBy`; delete
+`RESTART_CAP_MS`), `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` (branch-only).
+
+- [ ] **Step 1: Failing tests.** Change the file's restart-row helper to insert a
+  `clock_confirmations` row (`seq` next, `source: "devices"`, `reason: "behind_chain"`, `proof:
+  { heads }`). Every existing case keeps its readings and answers except case 5 (the cap), which
+  becomes: a record at `T`, a confirmation at `T − 400 days` → a sale at `T − 400 days + 1 min`
+  recorded, and its `anterior_huella` the first's `huella`. New cases: (a) a confirmation with
+  `registro_id` null covers nothing; (b) two confirmations naming the latest record — the first's
+  `heads` well formed, the second (larger `seq`) with `heads` naming a too-large head → the stop
+  stays (the latest confirmation governs, and fails closed); (c) a lift, sales at R + 1 min and
+  R + 10 h, the clock back to R + 30 min → `clock.behind_chain`; a new confirmation at R + 30 min
+  (larger `seq`, `heads` read now) → a sale at R + 31 min recorded (decision 10 of the FYI list).
+- [ ] **Step 2: Run, watch them fail** (they insert into a table the cover does not read):
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-behind.restart.test.ts`.
+- [ ] **Step 3: Implement** R2.
+- [ ] **Step 4: Run** it and `src/clock-behind.test.ts src/chain.clock-behind.test.ts
+  src/clock-behind-alerts.test.ts src/staff-notices.test.ts src/backend.clock-behind.test.ts
+  inmutabilidad src/write-path.e2e.test.ts src/chain.test.ts src/chain.concurrency.test.ts` → PASS;
+  the fiscal-core check prints nothing.
+- [ ] **Step 5: Proofs by deletion**, each restored: order by `seq asc` → case (b) records; drop the
+  running maximum → case 3b records (S11); drop the `heads` bound → case 8b's too-large head records
+  (S12); put back a 24 h cap → the 400-day case refuses.
+- [ ] **Step 6: Commit** `"The clock stop lifts for the latest confirmation of the latest record, however far back the clock is"`.
+
+### Task R3: The confirmation rule
+
+**Files:** `git mv packages/fiscal-verifactu/src/clock-stop-restart.ts
+packages/fiscal-verifactu/src/clock-confirmation.ts` and its test to
+`clock-confirmation.test.ts`; modify `packages/fiscal-verifactu/src/errors.ts`
+(`clock.confirm_refused { reason: "not_stopped" | "contrary_proof" | "differs" | "same_machine" |
+"challenge" }`; `clock.restart_refused` deleted — pre-live, CLAUDE.md §3).
+
+- [ ] **Step 1: Failing tests** (the old file's fixtures; witnesses with `boxAt` behind `T`):
+  1. no witness → `clockStopState.proof "none"`, `confirmClockStop` automatic → `{ confirmation:
+     null }`, rows unchanged;
+  2. two agreeing devices → `"ready"`; automatic → one row (`source "devices"`, `person_id` null,
+     `reason "behind_chain"`, `registro_id` the latest, `proof.heads` equal to `chainHeads` read just
+     before); a sale at the reading → recorded; `clockStopState.proof` then `"confirmed"`;
+  3. AEAT agreeing plus two devices DISagreeing → confirmed, `source "authority"` (FYI 6); AEAT
+     disagreeing (10 minutes old, no step) plus two agreeing devices → `"contrary"`, nothing written;
+  4. admin agreeing (`|diff| + uncertainty = 60 000`) → row `source "admin"`, `person_id` set,
+     `proof.admin` stored; 60 001 → refused `differs`; with AEAT disagreeing → `contrary_proof`;
+     with two devices disagreeing → `contrary_proof`; not stopped → `not_stopped`; each refusal
+     writes nothing;
+  5. a 400-day gap with proof → confirmed (no cap);
+  6. witnesses taken before the stop → `"none"`;
+  7. after a lift, a sale, then a reading 2 min behind it → `clockStopState.proof "none"` (the stop
+     is on again, the first confirmation no longer covers); fresh devices → a second row, larger
+     `seq`, same `registro_id`;
+  8. a reading before 28-10-2024 → `clock.unusable` for admin, `null` state.
+- [ ] **Step 2: Run, watch them fail**: `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+  src/clock-confirmation.test.ts`.
+- [ ] **Step 3: Implement** R3–R5 (no alerts yet: Task R4).
+- [ ] **Step 4:** `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`
+  → PASS; typecheck the package; the fiscal-core check.
+- [ ] **Step 5: Proofs by deletion**: the AEAT-disagrees block → case 3's second half writes; the
+  admin agreement bound `≤` → `<` → case 4 refuses at exactly 60 000; the during-the-stop filter →
+  case 6 writes.
+- [ ] **Step 6: Commit** `"The box confirms its clock during a payment stop on AEAT's time, two agreeing devices or an administrator's device, and keeps each confirmation"`.
+
+### Task R4: The restart and wrongly-dated alerts, and the disproof reading the new table
+
+**Files:** modify `packages/fiscal-verifactu/src/clock-stop-incidents.ts` (restarted params R6;
+`clock.records_misdated`; `recordDisproofs` picks confirmations naming a record whose
+`[confirmed_at, record_at)` holds `trustedUntil`), create
+`packages/fiscal-verifactu/src/clock-misdated.ts` (`misdatedRecords(tx, confirmationId)`: invoice
+series and number, generation time and offset, record id, ordered by time), modify
+`clock-confirmation.ts` (records both alerts), `alerts.ts` (the claim), `errors.ts` (params),
+`apps/dashboard/src/i18n/alert-messages.ts` (words; list `clock_confirmed_by` in `ALERT_WORDS`),
+tests `clock-stop-incidents.test.ts`, `clock-misdated.test.ts`, `apps/dashboard/src/i18n/alerts.test.ts`;
+declared change 3 in its own commit.
+
+- [ ] **Step 1: Failing tests.** A confirmed time `C`; records written before the confirmation at
+  `C + 60 000 ms` (not listed) and `C + 60 001 ms` (listed), and one written after it at `C + 2 h`
+  (not listed: past the confirmation's `heads`) → `misdatedRecords` lists exactly one. The confirmation records
+  `clock.records_misdated { confirmationId, count: 1, from, to }` in its transaction, and none when
+  the count is 0. The restarted alert carries `confirmedBy` and `person` (`null` unless admin).
+  `alertMessage` in EN and ES for each `confirmedBy` and an unknown value (no `—`). The disproof
+  case of the built test, re-pointed at a confirmation row, still records one
+  `clock.behind_chain_disproved` with `from`/`to` by time.
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/clock-misdated.test.ts src/clock-stop-incidents.test.ts`;
+  `pnpm --filter @waitron/dashboard exec vitest run src/i18n/alerts.test.ts` (Chromium: memory first).
+- [ ] **Step 3: Implement.** Words: `clock.records_misdated` EN "{count} sales were recorded with a
+  time later than the real time (from {from:minute} to {to:minute}). They stay as recorded. Go
+  through them with your tax adviser; the list is on the Box status page." / ES "Se registraron
+  {count} ventas con una hora posterior a la real (de {from:minute} a {to:minute}). Quedan como se
+  registraron. Revísalas con tu asesor; la lista está en Estado del equipo."
+  `clock.behind_chain_restarted` EN "Payments restarted on the box's clock ({clockAt:minute}),
+  earlier than the last sale ({lastRecordAt:minute}), once {confirmedBy:clock_confirmed_by}
+  confirmed it." / ES "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior
+  a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}."
+- [ ] **Step 4: Commit**, then declared change 3 alone; after it `pnpm exec vitest run
+  scripts/alert-codes.test.ts` and `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+  src/alerts.test.ts` and `pnpm --filter @waitron/composition exec vitest run` → PASS.
+  `"Each confirmation tells the managers payments restarted, and lists the sales recorded with a later time than the real one"`.
+
+### Task R5: The seat
+
+**Files:** `packages/fiscal/src/backend.ts` (R9's types and methods; `ClockRestart*` types deleted),
+`packages/fiscal/src/index.ts`, `packages/fiscal-verifactu/src/backend.ts`,
+`packages/fiscal-verifactu/src/backend.clock-stop.test.ts`, the fake's and `fiscal-none`'s tests.
+
+- [ ] **Step 1: Failing tests**: Veri\*Factu's backend answers `clockStopState`, `confirmClockStop`
+  and `misdatedRecords` as Task R3/R4 do (one stopped case, one automatic confirmation, one
+  listed record); `NoneBackend` and `FakeFiscalBackend` have none of them; `restartAfterClockStop`
+  is gone (`expect("restartAfterClockStop" in backend).toBe(false)`).
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backend.clock-stop.test.ts`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4:** `pnpm --filter "...@waitron/fiscal" --workspace-concurrency 4 typecheck` exits 0
+  (it will fail in `apps/server` until Tasks R8–R10: run it at Task R10's end instead and note it
+  here); `pnpm --filter @waitron/fiscal exec vitest run src/no-regime-vocabulary.test.ts`;
+  `pnpm exec vitest run scripts/module-seams.test.ts scripts/workspace-cycles.test.ts` → PASS.
+- [ ] **Step 5: Commit** `"The fiscal seat confirms the clock and lists wrongly dated records"`.
+
+### Task R6: A device on the box is never a witness
+
+**Files:** `apps/server/src/device-api.ts` (`requestFromBox` dep; note the clock only when false),
+`apps/server/src/device-equipment-api.test.ts`, `apps/server/src/boot.ts` (pass `seams.requestFromBox`).
+
+- [ ] **Step 1: Failing tests**: an equipment read with `x-waitron-device-clock` whose request is on
+  the box (`requestFromBox: () => true`) → `noteDevice` not called; the same from a LAN device
+  (`false`) → called once. And through the real check: an `app.request` with `env.incoming.socket.
+  remoteAddress` `192.168.10.20` and injected interfaces naming it → not called; `192.168.10.31` →
+  called (the shape of `request-from-box.test.ts`). **Refusal 1 of the owner's two.**
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/server exec vitest run src/device-equipment-api.test.ts`.
+- [ ] **Step 3: Implement.** Existing cases that note a clock through `app.request` (no socket, so
+  "on the box") gain `requestFromBox: () => false` in their setup — a setup change, no assertion.
+- [ ] **Step 4: Proof by deletion**: drop the check → the on-box cases fail. Commit
+  `"A till or browser running on the box itself never counts as a clock witness"`.
+
+### Task R7: The administrator's permission
+
+**Files:** `packages/identity/src/permissions.ts` (`"node.clock"` in `PERMISSIONS`, not in
+`MANAGER`, with a one-line comment: it sets the clock that dates every record, so admin only),
+`packages/identity/src/permissions.test.ts` (a new case; declared change 1 in its own commit).
+
+- [ ] **Step 1: Failing test**: `roleHasPermission("admin", "node.clock")` true; `manager`,
+  `supervisor`, `staff` false. Run `pnpm --filter @waitron/identity exec vitest run
+  src/permissions.test.ts` → fails.
+- [ ] **Step 2: Implement**; the list case fails as expected; declared change 1; PASS. Then grep for
+  other pins of the permission list (`/usr/bin/grep -rln '"node.promote"' apps packages scripts`) and
+  run each file found; a failure there is a STOP unless it is a whole list gaining the entry.
+- [ ] **Step 3: Commit** `"Only an administrator may confirm the box's clock by hand"`.
+
+### Task R8: The administrator's confirmation routes
+
+**Files:** `apps/server/src/box-health-api.ts` (delete the restart route; add `POST
+/api/box/clock-challenge` and `POST /api/box/clock-confirm`; `STATUS` gains
+`"clock.confirm_refused": 409`; deps `requestFromBox`, a challenge keeper, the steady clock),
+create `apps/server/src/clock-challenges.ts` (+ test), `apps/server/src/boot.ts`;
+`git mv apps/server/src/clock-restart.route.test.ts apps/server/src/clock-confirm.route.test.ts`.
+
+- [ ] **Step 1: Failing tests** (own database; slice 8 decision 13's clock rules):
+  1. a manager → 403 on both routes; no session → 401; a till PIN session → 401
+     `management_session.required`;
+  2. **refusal 2 of the owner's two**: an admin on the box (seam true) → challenge refused
+     `clock.confirm_refused { reason: "same_machine" }`; the confirm with a challenge obtained off
+     the box but sent from the box → refused the same; nothing written. Control: off the box →
+     200 and a row;
+  3. a challenge answered after 5 001 ms (injected steady clock), twice, or unknown → `challenge`;
+  4. a device 61 s off → `differs`; AEAT disagreeing noted → `contrary_proof`; not stopped →
+     `not_stopped`; a body that is not `{ challengeId: string, deviceAt: safe integer }` →
+     400 `management.request_invalid`;
+  5. after a 200: `POST /api/sales` cash → 200; marking `clock.behind_chain_restarted` handled →
+     a second sale 200 (moved from the old file's case);
+  6. two confirms at once with two challenges → one row, the second `not_stopped` (moved, re-aimed).
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/server exec vitest run src/clock-confirm.route.test.ts src/clock-challenges.test.ts`.
+- [ ] **Step 3: Implement** R4 and R8. One `withTransaction` per request; the on-box check first.
+- [ ] **Step 4:** typecheck; `pnpm exec vitest run scripts/module-seams.test.ts
+  scripts/write-path-tables.test.ts`; proofs by deletion of the on-box check (case 2 fails) and of
+  the permission (case 1 fails). Commit
+  `"An administrator can confirm the box's clock with their own phone or computer, never from the box's own screen"`.
+
+### Task R9: The clock watch restarts payments by itself
+
+**Files:** `apps/server/src/clock-watch.ts` (interval 15 s during a stop, 60 s otherwise; the HEAD
+at most once per 60 s; `confirmClockStop` in a transaction when `clockStopState.proof` is `"ready"`;
+`store.clear()` after a row; log `clock_watch.confirmed { confirmationId, source }`),
+`apps/server/src/clock-witnesses.ts` (`clear()`), tests `clock-watch.test.ts`,
+`clock-witnesses.test.ts`, `boot.clock-watch.test.ts`.
+
+- [ ] **Step 1: Failing tests** (injected clocks and timer): ready → one confirm call and one log
+  line, the store cleared; none → no call; a failing confirm logs `clock_watch.check_failed` and
+  the next check runs; four checks in a minute make one HEAD; `stop` during a confirm waits for it.
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/server exec vitest run src/clock-watch.test.ts src/clock-witnesses.test.ts src/boot.clock-watch.test.ts`.
+- [ ] **Step 3: Implement.** Step 4: `src/boot.failed-start.test.ts` PASS. Commit
+  `"The box restarts payments by itself as soon as AEAT or two tills confirm its clock"`.
+
+### Task R10: The Box status read and the wrongly dated list
+
+**Files:** `apps/server/src/box-health.ts` (`clockStop` view: `proof`, the covering confirmation with
+the person's display name, `misdatedOpen: [{ confirmationId, count }]`, `canConfirm` is NOT here —
+the dashboard reads the session's permissions), `apps/server/src/box-health-api.ts` (`GET
+/api/box/clock-misdated`), `apps/server/src/boot.ts`, tests `box-health.test.ts`,
+`clock-confirm.route.test.ts`.
+
+- [ ] **Step 1: Failing tests**: health during a stop → `proof "none"`, then `"ready"` with device
+  labels, then `"confirmed"` with source and person; `GET /api/box/clock-misdated` → the listed
+  records with invoice number and time, `system.manage` only, and an empty list once the incident is
+  marked handled; both answer on a full disk with a change waiting (the existing full-disk case's
+  shape).
+- [ ] **Step 2: Run, watch them fail**:
+  `pnpm --filter @waitron/server exec vitest run src/box-health.test.ts src/clock-confirm.route.test.ts`.
+- [ ] **Step 3: Implement.** Then `pnpm --filter "...@waitron/fiscal" --workspace-concurrency 4
+  typecheck` exits 0 (Task R5's deferred check). Commit
+  `"The Box status read says what proof the box has, who confirmed the clock, and which sales are dated wrongly"`.
+
+### Task R11: The managers' emails for a restart and for wrongly dated sales
+
+**Files:** `apps/server/src/box-alert-email.ts` (open incidents of the two codes, once per incident id
+per process; the time placeholders gain `from`/`to` read in the venue's offset),
+`apps/server/src/i18n/box-emails.ts`, tests `box-alert-email.test.ts`,
+`box-alert-email.duty.test.ts`.
+
+**Words.** `clock.behind_chain_restarted`: subject EN "Payments restarted at {venue}" / ES "Se
+reanudaron los cobros en {venue}"; text EN "The box's clock was confirmed by {confirmedBy} and
+payments started again. Sales recorded before it with a later time are listed on the Box status
+page (in the dashboard, Settings → Box status)." / ES "La hora del equipo se confirmó con
+{confirmedBy} y se volvió a cobrar. Las ventas registradas antes con una hora posterior están en
+Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo)." `clock.records_misdated`:
+subject EN "Sales dated wrongly at {venue}: check them with your tax adviser" / ES "Ventas con fecha
+incorrecta en {venue}: revísalas con tu asesor"; text EN "{count} sales were recorded with a time
+later than the real time, from {from} to {to}. They stay as recorded. The list is on the Box status
+page; go through it with your tax adviser and then mark the alert as handled." / ES the same in
+Spanish. The clock-stop email's "What to do" drops "which says whether payments can be restarted"
+for "where an administrator can confirm the clock with their own phone; with the internet or two
+tills switched on, the box does it by itself".
+
+- [ ] Failing tests: one email per manager per open incident, none for a handled one, a second
+  check sends nothing; the words in both languages with no `{` left. Commands:
+  `pnpm --filter @waitron/server exec vitest run src/box-alert-email.test.ts src/box-alert-email.duty.test.ts`;
+  then `pnpm exec vitest run scripts/alert-codes.test.ts scripts/ongoing-alert-codes.test.ts
+  scripts/errors-reachable.test.ts scripts/english-only.test.ts`. Commit
+  `"Managers get an email when payments restart by themselves and when sales are dated wrongly"`.
+
+### Task R12a: The Clock row and the wrongly dated section
+
+**Files:** `apps/dashboard/src/api/client.ts` (types; `clockMisdated()`;
+`restartClockPayments` deleted), `apps/dashboard/src/screens/box-status-rows.ts`,
+`apps/dashboard/src/screens/box-status-screen.ts` (the section), `apps/dashboard/src/i18n/strings.ts`
+(EN and ES; every `box_status.clock.restart.*` and `refused.*` key deleted), tests
+`box-status-rows.test.ts`, `box-status-screen.test.ts`.
+
+Words: during a stop, `none` "Waiting for proof that the clock is right: the tax agency's time, or two
+tills or handhelds." / "Esperando una prueba de que la hora es correcta: la de Hacienda, o la de dos
+cajas o terminales."; `contrary` "Other clocks say the box's clock is wrong." / "Otros relojes dicen
+que la hora del equipo está mal."; `ready` "Proof found: payments restart within a few seconds." /
+"Hay prueba: los cobros se reanudan en unos segundos."; `confirmed` "Payments restarted at {time},
+confirmed by {who}." / "Cobros reanudados a las {time}, confirmado por {who}." Section title "Sales
+dated wrongly" / "Ventas con fecha incorrecta", columns invoice / time recorded, and the line "Go
+through these with your tax adviser, then mark the alert as handled in the bell." / "Revísalas con
+tu asesor y después marca el aviso como atendido."
+
+- [ ] Failing tests for each state, the section with two records and none once handled. Command:
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/box-status-rows.test.ts src/screens/box-status-screen.test.ts`
+  (Chromium: memory first). Then `pnpm exec vitest run scripts/native-form-fields.test.ts
+  scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts
+  scripts/help-tooltip-mode.test.ts scripts/pinned-actions-column.test.ts`. Commit.
+
+### Task R12b: The administrator's dialog
+
+**Files:** `apps/dashboard/src/screens/box-status-screen.ts`, `apps/dashboard/src/api/client.ts`
+(`clockChallenge()`, `clockConfirm()`), `apps/dashboard/src/dashboard-app.ts` (hand the screen
+`canConfirmClock` from the session's permissions, as `canAdminister` is handed), strings, tests
+`box-status-screen.test.ts`, `box-status-screen.a11y.test.ts`.
+
+Behaviour: a `secondary` "Check with this device's time" / "Comprobar con la hora de este
+dispositivo" on the Clock row during a stop, only for `node.clock`. Opening it asks for a challenge
+and shows "The box's clock says {box}. This device says {device}." Agreeing (within a minute):
+"They agree. Confirm that the box's clock is right?" with Cancel and Confirm (`primary`, loading
+while sent); Confirm asks a FRESH challenge and answers it at once with `Date.now()`. Differing: the
+FYI 8 sentence and Close only. A refusal shows its sentence on its own line above the buttons
+(`same_machine`: "This screen is the box itself, so its clock is the box's own. Confirm from your
+phone or another computer." / "Esta pantalla es el propio equipo, así que su hora es la del equipo.
+Confírmalo desde tu móvil o desde otro ordenador."). Success closes and refreshes; a refusal
+refreshes too. No staged input, so no draft scope.
+
+- [ ] Failing tests: no button without the permission or without a stop; the two times; Confirm sends
+  a fresh challenge and its answer; `same_machine` shown at open; Escape closes; axe in both themes
+  for the closed row, the open agreeing dialog and the refusal. Command as R12a plus the a11y file.
+  Commit `"An administrator can confirm the box's clock from the Box status page with their own device"`.
+
+### Task R13: The guides
+
+**Files:** `apps/server/src/guide/en/box-status.md`, `apps/server/src/guide/es/box-status.md`,
+`apps/server/src/guide/en/till-notices.md`, `apps/server/src/guide/es/till-notices.md`. Replace every
+sentence about the Restart payments button, the 24-hour limit and "one restart per record" (EN
+`box-status.md` about `:137-219`, the `{#clock-behind}` and `{#clock-witnesses}` sections; ES the
+same; `till-notices.md` about `:58`) with: payments restart by themselves once the tax agency or two
+tills or handhelds confirm the clock, or an administrator confirms with their own phone or computer
+— never from the box's own screen; no limit on how far back; a later step back stops payments again
+until the clock is confirmed again; wrongly dated sales listed for the tax adviser. Keep each
+heading's `{#id}` in both languages. Run `pnpm --filter @waitron/server exec vitest run
+src/guide-content.test.ts` and `pnpm exec vitest run scripts/guide-links.test.ts`. Commit.
+
+### Task R14: Every other sentence about the old behaviour
+
+CLAUDE.md §1: a behaviour change retires every receipt about the old behaviour. Found by
+`/usr/bin/grep -rn -i -E "24[ -]hours?|24 horas|Restart payments|Reanudar los cobros|clock-restart|set the clock|whoever installed|manager's restart|restartAfterClockStop"`
+over `docs`, `apps/*/src`, `packages`, `deploy` and `CLAUDE.md` on 2026-10-24; re-run it and
+read every hit:
+- `CLAUDE.md` §5, the clock-stop rule: the restart sentence slice 9 added becomes "A confirmation of
+  the clock (`clock_confirmations`, by AEAT's time, two agreeing devices or an administrator's own
+  device, never one on the box) lifts it for one step back, with no limit on the gap; once a record
+  is written under it every reading is held to the minute against the latest time written since.
+  Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` and
+  `packages/fiscal-verifactu/src/clock-confirmation.test.ts`, weaker than the rule — they cover the
+  readings they name." Run `pnpm exec prettier --check CLAUDE.md` and `pnpm exec vitest run
+  scripts/claude-md-pointers.test.ts`.
+- `docs/developers/conventions-data.md` (about `:3659-3730`: the restart route, `RESTART_CAP_MS`,
+  `too_far`, `stepped_back`): the receipt for R1–R5, T1–T4.
+- `docs/developers/design-system.md` (about `:5397`, `:5442-5445`): the Restart payments button →
+  the administrator's dialog and the wrongly dated section.
+- `docs/compliance/asesor-questions.md` Q51 (the "why it matters", the Spanish text and the interim
+  treatment: automatic, no cap, an administrator's own device, AEAT first) and Q52 (pointer); a new
+  question **Q53, records listed as dated wrongly**: what the business must do about invoices whose
+  generation time was later (or earlier) than the real time — nothing is rewritten; is a note to
+  AEAT, a correction invoice, or nothing expected? Spanish text, as the others. "This records a
+  question; no enquiry has been sent."
+- `docs/backlog.md` A798-B entry (the owner's answers sentence and the slice 9 sentence; slices 9b
+  and 9c named as open), the slice-9 follow-up entries ("Two devices can fake a restart's proof" →
+  "…the clock is confirmed with no press and no limit"; "An AEAT disagreement blocks a restart…";
+  "the box sends AEAT's QR host a HEAD at every clock-watch check" → every 60 s during a stop),
+  and new short entries: FYI 11 and 12; "`clock_stop_restarts` is written by nothing: drop it in the
+  go-live migration squash (A760)".
+- `docs/superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md` Part 1's table: row 9 renamed,
+  rows 9b and 9c added (parked; FULL; 9 has the migration).
+- Dated pointers, not rewrites: `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md` §10
+  "No hand-set clock" and §8's host service (the clock request comes first, slice 9b);
+  `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md` (about `:925`, "no
+  set-the-clock action"); `docs/superpowers/specs/2026-10-03-fiscal-chain-divergence-design.md`'s D7
+  (devices may now set the box's clock, owner 2026-10-24); `docs/backlog/mockups/a798-degraded-trading/README.md`
+  line for picture 9; `docs/compliance/verifactu-findings.md`.
+- Left for 9b's own words (not changed here): `deploy/README.md`'s time-sync paragraph, the
+  "connect the box to the internet … or call whoever installed it" sentences in
+  `apps/dashboard/src/i18n/strings.ts` (`box_status.clock…`, about `:3260`, `:6606`),
+  `alert-messages.ts` (`clock.unusable`) and `box-emails.ts` (`clock.unusable`), which stay true
+  until the box can set its own clock.
+- Commit, docs only, `"Docs: payments restart by themselves once the clock is confirmed; the wrongly dated sales go to the tax adviser"`.
+
+### Task R15a / R15b: LOOK in English, then Spanish
+
+As Tasks 18a/18b below the line, with these states: a stop with no proof (no button for a manager);
+the same for an administrator (the button); the dialog agreeing, differing, and refused on the box;
+after a confirmation (amber row, who and how); the wrongly dated section with three sales; the bell
+on `clock.behind_chain_restarted` (each `confirmedBy`) and `clock.records_misdated`. Light and dark,
+1280 and 390. Write what you saw, sheet by sheet; fix with a test where one can catch it.
+
+---
+
+## As built before revision 4 (revisions 1–3; kept for their receipts)
+
+_The plan's title before revision 4: A798-B slice 9 — devices report their clock, `clock.disagrees`, `clock.unusable` in the bell, the manager's restart, and the clock-stop email._
 
 > **Revision 3 (2026-10-23).** Folds in the narrow round-3 check
 > (`~/waitron-campaign-b/a798-9-plan-review/round3.md`, logs in `r3/`: I1, I2, M1–M6), marked
