@@ -211,6 +211,67 @@ describe("withLateSendCheck", () => {
     });
   });
 
+  it("lets a send through with a wrong override PIN when no manager is needed", async () => {
+    const session = await sessionOf("staff");
+    const manager = await seedPerson(suite.db, "manager");
+    const throttle = createPinThrottle();
+    const failures = vi.spyOn(throttle, "recordFailure");
+
+    const by = await withLateSendCheck(
+      suite.db,
+      session,
+      throttle,
+      { menuIds: [MENU], override: { personId: manager, pin: "9999" } },
+      (late) => withTransaction(suite.db, (tx) => late!.confirm(tx, false)),
+    );
+
+    expect(by).toBe(session.personId);
+    expect(failures).not.toHaveBeenCalled();
+  });
+
+  it("refuses an override from staff, whose PIN is right, as authorization.not_permitted", async () => {
+    const session = await sessionOf("staff");
+    const colleague = await seedPerson(suite.db, "staff");
+
+    expect(
+      await refusal(() =>
+        confirmed(
+          session,
+          { menuIds: [MENU], override: { personId: colleague, pin: "1234" } },
+          true,
+        ),
+      ),
+    ).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "venue_service.manage" },
+    });
+  });
+
+  it("refuses to be asked again with a different setting, accepting no PIN", async () => {
+    const session = await sessionOf("staff");
+    const manager = await seedPerson(suite.db, "manager");
+    const throttle = createPinThrottle();
+    const verified = vi.spyOn(throttle, "clear");
+
+    const outcome = await withLateSendCheck(
+      suite.db,
+      session,
+      throttle,
+      { menuIds: [MENU], override: { personId: manager, pin: "1234" } },
+      (late) =>
+        withTransaction(suite.db, async (tx) => {
+          const first = await late!.confirm(tx, false);
+          expect(() => late!.confirm(tx, true)).toThrow(
+            "a late-send confirmation was asked with a different setting",
+          );
+          return first;
+        }),
+    );
+
+    expect(outcome).toBe(session.personId);
+    expect(verified).not.toHaveBeenCalled();
+  });
+
   it("verifies once when confirmed twice", async () => {
     const session = await sessionOf("staff");
     const manager = await seedPerson(suite.db, "manager");

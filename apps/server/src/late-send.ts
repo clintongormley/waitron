@@ -15,7 +15,10 @@ export interface ParsedLateSend {
 /** The ended menus a request confirms, and who confirms them. */
 export interface LateSendConfirmation {
   readonly menuIds: ReadonlySet<string>;
-  /** The person recorded as confirming; checked once, however often it is asked. */
+  /**
+   * The person recorded as confirming, checked once: a later call with the same `needsManager` gets
+   * the first answer, and one with a different value throws, since that answer did not ask for it.
+   */
   confirm(tx: Transaction, needsManager: boolean): Promise<string>;
 }
 
@@ -57,16 +60,22 @@ export async function withLateSendCheck<T>(
   const attempts = overridePinAttempts(pinThrottle, session.deviceId);
   const toCheck = await overrideToCheck(db, authz, override);
   return withPinCheckAhead(db, toCheck, attempts, (checked) => {
-    let confirmed: Promise<string> | undefined;
+    let confirmed: { needsManager: boolean; by: Promise<string> } | undefined;
     return run({
       menuIds: new Set(parsed.menuIds),
       confirm(tx, needsManager) {
-        confirmed ??= needsManager
-          ? authorize(tx, { ...authz, override: withCheck(override, checked) }, attempts).then(
-              (authorization) => authorization.authorizedBy,
-            )
-          : Promise.resolve(session.personId);
-        return confirmed;
+        confirmed ??= {
+          needsManager,
+          by: needsManager
+            ? authorize(tx, { ...authz, override: withCheck(override, checked) }, attempts).then(
+                (authorization) => authorization.authorizedBy,
+              )
+            : Promise.resolve(session.personId),
+        };
+        if (confirmed.needsManager !== needsManager) {
+          throw new Error("a late-send confirmation was asked with a different setting");
+        }
+        return confirmed.by;
       },
     });
   });
