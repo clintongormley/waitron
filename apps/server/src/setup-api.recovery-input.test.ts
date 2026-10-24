@@ -37,6 +37,9 @@ function setup(operations?: SetupDeps["operations"]) {
     start: async () => view,
     status: async () => view,
     startAgain: async () => view,
+    reconcileRestored: async (_binding, checkCommitted) => {
+      await checkCommitted();
+    },
     markRestored: async () => {},
     reportRestored: async () => {},
     binding: async () => ({ requestId: "cloud-request", pointId }),

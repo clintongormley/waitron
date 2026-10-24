@@ -9,6 +9,7 @@ import {
 import { lstat, mkdir, open, rename, rm } from "node:fs/promises";
 import { Agent } from "node:https";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   parseBackupVerificationJson,
@@ -599,6 +600,30 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         )
           unavailable();
         if (state.phase !== "staged") return;
+        state.phase = "restored";
+        await save(state);
+      });
+    },
+    async reconcileRestored(
+      binding: { requestId: string; pointId: string },
+      checkCommitted: () => Promise<void>,
+    ): Promise<void> {
+      const expected = { ...binding };
+      return locked(async () => {
+        const state = await read();
+        if (
+          !state ||
+          (state.phase !== undefined &&
+            !["staged", "restored", "reported"].includes(state.phase)) ||
+          state.requestId !== expected.requestId ||
+          state.pointId !== expected.pointId
+        )
+          unavailable();
+        assertCurrent(state);
+        await checkCommitted();
+        assertCurrent(state);
+        if (!isDeepStrictEqual(await read(), state)) unavailable();
+        if (state.phase === "restored" || state.phase === "reported") return;
         state.phase = "restored";
         await save(state);
       });
