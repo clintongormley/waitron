@@ -53,10 +53,6 @@ export function stubShellApi(signedIn: boolean, locale: ShellLocale = "es-ES"): 
       topSellers: [],
     }),
     getOverdueOrders: async () => ({ orders: [] }),
-    listMyShifts: async () => [],
-    listMySwaps: async () => [],
-    listMyAbsences: async () => [],
-    getStaffRoster: async () => [],
   };
   return api as unknown as ShellApi;
 }

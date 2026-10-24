@@ -11,6 +11,7 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
+import { en, es } from "./i18n/strings.js";
 import {
   nextLogoLoad,
   png,
@@ -98,6 +99,11 @@ async function check(
   const { el, banner } = await mountShell(address, signedIn, locale);
   const { logo, img } = await loads;
   expect(logo).toBe(banner.querySelector<WtVenueLogo>("wt-venue-logo"));
+  const strings = locale === "en-GB" ? en : es;
+  const shownWords = signedIn
+    ? banner.querySelector("[data-test=account-menu]")!.getAttribute("label")
+    : el.shadowRoot!.querySelector("wt-powered-by")!.label;
+  expect(shownWords).toBe(signedIn ? strings["nav.account_menu"] : strings["login.powered_by"]);
   const drawn = img.getBoundingClientRect();
   expect(drawn.height).toBeGreaterThan(0);
   expect(drawn.height).toBeLessThanOrEqual(40);
