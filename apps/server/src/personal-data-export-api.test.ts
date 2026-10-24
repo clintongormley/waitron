@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -212,11 +212,23 @@ describe("GET /management-api/me/personal-data/export", () => {
     await refused(await ask(mounted()), 401, "management_session.required");
   });
 
-  it("writes nothing: the session's last-seen time is left as it was", async () => {
+  it("leaves the session's last-seen time as it was", async () => {
     setLastSeen(martaToken, new Date(Date.now() - 5 * 60_000));
     const before = session(martaToken).lastSeenAt;
     expect((await ask(mounted())).status).toBe(200);
     expect(session(martaToken).lastSeenAt).toBe(before);
+  });
+
+  it("changes no row with a change waiting, so a full disk cannot refuse it", async () => {
+    setLastSeen(martaToken, new Date(Date.now() - 5 * 60_000));
+    suite.db.run(
+      sql`insert into change_log (id, payload) values ('pd1', '{"resource":"zz","id":"1"}')`,
+    );
+    const changes = () => suite.db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
+    const before = changes();
+    expect((await ask(mounted())).status).toBe(200);
+    expect(changes()).toBe(before);
+    expect(suite.db.all(sql`select id from change_log`)).toEqual([{ id: "pd1" }]);
   });
 
   it("checks the session again after building, and sends nothing once it has ended", async () => {

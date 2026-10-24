@@ -215,7 +215,9 @@ Left for later, on purpose:
      so the route writes nothing. The home rule says a housekeeping write on a read path must not
      take the read down on a full disk (CLAUDE.md §3); not writing at all is the simplest way to
      meet it. Cost: a download does not count as activity for the 30-minute idle timer
-     (`IDLE_TIMEOUT_MS`, `management-session.ts:13`).
+     (`IDLE_TIMEOUT_MS`, `management-session.ts:13`). Added after review, 2026-10-24: the
+     route's two turns are `withWriteLock` turns, not `withTransaction`, whose closing change-log
+     drain is itself a write — with a change waiting, a full disk refused it with 507.
    - Answer: `Content-Type: application/zip`;
      `Content-Disposition: attachment; filename="<slug>-<date>.zip"`;
      `Cache-Control: no-store`; `X-Content-Type-Options: nosniff` (the last three as

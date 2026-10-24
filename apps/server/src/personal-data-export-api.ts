@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { locations, nodes, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { locations, nodes, type Database, type Transaction } from "@waitron/db";
 import { resolveManagementSession } from "@waitron/identity";
 import {
   personalDataParts,
@@ -54,15 +54,19 @@ export async function sendPersonalData(
 ): Promise<Response> {
   const at = (deps.now ?? (() => new Date()))();
   const parts = [...personalDataParts(deps.modules), ...(deps.serverParts ?? [])];
-  const snapshot = await withTransaction(deps.db, async (tx) => {
+  // Write-lock turns, not `withTransaction`: its closing change-log drain is a write a full disk
+  // refuses even though this route changes nothing. A stated exception to one `withTransaction` per
+  // route.
+  const tx = deps.db;
+  const snapshot = await deps.db.withWriteLock(async () => {
     const who = await authorize(tx);
     const place = await venuePlace(tx, deps.nodeId);
     const build = await preparePersonalData(tx, parts, { personId: who.personId, at, ...place });
     return { who, place, build };
   });
-  // Building outlives the snapshot transaction, so authority is checked again before any bytes go.
+  // Building outlives the snapshot turn, so authority is checked again before any bytes go.
   const files = await snapshot.build();
-  await withTransaction(deps.db, async (tx) => {
+  await deps.db.withWriteLock(async () => {
     const again = await authorize(tx);
     if (again.personId !== snapshot.who.personId)
       throw new Error("personal-data authorisation named a different person after building");

@@ -2580,6 +2580,13 @@ and the email settings in one `withWriteLock` turn with no drain (`readBoxEmailC
 case is "the managers' email reads its context on a full disk with a change waiting" in
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
+The staff personal-data download (`GET /management-api/me/personal-data/export`,
+`apps/server/src/personal-data-export-api.ts`) reads in two `withWriteLock` turns with no drain —
+every part in the first, the session checked again in the second after the files are built — and
+resolves the session with `touch: false`, so it answers on a full disk with a change waiting. The
+case is "a person's own personal-data download answers on a full disk with a change waiting" in
+`apps/server/src/start-full-disk.e2e.test.ts`.
+
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a
