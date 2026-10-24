@@ -15,6 +15,7 @@ import {
   setLogo,
   setCorners,
   setHand,
+  setTextScale,
   typeCode,
   typeHandCode,
   useWorkedOut,
@@ -30,6 +31,7 @@ const LUCIA: ThemeChoices = {
   corners: "round",
   logo: null,
   handSet: { light: { bg: "#f8f1e1" }, dark: {} },
+  textScale: 100,
 };
 
 describe("the Look card's draft", () => {
@@ -161,6 +163,7 @@ describe("the Look card's draft", () => {
       background: "tinted",
       brandFix: { dark: true, light: true },
       brandColor: "#1e5b3a",
+      textScale: 100,
     });
     expect(sameDraft(a, b)).toBe(true);
     expect(sameDraft(b, a)).toBe(true);
@@ -336,5 +339,17 @@ describe("the Look card draft's logo", () => {
   it("is no longer Waitron's look once a logo is set", () => {
     expect(isWaitronLook(setLogo(waitronLook(), { light: L }))).toBe(false);
     expect(isWaitronLook(waitronLook())).toBe(true);
+  });
+});
+
+describe("the Look card draft's text size", () => {
+  it("a text size is part of the draft", () => {
+    const larger = setTextScale(waitronLook(), 120);
+    expect(larger.choices.textScale).toBe(120);
+    expect(sameDraft(larger, waitronLook())).toBe(false);
+    expect(isWaitronLook(larger)).toBe(false);
+    const back = setTextScale(larger, 100);
+    expect(sameDraft(back, waitronLook())).toBe(true);
+    expect(isWaitronLook(back)).toBe(true);
   });
 });

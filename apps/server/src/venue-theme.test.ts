@@ -20,6 +20,7 @@ const LEMON: ThemeChoices = {
   corners: "standard",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a", background: "tinted" };
@@ -76,6 +77,17 @@ describe("venueThemeAnswer", () => {
     expect(venueThemeAnswer({ inUse: { id: ID, choices: LEMON }, logo: null }).hash).toBe(
       lemon.hash,
     );
+  });
+
+  it("the theme in use at 130% serves its sizes, and its hash moves from 100%'s", () => {
+    const standard = venueThemeAnswer({ inUse: { id: ID, choices: LEMON }, logo: null });
+    const larger = venueThemeAnswer({
+      inUse: { id: ID, choices: { ...LEMON, textScale: 130 } },
+      logo: null,
+    });
+    expect(larger.css.split("--wt-font-size-md: 18px;\n")).toHaveLength(4);
+    expect(standard.css.split("--wt-font-size-md: 14px;\n")).toHaveLength(4);
+    expect(larger.hash).not.toBe(standard.hash);
   });
 
   it("answers the logo's addresses and hashes them", () => {

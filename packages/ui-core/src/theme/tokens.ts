@@ -41,9 +41,27 @@ export const handTokens = (
 ): Record<string, string> =>
   Object.fromEntries(Object.entries(values).map(([key, value]) => [colourToken(key), value]));
 
+export const TEXT_SCALES = [100, 105, 110, 115, 120, 125, 130] as const;
+
+export type TextScale = (typeof TEXT_SCALES)[number];
+
+export const isTextScale = (value: unknown): value is TextScale =>
+  (TEXT_SCALES as readonly unknown[]).includes(value);
+
 export const THEME_RADII = ["--wt-radius-sm", "--wt-radius-md", "--wt-radius-lg"] as const;
 
-export const THEME_TOKENS: readonly string[] = [...THEME_COLOUR_TOKENS, ...THEME_RADII];
+export const THEME_FONT_SIZES = [
+  "--wt-font-size-sm",
+  "--wt-font-size-md",
+  "--wt-font-size-lg",
+  "--wt-font-size-xl",
+] as const;
+
+export const THEME_TOKENS: readonly string[] = [
+  ...THEME_COLOUR_TOKENS,
+  ...THEME_RADII,
+  ...THEME_FONT_SIZES,
+];
 
 export const BRAND_FAMILY: readonly ThemeColour[] = [
   "primary",
@@ -73,5 +91,16 @@ export function cornerRadii(corners: Corners, defaults: WaitronDefaults): Record
       radius,
       corners === "standard" ? defaults.structure[radius]! : FIXED_CORNERS[corners][index]!,
     ]),
+  );
+}
+
+/** The four sizes in `defaults` times `textScale`, rounded half up to whole pixels. */
+export function fontSizes(textScale: TextScale, defaults: WaitronDefaults): Record<string, string> {
+  return Object.fromEntries(
+    THEME_FONT_SIZES.map((name) => {
+      const match = /^(\d+)px$/.exec(defaults.structure[name] ?? "");
+      if (match === null) throw new RangeError(`not a whole-pixel size: ${name}`);
+      return [name, `${Math.floor((Number(match[1]) * textScale + 50) / 100)}px`];
+    }),
   );
 }

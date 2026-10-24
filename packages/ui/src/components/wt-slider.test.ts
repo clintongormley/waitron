@@ -240,6 +240,85 @@ test("without an error there is no alert and the input is neither invalid nor de
   expect(input.hasAttribute("aria-invalid")).toBe(false);
 });
 
+test("draws its value through format, while dragging too", async () => {
+  const el = await mountSlider();
+  el.format = (n) => `${n}%`;
+  await el.updateComplete;
+  expect(shownOf(el)).toBe("6%");
+  const input = inputOf(el);
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(shownOf(el)).toBe("8%");
+  expect(input.value).toBe("8");
+});
+
+test("says its value through valueText", async () => {
+  const el = await mountSlider();
+  const input = inputOf(el);
+  expect(input.hasAttribute("aria-valuetext")).toBe(false);
+  el.valueText = (n) => `${n} percent`;
+  await el.updateComplete;
+  expect(input.getAttribute("aria-valuetext")).toBe("6 percent");
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(input.getAttribute("aria-valuetext")).toBe("8 percent");
+  el.valueText = null;
+  await el.updateComplete;
+  expect(input.hasAttribute("aria-valuetext")).toBe(false);
+});
+
+test("shows a hint under the range, describing it", async () => {
+  const el = await mountSlider('hint="Bigger wraps more"');
+  const input = inputOf(el);
+  const hint = el.shadowRoot!.querySelector<HTMLElement>('[part="hint"]')!;
+  expect(hint.textContent).toBe("Bigger wraps more");
+  expect(hint.id).not.toBe("");
+  expect(hint.hasAttribute("role")).toBe(false);
+  expect(hint.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    input.getBoundingClientRect().bottom,
+  );
+  expect(input.getAttribute("aria-describedby")).toBe(hint.id);
+  expect(input.hasAttribute("aria-invalid")).toBe(false);
+
+  el.error = "Pick at least 2";
+  await el.updateComplete;
+  const alert = el.shadowRoot!.querySelector('[role="alert"]')!;
+  expect(input.getAttribute("aria-describedby")).toBe(`${hint.id} ${alert.id}`);
+  expect(alert.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    hint.getBoundingClientRect().bottom,
+  );
+});
+
+test("the hint paints from the muted text and small size tokens", async () => {
+  const el = await mountSlider('hint="Bigger wraps more"');
+  const hint = el.shadowRoot!.querySelector('[part="hint"]')!;
+  host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  expect(getComputedStyle(hint).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(hint).fontSize).toBe("11px");
+  expect(getComputedStyle(hint).marginTop).toBe("0px");
+});
+
+test("the label paints from the muted text and small size tokens, as the other fields' labels do", async () => {
+  const el = await mountSlider();
+  const label = el.shadowRoot!.querySelector('[part="label"]')!;
+  expect(getComputedStyle(label).fontSize).toBe("12px");
+  host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  expect(getComputedStyle(label).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(label).fontSize).toBe("11px");
+});
+
+test("without a hint or a format it draws as before", async () => {
+  const el = await mountSlider();
+  expect(el.shadowRoot!.querySelector('[part="hint"]')).toBeNull();
+  expect(inputOf(el).hasAttribute("aria-describedby")).toBe(false);
+  expect(shownOf(el)).toBe("6");
+  expect([el.format(6), el.valueText, el.hint]).toEqual(["6", null, ""]);
+});
+
 test("the range paints from the primary token", async () => {
   const el = await mountSlider();
   host.style.setProperty("--wt-color-primary", "rgb(16, 17, 18)");
@@ -398,5 +477,163 @@ describe.each(["light", "dark"] as const)("continuous slider tokens (%s)", (them
     expect(getComputedStyle(input).outlineStyle).toBe("solid");
     expect(parseFloat(getComputedStyle(input).outlineWidth)).toBeGreaterThan(0);
     expect(el.shadowRoot!.activeElement).toBe(input);
+  });
+});
+
+describe("step marks", () => {
+  const marksOf = (el: Element) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>('[part="mark"]'),
+  ];
+  const partOf = (el: Element, part: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[part="${part}"]`)!;
+
+  async function mountMarked(): Promise<WtSlider> {
+    const el = (await mount(
+      '<wt-slider label="Text size" min="100" max="130" step="5" value="110" marks></wt-slider>',
+    )) as WtSlider;
+    host.style.width = "300px";
+    host.style.setProperty("--wt-field-max-width", "300px");
+    await document.fonts.ready;
+    return el;
+  }
+
+  test("marks one tick per step under the range", async () => {
+    const el = await mountMarked();
+    const marks = marksOf(el);
+    expect(marks).toHaveLength(7);
+    const inputBottom = inputOf(el).getBoundingClientRect().bottom;
+    for (const mark of marks) {
+      expect(mark.getBoundingClientRect().top).toBeGreaterThanOrEqual(inputBottom);
+      expect(mark.getBoundingClientRect().height).toBeGreaterThan(0);
+    }
+    expect(partOf(el, "marks").getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("counts whole steps only, from min", async () => {
+    const el = (await mount(
+      '<wt-slider label="Columns" min="2" max="9" step="3" value="5" marks></wt-slider>',
+    )) as WtSlider;
+    expect(marksOf(el)).toHaveLength(3);
+    el.max = 11;
+    await el.updateComplete;
+    expect(marksOf(el)).toHaveLength(4);
+  });
+
+  test("puts each mark under the thumb's centre for its value", async () => {
+    const el = await mountMarked();
+    const r = inputOf(el).getBoundingClientRect();
+    expect(marksOf(el)).toHaveLength(7);
+    marksOf(el).forEach((mark, i) => {
+      const box = mark.getBoundingClientRect();
+      const centre = box.left + box.width / 2;
+      expect(Math.abs(centre - (r.left + 8 + (i * (r.width - 16)) / 6))).toBeLessThanOrEqual(0.1);
+    });
+  });
+
+  test("the marks' inset follows the thumb-size token, not the spacing scale", async () => {
+    const el = await mountMarked();
+    const centres = () =>
+      marksOf(el).map((mark) => {
+        const box = mark.getBoundingClientRect();
+        return box.left + box.width / 2;
+      });
+    const r = inputOf(el).getBoundingClientRect();
+
+    host.style.setProperty("--wt-space-4", "40px");
+    const [first] = centres();
+    expect(Math.abs(first! - (r.left + 8))).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(centres().at(-1)! - (r.right - 8))).toBeLessThanOrEqual(0.1);
+
+    host.style.setProperty("--wt-slider-thumb-size", "40px");
+    expect(Math.abs(centres()[0]! - (r.left + 20))).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(centres().at(-1)! - (r.right - 20))).toBeLessThanOrEqual(0.1);
+  });
+
+  test("on a range a step does not divide, each mark sits under its value and none at max", async () => {
+    const el = (await mount(
+      '<wt-slider label="Columns" min="2" max="9" step="3" value="5" marks></wt-slider>',
+    )) as WtSlider;
+    host.style.width = "300px";
+    host.style.setProperty("--wt-field-max-width", "300px");
+    await document.fonts.ready;
+    const r = inputOf(el).getBoundingClientRect();
+    const centres = marksOf(el).map((mark) => {
+      const box = mark.getBoundingClientRect();
+      return box.left + box.width / 2;
+    });
+    expect(centres).toHaveLength(3);
+    centres.forEach((centre, i) => {
+      expect(Math.abs(centre - (r.left + 8 + ((i * 3) / 7) * (r.width - 16)))).toBeLessThanOrEqual(
+        0.1,
+      );
+    });
+  });
+
+  test.each([
+    ["a step of 0", 'min="100" max="130" step="0"'],
+    ["a negative step", 'min="100" max="130" step="-5"'],
+    ["max below min", 'min="130" max="100" step="5"'],
+    ["max equal to min", 'min="100" max="100" step="5"'],
+    ["more than 101 steps", 'min="0" max="1010" step="10"'],
+  ])("with %s it draws its label and range but no marks", async (_, range) => {
+    const el = (await mount(
+      `<wt-slider label="Text size" ${range} value="100" marks></wt-slider>`,
+    )) as WtSlider;
+    expect(partOf(el, "label").textContent).toBe("Text size");
+    expect(inputOf(el).type).toBe("range");
+    expect(marksOf(el)).toHaveLength(0);
+  });
+
+  test("draws up to 101 marks", async () => {
+    const el = (await mount(
+      '<wt-slider label="Percent" min="0" max="1000" step="10" value="0" marks></wt-slider>',
+    )) as WtSlider;
+    expect(marksOf(el)).toHaveLength(101);
+  });
+
+  test("draws the value at the end of the range's row", async () => {
+    const el = await mountMarked();
+    const r = inputOf(el).getBoundingClientRect();
+    const value = partOf(el, "value").getBoundingClientRect();
+    const label = partOf(el, "label").getBoundingClientRect();
+    expect(value.left).toBeGreaterThanOrEqual(r.right);
+    const middle = value.top + value.height / 2;
+    expect(middle).toBeGreaterThanOrEqual(r.top);
+    expect(middle).toBeLessThanOrEqual(r.bottom);
+    expect(value.top).toBeGreaterThanOrEqual(label.bottom);
+    expect(partOf(el, "value").textContent).toBe("110");
+  });
+
+  test("marks paint from the muted text token, a line wide and a small space tall", async () => {
+    const el = await mountMarked();
+    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-field-line-width", "3px");
+    host.style.setProperty("--wt-space-2", "7px");
+    const mark = marksOf(el)[0]!;
+    expect(getComputedStyle(mark).backgroundColor).toBe("rgb(1, 2, 3)");
+    expect(mark.getBoundingClientRect().width).toBe(3);
+    expect(mark.getBoundingClientRect().height).toBe(7);
+  });
+
+  test("a disabled marked slider disables its range and marks its label row", async () => {
+    const el = (await mount(
+      '<wt-slider label="Text size" min="100" max="130" step="5" value="110" marks disabled></wt-slider>',
+    )) as WtSlider;
+    expect(inputOf(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector(".row")!.getAttribute("aria-disabled")).toBe("true");
+    el.disabled = false;
+    await el.updateComplete;
+    expect(inputOf(el).disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector(".row")!.hasAttribute("aria-disabled")).toBe(false);
+  });
+
+  test("without marks the value stays on the label row", async () => {
+    const el = await mountSlider();
+    await document.fonts.ready;
+    expect(el.shadowRoot!.querySelector('[part="marks"]')).toBeNull();
+    expect(marksOf(el)).toHaveLength(0);
+    const label = partOf(el, "label").getBoundingClientRect();
+    const value = partOf(el, "value").getBoundingClientRect();
+    expect([value.top < label.bottom, label.top < value.bottom]).toEqual([true, true]);
   });
 });

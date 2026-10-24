@@ -8,6 +8,7 @@ import {
   type ThemeChoices,
   type ThemeColour,
   type ThemeLogo,
+  type TextScale,
 } from "@waitron/ui-core/theme";
 
 export type HandField = `handSet.${Mode}.${ThemeColour}`;
@@ -68,6 +69,7 @@ export function sameDraft(a: LookDraft, b: LookDraft): boolean {
     x.brandColor === y.brandColor &&
     x.background === y.background &&
     x.corners === y.corners &&
+    x.textScale === y.textScale &&
     MODES.every(
       (mode) =>
         Boolean(x.brandFix[mode]) === Boolean(y.brandFix[mode]) &&
@@ -121,6 +123,10 @@ export function setBackground(d: LookDraft, b: Background): LookDraft {
 
 export function setCorners(d: LookDraft, c: Corners): LookDraft {
   return { ...d, choices: { ...d.choices, corners: c } };
+}
+
+export function setTextScale(d: LookDraft, textScale: TextScale): LookDraft {
+  return { ...d, choices: { ...d.choices, textScale } };
 }
 
 function withoutKey<K extends string, V>(

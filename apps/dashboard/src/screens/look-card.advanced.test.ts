@@ -39,6 +39,7 @@ const LUCIA: ThemeChoices = {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const CHRISTMAS: ThemeChoices = {
   brandColor: "#7a1f2b",
@@ -47,6 +48,7 @@ const CHRISTMAS: ThemeChoices = {
   corners: "standard",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
 const christmas = theme("t-xmas", "Christmas", CHRISTMAS);

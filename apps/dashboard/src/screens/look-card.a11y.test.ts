@@ -30,6 +30,7 @@ const lucia = theme("t-lucia", "Bar Lucía", {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 });
 const twoFixes = theme("t-hand", "By hand", {
   ...WAITRON_CHOICES,
@@ -94,6 +95,16 @@ async function typeHand(el: Card, mode: string, key: string, value: string) {
   const field = inAdvanced(el, `wt-input[name="handSet.${mode}.${key}"]`)!;
   await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill(value);
   await el.updateComplete;
+}
+
+async function slideText(el: Card, value: number) {
+  const slider = q(el, "wt-slider[name=textScale]") as HTMLElementTagNameMap["wt-slider"];
+  const input = slider.shadowRoot!.querySelector("input")!;
+  input.value = String(value);
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  return slider;
 }
 
 const states: Record<
@@ -247,6 +258,31 @@ const states: Record<
         )
         .not.toBe("");
       return "dashboard-theme-advanced";
+    },
+  },
+  "text size moved to 130%": {
+    list: inUse(lucia),
+    reach: async (el) => {
+      const slider = await slideText(el, 130);
+      expect(slider.value).toBe(130);
+      await slider.updateComplete;
+      return "wt-slider[name=textScale]";
+    },
+  },
+  "a refused text size": {
+    list: inUse(lucia),
+    api: () =>
+      ({
+        saveTheme: vi.fn(async () => {
+          throw { code: "theme.invalid", params: { field: "textScale", reason: "bad_value" } };
+        }),
+      }) as unknown as DashboardApi,
+    reach: async (el) => {
+      const slider = await slideText(el, 120);
+      await press(el, "save");
+      await expect.poll(() => slider.error).toBe(t("appearance.bad_text_size"));
+      await slider.updateComplete;
+      return "wt-slider[name=textScale]";
     },
   },
   "the dark own colour line": {

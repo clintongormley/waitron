@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { applyTokens, baseStyles } from "@waitron/ui";
+import { formatMoney } from "@waitron/shared";
+import { ContentLanguageController, applyTokens, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
@@ -11,7 +12,8 @@ import {
   type Mode,
   type ThemeLogo,
 } from "@waitron/ui-core/theme";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { previewProductName } from "./theme-words.js";
 
 /**
  * A picture of a theme draft: one panel per mode, each a theme root of its own, painted from a
@@ -68,6 +70,8 @@ export class ThemePreview extends LitElement {
         color: var(--wt-color-text);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
+        font-family: var(--wt-font-family);
+        font-size: var(--wt-font-size-md);
       }
       .strip {
         display: flex;
@@ -198,6 +202,50 @@ export class ThemePreview extends LitElement {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
+      .till {
+        display: flex;
+        flex: 1 1 100%;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+      /* A counter till's narrowest tile (HOME_GRID_COLUMNS). */
+      .tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-sizing: border-box;
+        width: calc(var(--wt-tap-min) * 2 + var(--wt-space-4));
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        text-align: center;
+        overflow-wrap: break-word;
+      }
+      .tile > * {
+        max-width: 100%;
+      }
+      .tile-name {
+        font-weight: var(--wt-font-weight-bold);
+        hyphens: auto;
+      }
+      .tile-price {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .bill-line {
+        display: flex;
+        align-items: baseline;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+      .bill-name {
+        flex: 1;
+        min-width: 0;
+        hyphens: auto;
+        overflow-wrap: break-word;
+      }
     `,
   ];
 
@@ -207,6 +255,11 @@ export class ThemePreview extends LitElement {
   @property({ attribute: false }) legalName = "";
 
   readonly #draft = new CSSStyleSheet();
+
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("theme")) this.#draft.replaceSync(themeSheet(this.theme));
@@ -231,6 +284,22 @@ export class ThemePreview extends LitElement {
       light=${liveMediaImage(logo.light, "display")}
       dark=${logo.dark ? liveMediaImage(logo.dark, "display") : nothing}
     ></wt-venue-logo>`;
+  }
+
+  #till() {
+    const product = previewProductName();
+    const locale = currentLocale();
+    return html`<div class="till">
+      <div class="tile" data-test="preview-tile">
+        <span class="tile-name" lang=${product.lang}>${product.text}</span>
+        <span class="tile-price">${formatMoney("2.20", locale)}</span>
+      </div>
+      <div class="bill-line" data-test="preview-bill-line">
+        <span class="bill-name" lang=${product.lang}>${product.text}</span>
+        <span>2</span>
+        <span>${formatMoney("4.40", locale)}</span>
+      </div>
+    </div>`;
   }
 
   #panel(mode: Mode) {
@@ -262,6 +331,7 @@ export class ThemePreview extends LitElement {
             <span class="segment">${t("theme.dark")}</span>
           </div>
         </div>
+        ${this.#till()}
       </div>
     </figure>`;
   }

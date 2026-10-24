@@ -34,6 +34,7 @@ const lucia = theme("t-lucia", "Bar Lucía", {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 });
 const xmas = theme("t-xmas", "Christmas", {
   ...WAITRON_CHOICES,

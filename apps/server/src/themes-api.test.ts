@@ -48,6 +48,7 @@ const LEMON: ThemeChoices = {
   corners: "standard",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a" };
 const LEMON_WARNING = {
@@ -180,7 +181,9 @@ describe("the custom theme routes", () => {
         "fix_with_hand_set",
       ],
       [{ ...LEMON, logo: "x" }, "logo", "bad_value"],
-      [{ ...LEMON, textScale: 1 }, "theme", "unknown_key"],
+      [{ ...LEMON, notAThemeKey: 1 }, "theme", "unknown_key"],
+      [{ ...LEMON, textScale: 1 }, "textScale", "bad_value"],
+      [{ ...LEMON, textScale: 112 }, "textScale", "bad_value"],
       [
         { ...LEMON, handSet: { light: { evil: "#ff0000" }, dark: {} } },
         "handSet.light",
@@ -204,6 +207,27 @@ describe("the custom theme routes", () => {
     expect(body.warnings).toEqual([LEMON_WARNING]);
     expect(body.light["--wt-color-primary"]).toEqual(expect.any(String));
     expect(body.dark["--wt-color-primary"]).toEqual(expect.any(String));
+  });
+
+  it("a theme saved at 130% is answered with its sizes", async () => {
+    const id = await created("Lemon", LEMON);
+    const res = await save(managerCookie, id, { theme: { ...LEMON, textScale: 130 } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.choices.textScale).toBe(130);
+    expect(body.light["--wt-font-size-md"]).toBe("18px");
+    expect(body.dark["--wt-font-size-md"]).toBe("18px");
+  });
+
+  it("a text size off the list is refused, naming it", async () => {
+    const id = await created("Lemon", LEMON);
+    const before = await storedRows();
+    const res = await save(managerCookie, id, { theme: { ...LEMON, textScale: 112 } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      refusal("theme.invalid", { field: "textScale", reason: "bad_value" }),
+    );
+    expect(await storedRows()).toEqual(before);
   });
 
   it("answers the same warning from GET, to a supervisor too", async () => {

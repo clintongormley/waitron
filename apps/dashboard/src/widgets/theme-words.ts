@@ -1,5 +1,6 @@
 import {
   type AgainstItem,
+  type DerivedTheme,
   MODES,
   type Mode,
   STATIONS,
@@ -7,12 +8,14 @@ import {
   THEME_RULES,
   type ThemeChoices,
   type ThemeColour,
+  type TextScale,
   type ThemeWarning,
   colourKey,
   groupAgainst,
 } from "@waitron/ui-core/theme";
-import type { StringKey } from "../i18n/strings.js";
-import { fill, t } from "../i18n/t.js";
+import { currentContentLanguages } from "@waitron/ui";
+import { catalogues, type StringKey } from "../i18n/strings.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
 
 const ZONE_TABS: ReadonlySet<string> = new Set([
@@ -229,4 +232,41 @@ export function saveDialogLine(warning: ThemeWarning, choices: ThemeChoices): st
 export function savedWarningLine(warning: ThemeWarning): string {
   if (warning.field === "brandColor") return t(`appearance.saved_brand_${warning.mode}`);
   return hardToRead(warning);
+}
+
+export function textScaleLabel(n: number): string {
+  return new Intl.NumberFormat(currentLocale(), { style: "percent" }).format(n / 100);
+}
+
+export function textScaleRow(textScale: TextScale): string {
+  const size = textScaleLabel(textScale);
+  return textScale === 100 ? fill("appearance.text_size_standard", { size }) : size;
+}
+
+export function textScaleSpoken(n: number): string {
+  return fill("appearance.text_size_spoken", { n: String(n) });
+}
+
+function pixels(theme: Pick<DerivedTheme, "light">, size: string): string {
+  const name = `--wt-font-size-${size}`;
+  const value = theme.light[name];
+  if (value === undefined) throw new RangeError(`missing text size: ${name}`);
+  return value.replace(/px$/, "");
+}
+
+export function textSizesLine(theme: Pick<DerivedTheme, "light">): string {
+  return fill("appearance.text_sizes", {
+    sm: pixels(theme, "sm"),
+    md: pixels(theme, "md"),
+    lg: pixels(theme, "lg"),
+    xl: pixels(theme, "xl"),
+  });
+}
+
+/** The preview's sample name in the venue's default content language, else in the screen's. */
+export function previewProductName(): { text: string; lang: string } {
+  const lang = currentContentLanguages().defaultLanguage;
+  const text = catalogues[lang]?.["appearance.preview_product"];
+  if (text !== undefined) return { text, lang };
+  return { text: t("appearance.preview_product"), lang: currentLocale() };
 }

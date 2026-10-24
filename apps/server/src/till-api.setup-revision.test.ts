@@ -42,6 +42,7 @@ const LEMON: ThemeChoices = {
   corners: "standard",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a" };
@@ -244,6 +245,21 @@ describe("the till's setup revision", () => {
     expect(after.body.themeHash).not.toBe(before.body.themeHash);
     expect(after.body.setupRevision).not.toBe(before.body.setupRevision);
     expect(await menuStateRevision(till)).toBe(after.body.setupRevision);
+  });
+
+  it("saving the theme in use with a new text size moves setupRevision", async () => {
+    const till = await setupTill();
+    const lemonId = await storeTheme("Lemon", LEMON, true);
+    const before = await startRevision(till);
+    await suite.db.update(customThemes).set({ theme: LEMON }).where(eq(customThemes.id, lemonId));
+    expect(await startRevision(till)).toBe(before);
+    await suite.db
+      .update(customThemes)
+      .set({ theme: { ...LEMON, textScale: 130 } })
+      .where(eq(customThemes.id, lemonId));
+    const after = await sendAsTill(till, "GET", "/api/till");
+    expect(after.body.themeHash).toBe(await hashInUse());
+    expect(after.body.setupRevision).not.toBe(before);
   });
 
   it("saving a theme that is not in use leaves the revision", async () => {

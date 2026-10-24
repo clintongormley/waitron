@@ -122,6 +122,10 @@ test("refuses what is not a derived value", () => {
   expect(withLight({ ...light, "--wt-radius-md": "x14px" })).toThrow(RangeError);
   expect(withLight({ ...light, "--wt-radius-md": "#ffffff" })).toThrow(RangeError);
   expect(withLight({ ...light, "--wt-color-bg": "14px" })).toThrow(RangeError);
+  for (const size of ["NaNpx", "14.5px", "1em"])
+    expect(withLight({ ...light, "--wt-font-size-md": size }), size).toThrow(
+      new RangeError("not a derived value for --wt-font-size-md"),
+    );
   expect(withLight(missingBg)).toThrow(new RangeError("not a derived value for --wt-color-bg"));
   expect(withLight({ ...light, "--wt-color-danger": "#ff0000" })).toThrow(
     new RangeError("not a theme token: --wt-color-danger"),
@@ -129,4 +133,16 @@ test("refuses what is not a derived value", () => {
   expect(withDark({ ...dark, "--wt-color-bg": "red" })).toThrow(RangeError);
   expect(withDark({ ...missingBg, "--wt-color-danger": "#ff0000" })).toThrow(RangeError);
   expect(withLight(light)).not.toThrow();
+});
+
+test("a theme at 130% draws 18px body text", () => {
+  adopted = new CSSStyleSheet();
+  adopted.replaceSync(themeSheet(deriveTheme({ ...WAITRON_CHOICES, textScale: 130 })));
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, adopted];
+  const root = mount("light");
+  const probe = document.createElement("span");
+  probe.style.fontSize = "var(--wt-font-size-md)";
+  probe.textContent = "Text";
+  root.append(probe);
+  expect(getComputedStyle(probe).fontSize).toBe("18px");
 });

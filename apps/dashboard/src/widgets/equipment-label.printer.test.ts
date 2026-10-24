@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtButton, WtCombobox } from "@waitron/ui";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
+import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -105,6 +107,30 @@ it("prints the browser name larger and bolder than the code", async () => {
     Number(view.getComputedStyle(code!).fontWeight),
   );
   view.dispatchEvent(new Event("afterprint"));
+});
+it("the label prints Waitron's type under a theme at 130%", async () => {
+  const qr =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
+  try {
+    const printed = vi.fn<(view: Window) => void>();
+    printEquipmentLabel({ qr, name: "Portable", code: "CODE" }, printed);
+    await vi.waitFor(() => expect(printed).toHaveBeenCalledTimes(1));
+    const view = printed.mock.calls[0]![0];
+    expect(getComputedStyle(view.frameElement!).getPropertyValue("--wt-font-size-md")).toBe("18px");
+    const root = view.document.documentElement.style;
+    expect(root.getPropertyValue("--wt-font-size-md")).toBe("14px");
+    expect(root.getPropertyValue("--wt-font-size-xl")).toBe("22px");
+    expect(root.getPropertyValue("--wt-font-weight-bold")).toBe("600");
+    expect(root.getPropertyValue("--wt-font-family")).toBe(
+      WAITRON_DEFAULTS.structure["--wt-font-family"],
+    );
+    view.dispatchEvent(new Event("afterprint"));
+  } finally {
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+      (sheet) => sheet !== TEXT_130_SHEET,
+    );
+  }
 });
 it("shows the read failure and retries the printer list without losing the label", async () => {
   const { el, api } = await mount();

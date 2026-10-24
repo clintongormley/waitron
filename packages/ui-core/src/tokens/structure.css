@@ -31,6 +31,8 @@
   --wt-google-mark-size: 20px;
   --wt-google-mark-gap: 10px;
   --wt-google-button-line-height: 20px;
+  --wt-google-button-font-size: 14px;
+  --wt-google-button-font-weight: 500;
 
   --wt-field-height: 56px;
   --wt-field-line-width: 1px;
@@ -98,6 +100,10 @@
   /* Below --wt-tap-min by an owner decision (A263): the number keeps the two buttons apart, and
      24px is WCAG 2.2's level AA minimum target (2.5.8). */
   --wt-stepper-button-width: 24px;
+
+  /* Nothing sets the native thumb from this. wt-slider insets its step marks by half of it, to sit
+     under the thumb's centre, which Chromium 156 draws 8px in from each end of the range. */
+  --wt-slider-thumb-size: 16px;
 
   /* A help-mode badge's target and the circle inside it. 24px is WCAG 2.2's level AA minimum
      target (2.5.8). */

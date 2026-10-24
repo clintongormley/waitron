@@ -8,8 +8,9 @@ import {
   type ThemeWarning,
 } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import { es, type StringKey } from "../i18n/strings.js";
-import { setLocale } from "../i18n/t.js";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { en, es, type StringKey } from "../i18n/strings.js";
+import { fill, setLocale } from "../i18n/t.js";
 import {
   advancedSummary,
   againstNames,
@@ -22,8 +23,12 @@ import {
   handNames,
   handWarningLines,
   keptNote,
+  previewProductName,
   saveDialogLine,
   savedWarningLine,
+  textScaleLabel,
+  textScaleSpoken,
+  textSizesLine,
   themeColourName,
 } from "./theme-words.js";
 
@@ -64,6 +69,7 @@ const LUCIA: ThemeChoices = {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const CREAM: ThemeChoices = { ...LUCIA, handSet: { light: { bg: "#f8f1e1" }, dark: {} } };
 const SAGE: ThemeChoices = {
@@ -550,5 +556,72 @@ describe("theme words", () => {
         colour: "#8fa898",
       }),
     );
+  });
+});
+
+describe("text size words", () => {
+  it("shows a text size as the screen language's percent", () => {
+    expect(textScaleLabel(115)).toBe("115%");
+    setLocale("es-ES");
+    expect(textScaleLabel(115)).toBe("115\u00a0%");
+  });
+
+  it("says a text size in words", () => {
+    expect(textScaleSpoken(115)).toBe("115 percent");
+    setLocale("es-ES");
+    expect(textScaleSpoken(115)).toBe(esFill("appearance.text_size_spoken", { n: "115" }));
+  });
+
+  it("lists the four sizes the theme draws, read from its tokens", () => {
+    const theme = deriveTheme({ ...WAITRON_CHOICES, textScale: 115 });
+    const sizes = { sm: "14", md: "16", lg: "21", xl: "25" };
+    expect(textSizesLine(theme)).toBe(fill("appearance.text_sizes", sizes));
+    expect(textSizesLine(theme)).toBe(
+      "Text on screens: small 14\u00a0px · normal 16\u00a0px · large 21\u00a0px · largest 25\u00a0px",
+    );
+    const replaced = { light: { ...theme.light, "--wt-font-size-md": "20px" } };
+    expect(textSizesLine(replaced)).toBe(fill("appearance.text_sizes", { ...sizes, md: "20" }));
+  });
+
+  it("keeps each Spanish size and its px together with a no-break space", () => {
+    setLocale("es-ES");
+    const theme = deriveTheme({ ...WAITRON_CHOICES, textScale: 115 });
+    const line = textSizesLine(theme);
+    expect(line).toBe(esFill("appearance.text_sizes", { sm: "14", md: "16", lg: "21", xl: "25" }));
+    expect(line.match(/\d+\s+px/g)).toEqual(["14 px", "16 px", "21 px", "25 px"]);
+  });
+
+  it("refuses a theme that lacks one of the four sizes, naming it", () => {
+    const light = { ...deriveTheme(WAITRON_CHOICES).light };
+    delete light["--wt-font-size-lg"];
+    expect(() => textSizesLine({ light })).toThrow(
+      new RangeError("missing text size: --wt-font-size-lg"),
+    );
+  });
+});
+
+describe("the preview's sample name", () => {
+  const before = currentContentLanguages();
+  afterEach(() => {
+    setContentLanguages(before);
+  });
+
+  it("the preview's sample name is in the venue's content language when the strings have it", () => {
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    expect(previewProductName()).toEqual({ text: es["appearance.preview_product"], lang: "es" });
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    expect(previewProductName()).toEqual({ text: en["appearance.preview_product"], lang: "en" });
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
+    expect(previewProductName()).toEqual({
+      text: en["appearance.preview_product"],
+      lang: "en-GB",
+    });
+    setLocale("es-ES");
+    expect(previewProductName()).toEqual({
+      text: es["appearance.preview_product"],
+      lang: "es-ES",
+    });
   });
 });

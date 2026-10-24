@@ -29,6 +29,7 @@ const lucia = theme("t-lucia", "Bar Lucía", {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 });
 const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
 const hand = theme("t-hand", "By hand", {

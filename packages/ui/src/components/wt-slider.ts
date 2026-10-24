@@ -4,6 +4,8 @@ import { live } from "lit/directives/live.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
+const MAX_MARKS = 101;
+
 /** A labelled whole-number range that shows its value. */
 @customElement("wt-slider")
 export class WtSlider extends LitElement {
@@ -23,6 +25,30 @@ export class WtSlider extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-3);
       }
+      .range {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: var(--wt-space-3);
+      }
+      .range [part="value"] {
+        align-self: center;
+      }
+      [part="marks"] {
+        position: relative;
+        height: var(--wt-space-2);
+      }
+      [part="mark"] {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
+        width: var(--wt-field-line-width);
+        height: var(--wt-space-2);
+        background-color: var(--wt-color-text-muted);
+      }
+      [part="label"] {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       [part="value"] {
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
@@ -41,6 +67,11 @@ export class WtSlider extends LitElement {
       :host([disabled]) {
         opacity: var(--wt-opacity-disabled);
       }
+      .hint {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .error {
         margin: 0;
         color: var(--wt-color-danger);
@@ -58,6 +89,11 @@ export class WtSlider extends LitElement {
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean }) continuous = false;
   @property() error = "";
+  @property() hint = "";
+  /** Draws one mark per step under the range, and the value at the range's end. */
+  @property({ type: Boolean }) marks = false;
+  @property({ attribute: false }) format: (value: number) => string = String;
+  @property({ attribute: false }) valueText: ((value: number) => string) | null = null;
   /** The number under the latest drag, until a new `value` replaces it. */
   @state() private shown: number | null = null;
 
@@ -88,28 +124,62 @@ export class WtSlider extends LitElement {
     dispatchWtChange(this, event, { value });
   }
 
+  /**
+   * Where each step sits along the thumb's travel, from 0 at `min`. None when the range has no
+   * travel, the step cannot advance, or there would be more than `MAX_MARKS`.
+   */
+  #markFractions(): number[] {
+    const span = this.max - this.min;
+    if (!(span > 0)) return [];
+    // A step of 0 counts to Infinity, and a negative one to no marks.
+    const count = Math.floor(span / this.step) + 1;
+    if (count > MAX_MARKS) return [];
+    return Array.from({ length: count }, (_, i) => (i * this.step) / span);
+  }
+
   override render() {
     const errorId = `${this.#id}-error`;
+    const hintId = `${this.#id}-hint`;
     const shown = this.shown ?? this.value;
-    return html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>
-        <label for=${this.#id} part="label">${this.label}</label>
-        <span part="value" aria-hidden="true">${shown}</span>
-      </div>
-      <input
-        id=${this.#id}
-        type="range"
-        name=${this.name || nothing}
-        .min=${String(this.min)}
-        .max=${String(this.max)}
-        .step=${String(this.step)}
-        .value=${live(String(shown))}
-        ?disabled=${this.disabled}
-        aria-invalid=${this.error ? "true" : nothing}
-        aria-describedby=${this.error ? errorId : nothing}
-        @input=${this.#onInput}
-        @change=${this.#onChange}
-      />
-      ${this.error ? html`<p class="error" id=${errorId} role="alert" data-error>${this.error}</p>` : nothing}`;
+    const describedBy = [this.hint && hintId, this.error && errorId].filter(Boolean).join(" ");
+    const value = html`<span part="value" aria-hidden="true">${this.format(shown)}</span>`;
+    const input = html`<input
+      id=${this.#id}
+      type="range"
+      name=${this.name || nothing}
+      .min=${String(this.min)}
+      .max=${String(this.max)}
+      .step=${String(this.step)}
+      .value=${live(String(shown))}
+      ?disabled=${this.disabled}
+      aria-invalid=${this.error ? "true" : nothing}
+      aria-describedby=${describedBy || nothing}
+      aria-valuetext=${this.valueText ? this.valueText(shown) : nothing}
+      @input=${this.#onInput}
+      @change=${this.#onChange}
+    />`;
+    const label = html`<label for=${this.#id} part="label">${this.label}</label>`;
+    const control = this.marks
+      ? html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>${label}</div>
+          <div class="range">
+            ${input}${value}
+            <div part="marks" aria-hidden="true">
+              ${this.#markFractions().map(
+                (at) =>
+                  html`<span
+                    part="mark"
+                    style="left: calc(var(--wt-slider-thumb-size) / 2 + ${at} * (100% - var(--wt-slider-thumb-size)))"
+                  ></span>`,
+              )}
+            </div>
+          </div>`
+      : html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>
+            ${label}${value}
+          </div>
+          ${input}`;
+    return html`${control}
+    ${this.hint ? html`<p class="hint" part="hint" id=${hintId}>${this.hint}</p>` : nothing}
+    ${this.error ? html`<p class="error" id=${errorId} role="alert" data-error>${this.error}</p>` : nothing}`;
   }
 }
 

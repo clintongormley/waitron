@@ -23,6 +23,8 @@ elecciones que lo forman:
 - **Fondo**: **Neutro** conserva los grises de Waitron, y **Teñido** da a la página, al relleno de
   los campos y a los bordes un ligero matiz del color de marca.
 - **Esquinas**: **Rectas**, **Estándar** o **Redondeadas**, para botones, campos y tarjetas.
+- **Tamaño del texto**: lo grande que el tema hace el texto de todas las pantallas: «100 %
+  (estándar)», o un paso mayor, como «115 %».
 - **Colores fijados a mano**: los colores del tema que recibieron un valor propio en lugar de
   calcularse a partir del color de marca, o **Ninguno**. La sección **Avanzado** del editor los
   fija, como explica «Fija colores a mano», más abajo.
@@ -51,7 +53,7 @@ cualquier otro tema, dice «No está en uso. Al guardar no cambia ninguna pantal
 uses.», y el título de la tarjeta nombra el tema, o dice **Añadir tema**.
 
 El editor se abre con el **Logotipo** del tema en primer lugar, como explica «Añade tu logotipo»,
-más abajo, y después las tres elecciones del tema:
+más abajo, y después las cuatro elecciones del tema:
 
 - **Color de marca**: elige **De Waitron**, una de las muestras, o **Personalizado** para escoger
   cualquier color. También puedes escribir un código como `#1e5b3a` en la casilla junto a
@@ -59,6 +61,9 @@ más abajo, y después las tres elecciones del tema:
   lo es, Guardar te lo indica debajo del campo.
 - **Fondo**: **Neutro** o **Teñido**.
 - **Esquinas**: **Rectas**, **Estándar** o **Redondeadas**.
+- **Tamaño del texto**: un control deslizante del 100 % al 130 % en pasos del 5 %, con los cuatro
+  tamaños que da debajo, por ejemplo «Texto en pantalla: pequeño 12 px · normal 14 px · grande 18 px
+  · muy grande 22 px» al 100 %.
 
 Debajo del color de marca, **Elegir otro color para las pantallas oscuras** da a los botones
 principales de la versión oscura un color propio: abre Avanzado y pone el cursor en la casilla del
@@ -70,18 +75,37 @@ botones a partir del color de marca.
 Al lado o debajo de las elecciones, la **Vista previa** pinta una pequeña muestra del panel con el
 aspecto que estás preparando: una **Versión clara** y una **Versión oscura**, cada una encabezada
 por una franja con el logotipo y la razón social del local, y después un elemento del menú
-seleccionado, un campo, los botones Guardar y Cancelar, un interruptor, un enlace y una elección
-entre Claro y Oscuro. Es una imagen, así que sus botones no hacen nada. El editor se
-organiza según el ancho de la tarjeta, no el de la ventana. En una tarjeta ancha la vista previa
-queda al lado de las elecciones, y en una estrecha, debajo. Cuando la vista previa tiene espacio,
+seleccionado, un campo, los botones Guardar y Cancelar, un interruptor, un enlace, una elección
+entre Claro y Oscuro, y después el botón de un producto de una caja y una línea de la cuenta. Las
+dos versiones se dibujan con el tamaño del texto que has elegido. El nombre del producto está en el
+idioma principal del contenido de la carta del local cuando el panel lo tiene y, si no, en el idioma
+del panel. Es una imagen, así que sus botones no hacen nada. El editor se organiza según el ancho de
+la tarjeta, no el de la ventana. En una tarjeta ancha la vista previa queda al lado de las
+elecciones, y en una estrecha, debajo. Cuando la vista previa tiene espacio,
 las dos versiones quedan una al lado de la otra; si no, la versión clara queda encima de la oscura.
 
 Nada más en la página, ni ninguna otra pantalla, cambia hasta que guardas. **Usar el aspecto de
 Waitron** quita el logotipo y devuelve todas las elecciones a las de Waitron: el color de marca de
-Waitron, Neutro, esquinas Estándar y ningún color fijado a mano. No guarda nada por sí solo, y
-aparece desactivado mientras no hay logotipo y las elecciones ya son el aspecto de Waitron. **Cancelar** cierra el
-editor sin guardar. Si has cambiado algo, Cancelar, salir de la página y abrir otro tema desde la
-tarjeta Temas te lo preguntan antes.
+Waitron, Neutro, esquinas Estándar, tamaño del texto 100 % y ningún color fijado a mano. No guarda
+nada por sí solo, y aparece desactivado mientras no hay logotipo y las elecciones ya son el aspecto
+de Waitron. **Cancelar** cierra el editor sin guardar. Si has cambiado algo, Cancelar, salir de la
+página y abrir otro tema desde la tarjeta Temas te lo preguntan antes.
+
+## Agranda el texto {#text-size}
+
+El control **Tamaño del texto** agranda el texto de todos los paneles, cajas, terminales de camarero
+y pantallas de cocina: cada uno de los cuatro tamaños de texto crece en el mismo porcentaje,
+redondeado al píxel. El 100 % es el tamaño de Waitron, y el 130 %, el mayor. Los espacios no
+cambian, ni tampoco el tamaño mínimo de un botón, incluidos los botones de producto de una caja, así
+que un nombre largo que ya no cabe ocupa otra línea.
+
+Un tamaño de texto guardado llega a los paneles y las cajas igual que los colores de un tema guardado
+(consulta [Guarda un tema](appearance.md#save)). Una pantalla de cocina en la que nadie inicia sesión
+lo toma la próxima vez que se inicia.
+
+El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de cocina, la etiqueta
+del equipo y el kit de recuperación del nodo. El botón de inicio de sesión de Google conserva el
+tamaño de Google.
 
 ## Añade tu logotipo {#logo}
 
@@ -301,7 +325,8 @@ aspecto de ninguna pantalla.
 
 **Usar en todas las pantallas** pregunta antes, con una pregunta como «¿Usar Terraza en todas las
 pantallas?». Si el tema tiene colores que se leen mal, la pregunta los muestra bajo «Se leen mal:».
-**Usarlo** pone el tema en uso, y **Volver** no cambia nada.
+Si el tamaño del texto del tema es distinto del que está en uso, el diálogo dice también «El texto
+de las cajas también cambia de tamaño.» **Usarlo** pone el tema en uso, y **Volver** no cambia nada.
 
 Cuando un tema pasa a estar en uso, el panel que estás usando cambia a él al momento y los demás
 paneles abiertos a la vez lo siguen por su cuenta. Las cajas con la sesión iniciada lo siguen igual

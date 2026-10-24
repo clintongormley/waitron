@@ -160,8 +160,8 @@ export class LoginScreen extends LitElement {
         border-color: var(--wt-color-google-button-line);
         color: var(--wt-color-google-button-text);
         font-family: var(--wt-font-family-google);
-        font-weight: var(--wt-font-weight-medium);
-        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-google-button-font-weight);
+        font-size: var(--wt-google-button-font-size);
         line-height: var(--wt-google-button-line-height);
       }
       wt-button.google::part(button):hover:not(:disabled) {

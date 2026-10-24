@@ -863,7 +863,8 @@ the owner meant it, it is its own item.
   product editor already runs its phone-width cases at raised sizes larger than 130%
   (`design-system.md:615-623`).
 - **The preview** applies the draft's text size to both panels and adds a till product button
-  ("Tinto de verano con limón") and a bill line, drawn at the real pixel sizes, so the owner sees
+  ("Tinto de verano con limón" in Spanish, "Sparkling elderflower lemonade" in English: the
+  dashboard's strings in the venue's default content language, else in the screen's) and a bill line, drawn at the real pixel sizes, so the owner sees
   the wrap before saving (`25-text-size-editor-{light,dark}.png`, phone `26-…`).
 
 ### Text set by hand, under Advanced
@@ -1030,8 +1031,8 @@ All my call; the plan pins the exact numbers.
   other and does not reproduce Waitron's dark set: the prototype gives a dark button of `#1f6feb`
   with white text and link text `#67a0fd`, where Waitron's own dark set has `#4c8dff`, `#06101f` and
   `#78a9ff` (`colors.css:136-139`).
-- It always writes **the same list of tokens** — the 22 colours Advanced offers (section 5) and the
-  three corner radii — filling Waitron's own value where a knob sits at its default and nothing is
+- It always writes **the same list of tokens** — the 22 colours Advanced offers (section 5), the
+  three corner radii and, from slice 10, the four text sizes — filling Waitron's own value where a knob sits at its default and nothing is
   set by hand, so every theme has the same shape and the list doubles as the allowlist (section 14).
   Every colour the knobs work out is among the 22, so the list covers both.
 - It works in OKLCH, a colour model where "lightness" matches what the eye sees, so it can move a
@@ -2691,6 +2692,17 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **A picture that fails to load** (lane A ruling 2026-10-24, D14): the place draws what it draws
   with no logo, and the box tries the same address again every 60 s. Not taken: trying only on the
   next page load, which a till left running for days would not reach.
+- **Slice 10 in two pull requests** (lane A ruling 2026-10-24, slice 10 plan D1): 10a stores,
+  derives, delivers and edits the text size and keeps the equipment label and the recovery sheet on
+  Waitron's type; 10b adds the till's hyphenation and the layout cases at 130%. Not taken: one pull
+  request of fifteen tasks.
+- **The preview's till sample and the hyphenation case are named in English** (lane A ruling
+  2026-10-24, D13 and D15): the preview's product name comes from the dashboard's strings in the
+  venue's default content language, and the till's hyphenation case uses English dish names under a
+  Spanish content language. Not taken: Spanish dish names in general code.
+- **Where the equipment label and the recovery sheet get Waitron's type** (lane A ruling 2026-10-24,
+  D6): from Waitron's own token file (`WAITRON_DEFAULTS.structure`). Not taken: a theme-sheet
+  selector that skips print frames, which would not reach the recovery sheet.
 
 ## 17. Risks
 

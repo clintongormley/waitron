@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { commands, page } from "vitest/browser";
-import { applyTokens } from "@waitron/ui";
+import { formatMoney } from "@waitron/shared";
+import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { THEME_STORAGE_KEY, chooseTheme } from "@waitron/ui/src/theme-choice.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
@@ -11,7 +12,8 @@ import {
   type ThemeLogo,
 } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import { setLocale } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, serveLogos, servedLogo } from "./test-helpers.js";
 import "./theme-preview.js";
 
@@ -30,6 +32,7 @@ const LUCIA_DARK_FIX: ThemeChoices = {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const LEMON: ThemeChoices = { ...WAITRON_CHOICES, brandColor: "#f2d300" };
 const LEMON_LIGHT_FIX: ThemeChoices = { ...LEMON, brandFix: { light: true } };
@@ -80,8 +83,11 @@ function paintPage(): void {
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, venueSheet];
 }
 
+const contentLanguagesBefore = currentContentLanguages();
+
 afterEach(async () => {
   vi.restoreAllMocks();
+  setContentLanguages(contentLanguagesBefore);
   cleanupWidgets();
   setLocale("en-GB");
   outside?.remove();
@@ -378,4 +384,155 @@ it("the page's own setting does not move a panel's version", async () => {
     localStorage.removeItem(THEME_STORAGE_KEY);
     root.removeAttribute("data-wt-theme-root");
   }
+});
+
+const fontSize = (el: Element) => getComputedStyle(el).fontSize;
+const tile = (el: Preview, mode: "light" | "dark") =>
+  panel(el, mode).querySelector<HTMLElement>("[data-test=preview-tile]")!;
+const billLine = (el: Preview, mode: "light" | "dark") =>
+  panel(el, mode).querySelector<HTMLElement>("[data-test=preview-bill-line]")!;
+const names = (el: Preview) =>
+  (["light", "dark"] as const).flatMap((mode) => [
+    tile(el, mode).querySelector<HTMLElement>(".tile-name")!,
+    billLine(el, mode).querySelector<HTMLElement>(".bill-name")!,
+  ]);
+
+it("each panel draws its text at the theme's sizes", async () => {
+  for (const [textScale, md, sm] of [
+    [130, "18px", "16px"],
+    [100, "14px", "12px"],
+  ] as const) {
+    const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+      theme: deriveTheme({ ...LUCIA_DARK_FIX, textScale }),
+      name: "Bar Lucía",
+    });
+    for (const mode of ["light", "dark"] as const) {
+      const box = panel(el, mode);
+      expect([
+        textScale,
+        mode,
+        fontSize(box.querySelector(".field-value")!),
+        fontSize(box.querySelector(".field-label")!),
+        fontSize(box.closest("figure")!.querySelector("h4")!),
+      ]).toEqual([textScale, mode, md, sm, "12px"]);
+    }
+    cleanupWidgets();
+  }
+});
+
+it("a mounted preview's till button and bill line follow a change of text size", async () => {
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme(LUCIA_DARK_FIX),
+    name: "Bar Lucía",
+  });
+  for (const [textScale, md, sm] of [
+    [100, "14px", "12px"],
+    [130, "18px", "16px"],
+    [100, "14px", "12px"],
+  ] as const) {
+    el.theme = deriveTheme({ ...LUCIA_DARK_FIX, textScale });
+    await el.updateComplete;
+    for (const mode of ["light", "dark"] as const) {
+      const button = tile(el, mode);
+      expect([
+        textScale,
+        mode,
+        fontSize(button.querySelector(".tile-name")!),
+        fontSize(button.querySelector(".tile-price")!),
+        fontSize(billLine(el, mode).querySelector(".bill-name")!),
+      ]).toEqual([textScale, mode, md, sm, md]);
+    }
+  }
+});
+
+it("each panel shows a till button and a bill line", async () => {
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme(WAITRON_CHOICES),
+    name: "Bar Lucía",
+  });
+  await document.fonts.ready;
+  const name = en["appearance.preview_product"];
+  for (const mode of ["light", "dark"] as const) {
+    const button = tile(el, mode);
+    const tileName = button.querySelector<HTMLElement>(".tile-name")!;
+    const price = button.querySelector<HTMLElement>(".tile-price")!;
+    expect(tileName.textContent).toBe(name);
+    expect(price.textContent).toBe(formatMoney("2.20", currentLocale()));
+    expect(button.getBoundingClientRect().width).toBe(104);
+    expect(getComputedStyle(tileName).fontWeight).toBe(
+      getComputedStyle(button).getPropertyValue("--wt-font-weight-bold").trim(),
+    );
+    expect(fontSize(price)).toBe("12px");
+    expect(fontSize(tileName)).toBe("14px");
+    const line = billLine(el, mode);
+    expect([...line.children].map((child) => child.textContent)).toEqual([
+      name,
+      "2",
+      formatMoney("4.40", currentLocale()),
+    ]);
+    const outer = panel(el, mode).getBoundingClientRect();
+    for (const inner of [button.getBoundingClientRect(), line.getBoundingClientRect()]) {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left);
+      expect(inner.right).toBeLessThanOrEqual(outer.right);
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top);
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom);
+    }
+  }
+});
+
+it("an English screen in a Spanish venue shows the Spanish sample, as the tills would break it", async () => {
+  setLocale("en-GB");
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme(WAITRON_CHOICES),
+    name: "Bar Lucía",
+  });
+  for (const name of names(el)) {
+    expect([name.getAttribute("lang"), name.textContent, getComputedStyle(name).hyphens]).toEqual([
+      "es",
+      es["appearance.preview_product"],
+      "auto",
+    ]);
+  }
+});
+
+it("the sample follows a change of the venue's content language", async () => {
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme(WAITRON_CHOICES),
+    name: "Bar Lucía",
+  });
+  expect(names(el)[0]!.getAttribute("lang")).toBe("es");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  for (const name of names(el)) {
+    expect([name.getAttribute("lang"), name.textContent]).toEqual([
+      "en",
+      en["appearance.preview_product"],
+    ]);
+  }
+});
+
+it("the sample text follows the panel's own colours", async () => {
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme(LUCIA_DARK_FIX),
+    name: "Bar Lucía",
+  });
+  const drawn = (mode: "light" | "dark") => {
+    const box = panel(el, mode);
+    const probe = document.createElement("span");
+    box.appendChild(probe);
+    probe.style.borderTop = "1px solid var(--wt-color-border)";
+    probe.style.backgroundColor = "var(--wt-color-surface)";
+    const want = [getComputedStyle(probe).borderTopColor, getComputedStyle(probe).backgroundColor];
+    probe.remove();
+    const style = getComputedStyle(tile(el, mode));
+    return { want, got: [style.borderTopColor, style.backgroundColor] };
+  };
+  const light = drawn("light");
+  const dark = drawn("dark");
+  expect(light.got).toEqual(light.want);
+  expect(dark.got).toEqual(dark.want);
+  expect(dark.got).not.toEqual(light.got);
 });

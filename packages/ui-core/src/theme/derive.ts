@@ -347,7 +347,7 @@ function deriveAt(
 }
 
 export interface ModeResult {
-  /** Every token in THEME_TOKENS, Waitron's values wherever the derivation writes nothing. */
+  /** Every colour and radius token in THEME_TOKENS, Waitron's values wherever the derivation writes nothing. */
   readonly tokens: Record<string, string>;
   /** The rules still failing on the settled colours. */
   readonly failures: readonly RuleResult[];
