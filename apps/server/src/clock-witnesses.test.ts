@@ -38,6 +38,7 @@ describe("createClockWitnessStore", () => {
       {
         kind: "device",
         id: "till-1",
+        address: "192.168.10.31",
         boxAt: iso(START_WALL),
         witnessAt: iso(START_WALL + 3_000),
         uncertaintyMs: 0,
@@ -73,6 +74,7 @@ describe("createClockWitnessStore", () => {
       {
         kind: "device",
         id: "till-1",
+        address: "192.168.10.31",
         boxAt: iso(START_WALL + 15_000),
         witnessAt: iso(START_WALL + 16_500),
         uncertaintyMs: 0,

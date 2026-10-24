@@ -1781,7 +1781,9 @@ describe("the device's clock on the equipment read", () => {
       "192.168.10.31",
     );
     expect(res.status).toBe(200);
-    expect(noted).toEqual([[a, 1_792_000_060_000, { wallMs: 1_792_000_001_000, monoMs: 5_007 }]]);
+    expect(noted).toEqual([
+      [a, "192.168.10.31", 1_792_000_060_000, { wallMs: 1_792_000_001_000, monoMs: 5_007 }],
+    ]);
   });
 
   it("notes nothing from a till or browser on the box itself, and still answers the equipment", async () => {
@@ -1855,7 +1857,9 @@ describe("the device's clock on the equipment read", () => {
     }
     await held;
     expect((await answer).status).toBe(200);
-    expect(noted).toEqual([[a, 1_792_000_060_000, { wallMs: 1_792_000_000_000, monoMs: 5_000 }]]);
+    expect(noted).toEqual([
+      [a, undefined, 1_792_000_060_000, { wallMs: 1_792_000_000_000, monoMs: 5_000 }],
+    ]);
   });
 
   it.each([

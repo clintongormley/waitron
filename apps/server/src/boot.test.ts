@@ -2976,7 +2976,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     });
   }, 60_000);
 
-  it("keeps the device's clock from an equipment read in the store boot created", async () => {
+  it("notes no clock from an equipment read made on the box itself, in the store boot created", async () => {
     await withCapturedStdout(async () => {
       const port = await freePort();
       witnessStores.length = 0;
@@ -2998,13 +2998,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
         });
         expect(res.status).toBe(200);
         expect(witnessStores).toHaveLength(1);
-        expect(witnessStores[0]!.witnesses()).toEqual([
-          expect.objectContaining({
-            kind: "device",
-            id: deviceId1,
-            witnessAt: new Date(deviceMs).toISOString(),
-          }),
-        ]);
+        expect(witnessStores[0]!.witnesses()).toEqual([]);
       } finally {
         await server.close();
       }

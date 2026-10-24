@@ -552,6 +552,16 @@ check), each in the task named:
   → `expect("restartAfterClockStop" in x).toBe(false)` (the method is gone from the type, and `in`
   is the stronger check), each followed by the five new methods `toBeUndefined()` (none `:76-80`,
   fake `:68-72`).
+- a device's clock reading carries its address, and a request on the box is no witness (Task R6b,
+  rulings C4, C16, C24; lines at `dfdc165a1` → after): `apps/server/src/boot.test.ts:2979` "keeps the
+  device's clock from an equipment read in the store boot created" → "notes no clock from an
+  equipment read made on the box itself…", `:3001-3007` the noted witness → `:3001` none, because
+  its request to `127.0.0.1` is now on the box (refusal 1 through real boot);
+  `apps/server/src/device-equipment-api.test.ts:1777` `[a, ms, arrived]` → `:1784-1786`
+  `[a, "192.168.10.31", ms, arrived]` (the case now sends from that address), and `:1812` →
+  `:1860-1862` `[a, undefined, ms, arrived]` (no connection to read); the box's readings unchanged in
+  both. `apps/server/src/clock-witnesses.test.ts:38-44` and `:73-79`: the whole device witness gains
+  `address: "192.168.10.31"`, every other key unchanged.
 
 **Must pass unedited:** `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (the golden huella)
 and `inmutabilidad.test.ts`; every other test on `main`. One that would need an edit not listed
