@@ -4204,9 +4204,8 @@ panel left and no one sees it (A756 mock-up 01: "The tab goes").
      when a sent dish has no preparation record", `draft-recall.test.ts:1110`). That one check
      changes (Task 57) and is recorded as an owner FYI.
    - **A made-here dish** has a record (at the station it was made for) in state `ready`
-     (`ticket-items.ts:27-31`), so it is refused as started (`isStarted`,
-     `apps/server/src/kitchen-print.ts:786-788`) or, at a "Not allowed" station, as not allowed —
-     as today with the switch off.
+     (`ticket-items.ts:27-31`), so it is always refused as started (`isStarted`,
+     `apps/server/src/kitchen-print.ts:786-788`): the started check comes first (Decision 5).
 
 2. **Storage: one column on `kitchen_stations`, three English values, no CHECK.**
    `kitchen_stations.changes_after_sending` (`label`, `.$type<ChangesAfterSending>()`, NOT NULL,
@@ -4220,8 +4219,9 @@ panel left and no one sees it (A756 mock-up 01: "The tab goes").
    `allowsChangeAfterSending(value: ChangesAfterSending, fired: boolean): boolean` — `true` for
    `held-or-waiting`, `!fired` for `held`, `false` for `never`. "Held" is a record whose `fired_at`
    is null ("NULL = HELD", `ticket-items.ts:64`); "waiting" is a fired record not started. A started
-   record (`preparing` or `ready`) is refused `ticket.already_started` by the check every path
-   already makes after this one, whatever the value (A773 §3.10).
+   record (`preparing` or `ready`) is always refused `ticket.already_started`, whatever the value
+   (A773 §3.10: "Never once anyone has started the dish"): every path checks started first
+   (Decision 5).
 
 3. **Migrations: one core migration adds the column; one venue-service migration drops
    `service_settings`. No venue reset.** After PR 6 the table holds only `id` and `edit_sent_lines`
@@ -4301,39 +4301,59 @@ panel left and no one sees it (A756 mock-up 01: "The tab goes").
    that station's state in the story, not a default.
 
 5. **The rule on the server: every path that reads the venue switch today reads each record's
-   station instead.** A new `apps/server/src/changes-after-sending.ts` exports
-   `refuseChangesAfterSending(tx: Transaction, workingOrderId: string, records: readonly { stationId: string; firedAt: string | null }[]): Promise<void>`:
-   one `select id, changes_after_sending from kitchen_stations where id in (…)` over the distinct
-   station ids (none when `records` is empty), then `ticket.already_fired { workingOrderId }` if any
-   record's station does not `allowsChangeAfterSending(value, record.firedAt !== null)`. It runs
-   where the venue check runs today, before the started check, so which code a refused write answers
-   is unchanged at the two ends of the scale. The three readers
+   station instead, after the started check.** A new `apps/server/src/changes-after-sending.ts`
+   exports two functions, a read and a pure check:
+   `readStationChanges(tx: Transaction, stationIds: readonly string[]): Promise<ReadonlyMap<string, ChangesAfterSending>>`
+   — one `select id, changes_after_sending from kitchen_stations where id in (…)` (no query for an
+   empty list) — and
+   `refuseChangesAfterSending(workingOrderId: string, records: readonly { stationId: string; firedAt: string | null }[], stations: ReadonlyMap<string, ChangesAfterSending>): void`,
+   which throws `ticket.already_fired { workingOrderId }` if any record's station does not
+   `allowsChangeAfterSending(value, record.firedAt !== null)`. **Order in every path: started
+   first, then the station, both before any write.** Today the venue check comes first
+   (`draft-recall.ts:233-238`, `working-order.ts:2703-2709`, `:5451-5458`), so a started dish at a
+   venue with the switch off answers `ticket.already_fired`; A773 §3.10 says a started dish is
+   refused `ticket.already_started` ("as `recallLines` does today"), so the started check moves
+   ahead and a started dish answers that at every station value (controller's ruling, 2026-10-24;
+   Task 57 adds a started dish at a "While held" and at a "Not allowed" station). **One read per
+   command:** `applyLineEdits` reads every station the order's records name once, before its line
+   loop, and checks each line in memory (CLAUDE.md §3, "Resolve shared catalogue data once before a
+   basket's line loop"; today it caches the venue value once, `editSentLines ??=`, `:5453`); the two
+   recall paths make one batched read over their records. The three readers
    (`git grep -n readEditSentLines -- apps/server/src ':!*.test.ts'`):
    - **`recallToDraft`** (A773's Recall, `apps/server/src/draft-recall.ts:233-234`): the venue check
-     moves after `dishKitchenItems` (`:235`) and becomes
-     `refuseChangesAfterSending(tx, line.workingOrderId, items)` — every record of the dish and its
-     extras, held or fired. No records: allowed (Decision 1).
+     goes; after `dishKitchenItems` (`:235`) and its started check (`:236-240`), the station check
+     runs over `items` — every record of the dish and its extras, held or fired. No records: allowed
+     (Decision 1).
    - **`recallLines`** (the older `POST /api/working-orders/:id/lines/recall`,
      `working-order.ts:2655-2705`): today it refuses only when some record's line was ever fired
      (`sentAt !== null`, `:2703`). It now passes every record of the named lines and their extras
-     (`items`, `:2690-2702`). Its till client method has no caller in the till app
+     (`items`, `:2690-2702`), after its started check (`:2706-2709`). Its till client method has no
+     caller in the till app
      (`git grep -n -E '\.recallLines\(' -- apps/till/src` lists only `client.test.ts` and
      `client.recall-ownership.test.ts`), and the route stays.
    - **`applyLineEdits`** (a change to a line through `updateOrderLine` or the whole-order save,
-     `working-order.ts:5446-5455`): today it refuses a line with a record that was ever fired when
-     the switch is off. It now passes the line's records (`[line, ...line.children]`'s tickets,
-     `:5449-5451`). The guide says the same switch governs these changes today
-     (`apps/server/src/guide/en/modifiers.md:155-159`), so the station's choice replaces it there
-     too.
-   **Held dishes at a "Not allowed" station are now refused by all three**, where today
+     `working-order.ts:5446-5455`): today `kitchenHas` refuses, with the switch off, any line with a
+     record that was ever fired — both a changed line (`:5608`) and a removed one (`:5709`), and the
+     whole-order save (`updateHeldOrder`) passes every unclaimed line as removed (`:6368`). Now the
+     station check runs **only for a line that is changed or raised** (`changed || rise > 0`,
+     `:5596-5605`), over its records (`[line, ...line.children]`'s tickets, `:5449-5451`). **A removed
+     line and a pure quantity drop are not checked against the station** and keep only the started
+     refusal: taking a sent dish off, or part of it, is a Void (A773 §3.9; the edit itself records a
+     VOID notice and slip, `voided`, `:5707-5717`, `:5807`), which the setting never gates ("Fire now … Not gated by the
+     station's 'changes after sending'", §3.7, and the spec's setting "decides when Recall is
+     offered", §7.4) (controller's ruling, 2026-10-24). The guide says the same switch governs
+     changes today (`apps/server/src/guide/en/modifiers.md:155-159`), so the station's choice
+     replaces it for changes.
+   **Held dishes at a "Not allowed" station are now refused by all three (Recall and changes; not
+   removal)**, where today
    `recallLines` and `applyLineEdits` let a never-fired held line through with the switch off
    (`tabs.test.ts:1797`, "still recalls a held line that was never sent"). That is the spec's
    value: "never" (A773 §3.10, "When it is offered … never; while held; or while held or
    waiting"); the case moves to a "While held" station (Task 57) and is listed as changed.
    **Several lines or parts at different stations:** all-or-nothing, before any write — the three
    paths already check before writing (`recallLines` reads, checks, then updates at `:2719`;
-   `recallToDraft` checks before `acquireBillEditor` at `:257`; `applyLineEdits` checks inside
-   `kitchenHas`, called before each line's write). Firing ("Fire now") and Void are not gated, as
+   `recallToDraft` checks before `acquireBillEditor` at `:257`; `applyLineEdits` checks every line
+   before its first write, "Priced before anything is written", `:5720`). Firing ("Fire now") and Void are not gated, as
    today and as A773 §3.7 says ("Not gated by the station's 'changes after sending'"): `fireHeldLine`
    and `cancelLine` never read the switch (`order-groups.test.ts:5830` "fires while sent edits are
    disabled"; `tabs.test.ts:1808` "still voids a sent line").
@@ -4458,16 +4478,17 @@ panel left and no one sees it (A756 mock-up 01: "The tab goes").
       built, `:189-194`), and its `laterColumnDrops` entry for
       `waitron_change_service_settings_update` (`:247-250`) goes (Task 64b). Measured.
     - `scripts/schema-constraints.test.ts:789`: `"service_settings_singleton_ck"` leaves the list of
-      declared checks (Task 64b). A retired table's entries leave this list by precedent: A757 slice
-      2 (`eb16d3805`, `"table_service_statuses_tenant_label_key"`), A182-2 (`28e74463d`,
-      `"canvases_tenant_name_key"`), A506-5 (`15de79d24`) and A503 part 1 (`96f20188c`) each removed
-      theirs (`git show <sha> -- scripts/schema-constraints.test.ts`). The guard's checks are
+      declared checks (Task 64b). A retired table's CHECK names leave this list by precedent: A841
+      slice 2 (`a3e627167`) removed `"tenant_themes_singleton_ck"` and A506-5 (`15de79d24`) removed
+      `"special_dates_date_ck"`, `"menu_slots_step_ck"` and others
+      (`git show <sha> -- scripts/schema-constraints.test.ts | grep '^-[^-]'`). The guard's checks are
       unchanged; it is the one `scripts/` edit, named here and in the PR description.
     - `packages/venue-service/src/classification.ts:40` and `classification.test.ts:70-79`; the two
       live-query lists (`live-queries.ts:97`, `:239`) and their pin (`live-queries.test.ts:59`);
       `migrations.test.ts` (`:50`, `:302`, and the two `service_settings` cases `:1142-1161`);
-      `schema/service.test.ts:191-197`; `service.test.ts:75` (the seat's method list) — Tasks 62b,
-      63 and 64b.
+      `schema/service.test.ts:191-197`; `service.test.ts:75` (the seat's method list) and `:135-139`
+      (the transfer list); `opening-hours-client.lifecycle.test.ts:100` — Tasks 60a, 62c, 63, 64a
+      and 64b.
     - `kitchen-stations.test.ts`'s bare-insert case gains a check of the new default (added).
     - Not changed: `scripts/migration-upgrade.test.ts` (no hand list names either; the walk passed
       untouched), `scripts/write-path-tables.json`, `station-delete.test.ts`,
@@ -4496,12 +4517,16 @@ panel left and no one sees it (A756 mock-up 01: "The tab goes").
    it; the same dish held is offered and taken (Tasks 57, 59b).
 3. **A dish no station makes**, sent with every station at "Not allowed": Recall is offered and
    taken (Decision 1; the inverted `draft-recall.test.ts:1110`).
-4. **PATCH `changesAfterSending: null` or `"Held"`**: 400 `management.request_invalid { field:
+4. **A started dish at a "While held" or "Not allowed" station**: refused `ticket.already_started`
+   by all three paths (Decision 5's order). **Removing a held or waiting dish through the
+   whole-order save at a "Not allowed" station** goes through, with its VOID notice; a started one
+   is refused as today (Task 57).
+5. **PATCH `changesAfterSending: null` or `"Held"`**: 400 `management.request_invalid { field:
    "changesAfterSending" }`, nothing written (Task 54).
-5. **A format-7 configuration file**: refused `setup.configuration_outdated` before any write; an
+6. **A format-7 configuration file**: refused `setup.configuration_outdated` before any write; an
    imported station row with `changes_after_sending: "bogus"` refused before any write (Tasks 55,
    64a).
-6. **Venue settings for a manager with venue service**: Venue details only; the address
+7. **Venue settings for a manager with venue service**: Venue details only; the address
    `/manage/venue-settings/view/kitchen` is replaced by `/view/venue-details` (Task 62b).
 
 ### Task 53: storage — the station's column, one core migration
@@ -4645,21 +4670,27 @@ instead, writing both while the venue switch still decides, so each commit stays
 ### Task 57: Recall and changes to a sent dish follow each part's own station
 
 **Files:**
-- Create: `apps/server/src/changes-after-sending.ts` (Decision 5's `refuseChangesAfterSending`)
-- Modify: `apps/server/src/draft-recall.ts` (`:233-234` → after `:235`),
+- Create: `apps/server/src/changes-after-sending.ts` (Decision 5's `readStationChanges` and
+  `refuseChangesAfterSending`)
+- Modify: `apps/server/src/draft-recall.ts` (`:233-234` go; the station check after the started
+  check `:236-240`),
   `apps/server/src/working-order.ts` (`recallLines` `:2645-2705` and its comment `:2650-2654`;
-  `applyLineEdits` `:5446-5455` and its comment `:5413-5414`), `apps/server/src/errors.ts:834-841`
+  `applyLineEdits` `:5446-5455`, `:5608`, `:5709` and its comment `:5413-5414`: one
+  `readStationChanges` over every station the order's records name, before the line loop;
+  `kitchenHas` checks started first, then — only for a changed or raised line, never a removed one
+  or a pure drop — the station, in memory), `apps/server/src/errors.ts:834-841`
   (comment: "…and, when a station's choice of changes after sending refuses it, a recall
   (`recallToDraft`, `recallLines`) or an edit (`applyLineEdits`) of a dish with work there.")
 - Test: `apps/server/src/changes-after-sending.test.ts` (new), `draft-recall.test.ts`,
   `tabs.test.ts`, `bill-editing.commands.test.ts`
 
 - [ ] **Step 1: Write and change the tests first.**
-  - `changes-after-sending.test.ts` (one `useVenueDb`): with no records nothing is read and nothing
-    refused; a held record passes at `held` and `held-or-waiting` and is refused at `never`; a fired
-    record passes only at `held-or-waiting`; two records at two stations, one refusing → refused
-    `ticket.already_fired { workingOrderId }`; a record at an inactive station is judged by that
-    station's column.
+  - `changes-after-sending.test.ts` (one `useVenueDb`): `readStationChanges` with no ids makes no
+    query and answers an empty map, and reads an inactive station's column too;
+    `refuseChangesAfterSending` (pure): no records → nothing refused; a held record passes at `held`
+    and `held-or-waiting` and is refused at `never`; a fired record passes only at
+    `held-or-waiting`; two records at two stations, one refusing → refused
+    `ticket.already_fired { workingOrderId }`.
   - `draft-recall.test.ts`: `"the venue setting refuses Recall even when a sent dish has no
     preparation record"` (`:1110`) → `"a sent dish no station makes can be recalled whatever the
     stations allow"` — every station `never` (helper), the record deleted as now; Recall answers
@@ -4668,7 +4699,12 @@ instead, writing both while the venue switch still decides, so each commit stays
     nothing"`; `"a dish at a Not allowed station is refused even while held, changing nothing"`;
     `"a split-off extra's station can refuse its dish's Recall"` (dish at `held-or-waiting`, extra at
     a second station set `never`; `frozen` before and after equal; then the extra's station set
-    `held-or-waiting` and Recall goes through) — modelled on `:678`'s extra.
+    `held-or-waiting` and Recall goes through) — modelled on `:678`'s extra; `"a started dish is
+    refused as started at a While held station and at a Not allowed station"` (state `preparing`;
+    `ticket.already_started` both times, `frozen` unchanged). **This suite shares one database**
+    (`resetPerTest: false`, `draft-recall.test.ts:50`): every case that sets a station value
+    restores `held-or-waiting` in a `finally`, as `:1110` restores the switch today (the helper with
+    no station ids also writes the venue switch while it exists, Task 56).
   - `tabs.test.ts` "with changes to sent items switched off" (`:1777-1850`): the describe becomes
     "when a station does not allow changes after sending"; `"refuses to recall a line that was sent
     to a station"` and `"…refuses an edit of a sent line, changing nothing"` (`:2078`) keep their
@@ -4677,13 +4713,23 @@ instead, writing both while the venue switch still decides, so each commit stays
     new `"a Not allowed station refuses a held line's recall, changing nothing"`; `"recalls a sent
     line once the setting is back on"` → `"…once its station allows it again"`; `"still voids a sent
     line"` and `"still changes a no-preparation line"` keep their checks with every station `never`.
+    New, beside `:2078`: `"a started line is refused as started at a While held and at a Not allowed
+    station"` (an edit through `updateOrderLine`; `ticket.already_started`, nothing changed); `"at a
+    Not allowed station the whole-order save still removes a held dish and a waiting dish, with the
+    waiting one's VOID notice"` (`updateHeldOrder` leaving both lines out; the lines leave the
+    order, one `void` notice at the waiting dish's station); `"…and still refuses to remove a
+    started one"` (`ticket.already_started`, nothing changed) — Decision 5's removal rule; `"a
+    quantity drop of a waiting dish at a Not allowed station goes through as a void of the
+    difference"`.
   - `bill-editing.commands.test.ts:560` `"Recall checks the other editor before the venue's
     sent-edit restriction"` → `"…before the station's"` (its check unchanged; the save/restore of
     `readEditSentLines` goes, the helper sets `never` and `held-or-waiting`).
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/changes-after-sending.test.ts src/draft-recall.test.ts src/tabs.test.ts -t "station|no station|split-off"`.
-- [ ] **Step 3: Implement.** The three readers call `refuseChangesAfterSending`; none reads
-  `VENUE_SERVICE.readEditSentLines` any more.
+- [ ] **Step 3: Implement.** Started first, then the station, in all three; one station read per
+  command; none reads `VENUE_SERVICE.readEditSentLines` any more. Any existing case that pinned
+  `ticket.already_fired` for a started dish with the switch off now answers
+  `ticket.already_started` (Decision 5's order, A773 §3.10): record each as changed.
 - [ ] **Step 4: Run** (free memory first) the files of Task 56 plus `draft-recall.test.ts` and the
   new file in one `pnpm --filter @waitron/server exec vitest run <files>` — PASS;
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/module-seams.test.ts`;
@@ -4696,7 +4742,8 @@ instead, writing both while the venue switch still decides, so each commit stays
 
 **Assertions changed** (A773 §3.10, §7.4; Decisions 1 and 5): `draft-recall.test.ts:1110` inverted;
 `tabs.test.ts:1797` moved to a `held` station; renamed cases in `tabs.test.ts` and
-`bill-editing.commands.test.ts:560` with their checks kept.
+`bill-editing.commands.test.ts:560` with their checks kept; any started-dish case that answered
+`ticket.already_fired` (Step 3).
 
 ### Task 58: the tab-lines read gives each line its station's choice
 
@@ -4754,7 +4801,10 @@ Setup only, mechanical.
 - Modify: `apps/till/src/screens/till-table-order-screen.ts` (`editSentLines` property `:1162`
   goes; `#canRecall` `:2068-2083` per Decision 7), `apps/till/src/till-app.ts` (state `:2905`,
   `:10669`, the bindings `:17863`, `:17997` go), `apps/till/src/i18n/codes.ts:593-596` (Decision 5's
-  wording)
+  wording), `apps/till/src/api/client.ts:2255-2258` (the comment on `TabLines.editSentLines`, untrue
+  after Task 57 because removal inside an edit is no longer refused by the switch, becomes "Read by
+  nothing in the till."; Task 60b removes the field), and Task 59a's `TabLine.changesAfterSending`
+  comment gains "Removing the dish is not limited by it."
 - Test: `till-table-order-screen.sent-actions.test.ts`, `till-table-order-screen.test.ts`,
   `till-table-order-screen.sent-reorder.test.ts`, `till-app-table-service.test.ts`,
   `till-app-counter-move-station.test.ts`, `till-app.test.ts`
@@ -4899,25 +4949,16 @@ green before and after Task 62b.
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/index.ts` (`settingsPanels` `:140-157` and its
-  import), `client.ts` (`loadSettings`, `loadSettingsReadOnly`, `saveSettings` `:288-295`, `:390`;
-  `VenueServiceSettings`, `VenueServiceSettingsView` and the model's `settings` `:103`, `:112-115`),
-  `live-queries.ts:97` (the `settings` query), `strings.ts` (`venue.kitchen_changes`,
-  `venue.edit_sent_lines`, `venue.edit_sent_lines_hint`, EN `:524-527`, ES `:1418-1421`)
+  imports)
 - Delete: `service-settings-panel.ts`, `service-settings-panel.test.ts`,
   `service-settings-panel.a11y.test.ts`, `service-settings-panel.exempt.test.ts`
-- Test: `packages/venue-service/src/dashboard/index.test.ts:22-35`, `client.test.ts:183-241`,
+- Test: `packages/venue-service/src/dashboard/index.test.ts:22-35`,
   `apps/dashboard/src/dashboard-app.test.ts` (`:1744-1766`, `:1774-1790`, `:1825-1840`, `:1887-1908`,
-  `:2969-2990`)
-- Modify (fixtures, setup): the model fixtures that carry `settings: { editSentLines: true }` —
-  `git grep -l -E 'settings: \{ editSentLines' -- packages/venue-service apps/dashboard` (the
-  venue-service dashboard suites, `src/testing/department-zones-fixture.ts:110`,
-  `test/service-delete-test-helpers.ts:36`, `apps/dashboard/src/testing/department-receipt-app-fixture.ts:44`)
-  — the key goes.
+  `:2969-2990`), `apps/dashboard/src/dashboard-app.search-modules.test.ts:458-461`
 
 - [ ] **Step 1: Change the tests first.**
   - `index.test.ts:22` `"adds a kitchen panel for venue service managers"` → `"adds no Venue
     settings panel"`: `settingsPanels` is absent or empty.
-  - `client.test.ts:183-241`: the cases of the three settings methods are deleted with them.
   - `dashboard-app.test.ts`: `:1744` (tabs `["venue-details", "kitchen"]`) → `["venue-details"]`
     and renamed "…under one h1, with Venue details its only tab"; `:1774` `"Kitchen holds venue
     service's panel alone"` → `"venue service adds no panel to Venue settings, and the Kitchen
@@ -4926,25 +4967,63 @@ green before and after Task 62b.
     `:1825` and `:1887` (the retired Tables and Adjustment reasons addresses): the session gains
     `venue.view` and the expected address becomes `/view/venue-details` (the first visible tab is
     now Venue details); `:2969` ("includes the venue-service settings panel for a supervisor as
-    read-only"): deleted —
-    its subject is the panel.
+    read-only"): deleted — its subject is the panel.
+  - `dashboard-app.search-modules.test.ts:458-461` (search "kitchen" with venue service on expects
+    one `settings:kitchen` result): inverted to "Kitchen is not offered" — `toHaveLength(0)`. Run
+    2026-10-24 with only `settingsPanels` removed from `index.ts`, the file printed `Tests 1 failed |
+    13 passed (14)` ("the Voids and comps page follows its permission rather than every enabled
+    module"), so this is the only search pin that sees the panel.
 - [ ] **Step 2: Run and watch the changed cases fail.**
-  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "Venue settings|Kitchen|address|supervisor"`
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.search-modules.test.ts -t "Venue settings|Kitchen|address|supervisor|Voids and comps"`
   and `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/index.test.ts`.
-- [ ] **Step 3: Implement**; delete the four files; sweep the fixtures.
+- [ ] **Step 3: Implement**; delete the four files. The client's settings methods, its types, the
+  `settings` live query and the strings stay until Task 62c; nothing calls them in between, so the
+  commit stays green.
 - [ ] **Step 4: Run** (browser runs; free memory first)
   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard`,
-  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.settings-panels.test.ts src/dashboard-app.venue-settings-unsaved.test.ts src/dashboard-app.a11y.test.ts src/screens/venue-settings-screen.test.ts`
-  — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/style-token-names.test.ts scripts/guide-links.test.ts`;
-  `git grep -n -E 'dashboard-venue-service-settings|kitchen-changes|venue\.edit_sent_lines|loadSettings|saveSettings\(' -- apps/dashboard packages/venue-service`
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.search-modules.test.ts src/dashboard-app.settings-panels.test.ts src/dashboard-app.venue-settings-unsaved.test.ts src/dashboard-app.a11y.test.ts src/screens/venue-settings-screen.test.ts`
+  — PASS; `pnpm exec vitest run scripts/style-token-names.test.ts scripts/guide-links.test.ts`;
+  `git grep -n -E 'dashboard-venue-service-settings|kitchen-changes|venue-service-kitchen' -- apps/dashboard packages/venue-service`
   prints nothing.
 - [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
   `git commit -s -m "Venue service's Kitchen panel goes; Venue settings shows Venue details alone (A756 PR 8)"`,
   then update the ledger.
 
 **Assertions changed** (A756 mock-up 01, "The tab goes"; A773 §7.4): `index.test.ts:22` inverted;
-the deleted panel suites and client cases; `dashboard-app.test.ts` `:1744`, `:1774` (inverted),
-`:1825` and `:1887` (expected address), `:2969` (deleted). Fixtures losing `settings` are setup.
+the three deleted panel suites; `dashboard-app.test.ts` `:1744`, `:1774` (inverted), `:1825` and
+`:1887` (expected address), `:2969` (deleted); `dashboard-app.search-modules.test.ts:458-461`
+inverted.
+
+### Task 62c: the dashboard's settings client, live query and strings go
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/client.ts` (`loadSettings`, `loadSettingsReadOnly`
+  `:288-295`, `saveSettings` `:390`; `VenueServiceSettings`, `VenueServiceSettingsView` and the
+  model's `settings` `:103`, `:112-115`), `live-queries.ts:97` (the `settings` query),
+  `strings.ts` (`venue.kitchen_changes`, `venue.edit_sent_lines`, `venue.edit_sent_lines_hint`, EN
+  `:524-527`, ES `:1418-1421`)
+- Test: `packages/venue-service/src/dashboard/client.test.ts:183-241`
+- Modify (fixtures, setup): the model fixtures carrying `settings: { editSentLines: true }` —
+  `git grep -l -E 'settings: \{ editSentLines' -- packages/venue-service apps/dashboard` (the
+  venue-service dashboard suites, `src/testing/department-zones-fixture.ts:110`,
+  `test/service-delete-test-helpers.ts:36`, `apps/dashboard/src/testing/department-receipt-app-fixture.ts:44`)
+  — the key goes; and `dashboard-app.venue-settings-unsaved.test.ts:40`'s
+  `/management-api/venue-service/settings` answer, if Task 62a left it.
+
+- [ ] **Step 1: Change the tests first.** `client.test.ts:183-241`: the cases of the three settings
+  methods are deleted with them.
+- [ ] **Step 2: Implement**; sweep the fixtures.
+- [ ] **Step 3: Run** (browser runs; free memory first)
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard` and every touched
+  `apps/dashboard` suite — PASS; `pnpm exec vitest run scripts/live-subscriptions.test.ts`;
+  `git grep -n -E 'venue\.edit_sent_lines|venue\.kitchen_changes|loadSettings|saveSettings\(|editSentLines' -- apps/dashboard packages/venue-service/src/dashboard packages/venue-service/test packages/venue-service/src/testing`
+  prints nothing.
+- [ ] **Step 4:** typecheck `@waitron/venue-service`, `@waitron/dashboard`; prettier; commit
+  `git commit -s -m "The dashboard's settings client and strings for the venue switch go (A756 PR 8)"`,
+  then update the ledger.
+
+**Assertions changed** (A773 §7.4): the client's settings cases deleted with their methods; the
+fixtures losing `settings` are setup.
 
 ### Task 63: venue service stops storing and serving the venue switch
 
@@ -5004,7 +5083,12 @@ places; the operations list loses an entry. `hours.live.test.ts` is setup.
   `setup.configuration_outdated`; `"future version"` → `{ version: 9 }`),
   `apps/server/src/configuration-transfer.test.ts` (`:401`, `:4934` → 8),
   `packages/provisioning/test/configuration-bundle.ts:5` → 8,
-  `packages/provisioning/src/configuration-transfer.boundaries.test.ts:51` → `{ version: 9 }`
+  `packages/provisioning/src/configuration-transfer.boundaries.test.ts:51` → `{ version: 9 }`,
+  `packages/venue-service/src/service.test.ts:135-139` ("transfers the service settings, and never
+  the kitchen notices, which are operational rows" → "never transfers the kitchen notices, which are
+  operational rows": its `toContain("service_settings")` goes, the kitchen-notices check stays). Run
+  2026-10-24 with only the transfer entry removed, `service.test.ts` printed `Tests 1 failed | 6
+  passed (7)` on that case.
 
 - [ ] **Step 1: Change the tests first** as listed, plus in `configuration-transfer.test.ts`
   `"exports no service settings"` — the bundle's `tables` has no `service_settings` key.
@@ -5013,6 +5097,7 @@ places; the operations list loses an entry. `hours.live.test.ts` is setup.
   and `pnpm --filter @waitron/provisioning exec vitest run`.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** Step 2's commands — PASS; then
+  `pnpm --filter @waitron/venue-service exec vitest run src/service.test.ts`,
   `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-command-import.test.ts`,
   `pnpm exec vitest run scripts/id-columns-are-references.test.ts scripts/module-seams.test.ts`.
 - [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/provisioning`, `@waitron/server`;
@@ -5020,7 +5105,8 @@ places; the operations list loses an entry. `hours.live.test.ts` is setup.
   the body saying a format-7 copy is now refused as outdated and why (Decision 8); update the ledger.
 
 **Assertions changed** (the format rule of `conventions-data.md:1605`): the format pins 7 → 8 and
-the future-version rows 8 → 9; two new outdated rows.
+the future-version rows 8 → 9; two new outdated rows; `service.test.ts:135` narrowed to the kitchen
+notices.
 
 ### Task 64b: drop `service_settings`; one venue-service migration
 
@@ -5036,6 +5122,9 @@ the future-version rows 8 → 9; two new outdated rows.
 - Test: `packages/venue-service/src/migrations.test.ts` (`:50`, `:302`, `:1142-1161`),
   `classification.test.ts:70-79`, `schema/service.test.ts:21`, `:191-197`,
   `backup-verification.test.ts:196`, `provisioning.test.ts` (Task 63's case),
+  `dashboard/opening-hours-client.lifecycle.test.ts:100` (its made-up `service_settings` change,
+  the "outside the year read" example, moves to a venue-service table that still exists and the
+  year read does not follow — setup),
   `apps/server/src/draft-recall.test.ts` (`serviceSettings` import `:29`, if Task 57 left it)
 
 - [ ] **Step 1: Change the tests first.**
@@ -5064,15 +5153,18 @@ the future-version rows 8 → 9; two new outdated rows.
   `pnpm --filter @waitron/venue-service exec vitest run`,
   `pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts src/station-order-migration.test.ts src/backup-verification-compatibility.test.ts src/printing-retirement-upgrade.test.ts src/recovery-backup-preview.older.test.ts src/draft-recall.test.ts`
   — PASS, each count read; `git grep -n -E 'service_settings|serviceSettings' -- apps packages scripts ':!**/drizzle/**'`
-  prints only the format-1 JSON fixture, the two upgrade suites' entries, `migrations.test.ts`'s
-  absence check and `provisioning.test.ts`'s.
+  prints only the format-1 JSON fixture, the two upgrade suites' entries
+  (`canvas-retirement-upgrade.test.ts`, `kitchen-allergy.upgrade.test.ts`), `migrations.test.ts`'s
+  absence check and `provisioning.test.ts`'s (`service.test.ts` lost its name in Task 64a and
+  `opening-hours-client.lifecycle.test.ts` in Step 1).
 - [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/server`; prettier; commit
   `git commit -s -m "Drop the venue's service settings table (A756 PR 8)"`, the body saying why
   `scripts/schema-constraints.test.ts` loses one entry (Decision 11's precedent); update the ledger.
 
 **Assertions changed** (A773 §7.4; Decision 3): the `migrations.test.ts` cases (one deleted, one
 narrowed to the table's absence), `classification.test.ts:70`, `schema/service.test.ts`'s entry,
-the schema-constraints list entry; the upgrade suites and `backup-verification.test.ts` are setup.
+the schema-constraints list entry; the upgrade suites, `backup-verification.test.ts` and
+`opening-hours-client.lifecycle.test.ts` are setup.
 
 ### Task 65: a look at the station editor, the table screen and Venue settings in real Chromium
 
@@ -5105,7 +5197,7 @@ the schema-constraints list entry; the upgrade suites and `backup-verification.t
 `apps/server/src/guide/en/kitchen-service.md` and `es/kitchen-service.md` (the `{#service-lifetime}`
 paragraph that names each station's settings), `docs/developers/design-system.md` (`:2906`,
 `:4650-4655`, `:5198-5200`), `docs/developers/conventions-data.md:1622-1628`,
-`docs/backlog/kitchen.md` (`:148-151`, Open points, `:386-390`), `docs/backlog/dashboard.md:794-796`,
+`docs/backlog/kitchen.md` (`:148-151`, Open points, `:386-390`, `:418`), `docs/backlog/dashboard.md:794-796`,
 `docs/backlog.md` (A756 `:1558-1560`),
 `docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md` (`kitchen_stations` row; `:172`),
 `docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md` (after `:263`),
@@ -5152,7 +5244,11 @@ paragraph that names each station's settings), `docs/developers/design-system.md
   station too. The Spanish is «Cambios tras el envío», «No permitidos», «Solo en espera», «En espera
   o sin empezar»; say if other words read better." "From PR 8, owner FYI: a dish no station makes
   can always be recalled (A773-1 open point 4's answer A said so); a "Not allowed" station also
-  refuses changes to a held dish, which the venue switch allowed through line edits." Point 3's
+  refuses changes to a held dish, which the venue switch allowed through line edits." "From PR 8,
+  owner FYI: at a station set to "Not allowed", removing a waiting dish through an order edit goes
+  through, as a Void with its notice (with the venue switch off it was refused); the setting decides
+  only Recall and changes (controller's ruling, 2026-10-24)." `:418` (A725's format history) gains
+  "**2026-10-24:** A756 PR 8 moved it to version 8." Point 3's
   receipt sentence (`:388-390`, "check that against the code when PR 8 is picked up") gains
   "**2026-10-24 (A756 PR 8):** checked — a dish's own work is at one station, its split-off extras
   can be at others, and every part must allow the change (plan PR 8 Decision 1)." If every A756
@@ -5161,7 +5257,7 @@ paragraph that names each station's settings), `docs/developers/design-system.md
   (…); PR 8 is in review. Open points are in the detail." `docs/backlog/dashboard.md:794-796`: "(…;
   2026-10-24: the Kitchen tab went with A756 PR 8.)"
 - [ ] **Step 6: Missed claims.**
-  `git grep -n -i -E 'edit_sent_lines|editSentLines|changes (to items already sent|after sending)|kitchen tab|service_settings|cambios tras el envío|ya enviados a cocina' -- docs/backlog.md docs/backlog docs/developers docs/operations apps/server/src/guide README.md 'packages/*/README.md'`
+  `git grep -n -i -E 'edit_sent_lines|editSentLines|changes (to items already sent|after sending)|kitchen tab|service_settings|cambios tras el envío|ya enviados a cocina|version 7|format 7' -- docs/backlog.md docs/backlog docs/developers docs/operations apps/server/src/guide README.md 'packages/*/README.md'`
   — each hit is rewritten here, is a dated pointer of Step 4 or 5, or is history in a dated plan or
   spec (left alone). `pnpm exec prettier --file-info <file>` on each changed doc, and
   `pnpm exec vitest run scripts/claude-md-pointers.test.ts`.
@@ -5172,8 +5268,9 @@ paragraph that names each station's settings), `docs/developers/design-system.md
   - **the default and reset decision**: every station starts at "While held or waiting", the venue
     switch is dropped, not copied, `service_settings` is dropped, and no venue reset is needed
     (Decisions 3 and 4);
-  - **the rule** (Decisions 1 and 5): per part of the dish, all-or-nothing; no station means allowed;
-    "Not allowed" now refuses held dishes in all three paths;
+  - **the rule** (Decisions 1 and 5): started first, then per part of the dish, all-or-nothing; no
+    station means allowed; "Not allowed" now refuses held dishes in all three paths; removals and
+    quantity drops in an order edit are not checked against the station;
   - **the configuration format 8** and why (Decision 8);
   - **the Kitchen tab** gone from view, its key kept as an owner question (Decision 10);
   - **the wording** and the Spanish, as an owner FYI (Decision 9).
@@ -5326,9 +5423,11 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
   file that names the venue switch
   (`git grep -l -E 'edit_sent_lines|editSentLines|EditSentLines' -- apps packages ':!**/drizzle/**'`,
   88 files on `d7d428e52`) is assigned: the server readers and their suites to Tasks 56, 57 and 60a;
-  the till's 27 files to Tasks 59b and 60b; venue-service's dashboard and its fixtures to Tasks 62b;
+  the till's 27 files to Tasks 59b and 60b; venue-service's dashboard and its fixtures to Tasks 62b
+  and 62c;
   its server side and suites to Task 63 and 64b; and one left with a stated reason (the format-1 JSON
-  fixture, Decision 8). Tasks 53–66 (59, 60, 62 and 64 each split in two) each stay one package or
+  fixture, Decision 8). Tasks 53–66 (59, 60 and 64 each split in two, 62 in three) each stay one
+  package or
   one layer, ordered so each commit stays green and each consumer moves before its source: the
   server sends the per-line value (58) before the till's type requires it (59a); the till stops
   reading the venue value (59b) before the server stops sending it (60a); tests set stations
@@ -5337,3 +5436,14 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
   dashboard stops calling the settings routes (62b) before they go (63); and the table leaves the
   copy (64a) before it is dropped (64b). Tasks 57 and 62b are the largest; their implementers follow
   the handover rule if they run long.
+- PR 8 fresh-context review (2026-10-24), folded in with the controller's rulings: every path checks
+  started first, so a started dish always answers `ticket.already_started` (Decisions 2 and 5,
+  Task 57's new cases); removals and quantity drops in an order edit are left out of the station
+  check, pinned in Task 57 and recorded as an owner FYI; `applyLineEdits` reads station values once
+  before its loop (CLAUDE.md §3); Task 62b is split (62c takes the client, live query, strings and
+  fixtures) and gains `dashboard-app.search-modules.test.ts:458-461`; Task 64a gains
+  `service.test.ts:135-139`; Task 64b moves `opening-hours-client.lifecycle.test.ts:100` and
+  corrects its grep; Task 57's shared-database cases restore in `finally`; the schema-constraints
+  precedents cite CHECK removals (`a3e627167`, `15de79d24`); Task 66 records format 8 at
+  `docs/backlog/kitchen.md:418`. The two missed checks were re-run on this tree before folding
+  (`Tests 1 failed | 13 passed (14)` and `Tests 1 failed | 6 passed (7)`).
