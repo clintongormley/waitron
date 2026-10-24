@@ -2703,6 +2703,16 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **Where the equipment label and the recovery sheet get Waitron's type** (lane A ruling 2026-10-24,
   D6): from Waitron's own token file (`WAITRON_DEFAULTS.structure`). Not taken: a theme-sheet
   selector that skips print frames, which would not reach the recovery sheet.
+- **Only long words take a hyphen on the tills** (lane A ruling 2026-10-24, slice 10b):
+  `hyphenate-limit-chars: 8 auto auto` beside `hyphens: auto`, because hyphenation also split short
+  words such as "asado" that fit a line on their own, which the till's home-columns layout case
+  (#1411) forbids. Measured on Chromium 156 on macOS: seven letters still broke that case, eight
+  kept it, and at 130% eight still kept every long name inside its box (ten let "Mushrooms"
+  overflow). Not taken: changing the home-columns rule, or hyphenating only from 115%.
+- **The floor map keeps its ellipsis at 130%** (lane A ruling 2026-10-24, slice 10b): the map ends
+  a name that does not fit its square with "…" and can be pinched, so the 130% cases hold every
+  name's box inside its square at both widths and every name whole only on a 1280 × 800 till; on a
+  390 px phone the map already cuts names at 100%.
 
 ## 17. Risks
 

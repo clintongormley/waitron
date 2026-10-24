@@ -2960,10 +2960,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Slice 10a landed 2026-10-24 (#2045): a theme has a text size, 100% to 130% in 5% steps, set with a
   slider on the Look card that shows the four sizes it gives and a till button and bill line in the
   preview; every screen draws it, while the equipment label, the recovery sheet and Google's sign-in
-  button keep Waitron's sizes. Until 10b, long names on the tills break inside a word from 115%, while
-  the Look card's preview sets `hyphens: auto` on its sample name, so it draws a hyphen where Chromium
-  hyphenates the venue's default content language (Spanish, not English).
-  Next: 10b, then 9, 11, 12 and 14.
+  button keep Waitron's sizes. Slice 10b landed 2026-10-25 (#PR): on the tills, product button and
+  bill line names break words of eight letters or more with a hyphen in the venue's default content
+  language (shorter words stay whole, so a short word that fits a line is never split), and layout
+  cases at 130% hold the counter, the floor, a kitchen queue, the dashboard's shell and the Look
+  card. The Look card's preview hyphenates its sample name the same way. Names in a language
+  Chromium does not hyphenate, English among them, still break inside a long word with no hyphen.
+  Next: 9, 11, 12 and 14.
 
 - **The theme delete dialog does not say the tills' text changes size (A841 slice 10a's review,
   #2045).** Deleting the theme in use puts Waitron's theme, at 100%, on every screen; the switch
@@ -3245,6 +3248,26 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     the Collect step (light and dark): the row with quantity, price and Note is there, the name row
     above it is missing, not cut off. In English at 390, and in Spanish at 1280, the name shows.
     Seen once; cause not investigated.
+
+- **A table order's draft arrangement draws its line names without the content language's
+  `lang`**, so they do not hyphenate (A841 slice 10, D14). Give its `lead-<n>` names the same
+  `lang`, `hyphens: auto` and `hyphenate-limit-chars: 8 auto auto` as the bill's `.product-name`
+  (`apps/till/src/widgets/basket.ts`). Left open by A841 slice 10b.
+
+- **A wider till gives the bill line's name less room.** On a 1280 × 800 till the name shares its
+  row with four controls and keeps 104 px at 100% and 86 px at 130%, while under 360 px of basket
+  (a 1024 × 768 till) it takes a row of its own, 307 px wide (`@container (width < 360px)` in
+  `apps/till/src/widgets/basket.ts`), so long names wrap to more lines than they need. Left open by
+  A841 slice 10b.
+
+- **At 1024 × 768 and 130% the till's top strip hides "Transfers" and "Pass" behind a sideways
+  scroll**; at 100% "Pass" is already hidden. Seen in the slice's look check, demo venue. Left open
+  by A841 slice 10b.
+
+- **On a 390 px phone the floor map cuts table names short at every text size.** It fits twelve
+  tables in squares about 30 px wide, so a name longer than three or four letters shows "Terr…"
+  until the map is pinched (the map's `text-overflow: ellipsis`,
+  `packages/ui/src/components/wt-floor-map.ts`). Left open by A841 slice 10b.
 
 ### Printers, the print agent and receipts
 
@@ -3878,6 +3901,10 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   renders its quantity strings directly (`apps/dashboard/src/widgets/top-sellers-table.ts`), and the
   till's `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These
   are readings, not browser reproductions; reproduce them before changing their displays.
+
+- **At 1280 px and 130% the Overview's Top sellers card cuts "Octopus" and "Croquetas" short with
+  "…"** (a 66 px box; they need 73 and 90 px); they fit at 100% and at 390 px. The ellipsis for long
+  words is A829's rule; the column is what gets too narrow. Left open by A841 slice 10b.
 
 - **Loose ends left by W79 (#1186, the Menus list).**
   [Detail](backlog/dashboard.md#loose-ends-left-by-w79-1186-the-menus-list)
