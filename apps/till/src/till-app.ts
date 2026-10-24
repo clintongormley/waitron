@@ -9149,8 +9149,8 @@ export class TillApp extends LitElement {
     return this.#tableHoldsZone(input) ? "table" : undefined;
   }
 
-  /** A zone the profile no longer allows waits only while its table is on screen: the server refuses
-   * that table's sends and removals, and leaving a table keeps its draft rather than releasing it. */
+  /** A zone this device can no longer serve holds a narrowing back only while its table is on screen:
+   * that table cannot send or remove its dishes, and leaving a table keeps its draft. */
   #tableHoldsZone(
     input: Pick<DeviceZoneSelectionInput, "selectedZoneIds"> &
       Partial<Pick<DeviceZoneSelection, "zones">>,
@@ -9305,7 +9305,12 @@ export class TillApp extends LitElement {
     if (inTheWay !== undefined || this.#requestsOut()) {
       this.deviceZonesRefusal = {
         message: t(
-          inTheWay === "table" ? "device_zones.table_order_in_zone" : "device_zones.order_in_zone",
+          inTheWay !== "table"
+            ? "device_zones.order_in_zone"
+            : this.deviceZonesEditing !== null &&
+                !this.#tableZoneOnProfile(this.deviceZonesEditing.zones)
+              ? "device_zones.table_zone_removed"
+              : "device_zones.table_order_in_zone",
         ),
       };
       return;

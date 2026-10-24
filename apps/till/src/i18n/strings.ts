@@ -83,7 +83,7 @@ export const en = {
   "device_zones.table_order_in_zone": "Send or remove the unsent dishes before hiding their zone.",
   "device_zones.table_order_pending": "Send or remove this table's unsent dishes to hide its zone.",
   "device_zones.table_zone_removed":
-    "This table's zone is no longer on this device's profile. Leave the table to hide it.",
+    "This device can no longer serve this table's zone. Leave the table to hide it.",
 
   "refund_ack.title": "Payment refund acknowledgment",
   "refund_ack.reference": "Refund reference",
@@ -1844,7 +1844,7 @@ export const es: Record<StringKey, string> = {
   "device_zones.table_order_pending":
     "Envía o quita los platos sin enviar de esta mesa para ocultar su zona.",
   "device_zones.table_zone_removed":
-    "La zona de esta mesa ya no está en el perfil de este dispositivo. Sal de la mesa para ocultarla.",
+    "Este dispositivo ya no puede atender la zona de esta mesa. Sal de la mesa para ocultarla.",
 
   "refund_ack.title": "Justificante de devolución del pago",
   "refund_ack.reference": "Referencia de la devolución",

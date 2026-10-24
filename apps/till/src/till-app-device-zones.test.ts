@@ -1704,7 +1704,7 @@ describe("a handheld's zones", () => {
       await tick(el);
     }
     const tableZoneRemoved =
-      "This table's zone is no longer on this device's profile. Leave the table to hide it.";
+      "This device can no longer serve this table's zone. Leave the table to hide it.";
 
     it.each(["phone-portrait", "till"])(
       "the table whose zone left the profile cannot send its dishes, and leaving it applies the waiting narrowing (%s)",
@@ -1747,7 +1747,7 @@ describe("a handheld's zones", () => {
     );
 
     it.each(["phone-portrait", "till"])(
-      "a send refused because the table's zone left the profile keeps its unsent dishes (%s)",
+      "a send refused with service_zone.not_allowed keeps its unsent dishes (%s)",
       async (formFactor) => {
         const { el, screen, drafts } = await openRoomTable(formFactor);
         drafts.submitDraft.mockRejectedValueOnce({ code: "service_zone.not_allowed", status: 403 });
@@ -1761,6 +1761,32 @@ describe("a handheld's zones", () => {
         expect(screen.draftStore!.lines.map((line) => line.quantity)).toEqual(["1"]);
         expect(savedLines(drafts)).toHaveLength(1);
         expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBe(screen);
+      },
+    );
+
+    it.each(["phone-portrait", "till"])(
+      "the zones dialog at a table whose zone left the profile refuses a save in those words (%s)",
+      async (formFactor) => {
+        const { el } = await openRoomTable(formFactor);
+        await takeRoomOffProfile(el);
+        const api = el.api as unknown as { setDeviceZones: ReturnType<typeof vi.fn> };
+        const dialog = await openZones(el);
+        dialog.dispatchEvent(
+          new CustomEvent("save-device-zones", {
+            detail: {
+              profileId: "profile",
+              snapshot: "off-profile",
+              selectedZoneIds: ["garden"],
+              startingZoneId: "garden",
+            },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await vi.waitFor(() =>
+          expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(tableZoneRemoved),
+        );
+        expect(api.setDeviceZones).not.toHaveBeenCalled();
       },
     );
 

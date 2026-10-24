@@ -1743,12 +1743,14 @@ by the open table's unsent dishes now says "Send or remove this table's unsent d
 zone." on both device kinds: that table can still send or remove them, but takes no new picks, and
 a table in a zone the device already hides does not hold the narrowing back. Leaving the table
 alone does not let the narrowing apply, because leaving keeps the table's New order on the device
-(found while building). When the waiting choice's profile no longer offers the table's zone, the box
-refuses that table's draft writes and sends (`service_zone.not_allowed`; the draft route cases in
-`apps/server/src/till-api.profile-zones.test.ts`), so the table cannot send or remove them either,
-the line says "This table's zone is no longer on this device's profile. Leave the table to hide
-it.", and leaving the table applies the narrowing (found by review). [Build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md),
-slice 4.
+(found while building). When this device can no longer serve the table's zone (the waiting
+choice's `zones` leave it out, for example because a manager took it off the profile), the table
+cannot send or remove them either: the box refuses a party's draft writes and sends in a zone
+outside the profile (`service_zone.not_allowed`; the draft route cases in
+`apps/server/src/till-api.profile-zones.test.ts`). The line, and the zones dialog's refusal of a
+save at that table, say "This device can no longer serve this table's zone. Leave the table to hide
+it.", and leaving the table applies the narrowing (found by review).
+[Build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
 
 
 - **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either
