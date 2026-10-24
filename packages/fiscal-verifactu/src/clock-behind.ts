@@ -5,13 +5,13 @@ import type { ClockBehindLatestRecord } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
-import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
+import { clockConfirmations } from "./schema/clock-confirmations.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
 /** A reading exactly this much earlier than the latest record still sells. */
 export const CLOCK_BEHIND_MARGIN_MS = 60_000;
 
-/** No restart is offered for, or covers, a gap wider than this, whatever gap it accepted. */
+/** No restart is offered for a gap wider than this. */
 export const RESTART_CAP_MS = 86_400_000;
 
 export interface LatestRecord {
@@ -109,31 +109,36 @@ export async function latestWrittenAfter(
   return latest;
 }
 
-/** Null when the restart naming `latest` covers the reading; otherwise the record the refusal
- * names: the latest one written under the restart when that is what the reading falls behind. */
+/** Null when the latest confirmation naming `latest` covers the reading; otherwise the record the
+ * refusal names: the latest one written under the confirmation when that is what the reading falls
+ * behind. */
 async function uncoveredBy(
   tx: Transaction,
   latest: LatestRecord,
   reading: { instant: Date },
 ): Promise<{ at: Date; offsetMinutes: number } | null> {
-  const [restart] = await tx
+  const [confirmation] = await tx
     .select({
-      clockAt: clockStopRestarts.clockAt,
-      recordAt: clockStopRestarts.recordAt,
-      proof: sql<string>`${clockStopRestarts.proof}`,
+      confirmedAt: clockConfirmations.confirmedAt,
+      recordAt: clockConfirmations.recordAt,
+      proof: sql<string>`${clockConfirmations.proof}`,
     })
-    .from(clockStopRestarts)
-    .where(eq(clockStopRestarts.registroId, latest.id));
-  if (restart === undefined) return latest;
-  const heads = storedHeads(parsedProof(restart.proof));
+    .from(clockConfirmations)
+    .where(eq(clockConfirmations.registroId, latest.id))
+    .orderBy(desc(clockConfirmations.seq))
+    .limit(1);
+  if (confirmation === undefined) return latest;
+  const heads = storedHeads(parsedProof(confirmation.proof));
   if (heads === null) return latest;
   const current = await chainHeads(tx);
   for (const [node, head] of heads) if (head > headOf(current, node)) return latest;
-  if (restart.recordAt.getTime() !== latest.at.getTime()) return latest;
-  const accepted = restart.recordAt.getTime() - restart.clockAt.getTime();
+  // `registro_id` is set, so the row's check makes `record_at` set too.
+  const recordAt = confirmation.recordAt!.getTime();
+  if (recordAt !== latest.at.getTime()) return latest;
+  const accepted = recordAt - confirmation.confirmedAt.getTime();
   const gap = latest.at.getTime() - reading.instant.getTime();
   // Negated so that an unreadable stored time (NaN) covers nothing.
-  if (!(gap <= Math.min(accepted + CLOCK_BEHIND_MARGIN_MS, RESTART_CAP_MS))) return latest;
+  if (!(gap <= accepted + CLOCK_BEHIND_MARGIN_MS)) return latest;
   const under = await latestWrittenAfter(tx, heads, current);
   if (under !== null && reading.instant.getTime() < under.at.getTime() - CLOCK_BEHIND_MARGIN_MS)
     return under;

@@ -23,7 +23,7 @@ import {
   refuseWhileClockBehind,
 } from "./clock-behind.js";
 import { clockBehindSource } from "./clock-behind-alerts.js";
-import { clockStopRestarts } from "./schema/clock-stop-restarts.js";
+import { clockConfirmations } from "./schema/clock-confirmations.js";
 import { FISCAL_STAFF_NOTICES } from "./staff-notices.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -33,7 +33,6 @@ const M = 60_000;
 const H = 3_600_000;
 const T = Date.parse("2026-10-19T21:40:00.000Z");
 const R = T - 14.5 * H;
-const PERSON = "33333333-3333-4333-8333-333333333333";
 const NO_RECORDS_NODE = "99999999-9999-4999-8999-999999999999";
 
 let backend: VerifactuBackend;
@@ -131,37 +130,50 @@ function latestId(): string {
   )[0]!.id;
 }
 
+function nextSeq(): number {
+  return suite.db.all<{ n: number }>(
+    sql`select coalesce(max(seq), 0) + 1 as n from clock_confirmations`,
+  )[0]!.n;
+}
+
+/** A confirmation as the clock watch writes one when devices agree during a stop. */
 function restart(
   options: {
     proof?: unknown;
-    registroId?: string;
+    registroId?: string | null;
     clockMs?: number;
     recordMs?: number;
     node?: string;
   } = {},
 ) {
   const clockMs = options.clockMs ?? R;
+  const registroId = options.registroId === undefined ? latestId() : options.registroId;
   return withTransaction(suite.db, (tx) =>
-    tx.insert(clockStopRestarts).values({
-      nodeId: options.node ?? nodeId,
-      personId: PERSON,
-      restartedAt: new Date(clockMs),
-      clockAt: new Date(clockMs),
-      registroId: options.registroId ?? latestId(),
-      recordAt: new Date(options.recordMs ?? T),
+    tx.insert(clockConfirmations).values({
+      seq: nextSeq(),
+      nodeId: (options.node ?? nodeId) as NodeId,
+      boxClockAt: new Date(clockMs),
+      confirmedAt: new Date(clockMs),
+      stepMs: 0,
+      source: "devices",
+      reason: "behind_chain",
       proof: options.proof ?? { heads: headsNow() },
+      registroId,
+      recordAt: registroId === null ? null : new Date(options.recordMs ?? T),
     }),
   );
 }
 
-/** A restart row written past drizzle's encoding, for stored values a correct writer never stores. */
-function insertRawRestart(stored: { proof: string; clockAt?: string; recordAt?: string }) {
-  const clockAt = stored.clockAt ?? new Date(R).toISOString();
+/** A confirmation written past drizzle's encoding, for stored values a correct writer never
+ * stores. */
+function insertRawRestart(stored: { proof: string; confirmedAt?: string; recordAt?: string }) {
+  const confirmedAt = stored.confirmedAt ?? new Date(R).toISOString();
   const recordAt = stored.recordAt ?? new Date(T).toISOString();
-  suite.db.run(sql`insert into clock_stop_restarts
-    (id, node_id, person_id, restarted_at, clock_at, registro_id, record_at, proof)
-    values ('44444444-4444-4444-8444-444444444444', ${nodeId}, ${PERSON},
-      ${new Date(R).toISOString()}, ${clockAt}, ${latestId()}, ${recordAt}, ${stored.proof})`);
+  suite.db.run(sql`insert into clock_confirmations
+    (id, seq, node_id, box_clock_at, confirmed_at, step_ms, source, reason, proof, registro_id, record_at)
+    values ('44444444-4444-4444-8444-444444444444', ${nextSeq()}, ${nodeId},
+      ${new Date(R).toISOString()}, ${confirmedAt}, 0, 'devices', 'behind_chain', ${stored.proof},
+      ${latestId()}, ${recordAt})`);
 }
 
 function chain() {
@@ -347,6 +359,36 @@ describe("a restart lifts the stop for one step back", () => {
     expect(written()).toEqual(before);
     expect(await attempt(R + M)).toBe("recorded");
   });
+
+  it("covers nothing with a confirmation that names no record", async () => {
+    await attempt(T);
+    await restart({ registroId: null });
+    expect(await attempt(R + M)).toBe("clock.behind_chain");
+    expect(refusals[0]!.params).toEqual(behind(R + M, T));
+  });
+
+  it("keeps the stop when the later of two confirmations naming the latest record fails", async () => {
+    await attempt(T);
+    await restart();
+    await restart({ proof: { heads: { [nodeId]: 2 } } });
+    expect(await attempt(R + M)).toBe("clock.behind_chain");
+    expect(refusals[0]!.params).toEqual(behind(R + M, T));
+  });
+
+  it("lifts a further step back with a fresh confirmation", async () => {
+    await attempt(T);
+    await restart();
+    expect(await attemptAll([R + M, R + 10 * H, R + 30 * M])).toEqual([
+      "recorded",
+      "recorded",
+      "clock.behind_chain",
+    ]);
+    expect(refusals[0]!.params).toEqual(behind(R + 30 * M, R + 10 * H));
+    await restart({ clockMs: R + 30 * M });
+    expect(await attempt(R + 31 * M)).toBe("recorded");
+    const records = chain();
+    expect(records.at(-1)!.anterior).toBe(records.at(-2)!.huella);
+  });
 });
 
 describe("a restart whose stored heads a correct writer never stores covers nothing", () => {
@@ -400,7 +442,7 @@ describe("a restart whose stored heads a correct writer never stores covers noth
   });
 
   it.each([
-    ["clock_at", { clockAt: "garbage" }],
+    ["confirmed_at", { confirmedAt: "garbage" }],
     ["record_at", { recordAt: "garbage" }],
   ] as const)("an unreadable %s, a reading 30 days back", async (_column, stored) => {
     await attempt(T);
