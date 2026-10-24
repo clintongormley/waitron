@@ -863,7 +863,8 @@ the owner meant it, it is its own item.
   product editor already runs its phone-width cases at raised sizes larger than 130%
   (`design-system.md:615-623`).
 - **The preview** applies the draft's text size to both panels and adds a till product button
-  ("Tinto de verano con limón") and a bill line, drawn at the real pixel sizes, so the owner sees
+  ("Tinto de verano con limón" in Spanish, "Sparkling elderflower lemonade" in English: the
+  dashboard's strings in the venue's default content language, else in the screen's) and a bill line, drawn at the real pixel sizes, so the owner sees
   the wrap before saving (`25-text-size-editor-{light,dark}.png`, phone `26-…`).
 
 ### Text set by hand, under Advanced
@@ -1030,8 +1031,8 @@ All my call; the plan pins the exact numbers.
   other and does not reproduce Waitron's dark set: the prototype gives a dark button of `#1f6feb`
   with white text and link text `#67a0fd`, where Waitron's own dark set has `#4c8dff`, `#06101f` and
   `#78a9ff` (`colors.css:136-139`).
-- It always writes **the same list of tokens** — the 22 colours Advanced offers (section 5) and the
-  three corner radii — filling Waitron's own value where a knob sits at its default and nothing is
+- It always writes **the same list of tokens** — the 22 colours Advanced offers (section 5), the
+  three corner radii and, from slice 10, the four text sizes — filling Waitron's own value where a knob sits at its default and nothing is
   set by hand, so every theme has the same shape and the list doubles as the allowlist (section 14).
   Every colour the knobs work out is among the 22, so the list covers both.
 - It works in OKLCH, a colour model where "lightness" matches what the eye sees, so it can move a

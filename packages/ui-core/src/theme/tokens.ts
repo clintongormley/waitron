@@ -94,7 +94,7 @@ export function cornerRadii(corners: Corners, defaults: WaitronDefaults): Record
   );
 }
 
-/** Waitron's four sizes times `textScale`, rounded half up to whole pixels in integer arithmetic. */
+/** The four sizes in `defaults` times `textScale`, rounded half up to whole pixels. */
 export function fontSizes(textScale: TextScale, defaults: WaitronDefaults): Record<string, string> {
   return Object.fromEntries(
     THEME_FONT_SIZES.map((name) => {

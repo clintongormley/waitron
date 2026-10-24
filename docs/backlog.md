@@ -2971,7 +2971,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Slice 10a landed 2026-10-2x (#PR): a theme has a text size, 100% to 130% in 5% steps, set with a
   slider on the Look card that shows the four sizes it gives and a till button and bill line in the
   preview; every screen draws it, while the equipment label, the recovery sheet and Google's sign-in
-  button keep Waitron's sizes. Until 10b, long names break inside a word from 115%.
+  button keep Waitron's sizes. Until 10b, long names on the tills break inside a word from 115%, while
+  the Look card's preview sets `hyphens: auto` on its sample name, so it draws a hyphen where Chromium
+  hyphenates the venue's default content language (Spanish, not English).
   Next: 10b, then 9, 11, 12 and 14.
 
 - **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review,
@@ -2996,10 +2998,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   identical. Every screen using `colorField` is affected.
 
 - **`wt-slider`'s unfilled track is drawn nearly white on a dark screen.** The range is styled with
-  `accent-color` alone (`packages/ui/src/components/wt-slider.ts`, unchanged since #1832) and no
-  `color-scheme`, so Chromium draws its native light track; A841 slice 10's visual check saw it on
-  the Look card's Text size slider in dark, where the design's picture draws a dark grey track
-  (`~/waitron-campaign/a841-10-shots/10a-editor-100-dark-slider-crop.png`, lane A's machine only).
+  `accent-color` alone (`packages/ui/src/components/wt-slider.ts`, since #1287). A841 slice 10's
+  visual check saw Chromium draw its unfilled track nearly white on the Look card's Text size slider
+  in dark, where the design's picture draws a dark grey track
+  ([screenshot](backlog/mockups/a841-10-text-size/dark-slider-track.png)). Why is not yet
+  measured; it is not a missing `color-scheme`, since the dark theme root sets `color-scheme: dark` (`packages/ui-core/src/tokens/colors.css`).
   Every screen using `wt-slider` is affected: the Look card, Menus and photo framing.
 
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
