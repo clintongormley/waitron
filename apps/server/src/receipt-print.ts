@@ -22,6 +22,7 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { readPrintedGuests } from "./receipt-guests.js";
+import { resolvePrintedLogo } from "./receipt-venue-logo.js";
 import { optionalDocument } from "./optional-document.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import {
@@ -206,9 +207,9 @@ async function buildReceiptBytes(
           departmentId,
           printer.paperWidth,
         );
+  const { venue, logo } = await resolvePrintedLogo(tx, department, printer.paperWidth, diagnostic);
   const authored = department?.receipt ?? null;
-  const receipt = resolveReceiptTrim(authored, {}, language ?? ticket.locale, current.locale);
-  const logo = department?.logo ?? null;
+  const receipt = resolveReceiptTrim(authored, venue, language ?? ticket.locale, current.locale);
   const venueAddress = await readReceiptAddress(tx, cfg.locationId, {
     printAddress: authored?.printAddress === true,
   });
