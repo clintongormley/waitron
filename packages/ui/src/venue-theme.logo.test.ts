@@ -68,6 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
   localStorage.removeItem(KEY);
   vi.restoreAllMocks();
@@ -93,6 +94,12 @@ describe("the venue logo state", () => {
     expect(currentVenueLogo()).toEqual(NONE);
   });
 
+  it("a stored copy whose logo is malformed is ignored, so the start waits", () => {
+    localStorage.setItem(KEY, JSON.stringify({ ...GREEN, logo: "/media/a.webp" }));
+    startVenueTheme(document.documentElement, { fetchImpl: never });
+    expect(currentVenueLogo()).toEqual(WAITING);
+  });
+
   it("waits with no stored copy, then takes the answer", async () => {
     const { fetchImpl, calls } = byHand();
     startVenueTheme(document.documentElement, { fetchImpl });
@@ -104,18 +111,23 @@ describe("the venue logo state", () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
-  it("waits, then gives up at the time limit", async () => {
+  it("waits, then gives up at the time limit", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     startVenueTheme(document.documentElement, { fetchImpl: never, timeLimitMs: 50 });
+    vi.advanceTimersByTime(49);
     expect(currentVenueLogo()).toEqual(WAITING);
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    vi.advanceTimersByTime(1);
     expect(currentVenueLogo()).toEqual(NONE);
   });
 
-  it("an earlier start's time limit does not end a later start's wait", async () => {
+  it("an earlier start's time limit does not end a later start's wait", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     startVenueTheme(document.documentElement, { fetchImpl: never, timeLimitMs: 50 });
-    startVenueTheme(document.documentElement, { fetchImpl: never });
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    startVenueTheme(document.documentElement, { fetchImpl: never, timeLimitMs: 100 });
+    vi.advanceTimersByTime(99);
     expect(currentVenueLogo()).toEqual(WAITING);
+    vi.advanceTimersByTime(1);
+    expect(currentVenueLogo()).toEqual(NONE);
   });
 
   it.each([
