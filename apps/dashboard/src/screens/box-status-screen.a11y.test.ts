@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./box-status-screen.js";
@@ -160,6 +160,30 @@ function withMisdated(lists: ClockMisdatedView | Error): DashboardApi {
   } as unknown as DashboardApi;
 }
 
+const LIST: ClockMisdatedView = {
+  lists: [
+    {
+      confirmationId: "c1",
+      records: [
+        {
+          recordId: "r1",
+          series: "T1",
+          number: 7,
+          at: "2026-10-22T19:00:00.000Z",
+          offsetMinutes: 120,
+        },
+        {
+          recordId: "r2",
+          series: "ODD",
+          number: null,
+          at: "2026-10-22T19:05:00.000Z",
+          offsetMinutes: 120,
+        },
+      ],
+    },
+  ],
+};
+
 async function flush(el: BoxStatusScreen): Promise<void> {
   for (let i = 0; i < 3; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -178,34 +202,6 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     ],
     ["a failed read", () => stubApi(new Error("read"))],
     ["a failed alert read", () => stubApi(TROUBLED, new Error("alerts"))],
-    [
-      "sales dated wrongly, one list found and one that cannot tell",
-      () =>
-        withMisdated({
-          lists: [
-            {
-              confirmationId: "c1",
-              records: [
-                {
-                  recordId: "r1",
-                  series: "T1",
-                  number: 7,
-                  at: "2026-10-22T19:00:00.000Z",
-                  offsetMinutes: 120,
-                },
-                {
-                  recordId: "r2",
-                  series: "ODD",
-                  number: null,
-                  at: "2026-10-22T19:05:00.000Z",
-                  offsetMinutes: 120,
-                },
-              ],
-            },
-          ],
-        }),
-    ],
-    ["a failed read of the wrongly dated sales", () => withMisdated(new Error("lists"))],
   ];
   it.each(cases)("renders accessibly with %s", async (_name, api) => {
     const { el, host } = await mountWidget<BoxStatusScreen>(
@@ -214,6 +210,20 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    ["a found list", () => withMisdated(LIST), "misdated-table"],
+    ["a failed list read", () => withMisdated(new Error("lists")), "misdated-unavailable"],
+  ] as const)("renders sales dated wrongly accessibly with %s", async (_name, api, drawn) => {
+    const { el, host } = await mountWidget<BoxStatusScreen>(
+      "dashboard-box-status-screen",
+      { api: api(), canOpen: () => true },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

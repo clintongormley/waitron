@@ -8,9 +8,10 @@ export class DashboardQueries {
   readonly #queries: QueryController;
   readonly #initialized = new Set<DashboardQueryName>();
 
-  #client(name: DashboardQueryName): DashboardApi {
+  /** `passive` sends even the first read through the background client: a read no person asked for. */
+  #client(name: DashboardQueryName, passive = false): DashboardApi {
     const api = this.api();
-    const client = this.#initialized.has(name) ? (api.background ?? api) : api;
+    const client = passive || this.#initialized.has(name) ? (api.background ?? api) : api;
     this.#initialized.add(name);
     return client;
   }
@@ -51,8 +52,13 @@ export class DashboardQueries {
     name: N,
     args: Parameters<DashboardApi[N]>,
     apply: (value: Awaited<ReturnType<DashboardApi[N]>>) => void | Promise<void>,
+    options: { passive?: boolean } = {},
   ): Promise<void> {
-    return this.#queries.watch(name, dashboardQuery(this.#client(name), name, args), apply);
+    return this.#queries.watch(
+      name,
+      dashboardQuery(this.#client(name, options.passive), name, args),
+      apply,
+    );
   }
 
   /** `watch`, with each read sent through `send`, which may wrap its answer. */

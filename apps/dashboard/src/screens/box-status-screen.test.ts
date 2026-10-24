@@ -808,7 +808,43 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(q(el, "[data-test=misdated-table]")).toBeNull();
     expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
     expect(qa(el, "[data-test=misdated-sentence]")).toHaveLength(1);
+    expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(1);
     expect(qa(el, "ul.rows > li")).toHaveLength(7);
     expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("reads a list a later refresh brings through the background client", async () => {
+    const background = {
+      getBoxHealth: vi.fn().mockResolvedValue({ ...health(), misdatedOpen: [OPEN] }),
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
+      clockMisdated: vi.fn().mockResolvedValue(LISTS),
+    };
+    const api = stubApi({ background, clockMisdated: vi.fn().mockResolvedValue(LISTS) });
+    const { el } = await mount(api);
+    expect(section(el)).toBeNull();
+    api.liveData.refresh();
+    await flush(el);
+    expect(cells(el)).toHaveLength(2);
+    expect(background.clockMisdated).toHaveBeenCalledTimes(1);
+    expect(api.clockMisdated).not.toHaveBeenCalled();
+  });
+
+  it("leaves the bell's full sentence to the Clock row, not the section", async () => {
+    const sentence = alertMessage("clock.records_misdated", { ...OPEN });
+    const api = stubApi(
+      { clockMisdated: vi.fn().mockResolvedValue(LISTS) },
+      { ...health(), misdatedOpen: [OPEN] },
+      [alert("clock.records_misdated", "box", { kind: "event", params: { ...OPEN } })],
+    );
+    const { el } = await mount(api);
+    expect(text(q(el, "[data-test=row-clock] .words"))).toContain(sentence);
+    expect(text(section(el))).not.toContain(sentence);
+    expect(cells(el)).toHaveLength(2);
+  });
+
+  it("draws no empty block for an entry whose list is gone from a loaded answer", async () => {
+    const { el } = await mount(withOpen([OPEN, UNCONFIRMED], { lists: [] }));
+    expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(1);
+    expect(q(el, "[data-test=misdated-sentence]")).not.toBeNull();
   });
 });

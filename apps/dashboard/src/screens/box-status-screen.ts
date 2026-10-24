@@ -207,6 +207,7 @@ export class BoxStatusScreen extends LitElement {
   @state() private misdatedLists: ReadonlyMap<string, MisdatedRecordView[]> | null = null;
   @state() private misdatedFailed = false;
   #watchingMisdated = false;
+  #healthAnswered = false;
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
@@ -233,7 +234,8 @@ export class BoxStatusScreen extends LitElement {
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
         this.#nothingLeftToRetry = this.#nothingToRetry(health);
-        this.#followMisdated(health);
+        this.#followMisdated(health, this.#healthAnswered);
+        this.#healthAnswered = true;
         if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingLeftToRetry)
           this.retryAnswer = null;
         this.#readSucceeded("getBoxHealth");
@@ -249,7 +251,7 @@ export class BoxStatusScreen extends LitElement {
   }
 
   /** Reads the lists only while an open alert has one; a closing that cannot tell lists none. */
-  #followMisdated(health: BoxHealth): void {
+  #followMisdated(health: BoxHealth, passive: boolean): void {
     const wanted = health.misdatedOpen.some((open) => !open.unconfirmed);
     if (wanted === this.#watchingMisdated) return;
     this.#watchingMisdated = wanted;
@@ -260,12 +262,17 @@ export class BoxStatusScreen extends LitElement {
       return;
     }
     void this.#misdatedQueries
-      .watch("clockMisdated", [], (answer) => {
-        this.misdatedLists = new Map(
-          answer.lists.map((list) => [list.confirmationId, list.records]),
-        );
-        this.misdatedFailed = false;
-      })
+      .watch(
+        "clockMisdated",
+        [],
+        (answer) => {
+          this.misdatedLists = new Map(
+            answer.lists.map((list) => [list.confirmationId, list.records]),
+          );
+          this.misdatedFailed = false;
+        },
+        { passive },
+      )
       .catch(() => undefined);
   }
 
@@ -514,9 +521,17 @@ export class BoxStatusScreen extends LitElement {
     return open.partial && partial !== undefined ? pickLocale(partial, currentLocale()) : null;
   }
 
-  #renderMisdatedEntry(open: MisdatedOpenView): TemplateResult {
+  #renderMisdatedEntry(open: MisdatedOpenView): TemplateResult | typeof nothing {
     const sentence = this.#misdatedSentence(open);
     const records = open.unconfirmed ? undefined : this.misdatedLists?.get(open.confirmationId);
+    // A loaded answer without this entry's list means the alert was handled since the health read;
+    // a failed read is said once, under the section.
+    if (
+      sentence === null &&
+      records === undefined &&
+      (this.misdatedLists !== null || this.misdatedFailed)
+    )
+      return nothing;
     return html`<div class="misdated-entry" data-test="misdated-entry">
       ${
         sentence === null
