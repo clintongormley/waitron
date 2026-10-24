@@ -370,7 +370,7 @@ describe("an ordinary start with room", () => {
     await runEntry(d);
     expect(d.startServer).toHaveBeenCalledTimes(1);
     expect(existsSync(staged)).toBe(false);
-    expect(d.log).toHaveBeenCalledWith("info", "storage.start_backup_leftovers_deleted", {
+    expect(d.log).toHaveBeenCalledWith("info", "storage.start_leftovers_deleted", {
       deleted: 1,
     });
   });

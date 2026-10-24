@@ -1291,7 +1291,8 @@ included, inside that filesystem instead; delete it.
 **What the cases show, on HFS+.** Run 2026-10-21 on macOS 26.6.2, Node v26.11.1, Vitest 4.1.11,
 `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts`: `Tests  7 passed
 (7)`. The same command rerun 2026-10-24 on macOS 26.6.2, Node v26.11.1, Vitest 4.1.12, with the
-staged-copies case below: `Tests  17 passed (17)` (the file holds cases this list does not cover).
+staged-copies case below: `Tests  17 passed (17)`, and again with the workspace case below:
+`Tests  18 passed (18)` (the file holds cases this list does not cover).
 
 - A start whose leftovers free enough deletes rotated logs `waitron.log.2` to `.5`, a crash report
   eight days old and a 2 MiB file in `backup-staging`, keeps `waitron.log.1`, counts itself and
@@ -1303,6 +1304,12 @@ staged-copies case below: `Tests  17 passed (17)` (the file holds cases this lis
   `freeSpaceAtStart` deleted that folder the box stuck: `serveRecovery` was called once and
   `startServer` never (`Tests  1 failed | 16 skipped (17)`). Now `startServer` is called once,
   `staged-recovery` is gone, and `restore-staging` and its `archive-download-x` folder stay.
+- A start that first-setup resolution moved into a workspace (resolution stubbed to answer
+  `<state>/first-setup-workspaces/<id>/{state,venue}`) frees a 4 MiB staged recovery copy and a
+  1 MiB backup dump in the WORKSPACE's state folder and boots there. Run 2026-10-24, macOS 26.6.2, Node v26.11.1, Vitest 4.1.12,
+  `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts -t "moved to a workspace"`.
+  Before `runEntry` cleaned the workspace's folders too, the box stuck: `serveRecovery` was called
+  once (`Tests  1 failed | 17 skipped (18)`).
 - A start with nothing to delete serves the recovery page at once: over HTTPS, trusting the box's
   own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted what it
   could make again, and that was not enough." and "Free space on the box's disk: 0 MB.";

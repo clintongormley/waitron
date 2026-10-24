@@ -69,6 +69,39 @@ import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 
+/** When set, first-setup resolution answers that the box runs from these folders instead. */
+const workspace = vi.hoisted(() => ({
+  roots: undefined as { stateDir: string; venueDir: string } | undefined,
+}));
+
+vi.mock("./first-setup-entry.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./first-setup-entry.js")>();
+  const { lockVenueDatabase } = await import("@waitron/db");
+  type Admission = Awaited<ReturnType<typeof original.resolveFirstSetupEntry>>;
+  return {
+    ...original,
+    resolveFirstSetupEntry: async (
+      ...args: Parameters<typeof original.resolveFirstSetupEntry>
+    ): Promise<Admission> => {
+      const roots = workspace.roots;
+      if (roots === undefined) return original.resolveFirstSetupEntry(...args);
+      // As the real admission does, the workspace's venue folder is held for the whole start.
+      return {
+        kind: "normal",
+        roots: { ...roots, binding: { stateDir: roots.stateDir, venueDir: roots.venueDir } },
+        async run<T>(body: (venueHeld: boolean) => Promise<T>): Promise<T> {
+          const hold = await lockVenueDatabase(roots.venueDir);
+          try {
+            return await body(true);
+          } finally {
+            hold.release();
+          }
+        },
+      } as unknown as Admission;
+    },
+  };
+});
+
 const FLOOR = 8 * 1024 * 1024;
 const TITLE = escapeHtml("The box's disk is full, so Waitron cannot save anything.");
 const DELETED = escapeHtml(
@@ -455,6 +488,57 @@ describe("a start on a real full disk", () => {
     expect(() => statSync(staged)).toThrow();
     expect(statSync(restoreStaging).isDirectory()).toBe(true);
     expect(readFileSync(join(download, "part"), "utf8")).toBe("x");
+  });
+
+  it("a start that first setup moved to a workspace frees the workspace's staged recovery copy and boots", async (ctx) => {
+    const small = needDisk(ctx);
+    const anchor = await startedBefore(small, "moved");
+    const base = join(anchor, "first-setup-workspaces", "0b6f3c1e-5d2a-4c8e-9f1a-7e2d4b6a8c90");
+    const roots = { stateDir: join(base, "state"), venueDir: join(base, "venue") };
+    mkdirSync(roots.stateDir, { recursive: true });
+    mkdirSync(roots.venueDir);
+    await writeRecoveryState(roots.stateDir, FRESH);
+    // The server's own proof the database is usable, in the folder it was handed.
+    const startServer = vi.fn<StartServer>(async (env) => {
+      const store = await openVenueDatabase(env.WAITRON_VENUE_DIR!);
+      try {
+        store.venue.run(sql`create table if not exists start_probe (id integer primary key)`);
+        store.venue.run(sql`insert into start_probe default values`);
+      } finally {
+        await store.close();
+      }
+      return { close: () => Promise.resolve() };
+    });
+    workspace.roots = roots;
+    try {
+      const room = entryDeps(anchor, { startServer });
+      await runEntry(room);
+      expect(startServer).toHaveBeenCalledTimes(1);
+      const staged = join(roots.stateDir, "restore-staging", "staged-recovery");
+      mkdirSync(join(staged, "upload-1"), { recursive: true });
+      writeFileSync(join(staged, "upload-1", "venue.db"), Buffer.alloc(4 * 1024 * 1024, 67));
+      mkdirSync(join(roots.stateDir, "backup-staging"));
+      const dump = join(
+        roots.stateDir,
+        "backup-staging",
+        dumpFileName(new Date("2026-10-20T00:00:00Z")),
+      );
+      writeFileSync(dump, Buffer.alloc(1024 * 1024, 66));
+
+      small.fill();
+      expect(small.free()).toBeLessThan(65_536);
+
+      startServer.mockClear();
+      const d = entryDeps(anchor, { startServer });
+      await runEntry(d);
+      expect(d.serveRecovery).not.toHaveBeenCalled();
+      expect(startServer).toHaveBeenCalledTimes(1);
+      expect(startServer.mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
+      expect(() => statSync(staged)).toThrow();
+      expect(() => statSync(dump)).toThrow();
+    } finally {
+      workspace.roots = undefined;
+    }
   });
 
   let nothingDir: string | undefined;

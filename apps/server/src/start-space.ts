@@ -34,7 +34,8 @@ export async function lowestFreeBytes(
 export interface StartSpaceDeps {
   stateDir: string;
   venueDir: string;
-  logDir: string;
+  /** Null when another call cleans this start's logs. */
+  logDir: string | null;
   floor: number;
   /** Delete logs and crash reports whatever the free space: a start whose failure was a full disk. */
   force?: boolean;
@@ -112,31 +113,34 @@ export async function freeSpaceAtStart(
 
   if (!deps.force && (before === null || before >= deps.floor)) {
     await removeBackupStaging();
-    if (deleted > 0) deps.log("info", "storage.start_backup_leftovers_deleted", { deleted });
+    if (deleted > 0) deps.log("info", "storage.start_leftovers_deleted", { deleted });
     return { freeBytes: before, belowFloor: false };
   }
   const now = deps.now();
 
-  const logs = await entries(deps.logDir, "logs", deps.log, failed);
-  for (const name of logs ?? []) {
-    const match = ROTATED_LOG.exec(name);
-    if (match !== null && Number(match[1]) >= 2) await remove(join(deps.logDir, name), false);
-  }
-
-  const crashDir = join(deps.logDir, "crash-reports");
-  const crashReports =
-    logs === null ? [] : await entries(crashDir, "crash-reports", deps.log, failed);
-  for (const name of crashReports ?? []) {
-    if (!CRASH_REPORT.test(name)) continue;
-    const path = join(crashDir, name);
-    try {
-      const { mtimeMs } = await stat(path);
-      if (now.getTime() - mtimeMs <= CRASH_REPORT_KEEP_MS) continue;
-    } catch (error) {
-      failed(error);
-      continue;
+  if (deps.logDir !== null) {
+    const logDir = deps.logDir;
+    const logs = await entries(logDir, "logs", deps.log, failed);
+    for (const name of logs ?? []) {
+      const match = ROTATED_LOG.exec(name);
+      if (match !== null && Number(match[1]) >= 2) await remove(join(logDir, name), false);
     }
-    await remove(path, false);
+
+    const crashDir = join(logDir, "crash-reports");
+    const crashReports =
+      logs === null ? [] : await entries(crashDir, "crash-reports", deps.log, failed);
+    for (const name of crashReports ?? []) {
+      if (!CRASH_REPORT.test(name)) continue;
+      const path = join(crashDir, name);
+      try {
+        const { mtimeMs } = await stat(path);
+        if (now.getTime() - mtimeMs <= CRASH_REPORT_KEEP_MS) continue;
+      } catch (error) {
+        failed(error);
+        continue;
+      }
+      await remove(path, false);
+    }
   }
 
   await removeBackupStaging();

@@ -497,10 +497,10 @@ A987's design does not change the route
   the staging turn (A798-B slice 7); where the lock cannot be taken for another reason (measured on a full disk with
   no other holder), the holder file's heartbeat decides, so a holder that died less than 30 s
   before keeps it until a later start (`docs/developers/conventions-data.md`, "Every start takes
-  the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). A box whose first
-  setup was retired into a new workspace is outside the rule, by reading `runEntry`
-  (`apps/server/src/node-entry.ts`), not by a run: see the entry on that workspace's backup staging
-  below.
+  the venue lock"); a box reset also deletes it (`wipe_box`, `deploy/waitron.sh`). On a box whose first
+  setup was retired into a new workspace, the start also deletes them in the workspace's state
+  folder (`runEntry`, `apps/server/src/node-entry.ts`; run on a full disk by
+  `apps/server/src/start-full-disk.e2e.test.ts`).
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
   authorize trading or stop another server.
@@ -893,23 +893,6 @@ skips a configured destination folder and any folder holding one, except while t
 backup settings (they cannot be read, or a reload could not open the database). Until then the
 user guide's "never touches … your backups" (`box-status.md#free-space`, English and Spanish) does
 not hold for such a folder. A fix could refuse such a folder when the settings are saved.
-
-## A box whose first setup was retired into a new workspace keeps that workspace's backup staging through the clean-up before the count
-
-When a first-setup resolution chose a new workspace (`binding` not null), the clean-up that
-`runEntry` runs before first-setup resolution reads the folders the process was given, not the
-workspace's, so a `backup-staging`
-inside the workspace's state folder is not deleted by it. The forced clean-up after a start that
-failed on a full disk runs inside `runAdmittedEntry` with the workspace's folders, and the count
-check uses them too. Accepted for A798-B slice 2 (its plan's decision 15). Since A978
-(2026-10-21) this also means a cut-off backup run's plaintext copy in that workspace survives every
-ordinary start; of the starts, only one that fails on a full disk deletes it. Not yet put to the owner.
-Since A798-B slice 7, the Box status page's Liberar deletes a cut-off backup's leftovers in the
-running server's own state folder, which on such a box is the workspace's (`runEntry` starts the
-server with `WAITRON_STATE_DIR` set to the workspace's state folder, `apps/server/src/node-entry.ts`;
-read, not run).
-
-
 
 ## Backup data verification and Cloud release
 

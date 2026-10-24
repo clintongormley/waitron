@@ -90,7 +90,6 @@ const TRADING_ENV_FILE = "trading.env";
 /** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
 const REPLACED_SUFFIX = ".replaced";
 const IDENTITY_KEYS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
-export { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
 const INCOMING_SUFFIX = ".incoming";
 const ASIDE_PREFIX = `.${VENUE_FILE}-replaced-`;

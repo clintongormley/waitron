@@ -2951,9 +2951,16 @@ dies leaves its file behind; the next holder overwrites it.
 when the lock cannot be taken.** Whatever the free space, a start deletes the copies a backup run
 leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
 `lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
-The same section deletes `<state>/restore-staging/staged-recovery` whole, where a staged restore
-keeps each uploaded backup as a decrypted venue database; only the server stages one
-(`createSetupRecoveryPreparation`, called only from `apps/server/src/boot.ts`). On a
+The same section deletes `<state>/restore-staging/staged-recovery` whole. That is where the setup
+wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
+`apps/server/src/recovery-preparation.ts`) keeps the uploaded backup it is checking as a decrypted
+venue database, with a working copy of it, one backup at a time: staging another deletes the one it
+replaces once nothing reads it. Only the server stages a copy, after its store has taken the lock:
+the long-lived open at `apps/server/src/boot.ts:962` comes before the only call of
+`createSetupRecoveryPreparation`, at `boot.ts:1085`. When first-setup resolution has moved the box
+into a workspace (`<state>/first-setup-workspaces/<id>/`), the start runs the same clean-up on the
+workspace's folders as well, under the workspace's own venue lock, before it judges the floor; it
+cleans the logs once, in the folder it was given (`runEntry`, `apps/server/src/node-entry.ts`). On a
 box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
 staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.

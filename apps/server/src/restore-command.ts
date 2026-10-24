@@ -21,8 +21,8 @@ import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } f
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
+import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
-  RESTORE_STAGING_DIR,
   restoreFromArtifactFile,
   validateArtifactFile,
   type RestoreFileDeps,
