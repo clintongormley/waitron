@@ -188,8 +188,13 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(text).not.toContain(hashSessionToken(martaToken));
   });
 
-  it("refuses a request with no cookie", async () => {
+  it("refuses a request with no cookie, with or without a query", async () => {
     await refused(await ask(mounted(), null), 401, "management_session.required");
+    await refused(
+      await ask(mounted(), null, `?personId=${colleagueId}`),
+      401,
+      "management_session.required",
+    );
   });
 
   it("refuses an ended session", async () => {

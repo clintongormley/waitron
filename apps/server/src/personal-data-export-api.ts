@@ -89,9 +89,9 @@ export function mountPersonalDataExportApi(
 ): void {
   app.get("/management-api/me/personal-data/export", (c) =>
     withPersonalDataErrors(c, log, () => {
+      const token = requireManagementSession(c);
       if (new URL(c.req.url).search)
         throw new AppError("management.request_invalid", { field: "query" });
-      const token = requireManagementSession(c);
       return sendPersonalData(c, deps, async (tx) => {
         const viewer = await resolveManagementSession(tx, token, { touch: false });
         return { personId: viewer.personId, label: viewer.displayName };
