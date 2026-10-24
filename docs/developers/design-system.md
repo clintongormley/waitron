@@ -4586,8 +4586,8 @@ the same dialog asks whether waiting dishes move there or stay to finish; starte
 A manager PIN step keeps the draft after a refused PIN. Delete on Prep stations uses the shared
 deletion dialog and refuses unfinished dishes. Reopening moves no dishes back.
 The counter and table order screens show the
-period's end beside Keep open later. Its dialog offers server-provided times, explains the next
-period's delay and allows ending an existing extension. Both destination and endpoint dialogs
+period's end as status text. A zone that closes later today has Keep {zone} open later, whose
+dialog offers server-provided times and allows ending an existing extension. Both destination and endpoint dialogs
 use the shared draft scope and save-action state, with reconnect cases in their
 `*.unsaved.test.ts` suites under `apps/till/src/widgets/`.
 Routes shows the routing grid (`packages/venue-service/src/dashboard/routing-grid.ts`): a column
@@ -5517,7 +5517,7 @@ keep their own placement and permissions. A recalled table quantity decrease req
 cancellation flow; that request does not apply other staged note or modifier changes.
 
 The status row above the menu or selected list shows the service, zone and receipt-equipment
-availability. Tapping the service text opens today's keep-open action. Unknown, unconfigured,
+availability. Unknown, unconfigured,
 unavailable and available receipt equipment are separate states; availability does not claim that
 a physical printer is online or healthy. The existing equipment poll supplies changes.
 
@@ -5731,11 +5731,10 @@ so a Back or a Close that would end the window asks about an unsaved edit in the
 about a painter's paint underneath. Escape in the dialog closes only the dialog.
 
 The delete dialog (`period-delete-dialog.ts`) asks "Delete {name}?" and reads what the delete
-changes: how many seasons and repeating or still-to-come special days paint the period, the
-routing cells that name it, and whether today's later opening of it ends or moves to the
-replacement. When it changes none of these, it says the period is painted nowhere and no hours
-change. When the period is painted or kept open today and the
-department has another period, a Replace with choice offers them, with None first. The delete button names the period.
+changes: how many seasons and repeating or still-to-come special days paint the period, and the
+routing cells that name it. When it changes none of these, it says the period is painted nowhere
+and no hours change. When the period is painted and the department has another period, a Replace
+with choice offers them, with None first. The delete button names the period.
 It is its own `wt-modal`, not `wt-delete-dialog`, which has no place for Replace with. A failed
 re-read keeps the impact last shown and leaves Delete usable, except for the read that follows a
 changed-clock refusal, below. Delete sends the clock revision the

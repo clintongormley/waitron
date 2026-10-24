@@ -2187,7 +2187,8 @@ Board 1 is the target; board 2 the windows.
   ☰ → Testing on Demo and Preparation installs, which the owner needs for now.
 - **A status bar under the top bar:** the service period ("Open · until 02:00", tapping it opens
   today's keep-open window, replacing the "Keep Open open later" button), the zone, and the
-  printer's state.
+  printer's state. **2026-10-24, A789 slice 2:** there is no period keep-open window any more; the
+  service period is plain status text, and the zone's keep-open stays on its own button.
 - **Gone from the screen:** Refresh menus, the zone dropdown (A740), the Vegan/Vegetarian/No
   meat/No fish buttons, Make at…, the Modifiers and Note buttons on each line, "As served",
   "Allergens not fully reviewed" (A668 drops it), Approve/Decline (A739), Full invoice and
@@ -2226,7 +2227,8 @@ Board 1 is the target; board 2 the windows.
 
 - **The table-order screen gets the same clean-up**: no Vegan/Vegetarian/No meat/No fish buttons
   (the Filter replaces them), the status bar instead of "Keep Open open later", and no "Where the
-  rules send it" dropdown on each line.
+  rules send it" dropdown on each line. **2026-10-24, A789 slice 2:** the period's "Keep open" is
+  gone; the zone's "Keep {zone} open later" stays on its own button.
 - **The "last added" bar on the counter too.** The table-order screen shows the line the last tap
   added or grew, with −1 and +1 (`#lastAdded`, `till-table-order-screen.ts`); the counter shares
   the store (`WorkingOrderStore.lastAdded`) but draws no bar. On both: the bar takes its own space

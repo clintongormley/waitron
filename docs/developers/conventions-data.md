@@ -787,6 +787,7 @@ request (see [design-system.md](design-system.md), "Forms").
 **2026-10-14, A506-11.** The refusing `DELETE …/menu-periods/:periodId`, `deleteMenuPeriod` and
 `menu_period.in_use` are gone; `POST …/menu-periods/:periodId/delete` is the only delete.
 
+(2026-10-24, A789 slice 2: period extensions are gone; this records the earlier rule.)
 **2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
 (`deletePeriod`, `packages/venue-service/src/period-delete.ts`), taking the clock revision as the
 other hours writes do. `GET …/menu-periods/painted-in` lists where each period is painted, and
@@ -1720,16 +1721,14 @@ The station-hour assertions were retained at that checkpoint. **2026-10-10:** sl
 retires their subject, the station-hours schema and its writers. The menu endpoint checks remain.
 These experiments are not a complete-slice result.
 
-### Today's station destination and period extension
+### Today's station destination and zone extension
 
 A station's by-hand state and chosen destination belong to one business date. A closed station
 follows that destination, then the active venue default if the destination is missing or the walk
 cycles. A deleted station is not offered as a destination. With no active default, a failed walk
 has no replacement. Opening the station does not move already sent work back.
-Period extensions also belong to one business date: the resolver overlays the stored range
-before choosing the running and ended menus. The extension read offers future quarter-hours
-through the business-day boundary. Configuration exports omit `station_day_states`,
-`period_extensions` and `zone_extensions`; these are today's service choices, rather than a venue template.
+Configuration exports omit `station_day_states` and `zone_extensions`; these are today's service
+choices, rather than a venue template.
 
 Focused receipts: `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
 `routing-store.test.ts`, `service-day.test.ts`, `menu-timetable.test.ts`, `keep-open.test.ts`,
@@ -1737,15 +1736,17 @@ and `configuration-transfer.test.ts`. The approved slice 3 decision 14 leaves th
 person unstored; the open history decision is in `docs/backlog/service-periods.md`.
 
 To keep a zone open through its next closed range, choose **Keep Terrace open later** beside
-the till's period line, in its closed-zone notice or on the floor's selected-zone bar. Choose
+the till's service line, in its closed-zone notice or on the floor's selected-zone bar. Choose
 a later quarter-hour and confirm; staff without the service permission can ask a manager to
 approve with a PIN. **End the extension** removes today's zone override. The server checks that
-the department stays open throughout the requested range, so extend its period first when needed.
+the department stays open throughout the requested range: a zone can be kept open only while its
+department's own hours for the day run (`zone_extension.not_allowed`, `department_closed`).
 The zone override lifts its closed times; it changes no menu timetable or price.
 
 The real-route cases in `apps/server/src/till-api.keep-open.test.ts` seat a table during the
-extension and refuse it at the endpoint. `packages/venue-service/src/keep-open.test.ts` checks
-a department gap, an extension spanning two closed ranges, and the pricing path without zone-extension queries. The till's
+zone's extension and refuse it at its exact end, and refuse an extension beyond the department's
+closing time without writing. `packages/venue-service/src/keep-open.test.ts` checks a department
+gap, an extension spanning two closed ranges, and the pricing path without zone-extension queries. The till's
 `zone-keep-open.test.ts`, `zone-keep-open-screens.test.ts` and menu-refresh cases check the
 zone write, manager retry and refreshed controls.
 
