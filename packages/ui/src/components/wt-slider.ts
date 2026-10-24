@@ -23,6 +23,24 @@ export class WtSlider extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-3);
       }
+      .range {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: var(--wt-space-3);
+      }
+      .range [part="value"] {
+        align-self: center;
+      }
+      [part="marks"] {
+        display: flex;
+        justify-content: space-between;
+        padding-inline: calc(var(--wt-space-4) / 2);
+      }
+      [part="mark"] {
+        width: var(--wt-field-line-width);
+        height: var(--wt-space-2);
+        background-color: var(--wt-color-text-muted);
+      }
       [part="value"] {
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
@@ -64,6 +82,8 @@ export class WtSlider extends LitElement {
   @property({ type: Boolean }) continuous = false;
   @property() error = "";
   @property() hint = "";
+  /** Draws one mark per step under the range, and the value at the range's end. */
+  @property({ type: Boolean }) marks = false;
   @property({ attribute: false }) format: (value: number) => string = String;
   @property({ attribute: false }) valueText: ((value: number) => string) | null = null;
   /** The number under the latest drag, until a new `value` replaces it. */
@@ -101,27 +121,41 @@ export class WtSlider extends LitElement {
     const hintId = `${this.#id}-hint`;
     const shown = this.shown ?? this.value;
     const describedBy = [this.hint && hintId, this.error && errorId].filter(Boolean).join(" ");
-    return html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>
-        <label for=${this.#id} part="label">${this.label}</label>
-        <span part="value" aria-hidden="true">${this.format(shown)}</span>
-      </div>
-      <input
-        id=${this.#id}
-        type="range"
-        name=${this.name || nothing}
-        .min=${String(this.min)}
-        .max=${String(this.max)}
-        .step=${String(this.step)}
-        .value=${live(String(shown))}
-        ?disabled=${this.disabled}
-        aria-invalid=${this.error ? "true" : nothing}
-        aria-describedby=${describedBy || nothing}
-        aria-valuetext=${this.valueText ? this.valueText(shown) : nothing}
-        @input=${this.#onInput}
-        @change=${this.#onChange}
-      />
-      ${this.hint ? html`<p class="hint" part="hint" id=${hintId}>${this.hint}</p>` : nothing}
-      ${this.error ? html`<p class="error" id=${errorId} role="alert" data-error>${this.error}</p>` : nothing}`;
+    const value = html`<span part="value" aria-hidden="true">${this.format(shown)}</span>`;
+    const input = html`<input
+      id=${this.#id}
+      type="range"
+      name=${this.name || nothing}
+      .min=${String(this.min)}
+      .max=${String(this.max)}
+      .step=${String(this.step)}
+      .value=${live(String(shown))}
+      ?disabled=${this.disabled}
+      aria-invalid=${this.error ? "true" : nothing}
+      aria-describedby=${describedBy || nothing}
+      aria-valuetext=${this.valueText ? this.valueText(shown) : nothing}
+      @input=${this.#onInput}
+      @change=${this.#onChange}
+    />`;
+    const label = html`<label for=${this.#id} part="label">${this.label}</label>`;
+    const control = this.marks
+      ? html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>${label}</div>
+          <div class="range">
+            ${input}${value}
+            <div part="marks" aria-hidden="true">
+              ${Array.from(
+                { length: Math.floor((this.max - this.min) / this.step) + 1 },
+                () => html`<span part="mark"></span>`,
+              )}
+            </div>
+          </div>`
+      : html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>
+            ${label}${value}
+          </div>
+          ${input}`;
+    return html`${control}
+    ${this.hint ? html`<p class="hint" part="hint" id=${hintId}>${this.hint}</p>` : nothing}
+    ${this.error ? html`<p class="error" id=${errorId} role="alert" data-error>${this.error}</p>` : nothing}`;
   }
 }
 

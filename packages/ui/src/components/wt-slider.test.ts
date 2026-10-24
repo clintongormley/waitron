@@ -469,3 +469,100 @@ describe.each(["light", "dark"] as const)("continuous slider tokens (%s)", (them
     expect(el.shadowRoot!.activeElement).toBe(input);
   });
 });
+
+describe("step marks", () => {
+  const marksOf = (el: Element) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>('[part="mark"]'),
+  ];
+  const partOf = (el: Element, part: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[part="${part}"]`)!;
+
+  async function mountMarked(): Promise<WtSlider> {
+    const el = (await mount(
+      '<wt-slider label="Text size" min="100" max="130" step="5" value="110" marks></wt-slider>',
+    )) as WtSlider;
+    host.style.width = "300px";
+    host.style.setProperty("--wt-field-max-width", "300px");
+    await document.fonts.ready;
+    return el;
+  }
+
+  test("marks one tick per step under the range", async () => {
+    const el = await mountMarked();
+    const marks = marksOf(el);
+    expect(marks).toHaveLength(7);
+    const inputBottom = inputOf(el).getBoundingClientRect().bottom;
+    for (const mark of marks) {
+      expect(mark.getBoundingClientRect().top).toBeGreaterThanOrEqual(inputBottom);
+      expect(mark.getBoundingClientRect().height).toBeGreaterThan(0);
+    }
+    expect(partOf(el, "marks").getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("counts whole steps only, from min", async () => {
+    const el = (await mount(
+      '<wt-slider label="Columns" min="2" max="9" step="3" value="5" marks></wt-slider>',
+    )) as WtSlider;
+    expect(marksOf(el)).toHaveLength(3);
+    el.max = 11;
+    await el.updateComplete;
+    expect(marksOf(el)).toHaveLength(4);
+  });
+
+  test("puts each mark under the thumb's centre for its value", async () => {
+    const el = await mountMarked();
+    const r = inputOf(el).getBoundingClientRect();
+    expect(marksOf(el)).toHaveLength(7);
+    marksOf(el).forEach((mark, i) => {
+      const box = mark.getBoundingClientRect();
+      const centre = box.left + box.width / 2;
+      expect(Math.abs(centre - (r.left + 8 + (i * (r.width - 16)) / 6))).toBeLessThanOrEqual(1);
+    });
+  });
+
+  test("draws the value at the end of the range's row", async () => {
+    const el = await mountMarked();
+    const r = inputOf(el).getBoundingClientRect();
+    const value = partOf(el, "value").getBoundingClientRect();
+    const label = partOf(el, "label").getBoundingClientRect();
+    expect(value.left).toBeGreaterThanOrEqual(r.right);
+    const middle = value.top + value.height / 2;
+    expect(middle).toBeGreaterThanOrEqual(r.top);
+    expect(middle).toBeLessThanOrEqual(r.bottom);
+    expect(value.top).toBeGreaterThanOrEqual(label.bottom);
+    expect(partOf(el, "value").textContent).toBe("110");
+  });
+
+  test("marks paint from the muted text token, a line wide and a small space tall", async () => {
+    const el = await mountMarked();
+    host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-field-line-width", "3px");
+    host.style.setProperty("--wt-space-2", "7px");
+    const mark = marksOf(el)[0]!;
+    expect(getComputedStyle(mark).backgroundColor).toBe("rgb(1, 2, 3)");
+    expect(mark.getBoundingClientRect().width).toBe(3);
+    expect(mark.getBoundingClientRect().height).toBe(7);
+  });
+
+  test("a disabled marked slider disables its range and marks its label row", async () => {
+    const el = (await mount(
+      '<wt-slider label="Text size" min="100" max="130" step="5" value="110" marks disabled></wt-slider>',
+    )) as WtSlider;
+    expect(inputOf(el).disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector(".row")!.getAttribute("aria-disabled")).toBe("true");
+    el.disabled = false;
+    await el.updateComplete;
+    expect(inputOf(el).disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector(".row")!.hasAttribute("aria-disabled")).toBe(false);
+  });
+
+  test("without marks the value stays on the label row", async () => {
+    const el = await mountSlider();
+    await document.fonts.ready;
+    expect(el.shadowRoot!.querySelector('[part="marks"]')).toBeNull();
+    expect(marksOf(el)).toHaveLength(0);
+    const label = partOf(el, "label").getBoundingClientRect();
+    const value = partOf(el, "value").getBoundingClientRect();
+    expect(Math.abs(label.top - value.top)).toBeLessThanOrEqual(1);
+  });
+});
