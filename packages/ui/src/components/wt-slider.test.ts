@@ -530,6 +530,25 @@ describe("step marks", () => {
     });
   });
 
+  test("the marks' inset follows the thumb-size token, not the spacing scale", async () => {
+    const el = await mountMarked();
+    const centres = () =>
+      marksOf(el).map((mark) => {
+        const box = mark.getBoundingClientRect();
+        return box.left + box.width / 2;
+      });
+    const r = inputOf(el).getBoundingClientRect();
+
+    host.style.setProperty("--wt-space-4", "40px");
+    const [first] = centres();
+    expect(Math.abs(first! - (r.left + 8))).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(centres().at(-1)! - (r.right - 8))).toBeLessThanOrEqual(0.1);
+
+    host.style.setProperty("--wt-slider-thumb-size", "40px");
+    expect(Math.abs(centres()[0]! - (r.left + 20))).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(centres().at(-1)! - (r.right - 20))).toBeLessThanOrEqual(0.1);
+  });
+
   test("on a range a step does not divide, each mark sits under its value and none at max", async () => {
     const el = (await mount(
       '<wt-slider label="Columns" min="2" max="9" step="3" value="5" marks></wt-slider>',

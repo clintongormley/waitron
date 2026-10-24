@@ -59,6 +59,7 @@ test("defines the structural contract", () => {
     "--wt-floor-plan-preview-max-height",
     "--wt-stepper-field-width",
     "--wt-stepper-button-width",
+    "--wt-slider-thumb-size",
     "--wt-help-badge-target",
     "--wt-help-badge-size",
     "--wt-price-field-width",
@@ -213,6 +214,11 @@ test("a stepper's number box is never narrower than the tap target", () => {
 test("a stepper's buttons are 24px wide, WCAG 2.2's level AA minimum target", () => {
   const el = mount();
   expect(token(el, "--wt-stepper-button-width")).toBe("24px");
+});
+
+test("a slider's thumb size is 16px, twice the 8px inset of Chromium's range thumb centre", () => {
+  const el = mount();
+  expect(token(el, "--wt-slider-thumb-size")).toBe("16px");
 });
 
 test("a help badge is a 24px target around a 20px circle", () => {

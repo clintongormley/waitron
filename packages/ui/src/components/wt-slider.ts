@@ -168,7 +168,7 @@ export class WtSlider extends LitElement {
                 (at) =>
                   html`<span
                     part="mark"
-                    style="left: calc(var(--wt-space-4) / 2 + ${at} * (100% - var(--wt-space-4)))"
+                    style="left: calc(var(--wt-slider-thumb-size) / 2 + ${at} * (100% - var(--wt-slider-thumb-size)))"
                   ></span>`,
               )}
             </div>
