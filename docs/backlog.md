@@ -6262,9 +6262,9 @@ _Formerly entries spread across the old sections._
   [Detail](backlog/data-protection.md#libvips-is-lgpl-30-or-later)
 
 - **A980 — data protection, Waitron's side.** Design revision 2 (2026-10-24) records the owner's
-  ten answers; eight small slices are planned, nothing is built. Build S4 (delete sign-in secrets at
-  deactivation, a live defect) first; S1 waits, while lane B builds it, for lane B's parked pull
-  requests (its own rule); S9 and S11 wait for the specialists.
+  ten answers. S4 (deleting sign-in details when a person is disabled) is built; the other small
+  slices are planned. S1 waits, while lane B builds it, for lane B's parked pull requests
+  (its own rule); S9 and S11 wait for the specialists.
   [Detail](backlog/data-protection.md#a980--data-protection-waitrons-side)
 
 - **A privacy-notice page hosted by Waitron Cloud.** For a Cloud-connected venue, a page Cloud

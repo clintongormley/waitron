@@ -14,7 +14,9 @@ se aplica al rol y al estado de la cuenta.
 Como administrador, puedes añadir personas y enviar su invitación, reenviar una invitación,
 restablecer el PIN o el acceso, y deshabilitar o volver a habilitar cuentas. Restablecer el PIN
 lo borra; la persona elige el nuevo. Restablecer el acceso borra sus credenciales y envía una
-nueva invitación. Los gerentes no ven estas acciones.
+nueva invitación. Deshabilitar una cuenta también borra su PIN, contraseña, llaves de acceso,
+verificación en dos pasos y vínculo con Google, así que al volver a habilitarla se envía una nueva
+invitación. Los gerentes no ven estas acciones.
 
 ## Tu propia cuenta {#own-account}
 
