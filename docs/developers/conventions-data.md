@@ -3688,11 +3688,11 @@ is `packages/fiscal-verifactu/src/clock-behind.restart.test.ts` unless another i
 
 **The tables** (owner FYI 4). Two append-only `ledger` tables, declared `appendOnly()` in
 `packages/fiscal-verifactu/src/classification.ts` and created by
-`packages/fiscal-verifactu/drizzle/0011_glossy_silhouette.sql`. `clock_checks` holds one row each
+`packages/fiscal-verifactu/drizzle/0011_clock_checks_and_confirmations.sql`. `clock_checks` holds one row each
 time a check of the clock opens: the reading, the boot-time clock's reading and boot id, the latest
 record and every chain's largest `secuencia` (`detail.heads`). `clock_confirmations` holds one row
 each time a check closes: its `source` (`authority`, `devices`, `admin` or `elapsed`), the person
-for `admin` (a CHECK ties the two), the witnesses and the chain heads as `proof`, the corrected
+for `admin` (a CHECK ties the two and refuses an empty id), the witnesses and the chain heads as `proof`, the corrected
 start of the stop as `proof.closing`, and, for a closing that lifted a stop, the record it names
 (`registro_id`, `record_at`). A unique index on `check_id` allows one closing per check;
 `registro_id` is indexed but not unique, so a second confirmation of the same record is normal.

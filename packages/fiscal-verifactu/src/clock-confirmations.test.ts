@@ -244,6 +244,18 @@ describe("clock_confirmations", () => {
     expect(await countOf("clock_confirmations")).toBe(1);
   });
 
+  it("refuses an administrator's confirmation naming an empty person", async () => {
+    const { nodeId } = await seedPendingEnvios(suite.db, { count: 0 });
+    const error = await captureError(() =>
+      insertConfirmation(nodeId, 1, { source: "admin", personId: "" }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(checkFailed(error, "clock_confirmations_person_ck")).toBe(true);
+    expect(await countOf("clock_confirmations")).toBe(0);
+    await insertConfirmation(nodeId, 1, { source: "admin", personId: PERSON });
+    expect(await countOf("clock_confirmations")).toBe(1);
+  });
+
   it("refuses a record without its record_at", async () => {
     const { nodeId, registroIds } = await seedPendingEnvios(suite.db, { count: 1 });
     const error = await captureError(() =>

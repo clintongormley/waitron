@@ -29,7 +29,7 @@ CREATE TABLE `clock_confirmations` (
 	FOREIGN KEY (`registro_id`) REFERENCES `registros_facturacion`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "clock_confirmations_source_ck" CHECK("clock_confirmations"."source" in ('authority', 'devices', 'admin', 'elapsed')),
 	CONSTRAINT "clock_confirmations_reason_ck" CHECK("clock_confirmations"."reason" in ('start', 'change', 'behind_chain', 'disagrees', 'unusable')),
-	CONSTRAINT "clock_confirmations_person_ck" CHECK(("clock_confirmations"."source" = 'admin') = ("clock_confirmations"."person_id" is not null)),
+	CONSTRAINT "clock_confirmations_person_ck" CHECK(("clock_confirmations"."source" = 'admin') = ("clock_confirmations"."person_id" is not null and length("clock_confirmations"."person_id") > 0)),
 	CONSTRAINT "clock_confirmations_record_ck" CHECK(("clock_confirmations"."registro_id" is null) = ("clock_confirmations"."record_at" is null))
 );
 --> statement-breakpoint
