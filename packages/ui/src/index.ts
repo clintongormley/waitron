@@ -138,13 +138,18 @@ export {
 export type { ThemeChoice } from "./theme-choice.js";
 export {
   VENUE_THEME_STORAGE_KEY,
+  VenueLogoController,
   applyVenueTheme,
+  currentVenueLogo,
   followVenueTheme,
   readVenueTheme,
+  reportVenueLogoFailure,
+  reportVenueLogoLoaded,
   startVenueTheme,
+  subscribeVenueLogo,
 } from "./venue-theme.js";
-export type { VenueThemeReading } from "./venue-theme.js";
-export type { VenueThemeAnswer } from "@waitron/ui-core/theme";
+export type { VenueLogoState, VenueThemeReading } from "./venue-theme.js";
+export type { VenueLogoAddresses, VenueThemeAnswer } from "@waitron/ui-core/theme";
 export {
   HelpModeController,
   currentHelpMode,
