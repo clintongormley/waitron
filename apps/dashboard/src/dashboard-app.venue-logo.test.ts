@@ -252,13 +252,19 @@ describe("Powered by", () => {
     expect(line.previousElementSibling?.localName).toBe("dashboard-login-screen");
     expect(line.getAttribute("label")).toBe(t("login.powered_by"));
     await line.updateComplete;
+    const lockup = line.shadowRoot!.querySelector<HTMLImageElement>("[part=lockup]")!;
+    if (!(lockup.complete && lockup.naturalWidth > 0)) {
+      await new Promise((resolve) => lockup.addEventListener("load", resolve, { once: true }));
+    }
+    expect(lockup.naturalWidth).toBeGreaterThan(0);
     await frame();
     const below = card(el).getBoundingClientRect();
     const at = line.getBoundingClientRect();
     expect(at.top - below.bottom).toBeCloseTo(16, 0);
-    expect(Math.abs((at.left + at.right) / 2 - (below.left + below.right) / 2)).toBeLessThanOrEqual(
-      1,
-    );
+    const words = line.shadowRoot!.querySelector("[part=label]")!.getBoundingClientRect();
+    const drawn = lockup.getBoundingClientRect();
+    const centre = (Math.min(words.left, drawn.left) + Math.max(words.right, drawn.right)) / 2;
+    expect(Math.abs(centre - (below.left + below.right) / 2)).toBeLessThanOrEqual(1);
   }
 
   let width = 0;
