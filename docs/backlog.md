@@ -349,11 +349,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and both email forms open empty. Left open by A231q.
 
 - **A555. Keep a counter full invoice's email or A4 choice through payment** — DESIGN PROPOSED,
-  awaiting the owner's one delivery-choice decision and full-design approval. The
-  [design](superpowers/specs/2026-10-21-a555-counter-invoice-delivery-design.md) and
-  [pictures](backlog/mockups/a555-counter-invoice-delivery/README.md) recommend choosing the
-  original before payment, composing with A739's shared window and preserving paid status when
-  delivery fails. No implementation or public F1 enablement is included.
+  awaiting the owner's one delivery-choice decision and full-design approval.
+  No implementation or public F1 enablement is included.
   [Detail](backlog/fiscal.md#a555-counter-full-invoice-delivery-through-payment--design-proposed-2026-10-21)
 
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
@@ -425,10 +422,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   owned Cloud joint suite; neither starts a production reporting worker.
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
-  authority.** The bundle can reserve a signed identity, but the public adopter refuses that
-  allocation module before writing; no shipped entry point establishes its standby identity.
-  Complete the copy and authenticated establishment path before presenting a successful fiscal
-  join. The pending file alone supplies no live authority. Spec §9.4 permits the current refusal;
+  authority.** Complete the copy and authenticated establishment path before presenting a successful fiscal
+  join. The pending file alone supplies no live authority.
   [detail](backlog/fiscal.md#w41s-4-adoption-boundary-checkpoint-2026-10-14).
 
 - **Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
@@ -510,16 +505,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   not establish one physical print. [Detail](backlog/fiscal.md#uncertain-receipt-delivery)
 
 - **A888. After A795 lands: the owner's checks with real certificates** (left open by A795). The
-  owner approved landing A795 on 2026-10-19 before these ran. Run with the operator harness `apps/server/src/aeat-certificate-check.preprod.test.ts`:
-  production and `www10` consultas, each type at the other's address, an expired certificate, where
-  the tax ID sits, RC2 in real exports, a non-ASCII passphrase, and where AEAT puts its error number.
+  owner approved landing A795 on 2026-10-19 before these ran.
   If any answers differently from the design, that part is redesigned in a follow-up.
   [Detail](backlog/fiscal.md#a888-after-a795-lands-the-owners-checks-with-real-certificates)
 
 - **A853. The box makes a company seal's private key itself** (decided out of A795, 2026-10-18).
-  FNMT issues a seal only for a key pair and certificate request made on the subscriber's machine,
-  and never issues a `.p12`; setup and A795 both take only a `.p12`, so today a seal's key must be
-  made elsewhere and moved to the box. Design one flow for setup and renewal: the box makes the key
+  Design one flow for setup and renewal: the box makes the key
   and request, the owner pastes the request into FNMT's form, and the box takes back only the issued
   certificate. Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
@@ -531,16 +522,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A802 — correct part of a paid invoice: build the approved design.** Nothing in the
   product can issue a corrective invoice (R5, _factura rectificativa_) for part of an issued
-  simplified invoice: the engine exists and only the whole-order cancel uses it. Staff need an easy
-  way to correct a paid receipt when a customer spots an error afterwards. Build on today's
-  filing-by-differences. The owner approved the
-  [design](superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md) on 2026-10-21:
-  correction before connected refund, both permissions with explicit links, and the proposed
-  source-history gates. Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md),
+  simplified invoice: the engine exists and only the whole-order cancel uses it.
+  Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md),
   including its separate protected-writer approval and exact-gross qualification. The fiscal PR
-  waits for the owner to land it. A758 §3.8 (food cancelled on a paid bill, with a Refund tick per dish) refunds the ticked dishes through the ordinary refund; the
-  owner decided (Q43 e, 2026-10-18) that once A802 lands, such a refund files their partial
-  correction in the same step. Its §3.8.1 has a worked example to check against.
+  waits for the owner to land it.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **Correct VAT without returning money.** Design the separate correction for a wrong VAT rate
