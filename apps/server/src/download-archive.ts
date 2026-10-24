@@ -23,7 +23,7 @@ function safeName(label: string): string {
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
-    .replace(/[ßæœøłđðþıħŋŧ]/g, (letter) => LETTERS[letter]!)
+    .replace(/[^a-z0-9]/g, (letter) => LETTERS[letter] ?? letter)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)
