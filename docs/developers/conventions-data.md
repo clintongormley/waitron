@@ -787,7 +787,7 @@ request (see [design-system.md](design-system.md), "Forms").
 **2026-10-14, A506-11.** The refusing `DELETE …/menu-periods/:periodId`, `deleteMenuPeriod` and
 `menu_period.in_use` are gone; `POST …/menu-periods/:periodId/delete` is the only delete.
 
-(2026-10-24, A789 slice 2: period extensions are gone; this records the earlier rule.)
+(2026-10-24, A789 slice 2: period extensions are gone; this paragraph's sentences about a period's keep-open extension record the earlier rule.)
 **2026-10-13, A506-10.** `POST …/menu-periods/:periodId/delete` deletes a period in use
 (`deletePeriod`, `packages/venue-service/src/period-delete.ts`), taking the clock revision as the
 other hours writes do. `GET …/menu-periods/painted-in` lists where each period is painted, and
@@ -1731,7 +1731,7 @@ Configuration exports omit `station_day_states` and `zone_extensions`; these are
 choices, rather than a venue template.
 
 Focused receipts: `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
-`routing-store.test.ts`, `service-day.test.ts`, `menu-timetable.test.ts`, `keep-open.test.ts`,
+`routing-store.test.ts`, `keep-open.test.ts`,
 and `configuration-transfer.test.ts`. The approved slice 3 decision 14 leaves the authorising
 person unstored; the open history decision is in `docs/backlog/service-periods.md`.
 

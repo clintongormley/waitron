@@ -3239,6 +3239,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     and the "Keep … open later" button go with it. Seen once at 1280 wide. Read, not run: the
     retired renderer hid controls with its menu card. Recheck the observation on fixed Counter
     (`apps/till/src/screens/till-counter-screen.ts`); its controls and menu are separate now.
+    (2026-10-24, A789 slice 2: the period's Keep open button is gone.)
   - In Spanish at 390 wide, the counter's basket line showed no product name in two screenshots of
     the Collect step (light and dark): the row with quantity, price and Note is there, the name row
     above it is missing, not cut off. In English at 390, and in Spanish at 1280, the name shows.
