@@ -486,18 +486,21 @@ describe("configuration transfer archive", () => {
     ).toMatchObject(bundle.venue);
   });
 
-  it("accepts a bundle that still carries the venue's bump mode, as it checks only the venue fields it names", () => {
-    const older = {
-      ...bundle,
-      venue: { ...bundle.venue, location: { ...bundle.venue.location, bumpMode: "ticket" } },
-    };
-    expect(
-      decodeConfigurationBundle(
-        encodeConfigurationBundle(older, "a strong passphrase"),
-        "a strong passphrase",
-      ).venue,
-    ).toMatchObject(bundle.venue);
-  });
+  it.each([7, null])(
+    "accepts a bundle that still carries a venue bump mode, whatever its value, as it no longer checks it (%s)",
+    (leftover) => {
+      const older = {
+        ...bundle,
+        venue: { ...bundle.venue, location: { ...bundle.venue.location, bumpMode: leftover } },
+      };
+      expect(
+        decodeConfigurationBundle(
+          encodeConfigurationBundle(older, "a strong passphrase"),
+          "a strong passphrase",
+        ).venue,
+      ).toMatchObject(bundle.venue);
+    },
+  );
 
   it("rejects a short passphrase before creating an artifact", () => {
     expect(() => encodeConfigurationBundle(bundle, "short")).toThrowError(
