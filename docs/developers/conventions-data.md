@@ -3845,7 +3845,7 @@ rather than an empty list, and never throws (ruling R4b-1-1). `recordMisdated`
 record or cannot tell. A list's alert names the earliest listed record's sale; a "cannot tell" alert
 names no sale. `recordIncident` drops an alert whose source, device, code and sale match one still
 open, so **at most one "cannot tell" is open**, whatever sales the checks opened on. It asks for
-every sale since its start to be checked, so it keeps the earliest start: a "cannot tell" whose
+every sale since its start to be checked, so it keeps the earlier of the two starts: a "cannot tell" whose
 check opened before the open one's start has the open one marked handled by the system and is
 recorded in its place, which the managers' email duty emails as a new alert (it keeps one
 episode per alert id: "emails each alert of one code on its own, once",
