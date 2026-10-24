@@ -3,9 +3,10 @@ import { constraintTarget, customThemes, isUniqueViolation, nowIso, sameTarget }
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError, isUuid } from "@waitron/shared";
+import type { MonoRaster, PaperWidth } from "@waitron/printing";
 import { readThemeDocument, type ThemeChoices } from "@waitron/ui-core/theme";
 import { asc, eq, sql } from "drizzle-orm";
-import { printableLogoRasters } from "./receipt-store.js";
+import { printableLogoRasters, readLogoRaster, storedPictureMaxBytes } from "./receipt-store.js";
 import { parseThemeChoices, parseThemeName } from "./theme-input.js";
 import type { ReceiptLogoRasters } from "./types.js";
 
@@ -27,6 +28,13 @@ export interface ThemeInUse {
   readonly choices: ThemeChoices | null;
 }
 
+export interface PrintedThemeLogo {
+  /** The theme in use's light image, as the library names it. */
+  readonly name: string;
+  /** Its stored dots for the paper; `null` when they cannot be printed on it. */
+  readonly picture: MonoRaster | null;
+}
+
 // The `json` column's own reader runs JSON.parse and throws on a row that is not JSON.
 // json_remove rewrites the text, dropping a trailing NUL that JSON.parse refuses, so it runs only
 // on a row that holds dots.
@@ -38,6 +46,13 @@ const THEME_TEXT = sql<string | null>`case
 const STORED_TEXT = sql<
   string | null
 >`case when json_valid(${customThemes.theme}) then ${customThemes.theme} else null end`;
+
+function storedPicture(paper: PaperWidth) {
+  const value = sql`case when json_valid(${customThemes.theme}) then json_extract(${customThemes.theme}, ${`$.printedLogo."${paper}"`}) end`;
+  return sql<
+    string | null
+  >`case when typeof(${value}) = 'text' and length(cast(${value} as blob)) <= ${storedPictureMaxBytes(paper)} then ${value} else null end`;
+}
 
 const NAME_KEY: ConstraintTarget = { table: "custom_themes", columns: ["name_key"] };
 
@@ -124,6 +139,20 @@ export async function readThemeInUse(tx: Transaction): Promise<ThemeInUse | null
     .from(customThemes)
     .where(eq(customThemes.inUse, 1));
   return row === undefined ? null : { id: row.id, choices: choicesOf(row.theme) };
+}
+
+/** `null` when no theme is in use, it has no logo, or this release cannot read it. */
+export async function readPrintedThemeLogo(
+  tx: Transaction,
+  paperWidth: PaperWidth,
+): Promise<PrintedThemeLogo | null> {
+  const [row] = await tx
+    .select({ theme: THEME_TEXT, picture: storedPicture(paperWidth) })
+    .from(customThemes)
+    .where(eq(customThemes.inUse, 1));
+  const logo = row === undefined ? null : choicesOf(row.theme)?.logo;
+  if (logo === null || logo === undefined) return null;
+  return { name: logo.light, picture: readLogoRaster(row!.picture, paperWidth) };
 }
 
 export async function createCustomTheme(

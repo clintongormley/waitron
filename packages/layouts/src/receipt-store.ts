@@ -39,13 +39,16 @@ const TRIM = sql<string>`json_object(
   'printAddress', case when json_type(${DOCUMENT}, '$.printAddress') in ('true', 'false') then json_extract(${DOCUMENT}, '$.printAddress') else null end
 )`;
 
+/** The most bytes a stored picture for this paper can take as JSON text. */
+export function storedPictureMaxBytes(paper: PaperWidth): number {
+  return Math.ceil((Math.ceil(safeWidthDots(paper) / 8) * LOGO_MAX_HEIGHT_DOTS) / 3) * 4 + 128;
+}
+
 function storedPicture(paper: PaperWidth) {
   const value = sql`json_extract(${DOCUMENT}, ${`$.logoRasters."${paper}"`})`;
-  const maxBytes =
-    Math.ceil((Math.ceil(safeWidthDots(paper) / 8) * LOGO_MAX_HEIGHT_DOTS) / 3) * 4 + 128;
   return sql<
     string | null
-  >`case when typeof(${value}) = 'text' and length(cast(${value} as blob)) <= ${maxBytes} then ${value} else null end`;
+  >`case when typeof(${value}) = 'text' and length(cast(${value} as blob)) <= ${storedPictureMaxBytes(paper)} then ${value} else null end`;
 }
 
 function parseTrim(trim: string): ReceiptConfig {
@@ -93,7 +96,7 @@ function decodeLogoRaster(value: unknown, paperWidth: PaperWidth): MonoRaster | 
   return { widthDots, heightDots, bits };
 }
 
-function readLogoRaster(json: string | null, paperWidth: PaperWidth): MonoRaster | null {
+export function readLogoRaster(json: string | null, paperWidth: PaperWidth): MonoRaster | null {
   if (json === null) return null;
   try {
     return decodeLogoRaster(JSON.parse(json), paperWidth);

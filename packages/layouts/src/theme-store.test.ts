@@ -14,6 +14,7 @@ import {
   deleteCustomTheme,
   listCustomThemes,
   prepareThemeSave,
+  readPrintedThemeLogo,
   readThemeInUse,
   renameCustomTheme,
   saveCustomTheme,
@@ -750,5 +751,61 @@ describe("prepareThemeSave", () => {
       code: "theme.invalid",
       params: { field: "logo", reason: "bad_value" },
     });
+  });
+});
+
+describe("the theme in use's printed logo", () => {
+  const L = `${"e".repeat(64)}.png`;
+  const D = `${"f".repeat(64)}.png`;
+  const DOTS = {
+    "58mm": { widthDots: 8, heightDots: 1, data: "8A==" },
+    "80mm": { widthDots: 16, heightDots: 1, data: "8A8=" },
+  };
+  const WITH_LOGO = { ...LEMON, logo: { light: L, dark: D }, printedLogo: DOTS };
+
+  function read(paper: "58mm" | "80mm") {
+    return inTx((tx) => readPrintedThemeLogo(tx, paper));
+  }
+
+  it("answers null with no theme in use", async () => {
+    await insertRaw(JSON.stringify(WITH_LOGO));
+    expect(await read("58mm")).toBeNull();
+    expect(await read("80mm")).toBeNull();
+  });
+
+  it("answers null when the theme in use has no logo", async () => {
+    await insertRaw(JSON.stringify(LEMON), 1);
+    expect(await read("58mm")).toBeNull();
+  });
+
+  it("answers the light name and each paper's own dots", async () => {
+    await insertRaw(JSON.stringify(WITH_LOGO), 1);
+    expect(await read("58mm")).toEqual({
+      name: L,
+      picture: { widthDots: 8, heightDots: 1, bits: new Uint8Array([0xf0]) },
+    });
+    expect(await read("80mm")).toEqual({
+      name: L,
+      picture: { widthDots: 16, heightDots: 1, bits: new Uint8Array([0xf0, 0x0f]) },
+    });
+  });
+
+  it("answers the name and no picture for a paper whose dots cannot print", async () => {
+    const printedLogo = { ...DOTS, "80mm": { ...DOTS["80mm"], data: "x" } };
+    await insertRaw(JSON.stringify({ ...WITH_LOGO, printedLogo }), 1);
+    expect(await read("80mm")).toEqual({ name: L, picture: null });
+    expect(await read("58mm")).toEqual({
+      name: L,
+      picture: { widthDots: 8, heightDots: 1, bits: new Uint8Array([0xf0]) },
+    });
+  });
+
+  it.each([
+    "{broken",
+    JSON.stringify({ ...LEMON, logo: { light: L }, textScale: 112, printedLogo: DOTS }),
+  ])("answers null for a theme this release cannot read: %s", async (text) => {
+    await insertRaw(text, 1);
+    expect(await read("58mm")).toBeNull();
+    expect(await read("80mm")).toBeNull();
   });
 });

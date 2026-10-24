@@ -90,12 +90,13 @@ export {
   deleteCustomTheme,
   listCustomThemes,
   prepareThemeSave,
+  readPrintedThemeLogo,
   readThemeInUse,
   renameCustomTheme,
   saveCustomTheme,
   setThemeInUse,
 } from "./theme-store.js";
-export type { StoredTheme, ThemeInUse } from "./theme-store.js";
+export type { PrintedThemeLogo, StoredTheme, ThemeInUse } from "./theme-store.js";
 
 // Keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from the public
 // barrel (the rule is in packages/shared/src/errors.ts).
