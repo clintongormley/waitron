@@ -16,7 +16,6 @@ import {
 } from "./staff-notices.js";
 import type { AuthorityClockStatus, TimeHealth } from "./time-health.js";
 import type { FiscalOutboxState } from "@waitron/fiscal";
-import type { Transaction } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { sql } from "drizzle-orm";
 

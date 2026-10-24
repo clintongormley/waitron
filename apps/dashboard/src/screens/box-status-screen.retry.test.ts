@@ -40,6 +40,7 @@ function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
     notices: [],
     noticesUnavailable: [],
     filing: true,
+    clockStop: null,
     outbox: null,
     stream: { state: "off" },
     clock: {
