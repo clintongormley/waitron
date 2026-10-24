@@ -278,7 +278,8 @@ function emitLateMark(
 
 /**
  * Emit `items`, heading each with `GROUP n` where its group differs from the item before, `current`
- * before the first, and the late-send mark before each run of items with the same mark.
+ * before the first, and, where `lateMarks`, the late-send mark before each run of items with the
+ * same mark. A MOVED slip describes a move, not the agreed send, so it prints no mark.
  */
 function emitGrouped(
   b: ReturnType<typeof esc>,
@@ -286,6 +287,7 @@ function emitGrouped(
   columns: number,
   current: KitchenTicketItem | undefined,
   locale: string,
+  lateMarks: boolean,
 ): void {
   let mark: string | undefined;
   for (const item of items) {
@@ -297,7 +299,7 @@ function emitGrouped(
       mark = undefined;
     }
     current = item;
-    if (item.afterPeriod !== undefined && item.afterPeriod !== mark)
+    if (lateMarks && item.afterPeriod !== undefined && item.afterPeriod !== mark)
       emitLateMark(b, item.afterPeriod, columns, locale);
     mark = item.afterPeriod;
     emitItem(b, item, columns, locale);
@@ -339,7 +341,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
   const onlyGroup = onlyGroupOf(lists.flat());
   const emitList = (items: readonly KitchenTicketItem[]): void =>
-    emitGrouped(b, items, columns, onlyGroup, ticket.locale);
+    emitGrouped(b, items, columns, onlyGroup, ticket.locale, true);
 
   emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
   if (ticket.reprint === true) b.line("*** REPRINT ***");
@@ -590,7 +592,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));
   emitKitchenNote(b, slip.kitchenNote, columns);
-  emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale);
+  emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale, false);
   if (slip.held.length > 0) b.line("HOLD");
   for (const { group, items } of slip.held) {
     emitGroup(b, { ...items[0]!, group }, columns);

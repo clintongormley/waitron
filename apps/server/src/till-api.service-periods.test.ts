@@ -2044,6 +2044,72 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     ]);
   });
 
+  it("prints the mark on the own station's ticket of an extra on a dish confirmed late", async () => {
+    at(mondayAt("13:00"));
+    const c = await cocktailVenue();
+    const read = await sendAsTill(c.v, "GET", `/api/service-zones/${c.v.diningZone}/offers`);
+    const mojito = (read.body.offers as { id: string; productId: string }[]).find(
+      (offer) => offer.id === c.offer,
+    )!;
+    const { listId, mintId } = await withTransaction(suite.db, async (tx) => {
+      const garnish = (await createCategory(tx, { name: "Garnish" })).id;
+      await setRoutingCell(
+        tx,
+        c.v.cfg,
+        { row: { kind: "category", categoryId: garnish }, zoneId: null },
+        { kind: "station", stationId: c.downstairs.stationId },
+      );
+      const mint = await createProduct(tx, {
+        catalogueId: c.v.menus.Almuerzo,
+        categoryId: garnish,
+        name: "Mint",
+        pricingUnit: "each",
+        unitPrice: "0.50",
+        vatClass: "general",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Garnishes",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 1,
+          active: true,
+          items: [{ productId: mint.id, maxQuantity: 1, preselected: false, price: "0.50" }],
+        },
+        SIGNED_IN_TILL_LOCALE,
+      );
+      await writeProductModifiers(tx, mojito.productId, [{ kind: "extras", id: list.id }]);
+      await publishWorkingMenu(tx, c.v.menus.Almuerzo);
+      return { listId: list.id, mintId: mint.id };
+    });
+    at(mondayAt("14:05"));
+    const answer = await sendAsTill(c.v, "POST", `/api/parties/${c.partyId}/groups`, {
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, c.tabId)),
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(c.partyId),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups: [
+        {
+          lines: [
+            {
+              menuItemId: c.offer,
+              quantity: "1",
+              extras: [{ listId, picks: [{ productId: mintId, quantity: 1 }] }],
+            },
+          ],
+          release: "fire",
+        },
+      ],
+      lateSend: { menuIds: [c.v.menus.Almuerzo] },
+    });
+    expect(answer.status).toBe(200);
+    expect(await printed(c.downstairs.printerId)).toEqual([
+      expect.stringMatching(new RegExp(`\\nGROUP 1\\n${lunchMark}\\n1\\.000 x Mint\\n`)),
+    ]);
+  });
+
   it("prints the mark on the FIRE paper of a dish confirmed late and sent on hold", async () => {
     at(mondayAt("13:00"));
     const c = await cocktailVenue();

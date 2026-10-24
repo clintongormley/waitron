@@ -1692,6 +1692,37 @@ describe("a dish sent after its period", () => {
     ]);
   });
 
+  it("prints no mark on a MOVED slip, fired or held", () => {
+    const lines = printedLines(
+      formatMovedSlip(
+        {
+          stationName: "Grill",
+          fromNumber: "28",
+          fromText: "Mesa 91",
+          toText: "Mesa 92",
+          at: at.toISOString(),
+          items: [{ qty: 1, name: "Steak", afterPeriod: "Lunch" }],
+          held: [{ group: 2, items: [{ qty: 1, name: "Fish", group: 2, afterPeriod: "Lunch" }] }],
+          locale: "en-GB",
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** MOVED ***",
+      "Grill",
+      "Order 28",
+      "From: Mesa 91",
+      "To:   Mesa 92",
+      "14:30",
+      "1 x Steak",
+      "HOLD",
+      "GROUP 2",
+      "1 x Fish",
+      "",
+    ]);
+  });
+
   it("prints the mark again after each group heading", () => {
     const lines = printedLines(
       formatKitchenTicket(
