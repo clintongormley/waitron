@@ -110,7 +110,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
 it.each(["phone-portrait", "tablet-landscape"] as const)(
   "%s shows only the chosen zones, of every kind, and opens only on a saved start",
   (formFactor) => {
-    const chosen = { ...selection, selectedZoneIds: ["shop", "garden", "foreign"] };
+    const chosen = { ...selection, selectedZoneIds: ["garden", "shop", "foreign"] };
     const zones = { counterZoneIds: [], floorZoneIds: ["shop", "garden"], home: "floor" };
     expect(deviceZoneNavigation(formFactor, { ...chosen, startingZoneId: "shop" })).toEqual({
       ...zones,
@@ -122,6 +122,23 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     expect(
       deviceZoneNavigation(formFactor, { ...chosen, saved: false, startingZoneId: "garden" }),
     ).toEqual({ ...zones, startingZoneId: null });
+    expect(deviceZoneNavigation(formFactor, { ...chosen, startingZoneId: "room" })).toEqual({
+      ...zones,
+      startingZoneId: null,
+    });
+  },
+);
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "%s has no Floor home when no chosen zone is still offered",
+  (formFactor) => {
+    expect(
+      deviceZoneNavigation(formFactor, {
+        ...selection,
+        selectedZoneIds: ["foreign"],
+        startingZoneId: "foreign",
+      }),
+    ).toEqual({ counterZoneIds: [], floorZoneIds: [], startingZoneId: null, home: null });
   },
 );
 
