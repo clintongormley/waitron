@@ -582,6 +582,22 @@ describe("text size words", () => {
     const replaced = { light: { ...theme.light, "--wt-font-size-md": "20px" } };
     expect(textSizesLine(replaced)).toBe(fill("appearance.text_sizes", { ...sizes, md: "20" }));
   });
+
+  it("keeps each Spanish size and its px together with a no-break space", () => {
+    setLocale("es-ES");
+    const theme = deriveTheme({ ...WAITRON_CHOICES, textScale: 115 });
+    const line = textSizesLine(theme);
+    expect(line).toBe(esFill("appearance.text_sizes", { sm: "14", md: "16", lg: "21", xl: "25" }));
+    expect(line.match(/\d+\s+px/g)).toEqual(["14 px", "16 px", "21 px", "25 px"]);
+  });
+
+  it("refuses a theme that lacks one of the four sizes, naming it", () => {
+    const light = { ...deriveTheme(WAITRON_CHOICES).light };
+    delete light["--wt-font-size-lg"];
+    expect(() => textSizesLine({ light })).toThrow(
+      new RangeError("missing text size: --wt-font-size-lg"),
+    );
+  });
 });
 
 describe("the preview's sample name", () => {

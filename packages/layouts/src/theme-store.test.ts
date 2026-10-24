@@ -612,8 +612,12 @@ describe("a theme logo's printed dots", () => {
     await setup();
     const { textScale: _, ...noTextScale } = LEMON;
     void _;
-    await insertRaw(JSON.stringify(noTextScale));
-    expect((await inTx(listCustomThemes)).themes[0]!.choices!.textScale).toBe(100);
+    const id = await insertRaw(JSON.stringify(noTextScale), 1);
+    const choices = { ...LEMON, textScale: 100 };
+    expect((await inTx(listCustomThemes)).themes).toEqual([
+      { id, name: `Old ${id}`, choices, updatedAt: "2026-10-01T00:00:00.000Z" },
+    ]);
+    expect(await inTx(readThemeInUse)).toEqual({ id, choices });
   });
 
   it("a stored document with textScale 112 reads as unreadable", async () => {

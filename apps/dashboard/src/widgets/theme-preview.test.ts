@@ -420,6 +420,31 @@ it("each panel draws its text at the theme's sizes", async () => {
   }
 });
 
+it("a mounted preview's till button and bill line follow a change of text size", async () => {
+  const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
+    theme: deriveTheme(LUCIA_DARK_FIX),
+    name: "Bar Lucía",
+  });
+  for (const [textScale, md, sm] of [
+    [100, "14px", "12px"],
+    [130, "18px", "16px"],
+    [100, "14px", "12px"],
+  ] as const) {
+    el.theme = deriveTheme({ ...LUCIA_DARK_FIX, textScale });
+    await el.updateComplete;
+    for (const mode of ["light", "dark"] as const) {
+      const button = tile(el, mode);
+      expect([
+        textScale,
+        mode,
+        fontSize(button.querySelector(".tile-name")!),
+        fontSize(button.querySelector(".tile-price")!),
+        fontSize(billLine(el, mode).querySelector(".bill-name")!),
+      ]).toEqual([textScale, mode, md, sm, md]);
+    }
+  }
+});
+
 it("each panel shows a till button and a bill line", async () => {
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {

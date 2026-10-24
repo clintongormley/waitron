@@ -98,7 +98,7 @@ export function cornerRadii(corners: Corners, defaults: WaitronDefaults): Record
 export function fontSizes(textScale: TextScale, defaults: WaitronDefaults): Record<string, string> {
   return Object.fromEntries(
     THEME_FONT_SIZES.map((name) => {
-      const match = /^(\d+)px$/.exec(String(defaults.structure[name]));
+      const match = /^(\d+)px$/.exec(defaults.structure[name] ?? "");
       if (match === null) throw new RangeError(`not a whole-pixel size: ${name}`);
       return [name, `${Math.floor((Number(match[1]) * textScale + 50) / 100)}px`];
     }),

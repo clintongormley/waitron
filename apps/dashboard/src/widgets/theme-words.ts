@@ -247,8 +247,12 @@ export function textScaleSpoken(n: number): string {
   return fill("appearance.text_size_spoken", { n: String(n) });
 }
 
-const pixels = (theme: Pick<DerivedTheme, "light">, size: string) =>
-  (theme.light[`--wt-font-size-${size}`] as string).replace(/px$/, "");
+function pixels(theme: Pick<DerivedTheme, "light">, size: string): string {
+  const name = `--wt-font-size-${size}`;
+  const value = theme.light[name];
+  if (value === undefined) throw new RangeError(`missing text size: ${name}`);
+  return value.replace(/px$/, "");
+}
 
 export function textSizesLine(theme: Pick<DerivedTheme, "light">): string {
   return fill("appearance.text_sizes", {
