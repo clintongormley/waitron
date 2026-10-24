@@ -8,6 +8,7 @@ import {
   fixAll,
   type ThemeChoices,
   type ThemeWarning,
+  WAITRON_CHOICES,
 } from "./theme.js";
 import { colourToken, THEME_COLOURS } from "./tokens.js";
 import { WAITRON_DEFAULTS } from "./waitron.js";
@@ -37,7 +38,8 @@ function holds(reference: ReferenceCase) {
     light: { ...WAITRON_DEFAULTS.light, ...reference.overrides?.light },
     dark: { ...WAITRON_DEFAULTS.dark, ...reference.overrides?.dark },
   };
-  const theme = deriveThemeFrom(defaults, reference.choices);
+  const choices: ThemeChoices = { ...WAITRON_CHOICES, ...reference.choices };
+  const theme = deriveThemeFrom(defaults, choices);
   for (const mode of MODES) {
     for (const colour of THEME_COLOURS) {
       expect(theme[mode][colourToken(colour)], `${mode} ${colour}`).toBe(
@@ -48,8 +50,8 @@ function holds(reference: ReferenceCase) {
   expect(theme.warnings).toStrictEqual(reference.warnings);
   expect(theme.tintStrength).toStrictEqual(reference.tint);
   if (reference.fixAll !== undefined) {
-    expect(fixAll(defaults, reference.choices)).toStrictEqual(reference.fixAll);
-    expect(canFixAll(defaults, reference.choices)).toBe(reference.canFixAll);
+    expect(fixAll(defaults, choices)).toStrictEqual({ ...WAITRON_CHOICES, ...reference.fixAll });
+    expect(canFixAll(defaults, choices)).toBe(reference.canFixAll);
   }
 }
 

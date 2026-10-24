@@ -49,6 +49,7 @@ describe("Waitron's look", () => {
       corners: "standard",
       handSet: { light: {}, dark: {} },
       logo: null,
+      textScale: 100,
     });
   });
 

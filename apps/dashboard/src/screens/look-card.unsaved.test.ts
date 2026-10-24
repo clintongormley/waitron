@@ -34,6 +34,7 @@ const LUCIA: ThemeChoices = {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const derived = deriveTheme(LUCIA);
 const lucia: ThemeView = {

@@ -2,7 +2,13 @@ import { hexToRgb } from "./colour.js";
 import { MODES, type Mode, type WaitronDefaults } from "./defaults.js";
 import { type Memo, type ModeResult, settleMode, withMemo } from "./derive.js";
 import { nextFix, warningsFor, warns } from "./warnings.js";
-import { type Corners, type ThemeColour, THEME_COLOURS, handTokens } from "./tokens.js";
+import {
+  type Corners,
+  type TextScale,
+  type ThemeColour,
+  THEME_COLOURS,
+  handTokens,
+} from "./tokens.js";
 
 export const BACKGROUNDS = ["neutral", "tinted"] as const;
 
@@ -22,6 +28,7 @@ export interface ThemeChoices {
   readonly corners: Corners;
   readonly handSet: Readonly<Record<Mode, Readonly<Partial<Record<ThemeColour, string>>>>>;
   readonly logo: ThemeLogo | null;
+  readonly textScale: TextScale;
 }
 
 export const WAITRON_CHOICES: ThemeChoices = {
@@ -31,6 +38,7 @@ export const WAITRON_CHOICES: ThemeChoices = {
   corners: "standard",
   handSet: { light: {}, dark: {} },
   logo: null,
+  textScale: 100,
 };
 
 export type WarningField = "brandColor" | `handSet.${Mode}.${ThemeColour}`;

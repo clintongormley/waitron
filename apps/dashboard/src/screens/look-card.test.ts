@@ -57,6 +57,7 @@ const LUCIA: ThemeChoices = {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
 const DARK_OWN = theme("t-lucia", "Bar Lucía", {
@@ -517,6 +518,7 @@ describe("editing the Look card in place", () => {
       corners: "round",
       logo: null,
       handSet: { light: {}, dark: {} },
+      textScale: 100,
     });
     expect(q(el, "[data-test=saved-theme]")).not.toBeNull();
     expect(heard).toHaveBeenCalledTimes(1);

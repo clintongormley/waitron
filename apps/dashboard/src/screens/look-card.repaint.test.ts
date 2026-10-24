@@ -17,6 +17,7 @@ const LUCIA: ThemeChoices = {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const SAVED: ThemeChoices = { ...LUCIA, brandColor: "#b12525", brandFix: {} };
 

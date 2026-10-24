@@ -1,6 +1,6 @@
 import { MODES, type Mode } from "./defaults.js";
 import { BACKGROUNDS, normaliseChoices, type ThemeChoices, type ThemeLogo } from "./theme.js";
-import { CORNER_CHOICES, THEME_COLOURS } from "./tokens.js";
+import { CORNER_CHOICES, isTextScale, THEME_COLOURS } from "./tokens.js";
 
 export const THEME_DOCUMENT_KEYS = [
   "brandColor",
@@ -9,6 +9,7 @@ export const THEME_DOCUMENT_KEYS = [
   "corners",
   "handSet",
   "logo",
+  "textScale",
 ] as const satisfies readonly (keyof ThemeChoices)[];
 
 export type ThemeRefusalReason =
@@ -141,7 +142,10 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult {
         : null) ??
     checkHandSet(input.handSet) ??
     checkFixes(input) ??
-    checkLogo(logo);
+    checkLogo(logo) ??
+    (input.textScale !== undefined && !isTextScale(input.textScale)
+      ? refuse("textScale", "bad_value")
+      : null);
   if (refusal) return refusal;
   const own = logo as ThemeLogo | null;
   const answered: ThemeLogo | null =
@@ -152,6 +156,10 @@ export function readThemeDocument(input: unknown): ThemeDocumentResult {
         : { light: own.light };
   return {
     ok: true,
-    choices: normaliseChoices({ ...input, logo: answered } as unknown as ThemeChoices),
+    choices: normaliseChoices({
+      ...input,
+      logo: answered,
+      textScale: input.textScale ?? 100,
+    } as unknown as ThemeChoices),
   };
 }

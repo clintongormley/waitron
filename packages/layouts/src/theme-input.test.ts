@@ -18,6 +18,7 @@ const NEUTRAL = {
   corners: "standard",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 
 describe("parseThemeChoices", () => {

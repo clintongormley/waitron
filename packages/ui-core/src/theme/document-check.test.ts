@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readThemeDocument, THEME_DOCUMENT_KEYS } from "./document-check.js";
 import { BACKGROUNDS, WAITRON_CHOICES } from "./theme.js";
-import { CORNER_CHOICES } from "./tokens.js";
+import { CORNER_CHOICES, TEXT_SCALES } from "./tokens.js";
 
 const L = "a".repeat(64) + ".webp";
 const D = "b".repeat(64) + ".png";
@@ -26,7 +26,9 @@ describe("readThemeDocument", () => {
       "corners",
       "handSet",
       "logo",
+      "textScale",
     ]);
+    expect(TEXT_SCALES).toEqual([100, 105, 110, 115, 120, 125, 130]);
     expect(BACKGROUNDS).toEqual(["neutral", "tinted"]);
     expect(CORNER_CHOICES).toEqual(["square", "standard", "round"]);
   });
@@ -61,6 +63,36 @@ describe("readThemeDocument", () => {
     });
   });
 
+  it("accepts every text size", () => {
+    for (const textScale of TEXT_SCALES) {
+      expect(readThemeDocument({ ...WAITRON_CHOICES, textScale })).toEqual({
+        ok: true,
+        choices: { ...WAITRON_CHOICES, textScale },
+      });
+    }
+  });
+
+  it("reads a document without a text size as 100", () => {
+    const { textScale: _, ...noTextScale } = WAITRON_CHOICES;
+    void _;
+    expect(readThemeDocument(noTextScale)).toEqual({ ok: true, choices: WAITRON_CHOICES });
+    expect(readThemeDocument({ ...WAITRON_CHOICES, textScale: undefined })).toEqual({
+      ok: true,
+      choices: WAITRON_CHOICES,
+    });
+  });
+
+  it.each<unknown>([112, 95, 135, 0, 100.5, "115", null, true, [115]])(
+    "refuses a text size off the list (%j)",
+    (textScale) => {
+      expect(readThemeDocument({ ...WAITRON_CHOICES, textScale })).toEqual({
+        ok: false,
+        field: "textScale",
+        reason: "bad_value",
+      });
+    },
+  );
+
   it("accepts every background and corner choice", () => {
     for (const background of BACKGROUNDS) {
       for (const corners of CORNER_CHOICES) {
@@ -80,6 +112,7 @@ describe("readThemeDocument", () => {
       corners: "round",
       handSet: { light: { bg: "#f8f1e1", text: "#101010" }, dark: { surface: "#202020" } },
       logo: null,
+      textScale: 100,
     };
     expect(readThemeDocument(sent)).toEqual({ ok: true, choices: sent });
   });
@@ -114,7 +147,9 @@ describe("readThemeDocument", () => {
     [{ ...WAITRON_CHOICES, logo: { light: null } }, "logo.light", "bad_value"],
     [{ ...WAITRON_CHOICES, logo: { light: L, dark: null } }, "logo.dark", "bad_value"],
     [{ ...WAITRON_CHOICES, logo: { light: L, dark: 7 } }, "logo.dark", "bad_value"],
-    [{ ...WAITRON_CHOICES, textScale: 110 }, "theme", "unknown_key"],
+    [{ ...WAITRON_CHOICES, notAThemeKey: 110 }, "theme", "unknown_key"],
+    [{ ...WAITRON_CHOICES, textScale: 1 }, "textScale", "bad_value"],
+    [{ ...WAITRON_CHOICES, textScale: 112 }, "textScale", "bad_value"],
     [{ ...WAITRON_CHOICES, text: {} }, "theme", "unknown_key"],
     [{ ...WAITRON_CHOICES, printedLogo: null }, "theme", "unknown_key"],
     [withoutBrand, "brandColor", "missing"],
@@ -201,6 +236,11 @@ describe("readThemeDocument", () => {
   });
 
   it("answers the first refusal in its fixed order", () => {
+    expect(readThemeDocument({ ...WAITRON_CHOICES, logo: 7, textScale: 112 })).toEqual({
+      ok: false,
+      field: "logo",
+      reason: "bad_value",
+    });
     expect(readThemeDocument({ ...WAITRON_CHOICES, brandFix: { light: true }, logo: 7 })).toEqual({
       ok: false,
       field: "brandFix.light",

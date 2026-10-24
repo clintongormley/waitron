@@ -41,6 +41,13 @@ export const handTokens = (
 ): Record<string, string> =>
   Object.fromEntries(Object.entries(values).map(([key, value]) => [colourToken(key), value]));
 
+export const TEXT_SCALES = [100, 105, 110, 115, 120, 125, 130] as const;
+
+export type TextScale = (typeof TEXT_SCALES)[number];
+
+export const isTextScale = (value: unknown): value is TextScale =>
+  (TEXT_SCALES as readonly unknown[]).includes(value);
+
 export const THEME_RADII = ["--wt-radius-sm", "--wt-radius-md", "--wt-radius-lg"] as const;
 
 export const THEME_TOKENS: readonly string[] = [...THEME_COLOUR_TOKENS, ...THEME_RADII];

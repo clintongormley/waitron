@@ -30,6 +30,7 @@ const lucia = theme("t-lucia", "Bar Lucía", {
   corners: "round",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 });
 const twoFixes = theme("t-hand", "By hand", {
   ...WAITRON_CHOICES,

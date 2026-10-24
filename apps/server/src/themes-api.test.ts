@@ -48,6 +48,7 @@ const LEMON: ThemeChoices = {
   corners: "standard",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a" };
 const LEMON_WARNING = {
@@ -180,7 +181,9 @@ describe("the custom theme routes", () => {
         "fix_with_hand_set",
       ],
       [{ ...LEMON, logo: "x" }, "logo", "bad_value"],
-      [{ ...LEMON, textScale: 1 }, "theme", "unknown_key"],
+      [{ ...LEMON, notAThemeKey: 1 }, "theme", "unknown_key"],
+      [{ ...LEMON, textScale: 1 }, "textScale", "bad_value"],
+      [{ ...LEMON, textScale: 112 }, "textScale", "bad_value"],
       [
         { ...LEMON, handSet: { light: { evil: "#ff0000" }, dark: {} } },
         "handSet.light",

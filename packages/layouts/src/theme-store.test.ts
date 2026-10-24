@@ -30,6 +30,7 @@ const LEMON: ThemeChoices = {
   corners: "standard",
   logo: null,
   handSet: { light: {}, dark: {} },
+  textScale: 100,
 };
 
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a", background: "tinted" };
@@ -605,6 +606,22 @@ describe("a theme logo's printed dots", () => {
     const id = await insertRaw(JSON.stringify(noLogo), 1);
     expect((await inTx(listCustomThemes)).themes[0]!.choices).toEqual({ ...LEMON, logo: null });
     expect(await inTx(readThemeInUse)).toEqual({ id, choices: { ...LEMON, logo: null } });
+  });
+
+  it("a stored document without a text size reads as 100", async () => {
+    await setup();
+    const { textScale: _, ...noTextScale } = LEMON;
+    void _;
+    await insertRaw(JSON.stringify(noTextScale));
+    expect((await inTx(listCustomThemes)).themes[0]!.choices!.textScale).toBe(100);
+  });
+
+  it("a stored document with textScale 112 reads as unreadable", async () => {
+    await setup();
+    const id = await insertRaw(JSON.stringify({ ...LEMON, textScale: 112 }));
+    expect((await inTx(listCustomThemes)).themes).toEqual([
+      { id, name: `Old ${id}`, choices: null, updatedAt: "2026-10-01T00:00:00.000Z" },
+    ]);
   });
 
   it("a sent printedLogo is refused as an unknown key", async () => {
