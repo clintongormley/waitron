@@ -858,6 +858,27 @@ describe("image-upload as a venue logo", () => {
     },
   );
 
+  it.each(["light", "dark"] as const)(
+    "on a %s dashboard, edges the plate with the border colour and stacks Replace above Remove beside it",
+    async (theme) => {
+      const { el } = await venueLogo({ image: mediaTestReference("own.png") }, theme);
+      const style = getComputedStyle(plate(el)!);
+      expect(style.borderTopStyle).toBe("solid");
+      expect(style.borderTopWidth).toBe("1px");
+      const probe = document.createElement("span");
+      probe.style.color = "var(--wt-color-border)";
+      el.shadowRoot!.append(probe);
+      expect(style.borderTopColor).toBe(getComputedStyle(probe).color);
+      probe.remove();
+      const plateBox = plate(el)!.getBoundingClientRect();
+      const replaceBox = replace(el)!.getBoundingClientRect();
+      const removeBox = remove(el)!.getBoundingClientRect();
+      expect(replaceBox.left).toBeGreaterThanOrEqual(plateBox.right);
+      expect(removeBox.left).toBe(replaceBox.left);
+      expect(removeBox.top).toBeGreaterThanOrEqual(replaceBox.bottom);
+    },
+  );
+
   it("a name the library no longer resolves draws an empty plate, and Replace still opens the picker", async () => {
     const gone = mediaTestReference("gone.png");
     vi.mocked(fetch).mockImplementation(

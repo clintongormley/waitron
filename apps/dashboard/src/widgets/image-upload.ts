@@ -159,8 +159,14 @@ export class ImageUpload extends LitElement {
       }
       .plate {
         padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-logo-plate);
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
       }
       .plate img {
         display: block;
@@ -340,26 +346,28 @@ export class ImageUpload extends LitElement {
     return html`<div class="plate">
         <img src=${liveMediaImage(this.image, "display")} alt="" />
       </div>
-      <wt-button
-        data-test="replace-image"
-        variant="secondary"
-        aria-label=${this.replaceName || nothing}
-        aria-invalid=${invalid}
-        ?disabled=${this.disabled}
-        @click=${() => this.#setOpen(true)}
-        >${t("appearance.logo_replace")}</wt-button
-      >
-      <wt-button
-        data-test="remove-image"
-        variant="secondary"
-        aria-label=${this.removeName || nothing}
-        ?disabled=${this.disabled}
-        @click=${() => {
-          this.#remove();
-          void this.#focusLogo();
-        }}
-        >${t("image.remove_logo")}</wt-button
-      >`;
+      <div class="stack">
+        <wt-button
+          data-test="replace-image"
+          variant="secondary"
+          aria-label=${this.replaceName || nothing}
+          aria-invalid=${invalid}
+          ?disabled=${this.disabled}
+          @click=${() => this.#setOpen(true)}
+          >${t("appearance.logo_replace")}</wt-button
+        >
+        <wt-button
+          data-test="remove-image"
+          variant="secondary"
+          aria-label=${this.removeName || nothing}
+          ?disabled=${this.disabled}
+          @click=${() => {
+            this.#remove();
+            void this.#focusLogo();
+          }}
+          >${t("image.remove_logo")}</wt-button
+        >
+      </div>`;
   }
 
   override render() {
