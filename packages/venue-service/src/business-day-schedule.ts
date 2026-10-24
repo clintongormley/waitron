@@ -25,7 +25,6 @@ import {
 import { addDays } from "./hours-rules.js";
 import { minuteOfServiceDay, parseClosedRanges, rangeSpan } from "./service-day.js";
 import { serviceDayWallContext, settledClock } from "./service-day-context.js";
-import { periodExtensions } from "./schema/period-extensions.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import "./errors.js";
 
@@ -293,21 +292,6 @@ export async function keptOpenConflicts(
   effectiveBusinessDay: string,
 ): Promise<BusinessDayClockConflict[]> {
   const tonight = addDays(effectiveBusinessDay, -1);
-  const periods = await tx
-    .select({
-      departmentId: periodExtensions.departmentId,
-      departmentName: departments.name,
-      periodId: periodExtensions.periodId,
-      periodName: menuPeriods.name,
-      endsAt: periodExtensions.endsAt,
-    })
-    .from(periodExtensions)
-    .innerJoin(departments, eq(departments.id, periodExtensions.departmentId))
-    .innerJoin(menuPeriods, eq(menuPeriods.id, periodExtensions.periodId))
-    .where(
-      and(eq(departments.locationId, cfg.locationId), eq(periodExtensions.businessDay, tonight)),
-    )
-    .orderBy(asc(periodExtensions.id));
   const zones = await tx
     .select({
       departmentId: zoneServicePolicies.departmentId,
@@ -329,7 +313,7 @@ export async function keptOpenConflicts(
     .orderBy(asc(zoneExtensions.id));
   const oldCutover = cutoverForBusinessDay(before, tonight);
   const newEnd = serviceDayWallContext(candidate, tonight).endMinute;
-  return [...periods, ...zones]
+  return zones
     .filter((row) => (minuteOfServiceDay(row.endsAt, oldCutover) || 1440) > newEnd)
     .map((row) => ({
       ...row,

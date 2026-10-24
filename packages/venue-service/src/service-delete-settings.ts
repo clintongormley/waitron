@@ -199,10 +199,6 @@ async function settings(
     .from(zoneDays)
     .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
     .where(and(inArray(zoneDays.zoneId, zoneIds), isNotNull(zoneDays.seasonId)));
-  const periodExtra = await tx
-    .select()
-    .from(periodExtensions)
-    .where(eq(periodExtensions.departmentId, departmentId ?? ""));
   const departmentPolicy = await tx
     .select()
     .from(departmentSalePolicies)
@@ -339,7 +335,6 @@ async function settings(
       count: new Set([...departmentSeasons, ...zoneSeasons].map((row) => row.seasonId)).size,
       targets: [],
     },
-    { key: "period_extensions", count: periodExtra.length, targets: [] },
     { key: "department_policy", count: departmentPolicy.length, targets: [] },
     { key: "service_steps", count: steps.length, targets: [] },
     {

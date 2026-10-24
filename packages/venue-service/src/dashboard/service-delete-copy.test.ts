@@ -68,11 +68,6 @@ it.each([
   ],
   ["seasons", "Removes hours in {count} seasons.", "Quita los horarios de {count} temporadas."],
   [
-    "period_extensions",
-    "Removes {count} period extensions.",
-    "Quita {count} extensiones de periodos.",
-  ],
-  [
     "department_policy",
     "Removes {count} department service settings.",
     "Quita {count} ajustes de servicio del departamento.",
