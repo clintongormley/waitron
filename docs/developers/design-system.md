@@ -3496,9 +3496,12 @@ a request refusal alone leaves retry available.
 Keep the dashboard's branded banner across the full page width, on the login screen and every
 authenticated screen. In Demo and Preparation, put `wt-demo-bar` above it; in Live, the banner is
 at the top. The menu and page content belong underneath the banner. The
-banner shows the canonical Waitron lockup and the deployment tenant's legal name, not a location
-name: one deployment database represents one tenant, while that tenant can contain several
-locations. Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
+banner shows the venue's logo when one is set (`wt-venue-logo`, `size="banner"`, alt empty,
+Waitron's lockup in its fallback slot), else the canonical Waitron lockup, and then the deployment
+tenant's legal name, not a location name: one deployment database represents one tenant, while
+that tenant can contain several locations. Before the first answer about the theme in use, the
+logo's place is an empty `wt-venue-logo` box of the banner's height.
+Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
 holding Account settings, Theme, Language and Log out — at the banner's trailing (right-hand in the shipped locales)
 edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
 two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when

@@ -85,6 +85,7 @@ describe("the user guides", () => {
       "look",
       "edit",
       "logo",
+      "logo-screens",
       "advanced",
       "hard-to-read",
       "save",

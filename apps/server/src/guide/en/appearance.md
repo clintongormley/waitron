@@ -99,8 +99,33 @@ name: the main logo on the light version, and on the dark version the version fo
 the main logo on its light plate. With no logo, the strip shows Waitron's own logo.
 
 **Save** and **Cancel** treat the logo as they do the other choices. The logo is saved with the
-theme. Showing it in the dashboard's banner, on the tills and on the sign-in screens comes in a
-later update.
+theme.
+
+## Where your logo shows {#logo-screens}
+
+The logo of the theme in use shows in these places:
+
+- **The dashboard's banner**, before the business's legal name, both when you are signed in and on
+  the sign-in page.
+- **A handheld's top bar**, where the word "Waitron" was. It is the first thing the bar leaves out
+  when it is short of room, and a narrow screen, such as a phone's, leaves it out altogether, as it
+  did the word.
+- **The sign-in screen of a till or handheld**, above the device's name and the list of names.
+- **"Powered by Waitron"**, a line under the dashboard's sign-in form and at the foot of a till's or
+  handheld's sign-in screen, which shows while a logo is set.
+
+A cash register's top bar shows no logo yet.
+
+Each screen shows the light or the dark image by its own **Theme** setting. A dark screen, when the
+theme has no version for dark screens, shows the main logo on a white plate.
+
+Screens follow a new or removed logo when they follow a change of colours, as **Save a theme**
+above describes.
+
+When a screen cannot load the picture, the dashboard's banner shows Waitron's logo, a handheld's bar
+shows the word "Waitron", and a till's or handheld's sign-in screen shows no logo, with no gap where
+it would be. No "Powered by" line shows. The screen tries the picture again every minute, and shows
+it once it loads.
 
 ## Set colours by hand {#advanced}
 
