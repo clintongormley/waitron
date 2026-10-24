@@ -3347,9 +3347,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   network. It has not run from the box's container, and no receipt printer that answers IPP has
   been captured, so "A4 or letter means office printer" is a heuristic with one data point.
 
-- **A552. Invoices on the owner's office printer are unchecked with the committed code.** Owed on
-  the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR
-  measured with a ruler and scanned with a phone. Left open by A231q.
+- **A552. Invoices on the owner's office printer are unchecked with the committed code.** Check
+  the HP Color LaserJet MFP M181fw with a long PDF invoice, measuring and scanning its QR, and
+  check what Waitron reports with an empty tray and when power is lost mid-job. Left open by A231q.
   [Detail](backlog/printers.md#a552-invoices-on-the-owners-office-printer-are-unchecked-with-the-committed-code)
 
 - **A553. How long the box takes to draw one A4 raster page, and its peak memory, at 300 and

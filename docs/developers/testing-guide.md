@@ -1494,6 +1494,16 @@ call 50 ms later and checks that the first timeout leaves the second signal live
 Run `pnpm --filter @waitron/server exec vitest run src/backup-sweep.network.test.ts
 src/backup-destination-call.test.ts`.
 
+The IPP held-job reason cases keep their HTTP exchanges real but control `setTimeout` and
+`clearTimeout`. Wait for the hold callback before advancing the held polling interval, then wait
+for the completed outcome. These cases check reason classification; the separate timeout cases
+check the polling bounds.
+
+A1078 reproduced `unknown/timeout` instead of `sent` by blocking the fake printer for 250 ms
+before its `interlock-open-error` reply, exceeding the case's 200 ms poll bound. The same pause
+passes with controlled timers and unchanged assertions. This reproduces main CI run
+`40102704543`'s symptom; that run recorded no request timeline, so its exact delay is unknown.
+
 **Printing on real hardware**
 
 ## How long a job of pictures takes to print on the box is not measured
