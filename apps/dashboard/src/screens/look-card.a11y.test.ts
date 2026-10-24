@@ -1,9 +1,10 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
-import { fill, setLocale } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./look-card.js";
 
@@ -43,7 +44,13 @@ const christmas = theme("t-xmas", "Christmas", {
   brandColor: "#7a1f2b",
   brandFix: { dark: true },
 });
+const withLogo = theme("t-logo", "With a logo", {
+  ...WAITRON_CHOICES,
+  logo: { light: mediaTestReference("lucia.png"), dark: mediaTestReference("lucia-dark.png") },
+});
 const inUse = (view: ThemeView): ThemeList => ({ themes: [view], inUse: view.id });
+
+useMediaPresentations();
 
 const q = (el: Card, selector: string) => el.shadowRoot!.querySelector(selector);
 
@@ -89,7 +96,41 @@ async function typeHand(el: Card, mode: string, key: string, value: string) {
   await el.updateComplete;
 }
 
-const states: Record<string, { list: ThemeList; reach: (el: Card) => Promise<string> }> = {
+const states: Record<
+  string,
+  { list: ThemeList; reach: (el: Card) => Promise<string>; api?: () => DashboardApi }
+> = {
+  "the editor with a logo and a dark one": {
+    list: inUse(withLogo),
+    reach: async () => "dashboard-theme-logo-field",
+  },
+  "a logo refusal shown": {
+    list: inUse(withLogo),
+    api: () =>
+      ({
+        saveTheme: vi.fn(async () => {
+          throw {
+            code: "theme.invalid",
+            params: { field: "logo.light", reason: "image_not_found" },
+          };
+        }),
+      }) as unknown as DashboardApi,
+    reach: async (el) => {
+      const square = [
+        ...q(el, "wt-segmented-control[name=corners]")!.shadowRoot!.querySelectorAll("button"),
+      ].at(-1)!;
+      await userEvent.click(square);
+      await el.updateComplete;
+      await press(el, "save");
+      const field = q(
+        el,
+        "dashboard-theme-logo-field",
+      ) as HTMLElementTagNameMap["dashboard-theme-logo-field"];
+      await expect.poll(() => field.errors.light).toBe(t("appearance.logo_not_found"));
+      await field.updateComplete;
+      return "dashboard-theme-logo-field";
+    },
+  },
   "editing Bar Lucía": { list: inUse(lucia), reach: async () => "[data-test=brand-fixed-dark]" },
   "the lemon warning": {
     list: inUse(lucia),
@@ -231,10 +272,10 @@ afterEach(() => {
 
 it.each(cases)("Look card: $state, $locale / $mode", async ({ mode, locale, state }) => {
   setLocale(locale);
-  const { list, reach } = states[state]!;
+  const { list, reach, api } = states[state]!;
   const { el, host } = await mountWidget<Card>(
     "dashboard-look-card",
-    { api: {} as DashboardApi, list, canEdit: true },
+    { api: api?.() ?? ({} as DashboardApi), list, canEdit: true },
     mode,
   );
   await press(el, "edit");

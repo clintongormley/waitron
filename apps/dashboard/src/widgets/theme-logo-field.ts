@@ -29,10 +29,12 @@ export class ThemeLogoField extends LitElement {
         padding: 0;
         margin-block-end: var(--wt-space-2);
         font: inherit;
-        font-weight: var(--wt-font-weight-medium);
       }
       fieldset.dark {
         margin-block-start: var(--wt-space-3);
+      }
+      fieldset.dark > legend {
+        font-size: var(--wt-font-size-sm);
       }
       .hint {
         margin: 0;

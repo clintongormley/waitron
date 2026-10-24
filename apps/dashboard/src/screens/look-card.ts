@@ -31,6 +31,7 @@ import {
   type Mode,
   type ThemeChoices,
   type ThemeColour,
+  type ThemeLogo,
 } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
@@ -46,6 +47,7 @@ import {
   openDraft,
   pickBrand,
   resetAllHand,
+  setLogo,
   sameDraft,
   setBackground,
   setCorners,
@@ -58,6 +60,7 @@ import {
   type LookDraft,
 } from "../widgets/look-draft.js";
 import "../widgets/theme-advanced.js";
+import "../widgets/theme-logo-field.js";
 import type { HandAction, HandFixed, ThemeAdvanced } from "../widgets/theme-advanced.js";
 import { copyName } from "../widgets/theme-names.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -82,6 +85,8 @@ const PRIMARY = "--wt-color-primary";
 
 type Editing = { id: string; name: string } | { id: null; from: "in-use" | "new" };
 type Target = "save" | "save-as-new";
+type LogoRefusal = { field: "logo.light" | "logo.dark"; message: string };
+type LogoErrors = { light?: string; dark?: string };
 
 function chip(colour: string): TemplateResult {
   return html`<span class="chip" aria-hidden="true" style="background:${colour}"></span>`;
@@ -236,6 +241,7 @@ export class LookCard extends LitElement {
   @state() private submitted = false;
   @state() private refusedCode = "";
   @state() private refusedHand: HandField | "" = "";
+  @state() private refusedLogo: LogoRefusal | null = null;
   @state() private actionError = "";
   @state() private submitting = false;
   @state() private asking = false;
@@ -243,6 +249,8 @@ export class LookCard extends LitElement {
   @state() private handFixed: HandFixes = {};
   @state() private showKeptNote = false;
   #handErrors: HandErrors = {};
+  #logoErrorsFrom: LogoRefusal | null = null;
+  #logoErrorsShown: LogoErrors = {};
   #editing?: Editing;
   #expected?: LookDraft;
   #derived?: DerivedTheme;
@@ -338,6 +346,7 @@ export class LookCard extends LitElement {
     this.submitted = false;
     this.refusedCode = "";
     this.refusedHand = "";
+    this.refusedLogo = null;
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -411,6 +420,7 @@ export class LookCard extends LitElement {
     this.submitted = false;
     this.refusedCode = "";
     this.refusedHand = "";
+    this.refusedLogo = null;
     this.actionError = "";
     this.asking = false;
     this.handFixed = {};
@@ -448,6 +458,7 @@ export class LookCard extends LitElement {
     this.draft = after;
     if (code) this.refusedCode = "";
     if (hand && after !== before) this.refusedHand = "";
+    if (after.choices.logo !== before.choices.logo) this.refusedLogo = null;
     if (handNames(after.choices).length === 0) this.showKeptNote = false;
     else if (
       after.choices.brandColor !== before.choices.brandColor ||
@@ -536,6 +547,18 @@ export class LookCard extends LitElement {
     if (this.refusedHand) errors[this.refusedHand] = t("appearance.bad_code");
     if (!sameErrors(errors, this.#handErrors)) this.#handErrors = errors;
     return this.#handErrors;
+  }
+  /** The same object while the refusal holds, so the field is not redrawn for nothing. */
+  #logoErrors(): LogoErrors {
+    const refused = this.refusedLogo;
+    if (refused !== this.#logoErrorsFrom) {
+      this.#logoErrorsFrom = refused;
+      this.#logoErrorsShown =
+        refused === null
+          ? {}
+          : { [refused.field === "logo.light" ? "light" : "dark"]: refused.message };
+    }
+    return this.#logoErrorsShown;
   }
   #advanced(): ThemeAdvanced {
     return this.renderRoot.querySelector<ThemeAdvanced>("dashboard-theme-advanced")!;
@@ -664,6 +687,7 @@ export class LookCard extends LitElement {
     this.submitted = true;
     this.refusedCode = "";
     this.refusedHand = "";
+    this.refusedLogo = null;
     this.actionError = "";
     if (codeInvalid(draft) || invalidHandCodes(draft).length > 0) {
       await this.#focusInvalid();
@@ -700,7 +724,18 @@ export class LookCard extends LitElement {
       const code = codeOf(error);
       const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
       this.submitting = false;
-      if (code === "theme.invalid" && field === "brandColor") {
+      if (code === "theme.invalid" && (field === "logo.light" || field === "logo.dark")) {
+        const reason = (error as { params?: { reason?: unknown } }).params?.reason;
+        this.refusedLogo = {
+          field,
+          message: t(
+            reason === "dark_without_light"
+              ? "appearance.logo_dark_without_light"
+              : "appearance.logo_not_found",
+          ),
+        };
+        await this.#focusInvalid();
+      } else if (code === "theme.invalid" && field === "brandColor") {
         this.refusedCode = t("appearance.bad_code");
         await this.#focusInvalid();
       } else if (code === "theme.invalid" && isHandField(field)) {
@@ -769,7 +804,9 @@ export class LookCard extends LitElement {
       this.submitted && codeInvalid(draft) ? t("appearance.bad_code") : this.refusedCode;
     const handErrors = this.#errorsFor(draft);
     const message =
-      codeError || Object.keys(handErrors).length > 0 ? t("form.fix_fields") : this.actionError;
+      codeError || Object.keys(handErrors).length > 0 || this.refusedLogo
+        ? t("form.fix_fields")
+        : this.actionError;
     const saveAction = saveActionState(this.#scope);
     const busy = this.submitting;
     return html`<p class="editing-line" data-test="editing-line">
@@ -785,6 +822,17 @@ export class LookCard extends LitElement {
       >
         <div class="editor">
           <div class="choices">
+            <dashboard-theme-logo-field
+              .api=${this.api}
+              .logo=${draft.choices.logo}
+              ?busy=${busy}
+              .errors=${this.#logoErrors()}
+              .draftParent=${this}
+              @logo-change=${(event: CustomEvent<{ logo: ThemeLogo | null }>) => {
+                event.stopPropagation();
+                this.#change((d) => setLogo(d, event.detail.logo));
+              }}
+            ></dashboard-theme-logo-field>
             ${colorField({
               color: draft.choices.brandColor,
               busy,

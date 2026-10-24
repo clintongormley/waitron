@@ -2,7 +2,11 @@ import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LeaveController } from "@waitron/ui";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  formMessageOf,
+  mediaTestReference,
+  useMediaPresentations,
+} from "@waitron/ui/src/test-helpers.js";
 import {
   WAITRON_CHOICES,
   fixAll,
@@ -21,6 +25,9 @@ import {
   dotOf,
   mountWidget,
 } from "../widgets/test-helpers.js";
+// Registers the media module's code messages, image.changed among them.
+import "@waitron/dashboard-modules";
+import type { ImageUpload } from "../widgets/image-upload.js";
 import "./look-card.js";
 
 type Card = HTMLElementTagNameMap["dashboard-look-card"];
@@ -248,7 +255,12 @@ function editRig(list: ThemeList) {
     const name = list.themes.find((view) => view.id === id)?.name ?? id;
     return saved(id, name, choices);
   });
-  return { api: { saveTheme } as unknown as DashboardApi & { saveTheme: typeof saveTheme } };
+  const imageLibraryRequest = vi.fn();
+  return {
+    api: { saveTheme, imageLibraryRequest } as unknown as DashboardApi & {
+      saveTheme: typeof saveTheme;
+    },
+  };
 }
 
 async function mountEditing(list: ThemeList) {
@@ -506,6 +518,205 @@ describe("editing the Look card in place", () => {
       brandColor: "#b12525",
     });
   });
+});
+
+describe("the logo in the editor", () => {
+  useMediaPresentations();
+  const L = mediaTestReference("lucia.png");
+  const D = mediaTestReference("lucia-dark.png");
+  const NEW = mediaTestReference("new.png");
+  const withLogo = (logo: ThemeChoices["logo"], choices: ThemeChoices = LUCIA) =>
+    theme("t-lucia", "Bar Lucía", { ...choices, logo });
+  const field = (el: Card) =>
+    q(el, "dashboard-theme-logo-field") as HTMLElementTagNameMap["dashboard-theme-logo-field"];
+  const upload = (el: Card, which: "light" | "dark") =>
+    field(el).shadowRoot!.querySelector<ImageUpload>(
+      `dashboard-image-upload[name="logo.${which}"]`,
+    )!;
+  const errorTexts = (el: Card) =>
+    [...field(el).shadowRoot!.querySelectorAll("p.error")].map((p) => text(p));
+  async function pick(el: Card, which: "light" | "dark", image: string | null) {
+    upload(el, which).dispatchEvent(
+      new CustomEvent("image-changed", { detail: { image }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    await field(el).updateComplete;
+  }
+  async function reopen(el: Card) {
+    await userEvent.click(button(el, "cancel"));
+    await el.updateComplete;
+    expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+    await userEvent.click(q(el, "[data-test=edit]")!);
+    await el.updateComplete;
+  }
+
+  it("the Logo field comes first in the editor", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(withLogo({ light: L, dark: D })));
+    const first = q(el, ".choices")!.firstElementChild!;
+    expect(first.localName).toBe("dashboard-theme-logo-field");
+    expect(field(el).logo).toEqual({ light: L, dark: D });
+    expect(field(el).draftParent).toBe(el);
+    expect(field(el).busy).toBe(false);
+    expect(field(el).errors).toEqual({});
+  });
+
+  it("draws Logo like Brand colour, and the dark-screens legend smaller", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(withLogo({ light: L })));
+    const style = (node: Element) => getComputedStyle(node);
+    const logo = style(field(el).shadowRoot!.querySelector("fieldset > legend")!);
+    const brand = style(q(el, "fieldset.color > legend")!);
+    expect(logo.fontWeight).toBe(brand.fontWeight);
+    expect(logo.fontSize).toBe(brand.fontSize);
+    const dark = style(field(el).shadowRoot!.querySelector("fieldset.dark > legend")!);
+    expect(parseFloat(dark.fontSize)).toBeLessThan(parseFloat(logo.fontSize));
+  });
+
+  it("picking a logo enables Save and saves it", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(lucia));
+    expect(field(el).logo).toBeNull();
+    await pick(el, "light", L);
+    expect(field(el).logo).toEqual({ light: L });
+    expect(button(el, "save").variant).toBe("primary");
+    expect(button(el, "save").disabled).toBe(false);
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
+    expect(saveTheme.mock.calls[0]![0]).toBe("t-lucia");
+    expect(saveTheme.mock.calls[0]![1].logo).toEqual({ light: L });
+  });
+
+  it("Remove on the main image clears the dark one, and Cancel brings both back", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L, dark: D })));
+    await pick(el, "light", null);
+    expect(field(el).logo).toBeNull();
+    expect(button(el, "save").disabled).toBe(false);
+    await reopen(el);
+    expect(field(el).logo).toEqual({ light: L, dark: D });
+    expect(saveTheme).not.toHaveBeenCalled();
+  });
+
+  it("Use Waitron's look removes the logo and Cancel undoes it", async () => {
+    setLocale("en-GB");
+    const { el } = await mountEditing(inUse(withLogo({ light: L }, WAITRON_CHOICES)));
+    expect(button(el, "use-waitron").disabled).toBe(false);
+    expect(button(el, "save").disabled).toBe(true);
+    await userEvent.click(button(el, "use-waitron"));
+    await el.updateComplete;
+    expect(field(el).logo).toBeNull();
+    expect(button(el, "use-waitron").disabled).toBe(true);
+    expect(button(el, "save").disabled).toBe(false);
+    await reopen(el);
+    expect(field(el).logo).toEqual({ light: L });
+  });
+
+  it("a refused logo is explained under its field and Save stays enabled", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L, dark: D })));
+    await chooseSegment(el, "corners", "Square");
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "logo.light", reason: "image_not_found" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => field(el).errors).toEqual({ light: t("appearance.logo_not_found") });
+    await field(el).updateComplete;
+    expect(errorTexts(el)).toEqual([t("appearance.logo_not_found")]);
+    expect(upload(el, "light").invalid).toBe(true);
+    expect(upload(el, "dark").invalid).toBe(false);
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    expect(button(el, "save").disabled).toBe(false);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el));
+    expect(field(el).shadowRoot!.activeElement).toBe(upload(el, "light"));
+
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "logo.dark", reason: "dark_without_light" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect
+      .poll(() => field(el).errors)
+      .toEqual({ dark: t("appearance.logo_dark_without_light") });
+    await field(el).updateComplete;
+    expect(errorTexts(el)).toEqual([t("appearance.logo_dark_without_light")]);
+    expect(upload(el, "dark").invalid).toBe(true);
+    expect(await bottom(el)).toBe(t("form.fix_fields"));
+    expect(button(el, "save").disabled).toBe(false);
+    await expect.poll(() => field(el).shadowRoot!.activeElement).toBe(upload(el, "dark"));
+
+    await pick(el, "dark", NEW);
+    expect(field(el).errors).toEqual({});
+    expect(await bottom(el)).toBe("");
+    expect(saveTheme).toHaveBeenCalledTimes(2);
+  });
+
+  it("a refused save clears an earlier logo refusal before showing its own", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L })));
+    await chooseSegment(el, "corners", "Square");
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "logo.light", reason: "image_not_found" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => field(el).errors).toEqual({ light: t("appearance.logo_not_found") });
+    saveTheme.mockRejectedValueOnce({ code: "theme.not_found" });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => bottom(el)).toBe(codeMessage("theme.not_found"));
+    expect(field(el).errors).toEqual({});
+  });
+
+  it("Use Waitron's look clears a logo refusal with the logo", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L })));
+    await chooseSegment(el, "corners", "Square");
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "logo.light", reason: "image_not_found" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => field(el).errors).toEqual({ light: t("appearance.logo_not_found") });
+    await userEvent.click(button(el, "use-waitron"));
+    await el.updateComplete;
+    expect(field(el).logo).toBeNull();
+    expect(field(el).errors).toEqual({});
+    expect(await bottom(el)).toBe("");
+  });
+
+  it("a logo refusal is gone when the editor opens again", async () => {
+    setLocale("en-GB");
+    const { el, saveTheme } = await mountEditing(inUse(withLogo({ light: L })));
+    await chooseSegment(el, "corners", "Square");
+    saveTheme.mockRejectedValueOnce({
+      code: "theme.invalid",
+      params: { field: "logo.light", reason: "image_not_found" },
+    });
+    await userEvent.click(button(el, "save"));
+    await expect.poll(() => field(el).errors).toEqual({ light: t("appearance.logo_not_found") });
+    await reopen(el);
+    expect(field(el).errors).toEqual({});
+    expect(await bottom(el)).toBe("");
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "a changed image is a bottom message, with no field marked (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const { el, saveTheme } = await mountEditing(inUse(lucia));
+      await pick(el, "light", L);
+      saveTheme.mockRejectedValueOnce({ code: "image.changed", params: { imageId: "x" } });
+      await userEvent.click(button(el, "save"));
+      const english = "This photo has changed. Reload it before saving again.";
+      const expected = locale === "en-GB" ? english : codeMessage("image.changed");
+      if (locale === "es-ES") expect(expected).not.toBe(english);
+      await expect.poll(() => bottom(el)).toBe(expected);
+      expect(field(el).errors).toEqual({});
+      expect(upload(el, "light").invalid).toBe(false);
+      expect(button(el, "save").disabled).toBe(false);
+    },
+  );
 });
 
 describe("another dashboard changes the themes while this one edits", () => {
