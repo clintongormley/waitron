@@ -207,13 +207,17 @@ export class BoxStatusScreen extends LitElement {
   @state() private misdatedLists: ReadonlyMap<string, MisdatedRecordView[]> | null = null;
   @state() private misdatedFailed = false;
   #watchingMisdated = false;
+  /** Whether a health read has finished, answered or failed: any read after it is automatic. */
   #healthAnswered = false;
 
   // One controller per read: a controller's error callback does not say which query failed.
   readonly #healthQueries = new DashboardQueries(
     this,
     () => this.api,
-    () => this.#readFailed("getBoxHealth"),
+    () => {
+      this.#healthAnswered = true;
+      this.#readFailed("getBoxHealth");
+    },
   );
   readonly #alertQueries = new DashboardQueries(
     this,
@@ -521,17 +525,16 @@ export class BoxStatusScreen extends LitElement {
     return open.partial && partial !== undefined ? pickLocale(partial, currentLocale()) : null;
   }
 
-  #renderMisdatedEntry(open: MisdatedOpenView): TemplateResult | typeof nothing {
+  #renderMisdatedEntry(open: MisdatedOpenView): TemplateResult | null {
     const sentence = this.#misdatedSentence(open);
     const records = open.unconfirmed ? undefined : this.misdatedLists?.get(open.confirmationId);
-    // A loaded answer without this entry's list means the alert was handled since the health read;
-    // a failed read is said once, under the section.
+    // The answer leaves out a list it cannot give; a failed read is said once, under the section.
     if (
       sentence === null &&
       records === undefined &&
       (this.misdatedLists !== null || this.misdatedFailed)
     )
-      return nothing;
+      return null;
     return html`<div class="misdated-entry" data-test="misdated-entry">
       ${
         sentence === null
@@ -553,11 +556,14 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #renderMisdated(health: BoxHealth): TemplateResult | typeof nothing {
-    if (health.misdatedOpen.length === 0) return nothing;
+    const entries = health.misdatedOpen
+      .map((open) => this.#renderMisdatedEntry(open))
+      .filter((entry) => entry !== null);
+    if (entries.length === 0 && !this.misdatedFailed) return nothing;
     return html`<section class="misdated" data-test="misdated">
       <h2>${t("box_status.misdated.title")}</h2>
       <p class="note" data-test="misdated-line">${t("box_status.misdated.line")}</p>
-      ${health.misdatedOpen.map((open) => this.#renderMisdatedEntry(open))}
+      ${entries}
       ${
         this.misdatedFailed
           ? html`<p class="note" data-test="misdated-unavailable">

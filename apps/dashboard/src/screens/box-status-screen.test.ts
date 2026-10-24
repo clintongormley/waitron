@@ -847,4 +847,46 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(1);
     expect(q(el, "[data-test=misdated-sentence]")).not.toBeNull();
   });
+
+  it("reads a list the first health answer brings through the foreground client", async () => {
+    const background = {
+      getBoxHealth: vi.fn().mockResolvedValue({ ...health(), misdatedOpen: [OPEN] }),
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
+      clockMisdated: vi.fn().mockResolvedValue(LISTS),
+    };
+    const api = stubApi(
+      { background, clockMisdated: vi.fn().mockResolvedValue(LISTS) },
+      { ...health(), misdatedOpen: [OPEN] },
+    );
+    const { el } = await mount(api);
+    expect(cells(el)).toHaveLength(2);
+    expect(api.clockMisdated).toHaveBeenCalledTimes(1);
+    expect(background.clockMisdated).not.toHaveBeenCalled();
+  });
+
+  it("reads a list in the background when it comes after a failed first health read", async () => {
+    const background = {
+      getBoxHealth: vi.fn().mockResolvedValue({ ...health(), misdatedOpen: [OPEN] }),
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
+      clockMisdated: vi.fn().mockResolvedValue(LISTS),
+    };
+    const api = stubApi({
+      background,
+      getBoxHealth: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      clockMisdated: vi.fn().mockResolvedValue(LISTS),
+    });
+    const { el } = await mount(api);
+    expect(text(q(el, "[role=alert]"))).toBe(t("box_status.read_error"));
+    api.liveData.refresh();
+    await flush(el);
+    expect(cells(el)).toHaveLength(2);
+    expect(background.clockMisdated).toHaveBeenCalledTimes(1);
+    expect(api.clockMisdated).not.toHaveBeenCalled();
+  });
+
+  it("draws no section when no entry has anything left to show", async () => {
+    const { el } = await mount(withOpen([OPEN], { lists: [] }));
+    expect(section(el)).toBeNull();
+    expect(qa(el, "ul.rows > li")).toHaveLength(7);
+  });
 });
