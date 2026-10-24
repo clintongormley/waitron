@@ -5295,6 +5295,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **The first fiscal-hour end-to-end file exceeds the four-minute job budget on slow CI runners.**
+  Four successful main runs on 24 October measured the file alone at 248–250 seconds. Split or
+  reduce its repeated setup while preserving its restart assertions.
+  [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
+
 - **A backlog detail link still names the old five-handler heading.** The till entry’s
   `backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
   no longer matches “Three till handlers still leave a failed list refresh unhandled”.

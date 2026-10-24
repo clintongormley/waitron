@@ -256,3 +256,25 @@ all its assertions remain. Four installed disposable-checkout omissions are caug
 missing opening drain, late-grant rejection, preview clearing and known-PDF identity matching.
 The same selected cases pass before and after restoration. Whole-branch review, the normal push
 hook and required current-head CI remain before landing.
+
+**24 October 2026, review and CI follow-up:** the single whole-branch Claude review completed.
+The moved staging-directory import and two shutdown fixture waits are corrected. The page now
+explains the restart needed after an unsuccessful backup open, and an already-selected target
+shows reconnection. Three new browser checks first failed, then passed; the final page/session
+selection passes 139 cases and the real refused-key/retry/restart plus guide selection passes 32.
+
+The first successful PR CI run measured the new resume, recovery and Cloud files at 334.6, 273.8
+and 255.3 seconds. Their existing cases now run across three files per group, with shared fixtures
+under `apps/server/test/`. Canonical test statements and assertion calls are retained. To run all
+156 cases after this split, use:
+
+```bash
+pnpm --filter @waitron/server exec vitest run src/first-setup-backup-resume*.test.ts src/first-setup-backup-recovery*.test.ts src/first-setup-backup-cloud*.test.ts
+```
+
+The earlier single-file commands and counts above describe their dated pre-split checkpoints.
+The duration table is refreshed from the newest six successful main runs, with new repair-file
+measurements from the successful PR run and focused local coverage collectors. Those collectors
+measure file times; they do not establish package-wide coverage. Required current-head CI remains
+the final gate. The unrelated first-fiscal-hour file's existing budget overrun is recorded in the
+CI backlog.

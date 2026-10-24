@@ -3,6 +3,20 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## The first fiscal-hour end-to-end file exceeds the job budget
+
+Found while qualifying A731 on 24 October 2026. The file
+`apps/server/src/first-fiscal-hour.e2e.test.ts` took 248.1, 249.4, 250.2 and 248.5 seconds in
+successful main runs `40088908331`, `40088741438`, `40084093811` and `40102803326`, respectively.
+Those runs precede A731's code. The same file took 280.7 seconds in A731's successful
+[first PR run](https://github.com/clintongormley/waitron/actions/runs/40110506543).
+These are the file's `[file-progress] end` times, before the rest of its shard and job setup.
+
+Next: split the restart scenarios or reduce repeated fixture work, keep every fiscal and restart
+assertion, and measure the resulting files on a slow CI runner. Refresh the duration table after
+measuring; moving this whole file to another shard cannot bring its own time below four minutes.
+The A731 repair suites are split separately; this existing fiscal-hour suite is outside that item.
+
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
