@@ -55,7 +55,10 @@ export function validatePersonalDataParts(parts: readonly PersonalDataPart[]): v
       const earlier = seen.get(name);
       if (earlier !== undefined)
         throw new AppError("module.config_invalid", {
-          reason: `personal-data file name "${name}" is declared by both ${earlier} and ${owner}`,
+          reason:
+            earlier === owner
+              ? `personal-data file name "${name}" is declared twice by ${owner}`
+              : `personal-data file name "${name}" is declared by both ${earlier} and ${owner}`,
         });
       seen.set(name, owner);
     }
@@ -70,19 +73,19 @@ export async function preparePersonalData(
   validatePersonalDataParts(parts);
   const builders: {
     owner: string;
-    files: readonly string[];
+    files: ReadonlySet<string>;
     build: () => Promise<readonly PersonalDataFile[]>;
   }[] = [];
   for (const { owner, part } of parts) {
     // In turn, never Promise.all: queries on one transaction are awaited one after another.
-    builders.push({ owner, files: part.files, build: await part.prepare(tx, subject) });
+    builders.push({ owner, files: new Set(part.files), build: await part.prepare(tx, subject) });
   }
   return async () => {
     const files: PersonalDataFile[] = [];
     const built = new Set<string>();
     for (const { owner, files: declared, build } of builders) {
       for (const file of await build()) {
-        if (!declared.includes(file.name))
+        if (!declared.has(file.name))
           throw new Error(`${owner} built personal-data file "${file.name}" it did not declare`);
         if (built.has(file.name))
           throw new Error(`personal-data file "${file.name}" was built twice`);

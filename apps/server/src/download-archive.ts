@@ -13,6 +13,9 @@ const LETTERS: Readonly<Record<string, string>> = {
   ð: "d",
   þ: "th",
   ı: "i",
+  ħ: "h",
+  ŋ: "n",
+  ŧ: "t",
 };
 
 function safeName(label: string): string {
@@ -20,7 +23,7 @@ function safeName(label: string): string {
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
-    .replace(/[ßæœøłđðþı]/g, (letter) => LETTERS[letter]!)
+    .replace(/[ßæœøłđðþıħŋŧ]/g, (letter) => LETTERS[letter]!)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)

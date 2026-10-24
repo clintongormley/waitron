@@ -6,7 +6,6 @@ import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
 
-/** Decision 10 of the A980 S2a1 plan: every column of every identity table that names a person. */
 const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[] }> = {
   persons: {
     in: [
@@ -98,6 +97,7 @@ describe("identity personal-data classification", () => {
   it.each(personTables.map((config) => [config.name, config] as const))(
     "classifies every column of %s exactly once",
     (name, config) => {
+      expect(Object.keys(CLASSIFIED)).toContain(name);
       const { in: included, out: excluded } = CLASSIFIED[name]!;
       expect(included.filter((column) => excluded.includes(column))).toEqual([]);
       expect(config.columns.map((c) => c.name).sort()).toEqual([...included, ...excluded].sort());

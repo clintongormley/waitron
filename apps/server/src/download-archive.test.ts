@@ -15,6 +15,7 @@ describe("archiveFileName", () => {
     ["İlknur Işık", "ilknur-isik"],
     ["Ana María 2", "ana-maria-2"],
     ["Œuvre Ðóra Þór", "oeuvre-dora-thor"],
+    ["Ħamid Ŋgu Ŧom", "hamid-ngu-tom"],
     ["李雷", "person"],
     ["  ---  ", "person"],
   ])("makes %j safe as %j", (label, safe) => {

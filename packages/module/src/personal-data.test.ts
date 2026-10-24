@@ -71,7 +71,16 @@ describe("validatePersonalDataParts", () => {
     refused([part("a", stub(["profile.json"])), part("b", stub(["profile.json"]))]);
   });
   it("refuses the same name twice in one part", () => {
-    refused([part("a", stub(["profile.json", "profile.json"]))]);
+    expect(() =>
+      validatePersonalDataParts([part("a", stub(["profile.json", "profile.json"]))]),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "module.config_invalid",
+        params: expect.objectContaining({
+          reason: 'personal-data file name "profile.json" is declared twice by a',
+        }),
+      }),
+    );
   });
   it.each(["README.txt", "Profile.json", "a/b.json", "café.json", "profile.txt", "-profile.json"])(
     "refuses the malformed name %s",
@@ -165,9 +174,9 @@ describe("preparePersonalData", () => {
         return async () => [];
       },
     };
-    await expect(preparePersonalData(tx, [part("a", bad)], subject)).rejects.toMatchObject({
-      code: "module.config_invalid",
-    });
+    await expect(preparePersonalData(tx, [part("a", bad)], subject)).rejects.toThrowError(
+      expect.objectContaining({ code: "module.config_invalid" }),
+    );
     expect(prepared).toBe(false);
   });
 

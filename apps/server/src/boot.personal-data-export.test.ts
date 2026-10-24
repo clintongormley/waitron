@@ -59,7 +59,7 @@ describe("the own personal-data download in a real start", () => {
       await awaitListening(port);
       const response = await fetch(
         `http://127.0.0.1:${port}/management-api/me/personal-data/export`,
-        { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, "x-waitron-live": "1" } },
+        { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
       );
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("application/zip");
