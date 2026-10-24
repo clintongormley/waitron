@@ -35,7 +35,7 @@ corregir la hora.
 
 **No se puede cobrar: la hora del equipo es anterior a la última venta · Avisa al encargado** es
 rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró. Hasta que
-marque como mucho un minuto antes, o hasta que un encargado reanude los cobros, el equipo rechaza
+marque como mucho un minuto antes, o hasta que se confirme la hora del equipo, el equipo rechaza
 los cobros, las devoluciones y todo lo que registraría una venta o movería dinero: cobros en
 efectivo o con tarjeta, en la barra o en una mesa, devoluciones y reintentos de devoluciones, una
 mesa que se va sin pagar, anular un pedido que ya tiene factura, y un cambio o un envío a cocina que
@@ -62,8 +62,10 @@ Lo que hay que hacer después depende de cómo se cobró la tarjeta:
   se puede volver a cobrar.
 
 El encargado lo resuelve en la [página Estado del equipo](box-status.md#clock-behind). Si la hora
-del equipo es correcta y fue la última venta la que llevaba una hora equivocada, un encargado quizá
-pueda reanudar los cobros allí.
+del equipo es correcta y fue la última venta la que llevaba una hora equivocada, los cobros se
+reanudan solos en cuanto Hacienda o dos cajas o terminales confirman la hora, o cuando un
+administrador la confirma allí con su propio móvil u ordenador, nunca desde la pantalla del propio
+equipo.
 
 **Queda poco espacio en el equipo · Avisa al encargado** es ámbar. El trabajo se sigue guardando,
 pero se está acabando el espacio. El encargado debería liberar espacio antes de que se acabe, en

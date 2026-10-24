@@ -127,11 +127,11 @@ espacio.
 Cuando el reloj del equipo marca más de un minuto antes que la última venta registrada en el equipo,
 el equipo deja de cobrar y de devolver dinero. Una venta registrada en ese momento llevaría una hora
 anterior a esa última. La parada dura hasta que el reloj marca como mucho un minuto antes que esa
-venta, o hasta que alguien reanuda los cobros, como explica esta sección más abajo. Tomar pedidos,
-la cocina y los fichajes siguen funcionando, aunque se rechazan un cambio o un envío a cocina que
-terminaría de pagar una cuenta pagada en parte, y anular un pedido que ya tiene factura. La [guía de
-avisos del terminal](till-notices.md#notices) explica qué puede y qué no puede hacer el personal
-mientras tanto.
+venta, o hasta que algo confirma que la hora del equipo es correcta, como explica esta sección más
+abajo. Tomar pedidos, la cocina y los fichajes siguen funcionando, aunque se rechazan un cambio o un
+envío a cocina que terminaría de pagar una cuenta pagada en parte, y anular un pedido que ya tiene
+factura. La [guía de avisos del terminal](till-notices.md#notices) explica qué puede y qué no puede
+hacer el personal mientras tanto.
 
 Los terminales muestran **No se puede cobrar: la hora del equipo es anterior a la última venta**. La
 campana de avisos también lo dice, con las dos horas: la del reloj del equipo y la de la última
@@ -146,69 +146,113 @@ Hay tres salidas:
   permite corregir la hora por sí solo. Si no, llama a quien instaló el equipo: el equipo no tiene
   ninguna página para cambiar su hora. Esto termina la parada salvo que la última venta lleve una
   hora equivocada, posterior a la real.
-- **Reanudar los cobros**, cuando la hora del equipo es correcta y fue la última venta la que se
-  registró con una hora equivocada, posterior a la real, por ejemplo mientras el reloj iba
-  adelantado. Los párrafos que siguen a esta lista explican cuándo lo ofrece la página.
+- **Confirmar la hora del equipo**, cuando la hora del equipo es correcta y fue la última venta la
+  que se registró con una hora equivocada, posterior a la real, por ejemplo mientras el reloj iba
+  adelantado. Normalmente el equipo lo hace solo, como explican los párrafos que siguen a esta
+  lista.
 - **Esperar.** En cuanto el reloj del equipo llega a un minuto antes de la hora de la última venta,
   el equipo vuelve a cobrar.
 
-Cuando la página tiene una prueba reciente de que la hora del equipo es correcta, la fila **Reloj**
-muestra esa prueba y un botón **Reanudar los cobros**. La prueba es una de estas:
+Un equipo no puede saber por sí solo si su reloj está bien, así que durante una parada busca otro
+reloj que coincida con el suyo. Cualquiera de estos confirma la hora, y entonces los cobros se
+reanudan solos, sin que nadie pulse ningún botón:
 
-- **Hacienda: coincide (comprobado 2026-10-23 21:40)**: durante una parada, un equipo que envía
-  registros a Hacienda le pide su hora cada minuto, y su respuesta estaba a menos de un minuto del
-  reloj del equipo.
-- **Dispositivos: 2 marcan 2026-10-23 21:40**: dos o más cajas registradoras o terminales de
-  camarero enviaron una hora a menos de un minuto de la del equipo. La [sección
-  siguiente](box-status.md#clock-witnesses) explica qué dispositivos envían su hora.
+- **La hora de Hacienda.** Durante una parada, un equipo que envía registros a Hacienda le pide su
+  hora más o menos una vez por minuto. Una respuesta a menos de un minuto del reloj del equipo la
+  confirma. La fila **Reloj** lo muestra como **Hacienda: coincide (comprobado 2026-10-23 21:40)**.
+- **Dos cajas o terminales** con direcciones de red distintas, cuya hora está a menos de un minuto
+  de la del equipo y de la del otro. La fila lo muestra como **Dispositivos: 2 marcan 2026-10-23
+  21:40**. La [sección siguiente](box-status.md#clock-witnesses) explica qué dispositivos cuentan.
+- **El propio móvil u ordenador de un administrador**, como explican los párrafos siguientes.
 
-Solo cuenta una prueba tomada mientras el reloj del equipo marcaba más de un minuto por detrás de la
-última venta, y solo durante cinco minutos. Tampoco cuenta una prueba tomada antes de un cambio en el
-reloj del equipo.
+Solo cuenta una hora tomada cuando el reloj del equipo ya marcaba más de un minuto por detrás de la
+última venta, y solo durante cinco minutos. Tampoco cuenta una hora tomada antes de un cambio en el
+reloj del equipo. No hay límite de cuánto puede ir el reloj del equipo por detrás de la última
+venta.
 
-La página no ofrece reanudar, y explica por qué bajo la fila **Reloj**, cuando:
+Mientras el equipo espera, la fila **Reloj** dice **Esperando una prueba de que la hora es correcta:
+la de Hacienda, o la de dos cajas o terminales.** Cuando llega la prueba, dice **Hay prueba: los
+cobros se reanudan en unos segundos.**, y el equipo vuelve a cobrar en unos 15 segundos.
 
-- no hay ninguna prueba reciente: **No hay ninguna prueba reciente de que la hora del equipo sea
-  correcta.**
-- dos o más dispositivos coinciden entre sí en que el reloj del equipo va desviado más de un minuto,
-  o Hacienda no ha coincidido con él mientras el reloj del equipo marcaba más de un minuto por
-  detrás de la última venta. El equipo solo guarda ese desacuerdo en su memoria, así que lo olvida si el propio equipo se
-  reinicia durante la parada; mientras Hacienda siga sin coincidir, el bloqueo vuelve con su
-  siguiente respuesta, que un equipo que envía registros a Hacienda pide más o menos una vez por
-  minuto durante una parada: **Otros relojes dicen que la hora del equipo está mal.**
-- el reloj del equipo va más de 24 horas por detrás de la última venta: **La hora del equipo está
-  más de 24 horas por detrás de la última venta.**
+A veces los otros relojes dicen lo contrario: dos o más cajas o terminales coinciden entre sí en que
+el reloj del equipo va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
+la parada. Entonces la fila dice **Otros relojes dicen que la hora del equipo está mal.**, y nada
+reanuda los cobros, ni siquiera un administrador. La respuesta de Hacienda cuenta primero: cuando
+coincide con el equipo, los dispositivos que no coinciden no paran los cobros. El equipo solo guarda
+el desacuerdo de Hacienda en su memoria, así que lo olvida si el propio equipo se reinicia durante
+la parada; mientras Hacienda siga sin coincidir, vuelve con la siguiente respuesta.
 
-Solo las personas que pueden gestionar el sistema pueden reanudar los cobros. Al pulsar **Reanudar
-los cobros** se abre un diálogo que muestra la hora del reloj del equipo, la de la última venta y la
-prueba. Pulsa **Reanudar los cobros** en el diálogo para confirmarlo. Si dos personas confirman casi
-a la vez, solo se reanuda una vez, y la segunda persona ve la primera reanudación.
+Cuando no llega ninguna prueba, por ejemplo porque el equipo no tiene internet y hay menos de dos
+cajas en uso, un administrador puede confirmar la hora desde esta página en su propio móvil u
+ordenador. Durante una parada, la fila **Reloj** muestra a los administradores un botón
+**Comprobar con la hora de este dispositivo**. Abre un diálogo que muestra las dos horas: **El reloj
+del equipo marca … Este dispositivo marca …**
 
-Después de reanudar, el equipo vuelve a cobrar en ese momento. No cambia ninguna venta ya
+- Cuando las dos están a menos de un minuto, el diálogo pregunta **Coinciden. ¿Confirmas que la hora
+  del equipo es correcta?** Pulsa **Confirmar** y los cobros se reanudan.
+- Cuando se diferencian en más de un minuto, dice **Tu dispositivo y el equipo se diferencian en más
+  de un minuto. Si tu dispositivo tiene la hora bien, la del equipo está mal: conecta el equipo a
+  internet para que la corrija.** y solo ofrece **Cerrar**.
+
+El equipo da por buena la hora de tu dispositivo, así que comprueba antes que tu móvil u ordenador
+tiene la hora bien. Por la misma razón, nunca funciona desde la pantalla del propio equipo: ahí la
+hora del dispositivo es la del equipo, y el equipo lo rechaza con **Esta pantalla es el propio
+equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.**
+
+Cuando se confirma la hora, el equipo vuelve a cobrar en ese momento. No cambia ninguna venta ya
 registrada. La siguiente venta lleva la hora del reloj del equipo, así que se registra con una hora
-anterior a la de la última venta. La fila **Reloj** se pone en ámbar y dice quién reanudó los cobros
-y cuándo, por ejemplo **Cobros reanudados por Ana el 2026-10-23 21:42**, y la campana guarda un
-aviso con el nombre de esa persona, las dos horas y la prueba.
+anterior a la de la última venta. La fila **Reloj** se pone en ámbar y dice qué confirmó la hora,
+por ejemplo **Cobros reanudados a las 2026-10-23 21:42, confirmado por dos cajas o terminales.** La
+campana guarda un aviso con las dos horas y lo que confirmó la hora, y el equipo envía un
+[correo](box-status.md#emails) a las personas que gestionan el sistema.
 
-Una reanudación admite un solo paso atrás. Si el reloj del equipo vuelve a retroceder, de modo que
-marca más de un minuto más atrás que cuando se reanudó, o más de un minuto antes que una venta hecha
-desde la reanudación, los cobros se vuelven a parar. Pasa igual aunque el reloj retroceda poco a
-poco. La página ya no ofrece otra reanudación. En su lugar, la fila **Reloj** dice **Ya se
-reanudaron los cobros y la hora del equipo ha retrocedido desde entonces. Haz que revisen la
-hora.**
+Una confirmación cubre un paso atrás. Si el reloj del equipo vuelve a retroceder, de modo que marca
+más de un minuto más atrás que cuando se confirmó, o más de un minuto antes que una venta hecha
+desde entonces, los cobros se vuelven a parar hasta que la hora se confirme otra vez, de cualquiera
+de las mismas formas. Pasa igual aunque el reloj retroceda poco a poco.
 
-Si el equipo descubre más tarde que el reloj en el que se confió al reanudar estaba mal, porque la
-hora de Hacienda no coincide con él o el reloj salta hacia delante más de un minuto, y se hicieron
-ventas con esa reanudación, la campana lo dice: **Las ventas registradas entre 2026-10-23 21:42 y
-2026-10-23 22:15 se fecharon con un reloj que resultó estar mal. Quedan como se registraron;
+Una parada así suele significar que el reloj del equipo iba adelantado desde hacía un tiempo, así que
+algunas ventas se registraron con una hora posterior a la real. Quedan como se registraron: una
+venta registrada para Hacienda no se puede cambiar. Cuando se confirma la hora, el equipo calcula
+cuáles son: las ventas registradas antes de la parada con una hora de más de un minuto después del
+momento en que el equipo notó la parada. Las muestra en esta página en **Ventas con fecha
+incorrecta**, con la **Factura** y la **Hora registrada** de cada una, y dice **Revísalas con tu
+asesor y después marca el aviso como atendido.** La campana tiene un aviso con cuántas ventas son y
+la primera y la última hora, y el equipo envía un correo a las personas que gestionan el sistema. Si
+el propio equipo se reinició durante la parada, no puede estar seguro de cuándo empezó, así que puede
+faltar alguna venta en la lista, y el aviso lo dice. Cuando ninguna venta tiene la fecha mal, no hay
+lista ni aviso.
+
+La parada también puede terminar sola, porque se puso bien la hora o el reloj llegó a la hora de la
+última venta. El equipo sigue necesitando una confirmación para saber qué ventas tienen la fecha
+mal, así que hasta que la tiene, la fila **Reloj** sigue en ámbar y dice **La parada de cobros que
+empezó a las 2026-10-23 21:10 ha terminado, pero nada ha confirmado aún la hora del equipo. El
+equipo pregunta a Hacienda cada minuto; también pueden confirmarla dos cajas o terminales, o el
+dispositivo de un administrador.** Mientras tanto se sigue cobrando. Un equipo que envía registros a
+Hacienda le sigue pidiendo su hora más o menos una vez por minuto, y los administradores ven
+**Comprobar con la hora de este dispositivo** bajo la fila. En cuanto Hacienda, dos cajas o
+terminales, o el dispositivo de un administrador confirman la hora, el equipo muestra las ventas con
+fecha incorrecta como se explica arriba.
+
+Si en cambio Hacienda o dos cajas o terminales dicen que la hora del equipo está mal, o los cobros se
+vuelven a parar por la hora después de registrarse más ventas, el equipo no puede saber qué ventas
+tienen la fecha mal. La campana, un correo y la sección **Ventas con fecha incorrecta** lo dicen
+entonces: **La parada de cobros que empezó a las 2026-10-23 21:10 terminó sola, pero nada confirmó
+la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la
+hora del equipo y revisa con tu asesor las ventas desde entonces.**
+
+Si el equipo descubre más tarde que una hora que confirmó durante una parada estaba mal, porque la
+hora de Hacienda no coincide con ella o el reloj salta hacia delante más de un minuto, y se hicieron
+ventas después de la confirmación, la campana lo dice: **Las ventas registradas entre 2026-10-23
+21:42 y 2026-10-23 22:15 se fecharon con un reloj que resultó estar mal. Quedan como se registraron;
 consúltalo con tu asesor.** Las horas de ese aviso se fijan cuando aparece, así que las ventas
 hechas después no se añaden a él.
 
 No hace falta reiniciar el equipo ni los terminales. Cada cobro se comprueba en el momento de
-hacerlo, así que en cuanto el reloj marca como mucho un minuto antes que la última venta, el
-siguiente cobro ya no se rechaza por la hora. El aviso de los terminales y las filas en rojo de esta
-página desaparecen en unos 15 segundos. La campana, y el aviso de la campana que aparece bajo la
-fila **Reloj**, desaparecen en un minuto, más o menos.
+hacerlo, así que en cuanto el reloj marca como mucho un minuto antes que la última venta, o se
+confirma la hora, el siguiente cobro ya no se rechaza por la hora. El aviso de los terminales y las
+filas en rojo de esta página desaparecen en unos 15 segundos. La campana, y el aviso de la campana
+que aparece bajo la fila **Reloj**, desaparecen en un minuto, más o menos.
 
 Una tarjeta cobrada desde las opciones de pago de una cuenta justo cuando se paran los cobros puede
 aparecer en la campana como un pago con tarjeta que Waitron no ha podido registrar. El equipo
@@ -217,15 +261,16 @@ hasta que un encargado pulsa **Marcar como resuelto** en él.
 
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran en su lugar
 **No se pueden registrar ventas: la hora del equipo es incorrecta**, y la campana también lo dice,
-con la fecha que marca el reloj del equipo. Entonces la página no ofrece **Reanudar los cobros**. La
-salida es poner la hora bien.
+con la fecha que marca el reloj del equipo. Entonces nada puede confirmar la hora, y la página no
+ofrece **Comprobar con la hora de este dispositivo**. La salida es poner la hora bien.
 
 ## Dispositivos como testigos de la hora {#clock-witnesses}
 
 Un equipo no puede saber por sí solo que su reloj está mal, así que lo compara con otros relojes.
 Las cajas registradoras y los terminales de camarero envían su propia hora al equipo cada 15
 segundos, más o menos, mientras hay alguien con la sesión iniciada en ellos. Las pantallas de cocina
-no envían la suya.
+no envían la suya. Una caja o un terminal que funciona en el propio equipo no cuenta, y los
+dispositivos con una misma dirección de red cuentan como uno.
 
 Cuando dos o más dispositivos coinciden entre sí en que el reloj del equipo va desviado más de un
 minuto, la campana avisa a las personas que pueden gestionar el sistema, estén parados o no los
@@ -233,9 +278,8 @@ cobros: **2 dispositivos coinciden en que marcan 2026-10-23 21:40, pero el equip
 21:10. Comprueba la fecha y la hora del equipo en Estado del equipo.** El personal de los terminales
 no ve nada de esto.
 
-Esas mismas lecturas son la prueba de los dispositivos que la página necesita antes de ofrecer
-**Reanudar los cobros**, como explica [Cuando se paran los cobros por la
-hora](box-status.md#clock-behind).
+Esas mismas lecturas son la prueba de los dispositivos que confirma la hora del equipo durante una
+parada, como explica [Cuando se paran los cobros por la hora](box-status.md#clock-behind).
 
 ## Correos sobre el equipo {#emails}
 
@@ -247,6 +291,8 @@ correo cuando:
 - su reloj marca una fecha anterior al 28 de octubre de 2024, así que no se puede registrar ninguna
   venta;
 - su reloj marca una hora anterior a la de su última venta, así que se han parado los cobros.
+- se confirmó su hora durante una de esas paradas, y los cobros se reanudaron solos;
+- encontró ventas con fecha incorrecta tras una de esas paradas, o vio que no puede saber cuáles son.
 
 Cada persona recibe un correo por problema, en su propio idioma, o en el del local si no ha elegido
 ninguno. Si no se puede enviar, porque el equipo no tiene internet o el servidor de correo lo
@@ -254,7 +300,8 @@ rechaza (por ejemplo, porque los ajustes del servidor de correo tienen una contr
 el equipo lo vuelve a intentar cada minuto mientras dura el problema, hasta que el servidor de
 correo lo acepta. Así, el correo llega en cuanto se arregla la conexión o los ajustes. Si el
 problema termina antes, por ejemplo porque se puso bien la hora, el equipo deja de intentarlo y no
-envía nada. Un disco lleno al que solo se le libera parte del espacio sigue casi sin espacio, así
+envía nada. En los dos últimos casos, el equipo lo sigue intentando mientras su aviso esté abierto
+en la campana. Un disco lleno al que solo se le libera parte del espacio sigue casi sin espacio, así
 que quien no recibió el correo de disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras dura el problema puede enviar el mismo correo
 otra vez. Mientras no haya ningún servidor de correo configurado, no se envía nada.
 
