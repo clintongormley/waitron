@@ -7,9 +7,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProductToMenu,
   createCatalogue,
+  createExtraList,
   createProduct,
+  readProductModifiers,
+  setProductVariants,
   updateProduct,
+  writeProductModifiers,
 } from "@waitron/catalogue";
+import type { ExtraSelection } from "@waitron/shared";
 import {
   createServiceZone,
   replaceMenuWeek,
@@ -20,6 +25,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { VENUE_SERVICE } from "./modules.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { createBareDepartment, provisionSignedInTill } from "./testing/signed-in-till.js";
+import type { LateSendConfirmation } from "./late-send.js";
 import { createOpenOrder, updateHeldOrder } from "./working-order.js";
 
 const suite = useVenueDb({
@@ -41,7 +47,9 @@ let nifCounter = 0;
 /**
  * Lunch sells Almuerzo 12:00–14:00 and Dinner sells Desayunos 19:00–23:00 on the given weekdays
  * (Monday by default), each with Bebidas and Café as staff menus. The Tostada is on both: 4.00 on
- * Almuerzo, 2.50 on Desayunos. The Ensalada is on Almuerzo alone.
+ * Almuerzo, 2.50 on Desayunos. The Ensalada is on Almuerzo alone, with an Aguacate extras list. The
+ * Caña is on Bebidas. The Zumo is on Almuerzo and Desayunos, and only Almuerzo's live version lists
+ * its Small variant.
  */
 async function mealVenue(weekdays: readonly number[] = [1]) {
   return provisionSignedInTill(suite.db, {
@@ -80,7 +88,48 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         almuerzo: await offer(menus.almuerzo, toastId, "4.00"),
       };
       const salad = await offer(menus.almuerzo, saladId, "8.00");
+      const avocadoId = await product(menus.almuerzo, "Aguacate", "1.50");
+      const avocadoList = (
+        await createExtraList(
+          tx,
+          {
+            name: "Aguacate",
+            minPicks: 0,
+            maxPicks: null,
+            items: [{ productId: avocadoId, maxQuantity: 1, price: "1.00" }],
+          },
+          cfg.locale,
+        )
+      ).id;
+      const carried = (await readProductModifiers(tx, [saladId])).get(saladId) ?? [];
+      await writeProductModifiers(tx, saladId, [
+        ...carried.map((each) => ({ kind: each.kind, id: each.id })),
+        { kind: "extras", id: avocadoList },
+      ]);
+      const caña = await offer(menus.bebidas, await product(menus.bebidas, "Caña", "2.00"), "2.00");
+      const juiceId = await product(menus.almuerzo, "Zumo", "3.00");
+      const variant = (name: string, unitPrice: string) => ({
+        name,
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice,
+        available: true,
+      });
+      const [large] = await setProductVariants(tx, juiceId, [variant("Large", "3.50")], cfg.locale);
+      const juice = {
+        almuerzo: await offer(menus.almuerzo, juiceId, "3.00"),
+        desayunos: await offer(menus.desayunos, juiceId, "3.00"),
+      };
       for (const menuId of Object.values(menus)) await publishWorkingMenu(tx, menuId);
+      // Small is added after Desayunos was published, so only Almuerzo's live version lists it.
+      const [, small] = await setProductVariants(
+        tx,
+        juiceId,
+        [{ ...variant("Large", "3.50"), id: large!.id }, variant("Small", "2.50")],
+        cfg.locale,
+      );
+      await publishWorkingMenu(tx, menus.almuerzo);
       const period = async (name: string, menuId: string) =>
         (
           await saveMenuPeriod(tx, cfg, restaurant, {
@@ -116,6 +165,10 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         toastId,
         toast,
         salad,
+        avocado: { listId: avocadoList, productId: avocadoId },
+        caña,
+        juice,
+        variants: { large: large!.id, small: small!.id },
       };
     },
   });
@@ -123,7 +176,14 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
 
 type MealVenue = Awaited<ReturnType<typeof mealVenue>>;
 
-const open = (v: MealVenue, lines: { menuItemId: string; quantity: string }[], id = randomUUID()) =>
+type Line = {
+  menuItemId: string;
+  quantity: string;
+  variantId?: string;
+  extras?: ExtraSelection[];
+};
+
+const open = (v: MealVenue, lines: Line[], id = randomUUID(), lateSend?: LateSendConfirmation) =>
   withTransaction(suite.db, (tx) =>
     createOpenOrder(
       tx,
@@ -131,9 +191,28 @@ const open = (v: MealVenue, lines: { menuItemId: string; quantity: string }[], i
       id,
       lines,
       null,
-      { zoneId: v.diningZone },
+      { zoneId: v.diningZone, ...(lateSend === undefined ? {} : { lateSend }) },
     ),
   );
+
+/** A confirmation covering `menuIds`, confirmed by `personId`. */
+const confirming = (menuIds: string[], personId = randomUUID()) => ({
+  personId,
+  lateSend: {
+    menuIds: new Set(menuIds),
+    confirm: vi.fn(async () => personId),
+  },
+});
+
+const marksOf = (id: string) =>
+  suite.db
+    .select({
+      latePeriodName: workingLineContexts.latePeriodName,
+      lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+    })
+    .from(workingLineContexts)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, workingLineContexts.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, id));
 
 const linesOf = (id: string) =>
   suite.db
@@ -219,35 +298,174 @@ describe("a dish whose period ended earlier today", () => {
         ]),
       ).rejects.toMatchObject({
         code: "menu_period.ended",
-        params: { menuItemIds: [v.salad] },
+        params: {
+          menus: [{ menuId: v.menus.almuerzo, periodName: "Lunch" }],
+          menuItemIds: [v.salad],
+        },
       });
       expect(offeredIn).toHaveBeenCalledTimes(1);
     } finally {
       offeredIn.mockRestore();
     }
   });
+
+  it("names each ended menu once, in the order its dishes appear", async () => {
+    at("17:00");
+    const v = await mealVenue();
+    await expect(
+      open(v, [
+        { menuItemId: v.toast.almuerzo, quantity: "1" },
+        { menuItemId: v.caña, quantity: "1" },
+        { menuItemId: v.salad, quantity: "1" },
+        { menuItemId: v.caña, quantity: "1" },
+      ]),
+    ).rejects.toMatchObject({
+      code: "menu_period.ended",
+      params: {
+        menus: [
+          { menuId: v.menus.almuerzo, periodName: "Lunch" },
+          { menuId: v.menus.bebidas, periodName: "Lunch" },
+        ],
+        menuItemIds: [v.toast.almuerzo, v.caña, v.salad],
+      },
+    });
+  });
+
+  it("is also sold at 19:30 only in a variant the running menu lists", async () => {
+    at("19:30");
+    const v = await mealVenue();
+    const id = randomUUID();
+    await open(
+      v,
+      [{ menuItemId: v.juice.almuerzo, variantId: v.variants.large, quantity: "1" }],
+      id,
+    );
+    expect(await linesOf(id)).toMatchObject([{ unitPriceGross: 350 }]);
+    await expect(
+      open(v, [{ menuItemId: v.juice.almuerzo, variantId: v.variants.small, quantity: "1" }]),
+    ).rejects.toMatchObject({
+      code: "menu_period.ended",
+      params: { menuItemIds: [v.juice.almuerzo] },
+    });
+  });
+
+  it("is accepted at its taken price and marked when a confirmation covers its menu", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    const { personId, lateSend } = confirming([v.menus.almuerzo]);
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id, lateSend);
+    expect(await linesOf(id)).toMatchObject([{ unitPriceGross: 400 }]);
+    expect(await marksOf(id)).toEqual([{ latePeriodName: "Lunch", lateConfirmedBy: personId }]);
+    expect(lateSend.confirm).toHaveBeenCalledTimes(1);
+    expect(lateSend.confirm).toHaveBeenCalledWith(expect.anything(), false);
+  });
+
+  it("marks every row of a confirmed dish, its extras' rows included", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    const { personId, lateSend } = confirming([v.menus.almuerzo]);
+    const id = randomUUID();
+    await open(
+      v,
+      [
+        {
+          menuItemId: v.salad,
+          quantity: "1",
+          extras: [
+            { listId: v.avocado.listId, picks: [{ productId: v.avocado.productId, quantity: 1 }] },
+          ],
+        },
+      ],
+      id,
+      lateSend,
+    );
+    expect(await linesOf(id)).toHaveLength(2);
+    expect(await marksOf(id)).toEqual([
+      { latePeriodName: "Lunch", lateConfirmedBy: personId },
+      { latePeriodName: "Lunch", lateConfirmedBy: personId },
+    ]);
+  });
+
+  it("is refused menu_period.ended when the confirmation covers another menu, and writes nothing", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    const { lateSend } = confirming([v.menus.bebidas]);
+    const id = randomUUID();
+    await expect(
+      open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id, lateSend),
+    ).rejects.toMatchObject({
+      code: "menu_period.ended",
+      params: { menus: [{ menuId: v.menus.almuerzo, periodName: "Lunch" }] },
+    });
+    expect(lateSend.confirm).not.toHaveBeenCalled();
+    expect(await orderRows(id)).toEqual([]);
+  });
+
+  it("answers product.unavailable when it is sold out, even with a confirmation", async () => {
+    at("14:05");
+    const v = await mealVenue();
+    await withTransaction(suite.db, (tx) => updateProduct(tx, v.toastId, { available: false }));
+    const { lateSend } = confirming([v.menus.almuerzo]);
+    await expect(
+      open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], randomUUID(), lateSend),
+    ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: v.toastId } });
+    expect(lateSend.confirm).not.toHaveBeenCalled();
+  });
+
+  it("asks no confirmation when nothing is late", async () => {
+    at("19:30");
+    const v = await mealVenue();
+    const { lateSend } = confirming([v.menus.almuerzo]);
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id, lateSend);
+    expect(lateSend.confirm).not.toHaveBeenCalled();
+    expect(await marksOf(id)).toEqual([{ latePeriodName: null, lateConfirmedBy: null }]);
+  });
 });
 
 describe("a dish whose period has not ended today", () => {
-  it("is refused menu_period.not_running before its period starts", async () => {
-    at("13:00");
-    const v = await mealVenue();
-    await expect(open(v, [{ menuItemId: v.toast.desayunos, quantity: "1" }])).rejects.toMatchObject(
-      {
+  it.each([false, true])(
+    "is refused menu_period.not_running before its period starts (confirmation sent: %s)",
+    async (confirmed) => {
+      at("13:00");
+      const v = await mealVenue();
+      const { lateSend } = confirming([v.menus.desayunos]);
+      await expect(
+        open(
+          v,
+          [{ menuItemId: v.toast.desayunos, quantity: "1" }],
+          randomUUID(),
+          confirmed ? lateSend : undefined,
+        ),
+      ).rejects.toMatchObject({
         code: "menu_period.not_running",
         params: { departmentId: v.restaurant, menuId: v.menus.desayunos },
-      },
-    );
-  });
+      });
+      expect(lateSend.confirm).not.toHaveBeenCalled();
+    },
+  );
 
-  it("is refused menu_period.not_running the morning after its period ran", async () => {
-    at("10:00", "2026-10-06");
-    const v = await mealVenue([1, 2]);
-    await expect(open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }])).rejects.toMatchObject({
-      code: "menu_period.not_running",
-      params: { departmentId: v.restaurant, menuId: v.menus.almuerzo },
-    });
-  });
+  it.each([false, true])(
+    "is refused menu_period.not_running the morning after its period ran (confirmation sent: %s)",
+    async (confirmed) => {
+      at("10:00", "2026-10-06");
+      const v = await mealVenue([1, 2]);
+      const { lateSend } = confirming([v.menus.almuerzo]);
+      await expect(
+        open(
+          v,
+          [{ menuItemId: v.toast.almuerzo, quantity: "1" }],
+          randomUUID(),
+          confirmed ? lateSend : undefined,
+        ),
+      ).rejects.toMatchObject({
+        code: "menu_period.not_running",
+        params: { departmentId: v.restaurant, menuId: v.menus.almuerzo },
+      });
+      expect(lateSend.confirm).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("a raised quantity of a stored line", () => {

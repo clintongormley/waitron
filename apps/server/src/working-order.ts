@@ -68,6 +68,8 @@ import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { RETAINED_COURSE } from "./retained-course.js";
+import type { LateSendConfirmation } from "./late-send.js";
+import { offeredKey } from "@waitron/venue-service";
 import type { RetainedCourseLine } from "./retained-course.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
@@ -601,6 +603,7 @@ export async function priceOrderLines(
   snapshot?: ZoneOffers,
   invalidMakeAt: "refuse" | "ignore" = "refuse",
   periodCheck: "added" | "none" = "added",
+  lateSend?: LateSendConfirmation,
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
@@ -609,6 +612,7 @@ export async function priceOrderLines(
     workingOrderLineId: string;
     menuItemId: string;
     unit?: ExtraChild["unitContext"];
+    late?: { periodName: string; confirmedBy: string };
   }[];
   /** The zone's offers the lines were priced from, for `recordLineContexts`. */
   offers: ZoneOffers;
@@ -679,9 +683,9 @@ export async function priceOrderLines(
       );
     }
   }
-  const late: { menuItemId: string; menuId: string; periodName: string }[] = [];
+  const late: { index: number; menuItemId: string; menuId: string; periodName: string }[] = [];
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
-  const lines = requestedLines.map((line) => {
+  const lines = requestedLines.map((line, index) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry, or the
     // string spelling of an answer only the server settles.
     if (
@@ -701,8 +705,8 @@ export async function priceOrderLines(
     }
     const periodName = ended.get(line);
     if (periodName !== undefined) {
-      if (!alsoSold.has(`${offer.productId}:${line.variantId ?? ""}`)) {
-        late.push({ menuItemId: offer.id, menuId: offer.menuId, periodName });
+      if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
+        late.push({ index, menuItemId: offer.id, menuId: offer.menuId, periodName });
       }
     } else if (
       service !== null &&
@@ -729,16 +733,23 @@ export async function priceOrderLines(
     }
     return { ...line, offer };
   });
+  // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
+  const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
     const { departmentId } = service!;
-    throw new AppError("menu_period.ended", {
-      departmentId,
-      menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
-        ([menuId, periodName]) => ({ menuId, periodName }),
-      ),
-      menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
-      needsManager: await VENUE_SERVICE.readLateSendNeedsManager(tx, cfg, departmentId),
-    });
+    const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, cfg, departmentId);
+    if (lateSend === undefined || late.some((dish) => !lateSend.menuIds.has(dish.menuId))) {
+      throw new AppError("menu_period.ended", {
+        departmentId,
+        menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
+          ([menuId, periodName]) => ({ menuId, periodName }),
+        ),
+        menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
+        needsManager,
+      });
+    }
+    const confirmedBy = await lateSend.confirm(tx, needsManager);
+    for (const { index, periodName } of late) marks.set(index, { periodName, confirmedBy });
   }
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
   const savedLanguages = await readSavedContentLanguages(tx);
@@ -794,6 +805,7 @@ export async function priceOrderLines(
         makeAt: string | null;
         unit: ExtraChild["unitContext"];
         recorded: boolean;
+        late?: { periodName: string; confirmedBy: string };
       }
     | {
         kind: "child";
@@ -801,10 +813,12 @@ export async function priceOrderLines(
         menuItemId: string;
         extraListId: string;
         unit?: ExtraChild["unitContext"];
+        late?: { periodName: string; confirmedBy: string };
       };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
+    const mark = marks.get(index);
     const { offer } = line;
     const source = line[RECALLED_EXTRAS_SOURCE];
     const selection =
@@ -917,6 +931,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       recorded: source !== undefined,
+      ...(mark === undefined ? {} : { late: mark }),
       unit: source?.unit ?? {
         id: selection.unit.id,
         name: {
@@ -938,6 +953,7 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
         extraListId: child.listId,
         unit: child.unitContext,
+        ...(mark === undefined ? {} : { late: mark }),
       });
     }
   }
@@ -1030,6 +1046,7 @@ export async function priceOrderLines(
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
     ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
+    ...(meta.late !== undefined ? { late: meta.late } : {}),
   }));
   return { lineRows, gross, identities, lineContexts, offers };
 }
@@ -1513,6 +1530,7 @@ export async function createOpenOrder(
     receiptLocale?: string;
     creditedTo?: string;
     invalidMakeAt?: "ignore";
+    lateSend?: LateSendConfirmation;
     invoiceChoice?: {
       invoiceType: unknown;
       recipient: unknown;
@@ -1588,6 +1606,8 @@ export async function createOpenOrder(
     effectiveZoneId,
     undefined,
     placement.invalidMakeAt ?? "refuse",
+    "added",
+    placement.lateSend,
   );
   const { gross, identities, lineContexts, offers } = pricedLines;
   if (recipient === null) refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
