@@ -525,6 +525,15 @@ Once anything is edited the dialog keeps its whole draft (since #1891, `ef59aa44
 the dialog keeping each untouched field in step with incoming updates. Left open by A756 PR 4's
 review.
 
+## A1083. The department delete preview says "Removes 1 floor plan sets."
+
+- **A1083. The department delete preview says "Removes 1 floor plan sets."** Each
+  `venue.delete_item_*` line with `{count}` in `packages/venue-service/src/dashboard/strings.ts`
+  has one plural wording in English and Spanish, filled by `serviceDeleteCopy`
+  (`service-delete-copy.ts`), so a count of 1 reads wrongly — seen, 2026-10-24 (A789 slice 2's
+  look), for `delete_item_floor_plan_sets`, `delete_item_staff_menus` and
+  `delete_item_department_policy`. Fix: a singular wording for a count of 1.
+
 ## Decisions and deliberate limits
 
 - **One legal seller for the first venue (owner, 2026-10-21, A898).** Every department
