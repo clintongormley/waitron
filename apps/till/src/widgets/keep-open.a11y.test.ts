@@ -9,7 +9,7 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en");
 });
-describe.each(["period", "zone"] as const)("%s accessibility", (subject) => {
+describe("zone accessibility", () => {
   describe.each(["light", "dark"] as const)("keep-open flow %s", (theme) => {
     it.each(["ready", "absent", "refusal", "manager"])(
       "has no violations when %s",
@@ -25,7 +25,7 @@ describe.each(["period", "zone"] as const)("%s accessibility", (subject) => {
                     : String(_p).endsWith("authorizers")
                       ? [{ personId: "ana", displayName: "Ana" }]
                       : {
-                          [subject]: {
+                          zone: {
                             id: "lunch",
                             name: "Comida",
                             endsAt: "14:00",
@@ -33,7 +33,6 @@ describe.each(["period", "zone"] as const)("%s accessibility", (subject) => {
                             extendedUntil: null,
                             dayEndsAt: "05:00",
                             choices: ["14:30", "05:00"],
-                            next: null,
                           },
                         },
               ),
@@ -48,7 +47,6 @@ describe.each(["period", "zone"] as const)("%s accessibility", (subject) => {
           {
             api: new TillApi("", fetcher),
             zoneId: "z",
-            subject,
             zoneKeepOpen:
               state === "absent"
                 ? null
@@ -56,16 +54,6 @@ describe.each(["period", "zone"] as const)("%s accessibility", (subject) => {
                     zoneId: "z",
                     zoneName: "Terraza",
                     closesAt: "14:00",
-                    running: true,
-                    extendedUntil: null,
-                  },
-            keepOpen:
-              state === "absent"
-                ? null
-                : {
-                    periodId: "lunch",
-                    periodName: "Comida",
-                    endsAt: "14:00",
                     running: true,
                     extendedUntil: null,
                   },

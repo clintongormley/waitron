@@ -2184,6 +2184,18 @@ describe("a device behind the live version (§9)", () => {
   });
 });
 
+const zoneKeepOpen = (zoneId: string, closesAt: string, extendedUntil: string | null) => ({
+  zoneId,
+  zoneName: "Terrace",
+  closesAt,
+  running: true,
+  extendedUntil,
+});
+type ZoneWidget = HTMLElement & {
+  api: TillApi;
+  zoneId: string;
+  zoneKeepOpen: ZoneOfferCatalogue["service"]["zoneKeepOpen"];
+};
 describe("keep-open changes refresh the order screen", () => {
   const initialService = {
     open: true,
@@ -2203,24 +2215,12 @@ describe("keep-open changes refresh the order screen", () => {
     ...initialService,
     keepOpen: { ...initialService.keepOpen, endsAt: "14:30" },
   };
-  const zoneKeepOpen = (zoneId: string, closesAt: string, extendedUntil: string | null) => ({
-    zoneId,
-    zoneName: "Terrace",
-    closesAt,
-    running: true,
-    extendedUntil,
-  });
   const withZone = (zoneId: string, closesAt: string, extendedUntil: string | null) => ({
     ...initialService,
     zoneKeepOpen: zoneKeepOpen(zoneId, closesAt, extendedUntil),
   });
-  type ZoneWidget = HTMLElement & {
-    api: TillApi;
-    zoneId: string;
-    zoneKeepOpen: ZoneOfferCatalogue["service"]["zoneKeepOpen"];
-  };
   const zoneWidget = (screen: HTMLElement) =>
-    screen.shadowRoot!.querySelector<ZoneWidget>('till-keep-open[subject="zone"]');
+    screen.shadowRoot!.querySelector<ZoneWidget>("till-keep-open");
   it("redraws the counter after a poll changes only the period's end", async () => {
     let service = initialService as ZoneOfferCatalogue["service"];
     const { el } = await mountApp({
@@ -2315,13 +2315,7 @@ describe("keep-open changes refresh the order screen", () => {
 });
 
 it("passes keep-open recovery through a standalone table drill", async () => {
-  const zone = {
-    zoneId: "zone-dining",
-    zoneName: "Terrace",
-    closesAt: "14:00",
-    running: false,
-    extendedUntil: null,
-  };
+  const zone = { ...zoneKeepOpen("zone-dining", "14:00", null), running: false };
   const service = {
     open: false,
     zoneOpen: true,
@@ -2332,7 +2326,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
   };
   const extended = {
     ...service,
-    zoneKeepOpen: { ...zone, closesAt: "14:30", running: true, extendedUntil: "14:30" },
+    zoneKeepOpen: zoneKeepOpen("zone-dining", "14:30", "14:30"),
   };
   const { el } = await mountApp(
     tableStubs(DINING, {
@@ -2352,13 +2346,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
   );
   const screen = el.shadowRoot!.querySelector("till-table-order-screen")!;
   expect(screen, "the standalone order drill is reachable").not.toBeNull();
-  const widget = screen.shadowRoot!.querySelector<
-    HTMLElement & {
-      api: TillApi;
-      zoneId: string;
-      zoneKeepOpen: ZoneOfferCatalogue["service"]["zoneKeepOpen"];
-    }
-  >('till-keep-open[subject="zone"]')!;
+  const widget = screen.shadowRoot!.querySelector<ZoneWidget>("till-keep-open")!;
   expect(widget, "the closed drill exposes recovery").not.toBeNull();
   expect(widget.api).toBe(api);
   expect(widget.zoneId).toBe("zone-dining");
@@ -2450,7 +2438,7 @@ for (const kind of ["counter", "table"] as const) {
     const widget = () =>
       screen().shadowRoot!.querySelector<
         HTMLElement & { zoneKeepOpen: ZoneOfferCatalogue["service"]["zoneKeepOpen"] }
-      >('till-keep-open[subject="zone"]');
+      >("till-keep-open");
     expect(widget()).not.toBeNull();
     expect(widget()!.zoneKeepOpen!.closesAt).toBe("14:00");
     api.listZoneOffers.mockImplementation((zone: string) =>

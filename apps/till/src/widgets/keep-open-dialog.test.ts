@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
 import "./keep-open-dialog.js";
 beforeEach(() => setLocale("en"));
@@ -107,7 +108,7 @@ it("busy and disconnected dialogs refuse both save and stop host presses", async
     el.shadowRoot!.querySelector<HTMLElement>(`[data-${name}]`)!.click();
   expect(heard).toEqual([]);
 });
-it("localizes the choices, effect and refusal in Spanish", async () => {
+it("localizes the heading, choices and refusal in Spanish", async () => {
   try {
     setLocale("es");
     const el = await mount({
@@ -122,6 +123,9 @@ it("localizes the choices, effect and refusal in Spanish", async () => {
     expect(el.shadowRoot!.querySelector("wt-combobox")!.options.at(-1)!.label).toBe(
       "Fin del día (05:00)",
     );
+    const spanish = codeMessage("zone_extension.not_allowed", "es");
+    expect(spanish).not.toBe(codeMessage("zone_extension.not_allowed", "en"));
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(spanish);
   } finally {
     setLocale("en");
   }

@@ -32,21 +32,7 @@ for (const kind of ["counter", "table"] as const) {
         "",
         vi.fn(async (path: string | URL | Request) => {
           calls.push(String(path));
-          return new Response(
-            JSON.stringify({
-              period: {
-                id: "lunch",
-                name: "Lunch",
-                endsAt: "14:00",
-                running: true,
-                extendedUntil: null,
-                dayEndsAt: "05:00",
-                choices: ["14:15", "14:30"],
-                next: null,
-              },
-            }),
-            { headers: { "content-type": "application/json" } },
-          );
+          return new Response(null, { status: 204 });
         }),
       );
       const shared = { api, service, departmentName: "Restaurant" };

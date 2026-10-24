@@ -57,11 +57,6 @@ export function zoneKeepOpen(
   zoneId: string,
 ) {
   return subject
-    ? html`<till-keep-open
-        subject="zone"
-        .api=${api}
-        .zoneId=${zoneId}
-        .zoneKeepOpen=${subject}
-      ></till-keep-open>`
+    ? html`<till-keep-open .api=${api} .zoneId=${zoneId} .zoneKeepOpen=${subject}></till-keep-open>`
     : nothing;
 }

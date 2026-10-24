@@ -1454,8 +1454,7 @@ export interface KeepOpenZone {
   dayEndsAt: string;
   choices: readonly string[];
 }
-export interface PeriodExtensionWrite {
-  periodId: string;
+export interface ZoneExtensionWrite {
   until: string | null;
   override?: { personId: string; pin: string };
 }
@@ -3230,22 +3229,11 @@ export class TillApi {
     );
   }
 
-  keepOpen(zoneId: string): Promise<{ period: KeepOpenZone | null; zone: KeepOpenZone | null }> {
+  keepOpen(zoneId: string): Promise<{ zone: KeepOpenZone | null }> {
     return this.#request(`/api/service-zones/${encodeURIComponent(zoneId)}/keep-open`, "GET");
   }
 
-  keepPeriodOpen(zoneId: string, body: PeriodExtensionWrite): Promise<void> {
-    return this.#request(
-      `/api/service-zones/${encodeURIComponent(zoneId)}/period-extension`,
-      "PUT",
-      body,
-    );
-  }
-
-  keepZoneOpen(
-    zoneId: string,
-    body: { until: string | null; override?: { personId: string; pin: string } },
-  ): Promise<void> {
+  keepZoneOpen(zoneId: string, body: ZoneExtensionWrite): Promise<void> {
     return this.#request(
       `/api/service-zones/${encodeURIComponent(zoneId)}/zone-extension`,
       "PUT",

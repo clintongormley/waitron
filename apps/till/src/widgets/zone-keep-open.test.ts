@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -22,7 +23,6 @@ const zone = {
   extendedUntil: null,
   dayEndsAt: "05:00",
   choices: ["22:15", "22:30"],
-  next: null,
 };
 const summary = {
   zoneId: "terrace",
@@ -39,7 +39,7 @@ function json(body: unknown, status = 200) {
 }
 async function mount(
   reply: (path: string, init: RequestInit) => Response | Promise<Response> = (_p, i) =>
-    i.method === "PUT" ? new Response(null, { status: 204 }) : json({ period: null, zone }),
+    i.method === "PUT" ? new Response(null, { status: 204 }) : json({ zone }),
 ) {
   const calls: { path: string; method: string; body: unknown }[] = [];
   const { el } = await mountWidget<TillKeepOpen>("till-keep-open", {
@@ -55,9 +55,8 @@ async function mount(
       }),
     ),
     zoneId: "terrace",
-    subject: "zone",
     zoneKeepOpen: summary,
-  } as Partial<TillKeepOpen>);
+  });
   return { el, calls };
 }
 async function open(el: TillKeepOpen) {
@@ -83,9 +82,11 @@ it("reads the zone subject and writes a zone endpoint without a period id", asyn
   const heard: unknown[] = [];
   el.addEventListener("keep-open-changed", (e) => heard.push((e as CustomEvent).detail));
   const d = await open(el);
-  expect(el.shadowRoot!.querySelector("[data-action]")!.textContent!.trim()).toBe(
+  const trigger = el.shadowRoot!.querySelector<WtButton>("wt-button[data-action]")!;
+  expect([trigger.variant, trigger.textContent!.trim()]).toEqual([
+    "secondary",
     "Keep Terrace open later",
-  );
+  ]);
   expect(d.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Keep Terrace open later today");
   expect(d.shadowRoot!.querySelector("[data-ends]")!.textContent!.trim()).toBe(
     "Terrace closes at 22:00 today.",
@@ -108,7 +109,7 @@ it("retains a zone endpoint through manager approval", async () => {
         ? ++writes === 1
           ? json({ error: { code: "authorization.not_permitted", params: {} } }, 403)
           : new Response(null, { status: 204 })
-        : json({ period: null, zone }),
+        : json({ zone }),
   );
   await save(await open(el));
   await expect
@@ -131,7 +132,7 @@ it("ends the zone extension with a null endpoint", async () => {
   const { el, calls } = await mount((_p, i) =>
     i.method === "PUT"
       ? new Response(null, { status: 204 })
-      : json({ period: null, zone: { ...zone, extendedUntil: "22:30" } }),
+      : json({ zone: { ...zone, extendedUntil: "22:30" } }),
   );
   const d = await open(el);
   d.shadowRoot!.querySelector<HTMLElement>("[data-stop]")!.click();
@@ -146,8 +147,8 @@ it.each(["zone_extension.invalid", "zone_extension.not_allowed"])(
       i.method === "PUT"
         ? json({ error: { code, params: { field: "until" } } }, 409)
         : ++reads === 1
-          ? json({ period: null, zone })
-          : json({ period: null, zone: { ...zone, choices: ["22:15"] } }),
+          ? json({ zone })
+          : json({ zone: { ...zone, choices: ["22:15"] } }),
     );
     const d = await open(el);
     await save(d);
@@ -159,33 +160,22 @@ it.each(["zone_extension.invalid", "zone_extension.not_allowed"])(
     expect(d.shadowRoot!.querySelector("wt-combobox")!.error).not.toBe("");
   },
 );
-it("ignores zone choices that finish after switching the subject", async () => {
+it("ignores zone choices that finish after switching the zone", async () => {
   let finish!: (r: Response) => void;
   const { el } = await mount(() => new Promise((r) => (finish = r)));
   expect(el.shadowRoot!.querySelector("[data-action]")).not.toBeNull();
   el.shadowRoot!.querySelector<HTMLElement>("[data-action]")!.click();
   await expect.poll(() => typeof finish).toBe("function");
-  Object.assign(el, {
-    subject: "period",
-    keepOpen: {
-      periodId: "dinner",
-      periodName: "Dinner",
-      endsAt: "23:00",
-      running: true,
-      extendedUntil: null,
-    },
-  });
+  el.zoneKeepOpen = { ...summary, zoneId: "patio", zoneName: "Patio" };
   await el.updateComplete;
-  finish(json({ period: null, zone }));
+  finish(json({ zone }));
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
 });
 it("uses Spanish zone wording for a closed zone", async () => {
   setLocale("es");
-  const { el } = await mount(() =>
-    json({ period: null, zone: { ...zone, name: "Terraza", running: false } }),
-  );
+  const { el } = await mount(() => json({ zone: { ...zone, name: "Terraza", running: false } }));
   Object.assign(el, { zoneKeepOpen: { ...summary, zoneName: "Terraza", running: false } });
   await el.updateComplete;
   const d = await open(el);

@@ -8,22 +8,21 @@ import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
 import "./keep-open.js";
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-const subject = {
-  periodId: "lunch",
-  periodName: "Lunch",
-  endsAt: "14:00",
+const summary = {
+  zoneId: "zone /1",
+  zoneName: "Terrace",
+  closesAt: "14:00",
   running: true,
   extendedUntil: null,
 };
-const period = {
-  id: "lunch",
-  name: "Lunch",
+const zone = {
+  id: "zone /1",
+  name: "Terrace",
   endsAt: "14:00",
   running: true,
   extendedUntil: null,
   dayEndsAt: "05:00",
   choices: ["14:15", "14:30", "05:00"],
-  next: null,
 };
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -37,7 +36,7 @@ function refusal(code: string, params: object = {}) {
 async function mount(
   props: Partial<TillKeepOpen> = {},
   reply: (path: string, init: RequestInit) => Response | Promise<Response> = (_p, i) =>
-    i.method === "PUT" ? new Response(null, { status: 204 }) : json({ period }),
+    i.method === "PUT" ? new Response(null, { status: 204 }) : json({ zone }),
 ) {
   const calls: { path: string; method: string; body: unknown }[] = [];
   const fetcher = vi.fn(async (p: string | URL | Request, i?: RequestInit) => {
@@ -51,7 +50,7 @@ async function mount(
   const { el } = await mountWidget<TillKeepOpen>("till-keep-open", {
     api: new TillApi("", fetcher),
     zoneId: "zone /1",
-    keepOpen: subject,
+    zoneKeepOpen: summary,
     ...props,
   });
   expect(el.shadowRoot, "the keep-open flow renders").not.toBeNull();
@@ -73,46 +72,12 @@ async function save(d: TillKeepOpenDialog) {
   await d.updateComplete;
   d.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
 }
-it("omits the control when no period can be kept open", async () => {
-  const { el, calls } = await mount({ keepOpen: null });
+it("omits the control when the zone has no closing to keep open", async () => {
+  const { el, calls } = await mount({ zoneKeepOpen: null });
   expect(el.shadowRoot!.querySelector("wt-button")).toBeNull();
   expect(calls).toEqual([]);
 });
-it("opens with a quiet button and writes the chosen period and endpoint through the real API", async () => {
-  const { el, calls } = await mount();
-  const b = el.shadowRoot!.querySelector("wt-button")!;
-  expect([b.variant, b.textContent!.trim()]).toEqual(["secondary", "Keep Lunch open later"]);
-  const events: unknown[] = [];
-  el.addEventListener("keep-open-changed", (e) => events.push((e as CustomEvent).detail));
-  act(el);
-  const d = await dialog(el);
-  await save(d);
-  await expect.poll(() => events).toEqual([{ zoneId: "zone /1" }]);
-  expect(calls).toEqual([
-    { path: "/api/service-zones/zone%20%2F1/keep-open", method: "GET", body: null },
-    {
-      path: "/api/service-zones/zone%20%2F1/period-extension",
-      method: "PUT",
-      body: { periodId: "lunch", until: "14:30" },
-    },
-  ]);
-  expect(el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
-});
-it("ends the extension with a null endpoint", async () => {
-  const { el, calls } = await mount(
-    { keepOpen: { ...subject, extendedUntil: "14:30" } },
-    (_p, i) =>
-      i.method === "PUT"
-        ? new Response(null, { status: 204 })
-        : json({ period: { ...period, extendedUntil: "14:30" } }),
-  );
-  act(el);
-  const d = await dialog(el);
-  d.shadowRoot!.querySelector<HTMLElement>("[data-stop]")!.click();
-  await expect.poll(() => calls.length).toBe(2);
-  expect(calls.at(-1)!.body).toEqual({ periodId: "lunch", until: null });
-});
-it.each(["period_extension.invalid", "period_extension.not_allowed"])(
+it.each(["zone_extension.invalid", "zone_extension.not_allowed"])(
   "refreshes choices after %s and retains the write refusal if that read fails",
   async (code) => {
     let reads = 0;
@@ -120,7 +85,7 @@ it.each(["period_extension.invalid", "period_extension.not_allowed"])(
       i.method === "PUT"
         ? refusal(code, { field: "until" })
         : ++reads === 1
-          ? json({ period })
+          ? json({ zone })
           : refusal("time_zone.unreadable"),
     );
     act(el);
@@ -134,6 +99,18 @@ it.each(["period_extension.invalid", "period_extension.not_allowed"])(
     expect(d.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
     d.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
     await expect.poll(() => calls.filter((c) => c.method === "PUT").length).toBe(2);
+    expect(calls.filter((c) => c.method === "PUT")).toEqual([
+      {
+        path: "/api/service-zones/zone%20%2F1/zone-extension",
+        method: "PUT",
+        body: { until: "14:30" },
+      },
+      {
+        path: "/api/service-zones/zone%20%2F1/zone-extension",
+        method: "PUT",
+        body: { until: "14:30" },
+      },
+    ]);
   },
 );
 it.each(["pin.invalid", "pin.throttled"])(
@@ -149,7 +126,7 @@ it.each(["pin.invalid", "pin.throttled"])(
             : writes === 2
               ? refusal(code)
               : new Response(null, { status: 204 })
-          : json({ period }),
+          : json({ zone }),
     );
     act(el);
     const d = await dialog(el);
@@ -171,9 +148,9 @@ it.each(["pin.invalid", "pin.throttled"])(
     );
     await expect.poll(() => el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
     expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([
-      { periodId: "lunch", until: "14:30" },
-      { periodId: "lunch", until: "14:30", override: { personId: "ana", pin: "1234" } },
-      { periodId: "lunch", until: "14:30", override: { personId: "ana", pin: "5678" } },
+      { until: "14:30" },
+      { until: "14:30", override: { personId: "ana", pin: "1234" } },
+      { until: "14:30", override: { personId: "ana", pin: "5678" } },
     ]);
   },
 );
@@ -183,7 +160,7 @@ it("cancelling the PIN leaves the selected endpoint ready for retry", async () =
       ? json([])
       : i.method === "PUT"
         ? refusal("authorization.not_permitted")
-        : json({ period }),
+        : json({ zone }),
   );
   act(el);
   const d = await dialog(el);
@@ -209,12 +186,12 @@ it("a failed initial read shows its sentence and can be retried", async () => {
   await expect.poll(() => calls.length).toBe(2);
 });
 it("a null read opens no editor", async () => {
-  const { el } = await mount({}, () => json({ period: null }));
+  const { el } = await mount({}, () => json({ zone: null }));
   act(el);
   await expect.poll(() => el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(false);
   expect(el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
 });
-it.each(["disconnect", "zone", "period"])(
+it.each(["disconnect", "zone", "zone keep-open"])(
   "ignores a read that finishes after %s changes",
   async (change) => {
     let finish!: (r: Response) => void;
@@ -224,9 +201,9 @@ it.each(["disconnect", "zone", "period"])(
     await expect.poll(() => typeof finish).toBe("function");
     if (change === "disconnect") el.remove();
     else if (change === "zone") el.zoneId = "other";
-    else el.keepOpen = { ...subject, periodId: "dinner" };
+    else el.zoneKeepOpen = { ...summary, zoneId: "patio" };
     await el.updateComplete;
-    finish(json({ period }));
+    finish(json({ zone }));
     await read.mock.results[0]!.value;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await el.updateComplete;
@@ -236,9 +213,9 @@ it.each(["disconnect", "zone", "period"])(
 it("ignores a completed write after disconnect and prevents double submission", async () => {
   let finish!: (r: Response) => void;
   const { el, calls } = await mount({}, (_p, i) =>
-    i.method === "PUT" ? new Promise((r) => (finish = r)) : json({ period }),
+    i.method === "PUT" ? new Promise((r) => (finish = r)) : json({ zone }),
   );
-  const write = vi.spyOn(el.api!, "keepPeriodOpen");
+  const write = vi.spyOn(el.api!, "keepZoneOpen");
   act(el);
   const d = await dialog(el);
   await save(d);
@@ -260,7 +237,7 @@ it("a manager read finishing after the zone changes cannot reopen the old PIN st
       ? new Promise((resolve) => (finish = resolve))
       : init.method === "PUT"
         ? refusal("authorization.not_permitted")
-        : json({ period }),
+        : json({ zone }),
   );
   const read = vi.spyOn(el.api!, "serviceDayAuthorizers");
   act(el);
@@ -284,7 +261,7 @@ it("manager approval retains a null endpoint when ending the extension", async (
         ? ++writes === 1
           ? refusal("authorization.not_permitted")
           : new Response(null, { status: 204 })
-        : json({ period: { ...period, extendedUntil: "14:30" } }),
+        : json({ zone: { ...zone, extendedUntil: "14:30" } }),
   );
   act(el);
   const d = await dialog(el);
@@ -297,7 +274,6 @@ it("manager approval retains a null endpoint when ending the extension", async (
   );
   await expect.poll(() => writes).toBe(2);
   expect(calls.at(-1)!.body).toEqual({
-    periodId: "lunch",
     until: null,
     override: { personId: "ana", pin: "1234" },
   });
@@ -309,7 +285,7 @@ it.each(["answer", "refusal"])(
     let finish!: (response: Response) => void;
     let count = 0;
     const { el, calls } = await mount({}, () =>
-      ++count === 1 ? new Promise((resolve) => (finish = resolve)) : json({ period }),
+      ++count === 1 ? new Promise((resolve) => (finish = resolve)) : json({ zone }),
     );
     const read = vi.spyOn(el.api!, "keepOpen");
     act(el);
@@ -318,7 +294,7 @@ it.each(["answer", "refusal"])(
     el.remove();
     parent.append(el);
     await el.updateComplete;
-    finish(reply === "answer" ? json({ period }) : refusal("time_zone.unreadable"));
+    finish(reply === "answer" ? json({ zone }) : refusal("time_zone.unreadable"));
     await Promise.allSettled([read.mock.results[0]!.value]);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await el.updateComplete;
@@ -342,7 +318,7 @@ it("a failed manager list keeps the endpoint and lets staff retry approval", asy
         ? ++writes < 3
           ? refusal("authorization.not_permitted")
           : new Response(null, { status: 204 })
-        : json({ period }),
+        : json({ zone }),
   );
   act(el);
   const d = await dialog(el);
@@ -366,9 +342,9 @@ it("a failed manager list keeps the endpoint and lets staff retry approval", asy
   await expect.poll(() => el.shadowRoot!.querySelector("till-keep-open-dialog")).toBeNull();
   expect(managerReads).toBe(2);
   expect(calls.filter((call) => call.method === "PUT").map((call) => call.body)).toEqual([
-    { periodId: "lunch", until: "14:30" },
-    { periodId: "lunch", until: "14:30" },
-    { periodId: "lunch", until: "14:30", override: { personId: "ana", pin: "1234" } },
+    { until: "14:30" },
+    { until: "14:30" },
+    { until: "14:30", override: { personId: "ana", pin: "1234" } },
   ]);
 });
 it("closing the editor re-enables its control and reads fresh choices on reopening", async () => {
@@ -386,4 +362,17 @@ it("closing the editor re-enables its control and reads fresh choices on reopeni
     { path: "/api/service-zones/zone%20%2F1/keep-open", method: "GET", body: null },
     { path: "/api/service-zones/zone%20%2F1/keep-open", method: "GET", body: null },
   ]);
+});
+it("writes nothing for a confirm naming a zone other than the one it read", async () => {
+  const { el, calls } = await mount();
+  act(el);
+  const d = await dialog(el);
+  d.dispatchEvent(
+    new CustomEvent("keep-open-confirm", { detail: { zoneId: "patio", until: "14:30" } }),
+  );
+  d.dispatchEvent(
+    new CustomEvent("keep-open-confirm", { detail: { zoneId: "zone /1", until: "14:15" } }),
+  );
+  await expect.poll(() => calls.filter((c) => c.method === "PUT").length).toBe(1);
+  expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ until: "14:15" }]);
 });
