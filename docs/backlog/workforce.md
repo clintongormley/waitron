@@ -299,6 +299,34 @@ scheduled hours into accrued-versus-pending money. Rates are editable data, neve
 numbers; needs public holidays for every year it pays (today only 2026 exists), national,
 regional and local. Gated on the labour advisor; not fiscal.
 
+## A link look for `wt-button` (left open by #1841).
+
+**A link look for `wt-button` (left open by #1841).** The Rota's picker and open-slots menu draw
+"Show everyone" and "Another shift…" as underlined links by restyling a `wt-button` locally
+(`slot-picker.ts`, `open-slots-menu.ts`). A `link` variant on the shared button would replace both;
+it changes a shared primitive, so it needs its token-painting and a11y tests.
+
+## Staffing's day box: each area's staff roles and times.
+
+**Staffing's day box: each area's staff roles and times.** The box lists each area's number; the
+mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
+block. Decision 13 of the [A720 plan](../superpowers/plans/2026-10-15-a720-calendar-year-month.md),
+[mockup](mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
+
+## The Rota shift routes read a null or malformed JSON body as an empty object.
+
+**The Rota shift routes read a null or malformed JSON body as an empty object.**
+For no body, `{` and `null`, `POST …/rota/shifts` answered 400 with `field: "week"` and
+`PATCH …/rota/shifts/:shiftId` 404 `shift.not_found` for an unknown id, neither naming `body`
+(A750's probe, 2026-10-16). Next: swap `readJsonBody` for `readRawJsonBody`, as change-week did.
+
+## A587. Availability and personal preferences
+
+**A587. Availability and personal preferences** — "can't work Wednesdays"; "Anna only works
+mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broken rule does, in
+words that say it is the person's preference, not their contract. The `availability` table
+exists unused. Shown in A585's picker and warnings. After A586.
+
 ## Decisions and deliberate limits
 
 ### Pay-period cadence after closure (owner, 2026-10-15)
