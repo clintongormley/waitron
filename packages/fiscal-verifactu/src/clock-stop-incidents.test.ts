@@ -246,6 +246,13 @@ describe("a lift's alert", () => {
     ).rejects.toMatchObject({ code: "clock.confirm_refused", params: { reason: "differs" } });
     expect(count("incidents")).toBe(before.incidents);
     expect(count("clock_confirmations")).toBe(before.rows);
+    await lift(R, [], { personId: FIRST, personName: "Ana", differenceMs: 59 * S });
+    // Beside it, the wrongly dated sale's alert.
+    expect(count("incidents")).toBe(before.incidents + 2);
+    expect(count("clock_confirmations")).toBe(before.rows + 1);
+    expect(incidents(RESTARTED).map((row) => row.params)).toMatchObject([
+      { confirmedBy: "admin", person: "Ana" },
+    ]);
   });
 
   it("control: the same confirmation with proof records it", async () => {
@@ -262,11 +269,15 @@ describe("a lift's alert", () => {
     await sale(T);
     await lift(R, twoDevices(R));
     const before = count("incidents");
+    const rows = count("clock_confirmations");
+    expect(rows).toBe(1);
     expect(await confirm(R, twoDevices(R))).toEqual({ confirmation: null });
+    expect(count("clock_confirmations")).toBe(rows);
     await expect(confirm(R, [], { personId: SECOND, personName: "Berta" })).rejects.toMatchObject({
       code: "clock.confirm_refused",
       params: { reason: "not_stopped" },
     });
+    expect(count("clock_confirmations")).toBe(rows);
     expect(count("incidents")).toBe(before);
     expect(incidents(RESTARTED)).toHaveLength(1);
   });

@@ -7,6 +7,7 @@ import type {
   ClockConfirmation,
   ClockConfirmationSource,
   ClockWitness,
+  ClockWitnessVerdict,
 } from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
 import {
@@ -77,8 +78,8 @@ export function correctedStart(
 ): { correctedStart: string; partial: boolean } {
   const detail = (check.detail ?? {}) as { bootMs?: unknown; bootId?: unknown };
   const elapsedMs = typeof detail.bootMs === "number" ? closing.bootMs - detail.bootMs : Number.NaN;
-  // Negated so that an unreadable reading (NaN) takes the fallback.
   const sameBoot = closing.bootId !== null && detail.bootId === closing.bootId;
+  // Negated so that an unreadable reading (NaN) takes the fallback.
   if (!sameBoot || !(elapsedMs >= 0))
     return { correctedStart: closing.confirmedAt.toISOString(), partial: true };
   return {
@@ -101,7 +102,7 @@ export function takenDuringStop(
 /** The mirror: taken once the stop had ended, the box reading no more than a minute behind the
  * latest record. The witness store also hands back AEAT disagreements kept from during the stop,
  * whatever their age, so a waiting check is judged on these alone. */
-export function takenAfterStopEnded(
+function takenAfterStopEnded(
   witnesses: readonly ClockWitness[],
   latest: LatestRecord,
 ): ClockWitness[] {
@@ -301,15 +302,27 @@ export function judgeAfterStopEnded(
   latest: LatestRecord,
 ): { agreeing: Omit<ClosingWitnesses, "admin">; contrary: Omit<ClosingWitnesses, "admin"> } {
   const verdict = judgeClockWitnesses(takenAfterStopEnded(witnesses, latest));
-  const group = new Set(agreeingDeviceGroup(verdict.agreeing));
+  return witnessProof(verdict.agreeing, verdict);
+}
+
+/** The agreeing proof drawn from `agreeing` (AEAT's reading and the agreeing group of devices), and
+ * the contrary proof from `verdict`. */
+export function witnessProof(
+  agreeing: readonly ClockWitness[],
+  verdict: ClockWitnessVerdict,
+): {
+  agreeing: { authority: ClockWitness | null; devices: ClockWitness[] };
+  contrary: { authority: ClockWitness | null; devices: ClockWitness[] };
+} {
+  const group = new Set(agreeingDeviceGroup(agreeing));
   return {
     agreeing: {
-      authority: verdict.agreeing.find((witness) => witness.kind === "authority") ?? null,
-      devices: verdict.agreeing.filter((witness) => group.has(witness)),
+      authority: agreeing.find((witness) => witness.kind === "authority") ?? null,
+      devices: agreeing.filter((witness) => group.has(witness)),
     },
     contrary: {
       authority: verdict.authorityDisagrees[0] ?? null,
-      devices: verdict.devicesDisagreeing,
+      devices: [...verdict.devicesDisagreeing],
     },
   };
 }

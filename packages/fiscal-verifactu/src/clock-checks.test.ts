@@ -144,6 +144,13 @@ describe("openClockCheck", () => {
     expect(counts()).toEqual(before);
   });
 
+  it("control: opens a check a millisecond past a minute behind the latest record", async () => {
+    await sale(T);
+    expect(counts()).toEqual({ checks: 0, confirmations: 0 });
+    expect(await open(T - M - 1)).not.toBeNull();
+    expect(counts()).toEqual({ checks: 1, confirmations: 0 });
+  });
+
   it("writes nothing with no record at all", async () => {
     expect(await open(R)).toBeNull();
     expect(counts()).toEqual({ checks: 0, confirmations: 0 });
@@ -200,9 +207,16 @@ describe("openClockCheck", () => {
         boot: { ms: 6_400_000, id: "boot-1" },
         nodeId,
       });
-      return { answer, inside: { checks: (await tx.select().from(clockChecks)).length } };
+      return {
+        answer,
+        inside: {
+          checks: (await tx.select().from(clockChecks)).length,
+          confirmations: (await tx.select().from(clockConfirmations)).length,
+        },
+      };
     });
     expect(reopened.inside.checks).toBe(2);
+    expect(reopened.inside.confirmations).toBe(1);
     expect(reopened.answer!.id).not.toBe(old!.id);
     const written = await checks();
     expect(written).toHaveLength(2);
@@ -354,8 +368,7 @@ describe("correctedStart", () => {
   });
 });
 
-/** Round 3's case B: the clock right until 10:00, sales every five minutes, then set 30 minutes
- * back by mistake; the stop ends by itself once the wrong clock reaches the last sale. */
+/** The clock right until 10:00, sales every five minutes, then set 30 minutes back by mistake; the stop ends by itself once the wrong clock reaches the last sale. */
 const TEN = Date.parse("2026-10-19T10:00:00.000Z");
 const WRONG = 30 * M;
 
@@ -581,6 +594,34 @@ describe("closeClockCheckByItself", () => {
     const checkId = await caseB();
     const answer = await closeByItself(ENDED, [aeat(ENDED - 10 * S, WRONG)]);
     await closedWith(answer, checkId, "elapsed", { authority: null, devices: [] }, true);
+  });
+
+  it("with AEAT both disagreeing and then agreeing after the stop ended, closes it elapsed", async () => {
+    const checkId = await caseB();
+    const answer = await closeByItself(ENDED, [
+      aeat(ENDED - 20 * S, WRONG),
+      aeat(ENDED - 10 * S, 5 * S),
+    ]);
+    await closedWith(answer, checkId, "elapsed", { authority: null, devices: [] }, true);
+  });
+
+  it("counts AEAT's witness taken exactly a minute before the latest record as after the stop", async () => {
+    const checkId = await caseB();
+    const agreeing = aeat(TEN - M, 5 * S);
+    const answer = await closeByItself(ENDED, [agreeing]);
+    await closedWith(
+      answer,
+      checkId,
+      "authority",
+      { authority: storedAuthority(agreeing), devices: [] },
+      false,
+    );
+  });
+
+  it("control: AEAT's witness a millisecond earlier was taken during the stop, and closes nothing", async () => {
+    await caseB();
+    await closesNothing(ENDED, [aeat(TEN - M - 1, 5 * S)]);
+    expect(await waiting(ENDED)).not.toBeNull();
   });
 
   it("(ii) with two devices from two addresses disagreeing and no AEAT, closes it elapsed", async () => {

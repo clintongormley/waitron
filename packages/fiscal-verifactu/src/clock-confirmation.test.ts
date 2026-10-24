@@ -673,6 +673,15 @@ describe("an administrator's device", () => {
     expect(await sale(R)).toBe("clock.behind_chain");
   });
 
+  it("a negative uncertainty differs and writes nothing", async () => {
+    await sale(T);
+    await adminRefused(R, [], adminReading(R, 60 * S + 500, -S), "clock.confirm_refused", {
+      reason: "differs",
+    });
+    const answer = await confirmAsAdmin(R, [], adminReading(R, 59 * S, 0));
+    expect(answer.confirmation!.source).toBe("admin");
+  });
+
   it("an unreadable time differs and writes nothing", async () => {
     await sale(T);
     const admin = adminReading(R, 0, 0);
@@ -881,6 +890,38 @@ describe("an administrator's device while a check waits", () => {
     await adminRefused(T, twoDevicesAgainst(T), adminReading(T, 0, 0), "clock.confirm_refused", {
       reason: "contrary_proof",
     });
+  });
+
+  it("AEAT agreeing after the stop ended, beside two devices disagreeing, refuses it as contrary proof", async () => {
+    await waitingCheck();
+    await adminRefused(
+      T,
+      [authority(T - 20 * S, 10 * S, 500), ...twoDevicesAgainst(T)],
+      adminReading(T, 0, 0),
+      "clock.confirm_refused",
+      { reason: "contrary_proof" },
+    );
+  });
+
+  it("AEAT disagreeing after the stop ended, beside two agreeing devices, refuses it as contrary proof", async () => {
+    await waitingCheck();
+    await adminRefused(
+      T,
+      [authority(T - 20 * S, 2 * H, 500), ...twoDevices(T)],
+      adminReading(T, 0, 0),
+      "clock.confirm_refused",
+      { reason: "contrary_proof" },
+    );
+  });
+
+  it("control: a lone device disagreeing after the stop ended does not refuse it", async () => {
+    const checkId = await waitingCheck();
+    const answer = await confirmAsAdmin(
+      T,
+      [device("till-3", T - 20 * S, 2 * H, "10.0.0.3")],
+      adminReading(T, 0, 0),
+    );
+    expect(answer.confirmation).toMatchObject({ source: "admin", checkId, recordId: null });
   });
 
   it("a device that differs is refused, and writes nothing", async () => {

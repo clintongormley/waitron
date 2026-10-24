@@ -1,7 +1,7 @@
 import "./errors.js";
 import { desc, eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { agreeingDeviceGroup, CLOCK_WITNESS_MARGIN_MS, judgeClockWitnesses } from "@waitron/fiscal";
+import { CLOCK_WITNESS_MARGIN_MS, judgeClockWitnesses } from "@waitron/fiscal";
 import type {
   ClockAdminConfirm,
   ClockAdminReading,
@@ -26,6 +26,7 @@ import {
   nextConfirmationSeq,
   openCheck,
   openClockCheck,
+  witnessProof,
   storedWitnesses,
   takenDuringStop,
   waitingCheck,
@@ -70,15 +71,7 @@ async function judge(
   const taken = verdict.agreeing.filter(
     (witness) => Date.parse(witness.boxAt) <= reading.instant.getTime(),
   );
-  const group = new Set(agreeingDeviceGroup(taken));
-  const agreeing = {
-    authority: taken.find((witness) => witness.kind === "authority") ?? null,
-    devices: taken.filter((witness) => group.has(witness)),
-  };
-  const contrary = {
-    authority: verdict.authorityDisagrees[0] ?? null,
-    devices: [...verdict.devicesDisagreeing],
-  };
+  const { agreeing, contrary } = witnessProof(taken, verdict);
   const stopped = (await clockBehindChain(tx, reading)) !== null;
   let proof: ClockStopState["proof"];
   if (!stopped) proof = "confirmed";
@@ -138,13 +131,15 @@ function refuse(reason: "not_stopped" | "contrary_proof" | "differs"): never {
 }
 
 function adminAgrees(reading: ClockAdminReading): boolean {
+  if (!(reading.uncertaintyMs >= 0)) return false;
   const differenceMs = Math.abs(Date.parse(reading.witnessAt) - Date.parse(reading.boxAt));
   // An unreadable time compares false, so it does not agree.
   return differenceMs + reading.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
 }
 
-/** The administrator's confirmation of a check that waits: refused `not_stopped` with none, and
- * `contrary_proof` on a witness taken after the stop ended that disagrees. */
+/** The administrator's confirmation of a check that waits: refused `not_stopped` with none,
+ * `contrary_proof` when AEAT, or a group of devices from two addresses, taken after the stop ended
+ * disagrees, and `differs` when the administrator's device does not agree with the box. */
 async function closeWaitingAsAdmin(
   tx: Transaction,
   input: ClockConfirmRequest,
@@ -174,9 +169,10 @@ async function closeWaitingAsAdmin(
  * This stop's check is the one the watch's look answers: the open check, or one opened now (after
  * closing an open check whose stop came back), whose closing is then `partial`. With no `admin`, only
  * when the witnesses are ready; otherwise it writes nothing and answers null. With `admin`, on the
- * administrator's device unless a witness taken during the stop disagrees; a refusal throws
- * `clock.confirm_refused`, and a reading before 28-10-2024 `clock.unusable`, writing nothing. With
- * `admin` and no stop, it closes a check that waits instead. */
+ * administrator's device, refused `contrary_proof` when AEAT, or a group of devices from two
+ * addresses, taken during the stop disagrees, and `differs` when that device does not agree with
+ * the box. A refusal throws `clock.confirm_refused`, and a reading before 28-10-2024
+ * `clock.unusable`, writing nothing. With `admin` and no stop, it closes a check that waits instead. */
 export async function confirmClockStop(
   tx: Transaction,
   input: ClockConfirmRequest,
@@ -267,9 +263,9 @@ export async function confirmClockStop(
 }
 
 /** The clock was proved wrong after `trustedUntil`: by a jump, or by AEAT disagreeing, noticed at
- * `observedAt`. Records one `clock.behind_chain_disproved` for each restart then in force that has
+ * `observedAt`. Records one `clock.behind_chain_disproved` for each lift then in force that has
  * none yet; `recorded`, `unused` (no record written under it) and `held` (another open incident
- * holds its sale) list restart ids. */
+ * holds its sale) list the lifts' confirmation ids. */
 export async function noteClockProvedWrong(
   tx: Transaction,
   input: ClockProvedWrong,
