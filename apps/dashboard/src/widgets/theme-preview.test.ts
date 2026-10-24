@@ -520,7 +520,8 @@ it("the preview's names leave a word under 8 letters whole, as the tills do", as
   for (const name of names(el)) {
     expect(getComputedStyle(name).getPropertyValue("hyphenate-limit-chars")).toBe("8");
     // Where a short word sits in its line depends on the font, so a copy of the name is laid out
-    // at every width from its widest short word up to its own width.
+    // at every width from its widest short word up to its one-line width, or the tile's when that is
+    // narrower.
     const probe = name.cloneNode() as HTMLElement;
     probe.textContent = name.textContent;
     Object.assign(probe.style, { flex: "none", width: "max-content" });

@@ -1591,7 +1591,7 @@ image is reframed.
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.
 
-The `lang` on a till's product button names and bill line names is the venue's default content
+**A name's language.** The `lang` on a till's product button names and bill line names is the venue's default content
 language, which is not part of the start read: the till reads the content languages at start and
 again 60 s after each read ends, answered or not (`#refreshContentLanguages`, `apps/till/src/till-app.ts`), and the
 menu browser and the basket redraw on a change (`ContentLanguageController`), so the `lang` follows
