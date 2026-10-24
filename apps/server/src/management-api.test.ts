@@ -1828,6 +1828,50 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
+  it("PATCH saves a station's changes after sending and refuses any other value", async () => {
+    const name = unique("Changes after sending");
+    const id = await createStation(name);
+    const saved = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ changesAfterSending: "held" }) },
+      managerCookie,
+    );
+    expect(saved.status).toBe(204);
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      changesAfterSending: "held",
+    });
+    for (const changesAfterSending of ["Held", null, 1, true, "while-held"]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ changesAfterSending }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "management.request_invalid",
+          params: { field: "changesAfterSending" },
+        },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        changesAfterSending: "held",
+      });
+    }
+    const refused = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ name: "Renamed", changesAfterSending: "bogus" }) },
+      managerCookie,
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "changesAfterSending" } },
+    });
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      name,
+      changesAfterSending: "held",
+    });
+  });
+
   it("PATCH saves a station's held printing and refuses a non-boolean", async () => {
     const id = await createStation(unique("Held printing"));
     for (const printHeldWork of [true, false, true]) {

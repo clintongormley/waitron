@@ -71,7 +71,8 @@ import {
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./parties.js";
-import { listStationNotices, writeEditSentLines } from "@waitron/venue-service";
+import { listStationNotices } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -5813,7 +5814,7 @@ describe("Fire now on one held dish", () => {
           .update(locations)
           .set({ fireControl: mode })
           .where(eq(locations.id, v.cfg.locationId));
-        await writeEditSentLines(tx, false);
+        await setChangesAfterSending(tx, "never");
       });
       const command = await args(s.partyId);
       await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
@@ -5827,9 +5828,9 @@ describe("Fire now on one held dish", () => {
     },
   );
 
-  it("fires while sent edits are disabled", async () => {
+  it("fires a held dish at a Not allowed station", async () => {
     const { v, s, steak } = await fixture(false);
-    await inTx((tx) => writeEditSentLines(tx, false));
+    await inTx((tx) => setChangesAfterSending(tx, "never"));
     const command = await args(s.partyId);
     await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
     expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);

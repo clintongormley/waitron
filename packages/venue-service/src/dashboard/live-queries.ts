@@ -94,7 +94,6 @@ export const QUERY_DEPENDENCIES = {
     "floor_today_join_tables",
     "floor_today_joins",
   ],
-  settings: ["service_settings"],
   "floor-plan-sets": [
     "floor_plan_sets",
     "floor_plans",
@@ -236,7 +235,6 @@ export const QUERY_DEPENDENCIES = {
     "menu_periods",
     "menu_period_staff_menus",
     "routing_cells",
-    "service_settings",
     "catalogues",
     "categories",
     "kitchen_stations",

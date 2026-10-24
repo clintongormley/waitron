@@ -711,7 +711,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_transfer_desks" },
     { name: "department_transfer_destinations" },
     { name: "routing_cells", locationColumns: ["location_id"] },
-    { name: "service_settings" },
     { name: "department_floor_plan_sets" },
     { name: "menu_periods" },
     { name: "menu_period_staff_menus" },

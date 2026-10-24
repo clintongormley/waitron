@@ -47,7 +47,6 @@ const TABLES = [
   "routing_cell_periods",
   "order_service_contexts",
   "working_line_contexts",
-  "service_settings",
   "kitchen_notices",
   "device_profile_kitchen_screens",
   "device_profile_kitchen_screen_stations",
@@ -299,7 +298,6 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(working_order_line_id) -> working_order_lines(id) on delete cascade",
         ],
       },
-      service_settings: { primaryKey: ["id"], foreignKeys: [] },
       kitchen_notices: {
         primaryKey: ["id"],
         foreignKeys: [
@@ -1138,25 +1136,15 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   });
 });
 
-describe("the service settings and kitchen notices tables refuse what their rules forbid", () => {
-  it("holds at most one settings row, and it is row 1", async () => {
-    await db.execute(sql`insert into service_settings (id) values (1)`);
-    const second = await captureError(() =>
-      db.execute(sql`insert into service_settings (id) values (2)`),
-    );
-    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(second)).toContain("service_settings_singleton_ck");
-    // The flag defaults ON in the database itself, so a row written by raw SQL gets it too.
-    expect((await db.execute(sql`select edit_sent_lines from service_settings`)).rows).toEqual([
-      { edit_sent_lines: 1 },
-    ]);
-  });
-
-  it("the venue keeps no ticket grouping, held printing or MOVED slips of its own", async () => {
-    expect((await columnsOf("service_settings")).map((column) => column.name)).toEqual([
-      "id",
-      "edit_sent_lines",
-    ]);
+describe("the kitchen notices table refuses what its rules forbid", () => {
+  it("the venue keeps no service settings of its own", async () => {
+    expect(
+      (
+        await db.execute(
+          sql`select name from sqlite_master where type = 'table' and name = 'service_settings'`,
+        )
+      ).rows,
+    ).toEqual([]);
   });
 
   it("refuses a notice kind outside the vocabulary, a zero quantity, a missing station and a table on a notice that is not a move", async () => {

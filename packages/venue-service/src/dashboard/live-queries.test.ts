@@ -56,7 +56,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "menu_periods",
     "menu_period_staff_menus",
     "routing_cells",
-    "service_settings",
     "catalogues",
     "categories",
     "kitchen_stations",

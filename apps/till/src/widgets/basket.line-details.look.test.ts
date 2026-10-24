@@ -100,6 +100,7 @@ for (const locale of ["en-GB", "es-ES"])
                 revision: 4,
                 lines: [
                   {
+                    changesAfterSending: "held-or-waiting",
                     id: "sent-dish",
                     lineNo: 1,
                     stationId: "kitchen",

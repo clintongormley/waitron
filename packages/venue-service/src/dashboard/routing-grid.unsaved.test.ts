@@ -57,6 +57,7 @@ const view: PrepStationsView = {
       ticketGrouping: "combined",
       printHeldWork: false,
       bumpMode: "line",
+      changesAfterSending: "held-or-waiting",
     },
   ],
   categories: [

@@ -178,39 +178,6 @@ describe("VenueServiceApi", () => {
     ]);
   });
 
-  it("loads a supervisor's settings from the settings-only route", async () => {
-    const settings = {
-      settings: { editSentLines: true },
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    expect(await api.loadSettingsReadOnly()).toEqual(settings);
-    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
-      ["/management-api/venue-service/settings", "GET"],
-    ]);
-  });
-
-  it("loads only the settings from the venue-service read", async () => {
-    const model = {
-      departments: [{ id: "d1" }],
-      zones: [],
-      readiness: [],
-      settings: { editSentLines: false },
-      releaseReminderMinutesByDepartment: {},
-      needsClearingDepartmentIds: ["d1"],
-      serviceSteps: [],
-      courses: [],
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(model));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    expect(await api.loadSettings()).toEqual({
-      settings: { editSentLines: false },
-    });
-    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
-      ["/management-api/venue-service", "GET"],
-    ]);
-  });
-
   it("sends edits to the existing department", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
@@ -226,19 +193,6 @@ describe("VenueServiceApi", () => {
         JSON.parse(init.body as string),
       ]),
     ).toEqual([["/management-api/venue-service/departments/d1", "PATCH", department]]);
-  });
-
-  it("stores whether items already sent to the kitchen may be changed", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.saveSettings({ editSentLines: false });
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([["/management-api/venue-service/settings", "PUT", { editSentLines: false }]]);
   });
 
   it("loads the service model and its authoring choices", async () => {

@@ -253,6 +253,7 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 const sentDish = (id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine => ({
+  changesAfterSending: "held-or-waiting",
   id,
   lineNo,
   stationId: "kitchen",
@@ -309,8 +310,10 @@ function placedServer() {
     order,
     lines: {
       revision: 7,
-      editSentLines: false,
-      lines: [sentDish("dish-line-1", 1), sentDish("dish-line-2", 2)],
+      lines: [
+        sentDish("dish-line-1", 1, { changesAfterSending: "never" }),
+        sentDish("dish-line-2", 2, { changesAfterSending: "never" }),
+      ],
     } as TabLines,
     retrievePlacedOrder: vi.fn(async () => structuredClone(server.order)),
     getTabLines: vi.fn(async () => structuredClone(server.lines)),

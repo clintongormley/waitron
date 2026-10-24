@@ -67,15 +67,12 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       ),
     ).toEqual([["routing_cell_periods", "state"]]);
   });
-  it("classifies the service settings and kitchen notices as replicated state", () => {
+  it("classifies the kitchen notices as replicated state", () => {
     expect(
-      VENUE_SERVICE_CLASSIFICATION.filter((entry) =>
-        ["service_settings", "kitchen_notices"].includes(entry.table),
-      ).map((entry) => [entry.table, entry.class]),
-    ).toEqual([
-      ["service_settings", "state"],
-      ["kitchen_notices", "state"],
-    ]);
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "kitchen_notices").map(
+        (entry) => [entry.table, entry.class],
+      ),
+    ).toEqual([["kitchen_notices", "state"]]);
   });
   it("classifies seasons, special days and their day rows as replicated state", () => {
     const seasons = [

@@ -43,7 +43,6 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
           products: [beer],
           menus: menuOf([beer]),
           orderId: "wo-4",
-          editSentLines: true,
           lines: [storedDish],
           groups: [{ ...orderGroup("held", 1, "held"), lineIds: [storedDish.id] }],
           currentOrders: current({

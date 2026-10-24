@@ -272,7 +272,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       paidLines: [],
     })),
     getPartyBills: vi.fn().mockResolvedValue([]),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({
       revision: 3,
@@ -1455,7 +1455,6 @@ describe("till-app: a table's draft is kept on the server", () => {
           },
         ],
         revision: 0,
-        editSentLines: true,
       }),
     });
     const order = await openMesa(el);
@@ -3082,7 +3081,7 @@ describe("till-app: a Send the session outlives", () => {
     await openMesa(el);
     api.getTabLines.mockImplementationOnce(async () => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return { lines: [], revision: 0, editSentLines: true };
+      return { lines: [], revision: 0 };
     });
     await tap(el, "Beer");
     await act(el, "fire-all");
@@ -4244,7 +4243,7 @@ describe("till-app: two table opens overlapping", () => {
       }),
       getTabLines: vi.fn(async (tabId: string) => {
         if (tabId === "wo-7") await new Promise<void>((resolve) => (answerLines = resolve));
-        return { lines: [], revision: 0, editSentLines: true };
+        return { lines: [], revision: 0 };
       }),
     });
     await flush(el);
@@ -4279,7 +4278,7 @@ describe("till-app: a table open whose last wait outlives the session", () => {
       getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTabLines: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerLines = resolve));
-        return { lines: [], revision: 0, editSentLines: true };
+        return { lines: [], revision: 0 };
       }),
     });
     await flush(el);
@@ -4311,7 +4310,7 @@ describe("till-app: a table open whose last wait outlives the session", () => {
         .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
       getTabLines: vi.fn(async (tabId: string) => {
         if (tabId === "wo-new") await new Promise<void>((resolve) => (answerLines = resolve));
-        return { lines: [], revision: 0, editSentLines: true };
+        return { lines: [], revision: 0 };
       }),
     });
     await flush(el);
@@ -6586,6 +6585,7 @@ describe("recalled draft source splitting", () => {
 
   function reference(id = "source-7", netAmount = "17.25", quantity = "2"): SourceLine {
     const line: SourceLine["source"]["line"] = {
+      changesAfterSending: null,
       id,
       name: "Recorded steak",
       productId: "retired-steak",
@@ -7843,7 +7843,7 @@ describe("recalled draft source splitting", () => {
   it("source cancellation saves earlier edits before fixing its bill revision and blocks later edits", async () => {
     const { el } = await cancellationOpening();
     draft(el).setLineExtras(0, { note: "No salt" });
-    api.getTabLines!.mockResolvedValue({ lines: [], revision: 8, editSentLines: true });
+    api.getTabLines!.mockResolvedValue({ lines: [], revision: 8 });
     draft(el).removeLine(0);
     await flush(el);
     expect(server.saveDraft).toHaveBeenCalledOnce();
@@ -8249,7 +8249,7 @@ describe("recalled draft source splitting", () => {
         own = server.save("v1", { draftId: null, revision: 0, billId: "wo-4", lines: [] });
       own.revision += 1;
       own.lines.push(recalled());
-      api.getTabLines.mockResolvedValue({ lines: [], revision: 8, editSentLines: true });
+      api.getTabLines.mockResolvedValue({ lines: [], revision: 8 });
       return structuredClone(own);
     }
 
@@ -8266,7 +8266,6 @@ describe("recalled draft source splitting", () => {
             },
           ],
           revision: 7,
-          editSentLines: true,
         }),
         readCurrentOrders: vi.fn().mockResolvedValue(
           current({
@@ -8676,7 +8675,6 @@ describe("recalled draft source splitting", () => {
         getTabLines: vi.fn().mockResolvedValue({
           lines: [reference().source.line, reference().source.extras[0]],
           revision: 7,
-          editSentLines: true,
         }),
       });
       for (const lineNos of [[], [99], [7, 8], [8]]) emit(order, "recall-lines", { lineNos });
@@ -9814,7 +9812,7 @@ describe("direct line editing authority", () => {
     await vi.waitFor(() => expect(tableOrder(el)!.billEdit?.editorVersion).toBe(1));
     const saved = tableOrder(el)!.billEdit;
     const reads = api.getTabLines.mock.calls.length;
-    api.getTabLines.mockResolvedValue({ lines: [], revision: 5, editSentLines: true });
+    api.getTabLines.mockResolvedValue({ lines: [], revision: 5 });
     answer({ revision: 2, party: { id: "v1", revision: 4 } });
     await flush(el, 6);
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
@@ -10573,6 +10571,7 @@ describe("native app phone Review with mixed dish families", () => {
             afterGroupId: null,
           });
           const source: import("./api/client.js").TabLine = {
+            changesAfterSending: null,
             id: "review-source",
             name: "Recorded dish",
             lineNo: 1,
@@ -10644,7 +10643,6 @@ describe("native app phone Review with mixed dish families", () => {
                 getTabLines: vi.fn().mockResolvedValue({
                   lines: [source, extra],
                   revision: 0,
-                  editSentLines: true,
                 }),
               },
               undefined,

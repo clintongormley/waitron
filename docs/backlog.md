@@ -736,6 +736,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
+- **A1075. On the Courses page the row dividers stop short of the card's sides** (mock-up 02 runs
+  them to the edge; needs `course-list.ts` styles), and an error under the list would sit on the
+  card's bottom border (read from the code, not seen). Left open by #1854, A756.
+
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
   [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
 
@@ -1208,6 +1212,25 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Service periods, opening hours and departments
 
+- **A1070. The department dialog's Transfers panel heading is an `h2`, the dialog title's level,
+  beside Service's `h3` sections** — an existing accessibility check selects `h2` (left open by
+  #1852, A756).
+
+- **A1071. Offer "At once" (0 minutes) in each department's reminder**, as A773 §3.4 decided
+  (owner, 2026-10-17); the list offers Off and 5–30 minutes and the save refuses 0
+  (`requireReleaseReminderMinutes`, `packages/venue-service/src/routes.ts`). Left open by A756 PR 4.
+
+- **A1072. A chosen "Off" in the department reminder looks unset.** Off is the empty value, which
+  `wt-combobox` draws as a placeholder, grey and italic, without `show-empty-option`
+  (`packages/ui/src/components/wt-combobox.ts:508`, `:159-162`, `:1047`). Left open by A756 PR 4.
+
+- **A1073. Saving one field in the department dialog can undo another manager's change to a
+  different field.** [Detail](backlog/service-periods.md#a1073-saving-one-field-in-the-department-dialog-can-undo-another-managers-change-to-a-different-field)
+
+- **A1074. A configuration import does not range-check a department's reminder minutes**, so a
+  file could store 0, a negative number or 999; only the department save refuses them. Left open
+  by A756 PR 4's review (#2020).
+
 - **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
   A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
   column draws blank cells. Owner to decide whether it goes
@@ -1555,9 +1578,42 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references.**
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
-- **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).**
-  PRs 1–7 landed (#1852, #1854, #1858, #2020, #2023, #2031, #2037); PR 8 is buildable. Open points are in the detail.
-  [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
+- **A1059. Add station and the station editor draw the late flags differently.** Add draws three
+  full-width fields ("Warm after (min)" and so on); the editor one short row under "Late flags
+  (minutes)" (`prep-stations-screen.ts` `#dialog`, `station-editor.ts`). The owner's one-row
+  decision (A725) names the editor; ask whether Add should match. Left open by A756 PR 5.
+
+- **A1060. Ask whether A773's picture 10 replaces the station's three late-flag fields** with its
+  one "Late after · 5 · 10 · 15 min" dropdown; A756 PR 5 kept A725's three (owner, 2026-10-15).
+
+- **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its
+  fields** (they end at about x 951, the fields at about 905, measured in Chromium by A756 PRs 5 and
+  8's looks). The row's grid (`.timing-fields`, `station-editor.ts`) came with A725 (#1837); the
+  note has no width rule of its own, and why the fields stop narrower was not traced. At 390 px
+  every field is full width. Left open by A756 PR 5.
+
+- **A1062. Ask whether picture 10's Held courses dropdown, "Print when sent", replaces the station
+  editor's switch "Print held groups in advance"** (left open by A756 PR 6).
+
+- **A1063. Picture 10 lists Identical dishes and Held courses above MOVED slips; the station editor
+  puts them after it.** Owner FYI from A756 PR 6; say if the editor should follow the picture.
+
+- **A1065. A printer shared by a station recorded for a held group and one not recorded prints one
+  FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:662-666`);
+  ask the owner whether FIRE should mark only the recorded station's part. Left open by A756 PR 6.
+
+- **A1066. Four server test files mark a HOLD ticket printed without recording a station.**
+  [Detail](backlog/kitchen.md#a1066-four-server-test-files-mark-a-hold-ticket-printed-without-recording-a-station)
+
+- **A1067. Owner FYI: the station editor's "Done on the screen" words.** "One item at a time" and
+  "Whole ticket at once" (pictures 04 and 10; the old Kitchen tab said "Bump mode", "Per item",
+  "Whole ticket"); Spanish «Marcado en la pantalla», «Un plato cada vez», «Toda la comanda a la
+  vez», and the kitchen screen's «Toda la comanda». Say if other words read better (A756 PR 7).
+
+- **A1068. Owner FYI: the station editor's "Changes after sending" words.** "Not allowed", "While
+  held" and "While held or waiting"; picture 10's "(printer only)" was dropped because the middle
+  value suits a printer-only station too. Spanish «Cambios tras el envío», «No permitidos», «Solo
+  en espera», «En espera o sin empezar». Say if other words read better (A756 PR 8).
 
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change (owner, 2026-10-17).**
   [Detail](backlog/kitchen.md#a807-one-slip-per-printer-and-one-notice-per-station-for-a-whole-order-kitchen-note-change-owner-2026-10-17)
@@ -2106,7 +2162,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
   leaves PRs B–D: Requested, scoped pass release, station
   settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
-  Recheck A756 and other lanes' reservations before each slice. A797's revised design, pictures
+  Recheck other lanes' reservations before each slice. A797's revised design, pictures
   and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
@@ -3758,6 +3814,16 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
 
+- **A1069. Venue settings keeps a `kitchen` tab key with no panel (owner question).** The key in
+  `VENUE_SETTINGS_TABS` (`apps/dashboard/src/screens/venue-settings-screen.ts`) lets the page's tab
+  checks keep a second tab; say if it should go (about 25 cases then lose their subject) — plan
+  A756 PR 8 Decision 10.
+
+- **A1058. A `wt-combobox` list with no room below its field covers the field's own value.**
+  `positionPopup` (`packages/ui/src/components/wt-combobox.ts`) pulls the list up only as far as
+  the window needs, never above the field: at a 900 px-tall window the station editor's last field,
+  Changes after sending, opens its list over its own value and the Save button (A756 PR 8's look).
+
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
   slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
@@ -4089,6 +4155,12 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
+
+- **A1076. Spanish names the three late flags three ways**: the station editor's «En demora»,
+  «Retrasado», «Olvidado» (`prep.health.*`), the error's «aviso < atraso < olvido»
+  (`prep.threshold_invalid`) and Add station's «Aviso / Atraso / Olvido a partir de (min)»
+  (`packages/venue-service/src/dashboard/strings.ts`); English says warm, overdue and forgotten.
+  Left open by A756 PR 5.
 
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)
@@ -6127,6 +6199,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 ### Data protection and legal compliance
 
 _Formerly entries spread across the old sections._
+
+- **A1077. The core table `order_group_hold_stations` has no retention row** (added by A756 PR 6;
+  `docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md`, its 2026-10-23 line); its
+  retention policy is the owner's to choose.
 
 - **A664 — archive or delete a venue's old data once it no longer has to be kept.** Revised
   proposal adopted for specialist review (owner, 2026-10-17); relevant adviser agreement,

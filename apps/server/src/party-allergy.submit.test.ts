@@ -11,7 +11,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergyPatch } from "@waitron/module";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import { submitDraft, type FreshDraftLineInput } from "./order-drafts.js";
 import { submitGroups, type GroupRelease } from "./order-groups.js";
@@ -510,7 +510,7 @@ describe("A669 atomic submit", () => {
     const p = await party(),
       first = await directCommand(p, "hold", { party: guests, ticks: [] });
     await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, first));
-    await inTx(v, (tx) => writeEditSentLines(tx, true));
+    await inTx(v, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
     const [source] = await v.db
       .select()
       .from(workingOrderLines)

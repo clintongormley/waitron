@@ -9,7 +9,6 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
-import { serviceSettings } from "./schema/settings.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
@@ -17,7 +16,7 @@ import { addStarterServiceSteps } from "./service-steps.js";
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
-      "Create the default department with its starter service steps, counter zone, service settings and four seasons, and give each profile that takes orders that department",
+      "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
@@ -179,11 +178,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           startingZoneId: zoneId,
         });
       }
-      await tx
-        .insert(serviceSettings)
-        .values({ id: 1 })
-        .onConflictDoNothing({ target: serviceSettings.id });
-      return "default department, counter zone and service settings ready";
+      return "default department and counter zone ready";
     },
   },
 };

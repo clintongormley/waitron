@@ -37,6 +37,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       ticketGrouping: state === "moved slips don't print" ? "separate" : "combined",
       printHeldWork: state === "moved slips don't print",
       bumpMode: "ticket",
+      changesAfterSending: "held",
       printerIds: ["epson"],
       warmAfterMinutes: 3,
       overdueAfterMinutes: 5,

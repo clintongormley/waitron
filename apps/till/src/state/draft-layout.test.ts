@@ -274,6 +274,7 @@ describe("table panel amount (A773)", () => {
     });
     const source: NonNullable<OrderLine["source"]> = {
       line: {
+        changesAfterSending: null,
         id: "source",
         lineNo: 1,
         name: "already charged",

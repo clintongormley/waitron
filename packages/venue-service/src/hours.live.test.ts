@@ -11,6 +11,7 @@ import {
   subscribeToChanges,
   tenants,
   withTransaction,
+  workingOrders,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -22,7 +23,7 @@ import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
-import { writeEditSentLines } from "./kitchen-notices.js";
+import { kitchenNotices } from "./schema/kitchen-notices.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
 import { setStationToday } from "./station-times.js";
 
@@ -129,7 +130,22 @@ it("refreshes Calendar and routing from special days, clock and daily station st
   const today = await announced((tx) => setStationToday(tx, cfg, bar, "closed", at));
   expect(reaches(today, calendar)).toEqual([]);
   expect(reaches(today, routing)).toEqual(["station_day_states"]);
-  const unrelated = await announced((tx) => writeEditSentLines(tx, false));
+  const [order] = await withTransaction(db, (tx) =>
+    tx
+      .insert(workingOrders)
+      .values({ source: "dashboard", locationId: cfg.locationId, orderNumber: 1 })
+      .returning({ id: workingOrders.id }),
+  );
+  const unrelated = await announced((tx) =>
+    tx.insert(kitchenNotices).values({
+      stationId: kitchen,
+      workingOrderId: order!.id,
+      orderLabel: "1",
+      kind: "void",
+      lineName: "Soup",
+      quantity: 1000,
+    }),
+  );
   expect(unrelated.size).toBeGreaterThan(0);
   expect(reaches(unrelated, calendar)).toEqual([]);
 });

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parties, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { splitBill, transferItems } from "./bill-actions.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -154,7 +154,7 @@ async function recall(p: Fixture) {
     submissionId: randomUUID(),
   };
   return inTx(venue, async (tx) => {
-    await writeEditSentLines(tx, true);
+    await setChangesAfterSending(tx, "held-or-waiting");
     return recallToDraft(tx, venue.cfg, p.partyId, p.dish.id, ask);
   });
 }

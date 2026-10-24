@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { billPayments, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   saveDraft,
@@ -258,7 +258,7 @@ it("abandon refuses its editor's fresh outbox rather than stranding it on an aba
 it("abandon refuses a reserved recalled family with the current draft facts", async () => {
   const p = await fixture();
   await inTx(venue, async (tx) => {
-    await writeEditSentLines(tx, true);
+    await setChangesAfterSending(tx, "held-or-waiting");
     await fireAll(tx, venue.cfg, p.id);
     const [line] = await tx
       .select()

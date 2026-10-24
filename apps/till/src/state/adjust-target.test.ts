@@ -4,6 +4,7 @@ import { lineAdjustTarget } from "./adjust-target.js";
 
 function line(over: Partial<TabLine>): TabLine {
   return {
+    changesAfterSending: null,
     stationId: null,
     movable: false,
     id: "line-1",

@@ -73,6 +73,7 @@ const mistake: AdjustmentReason = {
 
 const lines: TabLine[] = [
   {
+    changesAfterSending: "held-or-waiting",
     stationId: null,
     movable: false,
     id: "line-1",
@@ -94,6 +95,7 @@ const lines: TabLine[] = [
     parentProductId: null,
   },
   {
+    changesAfterSending: "held-or-waiting",
     stationId: null,
     movable: false,
     id: "line-2",
@@ -209,6 +211,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     // The child row is painted muted and a size down from its dish, so its contrast against the
     // drawer surface is its own state — the scan above, which has no child row, cannot see it.
     const childLine: TabLine = {
+      changesAfterSending: null,
       stationId: null,
       movable: false,
       id: "line-3",

@@ -282,7 +282,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       paidLines: [],
     })),
     getPartyBills: vi.fn().mockResolvedValue([]),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
     submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),

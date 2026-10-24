@@ -73,7 +73,6 @@ it.each(["waiter", "kitchen", "expo"] as const)(
       currentOrders: orders,
       bills: [bill("settled")],
       ...{ fireControl },
-      editSentLines: false,
     });
     const events = capture(el, "fire-held-line");
     await openMore(el);
@@ -178,6 +177,7 @@ it("Not served cannot confirm a quantity after its bill is paid", async () => {
 
 function heldLine(over: Partial<TabLine> = {}): TabLine {
   return {
+    changesAfterSending: "held-or-waiting",
     id: "l-flan",
     name: "Flan",
     lineNo: 1,
@@ -212,7 +212,7 @@ it("Recall from More names the original line and closes information before conti
 });
 
 it.each([
-  "setting",
+  "station",
   "parent-started",
   "extra-started",
   "served",
@@ -224,7 +224,7 @@ it.each([
   async (refusal) => {
     const orders = structuredClone(current());
     const store = new DraftStore();
-    const lines = [heldLine()];
+    const lines = [heldLine(refusal === "station" ? { changesAfterSending: "never" } : {})];
     if (refusal === "parent-started") lines[0]!.state = "preparing";
     if (refusal === "extra-started")
       lines.push(heldLine({ id: "l-cream", lineNo: 2, parentLineNo: 1, state: "ready" }));
@@ -233,7 +233,6 @@ it.each([
     const el = await openLine("held", {
       lines: refusal === "missing-line" ? [] : lines,
       bills: [bill(refusal === "paid" ? "settled" : "open")],
-      editSentLines: refusal !== "setting",
       currentOrders: orders,
       draftStore: store,
     });
@@ -243,7 +242,7 @@ it.each([
   },
 );
 
-it.each(["owner", "setting", "paid", "started", "gone", "api", "visit"] as const)(
+it.each(["owner", "station", "paid", "started", "gone", "api", "visit"] as const)(
   "a retained Recall refuses a newer %s state before a repaint",
   async (change) => {
     const store = new DraftStore();
@@ -257,7 +256,7 @@ it.each(["owner", "setting", "paid", "started", "gone", "api", "visit"] as const
     const recall = q(el, "[data-sent-line-recall]");
     expect(recall).not.toBeNull();
     if (change === "owner") store.ownershipLocked = true;
-    if (change === "setting") el.editSentLines = false;
+    if (change === "station") el.lines = [heldLine({ changesAfterSending: "never" })];
     if (change === "paid") el.bills = [bill("settled")];
     if (change === "started") el.lines = [heldLine({ state: "preparing" })];
     if (change === "gone") el.lines = [];
@@ -268,6 +267,44 @@ it.each(["owner", "setting", "paid", "started", "gone", "api", "visit"] as const
     expect(events).toEqual([]);
   },
 );
+
+async function recallOffered(lines: TabLine[]) {
+  const el = await openLine("held", { lines, bills: [bill("open")] });
+  await openMore(el);
+  return q(el, "[data-sent-line-recall]") !== null;
+}
+
+it("offers Recall on a held line at a While held station and not on a waiting one", async () => {
+  expect(await recallOffered([heldLine({ changesAfterSending: "held" })])).toBe(true);
+  cleanupWidgets();
+  const sent = "2026-10-24T10:00:00.000Z";
+  expect(
+    await recallOffered([heldLine({ changesAfterSending: "held", sentAt: sent, firedAt: sent })]),
+  ).toBe(false);
+});
+
+it("offers no Recall when a split-off extra's station does not allow it", async () => {
+  const extra = (changesAfterSending: TabLine["changesAfterSending"]) =>
+    heldLine({ id: "l-cream", lineNo: 2, parentLineNo: 1, stationId: "bar", changesAfterSending });
+  expect(await recallOffered([heldLine({ changesAfterSending: "held" }), extra("never")])).toBe(
+    false,
+  );
+  cleanupWidgets();
+  expect(await recallOffered([heldLine({ changesAfterSending: "held" }), extra("held")])).toBe(
+    true,
+  );
+});
+
+it("offers Recall on a sent line no station makes", async () => {
+  const sent = "2026-10-24T10:00:00.000Z";
+  const none = { changesAfterSending: null, stationId: null, state: null, sentAt: sent };
+  expect(
+    await recallOffered([
+      heldLine(none),
+      heldLine({ ...none, id: "l-cream", lineNo: 2, parentLineNo: 1 }),
+    ]),
+  ).toBe(true);
+});
 
 it("station move from More carries the sent row's original bill, dish and station", async () => {
   const orders = structuredClone(current());

@@ -118,7 +118,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     expect(row!.showsRestOfOrder).toBe(false);
   });
 
-  it("a station row given no printing choices groups identical dishes, prints no held work in advance, leaves MOVED slips null and is done one item at a time", async () => {
+  it("a station row given no printing choices groups identical dishes, prints no held work in advance, leaves MOVED slips null, is done one item at a time and allows changes while held or waiting", async () => {
     const id = await seedStation(LOCATION_A, "Printing defaults");
     const [row] = await inTx((tx) =>
       tx
@@ -127,6 +127,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
           printHeldWork: kitchenStations.printHeldWork,
           printMovedSlips: kitchenStations.printMovedSlips,
           bumpMode: kitchenStations.bumpMode,
+          changesAfterSending: kitchenStations.changesAfterSending,
         })
         .from(kitchenStations)
         .where(eq(kitchenStations.id, id)),
@@ -136,6 +137,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       printHeldWork: false,
       printMovedSlips: null,
       bumpMode: "line",
+      changesAfterSending: "held-or-waiting",
     });
   });
 

@@ -33,8 +33,8 @@ import {
   setStationToday,
   setRoutingCell,
   type RouteTarget,
-  writeEditSentLines,
 } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -2495,9 +2495,9 @@ describe("moveDishesToStation", () => {
     },
   );
 
-  it("moves kitchen work even when ordinary sent-line edits are switched off", async () => {
+  it("moves kitchen work even at a Not allowed station", async () => {
     const { tabId, item } = await burger();
-    await inTx(venue, (tx) => writeEditSentLines(tx, false));
+    await inTx(venue, (tx) => setChangesAfterSending(tx, "never"));
     try {
       const answer = await inTx(venue, (tx) =>
         moveDishesToStation(
@@ -2516,7 +2516,7 @@ describe("moveDishesToStation", () => {
         { workingOrderLineId: item.workingOrderLineId, fromStationId: bar },
       ]);
     } finally {
-      await inTx(venue, (tx) => writeEditSentLines(tx, true));
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
     }
   });
 

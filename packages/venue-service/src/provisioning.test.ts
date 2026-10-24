@@ -256,9 +256,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const node = { locationId, nodeId };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
-    await expect(runSeed()).resolves.toBe(
-      "default department, counter zone and service settings ready",
-    );
+    await expect(runSeed()).resolves.toBe("default department and counter zone ready");
     const menus = await db
       .insert(catalogues)
       .values([{ name: "Provisioned" }, { name: "Authored" }])
@@ -341,7 +339,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     ).toEqual([{ period_id: periodId, menu_id: staff!.id, display_order: 5 }]);
   });
 
-  it("seeds the service settings row with changes to sent items allowed, and keeps a later choice", async () => {
+  it("leaves no service settings table", async () => {
     await seedTenant(db);
     const [location] = await db
       .insert(locations)
@@ -349,15 +347,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       .returning({ id: locations.id });
     const locationId = brandLocationId(location!.id);
     const node = { locationId, nodeId: await seedNode(db, locationId) };
-    const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-    const settings = async () =>
-      (await db.execute(sql`select id, edit_sent_lines from service_settings`)).rows;
-
-    await runSeed();
-    expect(await settings()).toEqual([{ id: 1, edit_sent_lines: 1 }]);
-    await db.execute(sql`update service_settings set edit_sent_lines = 0`);
-    await runSeed();
-    expect(await settings()).toEqual([{ id: 1, edit_sent_lines: 0 }]);
+    await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+    expect(
+      (
+        await db.execute(
+          sql`select name from sqlite_master where type = 'table' and name = 'service_settings'`,
+        )
+      ).rows,
+    ).toEqual([]);
   });
   it("leaves a fresh Spanish venue's holiday storage empty while its address reads the shipped holidays, and a re-run keeps entries made later", async () => {
     await seedTenant(db);

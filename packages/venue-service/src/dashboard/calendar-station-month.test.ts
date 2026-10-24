@@ -42,6 +42,7 @@ const STATIONS: PrepStation[] = [
   ticketGrouping: "combined",
   printHeldWork: false,
   bumpMode: "line",
+  changesAfterSending: "held-or-waiting",
   showsRestOfOrder: false,
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,

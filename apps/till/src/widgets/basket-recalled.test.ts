@@ -111,6 +111,7 @@ function offer(modifiers: LiveModifier[]): TillMenuOffer {
 
 function source(): RecalledDraftLine {
   const line: RecalledDraftLine["source"]["line"] = {
+    changesAfterSending: null,
     id: "sent-burger",
     name: "Recorded burger",
     productId: "burger",

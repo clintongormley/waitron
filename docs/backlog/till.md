@@ -2374,7 +2374,7 @@ public contracts. Physical schema and configuration-transfer fields remain for T
 PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,
 expose station settings and coverage warnings, finish tickets, then remove the retired schema and
 configuration fields. Preserve separately routed extras and the allergy snapshot child when
-rebuilding ticket items. Recheck current main, A756 and other lanes' actual reservations before
+rebuilding ticket items. Recheck current main and other lanes' actual reservations before
 each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
 Q42 answer is required. New copy still follows the plan's wording-review gate.
 

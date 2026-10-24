@@ -16,7 +16,10 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons } from "@waitron/identity";
-import { readEditSentLines, writeEditSentLines } from "@waitron/venue-service";
+import {
+  readChangesAfterSending,
+  setChangesAfterSending,
+} from "./testing/changes-after-sending.js";
 import { AppError } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { discardDraft, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
@@ -557,12 +560,12 @@ describe("bill editor in real save and takeover commands", () => {
       { submissionId: id },
     );
   });
-  it("Recall checks the other editor before the venue's sent-edit restriction", async () => {
+  it("Recall checks the other editor before the station's sent-edit restriction", async () => {
     const p = await fixture();
     const source = await sentDish(p);
     const saved = await save(p.partyId, blank(p.tabId), [fresh()], venue.adminId);
-    const allowed = await inTx(venue, (tx) => readEditSentLines(tx));
-    await inTx(venue, (tx) => writeEditSentLines(tx, false));
+    const found = await inTx(venue, (tx) => readChangesAfterSending(tx));
+    await inTx(venue, (tx) => setChangesAfterSending(tx, "never"));
     try {
       await refused(() => recall(p.partyId, source.id, blank(p.tabId)), "draft.taken_over", {
         billId: p.tabId,
@@ -572,7 +575,9 @@ describe("bill editor in real save and takeover commands", () => {
         edit: saved.edit,
       });
     } finally {
-      await inTx(venue, (tx) => writeEditSentLines(tx, allowed));
+      await inTx(venue, async (tx) => {
+        for (const [id, value] of found) await setChangesAfterSending(tx, value, [id]);
+      });
     }
   });
 

@@ -120,6 +120,7 @@ import {
   multiplyDecimal,
   perDishOptionQuantity,
   rawCentsToDecimal,
+  type ChangesAfterSending,
   type SaleId,
   type StationThresholds,
   stringToThousandths,
@@ -255,6 +256,7 @@ import {
   stationOrdersWithPrintProblem,
 } from "./kitchen-print.js";
 import type { CancelledExtra, CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
+import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
@@ -2647,10 +2649,8 @@ async function releasedCourses(
  * fired lines record a RECALLED kitchen notice and enqueue correction slips in the same
  * transaction; held lines do neither. Leave queued_at untouched until a later send or release refreshes it.
  *
- * With changes to sent items switched off (`readEditSentLines`), a line that was ever sent to a
- * station — stamped sent and holding a ticket item — is refused `ticket.already_fired`: a
- * paper-only kitchen reports nothing, so a recall slip cannot be trusted, and a void is the only
- * correction.
+ * After the started check, a record whose own station's choice of changes after sending refuses
+ * it fails the whole call `ticket.already_fired`.
  */
 export async function recallLines(
   tx: Transaction,
@@ -2700,13 +2700,18 @@ export async function recallLines(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(onDishesOrTheirExtras(tx, lineIds));
-  if (items.some((r) => r.sentAt !== null) && !(await VENUE_SERVICE.readEditSentLines(tx))) {
-    throw new AppError("ticket.already_fired", { workingOrderId: tabId });
-  }
   const started = items.find((r) => isStarted(r.state));
   if (started !== undefined) {
     throw new AppError("ticket.already_started", { ticketItemId: started.ticketItemId });
   }
+  refuseChangesAfterSending(
+    tabId,
+    items,
+    await readStationChanges(
+      tx,
+      items.map((r) => r.stationId),
+    ),
+  );
   // A held line stays held, so it gets no slip.
   const recalled = items
     .filter((r) => r.firedAt !== null && r.state === "queued")
@@ -3901,6 +3906,8 @@ export interface TabLine {
   /** Null when the line has no ticket item. A following extra has none; a split-off extra has its own. */
   state: TicketState | null;
   stationId: string | null;
+  /** The line's own station's choice; null when the line has no kitchen record. */
+  changesAfterSending: ChangesAfterSending | null;
   movable: boolean;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved here from another party's bill. */
@@ -3950,6 +3957,7 @@ export async function readTabLines(
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
+      changesAfterSending: kitchenStations.changesAfterSending,
       madeHere: ticketItems.madeHere,
       groupId: workingOrderLines.groupId,
       note: workingOrderLines.note,
@@ -3958,6 +3966,7 @@ export async function readTabLines(
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -4005,6 +4014,7 @@ export async function readTabLines(
       firedAt: row.firedAt,
       state: row.state,
       stationId: row.stationId,
+      changesAfterSending: row.changesAfterSending,
       movable:
         row.state !== null && stillMovable({ state: row.state, madeHere: row.madeHere! }, row),
       groupId: row.groupId,
@@ -5410,8 +5420,9 @@ async function assertProductsSellable(
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
  *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
  *   way.
- * - A started line is refused `ticket.already_started`; with changes to sent items switched off, a
- *   line that was sent to a station is refused `ticket.already_fired`.
+ * - A started line is refused `ticket.already_started`; then a changed or raised line whose records'
+ *   stations do not allow changes after sending is refused `ticket.already_fired`. A removal or a
+ *   drop is a void, which the stations' choice does not gate.
  *
  * New lines are numbered after the order's highest line number, and reach the kitchen as
  * {@link EditableOrder.newWork} says: where work was sent, as a round's line would, a course the
@@ -5443,20 +5454,23 @@ async function applyLineEdits(
   const before = await totalBeforeEdit(tx, cfg, orderId);
   const routing = routingOnce(tx, cfg, new Date());
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
-  let editSentLines: boolean | undefined;
-  /** Refuses what the kitchen state forbids; answers whether the kitchen holds fired work. */
-  const kitchenHas = async (line: EditableParent): Promise<boolean> => {
+  const stationChanges = await readStationChanges(
+    tx,
+    order.lines.flatMap((line) => (line.ticket === null ? [] : [line.ticket.stationId])),
+  );
+  /**
+   * Refuses what the kitchen state forbids, the stations' choice only for a change; answers
+   * whether the kitchen holds fired work.
+   */
+  const kitchenHas = (line: EditableParent, change: boolean): boolean => {
     const records = [line, ...line.children].flatMap((part) =>
       part.ticket === null ? [] : [part.ticket],
     );
-    if (line.sentAt !== null && records.length > 0) {
-      editSentLines ??= await VENUE_SERVICE.readEditSentLines(tx);
-      if (!editSentLines) throw new AppError("ticket.already_fired", { workingOrderId: orderId });
-    }
     const started = records.find((record) => isStarted(record.state));
     if (started !== undefined) {
       throw new AppError("ticket.already_started", { ticketItemId: started.id });
     }
+    if (change) refuseChangesAfterSending(orderId, records, stationChanges);
     return records.some((record) => record.firedAt !== null);
   };
   const menuItemOf = (line: EditableParent): string => {
@@ -5605,7 +5619,7 @@ async function applyLineEdits(
     if (!changed && rise === 0) continue;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
-    const fired = await kitchenHas(parent);
+    const fired = kitchenHas(parent, changed || rise > 0);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
     // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
     const addedApart = action === "free" && rise > 0 && parent.adjusted;
@@ -5706,7 +5720,7 @@ async function applyLineEdits(
   await refusePaidLines(tx, orderId, plan.removed.flatMap(paidLineParts), paid);
   const voided: CorrectionItem[] = [];
   for (const parent of plan.removed) {
-    await kitchenHas(parent);
+    kitchenHas(parent, false);
     for (const part of [parent, ...parent.children])
       if (part.ticket !== null && part.ticket.firedAt !== null)
         voided.push({

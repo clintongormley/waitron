@@ -27,7 +27,6 @@ function model(count = 2): VenueServiceView {
     floorZones: ["z1", "z2"].map((id) => ({ id, name: id, active: true })),
     salePolicies: { departments: [], zones: [] },
     readiness: [],
-    settings: { editSentLines: true },
     releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
     serviceSteps: [],

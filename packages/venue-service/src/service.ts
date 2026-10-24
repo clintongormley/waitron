@@ -89,7 +89,6 @@ import {
   acknowledgeKitchenNotice,
   listStationNotices,
   listStationsNotices,
-  readEditSentLines,
   recordKitchenNotices,
 } from "./kitchen-notices.js";
 import { readTablesNeedingClearing } from "./table-clearing.js";
@@ -234,7 +233,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listStationNotices,
   listStationsNotices,
   acknowledgeKitchenNotice,
-  readEditSentLines,
   readTablesNeedingClearing,
   readReleaseReminderMinutesByZone,
 };

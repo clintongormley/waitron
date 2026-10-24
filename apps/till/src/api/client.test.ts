@@ -2285,6 +2285,7 @@ describe("TillApi", () => {
     // ticket item (`state: null`), naming its parent dish by `parentLineNo` and its list by `listId`.
     const lines: TabLine[] = [
       {
+        changesAfterSending: "held-or-waiting",
         stationId: null,
         movable: false,
         id: "line-1",
@@ -2304,6 +2305,7 @@ describe("TillApi", () => {
         groupId: "g1",
       },
       {
+        changesAfterSending: null,
         stationId: null,
         movable: false,
         id: "line-2",
@@ -2324,9 +2326,7 @@ describe("TillApi", () => {
         groupId: null,
       },
     ];
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ lines, revision: 3, editSentLines: false }));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ lines, revision: 3 }));
 
     const tab = await new TillApi("", fetchStub).getTabLines("ord-1");
 
@@ -2334,7 +2334,7 @@ describe("TillApi", () => {
       "/api/working-orders/ord-1/lines",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
-    expect(tab).toEqual({ lines, revision: 3, editSentLines: false });
+    expect(tab).toEqual({ lines, revision: 3 });
     const r = tab.lines;
     // The served-state signal survives the round-trip decoded per line.
     expect(r[0]!.servedAt).not.toBeNull();

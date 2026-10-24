@@ -22,6 +22,7 @@ async function mount(printerIds = ["epson"]) {
     ticketGrouping: "combined",
     printHeldWork: false,
     bumpMode: "line",
+    changesAfterSending: "held-or-waiting",
     printerIds,
     warmAfterMinutes: 3,
     overdueAfterMinutes: 5,

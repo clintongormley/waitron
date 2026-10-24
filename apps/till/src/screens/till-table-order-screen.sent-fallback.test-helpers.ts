@@ -1,6 +1,7 @@
 import type { TabLine } from "../api/client.js";
 
 export const storedDish: TabLine = {
+  changesAfterSending: "held-or-waiting",
   id: "stored-dish",
   lineNo: 1,
   name: "Recorded dish",

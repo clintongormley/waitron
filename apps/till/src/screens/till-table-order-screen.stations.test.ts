@@ -73,6 +73,7 @@ it("A738 keeps an absent station's recorded id without drawing a fallback select
 });
 
 const sent: TabLine = {
+  changesAfterSending: "held-or-waiting",
   id: "line-1",
   stationId: "bar",
   movable: true,

@@ -153,6 +153,7 @@ const checkBill: PartyBill = {
 };
 
 const tabLine: TabLine = {
+  changesAfterSending: null,
   stationId: null,
   movable: false,
   id: "line-1",
@@ -281,7 +282,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     ),
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markTableCleared: vi.fn().mockResolvedValue(undefined),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     markServed: vi.fn().mockResolvedValue({ revision: 4 }),
@@ -1158,7 +1159,7 @@ describe("till-app: the party's bills and Finish table", () => {
     await flush(el);
     expect(figures(el)).toEqual(figuresOf("18.50", "48.50"));
 
-    answerLines({ lines: [tabLine], revision: 1, editSentLines: true });
+    answerLines({ lines: [tabLine], revision: 1 });
     await flush(el);
 
     expect(figures(el)).toEqual(figuresOf("18.50", "48.50"));
@@ -4823,7 +4824,7 @@ describe("till-app: leaving a finished party", () => {
 
     emit(tabletOrderCard(el)!, "finish-table", {});
     await flush(el);
-    answerLines({ lines: [tabLine], revision: 0, editSentLines: true });
+    answerLines({ lines: [tabLine], revision: 0 });
     answerBills([tabBill, checkBill]);
     await flush(el);
 
@@ -5532,7 +5533,6 @@ describe("till-app: the order's groups", () => {
         getTabLines: vi.fn(async () => ({
           lines: lines.map((line) => ({ ...line })),
           revision: 0,
-          editSentLines: true,
         })),
         listGroups: vi.fn(async () => ({ revision, groups: listed() })),
         readCurrentOrders: vi.fn(async (): Promise<CurrentOrders> => ({

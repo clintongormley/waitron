@@ -311,6 +311,10 @@ const en = {
   "prep.bump_mode": "Done on the screen",
   "prep.bump_mode.line": "One item at a time",
   "prep.bump_mode.ticket": "Whole ticket at once",
+  "prep.changes_after_sending": "Changes after sending",
+  "prep.changes_after_sending.never": "Not allowed",
+  "prep.changes_after_sending.held": "While held",
+  "prep.changes_after_sending.held_or_waiting": "While held or waiting",
   "prep.print_held_work": "Print held groups in advance",
   "prep.print_held_work_hint":
     "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.",
@@ -521,10 +525,6 @@ const en = {
     "{other} and {name} both fall on {date}. {name} applies; change one to choose.",
   "venue.readiness.menu_empty": "has no products for",
   "venue.readiness.zone_menu_unpublished": "needs an active, published menu.",
-  "venue.kitchen_changes": "Changes after sending",
-  "venue.edit_sent_lines": "Allow changes to items already sent to the kitchen",
-  "venue.edit_sent_lines_hint":
-    "When off, staff cannot change or recall an item the kitchen already has; they cancel it instead.",
   "venue.release_reminder": "Remind to fire the next course after",
   "venue.release_reminder.off": "Off",
   "venue.release_reminder.minutes": "{n} minutes",
@@ -1200,6 +1200,10 @@ const es: Record<keyof typeof en, string> = {
   "prep.bump_mode": "Marcado en la pantalla",
   "prep.bump_mode.line": "Un plato cada vez",
   "prep.bump_mode.ticket": "Toda la comanda a la vez",
+  "prep.changes_after_sending": "Cambios tras el envío",
+  "prep.changes_after_sending.never": "No permitidos",
+  "prep.changes_after_sending.held": "Solo en espera",
+  "prep.changes_after_sending.held_or_waiting": "En espera o sin empezar",
   "prep.print_held_work": "Imprimir por adelantado los grupos en espera",
   "prep.print_held_work_hint":
     "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",
@@ -1415,10 +1419,6 @@ const es: Record<keyof typeof en, string> = {
     "{other} y {name} caen el {date}. Se aplica {name}; cambia uno para elegir.",
   "venue.readiness.menu_empty": "no tiene productos para",
   "venue.readiness.zone_menu_unpublished": "necesita una carta activa y publicada.",
-  "venue.kitchen_changes": "Cambios tras el envío",
-  "venue.edit_sent_lines": "Permitir cambios en los artículos ya enviados a cocina",
-  "venue.edit_sent_lines_hint":
-    "Si está desactivado, el personal no puede cambiar ni retirar un artículo que ya tiene la cocina; tiene que cancelarlo.",
   "venue.release_reminder": "Avisar para marchar el siguiente curso tras",
   "venue.release_reminder.off": "Deshabilitado",
   "venue.release_reminder.minutes": "{n} minutos",

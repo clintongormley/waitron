@@ -1761,7 +1761,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           hasPayments: true,
         }),
       ]);
-      vi.mocked(api.getTabLines).mockResolvedValue({ lines: [], revision: 1, editSentLines: true });
+      vi.mocked(api.getTabLines).mockResolvedValue({ lines: [], revision: 1 });
       emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
       await flush(el);
       emit(shell(el), "screen-select", { screen: "floor" });
@@ -4037,7 +4037,6 @@ describe("till-app: the owner's split after a contribution", () => {
     const getTabLines = vi.fn(async (billId: string) => ({
       lines: billId === "wo-check" ? moved : split ? original.tabLines : bill120,
       revision: 0,
-      editSentLines: true,
     }));
     const getBillBalance = vi.fn(async (billId: string) =>
       billId === "wo-check"
@@ -4185,7 +4184,6 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
       getTabLines: vi.fn().mockResolvedValue({
         lines: [...bill120, tiramisu],
         revision: 0,
-        editSentLines: true,
       }),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [held] }),
       readCurrentOrders: vi.fn().mockResolvedValue(currentOrders),
@@ -4258,9 +4256,7 @@ describe("till-app: the steak's two choices", () => {
         .fn()
         .mockResolvedValue([billOf({ outstanding: "15.00", hasPayments: true })]),
       getBillBalance: vi.fn().mockResolvedValue(contributed),
-      getTabLines: vi
-        .fn()
-        .mockResolvedValue({ lines: [...bill120, steak], revision: 0, editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [...bill120, steak], revision: 0 }),
       ...overrides,
     });
     await openTable(el);
@@ -4713,9 +4709,7 @@ describe("till-app: a bill payment on the card reader", () => {
   });
 
   it("shows a card still at the reader as in progress, its amount held on the bill, and where a manager clears it", async () => {
-    const getTabLines = vi
-      .fn()
-      .mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true });
+    const getTabLines = vi.fn().mockResolvedValue({ lines: bill120, revision: 0 });
     const readsAtTake: number[] = [];
     const takeBillPayment = vi.fn(async () => {
       readsAtTake.push(getTabLines.mock.calls.length);
@@ -5369,9 +5363,7 @@ describe("till-app: giving back a bill payment", () => {
         return refunded;
       }),
     );
-    const getTabLines = vi
-      .fn()
-      .mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true });
+    const getTabLines = vi.fn().mockResolvedValue({ lines: bill120, revision: 0 });
     const openDrawer = vi.fn();
     const el = await askRefund(
       { refundBillPayment, getBillBalance: vi.fn(async () => latest), getTabLines, openDrawer },
@@ -5540,9 +5532,7 @@ describe("till-app: giving back a bill payment", () => {
 
   it("shows a refund the server refused above the refund's action, and reads the bill and its lines again", async () => {
     const getBillBalance = vi.fn().mockResolvedValue(holding(cashPaid));
-    const getTabLines = vi
-      .fn()
-      .mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true });
+    const getTabLines = vi.fn().mockResolvedValue({ lines: bill120, revision: 0 });
     const el = await askRefund(
       {
         getBillBalance,
@@ -5960,7 +5950,7 @@ describe("till-app: a party bill's receipt language", () => {
     const { el } = await mountApp({
       ...withLanguages(),
       getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
-      getTabLines: vi.fn().mockResolvedValue({ lines: bill120, revision: 7, editSentLines: true }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: bill120, revision: 7 }),
       setOrderReceiptLanguage,
     });
     const order = await openTable(el);

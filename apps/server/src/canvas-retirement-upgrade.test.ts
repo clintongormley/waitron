@@ -395,6 +395,7 @@ it("refuses the populated predecessor for reset and retains every row after roll
       "_floor_reset_tables_taken_off",
       "_station_printing_choices",
       "_station_bump_mode",
+      "_station_changes_after_sending",
     ]),
   );
   let before: Record<string, unknown[]>;
@@ -524,6 +525,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     delete retained.tenant_themes;
     delete retained.kitchen_timing_defaults;
     delete retained.kitchen_station_timing;
+    delete retained.service_settings;
     retained.device_profiles = before!.device_profiles!.map((row) =>
       Object.fromEntries(
         Object.entries(row as Record<string, unknown>).filter(([key]) => key !== "canvas_id"),

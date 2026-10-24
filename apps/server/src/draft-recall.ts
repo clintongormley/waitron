@@ -24,6 +24,7 @@ import { MAX_UNIT_PRECISION, assertQuantityPrecision } from "@waitron/catalogue"
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
 import { readLineCancellations } from "./line-service-state.js";
+import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -230,14 +231,20 @@ export async function recallToDraft(
       await refusePaymentInFlight(tx, [line.workingOrderId]);
       await requireBillEditor(tx, line.workingOrderId, args.operatorId, expectedEdit);
       if (line.parentLineId !== null) throw invalid("lineId");
-      if (!(await VENUE_SERVICE.readEditSentLines(tx)))
-        throw new AppError("ticket.already_fired", { workingOrderId: line.workingOrderId });
       const items = (await dishKitchenItems(tx, [lineId])).get(lineId) ?? [];
       const started = items.find((item) => isStarted(item.state));
       if (started !== undefined)
         throw new AppError("ticket.already_started", {
           ticketItemId: started.ticketItemId,
         });
+      refuseChangesAfterSending(
+        line.workingOrderId,
+        items,
+        await readStationChanges(
+          tx,
+          items.map((item) => item.stationId),
+        ),
+      );
       const cancellations = await readLineCancellations(tx, [lineId]);
       if (line.servedQuantity > 0 || (cancellations.get(lineId) ?? 0) > 0) throw invalid("lineId");
       const [reserved] = await tx

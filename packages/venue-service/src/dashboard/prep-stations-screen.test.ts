@@ -75,6 +75,7 @@ const view: PrepStationsView = {
       ticketGrouping: "combined",
       printHeldWork: false,
       bumpMode: "line",
+      changesAfterSending: "held-or-waiting",
     },
   ],
   categories: [
@@ -897,6 +898,7 @@ it("hands the station's printing choices to the editor and saves the station's",
           ticketGrouping: "separate",
           printHeldWork: true,
           bumpMode: "ticket",
+          changesAfterSending: "held",
         },
       ],
     }),
@@ -927,14 +929,20 @@ it("hands the station's printing choices to the editor and saves the station's",
     "wt-combobox[name=bumpMode]",
   )!;
   expect(bump.value).toBe("ticket");
+  const changes = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=changesAfterSending]",
+  )!;
+  expect(changes.value).toBe("held");
   moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "print" } }));
   bump.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "line" } }));
+  changes.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "never" } }));
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", {
     printMovedSlips: true,
     bumpMode: "line",
+    changesAfterSending: "never",
   });
 });
 function fallbackView(): PrepStationsView {

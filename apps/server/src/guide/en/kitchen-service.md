@@ -105,9 +105,13 @@ ticket at once, under **Done on the screen** when you edit it in **Prep stations
 screen, an order at a whole-ticket station shows **Whole ticket** while a tap can still move it on.
 Each prep station sets
 its own late flags when you add it with **Add station**, and under **Late flags (minutes)** when you
-edit it in **Prep stations**. Each prep station also sets how identical dishes print on its tickets
-and whether it prints held groups in advance, under **Identical dishes on a kitchen ticket** and
-**Print held groups in advance**.
+edit it in **Prep stations**. Each prep station also sets how identical dishes print on its tickets,
+whether it prints held groups in advance, and whether a dish already sent to it can be recalled or
+changed, under **Identical dishes on a kitchen ticket**, **Print held groups in advance** and
+**Changes after sending**: **Not allowed**, **While held**, or
+**While held or waiting**. A dish the kitchen has started is never recalled. A dish that went to no
+station, with no extra that went to a station of its own, can be recalled whatever the stations
+allow.
 
 ## Request cooking from the till {#request-cooking}
 

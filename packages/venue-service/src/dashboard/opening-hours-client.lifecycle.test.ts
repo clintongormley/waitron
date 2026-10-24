@@ -96,8 +96,11 @@ describe("OpeningHoursApi.watchYear", () => {
     expect(recovered).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledTimes(3);
 
-    // Service settings are outside the year read.
-    liveData.invalidate([{ type: "service_settings" }]);
+    // Kitchen notices are outside the year read.
+    liveData.invalidate([{ type: "kitchen_notices" }]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(apply).toHaveBeenCalledTimes(3);
     detach();
     expect(liveData.interests).toEqual([]);
     liveData.invalidate([{ type: "special_days" }]);

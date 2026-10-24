@@ -458,5 +458,7 @@ it("the Voids and comps page follows its permission rather than every enabled mo
   await search(el, "kitchen");
   expect(
     el.shadowRoot!.querySelectorAll('[data-search-destination="settings:kitchen"]'),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
+  await search(el, "venue details");
+  expect(result(el, "settings:venue-details")).not.toBeNull();
 });

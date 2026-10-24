@@ -107,7 +107,6 @@ export const zonesModel: VenueServiceView = {
       },
     ],
   },
-  settings: { editSentLines: true },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
   serviceSteps: [],

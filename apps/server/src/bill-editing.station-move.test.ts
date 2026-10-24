@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeEditSentLines } from "@waitron/venue-service";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
 import { saveDraft, takeOverDraft, type BillEditExpected } from "./order-drafts.js";
@@ -350,7 +350,7 @@ describe("station movement checks bill editing authority", () => {
     "refuses a reserved recalled parent through either authority (kitchen: %s)",
     async (kitchen) => {
       const p = await fixture();
-      await inTx(venue, (tx) => writeEditSentLines(tx, true));
+      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
       const recalled = await inTx(venue, async (tx) =>
         recallToDraft(tx, venue.cfg, p.partyId, p.lineId, {
           submissionId: randomUUID(),
@@ -381,7 +381,7 @@ describe("station movement checks bill editing authority", () => {
           .update(workingOrderLines)
           .set({ parentLineId: p.lineId })
           .where(eq(workingOrderLines.id, p.extraId));
-        await writeEditSentLines(tx, true);
+        await setChangesAfterSending(tx, "held-or-waiting");
       });
       const recalled = await inTx(venue, async (tx) =>
         recallToDraft(tx, venue.cfg, p.partyId, p.lineId, {

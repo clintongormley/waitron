@@ -2904,7 +2904,7 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor and the routing cell editor.
-Rest-of-order, MOVED slips, identical dishes, held printing, a station's three late-flag minutes and its bump mode are edited in the station editor. Routing
+Rest-of-order, MOVED slips, identical dishes, held printing, a station's three late-flag minutes, its bump mode and its changes after sending are edited in the station editor. Routing
 Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
@@ -4658,7 +4658,7 @@ late-flag fields in one row under "Late flags (minutes)", "Done on the screen" (
 a time or Whole ticket at once), "Also list the order's dishes from other
 stations" with "On this station's tickets and kitchen screen", "Print a slip when sent dishes
 move table", then "Identical dishes on a kitchen ticket" and "Print held groups in advance" with its
-note. The slip choices are "Print" and "Don't print".
+note, then "Changes after sending" (Not allowed, While held, or While held or waiting). The slip choices are "Print" and "Don't print".
 Save sends only what changed, in one request. Each minutes field is required and opens on the
 station's own value; a blank one is marked like any other invalid value. Save first checks that
 each minutes field is a whole number from 1 to 2147483647 and that warm < overdue < forgotten; it
@@ -5201,9 +5201,8 @@ Defaults — and, with the Veri\*Factu module, a fifth: the AEAT certificate, wh
 `fiscal.view` to read and `system.manage` to install or replace. The other four cards need
 `venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
 receipt language and the "VAT class for new products" default — is shown with `venue.view`, and is
-editable with `venue.configure` and read-only without it. Kitchen holds venue service's panel
-alone, Changes after sending, shown with `venue.view` and editable with `venue_service.manage`;
-without venue service there is no Kitchen tab (A756 PR 7, 2026-10-24). Voids and comps
+editable with `venue.configure` and read-only without it. Venue settings has no Kitchen tab:
+the `kitchen` key names no panel since A756 PR 8 (2026-10-24), so its address opens Venue details. Voids and comps
 (`/manage/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
@@ -5350,7 +5349,7 @@ preferences and restored URLs retain their capability checks.
 
 A menu's Device Home Page, receipt configuration, custom themes and the floor-plan editor remain
 independent. Profile writes and `/api/till` carry no authored canvas; the boot response carries the
-device's `formFactor`. Configuration exports use format 7; an older export is refused as outdated,
+device's `formFactor`. Configuration exports use format 8; an older export is refused as outdated,
 including one with an empty canvas list. No earlier canvas settings are carried over.
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.

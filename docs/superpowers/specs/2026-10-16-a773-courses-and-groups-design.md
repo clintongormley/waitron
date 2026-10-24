@@ -365,6 +365,8 @@ dish is placed by section 2.
   or waiting. Never once anyone has started the dish: the server refuses a started dish
   (`ticket.already_started`, as `recallLines` does today). Until A756 gives stations the setting,
   today's venue-wide `edit_sent_lines` decides: yes means while held or waiting, no means never.
+  **2026-10-24 (A756 PR 8):** each station decides; the dish's own station and the station of each
+  extra routed elsewhere must all allow it.
 - **The kitchen is told:** a recalled fired dish prints the RECALLED slip, as today. A recalled held
   dish whose HOLD ticket was already printed is told as a cancelled held dish is today (builder's
   call).

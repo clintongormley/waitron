@@ -32,7 +32,6 @@ const model: VenueServiceView = {
   floorZones: [{ id: "z1", name: "Patio" }],
   salePolicies: { departments: [], zones: [] },
   readiness: [],
-  settings: { editSentLines: true },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
   serviceSteps: [],

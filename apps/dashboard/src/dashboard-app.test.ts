@@ -1726,7 +1726,6 @@ describe("dashboard-app", () => {
           zones: [],
           hours: [],
           readiness: [],
-          settings: { editSentLines: true },
           releaseReminderMinutesByDepartment: {},
           needsClearingDepartmentIds: [],
           serviceSteps: [],
@@ -1741,7 +1740,7 @@ describe("dashboard-app", () => {
         .shadowRoot!.querySelectorAll('[role="tab"]'),
     ].map((tab) => tab.getAttribute("data-key"));
 
-  it("opens Venue settings under one h1, with Kitchen holding venue service's panel", async () => {
+  it("opens Venue settings under one h1, with Venue details its only tab", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -1760,33 +1759,29 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(mountedScreens(el)).toEqual(["dashboard-venue-settings-screen"]);
     const page = venueSettings(el)!;
-    expect(settingsTabKeys(el)).toEqual(["venue-details", "kitchen"]);
+    expect(settingsTabKeys(el)).toEqual(["venue-details"]);
     expect(page.shadowRoot!.querySelector("dashboard-kitchen-screen")).toBeNull();
     expect(allH1(el.shadowRoot!)).toHaveLength(1);
     expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   });
 
-  const panelsOn = (el: DashboardApp, tab: string) =>
-    [...venueSettings(el)!.shadowRoot!.querySelector(`[slot="${tab}"]`)!.children].map((child) =>
-      child.tagName.toLowerCase(),
-    );
-
-  it("Kitchen holds venue service's panel alone", async () => {
+  it("venue service adds no panel to Venue settings, and the Kitchen address opens Venue details", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/kitchen");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue_service.manage"],
+        permissions: ["booking.manage", "venue_service.manage", "venue.view"],
       }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api,
       request: venueServiceRequest,
     });
     await flush(el);
-    expect(panelsOn(el, "kitchen")).toEqual(["dashboard-venue-service-settings"]);
-    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(settingsTabKeys(el)).toEqual(["venue-details"]);
   });
 
   it("has no Kitchen tab when venue service is disabled", async () => {
@@ -1829,14 +1824,15 @@ describe("dashboard-app", () => {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           modules: ["bookings", "venue-service"],
-          permissions: ["booking.manage", "venue_service.manage"],
+          permissions: ["booking.manage", "venue_service.manage", "venue.view"],
         }),
+        getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
         listStaff: vi.fn().mockResolvedValue([]),
       }),
       request: venueServiceRequest,
     });
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
     expect(
       venueSettings(el)!.shadowRoot!.querySelector("dashboard-service-status-screen"),
     ).toBeNull();
@@ -1890,8 +1886,15 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "adjustments", "venue-service"],
-        permissions: ["booking.manage", "adjustment.manage", "report.view", "venue_service.manage"],
+        permissions: [
+          "booking.manage",
+          "adjustment.manage",
+          "report.view",
+          "venue_service.manage",
+          "venue.view",
+        ],
       }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
       liveData: new LiveData(),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -1902,7 +1905,9 @@ describe("dashboard-app", () => {
           : adjustmentsRequest(path, method, body, options),
     });
     await flush(el);
-    await vi.waitFor(() => expect(location.pathname).toBe("/manage/venue-settings/view/kitchen"));
+    await vi.waitFor(() =>
+      expect(location.pathname).toBe("/manage/venue-settings/view/venue-details"),
+    );
     expect(
       venueSettings(el)!.shadowRoot!.querySelector("dashboard-adjustment-reasons-screen"),
     ).toBeNull();
@@ -2964,27 +2969,6 @@ describe("dashboard-app", () => {
     await vi.waitFor(() => expect(courses.shadowRoot!.textContent).toContain("Starters"));
     expect(courses.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
     expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();
-  });
-
-  it("includes the venue-service settings panel for a supervisor as read-only", async () => {
-    const supervisor = stubApi({
-      getMe: vi.fn().mockResolvedValue({
-        ...meResponse,
-        role: "supervisor",
-        permissions: ["venue.view"],
-        modules: ["venue-service"],
-      }),
-    });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
-    await flush(el);
-    navVenueSettings(el)!.click();
-    await flush(el);
-    const settings = venueSettings(el)!;
-    const panels = settings.shadowRoot!.querySelectorAll<HTMLElement & { readOnly: boolean }>(
-      "dashboard-venue-service-settings",
-    );
-    expect(panels).toHaveLength(1);
-    expect(panels[0]!.readOnly).toBe(true);
   });
 
   it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {
@@ -4517,7 +4501,6 @@ describe("dashboard URL navigation", () => {
             needsClearingDepartmentIds: [],
             serviceSteps: [],
             courses: [],
-            settings: { editSentLines: true },
           }
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
@@ -4592,7 +4575,6 @@ describe("dashboard URL navigation", () => {
             needsClearingDepartmentIds: [],
             serviceSteps: [],
             courses: [],
-            settings: { editSentLines: true },
           }
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -8081,7 +8063,6 @@ describe("department list links inside dashboard capture", () => {
       floorZones: [],
       readiness: [],
       salePolicies: { departments: [], zones: [] },
-      settings: { editSentLines: true },
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: [],
       serviceSteps: [],
@@ -8198,7 +8179,6 @@ describe("mounted public department dialogs", () => {
         ? [{ code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" }]
         : [],
       salePolicies: { departments: [], zones: [] },
-      settings: { editSentLines: true },
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: [],
       serviceSteps: [],

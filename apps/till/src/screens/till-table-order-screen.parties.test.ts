@@ -66,6 +66,7 @@ const abandoned: PartyBill = {
 };
 
 const wine: TabLine = {
+  changesAfterSending: null,
   stationId: null,
   movable: false,
   id: "line-1",

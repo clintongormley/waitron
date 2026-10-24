@@ -245,7 +245,7 @@ export function stubApi(overrides: Record<string, unknown> = {}) {
       paidLines: [],
     })),
     getPartyBills: vi.fn().mockResolvedValue([]),
-    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({
       revision: 3,

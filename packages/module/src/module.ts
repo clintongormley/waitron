@@ -1363,8 +1363,6 @@ export interface VenueServiceContribution {
     id: string,
     scope?: { stationId?: string },
   ): Promise<void>;
-  /** Whether staff may change an item already sent to the kitchen. */
-  readEditSentLines(tx: Transaction): Promise<boolean>;
   /**
    * Which of these dining tables need clearing once their party leaves: those whose zone's
    * department has Needs clearing on. A table whose zone has no department is not among them.

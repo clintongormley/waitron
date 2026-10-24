@@ -193,7 +193,9 @@ describe("service backup evidence", () => {
     ])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
-    restored.db.run(sql`insert into service_settings (id) values (1)`);
+    restored.db.run(
+      sql`insert into holiday_geographies (id,location_id,country,province_code,city,city_key) values ('invented','venue','ES','46','Valencia','valencia')`,
+    );
     expect((await run({ absent: true })).status).toBe("invalid");
   });
   it("accepts an absent parent when no row references it", async () => {
