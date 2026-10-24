@@ -45,6 +45,8 @@ import "../src/components/wt-banner.js";
 import "../src/components/wt-relative-time.js";
 import "../src/components/wt-language-chooser.js";
 import "../src/components/wt-theme-chooser.js";
+import "../src/components/wt-venue-logo.js";
+import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "../src/waitron-lockup.js";
 
 registerIcons({
   ...DROPDOWN_ICONS,
@@ -295,6 +297,14 @@ const panel = (theme: "light" | "dark") => `
     </wt-modal>
     <wt-language-chooser active="es-ES"></wt-language-chooser>
     <wt-theme-chooser active="device"></wt-theme-chooser>
+    ${(["banner", "bar", "sign-in"] as const)
+      .map(
+        (size) => `<div class="row">
+      <wt-venue-logo size="${size}" light="${WAITRON_LOCKUP_URL}" alt="Light only"></wt-venue-logo>
+      <wt-venue-logo size="${size}" light="${WAITRON_LOCKUP_URL}" dark="${WAITRON_LOCKUP_DARK_URL}" alt="Light and dark"></wt-venue-logo>
+    </div>`,
+      )
+      .join("")}
   </div>
 `;
 
