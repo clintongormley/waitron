@@ -518,6 +518,10 @@ check), each in the task named:
   `box-status-screen.test.ts` and `box-status-screen.a11y.test.ts` (Tasks R12a, R12b);
 - `apps/server/src/boot.box-health.test.ts:160` and `apps/server/src/box-health.test.ts:333`: the
   old `offer` (Task R10);
+  `boot.box-health.test.ts:160` `toMatchObject({ offer: "no_proof", restart: null })` →
+  `toMatchObject({ proof: "none", confirmation: null })`: with no witness and no confirmation, the
+  running server's read still says payments are stopped with nothing proving the clock and nobody
+  having confirmed it, which is what `no_proof` and a null restart said;
 - the Box status view's old shape in `apps/server/src/clock-confirm.route.test.ts` (Task R10,
   controller addition after the R8b review; lines at `4f704c235` → after). The view no longer has
   `offer`, `restart` or witness lists under `proof`: `proof` is now the seat's status

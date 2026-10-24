@@ -157,7 +157,7 @@ describe("the running server's Box status read and free-space deletion", () => {
       });
     });
 
-    expect((await box.get()).clockStop).toMatchObject({ offer: "no_proof", restart: null });
+    expect((await box.get()).clockStop).toMatchObject({ proof: "none", confirmation: null });
   });
 
   it("reads the box, frees its rotated logs, and shares one staging turn with its backups", async () => {
