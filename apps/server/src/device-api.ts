@@ -92,8 +92,7 @@ import { listStationsToday } from "./kitchen.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
-import { requestFromBox } from "./request-from-box.js";
-import { getConnInfo } from "@hono/node-server/conninfo";
+import { requestAddress, requestFromBox } from "./request-from-box.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   createStaffNoticeLog,
@@ -156,14 +155,6 @@ function deviceClockOf(value: string | undefined): number | undefined {
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
   const ms = Number(value);
   return Number.isSafeInteger(ms) ? ms : undefined;
-}
-
-function remoteAddress(c: Context): string | undefined {
-  try {
-    return getConnInfo(c).remote.address;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -429,7 +420,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const deviceMs = deviceClockOf(c.req.header(DEVICE_CLOCK_HEADER));
       if (deviceMs !== undefined && !(deps.requestFromBox ?? requestFromBox)(c))
-        deps.clockWitnesses?.noteDevice(device.deviceId, remoteAddress(c), deviceMs, arrived);
+        deps.clockWitnesses?.noteDevice(device.deviceId, requestAddress(c), deviceMs, arrived);
       // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses
       // even when this read changed nothing.
       const equipment = await deps.db.withWriteLock(() =>

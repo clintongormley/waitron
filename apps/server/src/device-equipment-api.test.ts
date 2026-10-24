@@ -1822,6 +1822,20 @@ describe("the device's clock on the equipment read", () => {
       expect((await read(app, headers(), "192.168.10.31")).status).toBe(200);
       expect(noted).toEqual([[a, "192.168.10.31", 1_792_000_060_000, expect.anything()]]);
     });
+
+    it("notes an IPv4-mapped or scoped address in the plain form the box's own check compares", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers(), "::ffff:192.168.10.31")).status).toBe(200);
+      expect((await read(app, headers(), "192.168.10.31")).status).toBe(200);
+      expect((await read(app, headers(), "fe80::2%eth0")).status).toBe(200);
+      expect(noted.map(([, address]) => address)).toEqual([
+        "192.168.10.31",
+        "192.168.10.31",
+        "fe80::2",
+      ]);
+      expect((await read(app, headers(), "::ffff:192.168.10.20")).status).toBe(200);
+      expect(noted).toHaveLength(3);
+    });
   });
 
   it("reads the box's clocks before waiting for the write lock the device's sighting needs", async () => {
