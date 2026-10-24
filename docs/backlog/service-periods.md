@@ -404,7 +404,8 @@ bar is which department (hover shows it; the All departments Month has none eith
 **A789 — last orders without an offset: a period is when its menu can be ordered** — APPROVED
 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by
 default); building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
-retired) in review; slices 3–4 next, plan
+retired) landed in #2047; slices 3–4 next (slice 3 re-decides where the manager's-PIN setting
+lives, since #2044 dropped `service_settings`), plan
 [2026-10-21-a789-last-orders](../superpowers/plans/2026-10-21-a789-last-orders.md);
 [design](../superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
 [mockups/a789-last-orders/](mockups/a789-last-orders/). The period end offset

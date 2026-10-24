@@ -1385,7 +1385,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A789 — last orders without an offset: a period is when its menu can be ordered**
   APPROVED 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by default);
   building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
-  retired) in review; slices 3–4 next.
+  retired) landed in #2047; slices 3–4 next (slice 3 re-decides where the
+  manager's-PIN setting lives, since #2044 dropped `service_settings`).
   [Detail](backlog/service-periods.md#a789--last-orders-without-an-offset-a-period-is-when-its-menu-can-be-ordered)
 
 - **The start-time part of the business-day check's `transition_strip` reason never decides it**
