@@ -2674,6 +2674,20 @@ permission-gated write (CLAUDE.md's risk triggers).
 - **A warning blocked by another colour set by hand** (lane A ruling 2026-10-20): its sentence names
   the blocking colour and its value ("… while Sunken areas is set by hand to #000000"); with no
   blocker it stays as it was. Not taken: naming only the colours it fails against.
+- **Slice 8 in two pull requests** (lane A ruling 2026-10-24, slice 8 plan D1): 8a the editor side
+  (the Logo field, the preview's strip, the saved card's row, the library's wording), 8b the live
+  screens. Not taken: one pull request of twenty tasks.
+- **Which image a logo box draws** (lane A ruling 2026-10-24, D3): the box reads its own computed
+  `color-scheme`, so the image and the plate switch together and the preview's dark panel follows
+  its panel, not the page. Not taken: a `<picture>` with `darkLogoMedia` (section 8a), whose image
+  would switch before the plate did.
+- **A logo refusal** (lane A ruling 2026-10-24, D9): shown under the image it names, with the form's
+  usual bottom message; in the name dialog, at the dialog's bottom.
+- **Before the first answer** (lane A ruling 2026-10-24, D13): the logo's place is an empty box of
+  its height and no width.
+- **A picture that fails to load** (lane A ruling 2026-10-24, D14): the place draws what it draws
+  with no logo, and the box tries the same address again every 60 s. Not taken: trying only on the
+  next page load, which a till left running for days would not reach.
 
 ## 17. Risks
 
