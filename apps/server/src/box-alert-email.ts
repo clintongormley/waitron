@@ -1,11 +1,16 @@
-import { eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
-import { locations, type Database } from "@waitron/db";
+import { incidents, locations, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import type { DiskFullState } from "./disk-full-state.js";
 import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
-import { BOX_EMAIL_WORDS } from "./i18n/box-emails.js";
+import {
+  BOX_EMAIL_WORDS,
+  CLOCK_CONFIRMED_BY_WORDS,
+  CLOCK_MISDATED_EMAIL_WORDS,
+  CLOCK_RESTARTED_EMAIL_WORDS,
+} from "./i18n/box-emails.js";
 import type { Logger } from "./logger.js";
 import { receiptDateTimeNumeric } from "./receipt-dates.js";
 import {
@@ -25,21 +30,68 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
   return Object.hasOwn(BOX_EMAIL_WORDS, code);
 }
 
+/** The alerts the duty reads from the incidents table: each open one is emailed once. */
+export const CLOCK_INCIDENT_EMAIL_CODES = [
+  "clock.behind_chain_restarted",
+  "clock.records_misdated",
+] as const;
+
+export type ClockIncidentEmailCode = (typeof CLOCK_INCIDENT_EMAIL_CODES)[number];
+
+export interface ClockIncident {
+  readonly id: string;
+  readonly code: ClockIncidentEmailCode;
+  readonly params: Readonly<Record<string, unknown>>;
+}
+
 /** Each time placeholder and the param holding the offset it is written in. */
 const TIME_PLACEHOLDERS = {
   clockAt: "offsetMinutes",
   lastRecordAt: "lastRecordOffsetMinutes",
+  from: "fromOffsetMinutes",
+  to: "toOffsetMinutes",
 } as const;
+
+function wordsFor(
+  code: BoxEmailCode | ClockIncidentEmailCode,
+  language: "en" | "es",
+  params?: Readonly<Record<string, unknown>>,
+): { subject: string; text: string } {
+  if (code === "clock.behind_chain_restarted") {
+    const by = CLOCK_CONFIRMED_BY_WORDS[language];
+    const source = params?.["confirmedBy"];
+    const confirmedBy =
+      typeof source === "string" && source !== "otherwise" && Object.hasOwn(by, source)
+        ? by[source as keyof typeof by]
+        : by.otherwise;
+    const words = CLOCK_RESTARTED_EMAIL_WORDS[language];
+    return {
+      subject: words.subject,
+      text: words.text.replaceAll("{confirmedBy}", () => confirmedBy),
+    };
+  }
+  if (code === "clock.records_misdated") {
+    const words = CLOCK_MISDATED_EMAIL_WORDS[language];
+    if (params?.["unconfirmed"] === true) return words.unconfirmed;
+    const count = params?.["count"];
+    const main = count === 1 ? words.one : words.text.replaceAll("{count}", () => String(count));
+    return {
+      subject: words.subject,
+      text: params?.["partial"] === true ? `${main} ${words.partial}` : main,
+    };
+  }
+  return BOX_EMAIL_WORDS[code][language];
+}
 
 /** The subject and text for `code` in `language`, `{venue}` replaced by the venue's name and each
  * time placeholder by its param, written `dd/mm/yyyy hh:mm` in its own offset. */
 export function boxEmailMessage(
-  code: BoxEmailCode,
+  code: BoxEmailCode | ClockIncidentEmailCode,
   language: "en" | "es",
   venue: string,
   params?: Readonly<Record<string, unknown>>,
 ): { subject: string; text: string } {
-  const words = BOX_EMAIL_WORDS[code][language];
+  const words = wordsFor(code, language, params);
   const filled = (template: string) => {
     // A function replacement, so a name such as "$&" is not read as a pattern.
     let out = template.replaceAll("{venue}", () => venue);
@@ -52,6 +104,24 @@ export function boxEmailMessage(
     return out;
   };
   return { subject: filled(words.subject), text: filled(words.text) };
+}
+
+/** The open alerts of `CLOCK_INCIDENT_EMAIL_CODES`, oldest first, read in one write-lock turn with
+ * no change-log drain. */
+export async function readOpenClockIncidents(db: Database): Promise<ClockIncident[]> {
+  return db.withWriteLock(async () => {
+    const rows = await db
+      .select({ id: incidents.id, code: incidents.code, params: incidents.params })
+      .from(incidents)
+      .where(
+        and(
+          inArray(incidents.code, [...CLOCK_INCIDENT_EMAIL_CODES]),
+          isNull(incidents.acknowledgedAt),
+        ),
+      )
+      .orderBy(asc(incidents.detectedAt), asc(incidents.id));
+    return rows.map((row) => ({ ...row, code: row.code as ClockIncidentEmailCode }));
+  });
 }
 
 export const BOX_EMAIL_CHECK_MS = 60_000;
@@ -87,9 +157,11 @@ export async function readBoxEmailContext(
 }
 
 interface Episode {
-  readonly code: BoxEmailCode;
-  /** The module that gave the notice; absent for the disk's episodes. */
+  readonly code: BoxEmailCode | ClockIncidentEmailCode;
+  /** The module that gave the notice; absent for the disk's episodes and the alerts'. */
   readonly owner?: string;
+  /** Set for an open alert's episode, which lasts while the alert stays open. */
+  readonly incident?: true;
   /** The params of the notice that began the episode, kept for its whole length. */
   readonly params?: Readonly<Record<string, unknown>>;
   readonly sentTo: Set<string>;
@@ -109,6 +181,7 @@ export function startBoxEmailDuty(deps: {
   space: Pick<FreeSpaceState, "current">;
   /** The enabled modules' notices, read in turns. */
   moduleNotices: () => Promise<StaffNoticesRead>;
+  clockIncidents: () => Promise<readonly ClockIncident[]>;
   context: () => Promise<BoxEmailContext>;
   send: TextEmailSender;
   isPrimary: () => boolean;
@@ -134,15 +207,17 @@ export function startBoxEmailDuty(deps: {
 
   function begin(
     key: string,
-    code: BoxEmailCode,
+    code: BoxEmailCode | ClockIncidentEmailCode,
     owner?: string,
     params?: Readonly<Record<string, unknown>>,
+    incident?: true,
   ): Episode {
     let episode = episodes.get(key);
     if (episode === undefined) {
       episode = {
         code,
         ...(owner === undefined ? {} : { owner }),
+        ...(incident === undefined ? {} : { incident }),
         ...(params === undefined ? {} : { params }),
         sentTo: new Set(),
         said: new Set(),
@@ -225,7 +300,21 @@ export function startBoxEmailDuty(deps: {
         begin(key, notice.code, notice.owner, notice.params);
         moduleSeen.add(key);
       }
+      const open = await read(deps.clockIncidents);
+      if (stopped) return;
+      const incidentSeen = new Set<string>();
+      for (const incident of open) {
+        const key = `incident:${incident.id}`;
+        begin(key, incident.code, undefined, incident.params, true);
+        incidentSeen.add(key);
+      }
       for (const [key, episode] of episodes) {
+        if (episode.incident) {
+          // A handled alert is never open again, so its episode ends for good.
+          if (incidentSeen.has(key)) due.push({ episode });
+          else episodes.delete(key);
+          continue;
+        }
         if (episode.owner === undefined) continue;
         // While an owner's check fails, its episodes neither start nor end.
         if (moduleSeen.has(key) || notices.unavailable.includes(episode.owner)) {

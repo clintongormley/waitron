@@ -174,7 +174,12 @@ import {
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
-import { BOX_EMAIL_CHECK_MS, readBoxEmailContext, startBoxEmailDuty } from "./box-alert-email.js";
+import {
+  BOX_EMAIL_CHECK_MS,
+  readBoxEmailContext,
+  readOpenClockIncidents,
+  startBoxEmailDuty,
+} from "./box-alert-email.js";
 import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
@@ -2283,6 +2288,7 @@ async function bootServer(
       reading.settle(read.unavailable);
       return read;
     },
+    clockIncidents: () => readOpenClockIncidents(db),
     context: () =>
       readBoxEmailContext(db, {
         ring,

@@ -40,3 +40,55 @@ export const BOX_EMAIL_WORDS = {
     },
   },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;
+
+/** What confirmed the box's clock, by `clock.behind_chain_restarted`'s `confirmedBy`. */
+export const CLOCK_CONFIRMED_BY_WORDS = {
+  en: {
+    authority: "the tax agency's time",
+    devices: "two tills or handhelds",
+    admin: "an administrator",
+    otherwise: "a check recorded on the box",
+  },
+  es: {
+    authority: "la hora de Hacienda",
+    devices: "dos cajas o terminales",
+    admin: "un administrador",
+    otherwise: "una comprobación anotada en el equipo",
+  },
+} as const satisfies Record<"en" | "es", Record<string, string>>;
+
+export const CLOCK_RESTARTED_EMAIL_WORDS = {
+  en: {
+    subject: "Payments restarted at {venue}",
+    text: "The box's clock was confirmed by {confirmedBy} and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+  },
+  es: {
+    subject: "Se reanudaron los cobros en {venue}",
+    text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+  },
+} as const satisfies Record<"en" | "es", { subject: string; text: string }>;
+
+/** `text` for several sales, `one` for one, `partial` appended to either; `unconfirmed` instead of
+ * all three when the box cannot tell which sales. */
+export const CLOCK_MISDATED_EMAIL_WORDS = {
+  en: {
+    subject: "Sales dated wrongly at {venue}: check them with your tax adviser",
+    text: "{count} sales were recorded with a time later than the real time, from {from} to {to}. They stay as recorded. The list is on the Box status page; go through it with your tax adviser and then mark the alert as handled.",
+    one: "One sale was recorded with a time later than the real time, at {from}. It stays as recorded. The list is on the Box status page; go through it with your tax adviser and then mark the alert as handled.",
+    partial: "The box restarted during the stop, so the list may be short.",
+    unconfirmed: {
+      subject: "Sales may be dated wrongly at {venue}: check them with your tax adviser",
+      text: "The payment stop that began at {from} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser; then mark the alert as handled.",
+    },
+  },
+  es: {
+    subject: "Ventas con fecha incorrecta en {venue}: revísalas con tu asesor",
+    text: "Se registraron {count} ventas con una hora posterior a la real, de {from} a {to}. Quedan como se registraron. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como atendido.",
+    one: "Se registró una venta con una hora posterior a la real, a las {from}. Queda como se registró. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como atendido.",
+    partial: "El equipo se reinició durante la parada, así que puede faltar alguna.",
+    unconfirmed: {
+      subject: "Puede haber ventas con fecha incorrecta en {venue}: revísalas con tu asesor",
+      text: "La parada de cobros que empezó a las {from} terminó sola, pero nada confirmó la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la hora del equipo y revisa con tu asesor las ventas desde entonces; después marca el aviso como atendido.",
+    },
+  },
+} as const;
