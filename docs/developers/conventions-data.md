@@ -3676,8 +3676,8 @@ cover the routes they name; a new money route is seen by none.
 
 ### A confirmation of the clock lifts the stop for one step back
 
-Revision 8 of [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md),
-whose decisions and measurements are named here: a confirmation of the clock now lifts the stop by
+Built by A798-B slice 9 (#2025) from revision 8 of [the slice 9 plan](../superpowers/plans/2026-10-23-a798-9-clock-restart.md),
+whose decisions and measurements are named here: a confirmation of the clock lifts the stop by
 itself, with no limit on the gap. Every Q and S label below is a run made for the plan against a
 PROTOTYPE of `clock-behind.ts` — the Q labels against revision 2's, the S labels against revision
 3's, both reading the retired restart row rather than `clock_confirmations` — in a throwaway

@@ -170,7 +170,7 @@ Two consequences:
   ([A798 design, revision 5, §4.8](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md)).
   **2026-10-23:** built by A798-B slice 8 (#2012); the rule and where it is checked are in
   [conventions-data.md](../developers/conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
-  A798-B slice 9 (#2025): a confirmation of the clock — AEAT's time, two devices from two network
+  **2026-10-24:** A798-B slice 9 (#2025): a confirmation of the clock — AEAT's time, two devices from two network
   addresses, or an administrator's own device — lifts the stop by itself, for one step back, with no
   limit on the gap; see
   [conventions-data.md](../developers/conventions-data.md#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back).

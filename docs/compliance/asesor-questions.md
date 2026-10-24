@@ -3766,9 +3766,7 @@ records, the chain and the box's clock stay as they are
 **Proposed interim treatment (design default, A798 revision 5 decision 13):** raise the alert and
 change nothing else; the restart and its proof stay in the append-only table Q51 describes.
 
-**2026-10-24:** the manager's restart this question describes was replaced by a confirmation of the
-clock that lifts the stop by itself ([Q51](#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24)).
-A confirmation whose clock later proves wrong still raises the alert above,
+**2026-10-24:** A confirmation whose clock later proves wrong still raises the alert above,
 `clock.behind_chain_disproved`, for the sales written under it, and the proof is kept in
 `clock_confirmations`. The sales a clock running ahead dated before the stop are
 [Q60](#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
@@ -3808,7 +3806,7 @@ required is what this asks.
 > de la parada con una hora más de un minuto posterior a esa hora real: número de factura y hora
 > registrada. La lista se muestra en la página «Estado del equipo» del panel de gestión, y el sistema
 > avisa a los responsables en el panel y por correo electrónico; el aviso queda abierto hasta que
-> alguien lo marca como atendido. Si el
+> alguien lo marca como resuelto. Si el
 > equipo se reinició durante la parada, la lista puede estar incompleta, y el aviso lo dice; si la
 > parada terminó sola y la siguiente comprobación contradijo la hora del equipo, no se lista nada y el
 > aviso dice que no se puede saber qué ventas se fecharon mal. No se modifica ningún registro: ni su
