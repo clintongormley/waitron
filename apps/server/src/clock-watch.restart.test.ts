@@ -126,7 +126,7 @@ function agreeing(at: Box): AuthorityTimeSample {
   };
 }
 
-function count(table: "clock_checks" | "clock_confirmations"): number {
+function count(table: "clock_checks" | "clock_confirmations" | "incidents"): number {
   const [row] = suite.db.all<{ n: number }>(
     sql`select count(*) as n from ${sql.identifier(table)}`,
   );
@@ -308,12 +308,14 @@ describe("the clock watch over the real seat", () => {
     await w.look(T);
     expect(w.readAuthorityTime).toHaveBeenCalledTimes(1);
     const [opened] = checks();
+    const incidentsBefore = count("incidents");
     at.clocks.real = T + 20 * S;
     at.clocks.skew = 0;
     await w.look(T + 30 * S);
     await w.look(T + 45 * S);
     expect(w.readAuthorityTime).toHaveBeenCalledTimes(1);
     expect(count("clock_confirmations")).toBe(0);
+    expect(count("incidents")).toBe(incidentsBefore);
     await w.look(T + 60 * S);
     await w.stop();
     expect(w.readAuthorityTime).toHaveBeenCalledTimes(2);
@@ -384,13 +386,16 @@ describe("the clock watch over the real seat", () => {
     expect(await sale(at)).toBe(200);
     at.clocks.skew = -10 * M;
     await w.look(T + 30 * S);
+    const closedAtTheNextLook = [
+      { id: expect.any(String), source: "elapsed", check_id: opened!.id, unconfirmed: true },
+    ];
+    expect(checks()).toHaveLength(2);
+    expect(closings()).toEqual(closedAtTheNextLook);
     await w.look(T + 45 * S);
     await w.stop();
     expect(checks()).toHaveLength(2);
     expect(checks()[0]!.id).toBe(opened!.id);
-    expect(closings()).toEqual([
-      { id: expect.any(String), source: "elapsed", check_id: opened!.id, unconfirmed: true },
-    ]);
+    expect(closings()).toEqual(closedAtTheNextLook);
   });
 
   it("keeps the same check open when the clock steps back again with no sale in between", async () => {

@@ -74,8 +74,10 @@ Every point the owner's answers left open, the default built, and why. Each can 
    and a second lift of the same record is now normal; its `person_id` cannot be empty either.
 5. **The clock watch looks every 15 seconds**, stop or not (a few indexed reads: the latest record,
    the covering confirmation, the chain heads under a lift, the open check); AEAT is still asked at
-   most once a minute, and only during a stop or while a check whose stop has ended waits for its
-   witness (R6). Why: tills report every 15 seconds, and the start of a stop is recorded within 15
+   most once a minute while the steady clock reads forward (on every look when it cannot be read
+   or went backwards), and only while the box's reading is more than a minute behind the latest
+   record (a stop, or one a confirmation lifted) or while a check whose stop has ended waits for
+   its witness (R6). Why: tills report every 15 seconds, and the start of a stop is recorded within 15
    seconds.
 6. **AEAT's time outranks the devices.** AEAT agreeing with the box restarts payments even if two
    devices disagree (they get `clock.disagrees`); AEAT disagreeing blocks devices and the
@@ -646,9 +648,9 @@ check), each in the task named:
   expecting two HEADs; `:380` "still reads the stop and asks AEAT on every check while a record
   keeps failing" → "still reads the stop on every check, and asks AEAT once a minute, while a record
   keeps failing", its second tick at `:384` advancing the steady clock 60 s, every count unchanged;
-  `:467` "keeps at most a day of unrecorded disproofs…" → "keeps at most 1 440 unrecorded
+  `:469` "keeps at most a day of unrecorded disproofs…" → "keeps at most 1 440 unrecorded
   disproofs…", its assertion unchanged: the cap counts disproofs, not looks (forward jumps, and
-  AEAT's disagreements from the watch's once-a-minute ask and from AEAT's replies to filings), so it
+  AEAT's disagreements from the watch's own asks and from AEAT's replies to filings), so it
   names no span of time. Fixtures only, no assertion changed, in `c0c6da41e`: the
   file's `STOPPED` state rebuilt in R3's shape (`proof "none"`, `agreeing`, `contrary`,
   `confirmation: null`), and the case "still reads AEAT's time while a restart is in force…"

@@ -15,7 +15,8 @@ import { unrefTimer, type Timer } from "./unref-timer.js";
 
 export const CLOCK_WATCH_MS = 15_000;
 
-/** AEAT's time is asked at most this often, by the steady clock. */
+/** The least steady-clock time between two asks of AEAT's time; `authorityDue` says when it does
+ * not hold. */
 const AUTHORITY_EVERY_MS = 60_000;
 
 type Reading = ReturnType<TrustedClock["now"]>;
@@ -25,16 +26,17 @@ type Reading = ReturnType<TrustedClock["now"]>;
 const JUMP_MS = 60_000;
 
 /** The most unrecorded disproofs kept while every record fails: forward jumps, and AEAT's
- * disagreements from the watch's ask (at most once a minute, during a stop) and from AEAT's replies
- * to filings (`aeat-transport.ts`). Past it the earliest are kept. */
+ * disagreements from the watch's own asks and from AEAT's replies to filings
+ * (`aeat-transport.ts`). Past it the earliest are kept. */
 const PENDING_MAX = 1_440;
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
- * last finished, on the primary only. During a stop each check opens a clock check (the seat
- * decides whether one is due) and confirms the clock when the witnesses are ready; while a check
- * waits after its stop ended by itself, each check offers the seat the witnesses to close it. AEAT's
- * time is asked during a stop or while a check waits. `stop` resolves
- * once a check in flight has finished; nothing is read, asked or written after it. */
+ * last finished, on the primary only. While the box's reading is more than a minute behind the
+ * latest record (a stop, or a stop a confirmation lifted), each check offers the seat a clock check
+ * to open, confirms the clock when the witnesses are ready, and asks AEAT's time when an ask is
+ * due; while a check waits after its stop ended by itself, each check does the same ask and offers
+ * the seat the witnesses to close it. `stop` resolves once a check in flight has finished; nothing is read,
+ * asked or written after it. */
 export function startClockWatch(deps: {
   backend: Pick<
     FiscalBackend,
