@@ -2354,6 +2354,27 @@ describe("till-station-queue — a merged queue's station labels", () => {
       expect(el.shadowRoot!.querySelector(mark)).toBeNull();
     });
 
+    it.each(["rail", "kanban"] as const)(
+      "%s: a ticket-mode order whose only unfinished dish is held shows no mark",
+      async (view) => {
+        const held = { ...groupA.items[0]!, id: "ti-held", firedAt: null };
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [
+            {
+              ...groupB,
+              stationId: "st-1",
+              bumpMode: "ticket" as const,
+              items: [...groupB.items, held],
+            },
+          ],
+          stationNames,
+          view,
+        });
+        expect(el.shadowRoot!.querySelector('[data-item="ti-held"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(mark)).toBeNull();
+      },
+    );
+
     it("kanban: each bumpable cell of the ticket-mode order shows the mark, no other cell", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: mixed,

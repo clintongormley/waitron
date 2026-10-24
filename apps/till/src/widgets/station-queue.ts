@@ -1020,7 +1020,6 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** Marks only the exception: a tap on any dish of a whole-ticket order moves every dish of it. */
   #wholeTicket(group: StationQueueGroup): TemplateResult | typeof nothing {
     if (group.bumpMode !== "ticket") return nothing;
     return html`<span class="whole-ticket" data-whole-ticket>${t("station.whole_ticket")}</span>`;

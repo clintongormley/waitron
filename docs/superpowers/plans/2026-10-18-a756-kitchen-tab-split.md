@@ -4025,7 +4025,9 @@ server does not send it.
   it at both widths, its label and longest choice ("Toda la comanda a la vez") whole in both
   languages; no sideways scroll (`document.documentElement.scrollWidth` equals the viewport width);
   the Kitchen tab shows no gap where the bump buttons were; the merged rail shows "Advance ticket
-  #N" on Cocina's order and "Advance #N" on Barra's; dark is readable. A defect found is fixed with a
+  #N" on Cocina's order and "Advance #N" on Barra's (2026-10-24: that label is read out but not
+  shown; what a cook sees is the "Whole ticket" mark on Cocina's order, added after the review —
+  see `station-queue.test.ts`'s whole-ticket cases); dark is readable. A defect found is fixed with a
   failing test first, in the component's own test file, and committed.
 - [ ] **Step 3:** Delete the throwaway tests; `git status` shows them gone. Update the ledger with
   the look report's path and any defect found.
