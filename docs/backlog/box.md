@@ -1234,3 +1234,12 @@ signature requiring an absent reviewed root remains unsupported. External vault-
 also needs its separately versioned archive contract. Full-history work under the configured
 resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
 See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).
+
+## The Box status page reads the wrongly-dated-sales alerts' params through a cast
+
+`readMisdatedOpen` (`apps/server/src/box-health.ts`) finds the open `clock.records_misdated` alerts
+by their code name and reads each alert's params as `MisdatedOpen` behind an `as unknown as` cast,
+so the server keeps its own copy of a shape the Veri\*Factu module writes, and nothing checks the
+two agree. A fiscal seat method (for example `openMisdated(tx)`) answering the typed list would
+remove the copy. Naming a code as a string in `apps/server` is house practice
+(`apps/server/src/payments-api.ts`'s status map), so the code name alone is not the problem.

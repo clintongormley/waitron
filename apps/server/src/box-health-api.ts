@@ -87,9 +87,8 @@ async function requiredNameOf(tx: Transaction, personId: string): Promise<string
 }
 
 /** `GET /api/box/health`, `POST /api/box/free-space` and `GET /api/box/clock-misdated`, all
- * `system.manage`; `POST
- * /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both `person.admin` and refused on
- * the box itself. */
+ * `system.manage`; `POST /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both
+ * `person.admin` and refused on the box itself. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
   const freeRun = createErrorBoundary(STATUS, "box-free-space.failed");
@@ -118,7 +117,11 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
           const found = [];
           for (const { confirmationId } of await readMisdatedOpen(deps.db)) {
             const answer = await misdatedRecords(deps.db, confirmationId);
-            if (answer?.known !== true) continue;
+            if (answer === null) {
+              log("warn", "box-clock-misdated.unknown_confirmation", { confirmationId });
+              continue;
+            }
+            if (!answer.known) continue;
             found.push({
               confirmationId,
               records: answer.records.map((record) => ({

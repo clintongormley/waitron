@@ -43,6 +43,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { systemClock } from "./till-backend.js";
 import { writeRefusingDb } from "./testing/write-refusing-db.js";
 import "./errors.js";
+import type { Logger } from "./logger.js";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -939,7 +940,7 @@ it("leaves payments running when a manager marks the confirmation's alert handle
   expect(await alertCodes(stop)).not.toContain("clock.behind_chain");
 });
 
-it("stops payments again, and says the clock stepped back, when the clock reads 30 minutes behind a sale made after the restart", async () => {
+it("stops payments again under a stop with no proof and no confirmation when the clock reads 30 minutes behind a sale made after the restart", async () => {
   const stop = await stoppedBox(10 * MINUTE);
   noteDevice(stop, 0);
   noteDevice(stop, 0);
@@ -1152,7 +1153,7 @@ function misdatedIncident(confirmationId: string): string {
 }
 
 /** A Box status app whose routes read and write `db`. */
-function boxApp(stop: Stop, db: Database): Hono {
+function boxApp(stop: Stop, db: Database, log: Logger = () => {}): Hono {
   const app = new Hono();
   mountBoxHealthApi(
     app,
@@ -1172,7 +1173,7 @@ function boxApp(stop: Stop, db: Database): Hono {
         devMode: false,
       },
     },
-    () => {},
+    log,
   );
   return app;
 }
@@ -1295,6 +1296,31 @@ it("says an alert that cannot tell which sales are dated wrongly is unconfirmed,
     expect(
       (await misdatedOf(stop.app)).lists.some((list) => list.confirmationId === confirmationId),
     ).toBe(false);
+  } finally {
+    handOpenMisdated(stop.behind);
+  }
+});
+
+it("logs an open alert whose closing the seat does not know, and lists none for it", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  const confirmationId = randomUUID();
+  const from = new Date(stop.behind).toISOString();
+  await venue.db.insert(incidentRows).values({
+    source: jobOrigin("dashboard").source,
+    code: "clock.records_misdated",
+    params: { confirmationId, count: 1, from, fromOffsetMinutes: 60, partial: false },
+    severity: "error",
+    detectedAt: from,
+  });
+  const logged: Parameters<Logger>[] = [];
+  try {
+    const lists = await misdatedOf(boxApp(stop, venue.db, (...entry) => void logged.push(entry)));
+    expect(lists.lists.some((list) => list.confirmationId === confirmationId)).toBe(false);
+    expect(logged).toContainEqual([
+      "warn",
+      "box-clock-misdated.unknown_confirmation",
+      { confirmationId },
+    ]);
   } finally {
     handOpenMisdated(stop.behind);
   }
