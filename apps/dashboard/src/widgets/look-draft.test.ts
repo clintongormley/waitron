@@ -15,6 +15,7 @@ import {
   setLogo,
   setCorners,
   setHand,
+  setTextScale,
   typeCode,
   typeHandCode,
   useWorkedOut,
@@ -338,5 +339,17 @@ describe("the Look card draft's logo", () => {
   it("is no longer Waitron's look once a logo is set", () => {
     expect(isWaitronLook(setLogo(waitronLook(), { light: L }))).toBe(false);
     expect(isWaitronLook(waitronLook())).toBe(true);
+  });
+});
+
+describe("the Look card draft's text size", () => {
+  it("a text size is part of the draft", () => {
+    const larger = setTextScale(waitronLook(), 120);
+    expect(larger.choices.textScale).toBe(120);
+    expect(sameDraft(larger, waitronLook())).toBe(false);
+    expect(isWaitronLook(larger)).toBe(false);
+    const back = setTextScale(larger, 100);
+    expect(sameDraft(back, waitronLook())).toBe(true);
+    expect(isWaitronLook(back)).toBe(true);
   });
 });

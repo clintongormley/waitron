@@ -3043,6 +3043,16 @@ export const en = {
   "appearance.corners.square": "Square",
   "appearance.corners.standard": "Standard",
   "appearance.corners.round": "Round",
+  "appearance.text_size": "Text size",
+  "appearance.text_size_hint":
+    "100% is Waitron's standard size. Larger text wraps long names onto more lines.",
+  "appearance.text_size_spoken": "{n} percent",
+  "appearance.text_sizes":
+    "Text on screens: small {sm} px · normal {md} px · large {lg} px · largest {xl} px",
+  "appearance.text_size_standard": "{size} (standard)",
+  "appearance.bad_text_size": "Pick one of the steps from 100% to 130%.",
+  "appearance.preview_product": "Sparkling elderflower lemonade",
+  "appearance.switch_text_size": "Text on the tills changes size too.",
   "appearance.note":
     "Applies to the dashboard and every till. Each screen shows this theme's light or dark version, as its own Theme setting says: Light, Dark or Follow device.",
   "appearance.editing_in_use": "Theme in use: {name}. Saving changes every screen.",
@@ -6362,6 +6372,16 @@ export const es: Record<StringKey, string> = {
   "appearance.corners.square": "Rectas",
   "appearance.corners.standard": "Estándar",
   "appearance.corners.round": "Redondeadas",
+  "appearance.text_size": "Tamaño del texto",
+  "appearance.text_size_hint":
+    "El 100 % es el tamaño estándar de Waitron. Con texto más grande, los nombres largos ocupan más líneas.",
+  "appearance.text_size_spoken": "{n} por ciento",
+  "appearance.text_sizes":
+    "Texto en pantalla: pequeño {sm} px · normal {md} px · grande {lg} px · muy grande {xl} px",
+  "appearance.text_size_standard": "{size} (estándar)",
+  "appearance.bad_text_size": "Elige uno de los pasos del 100 % al 130 %.",
+  "appearance.preview_product": "Tinto de verano con limón",
+  "appearance.switch_text_size": "El texto de las cajas también cambia de tamaño.",
   "appearance.note":
     "Se aplica al panel y a todas las cajas. Cada pantalla muestra la versión clara u oscura de este tema, según su propio ajuste de Tema: Claro, Oscuro o Según el dispositivo.",
   "appearance.editing_in_use": "Tema en uso: {name}. Al guardar cambian todas las pantallas.",

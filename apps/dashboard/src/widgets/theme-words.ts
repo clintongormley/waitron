@@ -1,5 +1,6 @@
 import {
   type AgainstItem,
+  type DerivedTheme,
   MODES,
   type Mode,
   STATIONS,
@@ -12,7 +13,7 @@ import {
   groupAgainst,
 } from "@waitron/ui-core/theme";
 import type { StringKey } from "../i18n/strings.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
 
 const ZONE_TABS: ReadonlySet<string> = new Set([
@@ -229,4 +230,24 @@ export function saveDialogLine(warning: ThemeWarning, choices: ThemeChoices): st
 export function savedWarningLine(warning: ThemeWarning): string {
   if (warning.field === "brandColor") return t(`appearance.saved_brand_${warning.mode}`);
   return hardToRead(warning);
+}
+
+export function textScaleLabel(n: number): string {
+  return new Intl.NumberFormat(currentLocale(), { style: "percent" }).format(n / 100);
+}
+
+export function textScaleSpoken(n: number): string {
+  return fill("appearance.text_size_spoken", { n: String(n) });
+}
+
+const pixels = (theme: Pick<DerivedTheme, "light">, size: string) =>
+  (theme.light[`--wt-font-size-${size}`] as string).replace(/px$/, "");
+
+export function textSizesLine(theme: Pick<DerivedTheme, "light">): string {
+  return fill("appearance.text_sizes", {
+    sm: pixels(theme, "sm"),
+    md: pixels(theme, "md"),
+    lg: pixels(theme, "lg"),
+    xl: pixels(theme, "xl"),
+  });
 }

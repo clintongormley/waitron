@@ -9,7 +9,7 @@ import {
 } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import { es, type StringKey } from "../i18n/strings.js";
-import { setLocale } from "../i18n/t.js";
+import { fill, setLocale } from "../i18n/t.js";
 import {
   advancedSummary,
   againstNames,
@@ -24,6 +24,9 @@ import {
   keptNote,
   saveDialogLine,
   savedWarningLine,
+  textScaleLabel,
+  textScaleSpoken,
+  textSizesLine,
   themeColourName,
 } from "./theme-words.js";
 
@@ -551,5 +554,30 @@ describe("theme words", () => {
         colour: "#8fa898",
       }),
     );
+  });
+});
+
+describe("text size words", () => {
+  it("shows a text size as the screen language's percent", () => {
+    expect(textScaleLabel(115)).toBe("115%");
+    setLocale("es-ES");
+    expect(textScaleLabel(115)).toBe("115\u00a0%");
+  });
+
+  it("says a text size in words", () => {
+    expect(textScaleSpoken(115)).toBe("115 percent");
+    setLocale("es-ES");
+    expect(textScaleSpoken(115)).toBe(esFill("appearance.text_size_spoken", { n: "115" }));
+  });
+
+  it("lists the four sizes the theme draws, read from its tokens", () => {
+    const theme = deriveTheme({ ...WAITRON_CHOICES, textScale: 115 });
+    const sizes = { sm: "14", md: "16", lg: "21", xl: "25" };
+    expect(textSizesLine(theme)).toBe(fill("appearance.text_sizes", sizes));
+    expect(textSizesLine(theme)).toBe(
+      "Text on screens: small 14\u00a0px · normal 16\u00a0px · large 21\u00a0px · largest 25\u00a0px",
+    );
+    const replaced = { light: { ...theme.light, "--wt-font-size-md": "20px" } };
+    expect(textSizesLine(replaced)).toBe(fill("appearance.text_sizes", { ...sizes, md: "20" }));
   });
 });
