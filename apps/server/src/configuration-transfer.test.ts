@@ -2550,6 +2550,91 @@ it("refuses an imported bump mode outside the two values before writing anything
   ).toEqual([]);
 });
 
+it("transfers each station's changes after sending", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values([
+      { locationId: source.locationId, name: "Grill", changesAfterSending: "never" },
+      { locationId: source.locationId, name: "Cold", changesAfterSending: "held" },
+    ]),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_stations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "Grill", changes_after_sending: "never" }),
+      expect.objectContaining({ name: "Cold", changes_after_sending: "held" }),
+    ]),
+  );
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({
+      name: kitchenStations.name,
+      changesAfterSending: kitchenStations.changesAfterSending,
+    })
+    .from(kitchenStations)
+    .where(inArray(kitchenStations.name, ["Grill", "Cold"]))
+    .orderBy(kitchenStations.name);
+  expect(imported).toEqual([
+    { name: "Cold", changesAfterSending: "held" },
+    { name: "Grill", changesAfterSending: "never" },
+  ]);
+});
+
+it("refuses an imported changes after sending outside the three values before writing anything", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  const station = transferred.tables.kitchen_stations![0]!;
+  station.changes_after_sending = "bogus";
+  await expect(
+    applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "kitchen_stations.changes_after_sending" },
+  });
+  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+    { n: 0 },
+  ]);
+  expect(
+    (await targetSuite.db.execute(sql`select count(*) as n from kitchen_stations`)).rows,
+  ).toEqual([{ n: 0 }]);
+  expect(
+    await targetSuite.db
+      .select({ name: kitchenStations.name })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, String(station.name))),
+  ).toEqual([]);
+});
+
 it("A725 allocates omitted imported colours after reserving explicit colours later in the bundle", async () => {
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,

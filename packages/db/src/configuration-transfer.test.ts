@@ -1,4 +1,9 @@
-import { BUMP_MODES, STATION_COLOURS, TICKET_GROUPINGS } from "@waitron/shared";
+import {
+  BUMP_MODES,
+  CHANGES_AFTER_SENDING,
+  STATION_COLOURS,
+  TICKET_GROUPINGS,
+} from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import {
   CORE_CONFIGURATION_TRANSFER,
@@ -111,6 +116,34 @@ describe("validateCoreConfiguration", () => {
     expect(() =>
       validateCoreConfiguration({
         kitchen_stations: BUMP_MODES.map((bump_mode) => ({ bump_mode })),
+      }),
+    ).not.toThrow();
+  });
+
+  it.each(["bogus", "Held", null, 1])(
+    "refuses a station's changes after sending a save would refuse %j",
+    (changes_after_sending) => {
+      expect(() =>
+        validateCoreConfiguration({ kitchen_stations: [{ changes_after_sending }] }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "kitchen_stations.changes_after_sending" },
+        }),
+      );
+    },
+  );
+
+  it("accepts an absent station changes after sending", () => {
+    expect(() => validateCoreConfiguration({ kitchen_stations: [{}] })).not.toThrow();
+  });
+
+  it("accepts each station changes after sending", () => {
+    expect(() =>
+      validateCoreConfiguration({
+        kitchen_stations: CHANGES_AFTER_SENDING.map((changes_after_sending) => ({
+          changes_after_sending,
+        })),
       }),
     ).not.toThrow();
   });
