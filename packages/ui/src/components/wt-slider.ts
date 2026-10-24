@@ -41,6 +41,11 @@ export class WtSlider extends LitElement {
       :host([disabled]) {
         opacity: var(--wt-opacity-disabled);
       }
+      .hint {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .error {
         margin: 0;
         color: var(--wt-color-danger);
@@ -58,6 +63,9 @@ export class WtSlider extends LitElement {
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean }) continuous = false;
   @property() error = "";
+  @property() hint = "";
+  @property({ attribute: false }) format: (value: number) => string = String;
+  @property({ attribute: false }) valueText: ((value: number) => string) | null = null;
   /** The number under the latest drag, until a new `value` replaces it. */
   @state() private shown: number | null = null;
 
@@ -90,10 +98,12 @@ export class WtSlider extends LitElement {
 
   override render() {
     const errorId = `${this.#id}-error`;
+    const hintId = `${this.#id}-hint`;
     const shown = this.shown ?? this.value;
+    const describedBy = [this.hint && hintId, this.error && errorId].filter(Boolean).join(" ");
     return html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>
         <label for=${this.#id} part="label">${this.label}</label>
-        <span part="value" aria-hidden="true">${shown}</span>
+        <span part="value" aria-hidden="true">${this.format(shown)}</span>
       </div>
       <input
         id=${this.#id}
@@ -105,10 +115,12 @@ export class WtSlider extends LitElement {
         .value=${live(String(shown))}
         ?disabled=${this.disabled}
         aria-invalid=${this.error ? "true" : nothing}
-        aria-describedby=${this.error ? errorId : nothing}
+        aria-describedby=${describedBy || nothing}
+        aria-valuetext=${this.valueText ? this.valueText(shown) : nothing}
         @input=${this.#onInput}
         @change=${this.#onChange}
       />
+      ${this.hint ? html`<p class="hint" part="hint" id=${hintId}>${this.hint}</p>` : nothing}
       ${this.error ? html`<p class="error" id=${errorId} role="alert" data-error>${this.error}</p>` : nothing}`;
   }
 }

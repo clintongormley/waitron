@@ -240,6 +240,75 @@ test("without an error there is no alert and the input is neither invalid nor de
   expect(input.hasAttribute("aria-invalid")).toBe(false);
 });
 
+test("draws its value through format, while dragging too", async () => {
+  const el = await mountSlider();
+  el.format = (n) => `${n}%`;
+  await el.updateComplete;
+  expect(shownOf(el)).toBe("6%");
+  const input = inputOf(el);
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(shownOf(el)).toBe("8%");
+  expect(input.value).toBe("8");
+});
+
+test("says its value through valueText", async () => {
+  const el = await mountSlider();
+  const input = inputOf(el);
+  expect(input.hasAttribute("aria-valuetext")).toBe(false);
+  el.valueText = (n) => `${n} percent`;
+  await el.updateComplete;
+  expect(input.getAttribute("aria-valuetext")).toBe("6 percent");
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(input.getAttribute("aria-valuetext")).toBe("8 percent");
+  el.valueText = null;
+  await el.updateComplete;
+  expect(input.hasAttribute("aria-valuetext")).toBe(false);
+});
+
+test("shows a hint under the range, describing it", async () => {
+  const el = await mountSlider('hint="Bigger wraps more"');
+  const input = inputOf(el);
+  const hint = el.shadowRoot!.querySelector<HTMLElement>('[part="hint"]')!;
+  expect(hint.textContent).toBe("Bigger wraps more");
+  expect(hint.id).not.toBe("");
+  expect(hint.hasAttribute("role")).toBe(false);
+  expect(hint.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    input.getBoundingClientRect().bottom,
+  );
+  expect(input.getAttribute("aria-describedby")).toBe(hint.id);
+  expect(input.hasAttribute("aria-invalid")).toBe(false);
+
+  el.error = "Pick at least 2";
+  await el.updateComplete;
+  const alert = el.shadowRoot!.querySelector('[role="alert"]')!;
+  expect(input.getAttribute("aria-describedby")).toBe(`${hint.id} ${alert.id}`);
+  expect(alert.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    hint.getBoundingClientRect().bottom,
+  );
+});
+
+test("the hint paints from the muted text and small size tokens", async () => {
+  const el = await mountSlider('hint="Bigger wraps more"');
+  const hint = el.shadowRoot!.querySelector('[part="hint"]')!;
+  host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  expect(getComputedStyle(hint).color).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(hint).fontSize).toBe("11px");
+  expect(getComputedStyle(hint).marginTop).toBe("0px");
+});
+
+test("without a hint or a format it draws as before", async () => {
+  const el = await mountSlider();
+  expect(el.shadowRoot!.querySelector('[part="hint"]')).toBeNull();
+  expect(inputOf(el).hasAttribute("aria-describedby")).toBe(false);
+  expect(shownOf(el)).toBe("6");
+  expect([el.format(6), el.valueText, el.hint]).toEqual(["6", null, ""]);
+});
+
 test("the range paints from the primary token", async () => {
   const el = await mountSlider();
   host.style.setProperty("--wt-color-primary", "rgb(16, 17, 18)");
