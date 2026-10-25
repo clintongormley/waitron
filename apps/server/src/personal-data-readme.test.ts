@@ -403,7 +403,7 @@ ${ASK}
 What each file holds
 ${PROFILE_LINE}
 ${SIGN_IN_LINE}
-- actions.json: the whole sales voided after they were recorded that you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each and, for each one, the sale number where there is one, the amount where there is one, when it happened and your part in it. Kept to account for the money the venue takes and gives back.
+- actions.json: the whole sales already recorded whose void you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each; for each one, the invoice number where there is one, the amount where there is one and when it happened; and for each refund and opening, your part in it. Kept to account for the money the venue takes and gives back.
 ${MACHINE}
 
 ${ORIGIN}

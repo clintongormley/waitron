@@ -121,7 +121,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "actions.json": {
         holds:
-          "the whole sales voided after they were recorded that you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each and, for each one, the sale number where there is one, the amount where there is one, when it happened and your part in it.",
+          "the whole sales already recorded whose void you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each; for each one, the invoice number where there is one, the amount where there is one and when it happened; and for each refund and opening, your part in it.",
         use: "Kept to account for the money the venue takes and gives back.",
         kept: ["Nothing in the box deletes a voided sale, a refund or a cash-drawer opening."],
       },
@@ -238,7 +238,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "actions.json": {
         holds:
-          "las ventas completas anuladas después de registrarse que autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste: cuántas hay de cada una y, de cada una, el número de venta si lo tiene, el importe si lo tiene, cuándo ocurrió y qué parte tuviste tú.",
+          "las ventas completas ya registradas cuya anulación autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste: cuántas hay de cada una; de cada una, el número de factura si lo tiene, el importe si lo tiene y cuándo ocurrió; y de cada devolución y cada apertura, qué parte tuviste tú.",
         use: "Se guarda para dar cuenta del dinero que el local cobra y devuelve.",
         kept: [
           "Nada en el servidor Waitron del local borra una venta anulada, una devolución ni una apertura del cajón de efectivo.",
