@@ -30,7 +30,7 @@
     "@waitron/composition": "workspace:*",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12",
-    "vite": "^8.3.1"
+    "vite": "^8.3.5"
   },
   "exports": {
     ".": "./src/index.ts",
