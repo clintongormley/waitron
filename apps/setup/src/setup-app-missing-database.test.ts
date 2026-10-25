@@ -4,6 +4,7 @@ import type { WtButton } from "@waitron/ui";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, venue } from "../test/first-setup-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 
 import {
   q,
@@ -42,7 +43,7 @@ it("retires only after password recovery, confirmation and a fresh owner-bound m
   expect(q<WtButton>(app, "confirm-start-again")!.disabled).toBe(true);
   await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
   await click(app, "confirm-start-again");
-  await expect.poll(() => app.shadowRoot!.textContent).toContain("The old attempt is retained.");
+  await expect.poll(() => app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.restarting);
   const sent = requests.find((r) => r.path.endsWith("/start-again"))!;
   expect(sent.body).toEqual({ inspectionId: "b".repeat(64), revision: 2, ownerGeneration: 2 });
   expect(sent.headers.get("X-Waitron-Setup-Owner")).toBe("B".repeat(43));
@@ -86,7 +87,7 @@ it("requires password recovery again after a refused retirement and never retrie
   expect(q(app, "confirm-start-again")).toBeNull();
   expect(q(app, "screen-cert")).toBeNull();
   expect(requests.filter((r) => r.path.endsWith("/start-again"))).toHaveLength(1);
-  expect(app.shadowRoot!.textContent).not.toContain("The old attempt is retained.");
+  expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.restarting);
 });
 
 it("cancels missing-database retirement without sending it or continuing the wizard", async () => {
@@ -125,7 +126,7 @@ it("ignores duplicate clicks and a retirement answer after the app has left", as
   answer(Response.json({ restarting: true }));
   await operation.mock.results[0]!.value;
   await app.updateComplete;
-  expect(app.shadowRoot!.textContent).not.toContain("The old attempt is retained.");
+  expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.restarting);
 });
 
 it("does not restore missing-database evidence when a password inspection outlives its page", async () => {

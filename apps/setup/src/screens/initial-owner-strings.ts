@@ -6,7 +6,6 @@ export const initialOwnerStrings = {
     resume: "Continue with your setup password",
     password: "Administrator password",
     required: "Enter your password.",
-    passwordNotAccepted: "Password not accepted",
     resumeHelp: "Enter the administrator password you chose during setup.",
     interrupted: "First setup was interrupted",
     missingDatabase:
@@ -17,11 +16,10 @@ export const initialOwnerStrings = {
     finishEmail: "Re-enter the email settings used for this setup.",
     finishHelp: "Re-enter the certificate and email settings used for this setup.",
     startAgain: "Start again",
-    startAgainHelp:
-      "Keep the old attempt and its files, and begin in a new workspace. Previously selected installation codes stay used.",
-    retireConfirmed: "Keep the old attempt and start again.",
+    startAgainHelp: "Deletes this attempt. This box will not use its invoice series names again.",
+    retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
-    restarting: "The old attempt is retained. Reconnect to continue in the new workspace.",
+    restarting: "The old attempt is deleted. Reconnect to continue.",
     startUnavailable:
       "Start again without a password is available only when the box can verify an unused, empty setup.",
     abandon: "Abandon this attempt",
@@ -43,7 +41,6 @@ export const initialOwnerStrings = {
     resume: "Continuar con tu contraseña de configuración",
     password: "Contraseña de administrador",
     required: "Introduce tu contraseña.",
-    passwordNotAccepted: "Contraseña no aceptada",
     resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
     interrupted: "La configuración inicial se interrumpió",
     missingDatabase:
@@ -57,10 +54,10 @@ export const initialOwnerStrings = {
       "Vuelve a introducir el certificado y los ajustes de correo usados en esta configuración.",
     startAgain: "Empezar de nuevo",
     startAgainHelp:
-      "Conserva el intento anterior y sus archivos, y empieza en un espacio nuevo. Los códigos de instalación ya elegidos siguen usados.",
-    retireConfirmed: "Conservar el intento anterior y empezar de nuevo.",
+      "Borra este intento. Este equipo no volverá a usar sus nombres de serie de facturas.",
+    retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",
     cancel: "Cancelar",
-    restarting: "El intento anterior se conserva. Reconecta para continuar en el espacio nuevo.",
+    restarting: "El intento anterior se ha borrado. Reconecta para continuar.",
     startUnavailable:
       "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
     abandon: "Abandonar este intento",

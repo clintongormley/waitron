@@ -47,12 +47,7 @@ async function mount(
           capability: "B".repeat(43),
           ownerGeneration: 2,
         });
-      if (path.endsWith("/resolution/start-again"))
-        return Response.json({
-          workspaceId: "new-workspace",
-          selectionGeneration: 1,
-          restarting: true,
-        });
+      if (path.endsWith("/resolution/start-again")) return Response.json({ restarting: true });
     },
   });
   const { el } = await mountWidget<SetupApp>("setup-app", { api: fixture.api });
@@ -121,6 +116,44 @@ it("requires an explicit confirmation before asking to retire an empty workspace
   expect(q<WtButton>(app, "resume")).toBeNull();
   expect(requests.some((r) => /\/(claim|abandon|provision)$/.test(r.path))).toBe(false);
 });
+
+it("says in English that Start again deletes the attempt", () => {
+  expect(initialOwnerStrings.en.startAgainHelp).toBe(
+    "Deletes this attempt. This box will not use its invoice series names again.",
+  );
+  expect(initialOwnerStrings.en.retireConfirmed).toBe("Delete the old attempt and start again.");
+  expect(initialOwnerStrings.en.restarting).toBe(
+    "The old attempt is deleted. Reconnect to continue.",
+  );
+});
+
+it.each(["en-GB", "es-ES"])(
+  "in %s the confirmation says the attempt is deleted, and the page says so after Start again",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app, requests } = await mount();
+    setLocale(locale);
+    await app.updateComplete;
+    await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+    await app.updateComplete;
+    const section = q<HTMLElement>(app, "screen-first-owner");
+    expect(section.textContent).toContain(t.startAgainHelp);
+    expect(q<HTMLInputElement>(app, "retire-confirmed").closest("label")!.textContent).toBe(
+      t.retireConfirmed,
+    );
+    expect(section.textContent).not.toContain(t.restarting);
+    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+    await app.updateComplete;
+    await userEvent.click(
+      q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+    );
+    await expect
+      .poll(() => app.shadowRoot!.querySelector('[role="status"]')?.textContent)
+      .toBe(t.restarting);
+    expect(app.shadowRoot!.textContent).not.toContain(t.startAgainHelp);
+    expect(requests.filter((r) => r.path.endsWith("/start-again"))).toHaveLength(1);
+  },
+);
 
 it.each(["missing", "occupied", "unknown", "corrupt"] as const)(
   "does not offer password-free retirement of a %s database",
@@ -331,12 +364,12 @@ it("keeps retirement failures retryable and never reports them as a completed re
       ].some((f) => Boolean(f.error)),
     )
     .toBe(true);
-  expect(app.shadowRoot!.textContent).not.toContain("The old attempt is retained.");
+  expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.restarting);
   expect(q<WtButton>(app, "confirm-start-again").disabled).toBe(false);
   await userEvent.click(
     q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
   );
-  await expect.poll(() => app.shadowRoot!.textContent).toContain("The old attempt is retained.");
+  await expect.poll(() => app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.restarting);
 });
 
 it("does not publish a late retirement answer into a departed page", async () => {
@@ -360,7 +393,7 @@ it("does not publish a late retirement answer into a departed page", async () =>
   answer(Response.json({ restarting: true }));
   await retirement.mock.results[0]!.value;
   await app.updateComplete;
-  expect(app.shadowRoot!.textContent).not.toContain("The old attempt is retained.");
+  expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.restarting);
 });
 
 it("refuses a malformed recovered identity before saving its capability", async () => {

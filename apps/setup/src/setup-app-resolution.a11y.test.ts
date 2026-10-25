@@ -80,3 +80,52 @@ for (const locale of ["en-GB", "es-ES"] as const)
             await page.viewport(previous[0]!, previous[1]!);
           }
         });
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280])
+      it(`${locale} ${theme} ${width} restarting: accessible page after Start again`, async () => {
+        const previous = [innerWidth, innerHeight];
+        try {
+          await page.viewport(width, 1200);
+          const { api, requests } = wizardApi({
+            claimed: true,
+            intercept(path) {
+              if (path.endsWith("/resolution/start-again"))
+                return Response.json({ restarting: true });
+            },
+          });
+          const { el, host } = await mountWidget<SetupApp>(
+            "setup-app",
+            { api, browserLanguages: [locale] },
+            theme,
+          );
+          await expect
+            .poll(() => el.shadowRoot!.querySelector("[data-test=start-again]"))
+            .not.toBeNull();
+          const start = el.shadowRoot!.querySelector<WtButton>("[data-test=start-again]")!;
+          await userEvent.click(start.shadowRoot!.querySelector("button")!);
+          await userEvent.click(
+            el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=retire-confirmed]")!,
+          );
+          await el.updateComplete;
+          const confirm = el.shadowRoot!.querySelector<WtButton>(
+            "[data-test=confirm-start-again]",
+          )!;
+          await userEvent.click(confirm.shadowRoot!.querySelector("button")!);
+          await expect
+            .poll(() => el.shadowRoot!.querySelector("[data-test=start-again]"))
+            .toBeNull();
+          expect(requests.filter((request) => request.path.endsWith("/start-again"))).toHaveLength(
+            1,
+          );
+          await el.updateComplete;
+          await expectNoA11yViolations(host);
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          if (import.meta.env.VITE_A679_RESOLUTION_LOOK === "1")
+            await page.screenshot({
+              path: `__screenshots__/a679-interruption/${locale}-${theme}-${width}-restarting.png`,
+            });
+        } finally {
+          await page.viewport(previous[0]!, previous[1]!);
+        }
+      });

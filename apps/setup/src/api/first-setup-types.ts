@@ -54,13 +54,6 @@ export interface FirstSetupStatus {
   resolution?: boolean;
   state?: FirstSetupState;
 }
-export interface FirstSetupWorkspaceSelection {
-  inspectionId: string;
-  revision: number;
-  ownerGeneration: number;
-  workspaceId: string;
-  selectionGeneration: number;
-}
 export interface FirstSetupInspection {
   version: 2;
   inspectionId: string;
