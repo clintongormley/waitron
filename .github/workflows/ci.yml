@@ -813,15 +813,28 @@ jobs:
       # `if-no-files-found: error` is the guard that replaced the old `runnable test:coverage` check:
       # a `test:shard` that silently ran nothing (a missing script, a filter that matched nothing)
       # writes no blob, so the upload FAILS the shard rather than reporting a green that tested nothing.
-      - name: Upload the db coverage blob
-        # upload on failure too, so a flaky shard's blob names the exact test — 2026-09-05
+      - id: upload_blob
+        name: Upload the db coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: db-blob-${{ matrix.shard }}
           path: packages/db/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the db coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: db-blob-${{ matrix.shard }}
+          path: packages/db/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   # The coverage GATE for packages/db. The three test-heavy shards each emit a PARTIAL-coverage blob;
   # this job merges them and enforces the package's real thresholds on the TOTAL. It runs no tests and
@@ -983,15 +996,28 @@ jobs:
 
       # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
       # the shard, rather than a green that tested nothing (see test-heavy's upload step).
-      - name: Upload the server coverage blob
-        # upload on failure too, so a flaky shard's blob names the exact test — 2026-09-05
+      - id: upload_blob
+        name: Upload the server coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: server-blob-${{ matrix.shard }}
           path: apps/server/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the server coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: server-blob-${{ matrix.shard }}
+          path: apps/server/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   # apps/server's stream loop and pause tests, the S3 rehearsal scenarios, the send gate's and the
   # rehearsal interrupt's versitygw suites, and the suite of the S3 test server they start, on a runner
@@ -1077,14 +1103,28 @@ jobs:
             --outputFile=.vitest-reports/blob-stream.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
-      - name: Upload the stream tests' coverage blob
+      - id: upload_blob
+        name: Upload the stream tests' coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: server-blob-stream
           path: apps/server/.vitest-reports/blob-stream.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the stream tests' coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: server-blob-stream
+          path: apps/server/.vitest-reports/blob-stream.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   # The coverage GATE for apps/server — the mirror of test-heavy-merge. The test-server shards
   # and test-server-stream each emit a PARTIAL-coverage blob; this job merges them and enforces the
@@ -1231,14 +1271,28 @@ jobs:
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
-      - name: Upload the fiscal-verifactu coverage blob
+      - id: upload_blob
+        name: Upload the fiscal-verifactu coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: fiscal-verifactu-blob-${{ matrix.shard }}
           path: packages/fiscal-verifactu/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the fiscal-verifactu coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: fiscal-verifactu-blob-${{ matrix.shard }}
+          path: packages/fiscal-verifactu/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   test-fiscal-verifactu-merge:
     timeout-minutes: 5
@@ -1477,14 +1531,28 @@ jobs:
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       # No blob means the shard ran nothing; see test-heavy's upload step.
-      - name: Upload the till coverage blob
+      - id: upload_blob
+        name: Upload the till coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: till-blob-${{ matrix.shard }}
           path: apps/till/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the till coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: till-blob-${{ matrix.shard }}
+          path: apps/till/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   # The coverage gate for @waitron/till: merges the test-till blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
@@ -1624,14 +1692,28 @@ jobs:
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       # No blob means the shard ran nothing; see test-heavy's upload step.
-      - name: Upload the dashboard coverage blob
+      - id: upload_blob
+        name: Upload the dashboard coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: dashboard-blob-${{ matrix.shard }}
           path: apps/dashboard/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the dashboard coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: dashboard-blob-${{ matrix.shard }}
+          path: apps/dashboard/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   # The coverage gate for @waitron/dashboard: merges the test-dashboard blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
@@ -1856,14 +1938,28 @@ jobs:
             | { grep -v --line-buffered 'vitest:browser:api .*Triggering command' || [ $? -eq 1 ]; }
 
       # No blob means the shard ran nothing; see test-heavy's upload step.
-      - name: Upload the venue-service coverage blob
+      - id: upload_blob
+        name: Upload the venue-service coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: venue-service-blob-${{ matrix.shard }}
           path: packages/venue-service/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the venue-service coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: venue-service-blob-${{ matrix.shard }}
+          path: packages/venue-service/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
       - name: Snapshot the runner after a failed shard
         if: failure() || cancelled()
@@ -1876,13 +1972,26 @@ jobs:
             sudo dmesg -T | tail -80
           } > "$RUNNER_TEMP/shard-diagnostics/after.txt" 2>&1 || true
 
-      - name: Keep the failed shard's start-up record
+      - id: upload_diagnostics
+        name: Keep the failed shard's start-up record
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: venue-service-diagnostics-${{ matrix.shard }}
           path: ${{ runner.temp }}/shard-diagnostics/
           retention-days: 14
+
+      - name: Retry keep the failed shard's start-up record
+        if: always() && steps.upload_diagnostics.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: venue-service-diagnostics-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard-diagnostics/
+          retention-days: 14
+          overwrite: true
 
   # The coverage gate for @waitron/venue-service: merges the test-venue-service blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
@@ -2370,14 +2479,28 @@ jobs:
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
-      - name: Upload the provisioning coverage blob
+      - id: upload_blob
+        name: Upload the provisioning coverage blob
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: provisioning-blob-${{ matrix.shard }}
           path: packages/provisioning/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Retry upload the provisioning coverage blob
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: provisioning-blob-${{ matrix.shard }}
+          path: packages/provisioning/.vitest-reports/blob-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   test-provisioning-merge:
     timeout-minutes: 5

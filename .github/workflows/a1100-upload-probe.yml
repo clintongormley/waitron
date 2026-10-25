@@ -1,0 +1,70 @@
+name: A1100 temporary upload probe
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  overwrite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create the first file
+        run: echo before > upload.txt
+      - id: initial
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          name: a1100-overwrite-probe
+          path: upload.txt
+          if-no-files-found: error
+          retention-days: 1
+      - id: initial_retry
+        if: always() && steps.initial.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: a1100-overwrite-probe
+          path: upload.txt
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+      - name: Change the source file
+        run: echo after > upload.txt
+      - id: duplicate
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          name: a1100-overwrite-probe
+          path: upload.txt
+          if-no-files-found: error
+          retention-days: 1
+      - id: duplicate_retry
+        if: always() && steps.duplicate.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: a1100-overwrite-probe
+          path: upload.txt
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+      - name: Assert healthy skip and duplicate recovery
+        env:
+          INITIAL: ${{ steps.initial.outcome }}
+          INITIAL_RETRY: ${{ steps.initial_retry.outcome }}
+          DUPLICATE: ${{ steps.duplicate.outcome }}
+          DUPLICATE_RETRY: ${{ steps.duplicate_retry.outcome }}
+          OLD_ID: ${{ steps.initial.outputs.artifact-id }}
+          NEW_ID: ${{ steps.duplicate_retry.outputs.artifact-id }}
+        run: |
+          test "$INITIAL" = success
+          test "$INITIAL_RETRY" = skipped
+          test "$DUPLICATE" = failure
+          test "$DUPLICATE_RETRY" = success
+          test -n "$OLD_ID"
+          test -n "$NEW_ID"
+          test "$OLD_ID" != "$NEW_ID"
+          echo 'A1100: healthy skip, duplicate refusal, overwrite recovery and new artifact ID verified'
