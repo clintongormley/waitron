@@ -46,6 +46,36 @@ Prepared for Marta López on 2026-10-05.`;
 const ASK =
   "Contact Example Bar S.L. to ask. Its privacy notice: https://examplebar.example/privacy";
 
+function spanishReadme(files: readonly string[]): string {
+  const w = PERSONAL_DATA_README_WORDS.es;
+  const words = files.map((name) => w.files[name]!);
+  const venue = "Example Bar S.L.";
+  const lines = [
+    w.title.replace("{venue}", () => venue),
+    w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
+    "",
+    w.filesHeading,
+    ...files.map((name, index) => `- ${name}: ${words[index]!.holds} ${words[index]!.use}`),
+    w.machineReadable,
+    "",
+    w.originHeading,
+    w.origin,
+    "",
+    w.sentToHeading,
+    `- ${w.backup}`,
+    ...words.flatMap((file) => file.sentTo ?? []).map((s) => `- ${s}`),
+    "",
+    w.keptHeading,
+    ...words.flatMap((file) => file.kept ?? []).map((s) => `- ${s}`),
+    `- ${w.decides}`,
+    "",
+    w.rightsHeading,
+    w.rights,
+    `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
 describe("personalDataReadme", () => {
   it("writes every section in English", () => {
     expect(personalDataReadme(base)).toBe(`${HEAD}
@@ -79,36 +109,13 @@ ${ASK}
     const w = PERSONAL_DATA_README_WORDS.es;
     const profile = w.files["profile.json"]!;
     const signIn = w.files["sign-in.json"]!;
-    const venue = "Example Bar S.L.";
-    const lines = [
-      w.title.replace("{venue}", () => venue),
-      w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
-      "",
-      w.filesHeading,
-      `- profile.json: ${profile.holds} ${profile.use}`,
-      `- sign-in.json: ${signIn.holds} ${signIn.use}`,
-      w.machineReadable,
-      "",
-      w.originHeading,
-      w.origin,
-      "",
-      w.sentToHeading,
-      `- ${w.backup}`,
-      ...[...(profile.sentTo ?? []), ...(signIn.sentTo ?? [])].map((s) => `- ${s}`),
-      "",
-      w.keptHeading,
-      ...[...(profile.kept ?? []), ...(signIn.kept ?? [])].map((s) => `- ${s}`),
-      `- ${w.decides}`,
-      "",
-      w.rightsHeading,
-      w.rights,
-      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
-    ];
     expect(profile.sentTo).toHaveLength(1);
     expect(signIn.sentTo).toHaveLength(2);
     expect(profile.kept).toHaveLength(1);
     expect(signIn.kept).toHaveLength(3);
-    expect(personalDataReadme({ ...base, language: "es" })).toBe(`${lines.join("\n")}\n`);
+    expect(personalDataReadme({ ...base, language: "es" })).toBe(
+      spanishReadme(["profile.json", "sign-in.json"]),
+    );
   });
 
   it("never prints a double full stop after a legal name ending in one", () => {
@@ -349,34 +356,10 @@ ${ASK}
     const w = PERSONAL_DATA_README_WORDS.es;
     const words = WORKFORCE_FILES.map((name) => ({ name, file: w.files[name] }));
     for (const { name, file } of words) expect(file, name).toBeDefined();
-    const venue = "Example Bar S.L.";
-    const lines = [
-      w.title.replace("{venue}", () => venue),
-      w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
-      "",
-      w.filesHeading,
-      ...words.map(({ name, file }) => `- ${name}: ${file!.holds} ${file!.use}`),
-      w.machineReadable,
-      "",
-      w.originHeading,
-      w.origin,
-      "",
-      w.sentToHeading,
-      `- ${w.backup}`,
-      ...words.flatMap(({ file }) => file!.sentTo ?? []).map((s) => `- ${s}`),
-      "",
-      w.keptHeading,
-      ...words.flatMap(({ file }) => file!.kept ?? []).map((s) => `- ${s}`),
-      `- ${w.decides}`,
-      "",
-      w.rightsHeading,
-      w.rights,
-      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
-    ];
     expect(words.flatMap(({ file }) => file!.sentTo ?? [])).toHaveLength(8);
     expect(words.flatMap(({ file }) => file!.kept ?? [])).toHaveLength(11);
     expect(personalDataReadme({ ...base, language: "es", files: WORKFORCE_FILES })).toBe(
-      `${lines.join("\n")}\n`,
+      spanishReadme(WORKFORCE_FILES),
     );
   });
 
@@ -434,32 +417,8 @@ ${ASK}
     const actions = w.files["actions.json"]!;
     expect(actions.sentTo).toBeUndefined();
     expect(actions.kept).toHaveLength(1);
-    const venue = "Example Bar S.L.";
-    const lines = [
-      w.title.replace("{venue}", () => venue),
-      w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
-      "",
-      w.filesHeading,
-      ...words.map(({ name, file }) => `- ${name}: ${file!.holds} ${file!.use}`),
-      w.machineReadable,
-      "",
-      w.originHeading,
-      w.origin,
-      "",
-      w.sentToHeading,
-      `- ${w.backup}`,
-      ...words.flatMap(({ file }) => file!.sentTo ?? []).map((s) => `- ${s}`),
-      "",
-      w.keptHeading,
-      ...words.flatMap(({ file }) => file!.kept ?? []).map((s) => `- ${s}`),
-      `- ${w.decides}`,
-      "",
-      w.rightsHeading,
-      w.rights,
-      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
-    ];
     expect(personalDataReadme({ ...base, language: "es", files: ACTIONS_FILES_SET })).toBe(
-      `${lines.join("\n")}\n`,
+      spanishReadme(ACTIONS_FILES_SET),
     );
   });
 });
