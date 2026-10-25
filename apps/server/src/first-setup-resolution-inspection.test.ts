@@ -179,7 +179,7 @@ it.each(["file", "directory"] as const)(
     await unchanged();
   },
 );
-it("an authenticated missing-database Start again, once confirmed, deletes the attempt and its documents", async () => {
+it("an authenticated missing-database Start again, once confirmed, deletes first-setup.json and its documents", async () => {
   const f = await actionsFixture();
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
   const inspection = await f.service.inspectFirstSetupResolution();
@@ -251,7 +251,7 @@ it("an authenticated missing-database Start again, once confirmed, deletes the a
     code: "ENOENT",
   });
 });
-it("Start again rejects a stale snapshot and changes nothing", async () => {
+it("Start again rejects a stale snapshot, leaving no marker and the note unchanged", async () => {
   const f = await actionsFixture();
   const unchanged = await startAgainUnchanged(f);
   const request = await f.startRequest();

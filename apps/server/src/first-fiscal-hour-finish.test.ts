@@ -469,7 +469,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
   }
 });
 
-it("a missing hour database needs freshly recovered ownership before Start again", async () => {
+it("a missing hour database starts again only once confirmed, records the confirmation and notes the name", async () => {
   const f = await fixture();
   await f.recover();
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();

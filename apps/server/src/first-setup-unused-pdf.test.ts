@@ -239,7 +239,7 @@ async function abandonedWithMissingDatabase(
   const summary = () => f.actions.startAgainSummary(ids);
   return { f, name, startAgain, summary, attemptFiles, confirmations };
 }
-it("an abandoned activation with a missing database starts again only once confirmed, and a later attempt cannot reuse its name", async () => {
+it("an abandoned activation with a missing database starts again only once confirmed, and a later attempt cannot pick an earlier minute", async () => {
   const { f, name, startAgain, summary, attemptFiles, confirmations } =
     await abandonedWithMissingDatabase(["activation-started"]);
   const before = await attemptFiles();
