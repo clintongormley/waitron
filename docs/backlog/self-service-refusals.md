@@ -9,6 +9,57 @@ on 2026-10-25. It changes no product behavior. The entries below record source i
 not reproduced incidents, exercised recovery procedures or an approval to implement fiscal changes.
 No row establishes that a product bug is the only possible cause. No bug-only exception is granted.
 
+## Owner correction, 2026-10-25
+
+At 14:02 CET the owner clarified: “Never send the user to talk to somebody else. Explain the
+situation, ask for an admin login (if appropriate) and let the user make the choice.”
+The [house rule](../developers/conventions-ui.md#refusals-name-a-self-service-next-step) now
+requires an explanation of each choice, any needed administrator or owner sign-in at that point,
+and a safe Stop before destructive work. A referral to support, an administrator, an installer or
+provider staff does not complete a remedy. Only a state established as bug-only at its site can
+use the exception, and its message must identify a fault in Waitron.
+
+This correction supersedes the remedy assessments below, including the four dated wording
+milestones. Their historical words, source receipts and test scope remain recorded. Reading them
+again under this rule establishes follow-up work, not that any recovery procedure now works.
+No product behavior changes in this correction.
+
+The referral recheck reads `46bd9213d`: `apps/dashboard/src/i18n/codes.ts:359` and `:1016`,
+`apps/server/src/connection-bootstrap-strings.ts:16`, `:19` and `:30`,
+`packages/fiscal-verifactu/src/dashboard/strings.ts:81` and `:83`,
+`apps/server/src/recovery-surface.ts:211` and `:257`, and
+`apps/dashboard/src/i18n/strings.ts:2506` and `:2526`. These are source receipts for the remaining
+referrals, not completed recovery experiments.
+
+| Area | Work still required under the clarified rule |
+| --- | --- |
+| [Sign-in](#sign-in), #2054 | Replace the administrator referral with usable sign-in/recovery choices. Exercise the choices after refusal without disclosing account status. An alternative password must not be promised to activate a suspended account. |
+| [Public connection](#tls-repair), #2055 | Replace the installer referral with a connection-repair choice the reader can complete. Include installer-supplied certificates and managed-device installation restrictions, which also refer to another person. Retain the separate linked-layout recovery gap and public-page privacy. |
+| [Certificate](#certificate), #2056 | Replace the administrator referral with certificate/check/connection choices, preserving the installed certificate. Add sign-in at the action if extra rights are needed. |
+| [Backup key](#backup-key), #2058 | Replace the administrator referral with a way to inspect and correct effective configuration. Explain what each key choice does and keep both key records until their use is established. |
+| [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. Recheck lane A's A1042 S7l after landing; this lane does not change it. |
+| [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
+| [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
+| [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
+| [Archive settings](#backup-settings) | Preserve the cause after a failed Save and give the person a setting to correct or a recovery choice. |
+| [Bucket stream](#backup-stream) | Give reason-specific settings, restart or ownership choices, with authentication and evidence before resuming a primary. |
+| [Sealed state](#backup-state) | Expose the safe cause and a correction/retry choice; show whether the key copy was refreshed. |
+| [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
+| [Restored first start](#restore-start) | Preserve the completion refusal and offer a specific correction when restart fails again. |
+| [Fiscal integrity](#fiscal-integrity) | Offer evidence inspection and a supported decision/recovery path without editing immutable records. An administrator referral does not provide that path. |
+| [Filing cases](#fiscal-cases) | Build the released filing-case decision path; waiting or finding another person does not resolve a held case. |
+| [Fiscal reply](#fiscal-reply) | Describe only exercised retry behavior, then offer evidence inspection and a decision for a persistent malformed reply. |
+| [Fiscal environment](#fiscal-environment) | Offer safe host-configuration or evidence/recovery choices; never relabel records or promote test data. |
+| [Reconciliation](#fiscal-reconcile) | Establish the caller, then offer evidence and a decision path rather than sending the person to an administrator or adviser. |
+| [Payments](#payments) | Preserve confirmed-outcome requirements. Give a way to inspect provider evidence and resolve the held payment without depending on a conversation with provider staff. |
+| [Boot recovery](#boot-recovery) | Recheck the recovery page's installer referrals and expose applicable restart, space, backup or reinstall choices. The earlier observation that its instructions were distinct does not qualify them as self-service. |
+
+Take the four reworks in the order above, one small PR per area. Test the refusal and the available
+way out before calling it complete. Build a missing small action; record each substantial missing
+workflow separately in the backlog and the message's PR. The in-place sign-in requirement does
+not authorise public account-enrolment checks, destructive unauthenticated repair, a new charge
+for an uncertain payment, or work on a protected fiscal writer.
+
 ## Search and limits
 
 The read-only inventory parsed non-test TypeScript under `apps/` and `packages/`, including
@@ -629,7 +680,9 @@ money outcome.
 
 ## Follow-up fixes
 
-The audit is complete as a source inventory. Undated product fixes below remain open. Keep each change
+The audit is complete as a source inventory. All product areas below remain open under the
+[owner correction](#owner-correction-2026-10-25); the four dated wording milestones are superseded
+as completed remedies. Keep each change
 within its screen or area, reproduce the affected mapping with a failing test, then change the
 smallest applicable message or recovery path. A missing substantial workflow stays a backlog item
 for an owner decision; it is not silently replaced by “try again”. Fiscal/setup/sign-in/money
@@ -649,11 +702,16 @@ changes take their required review and existing protected-writer approvals.
 
 ### setup-readiness
 
-**Setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; name the supported source/image/administrator action.
+**Setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
 
 ### sign-in
 
 2026-10-25: the shared passkey refusal now asks your administrator to check your account, in English and Spanish. The login browser cases exercise the refusal followed by password sign-in in both languages. This wording applies to profile passkey registration too; it makes no claim about account status. The original audit above records the earlier wording. See [account access](../../apps/server/src/guide/en/staff.md#account-access).
+
+**Reopened after the 14:02 owner correction:** replace that referral with usable sign-in/recovery
+choices. Exercise each offered route and keep authentication privacy. Record a missing
+account-access recovery workflow separately rather than promising password sign-in resolves every
+cause. Trace profile registration, which shares the message, before changing it.
 
 ### backup-settings
 
@@ -661,11 +719,11 @@ changes take their required review and existing protected-writer approvals.
 
 ### backup-stream
 
-**A stopped or refused bucket stream needs a safe administrator action.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Build any missing restart/ownership workflow separately.
+**A stopped or refused bucket stream needs safe settings, restart or ownership choices.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
 
 ### backup-state
 
-**A failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, tell the administrator what to fix and recheck that sealing succeeds. Do not promise current recovery keys before success.
+**A failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, offer a correction and any required sign-in there, and recheck that sealing succeeds. Do not promise current recovery keys before success.
 
 ### backup-preparation
 
@@ -681,6 +739,10 @@ keep both key records; the refusal does not establish which key opens a backup. 
 effective-key checks and status handling are unchanged. The original source audit above records
 the earlier wording.
 
+**Reopened after the 14:02 owner correction:** replace the administrator referral with inspection
+and correction of the effective backup configuration, offering any needed sign-in there. Keep the
+key-use uncertainty explicit and a safe Stop for a change that could lose access to a backup.
+
 ### restore-start
 
 **A repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
@@ -695,7 +757,7 @@ the earlier wording.
 
 ### fiscal-reply
 
-**A fiscal reply-line mismatch needs accurate retry and escalation wording.** Describe only the drain behavior actually exercised, and name an administrator investigation step for persistent malformed replies.
+**A fiscal reply-line mismatch needs accurate retry and evidence choices.** Describe only the drain behavior actually exercised, then offer evidence inspection and a decision path for persistent malformed replies, with any required sign-in there.
 
 ### fiscal-environment
 
@@ -717,6 +779,10 @@ Spanish. It retains the HTTP status and the current-certificate reassurance, and
 a response is temporary from its status alone. The original source audit above records the earlier
 wording; certificate checking, installation and refusal classification are unchanged.
 
+**Reopened after the 14:02 owner correction:** replace the administrator referral with applicable
+certificate/check/connection choices, offering any needed sign-in there. Keep the current
+certificate until a replacement passes its checks; a generic retry does not resolve every cause.
+
 ### tls-repair
 
 2026-10-25: the public connection page now names the installer as the next step after a repeated
@@ -724,3 +790,15 @@ failure, in English and Spanish, for an initial refusal and a failed repair requ
 retry action and does not show private server details. The linked-layout checks are unchanged.
 Supporting repair of a damaged linked layout remains in **Public TLS repair refuses linked layouts**
 in the Box area; the original audit above records the earlier wording.
+
+**Reopened after the 14:02 owner correction:** replace the installer referral with an applicable
+connection-repair choice, including the installer-supplied certificate and managed-device
+instructions. Keep the linked-layout refusal and public-page privacy; any substantial missing
+authenticated repair workflow remains a separate backlog entry.
+
+### boot-recovery
+
+**Boot recovery must offer choices instead of an installer referral.** Recheck the cause-specific
+recovery wording and its actual actions. Give the person applicable restart, space, backup or
+reinstall choices, with any required authentication there and a safe Stop before destructive work.
+The earlier server-page inventory did not exercise those recovery procedures.

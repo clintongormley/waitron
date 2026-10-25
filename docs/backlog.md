@@ -152,13 +152,18 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
+- **A1089: rework certificate-check refusals without an administrator referral (#2056).**
+  Offer applicable certificate/check/connection choices and any needed sign-in there. Preserve the
+  current certificate and record a substantial missing workflow separately.
+  [Correction](backlog/self-service-refusals.md#certificate).
+
 - **A1089: reconciliation support wording needs a verified caller and remedy.** First establish where the reconciliation alerts can reach an owner; then give an evidence/decision route without promising an unimplemented periodic sweep.
   [Audit](backlog/self-service-refusals.md#fiscal-reconcile).
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).
 
-- **A1089: a fiscal reply-line mismatch needs accurate retry and escalation wording.** Describe only the drain behavior actually exercised, and name an administrator investigation step for persistent malformed replies.
+- **A1089: a fiscal reply-line mismatch needs accurate retry and evidence choices.** Describe only the drain behavior actually exercised, then offer evidence inspection and a decision path for persistent malformed replies, with any required sign-in there.
   [Audit](backlog/self-service-refusals.md#fiscal-reply).
 
 - **A1089: fiscal filing-case alerts need a real decision route.** Use W41s-8/W41s-9 when released, or keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
@@ -553,7 +558,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
-- **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; name the supported source/image/administrator action.
+- **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
 
 - **A1089: an incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
@@ -3799,6 +3804,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 ### Users, sign-in and the dashboard shell
 
+- **A1089: rework the passkey refusal without an administrator referral (#2054).** Offer usable
+  sign-in/recovery choices without disclosing account status. Exercise the offered way out; record
+  any substantial missing account-access recovery workflow separately. Check profile registration,
+  which shares the message.
+  [Correction](backlog/self-service-refusals.md#sign-in).
+
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
@@ -4478,16 +4489,31 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 ### The box: backups, upgrades and recovery
 
+- **A1089: rework the public connection refusal without an installer referral (#2055).** Offer
+  an applicable connection-repair choice, preserving linked-layout checks and public-page privacy.
+  Record a substantial missing authenticated repair workflow separately.
+  [Correction](backlog/self-service-refusals.md#tls-repair).
+
+- **A1089: rework the backup-key refusal without an administrator referral (#2058).** Give a way
+  to inspect and correct effective configuration, with any needed sign-in there. Keep both key
+  records until their use is established and explain what each choice does.
+  [Correction](backlog/self-service-refusals.md#backup-key).
+
+- **A1089: boot recovery must offer choices instead of an installer referral.** Recheck each
+  cause and offer applicable restart, space, backup or reinstall choices, any needed authentication
+  there and a safe Stop before destructive work. The original audit did not exercise these routes.
+  [Correction](backlog/self-service-refusals.md#boot-recovery).
+
 - **A1089: a repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
   [Audit](backlog/self-service-refusals.md#restore-start).
 
 - **A1089: backup preparation refusals need disk and missing-file remedies.** Replace both named backup_stop support substitutions and its generic fallback. Establish safe cleanup/recovery for each cause; no blanket deletion or replacement private keys.
   [Audit](backlog/self-service-refusals.md#backup-preparation).
 
-- **A1089: a failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, tell the administrator what to fix and recheck that sealing succeeds. Do not promise current recovery keys before success.
+- **A1089: a failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, offer a correction and any required sign-in there, and recheck that sealing succeeds. Do not promise current recovery keys before success.
   [Audit](backlog/self-service-refusals.md#backup-state).
 
-- **A1089: a stopped or refused bucket stream needs a safe administrator action.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Build any missing restart/ownership workflow separately.
+- **A1089: a stopped or refused bucket stream needs safe settings, restart or ownership choices.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
   [Audit](backlog/self-service-refusals.md#backup-stream).
 
 - **A1089: unusable archive settings need a next step after resaving fails.** Keep the existing Save route and preserve the underlying non-secret refusal instead of escalating every repeat to support.
@@ -4500,7 +4526,8 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
   but a damaged linked folder or managed file cannot be repaired through the public guide. The
-  refusal names the installer after a repeated failure; linked-layout repair remains open.
+  refusal still names the installer after a repeated failure, which A1089 must replace with a
+  self-service choice. Linked-layout repair remains open.
   [Detail](backlog/box.md#public-tls-repair-refuses-linked-layouts)
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
