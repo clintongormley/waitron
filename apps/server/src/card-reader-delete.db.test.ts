@@ -161,13 +161,13 @@ async function seedVenue(options: ReaderOptions = {}) {
     )[0]!.id,
     name,
   });
-  const sala = await profile("Sala");
-  const terraza = await profile("Terraza");
+  const diningProfile = await profile("Sala");
+  const terraceProfile = await profile("Terraza");
   await suite.db.insert(deviceProfileCardReaders).values([
-    { deviceProfileId: sala.id, readerId: r, position: 0, isDefault: true },
-    { deviceProfileId: sala.id, readerId: q, position: 1, isDefault: false },
-    { deviceProfileId: terraza.id, readerId: q, position: 0, isDefault: true },
-    { deviceProfileId: terraza.id, readerId: r, position: 1, isDefault: false },
+    { deviceProfileId: diningProfile.id, readerId: r, position: 0, isDefault: true },
+    { deviceProfileId: diningProfile.id, readerId: q, position: 1, isDefault: false },
+    { deviceProfileId: terraceProfile.id, readerId: q, position: 0, isDefault: true },
+    { deviceProfileId: terraceProfile.id, readerId: r, position: 1, isDefault: false },
   ]);
 
   const device = async (name: string, profileId: string, active = true) => ({
@@ -179,17 +179,17 @@ async function seedVenue(options: ReaderOptions = {}) {
     )[0]!.id,
     name,
   });
-  const caja1 = await device("Caja 1", sala.id);
-  const caja2 = await device("Caja 2", sala.id);
-  const vieja = await device("Vieja", terraza.id, false);
-  const caja3 = await device("Caja 3", terraza.id);
+  const firstTill = await device("Caja 1", diningProfile.id);
+  const secondTill = await device("Caja 2", diningProfile.id);
+  const retiredTill = await device("Vieja", terraceProfile.id, false);
+  const thirdTill = await device("Caja 3", terraceProfile.id);
   await suite.db.insert(deviceCardReaders).values([
-    { deviceId: caja1.id, readerId: r },
-    { deviceId: vieja.id, readerId: r },
+    { deviceId: firstTill.id, readerId: r },
+    { deviceId: retiredTill.id, readerId: r },
   ]);
   await suite.db.insert(cardReaderHolders).values([
-    { readerId: r, deviceId: caja1.id, heldAt: EARLIER },
-    { readerId: q, deviceId: caja3.id, heldAt: EARLIER },
+    { readerId: r, deviceId: firstTill.id, heldAt: EARLIER },
+    { readerId: q, deviceId: thirdTill.id, heldAt: EARLIER },
   ]);
 
   let orderNumber = 0;
@@ -214,7 +214,18 @@ async function seedVenue(options: ReaderOptions = {}) {
     });
   };
 
-  return { r, q, sala, terraza, caja1, caja2, vieja, caja3, payment, device };
+  return {
+    r,
+    q,
+    diningProfile,
+    terraceProfile,
+    firstTill,
+    secondTill,
+    retiredTill,
+    thirdTill,
+    payment,
+    device,
+  };
 }
 
 /** The stored Stripe credential, sealed from the payload the seat's own `connect` returns. */
@@ -262,25 +273,25 @@ describe("the card reader delete impact", () => {
       refusals: [],
       ends: [],
       removes: [
-        { key: "device_reader", count: 2, targets: [v.caja1, v.vieja] },
-        { key: "device_reader_default", count: 1, targets: [v.caja2] },
-        { key: "profile_reader", count: 2, targets: [v.sala, v.terraza] },
-        { key: "profile_reader_default", count: 1, targets: [v.sala] },
-        { key: "reader_holder", count: 1, targets: [v.caja1] },
+        { key: "device_reader", count: 2, targets: [v.firstTill, v.retiredTill] },
+        { key: "device_reader_default", count: 1, targets: [v.secondTill] },
+        { key: "profile_reader", count: 2, targets: [v.diningProfile, v.terraceProfile] },
+        { key: "profile_reader_default", count: 1, targets: [v.diningProfile] },
+        { key: "reader_holder", count: 1, targets: [v.firstTill] },
       ],
     });
   });
 
   it("names no switched-off device under the default it would inherit", async () => {
     const v = await seedVenue();
-    const apagada = await v.device("Apagada", v.sala.id, false);
+    const disabledTill = await v.device("Apagada", v.diningProfile.id, false);
     const impact = await read(seats, v.r);
     expect(impact.removes).toContainEqual({
       key: "device_reader_default",
       count: 1,
-      targets: [v.caja2],
+      targets: [v.secondTill],
     });
-    expect(JSON.stringify(impact)).not.toContain(apagada.id);
+    expect(JSON.stringify(impact)).not.toContain(disabledTill.id);
   });
 
   it("writes nothing", async () => {
@@ -309,10 +320,10 @@ describe("the card reader delete impact", () => {
 
   it("shows a payment in progress beside the notice for a disconnected provider", async () => {
     const v = await seedVenue({ unpairedAt: null });
-    await v.payment("attempting", v.caja2.id);
+    await v.payment("attempting", v.secondTill.id);
     const impact = await read([unpairing], v.r);
     expect(impact.refusals).toEqual([
-      { code: "reader.payment_in_progress", params: { readerId: v.r }, targets: [v.caja2] },
+      { code: "reader.payment_in_progress", params: { readerId: v.r }, targets: [v.secondTill] },
     ]);
     expect(impact.ends).toEqual([kept]);
   });
@@ -353,7 +364,7 @@ describe("deleting a card reader", () => {
 
   it("keeps the payment taken on it, joined to the retained row by name", async () => {
     const v = await seedVenue();
-    await v.payment("captured", v.caja2.id);
+    await v.payment("captured", v.secondTill.id);
     const before = await snapshot();
 
     await remove(seats, v.r);
@@ -375,9 +386,9 @@ describe("deleting a card reader", () => {
     "is refused while a payment is %s on it, and writes nothing",
     async (state) => {
       const v = await seedVenue();
-      await v.payment(state, v.caja2.id);
+      await v.payment(state, v.secondTill.id);
       expect((await read(seats, v.r)).refusals).toEqual([
-        { code: "reader.payment_in_progress", params: { readerId: v.r }, targets: [v.caja2] },
+        { code: "reader.payment_in_progress", params: { readerId: v.r }, targets: [v.secondTill] },
       ]);
       const before = await snapshot();
       await expect(remove(seats, v.r)).rejects.toMatchObject({
@@ -401,7 +412,7 @@ describe("deleting a card reader", () => {
     "is not refused by a %s payment on it",
     async (state) => {
       const v = await seedVenue();
-      await v.payment(state, v.caja2.id);
+      await v.payment(state, v.secondTill.id);
       expect((await read(seats, v.r)).refusals).toEqual([]);
       await remove(seats, v.r);
       const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
@@ -451,7 +462,7 @@ describe("deleting a card reader", () => {
 
   it("still refuses a payment in progress first when the notice is accepted", async () => {
     const v = await seedVenue({ unpairedAt: null });
-    await v.payment("attempting", v.caja2.id);
+    await v.payment("attempting", v.secondTill.id);
     const before = await snapshot();
     await expect(remove([unpairing], v.r, NOW, accepted)).rejects.toMatchObject({
       code: "reader.payment_in_progress",
@@ -580,7 +591,7 @@ describe("preparing a card reader delete (step a)", () => {
 
   it("throws the first refusal and writes nothing", async () => {
     const v = await seedVenue({ unpairedAt: null });
-    await v.payment("attempting", v.caja2.id);
+    await v.payment("attempting", v.secondTill.id);
     const before = await snapshot();
     await expect(prepare([unpairing], v.r)).rejects.toMatchObject({
       code: "reader.payment_in_progress",

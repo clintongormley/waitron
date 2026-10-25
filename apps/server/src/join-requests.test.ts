@@ -1197,18 +1197,18 @@ describe("a returning disabled device", () => {
       );
       return deviceId;
     };
-    const cocina = await returningWith("Pase cocina", [venue.defaultStationId]);
-    const plancha = await returningWith("Pase plancha", [grill.id]);
+    const kitchenDevice = await returningWith("Pase cocina", [venue.defaultStationId]);
+    const grillDevice = await returningWith("Pase plancha", [grill.id]);
     const batch = vi.spyOn(VENUE_SERVICE, "readDevicesKitchenScreens");
     const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
     try {
       const returning = await withTransaction(suite.db, (tx) =>
-        returningDevicesOf(tx, venue.cfg, [cocina, plancha]),
+        returningDevicesOf(tx, venue.cfg, [kitchenDevice, grillDevice]),
       );
       const stationsOf = (id: string) =>
         returning.get(id)?.kitchenScreens.map((screen) => screen.stations.map((slot) => slot.id));
-      expect(stationsOf(cocina)).toEqual([[venue.defaultStationId]]);
-      expect(stationsOf(plancha)).toEqual([[grill.id]]);
+      expect(stationsOf(kitchenDevice)).toEqual([[venue.defaultStationId]]);
+      expect(stationsOf(grillDevice)).toEqual([[grill.id]]);
       expect(batch).toHaveBeenCalledTimes(1);
       expect(single).not.toHaveBeenCalled();
     } finally {
