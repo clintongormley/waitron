@@ -150,6 +150,8 @@ export class StaffScreen extends LitElement {
       </p>`;
     const failure = this.downloadFailure;
     if (failure === null) return nothing;
+    // person.not_found: only first setup's import deletes persons, before Users can open (S2c plan
+    // decision 8).
     const text =
       failure.code === "authorization.not_permitted"
         ? fill("staff.data_copy_not_permitted", { name: failure.name })

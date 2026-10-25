@@ -112,7 +112,7 @@ by the answers):
     three openings (`["opened"]`) — the cash refund opened the drawer too — `counts.voids` is 0, and the three lines are not there. **Open decision for the
     owner** (S2c decision 3, built with S2d as the next slice): should line voids, comps and
     discounts have joined S2c instead?
-  - **The 28 core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
+  - **The core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
     lists as not in the download yet, by table: `sales` (`operator_id`, who rang a sale;
     `authorized_by`, who authorised a corrective invoice); `unpaid_departures` (`authorized_by`,
     `recorded_by`); `receipt_reprints.person_id`; `invoice_pdf_downloads.person_id`;

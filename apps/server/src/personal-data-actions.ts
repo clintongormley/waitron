@@ -16,12 +16,10 @@ import { centsToDecimal } from "@waitron/shared";
 // Commented decision, departing from the seat's doc comment (decision 4 of
 // docs/superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md): `prepare` reads nothing,
 // and the build reads through the `Database` this part was built with, in short `withWriteLock`
-// turns of its own after the snapshot turn has closed. The person's rows and their sale numbers
-// measured about 192 ms at 1,000,000 drawer openings, which would push the snapshot turn past its
-// 250 ms bar, and an index on the person columns did not remove the cost of joining each row to its
-// sale. So: one turn for the person's voids and refunds, one for their drawer openings, neither
-// joining another table; then one turn per `chunk` sale ids, by primary key; then one turn per
-// `chunk` bill-payment ids, by primary key, each finding the sale filed from the payment's order.
+// turns of its own after the snapshot turn has closed: one turn for the person's voids and
+// refunds, one for their drawer openings, neither joining another table; then one turn per
+// `chunk` sale ids, by primary key; then one turn per `chunk` bill-payment ids, by primary key,
+// each finding the sale filed from the payment's order.
 // Each is awaited in turn, none inside `withTransaction`, so nothing is written. An action
 // committed between the snapshot turn and these turns may appear in the file; it happened before
 // the download was sent, and the route's re-check still runs before any bytes go.
