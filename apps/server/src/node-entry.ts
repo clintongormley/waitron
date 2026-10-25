@@ -38,6 +38,7 @@ import {
   cleared,
   fullDiskAtStart,
   readRecoveryState,
+  refusedAtStart,
   stayedUpClear,
   updateRecoveryState,
   withFailureCode,
@@ -398,6 +399,31 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
+  if (admission.kind === "refused") {
+    const logDir = deps.logDir ?? join(rooted.stateDir, "logs");
+    const exit = deps.exit ?? DEFAULT_EXIT;
+    // Both lines, so the page's "Why the last start failed" is this refusal, not an earlier start's.
+    const page = pageLog(logDir, now, deps.log);
+    page("info", "server.boot_started");
+    page("error", "server.boot_failed", {
+      errorCode: admission.code,
+      detail: failureDetail(new AppError(admission.code, {})),
+    });
+    await deps.serveRecovery(
+      recoveryApp({
+        state: refusedAtStart(await deps.readRecoveryState(rooted.stateDir), admission.code, now()),
+        refusedAtStart: true,
+        logDir,
+        onRetry: async () => {
+          exit(0);
+        },
+        log: deps.log,
+      }),
+      transport,
+    );
+    return;
+  }
+
   if (admission.kind === "resolution") {
     const port = httpPortFrom(deps.baseEnv);
     await deps.serveRecovery(admission.app, {
@@ -415,7 +441,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
-  if (admission.kind === "refused") throw new AppError(admission.code, {});
   const selected = !moved ? deps : rooted;
   return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }
