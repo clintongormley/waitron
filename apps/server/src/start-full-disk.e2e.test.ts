@@ -510,6 +510,11 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     db.run(
       sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(admin.token)}`,
     );
+    // With room on the disk a touch of the session would succeed, so only this check sees one.
+    const roomy = await adminDownload(manager.personId);
+    expect(roomy.status).toBe(200);
+    await roomy.arrayBuffer();
+    expect(lastSeenOf(admin.token)).toBe(at);
     db.run(sql`insert into change_log (id, payload) values ('bs4', '{"resource":"zz","id":"4"}')`);
     db.all(sql`pragma wal_checkpoint(truncate)`);
     small.fill(0);
