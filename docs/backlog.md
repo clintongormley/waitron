@@ -152,6 +152,24 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
+- **A1089: certificate checks need a next step for persistent or unclassified refusals.** Keep the installed certificate unchanged; distinguish verified temporary HTTP/connection failure from persistent refusal or a proved Waitron fault.
+  [Audit](backlog/self-service-refusals.md#certificate).
+
+- **A1089: reconciliation support wording needs a verified caller and remedy.** First establish where the reconciliation alerts can reach an owner; then give an evidence/decision route without promising an unimplemented periodic sweep.
+  [Audit](backlog/self-service-refusals.md#fiscal-reconcile).
+
+- **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
+  [Audit](backlog/self-service-refusals.md#fiscal-environment).
+
+- **A1089: a fiscal reply-line mismatch needs accurate retry and escalation wording.** Describe only the drain behavior actually exercised, and name an administrator investigation step for persistent malformed replies.
+  [Audit](backlog/self-service-refusals.md#fiscal-reply).
+
+- **A1089: fiscal filing-case alerts need a real decision route.** Use W41s-8/W41s-9 when released, or keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+  [Audit](backlog/self-service-refusals.md#fiscal-cases).
+
+- **A1089: fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
+  [Audit](backlog/self-service-refusals.md#fiscal-integrity).
+
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
 - **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed
@@ -537,6 +555,18 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a679s-internet-time-reading-came-back-unavailable-against-pre-production-in-each-of-four-runs-on-2026-10-23)
 
 ### The setup wizard, onboarding and the demo venue
+
+- **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; name the supported source/image/administrator action.
+  [Audit](backlog/self-service-refusals.md#setup-readiness).
+
+- **A1089: an incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
+  [Audit](backlog/self-service-refusals.md#setup-reset).
+
+- **A1089: a different-environment partial setup needs an applicable fresh-start route.** Distinguish this from the authenticated half-adopt reset. Establish the safe fresh-server/reinstall action before offering it.
+  [Audit](backlog/self-service-refusals.md#setup-environment).
+
+- **A1089: setup state refusals need a usable resume or recovery route.** Recheck A1042 S7l on main first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+  [Audit](backlog/self-service-refusals.md#setup-state).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
@@ -3518,6 +3548,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 ### Payments and card readers
 
+- **A1089: charged-but-unsettled and repeated payment-check failures need a recovery route.** Trace the existing pending-payment recovery and reason-specific messages, then offer only confirmed-outcome actions. Never retry a charge or unlock an unknown outcome.
+  [Audit](backlog/self-service-refusals.md#payments).
+
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 
 - **A742 — the guest types what they pay, and a tip (owner, 2026-10-15; on the backlog, NOT to be
@@ -3741,6 +3774,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#an-offline-card-payment-that-forwarding-moved-to-settled-with-no-sale-no-longer-holds-its-placed-order)
 
 ### Users, sign-in and the dashboard shell
+
+- **A1089: a repeated passkey refusal needs a neutral alternative.** Offer another available sign-in method or administrator help without revealing whether the account is active, pending or suspended.
+  [Audit](backlog/self-service-refusals.md#sign-in).
 
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
@@ -4420,6 +4456,24 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
   [Detail](backlog/back-office.md#comments-and-test-titles-left-open-by-615)
 
 ### The box: backups, upgrades and recovery
+
+- **A1089: a repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
+  [Audit](backlog/self-service-refusals.md#restore-start).
+
+- **A1089: an effective backup-key mismatch needs configuration guidance.** Explain which administrator action addresses conflicting effective configuration; preserve accurate key status after a partial write.
+  [Audit](backlog/self-service-refusals.md#backup-key).
+
+- **A1089: backup preparation refusals need disk and missing-file remedies.** Replace both named backup_stop support substitutions and its generic fallback. Establish safe cleanup/recovery for each cause; no blanket deletion or replacement private keys.
+  [Audit](backlog/self-service-refusals.md#backup-preparation).
+
+- **A1089: a failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, tell the administrator what to fix and recheck that sealing succeeds. Do not promise current recovery keys before success.
+  [Audit](backlog/self-service-refusals.md#backup-state).
+
+- **A1089: a stopped or refused bucket stream needs a safe administrator action.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Build any missing restart/ownership workflow separately.
+  [Audit](backlog/self-service-refusals.md#backup-stream).
+
+- **A1089: unusable archive settings need a next step after resaving fails.** Keep the existing Save route and preserve the underlying non-secret refusal instead of escalating every repeat to support.
+  [Audit](backlog/self-service-refusals.md#backup-settings).
 
 - **Backup destination failures log no elapsed time or operation phase.**
   Add non-sensitive phase and elapsed-time diagnostics when investigating real

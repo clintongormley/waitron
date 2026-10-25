@@ -5,6 +5,22 @@ This file holds the evidence behind the UI-facing conventions in the repo root `
 recovery page: the regressions, measurements and pointers that paid for each rule. `CLAUDE.md` keeps
 the one-line version of each rule and points here for the rest.
 
+## Refusals name a self-service next step
+
+Owner decision, 2026-10-25: “Almost anything except a product bug should be resolved without
+contacting support, because they aren't paying for support.” A visible refusal names what you can
+do yourself. Keep a support exception only when the code states why only a product bug can cause
+that state. No guard enforces this rule.
+
+The [A1089 source audit](../backlog/self-service-refusals.md) records the current EN/ES words,
+producer and available or missing route at `9c896b1aeb3455bd092c45a1be1e594df4e258d0`.
+For example, `setup.not_ready` can mean an absent Cloud recovery service
+(`apps/server/src/first-setup-backup-source.ts:40`), yet the shell says to wait. A backup's
+`backup.staging_space_low` comes from an explicit free-space comparison
+(`apps/server/src/backup-sweep.ts:108`), yet its alert substitution says to contact support.
+Those reads demonstrate why wording must follow the actual cause; they do not qualify a recovery
+procedure. The audit grants no bug-only exceptions and leaves its listed product fixes open.
+
 **Forms and the shared UI contract**
 
 ## New or changed forms use the shared UI contract in `docs/developers/design-system.md` → Forms
