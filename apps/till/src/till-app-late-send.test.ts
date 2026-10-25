@@ -841,7 +841,8 @@ async function sendWithAllergy(el: TillApp, who: string): Promise<void> {
   await answerAllergy(el, who);
 }
 
-async function answerAllergy(el: TillApp, who: string): Promise<void> {
+/** With `tickDish`, the first dish is ticked as the new guest's before the answer is sent. */
+async function answerAllergy(el: TillApp, who: string, tickDish = false): Promise<void> {
   await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
   const form = allergyDialog(el)!;
   await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-allergies]")!);
@@ -853,6 +854,12 @@ async function answerAllergy(el: TillApp, who: string): Promise<void> {
   );
   await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
   await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+  if (tickDish) {
+    await vi.waitFor(() =>
+      expect(form.shadowRoot!.querySelector('[data-tick="0:0"]')).not.toBeNull(),
+    );
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>('[data-tick="0:0"]')!);
+  }
   await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
 }
 
@@ -1268,6 +1275,7 @@ describe("an allergy party's send the till marked, refused for a menu version ch
   async function answeredThenVersionChanged(
     submitDraft: ReturnType<typeof vi.fn<TillApi["submitDraft"]>>,
     previewPartyAllergy: (id: string, target: AllergySendTarget) => Promise<unknown>,
+    tickDish = false,
   ): Promise<TillApp> {
     const { el } = await mountAllergyApp({ submitDraft, previewPartyAllergy });
     await openAllergyTable(el);
@@ -1279,7 +1287,7 @@ describe("an allergy party's send the till marked, refused for a menu version ch
     await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
     await choose(el, "data-late-agreed");
     allergyApi.listZoneOffers!.mockResolvedValue(allergyCatalogue("v2"));
-    await answerAllergy(el, "Blue shirt");
+    await answerAllergy(el, "Blue shirt", tickDish);
     await vi.waitFor(() => expect(submitDraft).toHaveBeenCalled());
     await flush(el, 15);
     return el;
@@ -1312,6 +1320,25 @@ describe("an allergy party's send the till marked, refused for a menu version ch
     expect(rerun!.allergy).toEqual(first!.allergy);
     expect(rerun!.expectedPartyRevision).toBe(first!.expectedPartyRevision);
     expect(rerun!.lateSend).toEqual({ menuIds: ["lunch"] });
+  });
+
+  it("asks again when the answer ticked a dish, though the party and its dishes are unchanged", async () => {
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(versionChanged)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    const previewPartyAllergy = vi.fn(async (_id: string, target: AllergySendTarget) =>
+      allergyView(null, target),
+    );
+    const el = await answeredThenVersionChanged(submitDraft, previewPartyAllergy, true);
+
+    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
+    expect(previewPartyAllergy).toHaveBeenCalledTimes(2);
+    expect(submitDraft).toHaveBeenCalledOnce();
+    const first = submitDraft.mock.calls[0]![2];
+    expect(first.allergy?.ticks).toEqual([
+      { line: { kind: "draft", id: first.groups[0]!.lineIds[0] }, guestIndex: 0 },
+    ]);
   });
 
   it("asks again when the party read after the refusal names other dishes", async () => {

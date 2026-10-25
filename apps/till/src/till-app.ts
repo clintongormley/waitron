@@ -12025,7 +12025,10 @@ export class TillApp extends LitElement {
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
         if (!live()) return;
-        if (outcome === "adopted" && !retried)
+        if (outcome === "adopted" && !retried) {
+          const given = carried ?? answered;
+          // A menu version change reconsiders the dishes, never the people: an answer that ticked a
+          // dish is asked again, while the guests and their allergies alone may be sent again.
           return this.#submitDraft(
             tabId,
             party,
@@ -12035,8 +12038,9 @@ export class TillApp extends LitElement {
             live,
             true,
             lateSend,
-            carried ?? answered,
+            given?.patch.ticks.length === 0 ? given : undefined,
           );
+        }
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
       }
