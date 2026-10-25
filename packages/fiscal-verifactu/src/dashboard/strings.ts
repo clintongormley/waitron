@@ -78,9 +78,9 @@ const en = {
   "aeat_certificate.refused.aeat_fault":
     "AEAT answered with an error: {faultCode} {faultReason}. The current certificate is unchanged.",
   "aeat_certificate.refused.aeat_http":
-    "AEAT answered with HTTP error {status}. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
+    "AEAT answered with HTTP error {status}. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
   "aeat_certificate.refused.check_failed":
-    "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
+    "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
 } as const;
 
 export type AeatCertificateKey = keyof typeof en;
@@ -164,9 +164,9 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.refused.aeat_fault":
     "La AEAT ha respondido con un error: {faultCode} {faultReason}. El certificado actual no cambia.",
   "aeat_certificate.refused.aeat_http":
-    "La AEAT ha respondido con el error HTTP {status}. El certificado actual no cambia. Pide al administrador del equipo que revise su conexión con la AEAT y vuelve a intentarlo.",
+    "La AEAT ha respondido con el error HTTP {status}. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
   "aeat_certificate.refused.check_failed":
-    "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Pide al administrador del equipo que revise su conexión con la AEAT y vuelve a intentarlo.",
+    "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
 };
 
 export const AEAT_CERTIFICATE_STRINGS = { en, es };
