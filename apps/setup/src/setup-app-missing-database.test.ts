@@ -5,10 +5,12 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, venue } from "../test/first-setup-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
+import { shellEn, shellEs } from "./i18n/strings/shell.js";
 
 import {
   q,
   click,
+  damagedSummary,
   missingDatabaseFixture,
   namedSummary,
   recoverMissing,
@@ -392,4 +394,68 @@ it("shows the before-password line only before the password step", async () => {
     .toBeTruthy();
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
   expect(app.shadowRoot!.textContent).not.toContain(line);
+});
+
+const shells = { en: shellEn, es: shellEs };
+const startAgainRequests = <R extends { path: string }>(requests: R[]) =>
+  requests.filter((r) => r.path.endsWith("/start-again"));
+async function damagedConfirmation(browser: "en-GB" | "es-ES", summary = damagedSummary) {
+  const fixture = await missingDatabaseFixture({ locale: browser, summary });
+  await recoverMissing(fixture.app);
+  await click(fixture.app, "start-again");
+  return fixture;
+}
+
+it.each(locales)(
+  "a damaged recovery-key record is named in the confirmation, above what Start again deletes ($locale)",
+  async ({ locale, browser }) => {
+    const { app, requests } = await damagedConfirmation(browser);
+    const t = initialOwnerStrings[locale];
+    const notice = q(app, "recovery-record-damaged")!;
+    expect(notice.textContent!.trim()).toBe(t.recoveryRecordDamaged);
+    const help = [...app.shadowRoot!.querySelectorAll("p")].find(
+      (p) => p.textContent!.trim() === t.startAgainHelp,
+    )!;
+    expect(notice.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(q(app, "retire-confirmed")).not.toBeNull();
+    expect(q(app, "cancel-start-again")).not.toBeNull();
+    expect(startAgainRequests(requests)).toHaveLength(0);
+  },
+);
+
+it.each(locales)(
+  "a damaged record reaches the confirmation, never 'wait a moment' and never support ($locale)",
+  async ({ locale, browser }) => {
+    const { app } = await damagedConfirmation(browser);
+    const text = app.shadowRoot!.textContent!;
+    expect(text).not.toContain(shells[locale]["shell.not_ready"]);
+    expect(text).not.toContain(shells[locale]["shell.first_setup.attempt_invalid"]);
+    expect(q(app, "confirm-start-again")).not.toBeNull();
+  },
+);
+
+it("Cancel stops Start again past a damaged record and sends nothing", async () => {
+  const { app, requests } = await damagedConfirmation("en-GB");
+  await click(app, "cancel-start-again");
+  expect(startAgainRequests(requests)).toHaveLength(0);
+  expect(q(app, "recovery-record-damaged")).toBeNull();
+  expect(q(app, "retire-confirmed")).toBeNull();
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+});
+
+it("confirming sends the summary as displayed, the damaged record included", async () => {
+  const { app, requests } = await damagedConfirmation("en-GB");
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
+  const body = startAgainRequests(requests)[0]!.body as {
+    confirmMissingDatabase: { shown: unknown };
+  };
+  expect(body.confirmMissingDatabase.shown).toEqual(damagedSummary);
+});
+
+it("an undamaged record shows no damaged notice", async () => {
+  const { app } = await damagedConfirmation("en-GB", namedSummary);
+  expect(q(app, "retire-confirmed")).not.toBeNull();
+  expect(q(app, "recovery-record-damaged")).toBeNull();
 });

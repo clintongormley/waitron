@@ -158,6 +158,15 @@ it("reads a damaged-record summary and sends it back unchanged", async () => {
     confirmMissingDatabase: { nothingFiledOrSold: true, shown: damaged },
   });
 });
+it("refuses a summary that turned damaged between display and confirmation, and sends nothing", async () => {
+  const { session, requests } = await fixture({
+    summary: { ...shown, recoveryRecordDamaged: true },
+  });
+  await expect(session.retireMissingDatabase(shown)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
 it.each(["complete"] as const)("refuses %s work before inspection", async (status) => {
   const { session, requests } = await fixture({ status });
   await expect(session.retireMissingDatabase(shown)).rejects.toMatchObject({

@@ -8,6 +8,7 @@ import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.j
 import {
   q,
   click,
+  damagedSummary,
   missingDatabaseFixture,
   recoverMissing,
 } from "../test/missing-database-browser.js";
@@ -21,7 +22,14 @@ afterEach(async () => {
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      for (const state of ["password", "recovered", "finished", "confirmation", "refusal"] as const)
+      for (const state of [
+        "password",
+        "recovered",
+        "finished",
+        "confirmation",
+        "damaged",
+        "refusal",
+      ] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible missing-database repair`, async () => {
           const previous = [innerWidth, innerHeight];
           try {
@@ -34,7 +42,9 @@ for (const locale of ["en-GB", "es-ES"] as const)
                     recoveredStatus: "committed",
                     summary: { reached: "fiscal-finished", lastName: "0CNQT" },
                   }
-                : {}),
+                : state === "damaged"
+                  ? { summary: damagedSummary }
+                  : {}),
               intercept(path) {
                 if (state === "refusal" && path.endsWith("/start-again"))
                   return Response.json(
@@ -44,7 +54,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               },
             });
             if (state !== "password") await recoverMissing(app);
-            if (state === "confirmation" || state === "refusal") {
+            if (state === "confirmation" || state === "damaged" || state === "refusal") {
               await click(app, "start-again");
               await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
             }
@@ -53,6 +63,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               await expect.poll(() => q(app, "resume-password")).not.toBeNull();
             }
             await app.updateComplete;
+            if (state === "damaged") expect(q(app, "recovery-record-damaged")).not.toBeNull();
             await expectNoA11yViolations(host);
             expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
             const section = q<HTMLElement>(app, "screen-first-owner")!;
@@ -60,7 +71,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             expect(q(app, "screen-cert")).toBeNull();
             const button = q<WtButton>(
               app,
-              state === "confirmation"
+              state === "confirmation" || state === "damaged"
                 ? "confirm-start-again"
                 : state === "recovered" || state === "finished"
                   ? "start-again"

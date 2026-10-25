@@ -20,6 +20,7 @@ export async function click(app: SetupApp, name: string) {
   await userEvent.click(q<WtButton>(app, name)!.shadowRoot!.querySelector("button")!);
 }
 export const namedSummary: StartAgainSummary = { reached: "named", lastName: "0CNQT" };
+export const damagedSummary: StartAgainSummary = { ...namedSummary, recoveryRecordDamaged: true };
 export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];

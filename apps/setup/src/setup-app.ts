@@ -2143,7 +2143,12 @@ export class SetupApp extends LitElement {
       >${t.recoverBackup}</wt-button
     >`;
     const startAgainConfirm = this.firstRestartConfirm
-      ? html` <p>${t.startAgainHelp}</p>
+      ? html`${
+            missing && ask?.recoveryRecordDamaged
+              ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
+              : nothing
+          }
+          <p>${t.startAgainHelp}</p>
           <label
             ><input
               data-test="retire-confirmed"
