@@ -3308,3 +3308,54 @@ budget exceeds the download and cleanup limits combined. They recognise literal 
 relative directory paths, not composite actions, external reusable workflows, expressions naming
 an action, YAML anchors or alternative shell cleanup commands. A matching cleanup string does not
 prove that it ran or removed a file. Runtime controls and timing measurements belong in the PR.
+
+## Every artifact upload is bounded
+
+A shard can finish its tests and still fail while keeping the report. On 25 October 2026,
+[main run 40222796480](https://github.com/clintongormley/waitron/actions/runs/40222796480/job/121257963434)
+finished the server tests, then its coverage upload reported
+`Failed to CreateArtifact: Unable to make request: ETIMEDOUT`. The step ran from 18:56:09Z to
+18:58:25Z. The connection failure's cause is unverified. That run's 44 complete, successful
+upload logs span 0.86 to 2.48 seconds each, with a median of 1.65 seconds.
+
+Each upload site in the workflow files has two attempts, each with a one-minute step limit.
+The first keeps its existing condition and tolerates failure. Only its failed outcome runs the
+second. Its condition includes `always()` to override GitHub's default success check; it still
+requires a failed first outcome. The second uses identical inputs plus `overwrite: true`; its failure
+fails the job. Coverage-report uploads keep `if-no-files-found: error`, and the failed-shard
+diagnostics keep their failure-or-cancellation condition and fourteen-day retention. Job limits
+remain unchanged and still bound the time available for both attempts.
+
+You need overwrite when a failed response leaves an artifact under the same name. It replaces
+that artifact rather than retaining both attempts. It does not make a second upload infallible:
+the replacement can still fail or exceed its limit.
+
+| Source                                                                                                                                                                          | Source wording                                                                     | Use                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [upload-artifact v7 README](https://github.com/actions/upload-artifact/blob/cf430e030ddbb5b0abf93d22962f4752f3646cd9/README.md), checked 2026-10-25                             | “If false, the action will fail if an artifact for the given name already exists.” | Set overwrite only on the retry, where an earlier attempt may have created that name.                       |
+| [upload-artifact v7 implementation](https://github.com/actions/upload-artifact/blob/cf430e030ddbb5b0abf93d22962f4752f3646cd9/src/upload/upload-artifact.ts), checked 2026-10-25 | `await deleteArtifactIfExists(inputs.artifactName)`                                | The overwrite branch attempts deletion before uploading; it is replacement, not a merge of report contents. |
+| [GitHub Actions expressions](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions), checked 2026-10-25 | “A default status check of `success()` is applied” | Include an explicit status function so the retry does not depend on earlier steps succeeding. |
+
+[Hosted probe 40227727358](https://github.com/clintongormley/waitron/actions/runs/40227727358)
+used `actions/upload-artifact@v7` on head `c3851be0b51f84aa5332d4eef61b18a090fd762d`.
+The first upload succeeded and its retry was skipped. A second upload under the same name
+failed with `409 Conflict`; its overwrite retry succeeded, replacing artifact `12611494757`
+with `12612460480`. Downloading the final artifact returned the replacement file (`after`,
+rather than `before`). This measured a complete artifact already present under the name,
+not a network timeout or a cancellation during upload. The temporary probe workflow was removed
+after collecting its run log and downloaded payload.
+
+The artifact-upload cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
+read workflow text, never run an upload. They recognise literal action names, conditions, step
+fields and scalar inputs, not composite actions, external reusable workflows, expressions naming
+an action or YAML anchors. They check both attempt limits, matching inputs, failure-only retry,
+overwrite, unique step id, the second attempt's ability to fail the job, and a job budget larger
+than all of its upload step limits combined. They do not prove that GitHub scheduled a step or
+that an interrupted upload can always be recovered.
+
+Local controls removed each actual retry independently and removed overwrite, the explicit status
+condition, the second failure's propagation and a first-attempt deadline. All sixteen variants
+failed the real-workflow guard; restoring the files passed all 29 upload cases. The complete
+workflow suite passed 323 cases before the hosted probe. Parsing both final workflows and
+removing the added retry steps and first-attempt fields reproduced their original YAML values,
+including every original upload input and condition.

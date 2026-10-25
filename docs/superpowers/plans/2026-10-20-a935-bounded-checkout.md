@@ -1,5 +1,8 @@
 # A935 bounded checkout Implementation Plan
 
+> 2026-10-25, A1100: the artifact-upload part of task 5.3 now follows
+> [two bounded attempts](../../developers/ci-and-gates.md#every-artifact-upload-is-bounded).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development`. Every
 > implementer is dispatched as `subagent_type: "implementer"` (medium effort). Steps use checkboxes.
 > An implementer that passes about 150 tool calls with its task unfinished stops at a passing (or

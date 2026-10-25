@@ -105,13 +105,26 @@ jobs:
           echo "Shard $SHARD/$TOTAL mutates: $FILES"
           pnpm --filter @waitron/ui-core exec stryker run --mutate "$FILES"
 
-      - name: Upload mutation report
+      - id: upload_blob
+        name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: mutation-report-ui-core-shard-${{ matrix.shard }}
           path: packages/ui-core/reports/mutation/
           retention-days: 30
+
+      - name: Retry artifact upload
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: mutation-report-ui-core-shard-${{ matrix.shard }}
+          path: packages/ui-core/reports/mutation/
+          retention-days: 30
+          overwrite: true
 
   # packages/ui-core's gate, for the reasons given on `mutation-db-aggregate` below.
   mutation-ui-core-aggregate:
@@ -245,13 +258,26 @@ jobs:
           echo "Shard $SHARD/$TOTAL mutates: $FILES"
           pnpm --filter @waitron/ui exec stryker run --mutate "$FILES"
 
-      - name: Upload mutation report
+      - id: upload_blob
+        name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: mutation-report-ui-shard-${{ matrix.shard }}
           path: packages/ui/reports/mutation/
           retention-days: 30
+
+      - name: Retry artifact upload
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: mutation-report-ui-shard-${{ matrix.shard }}
+          path: packages/ui/reports/mutation/
+          retention-days: 30
+          overwrite: true
 
   # packages/ui's gate, for the reasons given on `mutation-db-aggregate` below.
   mutation-ui-aggregate:
@@ -404,13 +430,26 @@ jobs:
           echo "Shard $SHARD/$TOTAL mutates: $FILES"
           pnpm --filter @waitron/db exec stryker run --mutate "$FILES"
 
-      - name: Upload mutation report
+      - id: upload_blob
+        name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
         with:
           name: mutation-report-db-shard-${{ matrix.shard }}
           path: packages/db/reports/mutation/
           retention-days: 30
+
+      - name: Retry artifact upload
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: mutation-report-db-shard-${{ matrix.shard }}
+          path: packages/db/reports/mutation/
+          retention-days: 30
+          overwrite: true
 
   # The PACKAGE's gate. Each shard above publishes `mutation.json` beside its html report;
   # this job adds the ten together and fails below 90, the score the owner set for every package

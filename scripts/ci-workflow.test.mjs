@@ -30,7 +30,7 @@ import {
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one case
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
-// two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-download cases reading every
+// two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-transfer cases reading every
 // .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
 // the workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
@@ -3865,6 +3865,195 @@ describe("the workflows' artifact downloads", () => {
   it("bounds and retries every artifact download in every workflow", () => {
     const found = workflowFiles.flatMap((name) =>
       downloadAttempts(readFileSync(join(workflowsDir, name), "utf8")).map((attempt) => ({
+        workflow: name,
+        ...attempt,
+      })),
+    );
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.filter((attempt) => !attempt.bounded)).toEqual([]);
+  });
+});
+
+function uploadAttempts(text) {
+  const isUpload = (step) => step?.uses?.startsWith("actions/upload-artifact@") ?? false;
+  const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
+  const strict = (step) => step?.continueOnError === undefined || step.continueOnError === "false";
+  const inputsWithoutOverwrite = (inputs) =>
+    JSON.stringify(
+      Object.entries(inputs)
+        .filter(([key]) => key !== "overwrite")
+        .sort(),
+    );
+  const attempts = [];
+  for (const { id: job, lines } of jobBlocks(text)) {
+    const steps = workflowSteps(lines.join("\n"));
+    for (let at = 0; at < steps.length; at += 1) {
+      const [first, second] = steps.slice(at, at + 2);
+      if (!isUpload(first)) continue;
+      const failed = `always() && steps.${first.id}.outcome == 'failure'`;
+      const valid =
+        /^[A-Za-z_][\w-]*$/.test(first.id ?? "") &&
+        steps.filter((step) => step.id === first.id).length === 1 &&
+        [undefined, "always()", "failure() || cancelled()"].includes(first.if) &&
+        bounded(first) &&
+        first.continueOnError === "true" &&
+        Boolean(first.with.name) &&
+        Boolean(first.with.path) &&
+        [undefined, "false"].includes(first.with.overwrite) &&
+        second?.uses === first.uses &&
+        second.if === failed &&
+        bounded(second) &&
+        strict(second) &&
+        second.with.overwrite === "true" &&
+        inputsWithoutOverwrite(first.with) === inputsWithoutOverwrite(second.with);
+      attempts.push({ job, bounded: Boolean(valid) });
+      if (isUpload(second) && second.if === failed) at += 1;
+    }
+  }
+  return attempts;
+}
+
+describe("the workflows' artifact uploads", () => {
+  const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
+  const first = `      - id: upload
+        uses: actions/upload-artifact@v7
+        if: always()
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          name: service-blob-1
+          path: packages/service/.vitest-reports/blob-1.json
+          if-no-files-found: error
+          retention-days: 1
+`;
+  const second = `      - uses: actions/upload-artifact@v7
+        if: always() && steps.upload.outcome == 'failure'
+        timeout-minutes: 1
+        with:
+          name: service-blob-1
+          path: packages/service/.vitest-reports/blob-1.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+`;
+
+  it.each(["always()", "failure() || cancelled()"])(
+    "accepts the %s upload and strict retry",
+    (gate) => {
+      expect(
+        uploadAttempts(workflow(first.replace("if: always()", `if: ${gate}`) + second)),
+      ).toEqual([{ job: "a", bounded: true }]);
+    },
+  );
+
+  it("accepts an ordinary success-only upload and explicit false on its retry", () => {
+    expect(
+      uploadAttempts(
+        workflow(
+          first.replace("        if: always()\n", "") +
+            second.replace(
+              "        timeout-minutes:",
+              "        continue-on-error: false\n        timeout-minutes:",
+            ),
+        ),
+      ),
+    ).toEqual([{ job: "a", bounded: true }]);
+  });
+
+  it("ignores commented uploads", () => {
+    expect(uploadAttempts(workflow("      # - uses: actions/upload-artifact@v7\n"))).toEqual([]);
+  });
+
+  it.each([
+    ["no retry", first],
+    ["no first timeout", first.replace("        timeout-minutes: 1\n", "") + second],
+    ["no second timeout", first + second.replace("        timeout-minutes: 1\n", "")],
+    ["an excessive timeout", first.replace("timeout-minutes: 1", "timeout-minutes: 10") + second],
+    [
+      "an intolerant first attempt",
+      first.replace("        continue-on-error: true\n", "") + second,
+    ],
+    ["no upload id", first.replace("      - id: upload\n        uses:", "      - uses:") + second],
+    [
+      "a duplicate upload id",
+      first + second.replace("      - uses:", "      - id: upload\n        uses:"),
+    ],
+    ["a retry gated by implicit success", first + second.replace("always() && ", "")],
+    [
+      "a retry on another upload's failure",
+      first + second.replace("steps.upload.", "steps.other."),
+    ],
+    ["a retry on success", first + second.replace("== 'failure'", "== 'success'")],
+    [
+      "an unconditional retry",
+      first + second.replace("        if: always() && steps.upload.outcome == 'failure'\n", ""),
+    ],
+    ["an unrecognised first-upload condition", first.replace("if: always()", "if: true") + second],
+    ["another action version", first + second.replace("@v7", "@v6")],
+    [
+      "a tolerated retry failure",
+      first +
+        second.replace(
+          "        timeout-minutes:",
+          "        continue-on-error: true\n        timeout-minutes:",
+        ),
+    ],
+    [
+      "a retry with conditional error tolerance",
+      first +
+        second.replace(
+          "        timeout-minutes:",
+          "        continue-on-error: ${{ true }}\n        timeout-minutes:",
+        ),
+    ],
+    ["no overwrite on retry", first + second.replace("          overwrite: true\n", "")],
+    [
+      "overwrite on the first attempt",
+      first.replace("        with:", "        with:\n          overwrite: true") + second,
+    ],
+    ["another artifact name", first + second.replace("service-blob-1", "other-blob-1")],
+    ["another source path", first + second.replace("packages/service/", "packages/other/")],
+    [
+      "a weakened missing-file refusal",
+      first + second.replace("if-no-files-found: error", "if-no-files-found: warn"),
+    ],
+    ["changed retention", first + second.replace("retention-days: 1", "retention-days: 2")],
+    [
+      "a missing artifact name",
+      (first + second).replaceAll("          name: service-blob-1\n", ""),
+    ],
+    [
+      "a missing source path",
+      (first + second).replaceAll(
+        "          path: packages/service/.vitest-reports/blob-1.json\n",
+        "",
+      ),
+    ],
+  ])("refuses %s", (_label, steps) => {
+    const attempts = uploadAttempts(workflow(steps));
+    expect(attempts.length).toBeGreaterThan(0);
+    expect(attempts.every((attempt) => attempt.bounded)).toBe(false);
+  });
+
+  it("leaves job time outside all upload attempts", () => {
+    const found = workflowFiles.flatMap((name) =>
+      jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
+        const uploads = workflowSteps(lines.join("\n")).filter((step) =>
+          step.uses?.startsWith("actions/upload-artifact@"),
+        );
+        if (uploads.length === 0) return [];
+        const budget = uploads.reduce((sum, step) => sum + Number(step.timeoutMinutes), 0);
+        const jobBudget = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines.join("\n"))?.[1]);
+        return [{ workflow: name, job: id, fits: jobBudget > budget }];
+      }),
+    );
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.filter((entry) => !entry.fits)).toEqual([]);
+  });
+
+  it("bounds and retries every artifact upload in every workflow", () => {
+    const found = workflowFiles.flatMap((name) =>
+      uploadAttempts(readFileSync(join(workflowsDir, name), "utf8")).map((attempt) => ({
         workflow: name,
         ...attempt,
       })),
