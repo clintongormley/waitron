@@ -844,3 +844,22 @@ them. Tests cover a changed inspection after Check again and both pending repair
 recovery wording and its actual actions. Give the person applicable restart, space, backup or
 reinstall choices, with any required authentication there and a safe Stop before destructive work.
 The earlier server-page inventory did not exercise those recovery procedures.
+
+### Backup-key self-service rework, 2026-10-25
+
+The `backup.effective_mismatch` refusal now says the saved key could not be confirmed, asks you
+to keep both key records and to stop changing keys, and states that this page cannot diagnose the
+conflicting settings or identify which key opens a backup. The original milestone and source audit
+above describe the earlier administrator referral.
+
+The browser cases exercise apply and rotation refusals in both languages. After refusal, the
+new key's download remains readable; on rotation, both distinct key downloads remain readable.
+Leaving the screen sends no further apply or rotation request in those cases. Existing retry
+cases still exercise a later successful submission; that is not evidence that retry corrects a
+persistent effective-key conflict.
+
+**Still open:** authenticated inspection and correction of saved versus effective backup-key
+configuration, with each choice explained and a safe Stop. Source inspection finds that `statusBody` in
+`apps/server/src/backup-api.ts` prefers the saved key's fingerprint; this change does not qualify
+a status reload as confirmation of the effective key. No repair of that conflict or opening of
+an existing encrypted backup was qualified by this wording change.

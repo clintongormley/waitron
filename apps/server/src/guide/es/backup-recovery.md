@@ -42,9 +42,11 @@ Abrir una copia pausa la configuración normal aunque se rechace la clave. Puede
 la recuperación. Para volver a la configuración normal, reinicia el equipo; volver atrás o recargar
 la página no la reanuda.
 
-Si **Copias** indica que la clave guardada no se aplicó, pide al administrador del equipo que revise
-su configuración de copias de seguridad antes de volver a intentarlo. Conserva tanto la clave
-anterior como la que acabas de guardar; el rechazo no confirma qué clave abrirá una copia.
+Si **Copias** no puede confirmar la clave guardada, conserva tanto la clave anterior como la que
+acabas de guardar. Al cambiar una clave, aún puedes copiar o descargar ambas claves mostradas
+tras este rechazo. No sigas cambiando claves y sal de la página sin volver a enviar. Esta página
+no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia concreta;
+no sustituyas ninguno de los dos registros de claves basándote en este mensaje.
 
 ## Crea las nuevas series {#series}
 

@@ -40,9 +40,11 @@ location, date and key name. Check those details before continuing.
 Opening a backup pauses ordinary setup even if the key is refused. You can retry recovery here.
 To return to ordinary setup, restart the box; going back or refreshing the page does not resume it.
 
-If **Backups** says the saved key did not take effect, ask the box's administrator to check its
-backup configuration before trying again. Keep both the previous key and the key you just saved;
-the refusal does not confirm which key will open a backup.
+If **Backups** cannot confirm the saved key, keep both the previous key and the key you just
+saved. While changing a key, you can still copy or download both displayed keys after this
+refusal. Stop changing keys and leave the page without another submission. This page cannot
+diagnose conflicting backup-key settings or confirm which key opens a particular backup; do not
+replace either key record on the strength of this message.
 
 ## Make the new series {#series}
 
