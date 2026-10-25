@@ -1211,6 +1211,7 @@ describe("an open table's order", () => {
   const table = {
     id: "t2",
     label: "2",
+    shortName: "2",
     zoneId: "zone-comedor",
     state: "open-tab",
     hasOpenTab: true,
@@ -1867,6 +1868,7 @@ describe("a dish whose period ended earlier today", () => {
     const table = {
       id: "t2",
       label: "2",
+      shortName: "2",
       zoneId: "zone-comedor",
       state: "open-tab",
       hasOpenTab: true,

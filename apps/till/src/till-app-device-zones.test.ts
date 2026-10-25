@@ -575,6 +575,7 @@ describe("live device zones", () => {
     const table = {
       id: "table",
       label: "1",
+      shortName: "1",
       zoneId: "room",
       state: "open-tab",
       hasOpenTab: true,
@@ -1162,6 +1163,7 @@ describe("a handheld's zones", () => {
   const tableIn = (id: string, zoneId: string) => ({
     id,
     label: id,
+    shortName: id,
     zoneId,
     state: "open-tab",
     hasOpenTab: true,

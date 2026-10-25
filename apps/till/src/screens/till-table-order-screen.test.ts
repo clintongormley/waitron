@@ -5395,7 +5395,7 @@ describe("till-table-order-screen", () => {
         table.id === "t5"
           ? renamed(table, "Terrace")
           : table.id === "t9"
-            ? renamed({ ...table, label: "Counter 4" }, "Window")
+            ? renamed({ ...table, label: "Counter 4", shortName: "Counter 4" }, "Window")
             : table,
       );
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor, tables });
@@ -5476,7 +5476,9 @@ describe("till-table-order-screen", () => {
     it("Split a table names a table renamed for today by its name, in its choices and its heading", async () => {
       const floor = partyTables(true);
       const tables = floor.tables.map((table) =>
-        table.id === "t5" ? renamed({ ...table, label: "Counter 4" }, "Window") : table,
+        table.id === "t5"
+          ? renamed({ ...table, label: "Counter 4", shortName: "Counter 4" }, "Window")
+          : table,
       );
       const { el } = await mount({
         lines: [pendingLine],

@@ -195,6 +195,7 @@ const till = {
 const table = {
   id: "t2",
   label: "2",
+  shortName: "2",
   zoneId: "zone-dining-room",
   state: "open-tab",
   hasOpenTab: true,

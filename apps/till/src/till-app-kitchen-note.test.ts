@@ -1494,7 +1494,7 @@ it("keeps the second party after the first party's note save returns", async () 
   };
   vi.mocked(api.getTablesState).mockResolvedValue([
     tableRow(tableParty()),
-    { ...tableRow(second), id: "table-second", label: "Second" },
+    { ...tableRow(second), id: "table-second", label: "Second", shortName: "Second" },
   ]);
   emit(tableScreen(el), "floor-refresh", {});
   await flush(el);

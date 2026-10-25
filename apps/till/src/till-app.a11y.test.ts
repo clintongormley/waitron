@@ -284,6 +284,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         {
           id: "t4",
           label: "4",
+          shortName: "4",
           zoneId: "z1",
           state: "open-tab",
           hasOpenTab: true,

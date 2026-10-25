@@ -170,6 +170,7 @@ const partyTables: TableState[] = [
     ...tables[0]!,
     id: "t5",
     label: "5",
+    shortName: "5",
     nextReservation: null,
     condition: "held",
     party: {
@@ -184,6 +185,7 @@ const partyTables: TableState[] = [
     ...tables[0]!,
     id: "t7",
     label: "7",
+    shortName: "7",
     hasOpenTab: false,
     tabLineCount: undefined,
     tabTotal: undefined,
@@ -202,6 +204,7 @@ const partyTables: TableState[] = [
     ...tables[0]!,
     id,
     label: id.slice(1),
+    shortName: id.slice(1),
     hasOpenTab: false,
     tabLineCount: undefined,
     tabTotal: undefined,
@@ -231,7 +234,14 @@ const todayRow = (x: number, placed = true) => ({
 const plannedTables: TableState[] = [
   { ...partyTables[0]!, zoneId: "z1", today: todayRow(2) },
   { ...tables[2]!, today: todayRow(6) },
-  { ...partyTables[1]!, id: "t4", label: "4", zoneId: "z1", today: todayRow(0, false) },
+  {
+    ...partyTables[1]!,
+    id: "t4",
+    label: "4",
+    shortName: "4",
+    zoneId: "z1",
+    today: todayRow(0, false),
+  },
 ];
 
 afterEach(cleanupWidgets);
@@ -372,6 +382,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
         ...owing,
         id: "t10",
         label: "10",
+        shortName: "10",
         party: {
           ...owing.party!,
           id: "v10",
@@ -447,6 +458,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
         ...quiet,
         id: "t10",
         label: "10",
+        shortName: "10",
         signals: [{ kind: "held", count: 2 }],
         party: { ...quiet.party!, id: "v10", tableIds: ["t10"] },
       },
@@ -454,6 +466,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
         ...quiet,
         id: "t11",
         label: "11",
+        shortName: "11",
         nextReservation: { time: "21:30" },
         party: { ...quiet.party!, id: "v11", tableIds: ["t11"] },
       },
@@ -572,9 +585,9 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       {
         zones,
         tables: [
-          { ...tables[2]!, id: "t1", label: "1", today: merged },
+          { ...tables[2]!, id: "t1", label: "1", shortName: "1", today: merged },
           { ...tables[2]!, today: { ...merged, placement: { ...merged.placement!, x: 4 } } },
-          { ...tables[2]!, id: "t4", label: "4", today: todayRow(10) },
+          { ...tables[2]!, id: "t4", label: "4", shortName: "4", today: todayRow(10) },
         ],
       },
       theme,
@@ -699,6 +712,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
           ...owing,
           id: `tf${i}`,
           label: `F${i}`,
+          shortName: `F${i}`,
           zoneId: `f${i}`,
           ...over,
         })),
@@ -796,7 +810,14 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
           zones: manyZones,
           tables: [
             { ...owing, zoneId: "z1" },
-            { ...owing, id: "te3", label: "E3", zoneId: "e3", timingBand: "forgotten" },
+            {
+              ...owing,
+              id: "te3",
+              label: "E3",
+              shortName: "E3",
+              zoneId: "e3",
+              timingBand: "forgotten",
+            },
           ],
           now: Date.parse("2026-09-29T20:00:00.000Z"),
           reducedMotion: false,
