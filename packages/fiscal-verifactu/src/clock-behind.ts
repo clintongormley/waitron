@@ -64,9 +64,9 @@ function headOf(current: Record<string, number>, node: string): number {
   return Object.hasOwn(current, node) ? current[node]! : 0;
 }
 
-/** A stored proof read as text and parsed here, so text that is not JSON reads as null rather than
- * throwing from the stop. */
-function parsedProof(text: string): unknown {
+/** A stored JSON column read as text and parsed here, so text that is not JSON reads as null rather
+ * than throwing. */
+export function parsedStored(text: string): unknown {
   try {
     return JSON.parse(text) as unknown;
   } catch {
@@ -125,7 +125,7 @@ async function uncoveredBy(
     .orderBy(desc(clockConfirmations.seq))
     .limit(1);
   if (confirmation === undefined) return latest;
-  const heads = storedHeads(parsedProof(confirmation.proof));
+  const heads = storedHeads(parsedStored(confirmation.proof));
   if (heads === null) return latest;
   const current = await chainHeads(tx);
   for (const [node, head] of heads) if (head > headOf(current, node)) return latest;

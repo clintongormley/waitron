@@ -1,8 +1,8 @@
-import { and, asc, eq, gt, lte, or } from "drizzle-orm";
+import { and, asc, eq, gt, lte, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { MisdatedRecords } from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
-import { CLOCK_BEHIND_MARGIN_MS, storedHeads } from "./clock-behind.js";
+import { CLOCK_BEHIND_MARGIN_MS, parsedStored, storedHeads } from "./clock-behind.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -29,13 +29,16 @@ export async function misdatedRecords(
   confirmationId: string,
 ): Promise<MisdatedRecords | null> {
   const [row] = await tx
-    .select({ proof: clockConfirmations.proof, detail: clockChecks.detail })
+    .select({
+      proof: sql<string>`${clockConfirmations.proof}`,
+      detail: sql<string | null>`${clockChecks.detail}`,
+    })
     .from(clockConfirmations)
     .leftJoin(clockChecks, eq(clockChecks.id, clockConfirmations.checkId))
     .where(eq(clockConfirmations.id, confirmationId));
   if (row === undefined) return null;
-  const closing = storedClosing(row.proof);
-  const heads = storedHeads(row.detail);
+  const closing = storedClosing(parsedStored(row.proof));
+  const heads = storedHeads(row.detail === null ? null : parsedStored(row.detail));
   if (closing === null || heads === null || closing.unconfirmed) return CANNOT_TELL;
   const { start } = closing;
   // `or()` of nothing would drop the bound altogether.

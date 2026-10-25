@@ -392,6 +392,30 @@ describe("misdatedRecords", () => {
       });
   });
 
+  it("cannot tell for a closing whose proof or check detail is not JSON", async () => {
+    await aheadSales();
+    const check = await insertCheck({ openedAt: X, boot: BOOT, heads: heads() });
+    const badProof = "88888888-8888-4888-8888-888888888888";
+    suite.db.run(sql`
+      insert into clock_confirmations
+        (id, seq, node_id, box_clock_at, confirmed_at, step_ms, source, reason, proof, check_id)
+      values (${badProof}, 1, ${nodeId}, ${new Date(X).toISOString()},
+              ${new Date(X + 90 * M).toISOString()}, 0, 'elapsed', 'behind_chain', 'not json',
+              ${check.id})`);
+    const badDetail = "99999999-9999-4999-8999-999999999999";
+    suite.db.run(sql`
+      insert into clock_checks (id, seq, node_id, opened_at, reason, detail)
+      values (${badDetail}, 2, ${nodeId}, ${new Date(X).toISOString()}, 'behind_chain', 'not json')`);
+    const closing = closingFor(check, X + 90 * M, { ms: BOOT_MS + 90 * M, id: "boot-1" });
+    const goodProof = await insertClosing({
+      check: { id: badDetail },
+      confirmedAt: X + 90 * M,
+      closing,
+    });
+    expect(await answer(badProof)).toEqual({ known: false });
+    expect(await answer(goodProof)).toEqual({ known: false });
+  });
+
   it("answers null for an id no confirmation has", async () => {
     expect(await answer("no-such-confirmation")).toBeNull();
   });
