@@ -419,8 +419,8 @@ function optionalId(value: unknown, field: string): string | undefined {
 }
 
 /**
- * The shape of a floor-plan save; `saveLayout` checks the values. A null id or live table
- * is absent, as the read shape sends them.
+ * The shape of a floor-plan save; `saveLayout` checks the values. A null id, live table or
+ * short name is absent, as the read shape sends them.
  */
 function parseZonePlanSave(body: unknown): ZonePlanSave {
   const refuse = (field: string): never => {
@@ -440,6 +440,7 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
       if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
       if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
       const id = optionalId(table.id, `${at}.id`);
+      const shortName = optionalId(table.shortName, `${at}.shortName`);
       const partKeys = table.partKeys;
       if (!Array.isArray(partKeys) || !partKeys.every((key) => typeof key === "string")) {
         refuse(`${at}.partKeys`);
@@ -452,6 +453,7 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
         fixed: table.fixed as boolean,
         placement: table.placement as ZonePlanSave["tables"][number]["placement"],
         partKeys: partKeys as string[],
+        ...(shortName === undefined ? {} : { shortName }),
       };
     }),
   };
