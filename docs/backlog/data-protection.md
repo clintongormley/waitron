@@ -74,10 +74,12 @@ by the answers):
   person's own download exists (`GET /management-api/me/personal-data/export`, a ZIP of their
   profile and sign-in details with a `README.txt` first, in the person's own language, English or
   Spanish), the Profile page has a **Download** button beside **Copy of your data**, and the Users
-  guide has a "Download your data" section (`{#own-data}`) in English and Spanish. When those
-  modules are on, the download also holds the workforce and staffing files (`employment.json`,
-  `rota.json`, `absences.json`, `attendance.json`, `staff-roles.json`) and the working-time record
-  (`time-record.pdf`, `time-record.csv`). Left:
+  guide has a "Download your data" section (`{#own-data}`) in English and Spanish. When the
+  workforce module is on, the download also holds `employment.json`, `rota.json`, `absences.json`
+  and `attendance.json`, and when the staffing module is on, `staff-roles.json`. When workforce and
+  a working-time exporter (today `workforce-es`) are both on, it also holds the working-time record
+  (`time-record.pdf`, `time-record.csv`), but only if the person has an entry at this box's
+  location (`apps/server/src/personal-data-time-record.ts:26`, `:42`). Left:
   - **S2c** — the counts of voids, refunds and drawer openings (`actions.csv`) and an admin's
     download of another person's data. Its `authorize` returns a README language too, and it adds
     README words for `actions.csv`. It also widens the guide section's and the Profile help text's
@@ -100,17 +102,21 @@ by the answers):
   Include them, yes or no?
 - **The working-time record of a box with more than one location** — only this node's location is
   exported (S2b decision 6). Today provisioning refuses a second, different location.
-- **Measure the working-time part on a box.** On a Mac, the read inside the write lock took
-  669.7 ms with 48 closed pay periods × 30 staff (Task 6a); moving the person cut to read time,
-  with one copy of the export's logic, brought it to 213.8 ms median with an identical CSV
-  (Task 6c). The whole-history PDF for 4 years × about 20 shifts a month rendered in 2.6 s
-  (4.0 MB) on the Mac (Task 6a); the plan's 650 ms estimate was for 1,000 sessions. Measure both
-  on a box.
+- **Measure the working-time part on a box.** On a Mac, with 48 closed pay periods × 30 staff,
+  Task 6a's run timed the read inside the write lock at 669.7 ms. Task 6c, measuring its own
+  before-figure on the same Mac at 590.2 ms median, moved the person cut to read time, with one
+  copy of the export's logic, and brought it to 213.8 ms median with an identical CSV. The
+  whole-history PDF for 4 years × about 20 shifts a month rendered in 2.6 s (4.0 MB) on the Mac
+  (Task 6a); the plan's 650 ms estimate was for 1,000 sessions. The PDF renders on the thread that
+  serves sales, which is why the box's figure matters. Measure both on a box.
 - **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
   badge sits over the last letter of "Copy of your data" / "Copia de tus datos". The placement
   came from S2a2 (#2049), whose test in
   `apps/dashboard/src/screens/profile-screen.personal-data.test.ts` puts the badge's centre on the
-  label's top trailing corner. Place it so it never covers the label.
+  label's top trailing corner. The shared rule in
+  [design-system.md](../developers/design-system.md) (`wt-help-tooltip`) hangs the badge over the
+  top trailing corner of the nearest positioned box, so the fix is likely which box is positioned
+  on the Profile row, not the shared rule (not measured). Place it so it never covers the label.
 - **Mount the own download from `boot.ts`** — the route is mounted through `mountMeApi`, which
   gets module names and rebuilds the modules with `modulesNamed` (`apps/server/src/modules.ts`),
   and is not given boot's `now`, because #1990 was editing `boot.ts` while the route was built.

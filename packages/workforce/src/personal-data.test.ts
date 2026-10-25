@@ -424,13 +424,6 @@ const COLLEAGUE_VALUES = [
   "2025-10-29T13:40:00.000Z",
 ];
 
-/**
- * Marta's three attendance questions (two with their reminder email), two answers and two activity
- * facts, beside a colleague's one of each. Times are in the writers' spelling: `toISOString()`,
- * whole seconds for an activity's and a change's `at`. Each list's rows carry ids (or, for the
- * facts, sequence numbers) in the reverse of its sort order, and its created_at order differs
- * from its first sort key's, so neither tie-break can stand in for the sort.
- */
 /** A clock-in, then the automatic clock-out the end-of-day job writes (`recordAutomaticClose`);
  * returns the two entries' ids. */
 async function clockInThenAutomaticOut(
@@ -457,6 +450,13 @@ async function clockInThenAutomaticOut(
   return [open!.id, automatic];
 }
 
+/**
+ * Marta's three attendance questions (two with their reminder email), two answers and two activity
+ * facts, beside a colleague's one of each. Times are in the writers' spelling: `toISOString()`,
+ * whole seconds for an activity's and a change's `at`. Each list's rows carry ids (or, for the
+ * facts, sequence numbers) in the reverse of its sort order, and its created_at order differs
+ * from its first sort key's, so neither tie-break can stand in for the sort.
+ */
 async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof seedAll>>) {
   const { manager, marta, colleague } = people;
   await seedTenant(db);

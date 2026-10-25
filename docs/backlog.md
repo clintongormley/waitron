@@ -4321,10 +4321,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   S2b): its version, access holders, events and author types, in the PDF and CSV.
   [Detail](backlog/workforce.md#the-spanish-working-time-record-prints-english-words-and-internal-codes).
 
-- **The working-time PDF's text loses its fi and ff ligatures** (seen by A980 S2b): copied or
-  searched text reads "fnishes" though the page looks right.
-  [Detail](backlog/workforce.md#the-working-time-pdfs-text-loses-its-fi-and-ff-ligatures).
-
 - **Nothing in the product closes a pay period** (found by A793's design, read). A793's slice 6
   (tips frozen with the pay period) waits for one. Decide with the owner who closes a period and when.
   [Detail](backlog/workforce.md#nothing-in-the-product-closes-a-pay-period).

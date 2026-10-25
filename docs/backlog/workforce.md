@@ -103,12 +103,6 @@ access holders as words. Files: `apps/server/src/attendance-export-pdf.ts`,
 `apps/server/src/attendance-export-csv.ts` and `packages/workforce-es/src/`. This predates A980
 S2b (#1750, #1975). Print each value in the file's language.
 
-## The working-time PDF's text loses its fi and ff ligatures
-
-The page renders correctly, but text copied or searched in the PDF reads "fnishes", "ofset" and
-"Unconfrmed". Same renderer, `apps/server/src/attendance-export-pdf.ts`. Make the text layer carry
-the letters the ligature stands for.
-
 ## Rota warning query boundaries
 
 The warnings cases exercise the separate JavaScript filter's local dates. Add fixtures at
