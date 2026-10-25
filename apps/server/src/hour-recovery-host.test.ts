@@ -24,7 +24,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
-import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
+import {
+  createFirstSetupCoordinator,
+  raiseStartAgainNote,
+  readModulePreparationHistory,
+} from "@waitron/provisioning";
 import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants } from "@waitron/fiscal-verifactu/test/fixtures.js";
@@ -818,6 +822,43 @@ describe("a backup's own floors", () => {
     ).toMatchObject({ status: "waiting", targetMs: Date.parse("2026-10-24T09:02:00Z") });
     expect(await recoverySelectPastWaits(clock, service, asBrowser)).toMatchObject({
       status: "selected",
+    });
+  });
+});
+
+describe("the start-again note", () => {
+  const asBrowser = { onBox: false };
+  const noteAt = (stateDir: string, floorMs: number) =>
+    raiseStartAgainNote(stateDir, { floorMs, lastName: "0CNQT", module: binding.module });
+
+  it("a restore with the clock set back behind the start-again note is refused, not given a repeated name", async () => {
+    const floorMs = Date.parse("2026-10-23T08:00:00Z");
+    clock.set(floorMs - 10 * 60_000);
+    const f = await host();
+    await noteAt(f.roots.stateDir, floorMs);
+    await expect(recoverySelectPastWaits(clock, f.service, asBrowser)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: floorMs },
+    });
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
+  });
+
+  it("a backup whose history is later than the note wins", async () => {
+    clock.set(Date.parse("2026-10-23T07:50:00Z"));
+    const f = await host();
+    await noteAt(f.roots.stateDir, Date.parse("2026-10-20T00:00:00Z"));
+    await expect(
+      recoverySelectPastWaits(
+        clock,
+        createSelectedRecoveryPreparation({
+          ...f.options,
+          selected: { ...f.selected, createdAt: "2026-10-23T08:00:00Z" },
+        }),
+        asBrowser,
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-23T08:00:00Z") },
     });
   });
 });

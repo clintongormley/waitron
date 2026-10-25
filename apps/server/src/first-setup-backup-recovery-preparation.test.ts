@@ -1,4 +1,4 @@
-import { root, key, node, clock } from "../test/hour-recovery-host.js";
+import { root, key, node, clock, binding } from "../test/hour-recovery-host.js";
 import { createHash } from "node:crypto";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -11,7 +11,14 @@ import { suite } from "../test/hour-recovery-host.js";
 
 import { AppError } from "@waitron/shared";
 import { readModuleRecoveryEvidence, collectModuleNonDbState } from "./backup-sources.js";
-import { readModulePreparationHistory } from "@waitron/provisioning";
+import {
+  createFirstSetupCoordinator,
+  raiseStartAgainNote,
+  readModulePreparationHistory,
+  readStartAgainNote,
+} from "@waitron/provisioning";
+import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, writePointer, signPointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
@@ -595,4 +602,62 @@ it("shutdown drains an unfinished bucket restore before deleting its private des
   await expect(access(destination!)).rejects.toMatchObject({ code: "ENOENT" });
   expect(await f.workspace.read()).toEqual([]);
   expect((await readFile(f.database)).byteLength).toBeGreaterThan(0);
+});
+
+const noteTenMinutesAhead = async (stateDir: string) => {
+  const floorMs = clock.wall() - (clock.wall() % 60_000) + 10 * 60_000;
+  await raiseStartAgainNote(stateDir, {
+    floorMs,
+    lastName: "0CNQT",
+    module: "fiscal-verifactu",
+  });
+  return floorMs;
+};
+
+it("an A731 backup recovery with both clocks before the note is refused", async () => {
+  const f = await fixture(true);
+  const floorMs = await noteTenMinutesAhead(f.roots.stateDir);
+  const service = recovery(f.options);
+  const session = await service.open(f.request, { onBox: false });
+  await expect(
+    recoverySelectPastWaits(
+      clock,
+      { prepare: (proposal, client) => service.prepare(session.sessionId, proposal, client) },
+      { onBox: false },
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: floorMs },
+  });
+});
+
+it("a restore into A731's nested target reads the box's own note", async () => {
+  const f = await fixture(true);
+  const floorMs = await noteTenMinutesAhead(f.roots.stateDir);
+  const service = recovery(f.options);
+  const session = await service.open(f.request, { onBox: false });
+  await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
+  const target = (await f.workspace.read()).at(-1)!.target.target;
+  const selected = await previewRecoveryArchive(f.restore);
+  expect(await readStartAgainNote(target.stateDir)).toBeNull();
+  await expect(
+    recoverySelectPastWaits(
+      clock,
+      createSelectedRecoveryPreparation({
+        ...target,
+        coordinator: createFirstSetupCoordinator(),
+        modules: ALL_MODULES,
+        binding: { ...binding, sourceId: selected.activationSourceId ?? selected.sourceId },
+        node,
+        secret: key.secret,
+        database: () => suite.db,
+        selected,
+        readIsolation: async () => f.isolation,
+      }),
+      { onBox: false },
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: floorMs },
+  });
 });

@@ -23,9 +23,12 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import {
+  boxFolders,
   createModuleOperationHost,
   createRecoveryPreparationHost,
   readModulePreparationHistory,
+  readStartAgainNote,
+  startAgainFloorSources,
   type FirstSetupCoordinator,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
@@ -95,6 +98,15 @@ export function createNodeOperationPreparation(options: {
       check();
       return {
         ...current,
+        history: [
+          ...current.history,
+          ...startAgainFloorSources(
+            await readStartAgainNote(
+              (await boxFolders({ stateDir: options.stateDir, venueDir: options.venueDir }))
+                .stateDir,
+            ),
+          ),
+        ],
         oldMachineOffline: true,
         oldMachineAbsent: false,
         noParallelRecovery: true,

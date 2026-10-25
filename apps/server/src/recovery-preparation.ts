@@ -14,8 +14,11 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import {
+  boxFolders,
   createModuleOperationHost,
   createRecoveryPreparationHost,
+  readStartAgainNote,
+  startAgainFloorSources,
   type FirstSetupCoordinator,
   type FirstSetupHold,
 } from "@waitron/provisioning";
@@ -207,6 +210,12 @@ export function createSelectedRecoveryPreparation(options: Options): {
             records: [],
             timeFloorMs: Date.parse(selected.createdAt),
           },
+          ...startAgainFloorSources(
+            await readStartAgainNote(
+              (await boxFolders({ stateDir: options.stateDir, venueDir: options.venueDir }))
+                .stateDir,
+            ),
+          ),
         ],
         contextKey: JSON.stringify([
           binding,
