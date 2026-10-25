@@ -129,43 +129,37 @@ export class StaffList extends LitElement {
 
   #action(person: PersonSummary, action: string, label: string) {
     if (!this.canAdminister) return nothing;
-    return html`<wt-button
-      variant="ghost"
-      align="start"
-      data-test=${`${action}-${person.personId}`}
-      ?disabled=${action === "disable" && person.personId === this.currentPersonId}
-      @click=${(event: Event) => {
-        event.stopPropagation();
-        this.dispatchEvent(
-          new CustomEvent("person-action", {
-            detail: { personId: person.personId, action },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-      }}
-      >${label}</wt-button
-    >`;
+    return this.#menuItem(
+      `${action}-${person.personId}`,
+      action === "disable" && person.personId === this.currentPersonId,
+      label,
+      "person-action",
+      { personId: person.personId, action },
+    );
   }
 
   #downloadData(person: PersonSummary) {
     if (!this.canExportPersonalData) return nothing;
+    return this.#menuItem(
+      `download-data-${person.personId}`,
+      this.downloadingPersonId !== null,
+      t("person.download_data"),
+      "download-person-data",
+      { personId: person.personId },
+    );
+  }
+
+  #menuItem(test: string, disabled: boolean, label: string, name: string, detail: object) {
     return html`<wt-button
       variant="ghost"
       align="start"
-      data-test=${`download-data-${person.personId}`}
-      ?disabled=${this.downloadingPersonId !== null}
+      data-test=${test}
+      ?disabled=${disabled}
       @click=${(event: Event) => {
         event.stopPropagation();
-        this.dispatchEvent(
-          new CustomEvent<{ personId: string }>("download-person-data", {
-            detail: { personId: person.personId },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
       }}
-      >${t("person.download_data")}</wt-button
+      >${label}</wt-button
     >`;
   }
 
