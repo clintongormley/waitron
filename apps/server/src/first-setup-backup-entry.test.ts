@@ -7,10 +7,11 @@ import {
   realpath,
   rm,
   stat,
+  symlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
@@ -334,7 +335,6 @@ it("a supervised start after a finished backup recovery runs the server on the r
   await writeFile(dump, "cut-off copy");
   const { env, surface, statfsCalls } = await superviseSelected(f);
   expect(surface).toBeUndefined();
-  // The folders the start runs from are the ones its first clean-up was handed.
   expect(env).toMatchObject({
     WAITRON_STATE_DIR: target.stateDir,
     WAITRON_VENUE_DIR: target.venueDir,
@@ -354,5 +354,43 @@ it("a supervised start after a finished backup recovery judges the floor on the 
   expect(env).toBeUndefined();
   expect(await (await surface!.request("/")).text()).toContain(
     "The box&#39;s disk is full, so Waitron cannot save anything.",
+  );
+});
+
+/** `f`'s folders reached through a symbolic link, so they are not spelled canonically. */
+async function linkedRoots(f: Awaited<ReturnType<typeof fixture>>) {
+  const parent = await mkdtemp(join(tmpdir(), "backup-entry-link-"));
+  directories.push(parent);
+  const link = join(parent, "box");
+  await symlink(dirname(f.roots.venueDir), link);
+  return { venueDir: join(link, "venue"), stateDir: join(link, "state") };
+}
+
+const RETAINED_DUMP = ["backup-staging", "waitron-20261016T120000Z.dump"] as const;
+
+it.each(["canonical", "symlinked"] as const)(
+  "a supervised start serving a backup recovery's repair keeps the original folder's retained dump (%s folders)",
+  async (spelling) => {
+    const f = await fixture();
+    const roots = spelling === "canonical" ? f.roots : await linkedRoots(f);
+    const { env, surface } = await superviseSelected(f, { ...roots, baseEnv: {} });
+    expect(env).toBeUndefined();
+    expect(surface).toBeDefined();
+    expect(await readFile(join(f.roots.stateDir, ...RETAINED_DUMP), "utf8")).toBe(
+      "retained interrupted dump",
+    );
+  },
+);
+
+it("a refused start beside a finished backup recovery keeps the original folder's retained dump (symlinked folders)", async () => {
+  const f = await fixture("selected");
+  await mkdir(join(f.roots.stateDir, "first-setup-workspaces"));
+  const roots = await linkedRoots(f);
+  const logDir = join(dirname(roots.stateDir), "..", "logs");
+  const { env, surface } = await superviseSelected(f, { ...roots, baseEnv: {}, logDir });
+  expect(env).toBeUndefined();
+  expect(surface).toBeDefined();
+  expect(await readFile(join(f.roots.stateDir, ...RETAINED_DUMP), "utf8")).toBe(
+    "retained interrupted dump",
   );
 });
