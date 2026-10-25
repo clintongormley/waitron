@@ -226,3 +226,53 @@ it.each(["inspection", "summary", "retirement"] as const)(
     );
   },
 );
+const presentDatabase = { database: "no-venue-rows", emptyDatabase: true } as const;
+it.each(["claimed", "consumption-intent"] as const)(
+  "retireDamagedRecord sends the flag once the inspection still matches, for %s work",
+  async (status) => {
+    const { session, requests } = await fixture({ status, inspection: presentDatabase });
+    await expect(session.retireDamagedRecord()).resolves.toEqual({ restarting: true });
+    expect(requests.map((r) => r.path)).toEqual([
+      "/setup-api/first-setup/resolution/recover",
+      "/setup-api/first-setup/resolution",
+      "/setup-api/first-setup/resolution/start-again",
+    ]);
+    expect(requests[2]!.body).toEqual({
+      inspectionId: "b".repeat(64),
+      revision: 2,
+      ownerGeneration: 2,
+      recoveryRecordDamagedShown: true,
+    });
+    expect(requests[2]!.headers.get("X-Waitron-Setup-Owner")).toBe("B".repeat(43));
+    expect(session.recoveryRequired).toBe(true);
+  },
+);
+it.each([
+  { database: "missing" as const },
+  { revision: 3 },
+  { ownerGeneration: 3 },
+  { pair: "invalid" as const },
+  { emptyDatabase: false },
+  { database: "occupied" as const, emptyDatabase: false },
+  { password: "uncheckable" as const },
+  { inspectionId: "bad" },
+])("retireDamagedRecord sends nothing when the inspection changed to %j", async (inspection) => {
+  const { session, requests } = await fixture({
+    inspection: { ...presentDatabase, ...inspection },
+  });
+  await expect(session.retireDamagedRecord()).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(session.recoveryRequired).toBe(true);
+  expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
+it.each([{ restarting: false }, {}])(
+  "retireDamagedRecord does not accept an incomplete restart answer %j",
+  async (result) => {
+    const { session } = await fixture({ result, inspection: presentDatabase });
+    await expect(session.retireDamagedRecord()).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    expect(session.recoveryRequired).toBe(true);
+  },
+);

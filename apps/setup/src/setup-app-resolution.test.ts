@@ -599,3 +599,181 @@ it.each(["en-GB", "es-ES"])(
     );
   },
 );
+
+const ownerHeader = "X-Waitron-Setup-Owner";
+async function damagedRecord(
+  options: { status?: "claimed" | "consumption-intent"; locale?: string } = {},
+) {
+  let recovered = false;
+  const fixture = await mount({
+    intercept(path, _body, headers) {
+      if (path.endsWith("/resolution/start-again") && !headers.has(ownerHeader))
+        return Response.json(
+          { error: { code: "setup.start_again_password_required", params: {} } },
+          { status: 403 },
+        );
+      if (path.endsWith("/resolution/recover")) {
+        recovered = true;
+        const status = options.status ?? "claimed";
+        return Response.json({
+          state: {
+            ...initial,
+            status,
+            consumptionIntent: status === "consumption-intent",
+            revision: 2,
+            ownerGeneration: 2,
+          },
+          capability: "B".repeat(43),
+          ownerGeneration: 2,
+        });
+      }
+      if (path.endsWith("/resolution") && recovered)
+        return Response.json({ ...inspection, revision: 2, ownerGeneration: 2 });
+    },
+  });
+  const { app } = fixture;
+  if (options.locale) {
+    setLocale(options.locale);
+    await app.updateComplete;
+  }
+  await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await userEvent.click(
+    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  return fixture;
+}
+const startAgainRequests = <R extends { path: string }>(requests: R[]) =>
+  requests.filter((r) => r.path.endsWith("/resolution/start-again"));
+async function unlockDamagedRecord(app: SetupApp) {
+  await password(app);
+  await userEvent.click(
+    q<WtButton>(app, "damaged-record-continue").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => q(app, "recovery-record-damaged")).not.toBeNull();
+}
+
+it.each(["en-GB", "es-ES"])(
+  "a damaged recovery-key record asks for the administrator password, and shows no error, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const shell = shellText(locale);
+    const { app, requests } = await damagedRecord({ locale });
+    await app.updateComplete;
+    expect(q(app, "damaged-record-password").textContent).toBe(t.damagedRecordPassword);
+    expect(q<WtInput>(app, "resume-password")).not.toBeNull();
+    expect(q(app, "damaged-record-continue").textContent).toContain(t.resume);
+    expect(q(app, "cancel-damaged-record").textContent).toContain(t.cancel);
+    expect(q(app, "confirm-start-again")).toBeNull();
+    const text = app.shadowRoot!.textContent!;
+    for (const message of [
+      shell["shell.not_ready"],
+      shell["shell.first_setup.attempt_invalid"],
+      shell["shell.first_setup.owner_required"],
+      t.error,
+    ])
+      expect(text).not.toContain(message);
+    expect(
+      [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+        (f) => f.error,
+      ),
+    ).toEqual([""]);
+    expect(startAgainRequests(requests)).toHaveLength(1);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "after the password, the warning is shown above what Start again deletes, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app, requests } = await damagedRecord({ locale });
+    await unlockDamagedRecord(app);
+    await app.updateComplete;
+    const warning = q(app, "recovery-record-damaged");
+    expect(warning.textContent).toBe(t.recoveryRecordDamaged);
+    const help = [...app.shadowRoot!.querySelectorAll("p")].find(
+      (p) => p.textContent === t.startAgainHelp,
+    )!;
+    expect(help).toBeDefined();
+    expect(warning.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(q<HTMLInputElement>(app, "retire-confirmed").checked).toBe(false);
+    expect(q<HTMLInputElement>(app, "retire-confirmed").closest("label")!.textContent).toBe(
+      t.retireConfirmed,
+    );
+    expect(q(app, "cancel-start-again")).not.toBeNull();
+    expect(q<WtButton>(app, "confirm-start-again").disabled).toBe(true);
+    expect(q(app, "damaged-record-password")).toBeNull();
+    expect(startAgainRequests(requests)).toHaveLength(1);
+  },
+);
+
+it("confirming sends the warning flag with the recovered owner", async () => {
+  const { app, requests } = await damagedRecord();
+  await unlockDamagedRecord(app);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await userEvent.click(
+    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
+  const sent = startAgainRequests(requests)[1]!;
+  expect(sent.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    recoveryRecordDamagedShown: true,
+  });
+  expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
+  await expect.poll(() => app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.restarting);
+});
+
+it("Cancel at the password step sends nothing and offers Start again again", async () => {
+  const { app, requests } = await damagedRecord();
+  await password(app);
+  await userEvent.click(
+    q<WtButton>(app, "cancel-damaged-record").shadowRoot!.querySelector("button")!,
+  );
+  await app.updateComplete;
+  expect(q(app, "damaged-record-password")).toBeNull();
+  expect(q<WtInput>(app, "resume-password").value).toBe("");
+  expect(q<WtButton>(app, "resume")).not.toBeNull();
+  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
+  expect(q(app, "confirm-start-again")).toBeNull();
+  expect(requests.some((r) => /\/(recover|resume)$/.test(r.path))).toBe(false);
+  expect(startAgainRequests(requests)).toHaveLength(1);
+});
+
+it("Cancel at the warning sends nothing", async () => {
+  const { app, requests } = await damagedRecord();
+  await unlockDamagedRecord(app);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await userEvent.click(
+    q<WtButton>(app, "cancel-start-again").shadowRoot!.querySelector("button")!,
+  );
+  await app.updateComplete;
+  expect(q(app, "recovery-record-damaged")).toBeNull();
+  expect(q(app, "confirm-start-again")).toBeNull();
+  expect(q(app, "damaged-record-password")).toBeNull();
+  expect(startAgainRequests(requests)).toHaveLength(1);
+});
+
+it("the password step calls recover, never resume, for a consumption-intent attempt", async () => {
+  const { app, requests } = await damagedRecord({ status: "consumption-intent" });
+  await unlockDamagedRecord(app);
+  expect(requests.filter((r) => r.path.endsWith("/resolution/recover"))).toHaveLength(1);
+  expect(requests.filter((r) => r.path.endsWith("/first-setup/resume"))).toHaveLength(0);
+});
+
+it("a password-free Start again on a readable record is unchanged", async () => {
+  const { app, requests } = await mount();
+  await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await userEvent.click(
+    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+  );
+  await expect.poll(() => app.shadowRoot!.textContent).toContain(initialOwnerStrings.en.restarting);
+  expect(q(app, "damaged-record-password")).toBeNull();
+  expect(startAgainRequests(requests)).toHaveLength(1);
+  expect(requests.some((r) => /\/(recover|resume)$/.test(r.path))).toBe(false);
+});

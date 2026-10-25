@@ -25,6 +25,8 @@ export const initialOwnerStrings = {
     finishHelp: "Re-enter the certificate and email settings used for this setup.",
     startAgain: "Start again",
     recoveryRecordDamaged: "This setup's recovery-key record is damaged and cannot be read.",
+    damagedRecordPassword:
+      "To start again, enter the administrator password you chose during setup.",
     startAgainHelp: "Deletes this attempt. This box will not use its invoice series names again.",
     retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
@@ -72,6 +74,8 @@ export const initialOwnerStrings = {
     startAgain: "Empezar de nuevo",
     recoveryRecordDamaged:
       "El registro de la clave de recuperación de esta configuración está dañado y no se puede leer.",
+    damagedRecordPassword:
+      "Para empezar de nuevo, introduce la contraseña de administrador que elegiste al configurar.",
     startAgainHelp:
       "Borra este intento. Este equipo no volverá a usar sus nombres de serie de facturas.",
     retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",

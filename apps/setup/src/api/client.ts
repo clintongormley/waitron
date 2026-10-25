@@ -620,11 +620,16 @@ export class SetupApi {
     snapshot: FirstSetupResolutionSnapshot,
     owner?: FirstSetupOwner,
     confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary },
+    recoveryRecordDamagedShown?: true,
   ): Promise<{ restarting: true }> {
     return this.#request(
       "/setup-api/first-setup/resolution/start-again",
       "POST",
-      confirmMissingDatabase === undefined ? snapshot : { ...snapshot, confirmMissingDatabase },
+      {
+        ...snapshot,
+        ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+        ...(recoveryRecordDamagedShown === undefined ? {} : { recoveryRecordDamagedShown }),
+      },
       owner === undefined ? undefined : firstSetupHeaders(owner),
     );
   }

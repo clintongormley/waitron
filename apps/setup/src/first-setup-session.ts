@@ -613,6 +613,38 @@ export class FirstSetupSession {
       }
     });
   }
+  retireDamagedRecord() {
+    return this.#run(async (current) => {
+      if (this.recoveryRequired) failure("setup.owner_required");
+      const owner = this.#owner(false);
+      try {
+        const inspection = await this.#api.inspectFirstSetupResolution();
+        current();
+        if (
+          inspection.pair !== "valid" ||
+          inspection.database === "missing" ||
+          inspection.emptyDatabase !== true ||
+          inspection.password !== "checkable" ||
+          !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
+          inspection.revision !== owner.revision ||
+          inspection.ownerGeneration !== owner.ownerGeneration
+        )
+          failure("setup.attempt_conflict");
+        const snapshot = {
+          inspectionId: inspection.inspectionId,
+          revision: owner.revision,
+          ownerGeneration: owner.ownerGeneration,
+        };
+        const result = await this.#api.startAgainFirstSetup(snapshot, owner, undefined, true);
+        current();
+        if (result.restarting !== true) failure("setup.attempt_conflict");
+        return result;
+      } finally {
+        this.#proofRequired = true;
+        this.#needsRefresh = true;
+      }
+    });
+  }
   runEmailTest(email: EmailSettingsDraft) {
     return this.#run(async (current) => {
       const result = await this.#api.runFirstSetupEmailTest(this.#owner(), email);
