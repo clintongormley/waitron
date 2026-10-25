@@ -2144,3 +2144,25 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     });
   });
 });
+
+describe("backup preparation space choices", () => {
+  it.each(["en", "es"])(
+    "allows leaving without cleanup and an explicit cleanup in %s",
+    async (locale) => {
+      setLocale(locale);
+      const api = stubApi();
+      const first = await mount(api);
+      expect(freeButton(first.el)!.hasAttribute("disabled")).toBe(false);
+      expect(text(freeButton(first.el))).toBe(fill("box_status.free", { size: size(45_000_000) }));
+      cleanupWidgets();
+      expect(api.freeBoxSpace).not.toHaveBeenCalled();
+      const second = await mount(api);
+      await userEvent.click(freeButton(second.el)!);
+      await flush(second.el);
+      expect(api.freeBoxSpace).toHaveBeenCalledTimes(1);
+      expect(text(q(second.el, "[role=status]"))).toBe(
+        fill("box_status.freed", { size: size(45_000_000) }),
+      );
+    },
+  );
+});

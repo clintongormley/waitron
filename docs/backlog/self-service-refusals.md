@@ -763,7 +763,20 @@ Offer any required sign-in there and build a missing restart/ownership workflow 
 
 ### backup-preparation
 
-**Backup preparation refusals need disk and missing-file remedies.** Replace both named backup_stop support substitutions and its generic fallback. Establish safe cleanup/recovery for each cause; no blanket deletion or replacement private keys.
+**2026-10-25 staging-space wording:** `backup.staging_space_low` now points to the existing
+**Box status** page and its **Free** action, when available. It explains the deletion categories
+and leaving without cleanup. Free's filesystem cases exercise leftovers, log/crash-report age
+rules, active-backup exclusion and retained data; the dashboard cases exercise an explicit press
+and leaving without one. They do not establish that cleanup frees enough for every backup.
+
+**Still open: space beyond the supported cleanup.** The message states that Waitron cannot remove
+other files. Box status's existing footer still refers to an installer, and safe in-app guidance
+when no reclaimable files remain needs a separate fix. Do not delete database files, keys or
+saved backups to silence the alert. The historical source inventory above remains unchanged.
+
+**Missing files and unknown preparation failures still need remedies.** Preserve the safe error
+category and establish the component's recovery route before replacing `recovery.state_incomplete`
+and the `backup_stop` fallback. Do not manufacture replacement private keys.
 
 ### backup-key
 

@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setLocale } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { registerIcons } from "@waitron/ui";
@@ -423,4 +423,40 @@ describe("dashboard-alerts-bell", () => {
     expect(qa(el, "[data-test=alert-item]")).toHaveLength(1);
     expect(q(el, "[data-test=alert-go-to]")).toBeNull();
   });
+});
+
+describe("backup preparation space guidance", () => {
+  it.each(["en", "es"])(
+    "names the existing cleanup choice in %s and opens Backups",
+    async (locale) => {
+      setLocale(locale);
+      const stopped: AlertView = {
+        ...ongoing,
+        key: "backup.run_stopped",
+        code: "backup.run_stopped",
+        severity: "error",
+        params: { errorCode: "backup.staging_space_low" },
+      };
+      const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+        alerts: [stopped],
+        canOpen: (screen) => screen === "backup",
+      });
+      const message = q(el, "li")!.textContent!;
+      expect(message).toContain(t("box_status.title"));
+      expect(message).toContain(fill("box_status.free", { size: "" }).trim());
+      if (locale === "en") {
+        expect(message).toContain("leftover working files, old logs and crash reports");
+        expect(message).toContain("cannot remove other files");
+        expect(message).toContain("Leave without pressing Free");
+        expect(message).not.toContain("Contact support");
+      }
+      const navigate = vi.fn();
+      el.addEventListener("wt-alert-go-to", navigate);
+      el.open();
+      await userEvent.click(q(el, "[data-test=alert-go-to]")!);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate.mock.calls[0]![0].detail).toEqual({ screen: "backup" });
+      expect(q(el, "[data-test=alert-handle]")).toBeNull();
+    },
+  );
 });

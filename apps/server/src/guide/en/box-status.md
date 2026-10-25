@@ -100,6 +100,11 @@ At the bottom, the page always says how to free more: keep fewer backups on the 
 **Backups** page, or ask whoever installed the box to remove old versions of Waitron or fit a
 bigger disk. The sizes under **Disk space** show what is filling the disk.
 
+When the bell says a backup could not be prepared because there is not enough space, open
+**Box status** and check **Disk space**. Use **Free** if it is available, or leave without
+pressing it to skip cleanup. Freeing space does not start a backup. If the cleanup is not enough,
+Waitron cannot remove other files for you; keep your database, recovery keys and saved backups.
+
 ## When the box is out of space {#out-of-space}
 
 When the disk is full, nothing can be saved: tills cannot save orders, payments or other changes,

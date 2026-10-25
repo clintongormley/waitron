@@ -4516,7 +4516,10 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 - **A1089: a repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
   [Audit](backlog/self-service-refusals.md#restore-start).
 
-- **A1089: backup preparation refusals need disk and missing-file remedies.** Replace both named backup_stop support substitutions and its generic fallback. Establish safe cleanup/recovery for each cause; no blanket deletion or replacement private keys.
+- **A1089: backup preparation still needs missing-file and unknown-cause recovery.** Establish a supported remedy for `recovery.state_incomplete` and the `backup_stop` fallback; retain the safe cause and never manufacture replacement keys.
+  [Audit](backlog/self-service-refusals.md#backup-preparation).
+
+- **A1089: disk-space guidance must cover exhausted cleanup without installer referrals.** The staging-space alert now names Box status's existing Free action and its limit. Rework the page's installer footer and provide a supported choice when no reclaimable files remain, preserving database files, keys and saved backups.
   [Audit](backlog/self-service-refusals.md#backup-preparation).
 
 - **A1089: a failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, offer a correction and any required sign-in there, and recheck that sealing succeeds. Do not promise current recovery keys before success.
