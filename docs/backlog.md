@@ -5852,8 +5852,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   moves into `country-es`, plus region demos ("catalán demo in Catalunya"). After A918. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.**
-  Other private identifiers and file names remain, including table locals in the till's
-  draft and party suites. Fixture text belongs to A976. The owner-held
+  Private identifiers remain in the till's draft, party and widget suites and the server's
+  catalogue and ordering tests. File names still need auditing. Fixture text belongs to A976. The owner-held
   core-comment PR remains separate. See the
   [detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 

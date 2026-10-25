@@ -103,46 +103,49 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };
-    const { cocinaId, printerId, orderId, lineId } = await withTransaction(suite.db, async (tx) => {
-      const cat = await createCatalogue(tx, { name: "Carta" });
-      await assignCatalogueToLocation(tx, locationId, cat.id);
-      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
-        name: "Cocina printer",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-      });
-      await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
-        stationId: cocina.id,
-        printerId,
-      });
-      const { id: product } = await createProduct(tx, {
-        catalogueId: cat.id,
-        categoryId: null,
-        name: "Chuleton",
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-      });
-      const orderId = randomUUID();
-      const offers = await offerProducts(tx, cfg);
-      await createOpenOrder(
-        tx,
-        cfg,
-        orderId,
-        offers.toOfferLines([{ productId: product, quantity: "1" }]),
-        null,
-        { zoneId: offers.zoneId },
-      );
-      const [line] = await tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, orderId));
-      return { cocinaId: cocina.id, printerId, orderId, lineId: line!.id };
-    });
+    const { kitchenId, printerId, orderId, lineId } = await withTransaction(
+      suite.db,
+      async (tx) => {
+        const cat = await createCatalogue(tx, { name: "Carta" });
+        await assignCatalogueToLocation(tx, locationId, cat.id);
+        const kitchen = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+        const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
+          name: "Cocina printer",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        });
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: kitchen.id,
+          printerId,
+        });
+        const { id: product } = await createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: null,
+          name: "Chuleton",
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "general",
+        });
+        const orderId = randomUUID();
+        const offers = await offerProducts(tx, cfg);
+        await createOpenOrder(
+          tx,
+          cfg,
+          orderId,
+          offers.toOfferLines([{ productId: product, quantity: "1" }]),
+          null,
+          { zoneId: offers.zoneId },
+        );
+        const [line] = await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId));
+        return { kitchenId: kitchen.id, printerId, orderId, lineId: line!.id };
+      },
+    );
 
-    const firedItems = [{ workingOrderLineId: lineId, stationId: cocinaId }];
+    const firedItems = [{ workingOrderLineId: lineId, stationId: kitchenId }];
 
     // ---- The race ----
     // The fire parks uncommitted after enqueueing; the deactivate of the same printer, started
