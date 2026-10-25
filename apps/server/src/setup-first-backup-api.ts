@@ -274,22 +274,24 @@ export function mountFirstSetupBackupApi(
     return c.json({ renewed: true });
   });
   route("cloud/renew", async (c) => {
-    exact(await json(c), []);
-    service.cloudRenew();
+    const body = exact(await json(c), ["holder"]);
+    service.cloudRenew(text(body.holder, "holder", 256));
     return c.json({ renewed: true });
   });
   route("cloud/release", async (c) => {
-    exact(await json(c), []);
-    service.cloudRelease();
+    const body = exact(await json(c), ["holder"]);
+    service.cloudRelease(text(body.holder, "holder", 256));
     return c.json({ released: true });
   });
   for (const [path, action] of [
-    ["start", () => service.cloudStart()],
-    ["status", () => service.cloudStatus()],
-    ["start-again", () => service.cloudStartAgain()],
+    ["start", (holder?: string) => service.cloudStart(holder)],
+    ["status", (holder?: string) => service.cloudStatus(holder)],
+    ["start-again", (holder?: string) => service.cloudStartAgain(holder)],
   ] as const)
     route(`cloud/${path}`, async (c) => {
-      exact(await json(c), []);
-      return c.json(await action());
+      const body = exact(await json(c), [], ["holder"]);
+      return c.json(
+        await action(body.holder === undefined ? undefined : text(body.holder, "holder", 256)),
+      );
     });
 }

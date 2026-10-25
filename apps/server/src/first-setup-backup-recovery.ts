@@ -189,34 +189,45 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     entry.lastActiveMono = performance.now();
     entry.lastActiveAt = new Date().toISOString();
   };
-  // A Cloud wait holds no session; its lease is final once lapsed, sealed or ended, and no call
-  // renews it after that (owner decision 1, A1042).
-  let cloudWait:
-    | {
-        startedAt: string;
-        lastActiveAt: string;
-        lastActiveMono: number;
-        sealed?: { at: string };
-        ended?: true;
-      }
-    | undefined;
-  const cloudLeased = () =>
-    !disposed &&
-    cloudWait !== undefined &&
-    cloudWait.sealed === undefined &&
-    cloudWait.ended === undefined &&
-    performance.now() - cloudWait.lastActiveMono <= LEASE_MS;
-  const holdCloud = (journal: boolean) => {
-    if (cloudWait === undefined) {
-      if (!journal) cloudWait = lease();
-    } else if (cloudLeased()) {
-      cloudWait.lastActiveMono = performance.now();
-      cloudWait.lastActiveAt = new Date().toISOString();
+  // A Cloud wait holds no session, so each tab holds it under a holder id it makes itself. Only a
+  // seal makes a recovery id's wait final (owner decision 1, A1042).
+  type CloudWait = {
+    startedAt: string;
+    lastActiveAt: string;
+    holders: Map<string, number>;
+    sealed?: { at: string };
+  };
+  const cloudWaits = new Map<string, CloudWait>();
+  const cloudWait = () =>
+    pendingCloudId === undefined ? undefined : cloudWaits.get(pendingCloudId);
+  const held = (renewedMono: number) => performance.now() - renewedMono <= LEASE_MS;
+  const cloudLeased = () => {
+    const wait = cloudWait();
+    return (
+      !disposed && wait?.sealed === undefined && [...(wait?.holders.values() ?? [])].some(held)
+    );
+  };
+  // A wait is made only while no journal exists, so a journal written before a restart gets none.
+  const holdCloud = (id: string, journal: boolean, holder: string | undefined) => {
+    let wait = cloudWaits.get(id);
+    if (wait === undefined) {
+      if (journal) return;
+      const { startedAt, lastActiveAt } = lease();
+      wait = { startedAt, lastActiveAt, holders: new Map() };
+      cloudWaits.set(id, wait);
     }
+    if (wait.sealed !== undefined || holder === undefined) return;
+    wait.holders.set(holder, performance.now());
+    wait.lastActiveAt = new Date().toISOString();
+  };
+  const handOver = () => {
+    for (const wait of cloudWaits.values()) wait.holders.clear();
   };
   const fail = (entry: Entry) => {
     entry.failed ??= { at: new Date().toISOString() };
-    if (cloudWait !== undefined) cloudWait.ended = true;
+    // A failure is final at once, so no later Check may revive the failed recovery's wait.
+    const wait = cloudWaits.get(entry.session.recoveryId);
+    if (wait !== undefined) wait.sealed ??= entry.failed;
   };
   const live = (entry: Entry | undefined): entry is Entry =>
     entry !== undefined &&
@@ -628,7 +639,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         }
       });
     },
-    cloudStart() {
+    cloudStart(holder?: string) {
       return turn(async () => {
         if (disposed) ownerRequired();
         if (active !== undefined) conflict();
@@ -657,24 +668,26 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           });
         }
         generation++;
-        const cloud = await cloudFor(pendingCloudId);
-        holdCloud(record !== undefined);
-        return cloud.client.start();
+        const id = pendingCloudId;
+        const answer = await (await cloudFor(id)).client.start();
+        holdCloud(id, record !== undefined, holder);
+        return answer;
       });
     },
-    cloudStatus() {
+    cloudStatus(holder?: string) {
       return turn(async () => {
         if (disposed) ownerRequired();
         if (active !== undefined) conflict();
         const record = (await liveRecords()).at(-1);
         pendingCloudId ??= record?.target.recoveryId;
         if (pendingCloudId === undefined) conflict();
-        const cloud = await cloudFor(pendingCloudId);
-        holdCloud(record !== undefined);
-        return cloud.client.status();
+        const id = pendingCloudId;
+        const answer = await (await cloudFor(id)).client.status();
+        holdCloud(id, record !== undefined, holder);
+        return answer;
       });
     },
-    cloudStartAgain() {
+    cloudStartAgain(holder?: string) {
       return turn(async () => {
         if (disposed) ownerRequired();
         if (active !== undefined) conflict();
@@ -690,9 +703,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         )
           conflict();
         generation++;
-        const cloud = await cloudFor(pendingCloudId);
-        holdCloud(record !== undefined);
-        return cloud.client.startAgain();
+        const id = pendingCloudId;
+        const answer = await (await cloudFor(id)).client.startAgain();
+        holdCloud(id, record !== undefined, holder);
+        return answer;
       });
     },
     async open(
@@ -888,6 +902,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               }
               refresh(entry);
               touch(entry);
+              handOver();
               owned = false;
               return structuredClone(session);
             } catch (error) {
@@ -1082,6 +1097,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             await recheck(entry);
             refresh(entry);
             touch(entry);
+            handOver();
             owned = false;
             return structuredClone(session);
           });
@@ -1378,22 +1394,34 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         ownerRequired();
       refresh(entry);
     },
-    cloudRenew(): void {
-      if (pendingCloudId === undefined || !cloudLeased()) ownerRequired();
-      holdCloud(false);
+    cloudRenew(holder: string): void {
+      const wait = cloudWait();
+      const renewed = wait?.holders.get(holder);
+      if (disposed || wait?.sealed !== undefined || renewed === undefined || !held(renewed))
+        ownerRequired();
+      holdCloud(pendingCloudId!, true, holder);
     },
-    cloudRelease(): void {
-      if (cloudWait !== undefined) cloudWait.ended = true;
+    cloudRelease(holder: string): void {
+      for (const wait of cloudWaits.values()) wait.holders.delete(holder);
     },
     sealLapsed(): void {
       if (openings.size > 0) return;
-      if (cloudWait !== undefined && !cloudLeased())
-        cloudWait.sealed ??= { at: new Date().toISOString() };
       const entry = active;
-      if (entry === undefined || inFlight(entry) || leased(entry)) return;
-      // drop() deletes the selected copy, which an open or a step in flight would still be reading.
-      entry.sealed = { at: new Date().toISOString() };
-      void drop().catch(() => {});
+      if (entry !== undefined) {
+        if (inFlight(entry) || leased(entry)) return;
+        // drop() deletes the selected copy, which an open or a step in flight would still be reading.
+        entry.sealed = { at: new Date().toISOString() };
+        void drop().catch(() => {});
+      }
+      if (pendingCloudId === undefined || runningInMemory()) return;
+      const at = new Date().toISOString();
+      const wait: CloudWait = cloudWaits.get(pendingCloudId) ?? {
+        startedAt: at,
+        lastActiveAt: at,
+        holders: new Map(),
+      };
+      wait.sealed ??= { at };
+      cloudWaits.set(pendingCloudId, wait);
     },
     runningInMemory,
     async liveness(): Promise<BackupRepairActivity | null> {
@@ -1402,8 +1430,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         const opened = [...openings.values()][0];
         return {
           state: "running",
-          startedAt: entry?.startedAt ?? opened ?? cloudWait!.startedAt,
-          lastActiveAt: entry?.lastActiveAt ?? opened ?? cloudWait!.lastActiveAt,
+          startedAt: entry?.startedAt ?? opened ?? cloudWait()!.startedAt,
+          lastActiveAt: entry?.lastActiveAt ?? opened ?? cloudWait()!.lastActiveAt,
         };
       }
       let records: BackupRepairRecord[];

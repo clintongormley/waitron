@@ -861,6 +861,14 @@ it.each<[string, unknown]>([
   ["renew", {}],
   ["cloud/renew", { extra: true }],
   ["cloud/release", { extra: true }],
+  ["cloud/renew", {}],
+  ["cloud/release", {}],
+  ["cloud/renew", { holder: "A", extra: true }],
+  ["cloud/release", { holder: 1 }],
+  ["cloud/renew", { holder: " " }],
+  ["cloud/start", { holder: "A", extra: true }],
+  ["cloud/status", { holder: "" }],
+  ["cloud/start-again", { holder: 1 }],
 ])("%s refuses the body %j", async (path, body) => {
   const f = await fixture();
   const response = await f.post(path, body);
@@ -894,11 +902,62 @@ it("reads activity with no sign-in, renews a live session, and refuses an unknow
 });
 it("refuses a Cloud renewal with no wait, and answers a release", async () => {
   const f = await fixture();
-  expect((await f.post("cloud/start", {})).status).toBe(503);
-  const renewed = await f.post("cloud/renew", {});
+  expect((await f.post("cloud/start", { holder: "A" })).status).toBe(503);
+  const renewed = await f.post("cloud/renew", { holder: "A" });
   expect(renewed.status).toBe(403);
   expect(await renewed.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
-  const released = await f.post("cloud/release", {});
+  const released = await f.post("cloud/release", { holder: "A" });
   expect(released.status).toBe(200);
   expect(await released.json()).toEqual({ released: true });
+});
+it("holds a Cloud wait per holder through the routes, and renews it while any holder does", async () => {
+  const f = await fixture();
+  const expiresAt = new Date(clock.wall() + 900_000).toISOString();
+  let expired = false;
+  const service = createFirstSetupBackupRecovery({
+    ...f.options,
+    cloud: {
+      origin: "https://cloud.example.test",
+      environment: "preproduction",
+      fetch: async (url, init) => {
+        if (new URL(String(url)).pathname.endsWith("/status") && expired)
+          return new Response(null, { status: 410 });
+        const body = JSON.parse(String(init?.body)) as { payload: string };
+        const requestId = (
+          JSON.parse(Buffer.from(body.payload, "base64url").toString()) as string[]
+        )[2];
+        return Response.json({ requestId, state: "awaiting_owner", expiresAt, operationId: null });
+      },
+      download: async () => f.restore.artifact,
+    },
+  });
+  services.push(service);
+  const app = new Hono();
+  mountFirstSetupBackupApi(app, service, f.log);
+  const post = (path: string, body: unknown) =>
+    app.request(
+      `${prefix}/${path}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      tls(),
+    );
+  const activity = async () =>
+    ((await (await app.request(`${prefix}/activity`)).json()) as { activity: unknown }).activity;
+  expect((await post("cloud/start", { holder: "A" })).status).toBe(200);
+  expect(await activity()).toMatchObject({ state: "running" });
+  const renewed = await post("cloud/renew", { holder: "A" });
+  expect(renewed.status).toBe(200);
+  expect(await renewed.json()).toEqual({ renewed: true });
+  expect((await post("cloud/status", { holder: "B" })).status).toBe(200);
+  expired = true;
+  expect((await post("cloud/start-again", { holder: "B" })).status).toBe(200);
+  expect(await (await post("cloud/release", { holder: "A" })).json()).toEqual({ released: true });
+  expect(await activity()).toMatchObject({ state: "running" });
+  expect((await post("cloud/renew", { holder: "A" })).status).toBe(403);
+  expect((await post("cloud/renew", { holder: "B" })).status).toBe(200);
+  expect((await post("cloud/release", { holder: "B" })).status).toBe(200);
+  expect(await activity()).toBeNull();
 });
