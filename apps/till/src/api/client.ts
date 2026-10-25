@@ -1552,6 +1552,8 @@ export interface StationQueueItem {
   course: StationQueueCourse | null;
   /** Absent on a bill with no party, and on a line moved in from another bill. */
   group?: QueueGroup;
+  /** The period this dish was confirmed sent after; absent when it was not. */
+  afterPeriod?: string;
   /** `null` while the item's course is HELD — not advanceable (`ticket.item_held`); a timestamp once
    *  fired. */
   firedAt: string | null;

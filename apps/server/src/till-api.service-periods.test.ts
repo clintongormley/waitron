@@ -2110,6 +2110,33 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     ]);
   });
 
+  it("lists a dish confirmed late in its station's queue with afterPeriod, and an unmarked one without it", async () => {
+    at(mondayAt("13:00"));
+    const c = await cocktailVenue();
+    const onTime = await sendAsTill(c.v, "POST", `/api/parties/${c.partyId}/groups`, {
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, c.tabId)),
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(c.partyId),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups: [{ lines: [{ menuItemId: c.offer, quantity: "1" }], release: "fire" }],
+    });
+    expect(onTime.status).toBe(200);
+    at(mondayAt("14:05"));
+    await lateGroup(c, "fire");
+    const queueItems = async (stationId: string) => {
+      const read = await sendAsTill(c.v, "GET", `/api/stations/${stationId}/queue`);
+      expect(read.status).toBe(200);
+      return (read.body as { items: { items: Record<string, unknown>[] }[] }).items.flatMap(
+        (group) => group.items,
+      );
+    };
+    const late = await queueItems(c.upstairs.stationId);
+    expect(late).toEqual([expect.objectContaining({ name: "Mojito", afterPeriod: "Lunch" })]);
+    const unmarked = await queueItems(c.downstairs.stationId);
+    expect(unmarked).toEqual([expect.objectContaining({ name: "Mojito" })]);
+    expect(unmarked[0]).not.toHaveProperty("afterPeriod");
+  });
+
   it("prints the mark on the FIRE paper of a dish confirmed late and sent on hold", async () => {
     at(mondayAt("13:00"));
     const c = await cocktailVenue();

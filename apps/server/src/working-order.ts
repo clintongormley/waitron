@@ -7358,6 +7358,8 @@ export interface StationQueueItem {
   asServedDiet?: DietProfile;
   course: StationQueueCourse | null;
   group?: QueueGroup;
+  /** The period this dish was confirmed sent after; absent when it was not. */
+  afterPeriod?: string;
   /** `null` while the item is HELD. */
   firedAt: string | null;
   /** Snapshotted at fire, so a later draft edit never changes what the kitchen already sees. */
@@ -7686,6 +7688,10 @@ export async function listStationQueues(
     tx,
     rows.map((row) => row.workingOrderLineId),
   );
+  const lateMarks = await VENUE_SERVICE.readLateSendMarks(
+    tx,
+    rows.map((row) => row.workingOrderLineId),
+  );
 
   const orderIds = [...new Set(rows.map((row) => row.orderId))];
   const kitchenNotes = await readOrderKitchenNotes(tx, orderIds);
@@ -7773,6 +7779,7 @@ export async function listStationQueues(
       allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       workingOrderLineId: row.workingOrderLineId,
       ...optional("lastMove", lastMove),
+      ...optional("afterPeriod", lateMarks.get(row.workingOrderLineId)),
       state: row.state,
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
