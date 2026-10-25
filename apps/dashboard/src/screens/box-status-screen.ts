@@ -16,7 +16,7 @@ import type {
   FiscalRetryView,
   MisdatedOpenView,
 } from "../api/client.js";
-import { formatIsoMinute } from "../date-utils.js";
+import { formatIsoMinute, wallClock } from "../date-utils.js";
 import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -697,7 +697,7 @@ export class BoxStatusScreen extends LitElement {
       {
         key: "at",
         label: t("box_status.misdated.col_at"),
-        cell: (record) => wholeTimes(formatIsoMinute(record.at)),
+        cell: (record) => wholeTimes(wallMinute(record.at, record.offsetMinutes)),
       },
     ];
   }
@@ -732,8 +732,8 @@ export class BoxStatusScreen extends LitElement {
               aria-label=${
                 severalTables && open.to !== undefined
                   ? fill("box_status.misdated.table_range", {
-                      from: formatIsoMinute(open.from),
-                      to: formatIsoMinute(open.to),
+                      from: wallMinute(open.from, open.fromOffsetMinutes),
+                      to: wallMinute(open.to, open.toOffsetMinutes!),
                     })
                   : t("box_status.misdated.title")
               }
@@ -848,6 +848,12 @@ export class BoxStatusScreen extends LitElement {
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderClockCheckDialog()}
     `;
   }
+}
+
+/** A sale's minute on the wall clock at the offset stored beside it, not the browser's zone. */
+function wallMinute(instant: string, offsetMinutes: number): string {
+  const { date, time } = wallClock(instant, offsetMinutes);
+  return `${date} ${time}`;
 }
 
 /** A time to the second, written so `wholeTimes` keeps its date and minute on one line. */

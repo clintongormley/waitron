@@ -38,6 +38,7 @@ it.each([
 it.each([
   ["2027-01-04T07:00:00Z", 120, { date: "2027-01-04", time: "09:00" }],
   ["2027-01-04T23:30:00Z", 120, { date: "2027-01-05", time: "01:30" }],
+  ["2026-10-22T23:30:00.000Z", 120, { date: "2026-10-23", time: "01:30" }],
   ["2027-01-04T02:00:00Z", -300, { date: "2027-01-03", time: "21:00" }],
 ])("reads the wall clock of %s at offset %i, not the local one", (instant, offset, expected) => {
   expect(wallClock(instant, offset)).toEqual(expected);

@@ -11,7 +11,7 @@ import type {
   FreedSpaceView,
   MisdatedOpenView,
 } from "../api/client.js";
-import { formatIsoMinute } from "../date-utils.js";
+import { formatIsoMinute, wallClock } from "../date-utils.js";
 import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -1149,8 +1149,8 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       t("box_status.misdated.col_at"),
     ]);
     expect(cells(el)).toEqual([
-      ["T1/7", formatIsoMinute(OPEN.from)],
-      ["T1/8", formatIsoMinute(OPEN.to!)],
+      ["T1/7", "2026-10-22 21:00"],
+      ["T1/8", "2026-10-22 21:05"],
     ]);
     expect(q(el, "[data-test=misdated-sentence]")).toBeNull();
     expect(qa(el, "ul.rows > li")).toHaveLength(7);
@@ -1223,9 +1223,13 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(labels(one.el)).toEqual(["Sales dated wrongly"]);
     cleanupWidgets();
     const two = await mount(withOpen([OPEN, SECOND], lists));
+    const minute = (instant: string, offsetMinutes: number) => {
+      const { date, time } = wallClock(instant, offsetMinutes);
+      return `${date} ${time}`;
+    };
     const range = (open: MisdatedOpenView) => [
-      formatIsoMinute(open.from),
-      formatIsoMinute(open.to!),
+      minute(open.from, open.fromOffsetMinutes),
+      minute(open.to!, open.toOffsetMinutes!),
     ];
     expect(labels(two.el)).toEqual(
       [OPEN, SECOND].map((open) => {
@@ -1261,7 +1265,28 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       ],
     };
     const { el } = await mount(withOpen([{ ...OPEN, count: 1 }], lists));
-    expect(cells(el)).toEqual([["ODD", formatIsoMinute(OPEN.from)]]);
+    expect(cells(el)).toEqual([["ODD", "2026-10-22 21:00"]]);
+  });
+
+  it("writes a sale's time at its own recorded offset, across midnight, not the browser's zone", async () => {
+    const lists: ClockMisdatedView = {
+      lists: [
+        {
+          confirmationId: "c1",
+          records: [
+            {
+              recordId: "r10",
+              series: "T1",
+              number: 10,
+              at: "2026-10-22T23:30:00.000Z",
+              offsetMinutes: 120,
+            },
+          ],
+        },
+      ],
+    };
+    const { el } = await mount(withOpen([{ ...OPEN, count: 1 }], lists));
+    expect(cells(el)).toEqual([["T1/10", "2026-10-23 01:30"]]);
   });
 
   it("draws nothing once the alert is handled", async () => {
