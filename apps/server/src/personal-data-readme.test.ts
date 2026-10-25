@@ -198,6 +198,25 @@ ${ASK}
 `);
   });
 
+  it("treats a file named after an inherited object key as a file with no words", () => {
+    expect(personalDataReadme({ ...base, files: ["constructor"] })).toBe(`${HEAD}
+
+What each file holds
+- constructor
+
+${ORIGIN}
+
+Who else receives it
+${BACKUP}
+
+How long it is kept
+${DECIDES}
+
+${RIGHTS}
+${ASK}
+`);
+  });
+
   it("names the venue generically and ends at the ask line with no name and no notice", () => {
     const { privacyNoticeUrl: _omitted, ...rest } = base;
     const text = personalDataReadme({ ...rest, venue: null, files: [] });
@@ -219,12 +238,20 @@ Contact the venue to ask.
 
   it("puts the venue and person in literally, replacement patterns included", () => {
     const text = personalDataReadme({ ...base, venue: "$& Bar", person: "$1 Ana", files: [] });
-    expect(text.startsWith("Your data held by $& Bar\nPrepared for $1 Ana on 2026-10-05.\n")).toBe(
-      true,
-    );
-    expect(text).toContain(
-      "\nContact $& Bar to ask. Its privacy notice: https://barejemplo.example/privacy\n",
-    );
+    expect(text).toBe(`Your data held by $& Bar
+Prepared for $1 Ana on 2026-10-05.
+
+${ORIGIN}
+
+Who else receives it
+${BACKUP}
+
+How long it is kept
+${DECIDES}
+
+${RIGHTS}
+Contact $& Bar to ask. Its privacy notice: https://barejemplo.example/privacy
+`);
   });
 
   // Weaker than its name: it sees module parts only, not a file the server adds itself.

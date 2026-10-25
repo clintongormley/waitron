@@ -229,6 +229,7 @@ describe("profile-screen copy of your data", () => {
       button(el).click();
       await settle(el);
       expect(button(el).textContent!.trim()).toBe(t("profile.data_copy_busy"));
+      expect(button(el).getAttribute("aria-label")).toBe(t("profile.data_copy_busy"));
       spyOnSaving();
       request.resolve(FILE);
       await settle(el);

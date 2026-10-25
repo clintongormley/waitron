@@ -21,7 +21,10 @@ function fill(template: string, values: Readonly<Record<string, string>>): strin
 export function personalDataReadme(input: PersonalDataReadmeInput): string {
   const w = PERSONAL_DATA_README[input.language];
   const venue = input.venue ?? w.unnamedVenue;
-  const present = input.files.map((name) => ({ name, words: w.files[name] }));
+  const present = input.files.map((name) => ({
+    name,
+    words: Object.hasOwn(w.files, name) ? w.files[name] : undefined,
+  }));
   const lines: string[] = [
     fill(w.title, { venue }),
     fill(w.prepared, { name: input.person, date: input.date }),

@@ -83,7 +83,11 @@ by the answers):
     configuration export carries, design §2.4 r4).
   - **S2c** — the counts of voids, refunds and drawer openings (`actions.csv`) and an admin's
     download of another person's data. Its `authorize` returns a README language too, and it adds
-    README words for `actions.csv`.
+    README words for `actions.csv`. It also widens the guide section's and the Profile help text's
+    list of contents ("your profile and sign-in details", the `own-data` section of
+    `apps/server/src/guide/{en,es}/staff.md` and `profile.data_copy_help` in
+    `apps/dashboard/src/i18n/strings.ts`) for `actions.csv`, and adds guide text for an admin's
+    download of another person's data.
 
   A new section in the Users guide (`apps/server/src/guide/<language>/staff.md`) also goes into
   that page's section-id list in `apps/server/src/guide-content.test.ts`.
