@@ -33,7 +33,7 @@ referrals, not completed recovery experiments.
 
 | Area | Work still required under the clarified rule |
 | --- | --- |
-| [Sign-in](#sign-in), #2054 | Replace the administrator referral with usable sign-in/recovery choices. Exercise the choices after refusal without disclosing account status. An alternative password must not be promised to activate a suspended account. |
+| [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and the passkey screen explains password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
 | [Public connection](#tls-repair), #2055 | Replace the installer referral with a connection-repair choice the reader can complete. Include installer-supplied certificates and managed-device installation restrictions, which also refer to another person. Retain the separate linked-layout recovery gap and public-page privacy. |
 | [Certificate](#certificate), #2056 | Replace the administrator referral with certificate/check/connection choices, preserving the installed certificate. Add sign-in at the action if extra rights are needed. |
 | [Backup key](#backup-key), #2058 | Replace the administrator referral with a way to inspect and correct effective configuration. Explain what each key choice does and keep both key records until their use is established. |
@@ -708,10 +708,18 @@ changes take their required review and existing protected-writer approvals.
 
 2026-10-25: the shared passkey refusal now asks your administrator to check your account, in English and Spanish. The login browser cases exercise the refusal followed by password sign-in in both languages. This wording applies to profile passkey registration too; it makes no claim about account status. The original audit above records the earlier wording. See [account access](../../apps/server/src/guide/en/staff.md#account-access).
 
-**Reopened after the 14:02 owner correction:** replace that referral with usable sign-in/recovery
-choices. Exercise each offered route and keep authentication privacy. Record a missing
-account-access recovery workflow separately rather than promising password sign-in resolves every
-cause. Trace profile registration, which shares the message, before changing it.
+**2026-10-25 self-service rework:** the shared refusal says the passkey could not be verified and
+offers retry. After an explicit passkey sign-in refusal, the screen explains that **Use your password**
+opens password entry and the emailed-reset request. Browser cases in
+`apps/dashboard/src/screens/login-screen.test.ts` exercise retry, password sign-in and reset request
+after refusal in both languages; the existing profile suite exercises the shared registration
+message. The server reset-route case requests and completes a reset and checks the same
+acknowledgement for unknown email addresses. No account-status check was added to the public screen.
+
+**Still open: authenticated account-access recovery when no offered sign-in works.** Password reset
+does not reactivate a disabled account, and requesting an email does not repair unavailable email
+delivery. Offer any required administrator sign-in at the refusal and explain the access change
+before making it. This is a separate workflow; this rework does not claim to implement it.
 
 ### backup-settings
 

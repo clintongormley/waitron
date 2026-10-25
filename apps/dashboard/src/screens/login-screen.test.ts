@@ -4096,7 +4096,7 @@ it.each(["keep", "discard"] as const)(
 );
 
 it.each(["en-GB", "es-ES"])(
-  "offers administrator help after a passkey refusal and keeps password sign-in usable (%s)",
+  "keeps password sign-in usable after a passkey refusal (%s)",
   async (locale) => {
     const previousLocale = currentLocale();
     try {
@@ -4113,7 +4113,7 @@ it.each(["en-GB", "es-ES"])(
       await vi.waitFor(async () =>
         expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
       );
-      if (locale === "en-GB") expect(await bottomOf(el)).toContain("administrator");
+      if (locale === "en-GB") expect(await bottomOf(el)).not.toContain("administrator");
       expect(loggedIn).toHaveLength(0);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
       await el.updateComplete;
@@ -4122,6 +4122,89 @@ it.each(["en-GB", "es-ES"])(
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
       await vi.waitFor(() => expect(loggedIn).toHaveLength(1));
       expect(loggedIn[0]).toMatchObject({ personId: "p1", loginMethod: "password" });
+    } finally {
+      setLocale(previousLocale);
+    }
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "explains password and reset choices after a passkey refusal, then requests the reset (%s)",
+  async (locale) => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale(locale);
+      const api = stubApi({
+        passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.verification_failed" }),
+      });
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      await flush(el);
+      await openPasskey(el, "owner@example.test");
+      expect(el.shadowRoot!.querySelector("[data-test=passkey-recovery-choices]")).toBeNull();
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!,
+      );
+      await vi.waitFor(async () =>
+        expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
+      );
+      const choices = el.shadowRoot!.querySelector("[data-test=passkey-recovery-choices]");
+      expect(choices).not.toBeNull();
+      if (locale === "en-GB")
+        expect(choices!.textContent!.trim()).toBe(
+          "Use your password to sign in or request a password reset email.",
+        );
+      else expect(choices!.textContent!.trim()).toBe(t("login.passkey_recovery_choices"));
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-test=passkey-recovery-choices]")).toBeNull();
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=reset-sent]"))
+        .not.toBeNull();
+      expect(api.requestPasswordReset).toHaveBeenCalledExactlyOnceWith("owner@example.test");
+      expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")!.textContent).toContain(
+        "owner@example.test",
+      );
+      expect(await bottomOf(el)).toBe("");
+    } finally {
+      setLocale(previousLocale);
+    }
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "keeps the passkey retry available after a refusal (%s)",
+  async (locale) => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale(locale);
+      const api = stubApi({
+        passkeyAuthVerify: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "passkey.verification_failed" })
+          .mockResolvedValue({ personId: "p1" }),
+      });
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      const loggedIn: unknown[] = [];
+      el.addEventListener("logged-in", (event) => loggedIn.push((event as CustomEvent).detail));
+      await flush(el);
+      await openPasskey(el);
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!,
+      );
+      await vi.waitFor(async () =>
+        expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
+      );
+      if (locale === "en-GB")
+        expect(await bottomOf(el)).toBe("Could not verify the passkey. Try again.");
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!,
+      );
+      await expect.poll(() => loggedIn.length).toBe(1);
+      expect(loggedIn[0]).toMatchObject({ personId: "p1", loginMethod: "passkey" });
+      expect(api.passkeyAuthVerify).toHaveBeenCalledTimes(2);
     } finally {
       setLocale(previousLocale);
     }

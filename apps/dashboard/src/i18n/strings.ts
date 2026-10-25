@@ -1114,6 +1114,8 @@ export const en = {
   "login.or": "or",
   "login.google_hint": "Use a Google account you have already linked in your profile.",
   "login.passkey_hint": "Use a passkey saved on this device or another nearby device.",
+  "login.passkey_recovery_choices":
+    "Use your password to sign in or request a password reset email.",
   "login.passkey_unknown":
     "This passkey is no longer registered with Waitron. Use another way to log in.",
   "login.passkey_forgotten":
@@ -4482,6 +4484,8 @@ export const es: Record<StringKey, string> = {
   "login.or": "o",
   "login.google_hint": "Usa una cuenta de Google que ya hayas vinculado en tu perfil.",
   "login.passkey_hint": "Usa una passkey guardada en este dispositivo o en otro cercano.",
+  "login.passkey_recovery_choices":
+    "Usa tu contraseña para iniciar sesión o pedir un correo para restablecerla.",
   "login.passkey_unknown":
     "Esta passkey ya no está registrada en Waitron. Inicia sesión de otra forma.",
   "login.passkey_forgotten":
