@@ -5405,7 +5405,7 @@ bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets
 In the Tickets view it is a row of its own above each run of consecutive dishes with the same
 mark, within one course or group heading; in the Board view each marked dish's cell carries it
 above the dish. The pass and expo show no mark. The kitchen ticket prints the same words in
-capitals between `**` above each such run; a MOVED slip prints none.
+capitals between `**` above each such run; correction and MOVED slips print none.
 
 ### The notice strip (till)
 

@@ -120,9 +120,10 @@ with its period's name. On its kitchen ticket a line above it reads `** AFTER LU
 On the kitchen screen, **Tickets** shows **After Lunch — agreed** on a row above it, and
 **Board** shows the same words on its card. The till cannot send such a dish yet.
 
-Each department sets whether sending such a dish needs a manager's PIN, with **Manager's PIN to
-send after a period ends** under **Courses and the kitchen** on its **Service** tab in the
-dashboard. Off, anyone who can send confirms with the kitchen.
+Each department sets whether sending such a dish needs a manager, or a manager's PIN, with
+**Manager's PIN to send after a period ends** under **Courses and the kitchen** on its **Service**
+tab in the dashboard. Off, anyone who can send confirms with the kitchen. The setting takes effect
+once the till can send such a dish.
 
 ## Request cooking from the till {#request-cooking}
 

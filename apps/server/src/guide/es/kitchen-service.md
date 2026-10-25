@@ -138,9 +138,10 @@ línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En la pantalla de cocina,
 **Tras Almuerzo — aceptado** en una fila encima, y **Tablero** muestra las mismas palabras en su
 tarjeta. El terminal aún no puede enviar un plato así.
 
-Cada departamento fija si enviar un plato así necesita el PIN de un encargado, con **PIN de
-encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña **Servicio**
-del panel. Desactivado, quien puede enviar lo confirma con la cocina.
+Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
+con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña
+**Servicio** del panel. Desactivado, quien puede enviar lo confirma con la cocina. El ajuste se
+aplicará cuando el terminal pueda enviar un plato así.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 

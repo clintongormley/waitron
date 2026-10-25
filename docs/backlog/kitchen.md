@@ -289,8 +289,7 @@ Seen, 2026-10-25, on the demo printer in A789 slice 3's look: `2.000 x CROQ JAMO
 `apps/server/src/kitchen-print.ts:87`; the pass board's items read it the same way,
 `readPassBoard`, `apps/server/src/working-order.ts:8084`), and tests pin it
 (`apps/server/src/order-groups.test.ts:526`, `apps/server/src/line-cancel.test.ts:1148`), so it has
-been chosen or tolerated since #750 (2026-09-27; `git log -S'thousandthsToDecimal(1000)' --
-apps/server/src/kitchen-ticket.ts`). **Next action:** decide with the owner whether a whole-number
+been chosen or tolerated since #750 (2026-09-27). **Next action:** decide with the owner whether a whole-number
 quantity prints as `2 x`. A custom unit's quantity is a neighbour:
 [A custom-unit extra still shows a dot in Spanish](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation).
 
