@@ -3,6 +3,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { personalDataParts } from "@waitron/module";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { personalDataReadme, type PersonalDataReadmeInput } from "./personal-data-readme.js";
+import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
 const base: PersonalDataReadmeInput = {
   language: "en",
@@ -270,5 +271,120 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
       expect(es[name]?.sentTo?.length ?? 0, `${name} sentTo`).toBe(en[name]?.sentTo?.length ?? 0);
       expect(es[name]?.kept?.length ?? 0, `${name} kept`).toBe(en[name]?.kept?.length ?? 0);
     }
+  });
+  it("has words in both languages for every file the server adds itself", () => {
+    const names = timeRecordPersonalData(ALL_MODULES).flatMap((p) => p.part.files);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(PERSONAL_DATA_README_WORDS.en.files[name], `en ${name}`).toBeDefined();
+      expect(PERSONAL_DATA_README_WORDS.es.files[name], `es ${name}`).toBeDefined();
+    }
+  });
+
+  const WORKFORCE_FILES = [
+    "profile.json",
+    "sign-in.json",
+    "employment.json",
+    "rota.json",
+    "absences.json",
+    "attendance.json",
+    "staff-roles.json",
+    "time-record.pdf",
+    "time-record.csv",
+  ];
+
+  it("writes every section in English with the workforce and time-record files", () => {
+    expect(personalDataReadme({ ...base, files: WORKFORCE_FILES })).toBe(`${HEAD}
+
+What each file holds
+${PROFILE_LINE}
+${SIGN_IN_LINE}
+- employment.json: your employment contracts: the contract type, contracted minutes per week, start and end dates and pay rate. Used to manage your employment and pay; your contracted minutes are the baseline for overtime.
+- rota.json: your shifts (their times, location and the state of the rota each is on), the availability recorded for you, and the shift swaps you asked for or were offered, with the other person's name and who decided them. Used to plan the rota.
+- absences.json: your absences: the kind (holiday, sick leave, other leave or unpaid), the dates, whether it was approved, who decided it and any note. Used to plan the rota around your time off.
+- attendance.json: the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, where one was made, the answers you or a manager gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) it used to notice them. Used to keep your working-time record complete.
+- staff-roles.json: the staff roles you can fill, and the area and staff role of each of your shifts. Used to plan who covers each area.
+- time-record.pdf: your working-time record at this venue: when you started and finished work, your breaks, every correction and decision, and the closed periods, as the working-time export shows it. Kept as the venue's record of the hours you worked.
+- time-record.csv: the same working-time record as time-record.pdf, as a spreadsheet file. Kept as the venue's record of the hours you worked.
+${MACHINE}
+
+${ORIGIN}
+
+Who else receives it
+${BACKUP}
+${CONFIG_EXPORT}
+${EMAIL}
+${GOOGLE}
+- A manager or admin can download a configuration export that holds your employment contracts, pay rate included, including after you leave.
+- A manager or admin can download a configuration export that holds your availability, including after you leave.
+- Reminder emails are sent through the email service the venue set up, when it has one.
+- A manager or admin can download a configuration export that holds the staff roles you can fill, including after you leave.
+- Managers who may export reports can download the working-time record, yours included; the record names who has the right to see it.
+
+How long it is kept
+${PROFILE_KEPT}
+${DISABLE_KEPT}
+${SESSIONS_KEPT}
+${CLEANUP_KEPT}
+- Nothing in the box deletes an employment contract.
+- A shift can be deleted only while its rota is a draft or while it is on no rota, and deleting it deletes the swaps that offer it; nothing in the box deletes your availability or your other swaps.
+- Nothing in the box deletes an absence.
+- Nothing in the box deletes these questions, emails, answers or activity records.
+- A staff role is taken from you when a manager changes who holds it or deletes the role; a shift's area and role are deleted with the shift.
+- Nothing in the box deletes your working-time record, and the box refuses to change or delete an entry in it: a correction is added as a new entry.
+- The record's "Keep until" date is the legal minimum, counted from the end of the period this copy covers.
+${DECIDES}
+
+${RIGHTS}
+${ASK}
+`);
+  });
+
+  it("writes every section in Spanish with the workforce and time-record files", () => {
+    const w = PERSONAL_DATA_README_WORDS.es;
+    const words = WORKFORCE_FILES.map((name) => ({ name, file: w.files[name] }));
+    for (const { name, file } of words) expect(file, name).toBeDefined();
+    const venue = "Example Bar S.L.";
+    const lines = [
+      w.title.replace("{venue}", () => venue),
+      w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
+      "",
+      w.filesHeading,
+      ...words.map(({ name, file }) => `- ${name}: ${file!.holds} ${file!.use}`),
+      w.machineReadable,
+      "",
+      w.originHeading,
+      w.origin,
+      "",
+      w.sentToHeading,
+      `- ${w.backup}`,
+      ...words.flatMap(({ file }) => file!.sentTo ?? []).map((s) => `- ${s}`),
+      "",
+      w.keptHeading,
+      ...words.flatMap(({ file }) => file!.kept ?? []).map((s) => `- ${s}`),
+      `- ${w.decides}`,
+      "",
+      w.rightsHeading,
+      w.rights,
+      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
+    ];
+    expect(words.flatMap(({ file }) => file!.sentTo ?? [])).toHaveLength(8);
+    expect(words.flatMap(({ file }) => file!.kept ?? [])).toHaveLength(11);
+    expect(personalDataReadme({ ...base, language: "es", files: WORKFORCE_FILES })).toBe(
+      `${lines.join("\n")}\n`,
+    );
+  });
+
+  it("prints the time record's shared lines once when both its files are present", () => {
+    const lines = personalDataReadme({
+      ...base,
+      files: ["time-record.pdf", "time-record.csv"],
+    }).split("\n");
+    expect(
+      lines.filter((line) => line.startsWith("- Managers who may export reports")),
+    ).toHaveLength(1);
+    expect(
+      lines.filter((line) => line.startsWith('- The record\'s "Keep until" date')),
+    ).toHaveLength(1);
   });
 });

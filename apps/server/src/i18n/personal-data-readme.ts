@@ -57,6 +57,67 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in after it has expired.",
         ],
       },
+      "employment.json": {
+        holds:
+          "your employment contracts: the contract type, contracted minutes per week, start and end dates and pay rate.",
+        use: "Used to manage your employment and pay; your contracted minutes are the baseline for overtime.",
+        sentTo: [
+          "A manager or admin can download a configuration export that holds your employment contracts, pay rate included, including after you leave.",
+        ],
+        kept: ["Nothing in the box deletes an employment contract."],
+      },
+      "rota.json": {
+        holds:
+          "your shifts (their times, location and the state of the rota each is on), the availability recorded for you, and the shift swaps you asked for or were offered, with the other person's name and who decided them.",
+        use: "Used to plan the rota.",
+        sentTo: [
+          "A manager or admin can download a configuration export that holds your availability, including after you leave.",
+        ],
+        kept: [
+          "A shift can be deleted only while its rota is a draft or while it is on no rota, and deleting it deletes the swaps that offer it; nothing in the box deletes your availability or your other swaps.",
+        ],
+      },
+      "absences.json": {
+        holds:
+          "your absences: the kind (holiday, sick leave, other leave or unpaid), the dates, whether it was approved, who decided it and any note.",
+        use: "Used to plan the rota around your time off.",
+        kept: ["Nothing in the box deletes an absence."],
+      },
+      "attendance.json": {
+        holds:
+          "the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, where one was made, the answers you or a manager gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) it used to notice them.",
+        use: "Used to keep your working-time record complete.",
+        sentTo: [
+          "Reminder emails are sent through the email service the venue set up, when it has one.",
+        ],
+        kept: ["Nothing in the box deletes these questions, emails, answers or activity records."],
+      },
+      "staff-roles.json": {
+        holds: "the staff roles you can fill, and the area and staff role of each of your shifts.",
+        use: "Used to plan who covers each area.",
+        sentTo: [
+          "A manager or admin can download a configuration export that holds the staff roles you can fill, including after you leave.",
+        ],
+        kept: [
+          "A staff role is taken from you when a manager changes who holds it or deletes the role; a shift's area and role are deleted with the shift.",
+        ],
+      },
+      "time-record.pdf": {
+        holds:
+          "your working-time record at this venue: when you started and finished work, your breaks, every correction and decision, and the closed periods, as the working-time export shows it.",
+        use: "Kept as the venue's record of the hours you worked.",
+        sentTo: [
+          "Managers who may export reports can download the working-time record, yours included; the record names who has the right to see it.",
+        ],
+        kept: [
+          "Nothing in the box deletes your working-time record, and the box refuses to change or delete an entry in it: a correction is added as a new entry.",
+          'The record\'s "Keep until" date is the legal minimum, counted from the end of the period this copy covers.',
+        ],
+      },
+      "time-record.csv": {
+        holds: "the same working-time record as time-record.pdf, as a spreadsheet file.",
+        use: "Kept as the venue's record of the hours you worked.",
+      },
     },
     machineReadable: "The .json files are a machine-readable copy you can take to another service.",
     originHeading: "Where it came from",
@@ -103,6 +164,70 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "Tus sesiones se quedan en el servidor Waitron del local aunque hayan terminado.",
           "El registro de un correo de cuenta ya usado o caducado se borra cuando se genera para ti otro del mismo tipo; una vinculación con Google sin terminar se borra la próxima vez que alguien empieza un inicio de sesión o una vinculación con Google después de que caduque.",
         ],
+      },
+      "employment.json": {
+        holds:
+          "tus contratos: el tipo de contrato, los minutos semanales contratados, las fechas de inicio y fin y la retribución.",
+        use: "Sirve para gestionar tu contrato y tu retribución; tus minutos contratados son la base para calcular las horas extra.",
+        sentTo: [
+          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tus contratos, con la retribución, también después de que te vayas.",
+        ],
+        kept: ["Nada en el servidor Waitron del local borra un contrato."],
+      },
+      "rota.json": {
+        holds:
+          "tus turnos (sus horas, el centro y el estado del cuadrante en que está cada uno), la disponibilidad registrada para ti y los cambios de turno que pediste o te ofrecieron, con el nombre de la otra persona y de quien los decidió.",
+        use: "Sirve para planificar el cuadrante.",
+        sentTo: [
+          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu disponibilidad, también después de que te vayas.",
+        ],
+        kept: [
+          "Un turno solo se puede borrar mientras su cuadrante es un borrador o mientras no está en ningún cuadrante, y al borrarlo se borran los cambios de turno que lo ofrecen; nada en el servidor Waitron del local borra tu disponibilidad ni tus demás cambios de turno.",
+        ],
+      },
+      "absences.json": {
+        holds:
+          "tus ausencias: el tipo (vacaciones, baja por enfermedad, otro permiso o sin sueldo), las fechas, si se aprobó, quién la decidió y cualquier nota.",
+        use: "Sirve para planificar el cuadrante teniendo en cuenta tus ausencias.",
+        kept: ["Nada en el servidor Waitron del local borra una ausencia."],
+      },
+      "attendance.json": {
+        holds:
+          "las preguntas que te hizo el servidor Waitron del local sobre fichajes de entrada o de salida que faltaban o un fichaje de salida automático, el correo de aviso de una pregunta sobre fichajes que faltaban, si se hizo, las respuestas que diste tú o un gerente y quién las autorizó, y la actividad (inicios de sesión, comandas, cobros, descansos) con la que las detectó.",
+        use: "Sirve para que tu registro de jornada esté completo.",
+        sentTo: [
+          "Los correos de aviso se envían a través del servicio de correo que configuró el local, si tiene uno.",
+        ],
+        kept: [
+          "Nada en el servidor Waitron del local borra estas preguntas, correos, respuestas ni registros de actividad.",
+        ],
+      },
+      "staff-roles.json": {
+        holds:
+          "los roles de personal que puedes cubrir y el área y el rol de personal de cada uno de tus turnos.",
+        use: "Sirve para planificar quién cubre cada área.",
+        sentTo: [
+          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene los roles de personal que puedes cubrir, también después de que te vayas.",
+        ],
+        kept: [
+          "Un rol de personal se te quita cuando un gerente cambia quién lo tiene o borra el rol; el área y el rol de un turno se borran con el turno.",
+        ],
+      },
+      "time-record.pdf": {
+        holds:
+          "tu registro de jornada en este local: cuándo empezaste y terminaste de trabajar, tus descansos, cada corrección y decisión y los períodos cerrados, tal como lo muestra la exportación del registro de jornada.",
+        use: "Se guarda como el registro del local de las horas que trabajaste.",
+        sentTo: [
+          "Los gerentes que pueden exportar informes pueden descargar el registro de jornada, incluido el tuyo; el propio registro indica quién tiene derecho a verlo.",
+        ],
+        kept: [
+          "Nada en el servidor Waitron del local borra tu registro de jornada, y el servidor no permite cambiar ni borrar un asiento: una corrección se añade como un asiento nuevo.",
+          "La fecha «Conservar hasta» del registro es el mínimo legal, contado desde el final del período que cubre esta copia.",
+        ],
+      },
+      "time-record.csv": {
+        holds: "el mismo registro de jornada que time-record.pdf, como archivo de hoja de cálculo.",
+        use: "Se guarda como el registro del local de las horas que trabajaste.",
       },
     },
     machineReadable:
