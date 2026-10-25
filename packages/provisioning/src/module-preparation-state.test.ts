@@ -222,21 +222,17 @@ it("does not acknowledge a renamed ledger whose directory sync fails", async () 
   });
 });
 
-it("selected successor workspaces retain spent module history at the original anchor", async () => {
+it("a successor preparation state keeps spent module history in the attempt's own folders", async () => {
   const f = await fixture();
   await f.store.withState(binding, async (state) => state.replace({ identities: ["06RB"] }));
   await fs.writeFile(join(f.stateDir, "first-setup.json"), "original state");
   await fs.writeFile(join(f.venueDir, "first-setup-claim.json"), "original claim");
-  const next = { stateDir: join(f.root, "next", "state"), venueDir: join(f.root, "next", "venue") };
   const successor = createModulePreparationState({ ...f.options });
   await successor.withState({ ...binding, eventId: "successor" }, async (state) => {
     expect(state.value).toEqual({ identities: ["06RB"] });
     await state.replace({ identities: ["06RB", "06RC"] });
   });
   expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(2);
-  await expect(
-    fs.readFile(join(next.stateDir, "module-preparation-state.json")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
   expect(await fs.readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe("original state");
 });
 

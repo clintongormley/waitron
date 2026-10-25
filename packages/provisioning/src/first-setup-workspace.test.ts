@@ -62,6 +62,7 @@ it.each(["venueDir", "stateDir"] as const)(
     const { root, roots } = await folders();
     const real = join(root, "real");
     await mkdir(real);
+    await writeFile(join(real, "first-setup-selection.json"), "");
     await rm(roots[folder], { recursive: true });
     await symlink(real, roots[folder]);
     await expect(assertNoLegacyFirstSetupWorkspace(roots)).rejects.toMatchObject({
