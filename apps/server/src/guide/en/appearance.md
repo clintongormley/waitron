@@ -155,6 +155,25 @@ shows the word "Waitron", and a cash register's or handheld's sign-in screen sho
 gap where it would be. No "Powered by" line shows. The screen tries the picture again every minute,
 and shows it once it loads.
 
+## On receipts and invoices {#logo-receipts}
+
+The logo of the theme in use also prints, in black dots, above the venue's name on receipts and A4
+invoices for a department that has no receipt logo of its own, and for a sale with no department.
+
+A department's own receipt logo, set on its **Receipts** tab, always comes first. That is how a
+department prints a different picture from the rest of the venue.
+
+Paper takes the main logo, never the version for dark screens.
+
+Saving a new logo, removing it, or putting another theme in use changes what the next receipt or
+invoice prints, a reprint of an earlier sale included. A theme that is not in use prints nothing.
+
+A department's **Receipts** tab preview shows the theme's logo while no receipt logo is chosen on
+the tab.
+
+When a department's receipt settings cannot be read, its receipts and invoices print no logo at all,
+rather than one that may be the wrong one.
+
 ## Set colours by hand {#advanced}
 
 Below the choices and the preview, the editor has a section headed **Advanced: set colours by

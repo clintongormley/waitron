@@ -229,7 +229,8 @@ photograph as the published menu instead.
 A saved receipt logo also keeps a photograph in use. The library lists that use as
 **<department> receipt logo**, and its link opens the department's **Receipts** tab:
 choose **Remove** beside the logo, and save. A department that is no longer active is listed
-with **(Deleted department)** after its name and no link.
+with **(Deleted department)** after its name and no link. A department with no receipt logo prints the logo of the theme in use
+instead, as [On receipts and invoices](appearance.md#logo-receipts) describes.
 
 A theme's logo keeps a photograph in use too, whether or not the theme is in use. The library lists
 that use as **Logo of theme <theme>**, whether the photograph is the theme's logo or its version

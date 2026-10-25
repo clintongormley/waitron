@@ -172,6 +172,27 @@ sesión de una caja registradora o de un terminal de camarero no muestra ningún
 un hueco donde iría. No se ve la línea «Con la tecnología de». La pantalla vuelve a intentar cargar
 la imagen cada minuto y la muestra en cuanto carga.
 
+## En los tickets y las facturas {#logo-receipts}
+
+El logotipo del tema en uso también se imprime, en puntos negros, encima del nombre del local en los
+tickets y las facturas en A4 de un departamento que no tiene logotipo de ticket propio, y de una
+venta sin departamento.
+
+El logotipo de ticket propio de un departamento, elegido en su pestaña **Recibos**, siempre tiene
+prioridad. Así es como un departamento imprime una imagen distinta de la del resto del local.
+
+En papel se imprime el logotipo principal, nunca la versión para pantallas oscuras.
+
+Guardar un logotipo nuevo, quitarlo o poner otro tema en uso cambia lo que imprime el siguiente
+ticket o la siguiente factura, incluida la reimpresión de una venta anterior. Un tema que no está en
+uso no imprime nada.
+
+La vista previa de la pestaña **Recibos** de un departamento muestra el logotipo del tema mientras
+no hay ningún logotipo de ticket elegido en la pestaña.
+
+Cuando no se pueden leer los ajustes de ticket de un departamento, sus tickets y facturas no
+imprimen ningún logotipo, en lugar de uno que podría no ser el correcto.
+
 ## Fija colores a mano {#advanced}
 
 Debajo de las elecciones y de la vista previa, el editor tiene una sección titulada **Avanzado:
