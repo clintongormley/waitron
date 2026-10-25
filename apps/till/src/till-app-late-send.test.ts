@@ -910,6 +910,24 @@ describe("a manager's PIN", () => {
     expect(submissions()).toHaveLength(2);
   });
 
+  it("shows a refused approver on the app's line when the dialog was closed while it was sent", async () => {
+    let answer!: (refused: unknown) => void;
+    const held = new Promise<never>((_, reject) => (answer = reject));
+    const el = await managerAsked();
+    api.submitDraft!.mockImplementationOnce(() => held);
+    await authorize(el, "0123");
+
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    answer(MANAGER_NEEDED);
+    await flush(el, 6);
+
+    expect(approval(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(
+      codeMessage("authorization.not_permitted"),
+    );
+  });
+
   it("shows a wrong PIN on the app's line when the dialog was closed while it was sent, and asks afresh next time", async () => {
     let answer!: (refused: unknown) => void;
     const held = new Promise<never>((_, reject) => (answer = reject));

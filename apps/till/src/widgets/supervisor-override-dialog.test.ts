@@ -162,7 +162,7 @@ describe("till-supervisor-override-dialog", () => {
     expect(root(el).querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("maps any non-pin error code to the generic override.error copy, never the raw code", async () => {
+  it("maps any other code to the generic override.error copy, never the raw code", async () => {
     const { el } = await mount();
     await pick(el, "sup-1");
     el.error = "server.internal";
