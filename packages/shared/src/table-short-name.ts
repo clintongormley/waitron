@@ -14,8 +14,10 @@ export function shortNameLength(value: string): number {
   return characters(value).length;
 }
 
+/** The steps are `@waitron/identity`'s `foldForUniqueness`, whose comment gives the reason for
+ * each. */
 export function shortNameKey(shortName: string): string {
-  return shortName.normalize("NFC").toLowerCase();
+  return shortName.trim().normalize("NFC").toLowerCase().normalize("NFC");
 }
 
 function firstCharacters(value: string, count: number): string {

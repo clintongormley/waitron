@@ -61,6 +61,10 @@ describe("proposeShortName", () => {
     expect(shortNameKey("T1")).toBe("t1");
     expect(shortNameKey("t1")).toBe("t1");
   });
+
+  it("gives a capital with a combining mark the key of its composed small letter", () => {
+    expect(shortNameKey("J\u030c1")).toBe(shortNameKey("\u01f01"));
+  });
 });
 
 it("holds a short name to five characters", () => {
