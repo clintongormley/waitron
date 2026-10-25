@@ -35,7 +35,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
-import { AppError, NEW_TABLE_SIZE, groupStep } from "@waitron/shared";
+import { AppError, NEW_TABLE_SIZE, groupStep, shortNameKey } from "@waitron/shared";
 import {
   blockedMoves,
   movesTable,
@@ -236,6 +236,7 @@ async function resetZoneFor(
     master.map((row) => ({
       id: row.id,
       label: row.label,
+      shortName: row.shortName,
       seats: row.seats,
       fixed: row.fixed,
       placement: row.placement,
@@ -333,6 +334,7 @@ function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
       id: diningTables.id,
       label: diningTables.label,
       planTableId: diningTables.planTableId,
+      shortName: diningTables.shortName,
     })
     .from(diningTables)
     .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.zoneId, zoneId)));
@@ -420,6 +422,7 @@ async function catchUpPass(
       tableId: row.tableId,
       planTableId: row.planTableId,
       label: row.label,
+      shortName: row.shortName,
       seats: row.seats,
       fixed: row.fixed,
       placement: placementOf(row),
@@ -432,6 +435,7 @@ async function catchUpPass(
     .select({
       id: diningTables.id,
       label: diningTables.label,
+      shortName: diningTables.shortName,
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
       splitOffFrom: floorTodaySplitParts.joinedTableId,
@@ -442,6 +446,11 @@ async function catchUpPass(
   const inZone = venueTables.filter((table) => table.zoneId === zoneId);
   const takenElsewhere = new Set(
     venueTables.filter((table) => table.zoneId !== zoneId).map((table) => table.label),
+  );
+  const shortNameKeysElsewhere = new Set(
+    venueTables.flatMap((table) =>
+      table.zoneId !== zoneId && table.shortName !== null ? [shortNameKey(table.shortName)] : [],
+    ),
   );
   const ids = inZone.map((table) => table.id);
   const inZoneIds = new Set(ids);
@@ -544,6 +553,7 @@ async function catchUpPass(
     const live: LiveTable[] = inZone.map((table) => ({
       id: table.id,
       label: table.label,
+      shortName: table.shortName,
       held: held.has(table.id),
       refused: refused.has(table.id),
       tied: held.has(table.id) || tied.has(table.id),
@@ -561,7 +571,7 @@ async function catchUpPass(
           : [],
       ),
     );
-    plan = planReset({ targets, live, takenElsewhere, waitingToCreate });
+    plan = planReset({ targets, live, takenElsewhere, shortNameKeysElsewhere, waitingToCreate });
 
     const drawnMoving: { tableId: string; from: Placement; to: Placement | null }[] = [];
     const offMoving: { tableId: string; from: null; to: Placement }[] = [];
