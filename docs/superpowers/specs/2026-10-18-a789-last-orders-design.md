@@ -163,7 +163,8 @@ sell; only dishes already on an order before 14:00 can still go, with the kitche
    business day's changeover (06:00) is refused the next morning, as today: the window is for dishes
    from a period that ended earlier the **same** business day. The till marks it "Dinner ended" and
    its only choice is Remove. 2026-10-25 (plan D35): the till marks it "Last orders have ended", not
-   "Dinner ended": the menus' read names only periods that ended earlier the same business day.
+   "Dinner ended", and handles it as today: the counter holds Pay, and a table offers Remove or Keep.
+   The menus' read names only periods that ended earlier the same business day.
 5. **A held course fired after Lunch.** Desserts sent to the kitchen on hold at 13:40 and fired at
    14:20 go as today, with no window: the kitchen already had them.
 
