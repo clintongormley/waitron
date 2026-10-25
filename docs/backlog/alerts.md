@@ -108,3 +108,12 @@ in").** Setup asks plainly, unticked; settings can change it. A report holds onl
 code and source, the version, counts and masked log lines (A980 O9), is signed with the box's
 Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
 by version to catch a bad release (design section 10).
+
+## The alert pop-up can split a written time across two lines
+
+- **The alert pop-up can split a written time across two lines.** The Box status page's rows, its
+  clock check dialog and its list of wrongly dated sales, the bell and the Alerts screen keep each
+  `YYYY-MM-DD HH:MM` whole (`wholeTimes`, `apps/dashboard/src/widgets/alert-format.ts`); the pop-up
+  (`wt-toast`) takes a plain string, so keeping times whole there needs `wt-toast` to take more than
+  a string, or no-break characters in the text. The page's 'Updated' line does not use `wholeTimes`
+  either (`apps/dashboard/src/screens/box-status-screen.ts`). Left open by A798-B slice 9 (#2025).

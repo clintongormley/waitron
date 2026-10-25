@@ -4243,12 +4243,8 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   source's five-minute cache shares that in-flight call with reads during its lifetime. Left open
   by the A258 follow-up (the alerts list's battery check has its own deadline, W58, #1176).
 
-- **The alert pop-up can split a written time across two lines.** The Box status page's rows, its
-  clock check dialog and its list of wrongly dated sales, the bell and the Alerts screen keep each
-  `YYYY-MM-DD HH:MM` whole (`wholeTimes`, `apps/dashboard/src/widgets/alert-format.ts`); the pop-up
-  (`wt-toast`) takes a plain string, so keeping times whole there needs `wt-toast` to take more than
-  a string, or no-break characters in the text. The page's 'Updated' line does not use `wholeTimes`
-  either (`apps/dashboard/src/screens/box-status-screen.ts`). Left open by A798-B slice 9 (#2025).
+- **The alert pop-up can split a written time across two lines.** Left open by A798-B slice 9
+  (#2025). [Detail](backlog/alerts.md#the-alert-pop-up-can-split-a-written-time-across-two-lines)
 
 ### Working time and staff
 
