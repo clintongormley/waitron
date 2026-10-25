@@ -302,6 +302,41 @@ describe("staff-screen: download their data", () => {
     });
   });
 
+  it.each([
+    ["fails", "staff.data_copy_not_found_unreloaded"],
+    ["succeeds", "staff.data_copy_not_found"],
+  ] as const)(
+    "says the list was reloaded only by the newer read, when a row action's reload replaces it and %s",
+    async (outcome, key) => {
+      const api = stubApi(() => Promise.reject({ code: "person.not_found" }));
+      (api as { resetPin: unknown }).resetPin = vi.fn().mockResolvedValue(undefined);
+      const { el } = await mount(api);
+      const replacedRead = new Promise<PersonSummary[]>(() => {});
+      vi.mocked(api.listStaff).mockReturnValueOnce(replacedRead);
+      if (outcome === "fails")
+        vi.mocked(api.listStaff).mockRejectedValueOnce({ code: "connection.failed" });
+      await press(el, "p2");
+      expect(api.listStaff).toHaveBeenCalledTimes(2);
+      expect(statusLine(el)).not.toBe(null);
+
+      list(el).dispatchEvent(
+        new CustomEvent("person-action", {
+          detail: { personId: "p1", action: "reset-pin" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await settle(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-row-action]")!.click();
+      await settle(el);
+
+      expect(api.resetPin).toHaveBeenCalledExactlyOnceWith("p1");
+      expect(api.listStaff).toHaveBeenCalledTimes(3);
+      expect(statusLine(el)).toBe(null);
+      expect(alertText(el)).toBe(named(key, "Mar$&ta"));
+    },
+  );
+
   it("keeps the list's download event from reaching anything above the screen", async () => {
     const api = stubApi();
     const { el, host } = await mount(api);

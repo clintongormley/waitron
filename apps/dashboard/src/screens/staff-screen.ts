@@ -261,8 +261,19 @@ export class StaffScreen extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** Resolves whether the list was read. */
-  async #load(): Promise<boolean> {
+  #newestLoad: Promise<boolean> | null = null;
+
+  /** Resolves whether the list now shown was read. The query controller settles a watch a newer
+   * one replaced without reading, so a replaced load answers with the newest load's result. */
+  #load(): Promise<boolean> {
+    const load: Promise<boolean> = this.#readList().then((read) =>
+      this.#newestLoad === load ? read : this.#newestLoad!,
+    );
+    this.#newestLoad = load;
+    return load;
+  }
+
+  async #readList(): Promise<boolean> {
     if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStaff", [], (value) => {
