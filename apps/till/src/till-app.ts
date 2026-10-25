@@ -528,7 +528,7 @@ type DraftFollowUp =
   | "recheck-dead-ends"
   | { landedOn: string }
   | { lateSend: LateSendAsked }
-  | { approve: LateSend; pinError?: string }
+  | { approval: LateSendApprovalAsked }
   | undefined;
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
@@ -6223,7 +6223,6 @@ export class TillApp extends LitElement {
     let recheck = false;
     let inactiveChoice = false;
     let paid = false;
-    let approval: LateSendApprovalAsked | undefined;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
@@ -6259,11 +6258,13 @@ export class TillApp extends LitElement {
       // filed.
       if (session !== this.#operatorSession) return;
       const asked = lateSendAsked(error, basketLines);
-      approval = lateSendApprovalAsked(error, lateSend);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
-      else if (approval !== undefined) {
-        // Asked once `submitting` has cleared, so the PIN's rerun is not ignored.
-      } else if (
+      // Awaited before `finally` so `submitting` stays set while the managers are read: a second
+      // Pay tap meanwhile cannot open the late-send window under the PIN dialog.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6290,8 +6291,6 @@ export class TillApp extends LitElement {
     if (session !== this.#operatorSession) return;
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
-    if (approval !== undefined)
-      await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#onConfirmPayment(event, true, lateSend),
@@ -6382,7 +6381,6 @@ export class TillApp extends LitElement {
     let recheck = false;
     let inactiveChoice = false;
     let paid = false;
-    let approval: LateSendApprovalAsked | undefined;
     try {
       if (
         !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
@@ -6438,11 +6436,13 @@ export class TillApp extends LitElement {
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
       if (session !== this.#operatorSession) return;
       const asked = lateSendAsked(error, basketLines);
-      approval = lateSendApprovalAsked(error, lateSend);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
-      else if (approval !== undefined) {
-        // Asked once `submitting` has cleared, so the PIN's rerun is not ignored.
-      } else if (
+      // Awaited before `finally` so `submitting` stays set while the managers are read: a second
+      // Pay tap meanwhile cannot open the late-send window under the PIN dialog.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6476,8 +6476,6 @@ export class TillApp extends LitElement {
     if (session !== this.#operatorSession) return;
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
-    if (approval !== undefined)
-      await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#collectCard(event, true, lateSend),
@@ -11630,8 +11628,9 @@ export class TillApp extends LitElement {
       );
       return;
     }
-    if (typeof followUp === "object" && "approve" in followUp) {
-      await this.#askLateSendApproval(followUp.approve, followUp.pinError, (confirmed) =>
+    if (typeof followUp === "object" && "approval" in followUp) {
+      const { approval } = followUp;
+      await this.#askLateSendApproval(approval.lateSend, approval.pinError, (confirmed) =>
         this.#sendDraft(detail, confirmed),
       );
       return;
@@ -11944,17 +11943,8 @@ export class TillApp extends LitElement {
       if (!live()) return;
       const asked = lateSendAsked(error, sent);
       if (asked !== undefined) return { lateSend: asked };
-      if (lateSend !== undefined && isLateSendManagerRefusal(error))
-        return lateSend.override === undefined
-          ? { approve: lateSend }
-          : { approve: lateSend, pinError: "authorization.not_permitted" };
-      const pinRefused = asRefusal(error)?.refused;
-      if (
-        lateSend?.override !== undefined &&
-        pinRefused !== undefined &&
-        APPROVER_REFUSALS.has(pinRefused)
-      )
-        return { approve: lateSend, pinError: pinRefused };
+      const approval = lateSendApprovalAsked(error, lateSend);
+      if (approval !== undefined) return { approval };
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
         if (!live()) return;

@@ -1363,59 +1363,88 @@ describe("counter pay", () => {
     expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
   });
 
-  it("asks for the invoice's recipient before the window on a bill over the simplified-invoice limit", async () => {
-    const el = await counterBasket(
-      {
-        getTill: vi
-          .fn()
-          .mockResolvedValue({ ...till, fullInvoices: true, simplifiedInvoiceLimit: "4.00" }),
-        getInvoiceDeliveryOptions: vi
-          .fn()
-          .mockResolvedValue({ invoicePrinter: null, emailAvailable: false }),
-      },
-      { products: [] },
-    );
-    // Loaded rather than added: the basket refuses an add that takes it past the limit.
-    counterScreen(el).store.loadFrom(
-      "large",
-      ["Omelette", "Coffee"].map((product) => ({
-        product: menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"),
-        quantity: "1",
-      })),
-    );
-    counterMenus = catalogue("lunch", "zone-barra", "prepay");
-    await poll(el);
-    expect(counterScreen(el).store.lines.map((line) => line.endedPeriod?.menuId)).toEqual([
-      DESAYUNOS.id,
-      undefined,
-    ]);
-    emit(counterScreen(el), "confirm-payment", CASH);
-    await flush(el, 6);
+  it.each([
+    {
+      way: "cash Pay",
+      event: "confirm-payment",
+      detail: CASH,
+      paid: () => api.recordSale!,
+      sent: () => lastArgument(api.recordSale!, 0),
+      overrides: {},
+    },
+    {
+      way: "the card reader",
+      event: "collect-card",
+      detail: {},
+      paid: () => api.pay!,
+      sent: () => api.pay!.mock.calls[0]![0].lateSend,
+      overrides: integratedCard(),
+    },
+  ])(
+    "asks for the invoice's recipient before the window at $way on a bill over the simplified-invoice limit",
+    async ({ event, detail, paid, sent, overrides }) => {
+      const el = await counterBasket(
+        {
+          ...overrides,
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            ...(event === "collect-card"
+              ? {
+                  cardProvider: "simulator",
+                  capabilities: [...till.capabilities, "integrated-card-payment"],
+                }
+              : {}),
+            fullInvoices: true,
+            simplifiedInvoiceLimit: "4.00",
+          }),
+          getInvoiceDeliveryOptions: vi
+            .fn()
+            .mockResolvedValue({ invoicePrinter: null, emailAvailable: false }),
+        },
+        { products: [] },
+      );
+      // Loaded rather than added: the basket refuses an add that takes it past the limit.
+      counterScreen(el).store.loadFrom(
+        "large",
+        ["Omelette", "Coffee"].map((product) => ({
+          product: menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"),
+          quantity: "1",
+        })),
+      );
+      counterMenus = catalogue("lunch", "zone-barra", "prepay");
+      await poll(el);
+      expect(counterScreen(el).store.lines.map((line) => line.endedPeriod?.menuId)).toEqual([
+        DESAYUNOS.id,
+        undefined,
+      ]);
+      emit(counterScreen(el), event, detail);
+      await flush(el, 6);
 
-    const recipient = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
-    expect(recipient).not.toBeNull();
-    expect(windowOf(el)).toBeNull();
-    emit(recipient!, "invoice-recipient-confirm", {
-      invoiceType: "F1",
-      recipient: {
-        taxId: "12345678Z",
-        legalName: "Example Guest",
-        address: "1 Main Street",
-        countryCode: "ES",
-      },
-      delivery: { medium: "receipt" },
-    });
-    await flush(el);
+      const recipient = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
+      expect(recipient).not.toBeNull();
+      expect(windowOf(el)).toBeNull();
+      emit(recipient!, "invoice-recipient-confirm", {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Example Guest",
+          address: "1 Main Street",
+          countryCode: "ES",
+        },
+        delivery: { medium: "receipt" },
+      });
+      await flush(el);
 
-    emit(counterScreen(el), "confirm-payment", CASH);
-    await flush(el, 6);
-    expect(windowDishes(el)).toEqual(["1× Omelette"]);
-    await choose(el, "data-late-agreed");
+      emit(counterScreen(el), event, detail);
+      await flush(el, 6);
+      expect(windowDishes(el)).toEqual(["1× Omelette"]);
+      await choose(el, "data-late-agreed");
 
-    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
-    expect(api.recordSale).toHaveBeenCalledOnce();
-    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
-  });
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+      expect(paid()).toHaveBeenCalledOnce();
+      expect(sent()).toEqual(BREAKFAST_CONFIRMED);
+    },
+  );
 });
 
 /** The held order `wo-1` with a payment on it, so the counter takes the rest as a bill payment. */
@@ -1547,6 +1576,37 @@ describe("counter pay of a partly paid order", () => {
     expect(approval(el)).toBeNull();
     expect(billPayDialog(el)).not.toBeNull();
   });
+  it("keeps the dialog open on a wrong PIN on the save, and opens the bill payment once a right one saves", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockRejectedValueOnce(WRONG_PIN)
+      .mockResolvedValue({ revision: 4 });
+    const el = await lateCounter(
+      billPayment({
+        updateWorkingOrder,
+        serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+      }),
+      { products: ["Omelette"], held: true },
+    );
+    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+    await authorize(el, "0123");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(billPayDialog(el)).toBeNull();
+    await authorize(el, "4567");
+
+    expect(savedLateSends()).toEqual([
+      BREAKFAST_CONFIRMED,
+      { ...BREAKFAST_CONFIRMED, override: { personId: MARTA.personId, pin: "0123" } },
+      { ...BREAKFAST_CONFIRMED, override: { personId: MARTA.personId, pin: "4567" } },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(billPayDialog(el)).not.toBeNull();
+  });
 });
 
 describe("counter pay with a manager's PIN", () => {
@@ -1603,6 +1663,44 @@ describe("counter pay with a manager's PIN", () => {
       MARTA_OVERRIDE("4567"),
     ]);
     expect(approval(el)).toBeNull();
+  });
+
+  it("opens no dialog for a refusal at cash Pay naming another permission, and says why", async () => {
+    const el = await lateCounter({
+      recordSale: vi
+        .fn()
+        .mockRejectedValueOnce({ ...MANAGER_NEEDED, permission: "sale.take_payment" }),
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+
+    expect(approval(el)).toBeNull();
+    expect(api.serviceDayAuthorizers).not.toHaveBeenCalled();
+    expect(errorLine(el)).toBe(t("take_payment.not_permitted"));
+  });
+
+  it("ignores a second Pay tap while the managers are read, and opens no window under the PIN dialog", async () => {
+    let answer!: (managers: (typeof MARTA)[]) => void;
+    const el = await lateCounter({
+      recordSale: vi.fn().mockRejectedValueOnce(MANAGER_NEEDED).mockResolvedValue(saleResult),
+      serviceDayAuthorizers: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+    expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
+
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+    expect(windowOf(el)).toBeNull();
+
+    answer([MARTA]);
+    await flush(el, 6);
+    expect(approval(el)).not.toBeNull();
+    expect(windowOf(el)).toBeNull();
+    expect(api.recordSale).toHaveBeenCalledOnce();
   });
 
   it("says in the dialog when the person who approved at cash Pay may not, and keeps it open", async () => {
