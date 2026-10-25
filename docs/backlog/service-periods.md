@@ -399,22 +399,6 @@ day's name breaks only between its words since A784); at 320 px a 45-letter stat
 Show's open list sideways (the page does not widen); a station's Month has no key naming which
 bar is which department (hover shows it; the All departments Month has none either).
 
-## A789 — last orders without an offset: a period is when its menu can be ordered
-
-**A789 — last orders without an offset: a period is when its menu can be ordered** — APPROVED
-2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by
-default); building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
-retired) landed in #2047; slice 3 (a confirmed late send accepted and marked; the manager's-PIN
-setting is per department) landed in #2051; slice 4 (the till's window) in progress on
-`feat/a789-4-till-late-send-window`, plan
-[2026-10-21-a789-last-orders](../superpowers/plans/2026-10-21-a789-last-orders.md);
-[design](../superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
-[mockups/a789-last-orders/](mockups/a789-last-orders/). The period end offset
-and the period "Keep open" go (the zone one stays); a dish taken during a period and sent after it
-ends opens a window asking the waiter to check with the kitchen, and once confirmed it is sent and
-marked on the kitchen ticket. Four slices; A773-1 has landed (#1897); the till slice is built in its
-editor.
-
 ## Loose ends left by A577 (#1702).
 
 **Loose ends left by A577 (#1702).**

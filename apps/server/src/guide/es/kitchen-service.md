@@ -132,16 +132,28 @@ sea cual sea el ajuste de las estaciones.
 
 ## Un plato enviado tras acabar su periodo {#after-period}
 
+En el terminal, un plato sin enviar cuyo periodo acabó antes en el mismo día de servicio muestra un
+signo de aviso y **Ha terminado Almuerzo**. Cuando lo envías desde una mesa, o cobras, envías o
+aparcas el pedido en la barra, el terminal primero lista esos platos y te pide que lo consultes con
+la cocina. **La cocina acepta — enviar** los envía y **Quitarlos** los quita del pedido. Al aparcar,
+el botón dice **La cocina acepta — guardar**. La misma ventana se abre cuando el equipo encuentra un
+plato así antes de que el terminal lo haya marcado.
+
+Un plato que también vende el periodo en curso no se marca y se envía como siempre. Un plato que
+quedó de un día de servicio anterior muestra **Ya no se admiten pedidos** y no se puede enviar: en
+una mesa, **Quitar** lo quita y **Dejar** lo deja en el pedido sin enviar, y en la barra solo
+puedes cobrar cuando lo has quitado.
+
 Un plato enviado después de que su periodo acabara antes en el mismo día de servicio, una vez que la
 cocina lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de cocina, una
 línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En la pantalla de cocina, **Comandas** muestra
 **Tras Almuerzo — aceptado** en una fila encima, y **Tablero** muestra las mismas palabras en su
-tarjeta. El terminal aún no puede enviar un plato así.
+tarjeta.
 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
 con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña
-**Servicio** del panel. Desactivado, quien puede enviar lo confirma con la cocina. El ajuste se
-aplicará cuando el terminal pueda enviar un plato así.
+**Servicio** del panel. Desactivado, quien puede enviar lo confirma con la cocina. Si está activado y
+quien envía no es encargado, el terminal pide el PIN de un encargado tras **La cocina acepta**.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 
