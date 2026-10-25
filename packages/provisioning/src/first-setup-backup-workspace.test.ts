@@ -5,6 +5,8 @@ import { afterEach, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import * as provision from "./index.js";
 import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
+import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
+import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -672,13 +674,80 @@ it("lets nothing follow an abandoned record", async () => {
     "abandoned",
   ]);
 });
-it("refuses an abandoned record whose input differs from the record before it", async () => {
+it("refuses an abandoned record through the public append, before or after abandon", async () => {
   const { f, input } = await journalAt("placement-started");
   await expect(
-    f.store.append({ ...input, input: { checked: false }, phase: "abandoned" }),
+    f.store.append({ ...input, input: placementInput, phase: "abandoned" }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect((await f.store.read()).at(-1)!.phase).toBe("placement-started");
+  const abandoned = await f.store.abandon(recoveryId);
+  const pointer = join(
+    f.anchor.venueDir,
+    "first-setup-resolutions",
+    "backup-recovery",
+    "current.json",
+  );
+  await rm(join(f.base, "target"), { recursive: true });
+  await rm(pointer);
+  const { version, sequence, previousRecordDigest, recordedAt, ...retry } = abandoned;
+  void [version, sequence, previousRecordDigest, recordedAt];
+  await expect(f.store.append(retry)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await expect(readFile(pointer)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(
+    readFile(
+      join(f.target.target.stateDir, "first-setup-resolutions", "backup-recovery", "backlink.json"),
+    ),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
+it("refuses a journal whose abandoned record carries different input from the record before it", async () => {
+  const { f } = await journalAt("placement-started");
+  const previous = (await f.store.read()).at(-1)!;
+  const { createHash } = await import("node:crypto");
+  const forged: BackupRepairRecord = {
+    ...previous,
+    input: { checked: false },
+    phase: "abandoned",
+    sequence: previous.sequence + 1,
+    previousRecordDigest: createHash("sha256").update(JSON.stringify(previous)).digest("hex"),
+  };
+  await writeFile(join(f.base, "000003.json"), JSON.stringify(forged));
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await writeFile(
+    join(f.base, "000003.json"),
+    JSON.stringify({ ...forged, input: placementInput }),
+  );
+  expect((await f.store.read()).at(-1)!.phase).toBe("abandoned");
+});
+it.each([
+  [
+    "the series-name note",
+    (stateDir: string) => writeFile(join(stateDir, START_AGAIN_NOTE_FILE), "{}"),
+  ],
+  [
+    "a confirmation record",
+    async (stateDir: string) => {
+      await mkdir(join(stateDir, START_AGAIN_CONFIRMATIONS_DIR));
+      await writeFile(join(stateDir, START_AGAIN_CONFIRMATIONS_DIR, "confirmation.json"), "{}");
+    },
+  ],
+  [
+    "a change to the attempt's own files",
+    (stateDir: string) => writeFile(join(stateDir, "first-setup.json"), "changed after prepare"),
+  ],
+] as const)(
+  "abandons after Start again has written %s, checking only the journal",
+  async (_, change) => {
+    const { f, input } = await journalAt("placement-started");
+    await change(f.anchor.stateDir);
+    await expect(
+      f.store.append({ ...input, input: placementInput, phase: "restored" }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    const abandoned = await f.store.abandon(recoveryId);
+    expect(abandoned).toMatchObject({ phase: "abandoned", sequence: 3, input: placementInput });
+    expect((await f.store.read()).at(-1)).toEqual(abandoned);
+    expect(await provision.resolveFirstSetupBackupWorkspace(f.anchor)).toEqual({ kind: "absent" });
+  },
+);
 it.each([true, false])(
   "keeps an abandoned journal readable once the attempt is deleted (abandoned: %s)",
   async (abandon) => {

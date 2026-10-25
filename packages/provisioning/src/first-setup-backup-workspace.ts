@@ -465,6 +465,7 @@ async function archiveControls(base: string, entries: Original[]): Promise<void>
 async function checkedRecords(
   anchor: FirstSetupRoots,
   selection: Witness,
+  chainOnly = false,
 ): Promise<BackupRepairRecord[]> {
   const path = folder(selection.target);
   await firstSetupDirectory(path);
@@ -487,7 +488,9 @@ async function checkedRecords(
   }
   if (digest(records[0]) !== selection.initialRecordDigest) uncertain();
   // An abandoned recovery is a tombstone; the attempt it was taken against may be deleted.
-  if (records.at(-1)!.phase === "abandoned") return records;
+  // Abandoning checks only the chain too: Start again writes its note and confirmation
+  // into the box's state folder before it abandons.
+  if (chainOnly || records.at(-1)!.phase === "abandoned") return records;
   const manifest = await read(join(path, "originals.json"));
   if (
     !exact(manifest, ["version", "entries"]) ||
@@ -538,6 +541,7 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
   async function append(input: RecordInput, selecting = false): Promise<BackupRepairRecord> {
     inputValid(input);
     if (input.phase === "selected" && !selecting) conflict();
+    if (input.phase === "abandoned") conflict();
     const anchor = await canonical(anchorInput);
     if (
       !isDeepStrictEqual(anchor, input.target.anchor) ||
@@ -646,11 +650,26 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
     abandon: (id: string) =>
       turn
         .run(async () => {
-          const records = await readRecords(),
-            last = records.at(-1);
-          if (last === undefined || last.target.recoveryId !== id) conflict();
+          const anchor = await canonical(anchorInput),
+            selected = await witness(anchor);
+          if (selected === null) conflict();
+          const last = (await checkedRecords(anchor, selected, true)).at(-1)!;
+          if (last.target.recoveryId !== id) conflict();
           if (last.phase === "abandoned") return last;
-          return append({ ...recordInput(last), phase: "abandoned" });
+          const input: RecordInput = { ...recordInput(last), phase: "abandoned" };
+          if (!isDeepStrictEqual(sourceFor(anchor), input.target.source)) conflict();
+          transition(last, input);
+          const record: BackupRepairRecord = {
+            ...structuredClone(input),
+            version: 2,
+            sequence: last.sequence + 1,
+            previousRecordDigest: digest(last),
+            recordedAt: new Date().toISOString(),
+          };
+          recordValid(record);
+          const name = `${String(record.sequence).padStart(6, "0")}.json`;
+          await immutable(join(folder(input.target), name), record);
+          return record;
         })
         .catch(writeFailure),
   };
