@@ -180,7 +180,8 @@ export function startClockWatch(deps: {
 
   /** AEAT is asked before the closing, so an answer it gives on this check can close the check;
    * the closing takes the witnesses, the clock reading and the boot reading together, inside its
-   * transaction, so the reading it stores is the one those witnesses were taken against. */
+   * transaction, so a clock put right while AEAT was asked is not stored as the closing's time;
+   * the seat judges the waiting check again at that reading. */
   async function closeWaiting(reading: Pick<Reading, "instant" | "offsetMinutes">): Promise<void> {
     const { waitingClockCheck, closeClockCheckByItself } = deps.backend;
     if (waitingClockCheck === undefined || closeClockCheckByItself === undefined) return;

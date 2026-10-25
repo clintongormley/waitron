@@ -6,7 +6,7 @@ import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin } from "@waitron/shared";
 import type { ErrorParams, NodeId, SaleId } from "@waitron/shared";
-import { chainHeads, storedHeads } from "./clock-behind.js";
+import { chainHeads, parsedStored, storedHeads } from "./clock-behind.js";
 import { misdatedRecords } from "./clock-misdated.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -119,14 +119,6 @@ async function replaceLaterStart(tx: Transaction, start: Date, at: Date): Promis
   await markIncidentHandled(tx, { id: open.id, personId: null, handledAt: at });
 }
 
-function parsed(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
 /** The earliest and latest generation times among the records past `heads` and at or before
  * `bound`, on the chains `current` names; a node either map leaves out counts from 0. Null when
  * there are none. */
@@ -184,7 +176,7 @@ export async function recordDisproofs(
   )
     // A CHECK keeps `record_at` set wherever `registro_id` is.
     .map((row) => ({ ...row, registroId: row.registroId!, recordAt: row.recordAt! }));
-  const withHeads = rows.map((row) => ({ ...row, heads: storedHeads(parsed(row.proof)) }));
+  const withHeads = rows.map((row) => ({ ...row, heads: storedHeads(parsedStored(row.proof)) }));
   const disproved = new Set(
     (
       await tx
