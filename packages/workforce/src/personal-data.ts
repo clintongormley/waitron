@@ -5,7 +5,6 @@ import type { ModulePersonalData, PersonalDataFile } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
 import { asc, eq, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import type { AttendanceChange } from "./attendance-contract.js";
 import { localWallClock } from "./projection.js";
 import { absences } from "./schema/absences.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
@@ -240,13 +239,14 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
                       },
               })),
               responses: responseRows.map((row) => {
-                const input = row.input as { reason?: string; changes?: AttendanceChange[] };
+                const input = row.input;
+                const reason: string | null = "reason" in input ? input.reason : null;
                 return {
                   action: row.action,
                   byYou: row.requestedByPersonId === personId,
                   authorizedBy: row.authorizedBy,
-                  reason: input.reason ?? null,
-                  changes: (input.changes ?? []).map((change) => ({
+                  reason,
+                  changes: ("changes" in input ? input.changes : []).map((change) => ({
                     at: localWallClock(change.at, change.offsetMinutes),
                     missingKind: "missingKind" in change.target ? change.target.missingKind : null,
                   })),

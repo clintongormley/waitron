@@ -402,6 +402,9 @@ const COLLEAGUE_SHIFT_UTC = ["02:17", "09:17", "21:53", "05:53", "15:23", "23:23
 /** Marta's draft shift, moved to a fourth person in one case, in every form a leak could take. */
 const DRAFT_SHIFT_VALUES = ["2026-02-14", "04:41", "03:41", "12:41", "11:41", "2025-12-15T08:20"];
 
+/** The exact text the part writes for a value, so key order is pinned as well as content. */
+const asFile = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
+
 const rotaOf = (files: { name: string; text: string }[]) => {
   const rota = files.find((f) => f.name === "rota.json");
   if (rota === undefined) throw new Error("no rota.json");
@@ -422,7 +425,7 @@ const COLLEAGUE_VALUES = [
 ];
 
 /**
- * Marta's two attendance questions (one with its reminder email), two answers and two activity
+ * Marta's three attendance questions (two with their reminder email), two answers and two activity
  * facts, beside a colleague's one of each. Times are in the writers' spelling: `toISOString()`,
  * whole seconds for an activity's and a change's `at`. Each list's rows carry ids (or, for the
  * facts, sequence numbers) in the reverse of its sort order, and its created_at order differs
@@ -467,6 +470,26 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     missingKinds: ["in", "out"],
     evidenceKeys: ["order:evidence-marta-1"],
     createdAt: "2026-04-19T04:00:00.000Z",
+  });
+  // A second shift on the same day, asked later, with an id that sorts before the first's, so
+  // only the created_at sort puts it second. Its reminder is as the writer inserts it.
+  const sameDayLater = "00000000-0000-4000-8000-0000000000a0";
+  await db.insert(attendanceQuestions).values({
+    id: sameDayLater,
+    personId: marta,
+    locationId,
+    businessDay: "2026-04-18",
+    startAt: "2026-04-18T04:00:00.000Z",
+    endAt: "2026-04-19T04:00:00.000Z",
+    shiftKey: "shift:marta-0418-late",
+    kind: "missing-times",
+    missingKinds: ["out"],
+    evidenceKeys: ["order:evidence-marta-3"],
+    createdAt: "2026-04-19T09:45:00.000Z",
+  });
+  await db.insert(attendanceMail).values({
+    questionId: sameDayLater,
+    nextAttemptAt: "2026-04-19T09:45:00.000Z",
   });
   // Re-asked late, so recorded after a question about a later day.
   await db.insert(attendanceQuestions).values({
@@ -614,7 +637,7 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     outcome: "refused",
   });
 
-  return { locationId };
+  return { locationId, nodeId };
 }
 
 const MARTA_CLAIM_TOKEN = "holder-7:3f9c2b1e-claim-token";
@@ -647,6 +670,23 @@ const MARTA_ATTENDANCE = {
         outcome: "sent",
         claimedAt: "2026-04-19T04:01:00.000Z",
         nextAttemptAt: "2026-04-19T04:00:00.000Z",
+      },
+    },
+    {
+      businessDay: "2026-04-18",
+      kind: "missing-times",
+      missingKinds: ["out"],
+      startAt: "2026-04-18T04:00:00.000Z",
+      endAt: "2026-04-19T04:00:00.000Z",
+      createdAt: "2026-04-19T09:45:00.000Z",
+      active: true,
+      inactiveReason: null,
+      reminderEmail: {
+        recipient: null,
+        status: "pending",
+        outcome: null,
+        claimedAt: null,
+        nextAttemptAt: "2026-04-19T09:45:00.000Z",
       },
     },
   ],
@@ -724,61 +764,64 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     const { marta } = await seedAll(suite.db);
     const files = await download(marta);
     expect(files.map((f) => f.name)).toEqual(["employment.json", "absences.json"]);
-    for (const f of files) expect(f.text.endsWith("}\n")).toBe(true);
-    expect(JSON.parse(files[0]!.text)).toEqual({
-      employments: [
-        {
-          contractType: "fixed_term",
-          contractedMinutesPerWeek: 2400,
-          startDate: "2024-01-15",
-          endDate: "2025-02-28",
-          payRate: "11.00",
-          createdAt: "2025-04-01T08:00:00.000Z",
-        },
-        {
-          contractType: "part_time",
-          contractedMinutesPerWeek: 1200,
-          startDate: "2025-03-01",
-          endDate: null,
-          payRate: "12.34",
-          createdAt: "2025-02-20T09:15:00.000Z",
-        },
-      ],
-    });
-    expect(JSON.parse(files[1]!.text)).toEqual({
-      absences: [
-        {
-          kind: "sick_leave",
-          startsOn: "2026-02-03",
-          endsOn: "2026-02-05",
-          status: "requested",
-          note: "Flu, doctor's note given",
-          decidedBy: null,
-          decidedAt: null,
-          createdAt: "2026-04-10T07:45:00.000Z",
-        },
-        {
-          kind: "holiday",
-          startsOn: "2026-05-18",
-          endsOn: "2026-05-22",
-          status: "approved",
-          note: "Family wedding",
-          decidedBy: "Luis Manager",
-          decidedAt: "2026-04-02T16:20:00.000Z",
-          createdAt: "2026-04-01T11:05:00.000Z",
-        },
-        {
-          kind: "unpaid",
-          startsOn: "2026-08-10",
-          endsOn: "2026-08-12",
-          status: "requested",
-          note: null,
-          decidedBy: null,
-          decidedAt: null,
-          createdAt: "2026-07-01T10:00:00.000Z",
-        },
-      ],
-    });
+    expect(files[0]!.text).toBe(
+      asFile({
+        employments: [
+          {
+            contractType: "fixed_term",
+            contractedMinutesPerWeek: 2400,
+            startDate: "2024-01-15",
+            endDate: "2025-02-28",
+            payRate: "11.00",
+            createdAt: "2025-04-01T08:00:00.000Z",
+          },
+          {
+            contractType: "part_time",
+            contractedMinutesPerWeek: 1200,
+            startDate: "2025-03-01",
+            endDate: null,
+            payRate: "12.34",
+            createdAt: "2025-02-20T09:15:00.000Z",
+          },
+        ],
+      }),
+    );
+    expect(files[1]!.text).toBe(
+      asFile({
+        absences: [
+          {
+            kind: "sick_leave",
+            startsOn: "2026-02-03",
+            endsOn: "2026-02-05",
+            status: "requested",
+            note: "Flu, doctor's note given",
+            decidedBy: null,
+            decidedAt: null,
+            createdAt: "2026-04-10T07:45:00.000Z",
+          },
+          {
+            kind: "holiday",
+            startsOn: "2026-05-18",
+            endsOn: "2026-05-22",
+            status: "approved",
+            note: "Family wedding",
+            decidedBy: "Luis Manager",
+            decidedAt: "2026-04-02T16:20:00.000Z",
+            createdAt: "2026-04-01T11:05:00.000Z",
+          },
+          {
+            kind: "unpaid",
+            startsOn: "2026-08-10",
+            endsOn: "2026-08-12",
+            status: "requested",
+            note: null,
+            decidedBy: null,
+            decidedAt: null,
+            createdAt: "2026-07-01T10:00:00.000Z",
+          },
+        ],
+      }),
+    );
   });
 
   it("holds none of a colleague's values", async () => {
@@ -828,8 +871,7 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     const files = await download(people.marta);
     expect(files.map((f) => f.name)).toEqual(["employment.json", "rota.json", "absences.json"]);
     const text = rotaOf(files);
-    expect(text.endsWith("}\n")).toBe(true);
-    expect(JSON.parse(text)).toEqual(MARTA_ROTA);
+    expect(text).toBe(asFile(MARTA_ROTA));
   });
 
   it("holds none of the colleague's rota and names others only where decided", async () => {
@@ -919,8 +961,7 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
       "attendance.json",
     ]);
     const text = attendanceOf(files);
-    expect(text.endsWith("}\n")).toBe(true);
-    expect(JSON.parse(text)).toEqual(MARTA_ATTENDANCE);
+    expect(text).toBe(asFile(MARTA_ATTENDANCE));
   });
 
   it("holds none of the colleague's attendance and no manager's id or email", async () => {
@@ -954,8 +995,29 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
 
   it("writes a null reason and no changes for an answer that has neither", async () => {
     const people = await seedAll(suite.db);
-    const { locationId } = await seedAttendance(suite.db, people);
+    const { locationId, nodeId } = await seedAttendance(suite.db, people);
     const person = await seedPerson(suite.db, "Confirms Only");
+    await insertTimeEntry(suite.db, {
+      nodeId,
+      personId: person,
+      locationId,
+      entryKind: "in",
+      eventAt: "2026-06-02T08:00:00Z",
+    });
+    await insertTimeEntry(suite.db, {
+      nodeId,
+      personId: person,
+      locationId,
+      entryKind: "out",
+      eventAt: "2026-06-03T04:00:00Z",
+    });
+    const entries = await suite.db
+      .select({ id: timeEntries.id })
+      .from(timeEntries)
+      .where(eq(timeEntries.personId, person))
+      .orderBy(asc(timeEntries.eventAt));
+    const [openEntry, automaticEntry] = entries.map((e) => e.id) as [string, string];
+    // Only an automatic clock-out can be confirmed, and such a question gets no reminder.
     const questionId = "00000000-0000-4000-8000-0000000000d1";
     await suite.db.insert(attendanceQuestions).values({
       id: questionId,
@@ -965,8 +1027,10 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
       startAt: "2026-06-02T04:00:00.000Z",
       endAt: "2026-06-03T04:00:00.000Z",
       shiftKey: "shift:confirms-0602",
-      kind: "missing-times",
-      missingKinds: ["out"],
+      kind: "automatic-out",
+      missingKinds: [],
+      openEntryId: openEntry,
+      automaticEntryId: automaticEntry,
       evidenceKeys: [],
       createdAt: "2026-06-03T04:00:00.000Z",
     });
@@ -979,36 +1043,38 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
       questionId,
       action: "confirm",
       input: { action: "confirm", questionId },
-      entryIds: ["00000000-0000-4000-8000-0000000000d3"],
+      entryIds: [automaticEntry],
       createdAt: "2026-06-03T07:00:00.000Z",
     });
     const files = await download(person);
     expect(files.map((f) => f.name)).toEqual(["attendance.json"]);
-    expect(JSON.parse(files[0]!.text)).toEqual({
-      questions: [
-        {
-          businessDay: "2026-06-02",
-          kind: "missing-times",
-          missingKinds: ["out"],
-          startAt: "2026-06-02T04:00:00.000Z",
-          endAt: "2026-06-03T04:00:00.000Z",
-          createdAt: "2026-06-03T04:00:00.000Z",
-          active: true,
-          inactiveReason: null,
-          reminderEmail: null,
-        },
-      ],
-      responses: [
-        {
-          action: "confirm",
-          byYou: true,
-          authorizedBy: "Confirms Only",
-          reason: null,
-          changes: [],
-          createdAt: "2026-06-03T07:00:00.000Z",
-        },
-      ],
-      activity: [],
-    });
+    expect(files[0]!.text).toBe(
+      asFile({
+        questions: [
+          {
+            businessDay: "2026-06-02",
+            kind: "automatic-out",
+            missingKinds: [],
+            startAt: "2026-06-02T04:00:00.000Z",
+            endAt: "2026-06-03T04:00:00.000Z",
+            createdAt: "2026-06-03T04:00:00.000Z",
+            active: true,
+            inactiveReason: null,
+            reminderEmail: null,
+          },
+        ],
+        responses: [
+          {
+            action: "confirm",
+            byYou: true,
+            authorizedBy: "Confirms Only",
+            reason: null,
+            changes: [],
+            createdAt: "2026-06-03T07:00:00.000Z",
+          },
+        ],
+        activity: [],
+      }),
+    );
   });
 });
