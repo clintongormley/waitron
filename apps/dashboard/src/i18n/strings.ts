@@ -3333,6 +3333,12 @@ export const en = {
   "box_status.misdated.note": "Note: {note}",
   "box_status.misdated.handled_read_error": "The handled lists could not be read.",
   "box_status.misdated.download": "Download for your adviser",
+  "misdated_note.add_heading": "Add a note",
+  "misdated_note.label": "Note",
+  "misdated_note.placeholder": "What your tax adviser said, or what was done",
+  "misdated_note.placeholder_optional": "What your tax adviser said, or what was done (optional)",
+  "misdated_note.required": "Write a note.",
+  "misdated_note.too_long": "Write a note of 500 characters or fewer.",
   "box_status.alerts_unavailable":
     "The alerts could not be read, so a part may look fine when it is not.",
 } as const;
@@ -6720,6 +6726,12 @@ export const es: Record<StringKey, string> = {
   "box_status.misdated.note": "Nota: {note}",
   "box_status.misdated.handled_read_error": "No se han podido leer las listas resueltas.",
   "box_status.misdated.download": "Descargar para tu asesor",
+  "misdated_note.add_heading": "Añadir una nota",
+  "misdated_note.label": "Nota",
+  "misdated_note.placeholder": "Lo que dijo tu asesor fiscal, o lo que se hizo",
+  "misdated_note.placeholder_optional": "Lo que dijo tu asesor fiscal, o lo que se hizo (opcional)",
+  "misdated_note.required": "Escribe una nota.",
+  "misdated_note.too_long": "Escribe una nota de 500 caracteres como máximo.",
   "box_status.alerts_unavailable":
     "No se han podido leer los avisos, así que puede parecer que una parte está bien cuando no lo está.",
 };
