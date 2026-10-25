@@ -96,7 +96,7 @@ describe("landing app", () => {
       });
       const page = await (await app.request("http://waitron.local/")).text();
       expect(page).not.toContain('href="/ca.crt"');
-      expect(page).toMatch(/installer supplied/i);
+      expect(page).toContain("This page cannot replace a separately installed certificate.");
 
       const res = await app.request("http://waitron.local/ca.crt");
       expect(res.status).toBe(404);
