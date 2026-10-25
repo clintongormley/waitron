@@ -9,6 +9,7 @@ import {
   createFirstSetupStore,
   assertOtherSetupAllowed,
   inspectFirstSetupMarker,
+  assertVenueFirstSetupAllowed,
   type FirstSetupFrozen,
 } from "./first-setup-state.js";
 import * as durable from "./durable-host-json.js";
@@ -980,13 +981,25 @@ it("a retired root cannot be claimed again or accept a delayed state update", as
   });
   await writeFile(join(f.options.venueDir, "first-setup-retirement.json"), "{}");
   const before = await readFile(f.statePath);
-  await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  await expect(f.claim()).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
   await expect(
     f.store.update(abandoned.frozen.attemptId, abandoned.revision, {
       kind: "recover",
       capabilityHash: digest("different"),
       claimNonceHash: digest("different-nonce"),
     }),
-  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  ).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
   expect(await readFile(f.statePath)).toEqual(before);
+});
+
+it("marker inspection and venue-only admission refuse an earlier Waitron's first-setup layout", async () => {
+  const f = await fixture();
+  await f.claim();
+  await writeFile(join(f.options.venueDir, "first-setup-selection.json"), "");
+  await expect(inspectFirstSetupMarker(f.options.venueDir)).rejects.toMatchObject({
+    code: "setup.workspace_unsupported",
+  });
+  await expect(assertVenueFirstSetupAllowed(f.options.venueDir)).rejects.toMatchObject({
+    code: "setup.workspace_unsupported",
+  });
 });

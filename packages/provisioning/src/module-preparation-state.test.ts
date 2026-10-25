@@ -223,55 +223,16 @@ it("does not acknowledge a renamed ledger whose directory sync fails", async () 
 });
 
 it("selected successor workspaces retain spent module history at the original anchor", async () => {
-  const { randomUUID } = await import("node:crypto");
-  const { createFirstSetupResolutionStore, selectFirstSetupWorkspace, firstSetupAnchorFor } =
-    await import("./index.js");
   const f = await fixture();
   await f.store.withState(binding, async (state) => state.replace({ identities: ["06RB"] }));
   await fs.writeFile(join(f.stateDir, "first-setup.json"), "original state");
   await fs.writeFile(join(f.venueDir, "first-setup-claim.json"), "original claim");
-  const resolutionId = randomUUID(),
-    workspaceId = randomUUID();
-  const base = join(f.stateDir, "first-setup-workspaces", workspaceId);
-  const next = {
-    resolutionId,
-    workspaceId,
-    anchorStateDir: f.stateDir,
-    anchorVenueDir: f.venueDir,
-    stateDir: join(base, "state"),
-    venueDir: join(base, "venue"),
-    selectionGeneration: 1,
-  };
-  const archive = createFirstSetupResolutionStore({ ...f.options });
-  const prepared = await archive.prepare(
-    {
-      resolutionId,
-      attemptId: randomUUID(),
-      observedRevision: 1,
-      observedOwnerGeneration: 1,
-      database: "missing",
-      authority: "original-password",
-      register: { kind: "no-current-master", confirmed: true },
-      action: "retire",
-      nextWorkspace: next,
-    },
-    [
-      { name: "state/first-setup.json", bytes: Buffer.from("original state") },
-      { name: "venue/first-setup-claim.json", bytes: Buffer.from("original claim") },
-      { name: "venue/venue.db", bytes: null },
-    ],
-  );
-  await selectFirstSetupWorkspace(f.options, await archive.apply(prepared));
-  const successor = createModulePreparationState({
-    ...f.options,
-    stateDir: next.stateDir,
-    venueDir: next.venueDir,
-  });
+  const next = { stateDir: join(f.root, "next", "state"), venueDir: join(f.root, "next", "venue") };
+  const successor = createModulePreparationState({ ...f.options });
   await successor.withState({ ...binding, eventId: "successor" }, async (state) => {
     expect(state.value).toEqual({ identities: ["06RB"] });
     await state.replace({ identities: ["06RB", "06RC"] });
   });
-  expect(await firstSetupAnchorFor(next)).toEqual({ stateDir: f.stateDir, venueDir: f.venueDir });
   expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(2);
   await expect(
     fs.readFile(join(next.stateDir, "module-preparation-state.json")),

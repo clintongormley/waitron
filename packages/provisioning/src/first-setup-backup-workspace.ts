@@ -8,7 +8,6 @@ import type { OperationBinding } from "@waitron/module";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupCoordinator } from "./first-setup-state.js";
 import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup-resolution.js";
-import { resolveFirstSetupWorkspace, firstSetupAnchorFor } from "./first-setup-workspace.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import "./errors.js";
 
@@ -276,9 +275,8 @@ async function witness(anchor: FirstSetupRoots): Promise<Witness | null> {
     uncertain();
   return first as unknown as Witness;
 }
-async function sourceFor(anchor: FirstSetupRoots): Promise<FirstSetupRoots> {
-  const selected = await resolveFirstSetupWorkspace(anchor);
-  return { venueDir: selected.venueDir, stateDir: selected.stateDir };
+function sourceFor(anchor: FirstSetupRoots): FirstSetupRoots {
+  return { venueDir: anchor.venueDir, stateDir: anchor.stateDir };
 }
 async function originals(
   anchor: FirstSetupRoots,
@@ -499,7 +497,7 @@ async function checkedRecords(
     )
   )
     conflict();
-  if (!isDeepStrictEqual(await sourceFor(anchor), selection.target.source)) conflict();
+  if (!isDeepStrictEqual(sourceFor(anchor), selection.target.source)) conflict();
   return records;
 }
 const coordinators = new Map<string, ReturnType<typeof createFirstSetupCoordinator>>();
@@ -514,7 +512,7 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
   async function inspect(id: string): Promise<string> {
     if (!isUuid(id)) invalid();
     const anchor = await canonical(anchorInput);
-    return digest(await stableOriginals(anchor, await sourceFor(anchor), id));
+    return digest(await stableOriginals(anchor, sourceFor(anchor), id));
   }
   async function readRecords(): Promise<BackupRepairRecord[]> {
     const anchor = await canonical(anchorInput),
@@ -528,7 +526,7 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
     if (
       !isDeepStrictEqual(anchor, input.target.anchor) ||
       !isDeepStrictEqual(await canonical(input.target.source), input.target.source) ||
-      !isDeepStrictEqual(await sourceFor(anchor), input.target.source)
+      !isDeepStrictEqual(sourceFor(anchor), input.target.source)
     )
       conflict();
     let selected: Witness | null;
@@ -683,9 +681,7 @@ export async function assertFirstSetupBackupBootTarget(input: FirstSetupRoots): 
         Object.values(target).map((root) => read(join(root, NAMESPACE, "backlink.json"))),
       );
     if (backlinks.every((value) => value === null)) {
-      const v1 = await read(join(target.venueDir, "first-setup-workspace.json"));
-      const anchor = v1 === null ? target : await firstSetupAnchorFor(target);
-      const location = await resolveFirstSetupBackupWorkspace(anchor);
+      const location = await resolveFirstSetupBackupWorkspace(target);
       if (location.kind !== "absent" || Object.values(target).some(insideBackupRepairTarget))
         uncertain();
       return;

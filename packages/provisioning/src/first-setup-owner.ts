@@ -24,7 +24,7 @@ import { createSetupOperationStore } from "./setup-operation.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { inTurn } from "./attempt-turns.js";
 import type { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
-import { assertFirstSetupBootTarget } from "./first-setup-workspace.js";
+import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { createFirstSetupOwnerAudit } from "./first-setup-owner-audit.js";
 
 export interface FirstSetupClaimPayload {
@@ -170,7 +170,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
   };
   const authorize = async (owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> => {
     const state = await store.read();
-    if (state !== null) await assertFirstSetupBootTarget(state);
+    if (state !== null) await assertNoLegacyFirstSetupWorkspace(state);
     if (
       state === null ||
       !validToken(owner.capability) ||
@@ -235,7 +235,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
         const capability = token();
         const rebind = () =>
           coordinator.run(async (hold) => {
-            if (before !== null) await assertFirstSetupBootTarget(before);
+            if (before !== null) await assertNoLegacyFirstSetupWorkspace(before);
             if (
               snapshot !== undefined &&
               (await options.resolution!.inspectFirstSetupResolution()).inspectionId !==
@@ -358,7 +358,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
     },
     async status(owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> {
       const state = await store.read();
-      if (state !== null) await assertFirstSetupBootTarget(state);
+      if (state !== null) await assertNoLegacyFirstSetupWorkspace(state);
       if (
         state === null ||
         !validToken(owner.capability) ||

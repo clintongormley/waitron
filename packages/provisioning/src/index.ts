@@ -64,14 +64,7 @@ export type {
   ResolutionInput,
   FirstSetupOriginal,
 } from "./first-setup-resolution.js";
-export {
-  firstSetupAnchorFor,
-  inspectFirstSetupWorkspaceSelection,
-  selectFirstSetupWorkspace,
-  resolveFirstSetupWorkspace,
-  assertFirstSetupBootTarget,
-} from "./first-setup-workspace.js";
-export type { FirstSetupAnchor, FirstSetupBootTarget } from "./first-setup-workspace.js";
+export { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 export { createSetupPreparationHost } from "./setup-preparation-host.js";
 export { publicFirstSetupState, createFirstSetupOwner } from "./first-setup-owner.js";
 export type {

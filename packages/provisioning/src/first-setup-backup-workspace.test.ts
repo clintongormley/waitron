@@ -325,55 +325,6 @@ it.each(["state", "venue", "target-state", "target-venue"])(
     });
   },
 );
-it("rejects V1's retired source as a raw boot target while its V2 repair is pending", async () => {
-  const f = await fixture();
-  const workspaceId = "14a1973a-ddeb-49d6-a63f-7cc490cf03dd",
-    resolutionId = "63a50838-d58f-4f5c-826b-cd369b5acb63";
-  const base = join(f.anchor.stateDir, "first-setup-workspaces", workspaceId);
-  const binding: provision.WorkspaceBinding = {
-    workspaceId,
-    resolutionId,
-    anchorVenueDir: f.anchor.venueDir,
-    anchorStateDir: f.anchor.stateDir,
-    venueDir: join(base, "venue"),
-    stateDir: join(base, "state"),
-    selectionGeneration: 1,
-  };
-  const v1 = provision.createFirstSetupResolutionStore({
-    ...f.anchor,
-    coordinator: provision.createFirstSetupCoordinator(),
-  });
-  const applied = await v1.apply(
-    await v1.prepare(
-      {
-        resolutionId,
-        attemptId: "4cc6a357-e31c-4c2e-9b40-023c9963bec8",
-        observedRevision: 1,
-        observedOwnerGeneration: 1,
-        database: "missing",
-        authority: "original-password",
-        register: null,
-        action: "retire",
-        nextWorkspace: binding,
-      },
-      [
-        { name: "state/first-setup.json", bytes: Buffer.from("opaque malformed original") },
-        { name: "venue/first-setup-claim.json", bytes: null },
-        { name: "venue/venue.db", bytes: Buffer.from("unchanged database bytes") },
-      ],
-    ),
-  );
-  await provision.selectFirstSetupWorkspace(f.anchor, applied);
-  const source = { venueDir: binding.venueDir, stateDir: binding.stateDir };
-  expect(await provision.resolveFirstSetupWorkspace(f.anchor)).toMatchObject(source);
-  await provision.assertFirstSetupBackupBootTarget(source);
-  const input = await f.input();
-  input.target.source = source;
-  await f.store.append(input);
-  await expect(provision.assertFirstSetupBackupBootTarget(source)).rejects.toMatchObject({
-    code: "setup.attempt_uncertain",
-  });
-});
 it.each([
   ["extra record field", (input: Record<string, unknown>) => ({ ...input, authority: "invented" })],
   [

@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFirstSetupCoordinator, createFirstSetupStore } from "./index.js";
@@ -321,6 +321,15 @@ it("does not treat an absent independently configured register as proof of no re
   const result = await service.inspectFirstSetupResolution();
   expect(result.artifacts).toContainEqual({ name: "outside-evidence-0", status: "missing" });
   expect(result.repairEligible).toBe(false);
+});
+it("venue exclusion refuses an earlier Waitron's first-setup layout before its body runs", async () => {
+  const f = await fixture();
+  await writeFile(join(f.stateDir, "first-setup-retirement.json"), "");
+  const body = vi.fn(async () => "ran");
+  await expect(f.service.withVenueExclusion(body)).rejects.toMatchObject({
+    code: "setup.workspace_unsupported",
+  });
+  expect(body).not.toHaveBeenCalled();
 });
 it("rereads auxiliary evidence after password checking under venue exclusion", async () => {
   const f = await fixture("active");
