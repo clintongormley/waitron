@@ -5,6 +5,7 @@ import {
   ADJUSTMENTS_CONFIGURATION_TRANSFER,
   ADJUSTMENTS_MIGRATIONS,
   ADJUSTMENTS_PERMISSIONS,
+  ADJUSTMENTS_PERSONAL_DATA,
   ADJUSTMENTS_PROVISIONING,
   ADJUSTMENTS_ROUTES,
 } from "@waitron/adjustments";
@@ -369,10 +370,17 @@ describe("ALL_MODULES personal-data seat", () => {
     );
   });
 
+  it("adjustments carries its part, by reference", () => {
+    expect(ALL_MODULES.find((m) => m.name === "adjustments")?.personalData).toBe(
+      ADJUSTMENTS_PERSONAL_DATA,
+    );
+  });
+
   it("no other module carries the seat", () => {
     expect(ALL_MODULES.filter((m) => m.personalData !== undefined).map((m) => m.name)).toEqual([
       "identity",
       "workforce",
+      "adjustments",
       "staffing",
     ]);
   });
