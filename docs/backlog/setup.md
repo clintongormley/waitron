@@ -438,16 +438,6 @@ Reconnect to continue."; two "Start again" buttons are drawn at once, the one th
 confirmation and the one that confirms; and Continue sits tight against the password field at
 phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
 
-## A damaged kept recovery-key record on a box whose database is present: Start again refuses and the page offers no way out
-
-Left open by A1042 (S7l). With the venue database present, the kept recovery-key record
-(`first-fiscal-documents/<module>.recovery.json` in the state folder) is what allows a Start again
-without the setup password, so a damaged one makes Start again refuse `setup.not_ready`
-(`apps/server/src/first-setup-unused-assignment.ts`; rows in
-`apps/server/src/first-setup-unused-pdf.test.ts` pin the refusal), and the page offers nothing
-else to do. With the database missing, A1042 fixed the same damage: the page says the record is
-damaged and Start again goes ahead once the person confirms. Waiting for the owner.
-
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database

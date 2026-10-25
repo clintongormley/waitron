@@ -458,10 +458,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   "Start again" buttons, and Continue tight against the password field at phone width.
   [Detail](backlog/setup.md#the-repair-pages-start-again-oddities-from-1752)
 
-- **A damaged kept recovery-key record on a box whose database is present: Start again refuses and
-  the page offers no way out.** Waiting for the owner. Left open by A1042 (S7l).
-  [Detail](backlog/setup.md#a-damaged-kept-recovery-key-record-on-a-box-whose-database-is-present-start-again-refuses-and-the-page-offers-no-way-out)
-
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
   Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
