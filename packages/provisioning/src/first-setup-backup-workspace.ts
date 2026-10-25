@@ -9,6 +9,7 @@ import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupCoordinator } from "./first-setup-state.js";
 import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup-resolution.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import "./errors.js";
 
 export interface BackupRepairTarget {
@@ -306,9 +307,11 @@ async function originals(
     ]),
   );
   const pointers = new Set(currentPaths(anchor));
+  const recoveries = join(anchor.stateDir, NAMESPACE);
   const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
   async function walk(path: string, isRoot = false): Promise<void> {
     if (path === output || pointers.has(path)) return;
+    if (dirname(path) === recoveries && (await abandonedJournal(anchor, basename(path)))) return;
     // Lock journals and holder heartbeats carry no setup or recovery authority.
     if (
       rootsToRead.some(
@@ -370,6 +373,31 @@ async function originals(
     await walk(root, true);
   }
   return [...entries.values()].sort((a, b) => a.path.localeCompare(b.path, "en"));
+}
+async function abandonedJournal(anchor: FirstSetupRoots, id: string): Promise<boolean> {
+  if (!isUuid(id)) return false;
+  try {
+    const path = join(anchor.stateDir, NAMESPACE, id);
+    const names = (await readdir(path)).filter((name) => /^\d+\.json$/.test(name)).sort();
+    let previous: BackupRepairRecord | undefined;
+    for (const [index, name] of names.entries()) {
+      const record = await read(join(path, name));
+      recordValid(record);
+      if (
+        name !== `${String(index + 1).padStart(6, "0")}.json` ||
+        record.sequence !== index + 1 ||
+        record.previousRecordDigest !== (previous === undefined ? null : digest(previous)) ||
+        record.target.recoveryId !== id ||
+        !isDeepStrictEqual(record.target.anchor, anchor)
+      )
+        return false;
+      transition(previous, recordInput(record));
+      previous = record;
+    }
+    return previous?.phase === "abandoned";
+  } catch {
+    return false;
+  }
 }
 async function stableOriginals(anchor: FirstSetupRoots, source: FirstSetupRoots, id: string) {
   const first = await originals(anchor, source, id),
@@ -557,7 +585,19 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
       if (values.some((value) => value !== null)) throw error;
       selected = null;
     }
-    if (selected !== null && !isDeepStrictEqual(selected.target, input.target)) conflict();
+    let replacing = false;
+    if (selected !== null && !isDeepStrictEqual(selected.target, input.target)) {
+      if (
+        input.phase !== "prepared" ||
+        (await checkedRecords(anchor, selected, true)).at(-1)!.phase !== "abandoned"
+      )
+        conflict();
+      // Start again finishes the emptying; once the pointers move, nothing could reach it.
+      if (!(await isEmptiedTombstone(anchor, selected.target.recoveryId)))
+        throw new AppError("setup.start_again_incomplete", {});
+      selected = null;
+      replacing = true;
+    }
     const path = folder(input.target);
     let previous: BackupRepairRecord | undefined;
     if (selected !== null) {
@@ -612,7 +652,14 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
       initialRecordDigest: digest(record),
       initialRecord: record,
     };
-    for (const pointer of currentPaths(anchor)) await immutable(pointer, selected);
+    if (replacing) {
+      // A discarded recovery's pointer gives way to the next one; its records stay as a tombstone.
+      // The state folder's goes first: the venue folder's is already gone, so a cut leaves one.
+      for (const pointer of currentPaths(anchor).reverse()) {
+        await firstSetupDirectory(dirname(pointer), true);
+        await writeDurableHostJson(pointer, selected, LIMIT);
+      }
+    } else for (const pointer of currentPaths(anchor)) await immutable(pointer, selected);
     await archiveControls(path, entries);
     await immutable(join(path, "originals.json"), { version: 1, entries });
     await immutable(join(path, `${String(record.sequence).padStart(6, "0")}.json`), record);

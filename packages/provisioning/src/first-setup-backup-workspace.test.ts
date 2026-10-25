@@ -775,3 +775,126 @@ it("returns the same record when abandoned twice, writing nothing the second tim
   expect(await readFile(path)).toEqual(bytes);
   expect(await f.store.read()).toHaveLength(first.sequence);
 });
+
+const laterId = "5b0d6c1e-8a4f-4f59-9d43-2c7a1e0b9f11";
+async function laterInput(f: Awaited<ReturnType<typeof fixture>>) {
+  const input = await f.input();
+  const base = join(f.anchor.stateDir, "first-setup-resolutions", "backup-recovery", laterId);
+  return {
+    ...input,
+    target: {
+      ...f.target,
+      recoveryId: laterId,
+      target: { venueDir: join(base, "target", "venue"), stateDir: join(base, "target", "state") },
+    },
+    observation: { ...input.observation, originalsDigest: await f.store.inspect(laterId) },
+  };
+}
+const pointersOf = (f: Awaited<ReturnType<typeof fixture>>) =>
+  [...new Set(Object.values(f.anchor))].map((root) =>
+    join(root, "first-setup-resolutions", "backup-recovery", "current.json"),
+  );
+async function tombstoneAt(shared: boolean) {
+  const f = await fixture(shared),
+    input = await f.input();
+  await f.store.append(input);
+  await f.store.append({ ...input, input: placementInput, phase: "placement-started" });
+  return { f, tombstone: await f.store.abandon(recoveryId) };
+}
+it.each([false, true])(
+  "refuses a new recovery beside a tombstone not yet emptied, changing nothing (shared roots: %s)",
+  async (shared) => {
+    const { f } = await tombstoneAt(shared);
+    const { stat } = await import("node:fs/promises");
+    const record = join(f.base, "000003.json");
+    const inode = (await stat(record)).ino;
+    const pointers = await Promise.all(pointersOf(f).map((pointer) => readFile(pointer)));
+    const records = await f.store.read();
+    await expect(f.store.append(await laterInput(f))).rejects.toMatchObject({
+      code: "setup.start_again_incomplete",
+    });
+    expect(await f.store.read()).toEqual(records);
+    expect(await Promise.all(pointersOf(f).map((pointer) => readFile(pointer)))).toEqual(pointers);
+    expect((await stat(record)).ino).toBe(inode);
+    await expect(
+      readFile(join(f.anchor.stateDir, "first-setup-resolutions", "backup-recovery", laterId)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+it("finishes a new recovery whose first write was cut after the state pointer was replaced", async () => {
+  const { f } = await tombstoneAt(false);
+  await provision.emptyAbandonedBackupRecovery(f.anchor, recoveryId);
+  const next = await laterInput(f);
+  const first = await f.store.append(next);
+  const [venuePointer] = pointersOf(f);
+  await rm(venuePointer!);
+  const later = join(f.anchor.stateDir, "first-setup-resolutions", "backup-recovery", laterId);
+  await rm(join(later, "000001.json"));
+  await expect(f.store.append(next)).resolves.toEqual(first);
+  expect(await f.store.read()).toEqual([first]);
+  for (const pointer of pointersOf(f))
+    expect(JSON.parse(await readFile(pointer, "utf8"))).toMatchObject({ target: next.target });
+});
+it.each([false, true])(
+  "starts a new recovery beside an emptied tombstone, keeping its records (shared roots: %s)",
+  async (shared) => {
+    const { f, tombstone } = await tombstoneAt(shared);
+    const { stat } = await import("node:fs/promises");
+    const names = ["000001.json", "000002.json", "000003.json"];
+    const before = await Promise.all(names.map((name) => stat(join(f.base, name))));
+    const bytes = await Promise.all(names.map((name) => readFile(join(f.base, name))));
+    await provision.emptyAbandonedBackupRecovery(f.anchor, recoveryId);
+    const next = await laterInput(f);
+    const record = await f.store.append(next);
+    expect(record).toMatchObject({ sequence: 1, phase: "prepared", target: next.target });
+    expect(await f.store.read()).toEqual([record]);
+    for (const pointer of pointersOf(f))
+      expect(JSON.parse(await readFile(pointer, "utf8"))).toMatchObject({
+        target: next.target,
+        initialRecord: record,
+      });
+    expect(await provision.resolveFirstSetupBackupWorkspace(f.anchor)).toEqual({
+      kind: "repair",
+      target: next.target,
+    });
+    const after = await Promise.all(names.map((name) => stat(join(f.base, name))));
+    expect(after.map(({ ino, birthtimeMs }) => ({ ino, birthtimeMs }))).toEqual(
+      before.map(({ ino, birthtimeMs }) => ({ ino, birthtimeMs })),
+    );
+    expect(await Promise.all(names.map((name) => readFile(join(f.base, name))))).toEqual(bytes);
+    expect(JSON.parse(bytes[2]!.toString())).toEqual(tombstone);
+    expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(true);
+    await f.store.append({ ...next, input: placementInput, phase: "placement-started" });
+    expect((await f.store.read()).map((each) => each.phase)).toEqual([
+      "prepared",
+      "placement-started",
+    ]);
+  },
+);
+it.each(["prepared", "placement-started", "restored", "selected"] as const)(
+  "refuses a new recovery while the current one is %s",
+  async (phase) => {
+    const { f } = await journalAt(phase === "selected" ? "restored" : phase);
+    if (phase === "selected") await f.store.select((await f.store.read()).at(-1)!);
+    const records = await f.store.read();
+    const pointers = await Promise.all(pointersOf(f).map((pointer) => readFile(pointer)));
+    await expect(f.store.append(await laterInput(f))).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    expect(await f.store.read()).toEqual(records);
+    expect(await Promise.all(pointersOf(f).map((pointer) => readFile(pointer)))).toEqual(pointers);
+    await expect(
+      readFile(join(f.anchor.stateDir, "first-setup-resolutions", "backup-recovery", laterId)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+it.each([false, true])(
+  "leaves an abandoned recovery's folder out of a new recovery's originals (abandoned: %s)",
+  async (abandon) => {
+    const { f } = await journalAt("placement-started");
+    if (abandon) await f.store.abandon(recoveryId);
+    const first = await f.store.inspect(laterId);
+    await writeFile(join(f.base, "left-behind.bin"), "bytes inside the old recovery");
+    expect((await f.store.inspect(laterId)) === first).toBe(abandon);
+  },
+);

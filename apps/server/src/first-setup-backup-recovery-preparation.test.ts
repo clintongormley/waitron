@@ -13,6 +13,7 @@ import { AppError } from "@waitron/shared";
 import { readModuleRecoveryEvidence, collectModuleNonDbState } from "./backup-sources.js";
 import {
   createFirstSetupCoordinator,
+  emptyAbandonedBackupRecovery,
   raiseStartAgainNote,
   readModulePreparationHistory,
   readStartAgainNote,
@@ -25,6 +26,8 @@ import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { copyFile } from "node:fs/promises";
+import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
+import { packArchive, unpackArchive } from "./backup-archive.js";
 
 import {
   recovery,
@@ -659,5 +662,54 @@ it("a restore into A731's nested target reads the box's own note", async () => {
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "minute_not_later", allowedFromMs: floorMs },
+  });
+});
+
+it("reads a discarded recovery as none, and runs a second archive recovery to selected beside it", async () => {
+  const f = await fixture(true);
+  const entries = unpackArchive(decryptArtifact(f.request.source.artifact, f.restore.recoveryKey));
+  entries.push({
+    name: "secrets/module-evidence/fiscal-verifactu/hour-history.json",
+    bytes: Buffer.from(
+      JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
+    ),
+  });
+  f.request.source.artifact = Uint8Array.from(
+    encryptArtifact(packArchive(entries), f.restore.recoveryKey),
+  );
+  const service = recovery(f.options);
+  const first = await service.open(f.request, { onBox: false });
+  await service.prepare(first.sessionId, { action: "clock-challenge" }, { onBox: false });
+  await service.close(first.sessionId);
+  await f.workspace.abandon(first.recoveryId);
+  expect(await service.status()).toEqual({ phase: "unstarted", proofRequired: true });
+  await expect(service.open(f.request, { onBox: false })).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("abandoned");
+  await emptyAbandonedBackupRecovery(f.roots, first.recoveryId);
+  expect(await service.status()).toEqual({ phase: "unstarted", proofRequired: true });
+  const second = await service.open(f.request, { onBox: false });
+  expect(second.recoveryId).not.toBe(first.recoveryId);
+  const selected = (await recoverySelectPastWaits(
+    clock,
+    { prepare: (proposal, client) => service.prepare(second.sessionId, proposal, client) },
+    { onBox: false },
+  )) as { status: string; input: unknown };
+  expect(selected.status).toBe("selected");
+  await service.commit(second.sessionId, selected.input, { onBox: false });
+  const records = await f.workspace.read();
+  expect(new Set(records.map((record) => record.target.recoveryId))).toEqual(
+    new Set([second.recoveryId]),
+  );
+  expect(records.slice(-3).map((record) => record.phase)).toEqual([
+    "placement-started",
+    "restored",
+    "selected",
+  ]);
+  expect(await service.status()).toEqual({
+    phase: "selected",
+    recoveryId: second.recoveryId,
+    proofRequired: true,
   });
 });

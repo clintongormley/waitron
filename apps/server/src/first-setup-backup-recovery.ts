@@ -17,6 +17,7 @@ import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/
 import {
   assertNoStartAgainDeletion,
   canonicalFirstSetupDirectory,
+  isEmptiedTombstone,
   readDurableHostJson,
   writeDurableHostJson,
   type FirstSetupHold,
@@ -478,12 +479,32 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     });
     return entry.preparation;
   };
+  // A discarded recovery reads as none, and its Cloud approval is never used again. Until it is
+  // emptied a new one is refused, as the workspace would; status still offers Start again.
+  const liveRecords = async (starting = true) => {
+    const records = await options.workspace.read(),
+      last = records.at(-1);
+    if (last?.phase !== "abandoned") return records;
+    if (
+      starting &&
+      !(await isEmptiedTombstone(
+        { venueDir: options.venueDir, stateDir: options.stateDir },
+        last.target.recoveryId,
+      ))
+    )
+      throw new AppError("setup.start_again_incomplete", {});
+    if (pendingCloudId === last.target.recoveryId) {
+      clouds.delete(pendingCloudId);
+      pendingCloudId = undefined;
+    }
+    return [];
+  };
   return {
     status() {
       return turn(async () => {
         if (disposed) ownerRequired();
         try {
-          const record = (await options.workspace.read()).at(-1);
+          const record = (await liveRecords(false)).at(-1);
           return record === undefined
             ? { phase: "unstarted" as const, proofRequired: true }
             : { phase: record.phase, recoveryId: record.target.recoveryId, proofRequired: true };
@@ -496,7 +517,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       return turn(async () => {
         if (disposed) ownerRequired();
         if (active !== undefined) conflict();
-        const record = (await options.workspace.read()).at(-1);
+        const record = (await liveRecords()).at(-1);
         if (record !== undefined) {
           const directory = dirname(dirname(record.target.target.stateDir));
           if (
@@ -528,7 +549,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       return turn(async () => {
         if (disposed) ownerRequired();
         if (active !== undefined) conflict();
-        pendingCloudId ??= (await options.workspace.read()).at(-1)?.target.recoveryId;
+        const record = (await liveRecords()).at(-1);
+        pendingCloudId ??= record?.target.recoveryId;
         if (pendingCloudId === undefined) conflict();
         return (await cloudFor(pendingCloudId)).client.status();
       });
@@ -536,8 +558,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     cloudStartAgain() {
       return turn(async () => {
         if (disposed) ownerRequired();
-        if (active !== undefined || pendingCloudId === undefined) conflict();
-        const record = (await options.workspace.read()).at(-1);
+        if (active !== undefined) conflict();
+        const record = (await liveRecords()).at(-1);
+        if (pendingCloudId === undefined) conflict();
         if (
           record !== undefined &&
           (record.phase !== "prepared" ||
@@ -575,7 +598,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           if (disposed) ownerRequired();
           await assertNoStartAgainDeletion(options.venueDir);
           if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
-          const records = await options.workspace.read();
+          const records = await liveRecords();
           const record = records.at(-1);
           if (
             request.recoveryId === undefined
@@ -661,7 +684,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               (await options.workspace.inspect(recoveryId)) !== before.digest ||
               (await fingerprint(selected!)) !== sourceDigest ||
               (await verifier(selected!)) !== provedVerifier ||
-              !isDeepStrictEqual((await options.workspace.read()).at(-1), before.record)
+              !isDeepStrictEqual((await liveRecords()).at(-1), before.record)
             )
               conflict();
             await drop();
