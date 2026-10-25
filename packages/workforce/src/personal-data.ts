@@ -5,8 +5,15 @@ import type { ModulePersonalData, PersonalDataFile } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
 import { asc, eq, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+import type { AttendanceChange } from "./attendance-contract.js";
 import { localWallClock } from "./projection.js";
 import { absences } from "./schema/absences.js";
+import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import {
+  attendanceMail,
+  attendanceOperationFacts,
+  attendanceQuestions,
+} from "./schema/attendance.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
@@ -25,6 +32,7 @@ const clockOfMinute = (minute: number): string =>
 const requester = alias(persons, "requester");
 const offeredTo = alias(persons, "offered_to");
 const decider = alias(persons, "decider");
+const authorizer = alias(persons, "authorizer");
 
 /** A file is built only when the person has a row for it. */
 export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
@@ -113,6 +121,60 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
 
     const hasRota = shiftRows.length + availabilityRows.length + swapRows.length > 0;
 
+    const questionRows = await tx
+      .select({
+        businessDay: attendanceQuestions.businessDay,
+        kind: attendanceQuestions.kind,
+        missingKinds: attendanceQuestions.missingKinds,
+        startAt: attendanceQuestions.startAt,
+        endAt: attendanceQuestions.endAt,
+        createdAt: attendanceQuestions.createdAt,
+        active: attendanceQuestions.active,
+        inactiveReason: attendanceQuestions.inactiveReason,
+        mailId: attendanceMail.id,
+        recipient: attendanceMail.recipient,
+        status: attendanceMail.status,
+        outcome: attendanceMail.outcome,
+        claimedAt: attendanceMail.claimedAt,
+        nextAttemptAt: attendanceMail.nextAttemptAt,
+      })
+      .from(attendanceQuestions)
+      .leftJoin(attendanceMail, eq(attendanceMail.questionId, attendanceQuestions.id))
+      .where(eq(attendanceQuestions.personId, personId))
+      .orderBy(
+        asc(attendanceQuestions.businessDay),
+        asc(attendanceQuestions.createdAt),
+        asc(attendanceQuestions.id),
+      );
+
+    const responseRows = await tx
+      .select({
+        action: attendanceResponseCommands.action,
+        requestedByPersonId: attendanceResponseCommands.requestedByPersonId,
+        authorizedBy: authorizer.displayName,
+        input: attendanceResponseCommands.input,
+        createdAt: attendanceResponseCommands.createdAt,
+      })
+      .from(attendanceResponseCommands)
+      .innerJoin(authorizer, eq(authorizer.id, attendanceResponseCommands.authorizedByPersonId))
+      .where(eq(attendanceResponseCommands.personId, personId))
+      .orderBy(asc(attendanceResponseCommands.createdAt), asc(attendanceResponseCommands.id));
+
+    const activityRows = await tx
+      .select({
+        source: attendanceOperationFacts.source,
+        kind: attendanceOperationFacts.kind,
+        at: attendanceOperationFacts.at,
+        offsetMinutes: attendanceOperationFacts.offsetMinutes,
+        businessDay: attendanceOperationFacts.businessDay,
+        outcome: attendanceOperationFacts.outcome,
+      })
+      .from(attendanceOperationFacts)
+      .where(eq(attendanceOperationFacts.personId, personId))
+      .orderBy(asc(attendanceOperationFacts.at), asc(attendanceOperationFacts.sequence));
+
+    const hasAttendance = questionRows.length + responseRows.length + activityRows.length > 0;
+
     return async () => [
       ...(employmentRows.length === 0
         ? []
@@ -154,6 +216,53 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
           ]
         : []),
       ...(absenceRows.length === 0 ? [] : [jsonFile("absences.json", { absences: absenceRows })]),
+      ...(hasAttendance
+        ? [
+            jsonFile("attendance.json", {
+              questions: questionRows.map((row) => ({
+                businessDay: row.businessDay,
+                kind: row.kind,
+                missingKinds: row.missingKinds,
+                startAt: row.startAt,
+                endAt: row.endAt,
+                createdAt: row.createdAt,
+                active: row.active,
+                inactiveReason: row.inactiveReason,
+                reminderEmail:
+                  row.mailId === null
+                    ? null
+                    : {
+                        recipient: row.recipient,
+                        status: row.status,
+                        outcome: row.outcome,
+                        claimedAt: row.claimedAt,
+                        nextAttemptAt: row.nextAttemptAt,
+                      },
+              })),
+              responses: responseRows.map((row) => {
+                const input = row.input as { reason?: string; changes?: AttendanceChange[] };
+                return {
+                  action: row.action,
+                  byYou: row.requestedByPersonId === personId,
+                  authorizedBy: row.authorizedBy,
+                  reason: input.reason ?? null,
+                  changes: (input.changes ?? []).map((change) => ({
+                    at: localWallClock(change.at, change.offsetMinutes),
+                    missingKind: "missingKind" in change.target ? change.target.missingKind : null,
+                  })),
+                  createdAt: row.createdAt,
+                };
+              }),
+              activity: activityRows.map((row) => ({
+                source: row.source,
+                kind: row.kind,
+                at: localWallClock(row.at, row.offsetMinutes),
+                businessDay: row.businessDay,
+                outcome: row.outcome,
+              })),
+            }),
+          ]
+        : []),
     ];
   },
 };

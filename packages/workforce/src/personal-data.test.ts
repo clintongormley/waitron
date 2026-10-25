@@ -1,19 +1,33 @@
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { eq } from "drizzle-orm";
+import { locationId as brandLocationId } from "@waitron/shared";
+import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WORKFORCE_PERSONAL_DATA } from "./personal-data.js";
+import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import {
+  attendanceMail,
+  attendanceOperationFacts,
+  attendanceQuestions,
+} from "./schema/attendance.js";
 import { absences } from "./schema/absences.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { shiftSwaps } from "./schema/shift-swaps.js";
 import { shifts } from "./schema/shifts.js";
-import { insertRosterVersion, insertShiftSwap, seedPerson } from "../test/fixtures.js";
+import { timeEntries } from "./schema/time-entries.js";
+import {
+  insertRosterVersion,
+  insertTimeEntry,
+  seedLocation,
+  seedPerson,
+} from "../test/fixtures.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
@@ -54,7 +68,7 @@ async function seedAll(db: Database) {
   const colleague = await seedPerson(db, "Colleague Ruiz");
 
   // Inserted out of list order, and one row in each list recorded after a row that starts later,
-  // so dropping either sort key reorders the expected lists.
+  // so dropping either list's start-date sort reorders its expected list.
   await db.insert(employments).values([
     {
       personId: marta,
@@ -257,18 +271,23 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     },
   ]);
 
-  const giveAway = await insertShiftSwap(db, {
+  // Explicit ids in the reverse of their recorded order, so the id tie-break cannot stand in for
+  // the created_at sort.
+  const swap = async (values: typeof shiftSwaps.$inferInsert) => {
+    await db.insert(shiftSwaps).values(values);
+  };
+  await swap({
+    id: "00000000-0000-4000-8000-0000000005a1",
     requestedByPersonId: colleague,
     fromShiftId: colleagueGiveAway,
     toPersonId: marta,
     status: "approved",
+    decidedByPersonId: manager.id,
+    decidedAt: "2026-05-02T14:00:00.000Z",
     createdAt: "2026-05-01T09:00:00.000Z",
   });
-  await db
-    .update(shiftSwaps)
-    .set({ decidedByPersonId: manager.id, decidedAt: "2026-05-02T14:00:00.000Z" })
-    .where(eq(shiftSwaps.id, giveAway));
-  await insertShiftSwap(db, {
+  await swap({
+    id: "00000000-0000-4000-8000-0000000005a3",
     requestedByPersonId: marta,
     fromShiftId: draft,
     toPersonId: colleague,
@@ -276,7 +295,8 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     status: "accepted",
     createdAt: "2026-02-01T10:00:00.000Z",
   });
-  await insertShiftSwap(db, {
+  await swap({
+    id: "00000000-0000-4000-8000-0000000005a2",
     requestedByPersonId: colleague,
     fromShiftId: colleagueEarly,
     toPersonId: marta,
@@ -400,6 +420,295 @@ const COLLEAGUE_VALUES = [
   "2025-10-30T12:00:00.000Z",
   "2025-10-29T13:40:00.000Z",
 ];
+
+/**
+ * Marta's two attendance questions (one with its reminder email), two answers and two activity
+ * facts, beside a colleague's one of each. Times are in the writers' spelling: `toISOString()`,
+ * whole seconds for an activity's and a change's `at`. Each list's rows carry ids (or, for the
+ * facts, sequence numbers) in the reverse of its sort order, and its created_at order differs
+ * from its first sort key's, so neither tie-break can stand in for the sort.
+ */
+async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof seedAll>>) {
+  const { manager, marta, colleague } = people;
+  await seedTenant(db);
+  const locationId = await seedLocation(db);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await insertTimeEntry(db, {
+    nodeId,
+    personId: marta,
+    locationId,
+    entryKind: "in",
+    eventAt: "2026-03-07T08:00:00Z",
+  });
+  await insertTimeEntry(db, {
+    nodeId,
+    personId: marta,
+    locationId,
+    entryKind: "out",
+    eventAt: "2026-03-08T04:00:00Z",
+  });
+  const entries = await db
+    .select({ id: timeEntries.id })
+    .from(timeEntries)
+    .where(eq(timeEntries.personId, marta))
+    .orderBy(asc(timeEntries.eventAt));
+  const [openEntry, automaticEntry] = entries.map((e) => e.id) as [string, string];
+
+  const missingTimes = "00000000-0000-4000-8000-0000000000a1";
+  await db.insert(attendanceQuestions).values({
+    id: missingTimes,
+    personId: marta,
+    locationId,
+    businessDay: "2026-04-18",
+    startAt: "2026-04-18T04:00:00.000Z",
+    endAt: "2026-04-19T04:00:00.000Z",
+    shiftKey: "shift:marta-0418",
+    kind: "missing-times",
+    missingKinds: ["in", "out"],
+    evidenceKeys: ["order:evidence-marta-1"],
+    createdAt: "2026-04-19T04:00:00.000Z",
+  });
+  // Re-asked late, so recorded after a question about a later day.
+  await db.insert(attendanceQuestions).values({
+    id: "00000000-0000-4000-8000-0000000000a2",
+    personId: marta,
+    locationId,
+    businessDay: "2026-03-07",
+    startAt: "2026-03-07T05:00:00.000Z",
+    endAt: "2026-03-08T05:00:00.000Z",
+    shiftKey: "shift:marta-0307",
+    kind: "automatic-out",
+    missingKinds: [],
+    openEntryId: openEntry,
+    automaticEntryId: automaticEntry,
+    evidenceKeys: ["clock:evidence-marta-2"],
+    createdAt: "2026-05-01T06:12:00.000Z",
+    active: false,
+    inactiveReason: "rota_superseded",
+  });
+  await db.insert(attendanceMail).values({
+    questionId: missingTimes,
+    status: "sent",
+    claimToken: MARTA_CLAIM_TOKEN,
+    claimedAt: "2026-04-19T04:01:00.000Z",
+    nextAttemptAt: "2026-04-19T04:00:00.000Z",
+    recipient: "marta.reminders@example.test",
+    outcome: "sent",
+  });
+
+  // The manager's proposal is inserted first and carries the lower id, but was recorded later.
+  await db.insert(attendanceResponseCommands).values({
+    id: "00000000-0000-4000-8000-0000000000b1",
+    requestedByPersonId: manager.id,
+    authorizedByPersonId: manager.id,
+    personId: marta,
+    locationId,
+    questionId: null,
+    action: "propose",
+    input: {
+      action: "propose",
+      personId: marta,
+      locationId,
+      changes: [
+        { target: { entryId: openEntry }, at: "2026-04-18T23:25:00.000Z", offsetMinutes: 120 },
+        { target: { missingKind: "out" }, at: "2026-04-19T00:10:00.000Z", offsetMinutes: 120 },
+      ],
+      reason: "Till log shows a later finish",
+    },
+    entryIds: [automaticEntry],
+    createdAt: "2026-04-20T10:05:00.000Z",
+  });
+  await db.insert(attendanceResponseCommands).values({
+    id: "00000000-0000-4000-8000-0000000000b2",
+    requestedByPersonId: marta,
+    authorizedByPersonId: marta,
+    personId: marta,
+    locationId,
+    questionId: missingTimes,
+    action: "request",
+    input: {
+      action: "request",
+      questionId: missingTimes,
+      locationId,
+      changes: [
+        { target: { missingKind: "in" }, at: "2026-04-18T15:58:00.000Z", offsetMinutes: 120 },
+      ],
+      reason: "Forgot to clock in after the delivery",
+    },
+    entryIds: [openEntry],
+    createdAt: "2026-04-19T08:30:00.000Z",
+  });
+
+  // Inserted, so numbered, in the reverse of their times.
+  await db.insert(attendanceOperationFacts).values({
+    source: "whole-payment",
+    key: "payment:marta-1",
+    personId: marta,
+    locationId,
+    kind: "payment",
+    at: "2026-04-18T22:58:00.000Z",
+    offsetMinutes: 120,
+    businessDay: "2026-04-18",
+    outcome: "qualifying",
+  });
+  await db.insert(attendanceOperationFacts).values({
+    source: "clock",
+    key: "clock:marta-2",
+    personId: marta,
+    locationId,
+    kind: "break",
+    at: "2026-03-07T21:30:00.000Z",
+    offsetMinutes: 60,
+    businessDay: "2026-03-07",
+    outcome: "pending",
+  });
+
+  const colleagueQuestion = "00000000-0000-4000-8000-0000000000c1";
+  await db.insert(attendanceQuestions).values({
+    id: colleagueQuestion,
+    personId: colleague,
+    locationId,
+    businessDay: "2026-04-25",
+    startAt: "2026-04-25T04:00:00.000Z",
+    endAt: "2026-04-26T04:00:00.000Z",
+    shiftKey: "shift:colleague-0425",
+    kind: "missing-times",
+    missingKinds: ["out"],
+    evidenceKeys: ["order:evidence-colleague"],
+    createdAt: "2026-04-26T04:02:00.000Z",
+  });
+  await db.insert(attendanceMail).values({
+    questionId: colleagueQuestion,
+    status: "rejected",
+    claimToken: "holder-9:colleague-claim-token",
+    claimedAt: "2026-04-26T04:03:00.000Z",
+    nextAttemptAt: "2026-04-26T04:18:00.000Z",
+    recipient: "ruiz.mail@example.test",
+    outcome: "rejected",
+  });
+  await db.insert(attendanceResponseCommands).values({
+    id: "00000000-0000-4000-8000-0000000000c2",
+    requestedByPersonId: colleague,
+    authorizedByPersonId: colleague,
+    personId: colleague,
+    locationId,
+    questionId: null,
+    action: "disagree",
+    input: {
+      action: "disagree",
+      itemId: "00000000-0000-4000-8000-0000000000c9",
+      reason: "Colleague was on a delivery run",
+    },
+    entryIds: [automaticEntry],
+    createdAt: "2026-04-27T09:11:00.000Z",
+  });
+  await db.insert(attendanceOperationFacts).values({
+    source: "order",
+    key: "order:colleague-1",
+    personId: colleague,
+    locationId,
+    kind: "order",
+    at: "2026-04-25T20:47:00.000Z",
+    offsetMinutes: 180,
+    businessDay: "2026-04-25",
+    outcome: "refused",
+  });
+
+  return { locationId };
+}
+
+const MARTA_CLAIM_TOKEN = "holder-7:3f9c2b1e-claim-token";
+
+const MARTA_ATTENDANCE = {
+  questions: [
+    {
+      businessDay: "2026-03-07",
+      kind: "automatic-out",
+      missingKinds: [],
+      startAt: "2026-03-07T05:00:00.000Z",
+      endAt: "2026-03-08T05:00:00.000Z",
+      createdAt: "2026-05-01T06:12:00.000Z",
+      active: false,
+      inactiveReason: "rota_superseded",
+      reminderEmail: null,
+    },
+    {
+      businessDay: "2026-04-18",
+      kind: "missing-times",
+      missingKinds: ["in", "out"],
+      startAt: "2026-04-18T04:00:00.000Z",
+      endAt: "2026-04-19T04:00:00.000Z",
+      createdAt: "2026-04-19T04:00:00.000Z",
+      active: true,
+      inactiveReason: null,
+      reminderEmail: {
+        recipient: "marta.reminders@example.test",
+        status: "sent",
+        outcome: "sent",
+        claimedAt: "2026-04-19T04:01:00.000Z",
+        nextAttemptAt: "2026-04-19T04:00:00.000Z",
+      },
+    },
+  ],
+  responses: [
+    {
+      action: "request",
+      byYou: true,
+      authorizedBy: "Marta Lopez",
+      reason: "Forgot to clock in after the delivery",
+      changes: [{ at: "2026-04-18T17:58:00+02:00", missingKind: "in" }],
+      createdAt: "2026-04-19T08:30:00.000Z",
+    },
+    {
+      action: "propose",
+      byYou: false,
+      authorizedBy: "Luis Manager",
+      reason: "Till log shows a later finish",
+      changes: [
+        { at: "2026-04-19T01:25:00+02:00", missingKind: null },
+        { at: "2026-04-19T02:10:00+02:00", missingKind: "out" },
+      ],
+      createdAt: "2026-04-20T10:05:00.000Z",
+    },
+  ],
+  activity: [
+    {
+      source: "clock",
+      kind: "break",
+      at: "2026-03-07T22:30:00+01:00",
+      businessDay: "2026-03-07",
+      outcome: "pending",
+    },
+    {
+      source: "whole-payment",
+      kind: "payment",
+      at: "2026-04-19T00:58:00+02:00",
+      businessDay: "2026-04-18",
+      outcome: "qualifying",
+    },
+  ],
+};
+
+/** The colleague's attendance values as their own file writes them. */
+const COLLEAGUE_ATTENDANCE_VALUES = [
+  "2026-04-25",
+  "2026-04-26T04:02:00.000Z",
+  "ruiz.mail@example.test",
+  "rejected",
+  "2026-04-26T04:03:00.000Z",
+  "2026-04-26T04:18:00.000Z",
+  "disagree",
+  "Colleague was on a delivery run",
+  "2026-04-27T09:11:00.000Z",
+  "2026-04-25T23:47:00+03:00",
+  "refused",
+];
+
+const attendanceOf = (files: { name: string; text: string }[]) => {
+  const file = files.find((f) => f.name === "attendance.json");
+  if (file === undefined) throw new Error("no attendance.json");
+  return file.text;
+};
 
 describe("WORKFORCE_PERSONAL_DATA", () => {
   it("declares its four files", () => {
@@ -599,5 +908,107 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     });
     const files = await download(nobody);
     expect(files.map((f) => f.name)).toEqual(["employment.json"]);
+  });
+  it("builds exactly her attendance file, times local from each stored offset", async () => {
+    const people = await seedAll(suite.db);
+    await seedAttendance(suite.db, people);
+    const files = await download(people.marta);
+    expect(files.map((f) => f.name)).toEqual([
+      "employment.json",
+      "absences.json",
+      "attendance.json",
+    ]);
+    const text = attendanceOf(files);
+    expect(text.endsWith("}\n")).toBe(true);
+    expect(JSON.parse(text)).toEqual(MARTA_ATTENDANCE);
+  });
+
+  it("holds none of the colleague's attendance and no manager's id or email", async () => {
+    const people = await seedAll(suite.db);
+    await seedAttendance(suite.db, people);
+    const all = (await download(people.marta)).map((f) => f.text).join("\n");
+    for (const value of COLLEAGUE_ATTENDANCE_VALUES) expect(all).not.toContain(value);
+    expect(all).not.toContain(people.colleague);
+    expect(all).not.toContain(people.manager.id);
+    expect(all).not.toContain(people.manager.email);
+    // Positive control: the colleague's own file carries every one of them.
+    const theirs = attendanceOf(await download(people.colleague));
+    for (const value of COLLEAGUE_ATTENDANCE_VALUES) expect(theirs).toContain(value);
+  });
+
+  it("writes the reminder email's recipient but never its claim token", async () => {
+    const people = await seedAll(suite.db);
+    await seedAttendance(suite.db, people);
+    const all = (await download(people.marta)).map((f) => f.text).join("\n");
+    expect(all).not.toContain(MARTA_CLAIM_TOKEN);
+    expect(all).not.toContain("claim-token");
+    expect(all).toContain("marta.reminders@example.test");
+  });
+
+  it("builds no attendance.json for a person with no attendance record", async () => {
+    const people = await seedAll(suite.db);
+    await seedAttendance(suite.db, people);
+    const nobody = await seedPerson(suite.db, "No Attendance");
+    expect(await download(nobody)).toEqual([]);
+  });
+
+  it("writes a null reason and no changes for an answer that has neither", async () => {
+    const people = await seedAll(suite.db);
+    const { locationId } = await seedAttendance(suite.db, people);
+    const person = await seedPerson(suite.db, "Confirms Only");
+    const questionId = "00000000-0000-4000-8000-0000000000d1";
+    await suite.db.insert(attendanceQuestions).values({
+      id: questionId,
+      personId: person,
+      locationId,
+      businessDay: "2026-06-02",
+      startAt: "2026-06-02T04:00:00.000Z",
+      endAt: "2026-06-03T04:00:00.000Z",
+      shiftKey: "shift:confirms-0602",
+      kind: "missing-times",
+      missingKinds: ["out"],
+      evidenceKeys: [],
+      createdAt: "2026-06-03T04:00:00.000Z",
+    });
+    await suite.db.insert(attendanceResponseCommands).values({
+      id: "00000000-0000-4000-8000-0000000000d2",
+      requestedByPersonId: person,
+      authorizedByPersonId: person,
+      personId: person,
+      locationId,
+      questionId,
+      action: "confirm",
+      input: { action: "confirm", questionId },
+      entryIds: ["00000000-0000-4000-8000-0000000000d3"],
+      createdAt: "2026-06-03T07:00:00.000Z",
+    });
+    const files = await download(person);
+    expect(files.map((f) => f.name)).toEqual(["attendance.json"]);
+    expect(JSON.parse(files[0]!.text)).toEqual({
+      questions: [
+        {
+          businessDay: "2026-06-02",
+          kind: "missing-times",
+          missingKinds: ["out"],
+          startAt: "2026-06-02T04:00:00.000Z",
+          endAt: "2026-06-03T04:00:00.000Z",
+          createdAt: "2026-06-03T04:00:00.000Z",
+          active: true,
+          inactiveReason: null,
+          reminderEmail: null,
+        },
+      ],
+      responses: [
+        {
+          action: "confirm",
+          byYou: true,
+          authorizedBy: "Confirms Only",
+          reason: null,
+          changes: [],
+          createdAt: "2026-06-03T07:00:00.000Z",
+        },
+      ],
+      activity: [],
+    });
   });
 });
