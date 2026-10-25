@@ -850,6 +850,8 @@ Node v26.11.1, SQLite 3.54.0, one Mac. `node_modules` there is a symlink to this
     image's drawn size (as "draws a library logo fitted to the paper", `:851-861`), never `[16, 1]`.
     Count calls in a `mockImplementation`; a `mockImplementationOnce` on the first call breaks the
     route's mandatory second read and answers 500 (the review's E2).
+    _Note, 2026-10-25:_ renaming on the second `readDepartmentReceipt` call answers 500 too; the
+    test instead wraps `readPrintedDepartmentReceipt` and renames the table only around that call.
   - `it.each` over the stored-document `UNTRUSTED_CASES` (`{bad json` through "not a library name")
     "a draft naming a logo draws it from its image while the stored settings cannot be trusted: %s":
     the draft names `libraryImage(47)` → its drawn size, never `[16, 1]`. These pass before the

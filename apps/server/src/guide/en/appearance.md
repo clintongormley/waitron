@@ -141,14 +141,17 @@ The logo of the theme in use shows in these places:
   names.
 - **"Powered by Waitron"**, a line under the dashboard's sign-in form and at the foot of a cash
   register's or handheld's sign-in screen, which shows while a logo is set.
+- **A receipt shown on a cash register's or handheld's screen**, above the venue's name. A
+  department's own receipt logo comes first there too, and it always shows the main logo, never the
+  version for dark screens.
 
 A cash register's top bar shows no logo yet.
 
-Each screen shows the light or the dark image by its own **Theme** setting. A dark screen, when the
+Each of the other screens shows the light or the dark image by its own **Theme** setting. A dark screen, when the
 theme has no version for dark screens, shows the main logo on a white plate.
 
-Screens follow a new or removed logo when they follow a change of colours, as "Save a theme"
-below describes.
+The other screens follow a new or removed logo when they follow a change of colours, as "Save a
+theme" below describes.
 
 When a screen cannot load the picture, the dashboard's banner shows Waitron's logo, a handheld's bar
 shows the word "Waitron", and a cash register's or handheld's sign-in screen shows no logo, with no
@@ -169,7 +172,7 @@ Saving a new logo, removing it, or putting another theme in use changes what the
 invoice prints, a reprint of an earlier sale included. A theme that is not in use prints nothing.
 
 A department's **Receipts** tab preview shows the theme's logo while no receipt logo is chosen on
-the tab.
+the tab, unless the department's saved receipt settings cannot be read: then it shows no logo.
 
 When a department's receipt settings cannot be read, its receipts and invoices print no logo at all,
 rather than one that may be the wrong one.

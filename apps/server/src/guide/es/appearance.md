@@ -156,15 +156,19 @@ El logotipo del tema en uso se ve en estos lugares:
 - **«Con la tecnología de Waitron»**, una línea bajo el formulario de inicio de sesión del panel y
   al pie de la pantalla de inicio de sesión de una caja registradora o de un terminal de camarero,
   que se ve mientras hay un logotipo.
+- **Un ticket que se muestra en la pantalla de una caja registradora o de un terminal de
+  camarero**, encima del nombre del local. Ahí también tiene prioridad el logotipo de ticket propio
+  del departamento, y siempre se ve el logotipo principal, nunca la versión para pantallas oscuras.
 
 La barra superior de una caja registradora todavía no muestra ningún logotipo.
 
-Cada pantalla muestra la imagen clara o la oscura según su propio ajuste de **Tema**. Una pantalla
+Cada una de las demás pantallas muestra la imagen clara o la oscura según su propio ajuste de
+**Tema**. Una pantalla
 oscura, cuando el tema no tiene versión para pantallas oscuras, muestra el logotipo principal sobre
 una placa blanca.
 
-Las pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan un
-cambio de colores, como describe «Guarda un tema», más abajo.
+Las demás pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan
+un cambio de colores, como describe «Guarda un tema», más abajo.
 
 Cuando una pantalla no puede cargar la imagen, la franja superior del panel muestra el logotipo de
 Waitron, la barra de un terminal de camarero muestra la palabra «Waitron» y la pantalla de inicio de
@@ -188,7 +192,8 @@ ticket o la siguiente factura, incluida la reimpresión de una venta anterior. U
 uso no imprime nada.
 
 La vista previa de la pestaña **Recibos** de un departamento muestra el logotipo del tema mientras
-no hay ningún logotipo de ticket elegido en la pestaña.
+no hay ningún logotipo de ticket elegido en la pestaña, salvo cuando no se pueden leer los ajustes
+de ticket guardados del departamento: entonces no muestra ningún logotipo.
 
 Cuando no se pueden leer los ajustes de ticket de un departamento, sus tickets y facturas no
 imprimen ningún logotipo, en lugar de uno que podría no ser el correcto.
