@@ -1264,6 +1264,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",
   },
+  "alert.already_handled": {
+    en: "This alert was already marked handled, so the note was not saved. Add it from Handled lists on the Box status page.",
+    es: "Este aviso ya estaba marcado como resuelto, así que la nota no se ha guardado. Añádela desde Listas resueltas en Estado del equipo.",
+  },
   "fiscal.not_filing": {
     en: "This box does not send records to the tax agency.",
     es: "Este equipo no envía registros a Hacienda.",

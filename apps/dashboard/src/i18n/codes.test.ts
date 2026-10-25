@@ -755,3 +755,12 @@ it("words a refused confirmation of the clock in both languages", () => {
     "No se ha podido confirmar la hora. Mira Estado del equipo.",
   );
 });
+
+it("words a note refused on an already handled alert in both languages", () => {
+  expect(codeMessage("alert.already_handled", "en")).toBe(
+    "This alert was already marked handled, so the note was not saved. Add it from Handled lists on the Box status page.",
+  );
+  const spanish = codeMessage("alert.already_handled", "es");
+  expect(spanish).not.toBe(codeMessage("unknown.code", "es"));
+  expect(spanish).not.toBe(codeMessage("alert.already_handled", "en"));
+});

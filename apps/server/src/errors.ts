@@ -1292,6 +1292,8 @@ declare module "@waitron/shared" {
     /** No incident with this id exists in this venue. Also answered for a malformed id and to a
      * session that can see no alerts. */
     "alert.not_found": { id: string };
+    /** A note came with marking an incident handled that was already handled, so it was not saved. */
+    "alert.already_handled": { id: string };
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */
     "alert.source_unavailable": { area: string };

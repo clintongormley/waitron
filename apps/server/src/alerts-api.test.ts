@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
+  incidents,
   locations,
   printJobs,
   printers,
@@ -356,6 +357,163 @@ describe("alert routes", () => {
         "alert.not_found",
       );
     }
+  });
+});
+
+const postBody = (app: Hono, id: string, cookie: string | undefined, body: string) =>
+  app.request(`/management-api/alerts/incidents/${id}/handled`, {
+    method: "POST",
+    headers: cookie === undefined ? {} : { cookie },
+    body,
+  });
+
+async function storedIncident(
+  id: string,
+): Promise<{ acknowledgedAt: string | null; acknowledgedNote: string | null }> {
+  const [row] = await db
+    .select({
+      acknowledgedAt: incidents.acknowledgedAt,
+      acknowledgedNote: incidents.acknowledgedNote,
+    })
+    .from(incidents)
+    .where(eq(incidents.id, id));
+  return row!;
+}
+
+async function expectError(res: Response, status: number, error: unknown): Promise<void> {
+  expect(res.status).toBe(status);
+  expect(await res.json()).toEqual({ error });
+}
+
+describe("marking a wrongly dated sales alert handled with a note", () => {
+  const MISDATED = "clock.records_misdated";
+  const note = (text: unknown) => JSON.stringify({ note: text });
+
+  it("stores the trimmed note with the handling", async () => {
+    const v = await seedVenue();
+    const id = await raise(v, MISDATED);
+    const res = await postBody(appFor(), id, v.manager, note("  Checked with the accountant  "));
+    expect(res.status).toBe(204);
+    expect(await storedIncident(id)).toEqual({
+      acknowledgedAt: NOW.toISOString(),
+      acknowledgedNote: "Checked with the accountant",
+    });
+  });
+
+  it("accepts a note of 500 characters and refuses one of 501", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const refusedId = await raise(v, MISDATED);
+    await expectError(await postBody(app, refusedId, v.manager, note("x".repeat(501))), 400, {
+      code: "management.request_invalid",
+      params: { field: "note" },
+    });
+    expect(await storedIncident(refusedId)).toEqual({
+      acknowledgedAt: null,
+      acknowledgedNote: null,
+    });
+    expect((await postBody(app, refusedId, v.manager, note("x".repeat(500)))).status).toBe(204);
+    expect((await storedIncident(refusedId)).acknowledgedNote).toBe("x".repeat(500));
+  });
+
+  it("stores no note for a whitespace-only note, an empty body, null, {} and an absent note", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    for (const body of [note("   \n\t "), "", "null", "{}", note(undefined)]) {
+      const id = await raise(v, MISDATED);
+      expect((await postBody(app, id, v.manager, body)).status).toBe(204);
+      expect(await storedIncident(id)).toEqual({
+        acknowledgedAt: NOW.toISOString(),
+        acknowledgedNote: null,
+      });
+    }
+  });
+
+  it("refuses a note that is not a string, and a body that is not an object", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, MISDATED);
+    for (const body of [note(42), note(null), note(["x"]), "[]", '"x"', "7"]) {
+      await expectError(await postBody(app, id, v.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "note" },
+      });
+    }
+    expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
+  });
+
+  it("refuses a body that does not parse and leaves the incident open", async () => {
+    const v = await seedVenue();
+    const id = await raise(v, MISDATED);
+    await expectError(await postBody(appFor(), id, v.manager, '{note:"x"'), 400, {
+      code: "management.request_invalid",
+      params: { field: "body" },
+    });
+    expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
+  });
+
+  it("refuses a note on an incident already handled and stores nothing", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, MISDATED);
+    expect(
+      (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status,
+    ).toBe(204);
+    await expectError(await postBody(app, id, v.manager, note("Late note")), 409, {
+      code: "alert.already_handled",
+      params: { id },
+    });
+    expect(await storedIncident(id)).toEqual({
+      acknowledgedAt: NOW.toISOString(),
+      acknowledgedNote: null,
+    });
+  });
+
+  it("judges the session, visibility and claim before an over-long note", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, MISDATED);
+    const long = note("x".repeat(501));
+    await expectError(await postBody(app, id, undefined, long), 401, {
+      code: "management_session.required",
+      params: {},
+    });
+    await expectError(await postBody(app, id, v.supervisor, long), 404, {
+      code: "alert.not_found",
+      params: { id },
+    });
+    roleOverride.set("supervisor", ["payments.manage"]);
+    await expectError(await postBody(app, id, v.supervisor, long), 403, {
+      code: "authorization.not_permitted",
+      params: { permission: "system.manage" },
+    });
+    const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
+    const idle = new Date(Date.now() - 31 * 60_000).toISOString();
+    await db.execute(
+      sql`update management_sessions set last_seen_at = ${idle} where token_hash = ${hashSessionToken(sid)}`,
+    );
+    const expired = await postBody(app, id, v.manager, long);
+    expect(expired.status).toBe(401);
+    expect(((await expired.json()) as { error: { code: string } }).error.code).toBe(
+      "management_session.expired",
+    );
+    expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
+  });
+
+  it("refuses a note on another code's incident as not found, and handles it without one", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, "printing.mystery");
+    await expectError(await postBody(app, id, v.manager, note("Paper jam")), 404, {
+      code: "alert.not_found",
+      params: { id },
+    });
+    expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
+    expect((await postBody(app, id, v.manager, "")).status).toBe(204);
+    expect(await storedIncident(id)).toEqual({
+      acknowledgedAt: NOW.toISOString(),
+      acknowledgedNote: null,
+    });
   });
 });
 
