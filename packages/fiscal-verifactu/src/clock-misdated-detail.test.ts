@@ -10,7 +10,7 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { correctedStart } from "./clock-checks.js";
-import { misdatedDetail } from "./clock-misdated.js";
+import { misdatedDetail, misdatedRecords } from "./clock-misdated.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
@@ -356,6 +356,65 @@ describe("misdatedDetail", () => {
 
   it("answers null when no confirmation has the id", async () => {
     expect(await detail("00000000-0000-4000-8000-000000000000")).toBeNull();
+  });
+
+  it("answers every record of a list longer than one query can name by id, row for row", async () => {
+    // A query naming every listed id overflowed the stack at 60,000 ids and not at 57,500 (macOS,
+    // Node 26); the bound depends on the stack, so the size leaves room above it.
+    const size = 65_536;
+    await sale(X + H);
+    const columns = suite.db.all<{ name: string }>(sql`pragma table_info(registros_facturacion)`);
+    const copied = (name: string): string =>
+      ({
+        // After the sale's own id, a UUID, whatever its first letter: the list orders by id at one time.
+        id: "'z-' || printf('%06d', n)",
+        secuencia: "n",
+        num_serie_factura: "'BULK/' || n",
+        tipo_registro: "case when n % 3 = 0 then 'anulacion' else 'alta' end",
+        fecha_expedicion_factura: "'2026-10-' || printf('%02d', 1 + n % 28)",
+        importe_total: "case when n % 3 = 0 then null else printf('%d.%02d', n / 100, n % 100) end",
+      })[name] ?? `"${name}"`;
+    suite.db.run(
+      sql.raw(`with recursive batch(n) as (values (2) union all select n + 1 from batch where n < ${size})
+        insert into registros_facturacion (${columns.map(({ name }) => `"${name}"`).join(", ")})
+        select ${columns.map(({ name }) => copied(name)).join(", ")}
+        from batch cross join (select * from registros_facturacion)`),
+    );
+    const stored = suite.db.all<{
+      kind: string;
+      issueDate: string;
+      amount: string | null;
+    }>(
+      sql`select tipo_registro as kind, fecha_expedicion_factura as issueDate, importe_total as amount
+        from registros_facturacion order by fecha_hora_huso_gen_registro, id`,
+    );
+    expect(stored).toHaveLength(size);
+    const check = await insertCheck({ openedAt: X, boot: BOOT, heads: heads(), offsetMinutes: 60 });
+    const id = await insertClosing({
+      check,
+      confirmedAt: X + 90 * M,
+      closing: closingFor(check, X + 90 * M, { ms: BOOT_MS + 90 * M, id: "boot-1" }),
+    });
+    const list = await withTransaction(suite.db, (tx) => misdatedRecords(tx, id));
+    if (list === null || !list.known) throw new Error(`expected a list, got ${String(list)}`);
+    expect(list.records).toHaveLength(size);
+
+    const found = await detail(id);
+    if (found === null || !found.known) throw new Error(`expected a list, got ${String(found)}`);
+    expect(found.records).toEqual(
+      list.records.map((record, k) => ({
+        ...record,
+        kind: stored[k]!.kind === "anulacion" ? "cancellation" : "issue",
+        issueDate: stored[k]!.issueDate,
+        amount: stored[k]!.amount,
+      })),
+    );
+    expect(found.records.slice(0, 4).map(({ kind, amount }) => ({ kind, amount }))).toEqual([
+      { kind: "issue", amount: "14.41" },
+      { kind: "issue", amount: "0.02" },
+      { kind: "cancellation", amount: null },
+      { kind: "issue", amount: "0.04" },
+    ]);
   });
 
   it("answers an empty list with its closing", async () => {
