@@ -278,9 +278,8 @@ them while another process, such as a running server, holds the database folder.
 cannot find that out, as on a disk with no room left for the note it writes while it holds the
 folder, it keeps them while that folder's holder note shows a heartbeat less than 30 seconds old.
 In the same step it deletes `restore-staging/staged-recovery` in the state folder, where the setup
-wizard keeps a backup uploaded for checking. On a box whose first setup was moved into a new
-workspace, the start then does the same in the workspace's folders, once first-setup resolution has
-found them.
+wizard keeps a backup uploaded for checking. On a box where a backup recovery from the setup
+repair page has selected its own folders, the start does this in those folders instead.
 
 Every start also checks the free space in the state folder and in the database's folder. Below
 256 MiB, it deletes as well:
@@ -345,19 +344,31 @@ the box had just been installed. Use it to get a demo or test box back to a know
 recovery tool for a box holding real trading data — see the refusal below.
 
 ```bash
-sudo bash waitron.sh reset          # wipe the database and settings, keep the box's certificate
-sudo bash waitron.sh reset --all    # also wipe the certificate, so a new one is minted on next boot
+sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate and the start-again note
+sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
-Both forms wipe every volume in the table above except one folder: plain `reset` keeps `tls/` inside the box's `state`
-volume, which holds the certificate authority the box's devices already trust and the box's own
-certificate signed by it. Because that folder survives, a device that has already been told to trust
-this box does not need to trust it again after a plain `reset`. `reset --all` throws `tls/` away too, so the box
-mints a brand-new certificate authority on its next boot and every device has to go through the
-trust step again. That includes any device with a dashboard or till tab left open across the reset:
+Both forms wipe every volume in the table above. Plain `reset` keeps three things inside the box's
+`state` volume:
+
+- `tls/`, which holds the certificate authority the box's devices already trust and the box's own
+  certificate signed by it. Because that folder survives, a device that has already been told to
+  trust this box does not need to trust it again after a plain `reset`.
+- `first-setup-start-again.json`, the start-again note: the last invoice series name a first setup
+  abandoned with **Start again** chose, and the earliest moment a later name may be taken. The box
+  never issues a production series name at or before it, so keeping it stops a reset box from
+  reusing that name.
+- `first-setup-start-again-confirmations/`, one small record for each Start again that someone
+  confirmed while the venue database was missing: who confirmed, when, and what the repair page
+  showed them.
+
+`reset --all` removes the whole `state` volume, those three included, so the box mints a brand-new
+certificate authority on its next boot and every device has to go through the trust step again. That includes any device with a dashboard or till tab left open across the reset:
 take it through the trust step, then reopen the dashboard or till. Neither form touches `.env`, so if
 a branch install pinned an image there, the box comes back on that same image. Only the data in the
 volumes is wiped, and that includes the venue's databases, because they live in the `state` volume.
+
+A reset during an unfinished first setup forgets the series name that setup chose; the box's clock check still guards it.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.

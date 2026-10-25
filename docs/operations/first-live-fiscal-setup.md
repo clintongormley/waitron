@@ -82,9 +82,23 @@ can be repaired; preserve the state and venue folders when the page reports an u
 conflicting outcome. Do not delete records to get past a refusal.
 
 **Finish** publishes an exactly checked committed result. It does not activate another identity,
-reset counters or require a new name because the clock has advanced. Starting again is limited
-to a positively empty, never-activated attempt; it retains the original evidence and spends the
-former name. A missing database is a different condition.
+reset counters or require a new name because the clock has advanced. With the venue database
+present, **Start again** is limited to a positively empty, never-activated attempt. It deletes the
+attempt and keeps one small note of the last invoice series name the attempt chose
+(`first-setup-start-again.json` in the state folder); from then on the box issues no production
+series name at or before that note. Nothing deletes the note except `sudo bash waitron.sh reset
+--all`. If a Start again is cut off, for example by a power cut, the next start finishes it, or
+refuses with a page that says what to do.
+
+When the venue database is missing, the box cannot check whether the attempt filed anything to
+AEAT or made a sale. After the setup password step, the repair page says so, lists what the
+attempt's own record says it reached — the invoice series name it chose, if any, and whether it
+started or finished activation — and offers **Recover from backup** beside **Start again**. Start
+again then asks you to tick "Nothing was filed to AEAT and nothing was sold."; before it deletes
+anything, the box records who confirmed, when, and what the page showed. If the attempt's
+recovery-key record is damaged, the page also says "This setup's recovery-key record is damaged
+and cannot be read." above what Start again deletes, and you can still choose **Cancel**. Once a
+backup recovery has started, Start again is no longer offered.
 
 For an authenticated archive, bucket or supported Cloud copy, choose **Recover from backup**
 and follow the [repair recovery procedure](hour-recovery.md#recover-while-first-setup-is-blocked).

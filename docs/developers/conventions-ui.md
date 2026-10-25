@@ -1102,12 +1102,12 @@ that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/s
 
 **A full disk at start** (A798-B slice 2). Every start deletes the copies a cut-off backup
 run left in backup staging, and the staged recovery copies in `restore-staging/staged-recovery`,
-unless another process holds the venue folder's lock — in a first-setup workspace's folders too,
-when resolution moved the box there (the heartbeat fallback is in conventions-data.md, "Every start
-takes the venue lock"); one that
+unless another process holds the venue folder's lock — in the folders a backup recovery from the
+setup repair page selected instead, when there is one (the heartbeat fallback is in
+conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
-week (`apps/server/src/start-space.ts`). If it is still below that floor, or the folders a
-first-setup resolution chose in their place are, and it cannot write its count back unchanged
+week (`apps/server/src/start-space.ts`). If it is still below that floor, or the folders the
+start goes on to run from are (a selected backup recovery's), and it cannot write its count back unchanged
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
 disk is full." («Nivel: recovery. Este arranque no se ha contado: el disco está lleno.»). The

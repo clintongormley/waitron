@@ -3026,10 +3026,9 @@ of `createSetupRecoveryPreparation`. On a
 box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
 staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.
-When first-setup resolution has moved the box into a workspace (`<state>/first-setup-workspaces/<id>/`),
-the start runs the same clean-up on the workspace's folders as well, under the workspace's own venue
-lock, before it judges the floor; it cleans the logs once, in the folder it was given (`runEntry`,
-`apps/server/src/node-entry.ts`).
+When a backup recovery from the setup repair page has selected its own folders, the start runs the
+clean-up on those folders instead, under their own venue lock, and cleans the logs in that state
+folder (`runEntry`, `apps/server/src/node-entry.ts`).
 Measured 2026-10-21, Node v26.11.1, macOS, on the 32 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
 makes, with a second process holding `venue.lock` by `begin immediate`: `lockVenueDatabase` was
 refused `provisioning.database_in_use` with 0, 4 KiB and 16 KiB left. The control, with no other
@@ -3142,16 +3141,18 @@ lock, not that every writer of the file takes it.
 
 **First-setup entry, 2026-10-16:** `apps/server/src/first-setup-entry.ts` inspects an existing claim
 through a read-only SQLite connection before the ordinary entry path. Its admission callback holds
-the original anchor venue lock, then the selected target's lock when different, and rereads the
-selection and setup/database admission before staged work or normal boot. An ordinary unclaimed
-workspace keeps the locking path in the table above. `first-setup-resolution.boot.test.ts` removes
-the database or changes the selected workspace after discovery and checks that the callback refuses
-without creating a database. The same suite checks direct, supervised and already-recovery entry.
+the venue lock and rereads setup/database admission before normal boot; since A1042 (2026-10-25)
+there is no first-setup workspace, so no second lock and no selection to reread. An ordinary
+unclaimed box keeps the locking path in the table above. `first-setup-resolution.boot.test.ts`
+removes the database after discovery and checks that the callback refuses without creating a
+database ("rechecks the unfinished database after taking the startup locks"). The same suite checks direct, supervised and already-recovery entry.
 
 **First-setup durable replay, 2026-10-16:** on Node v26.11.1, the new
 `first-setup-resolution.durability.test.ts` left an applied record visible after injecting a
 directory-sync failure; retry returned it without another sync. The renamed-backlink and final
-selection cases in `first-setup-workspace.test.ts` reproduced the same early success. Replays now
+selection cases in `first-setup-workspace.test.ts` reproduced the same early success (dated
+pointer, 2026-10-25: those cases went with first-setup workspaces in A1042; that file now holds
+only the refusal of an earlier layout). Replays now
 sync the existing record or witness directory before returning. The resolution suite also injects
 write, file-sync, rename and directory-sync failures into original chunks, manifests and both
 action phases, then resumes through a new store and compares retained bytes. These are filesystem

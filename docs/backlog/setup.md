@@ -304,27 +304,6 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
   same way had no fiscal records and no fiscal alert. The alert is raised in
   `packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
 
-## Owner decision: should a setup request stop re-checking every old "start again" archive in full?
-
-Left open by A1037. Within one call of an exported reader in `first-setup-workspace.ts`, each
-archive is read and checked once while its decoded files fit the call's 16 MiB budget
-(`createFirstSetupOriginalsCache`); past that, its files are read and checked again each time
-they are needed. Every request still checks every archived file of every retirement and the whole
-retired workspace, so the cost grows with each retirement. Two ways to make it near-flat, both
-weaker than today's check:
-
-- **Check only what the request uses**: the record chain, the manifest's digests and the few small
-  files the callers read (`state/first-setup.json`, `state/first-setup-node-key.json`,
-  `workspace:predecessor`, `outside-file:*`, `state/first-fiscal-documents/*`,
-  `state/module-operation-public.json`, and every entry's name and presence), and hash the
-  retired workspace against the manifest's digests instead of re-reading the archive. The cost:
-  damage to an archived file nobody reads, such as the old `venue.db` copy, would go unnoticed until
-  it is used.
-- **Keep a cache between requests.** It would stop noticing a change on disk between requests.
-
-At three retirements on the owner's Mac, A1037 took a request from about 9,300 file opens and
-1.0 s to about 900 opens and 0.17 s. Not measured on a box.
-
 ## Loose ends left by A496 (moving to a new tax ID).
 
 - **Loose ends left by A496 (moving to a new tax ID).**
@@ -414,7 +393,92 @@ At three retirements on the owner's Mac, A1037 took a request from about 9,300 f
     not run; whether a real draft can reach that state has not been tested.
     [Detail](#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
 
+## Move the start-again note whenever a series name is put into use, and when a plain reset ends an unfinished setup
+
+Left open by A1042 (owner, 2026-10-25: point 1 answered A). Today only Start again writes the
+start-again note (`first-setup-start-again.json` in the state folder, the floor below which no new
+invoice series name is taken). Wanted: the note also moves when setup's fiscal step finishes, when
+a restore finishes, at a re-registration and at a promotion — designed so the name chooser never
+refuses its own request. Written at the moment a path picks its name, the note would make the
+chooser refuse that same request's pick until the next minute starts: it re-takes the request's
+existing pick (`packages/fiscal-verifactu/src/hour-selection.ts:326-328`) and refuses
+`minute_not_later` while the clock is before any recorded time floor (`:409-416`); A1042's
+round-4 reviewer ran the real chooser and saw exactly that. Also wanted: a plain `waitron.sh
+reset` raises the note from an unfinished setup's chosen name before it deletes that setup. Until
+then a reset during an unfinished first setup forgets the series name that setup chose, and only
+the box's clock check guards it (`deploy/README.md`, "Resetting a box"). The failover requirement
+that every node holds the current note
+([replication-cloud.md](replication-cloud.md#replication-membership--failover--residuals-afterwards))
+depends on this.
+
+## Starting a backup recovery and giving it up blocks Start again for good
+
+Left open by A1042 (owner, 2026-10-25: point 5 answered B). Start again is refused while any
+backup-recovery journal from the repair page's Recover from backup (A731) exists; before a recovery starts, the page
+warns of this under Recover from backup. The journal A731 writes when a backup is prepared
+(`first-setup-resolutions/backup-recovery/` in the box's folders) is never deleted; its restore target holds a
+`venue.lock`, which must never be unlinked (`packages/store/src/venue-lock.ts`); and A731 refuses
+any other backup into that recovery with `setup.attempt_conflict`, run on 2026-10-25 (A1042 plan,
+"Task 0 results", (m)). So a person who starts a recovery and gives up can only finish a recovery
+with that same backup, or have Waitron reinstalled. A way out needs A731 to learn an abandoned
+recovery that its entry treats as absent while the folder and its lock stay.
+
+## The first-setup record store still accepts the `retire` and `select-workspace` actions and `nextWorkspace`, which nothing writes since A1042
+
+Left open by A1042 (D4). `packages/provisioning/src/first-setup-resolution.ts` still declares and
+validates both actions and the `nextWorkspace` field (`:43-48`, `:195-267`); every writer passes
+`nextWorkspace: null` (`first-setup-finish-audit.ts`, `first-setup-owner-audit.ts`) and none
+writes either action. Remove them, with the tests that pin them.
+
+## The repair page's Start again oddities from #1752
+
+Three things on the setup app's repair page, all on main since 4e318802f (#1752): after Start
+again the heading still reads "First setup was interrupted" above "The old attempt is deleted.
+Reconnect to continue."; two "Start again" buttons are drawn at once, the one that opens the
+confirmation and the one that confirms; and Continue sits tight against the password field at
+phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
+
+## A damaged kept recovery-key record on a box whose database is present: Start again refuses and the page offers no way out
+
+Left open by A1042 (S7l). With the venue database present, the kept recovery-key record
+(`first-fiscal-documents/<module>.recovery.json` in the state folder) is what allows a Start again
+without the setup password, so a damaged one makes Start again refuse `setup.not_ready`
+(`apps/server/src/first-setup-unused-assignment.ts`; rows in
+`apps/server/src/first-setup-unused-pdf.test.ts` pin the refusal), and the page offers nothing
+else to do. With the database missing, A1042 fixed the same damage: the page says the record is
+damaged and Start again goes ahead once the person confirms. Waiting for the owner.
+
 ## Decisions and deliberate limits
+
+**DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database
+proof (or, with the database missing, after the person's recorded confirmation) and keeps one small
+note of the last series name, which nothing but `waitron.sh reset --all` deletes (A1042).** The
+question, left open by A1037, was whether a setup request should stop re-checking every kept
+"start again" archive in full, or keep a cache; with no archives kept, there is nothing to re-check.
+A box that still holds an archive or a first-setup workspace from an earlier Waitron is refused at
+the start (`setup.workspace_unsupported`), and the page asks for Waitron to be reinstalled.
+
+- **The note's file:** `first-setup-start-again.json` in the box's own state folder
+  (`packages/provisioning/src/first-setup-start-again-note.ts`). It holds the last series name, the
+  earliest moment a later name may be taken, and the module that gave it. A write only ever replaces
+  it with a later moment, and no backup carries it: a restore archive or recovery bundle holding it
+  is refused.
+- **The floor:** first setup, a restore, a re-registration and a promotion all read the note as a
+  time floor (the earliest moment a new name may be taken), so none of them issues a production
+  series name at or before it.
+- **Q1:** with the venue database missing, the repair page asks instead of refusing: it says the box
+  cannot check whether anything was filed or sold, shows what the attempt's own record says it
+  reached, and Start again goes ahead only once the person confirms nothing was; each confirmation
+  is kept as a small record in `first-setup-start-again-confirmations/` in the state folder.
+- **Q2:** one note per box, whatever the tax number or environment.
+- **Q3:** nothing deletes the note in normal operation (a read, a start, Start again, a restore or
+  the in-app reset); a reinstall from the USB stick should keep it (a proposed change to B3's
+  design) and every node of a venue should hold it (a failover requirement), neither built.
+- **Q4:** a plain `waitron.sh reset` keeps the note and the confirmation records; `reset --all`
+  removes them.
+- **Q5:** A950's upgrade rollback must keep the newer note; an ordinary upgrade never writes it.
+- **Q6:** practice setups — Demo, Preparation, Live on a development box, and the readiness test
+  run — stay outside the note, as they stay outside every history check.
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack
