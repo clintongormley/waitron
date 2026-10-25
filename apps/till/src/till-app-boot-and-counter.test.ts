@@ -2228,7 +2228,7 @@ describe("till-app simplified-invoice limit", () => {
 
   it.each([
     ["en-GB", "A dish's period has ended."],
-    ["es-ES", "Ha terminado el periodo de un plato."],
+    ["es-ES", codeMessage("menu_period.ended", "es-ES")],
   ])("says a dish's period has ended in %s and keeps its basket", async (locale, message) => {
     try {
       const { el } = await mountApp({

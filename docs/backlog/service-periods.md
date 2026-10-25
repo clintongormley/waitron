@@ -537,20 +537,21 @@ review.
 
 ## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for
 
-A routing cell's line for Lunch does not apply to a Lunch dish confirmed after Lunch: it goes where
-the running period's line, or the cell's every-period target, sends it. A table's mojito on
-Almuerzo, with Cocktails routed Lunch → Downstairs bar and otherwise Upstairs bar, confirmed at
-14:05 is made Upstairs (`apps/server/src/till-api.service-periods.test.ts`, "makes a table's
-cocktail confirmed late at 14:05 at the Upstairs bar, not Lunch's Downstairs bar"). Routing it by
-the ended period is a module-contract change across the fire, hold and release paths: the router
-resolves one period per department per resolver (`routingAt`,
-`packages/venue-service/src/routing-store.ts`, filling `periods` from `runningPeriod`);
-`MakerResolver.makers` and `extraMakers` answer by product, not by line
-(`packages/module/src/module.ts`), so one fire holding a tortilla confirmed late and one picked now
-could not be routed apart; the resolver is asked for extras made at their own station, by
-`fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
-(`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
-its id. Left open by A789 slice 3 (plan D33).
+- **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
+  kitchen agreed for.** A routing cell's line for Lunch does not apply to a Lunch dish confirmed
+  after Lunch: it goes where the running period's line, or the cell's every-period target, sends it.
+  A table's mojito on Almuerzo, with Cocktails routed Lunch → Downstairs bar and otherwise Upstairs
+  bar, confirmed at 14:05 is made Upstairs (`apps/server/src/till-api.service-periods.test.ts`,
+  "makes a table's cocktail confirmed late at 14:05 at the Upstairs bar, not Lunch's Downstairs
+  bar"). Routing it by the ended period is a module-contract change across the fire, hold and
+  release paths: the router resolves one period per department per resolver (`routingAt`,
+  `packages/venue-service/src/routing-store.ts`, filling `periods` from `runningPeriod`);
+  `MakerResolver.makers` and `extraMakers` answer by product, not by line
+  (`packages/module/src/module.ts`), so one fire holding a tortilla confirmed late and one picked
+  now could not be routed apart; the resolver is asked for extras made at their own station, by
+  `fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
+  (`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
+  its id. Left open by A789 slice 3 (plan D33).
 
 ## Decisions and deliberate limits
 

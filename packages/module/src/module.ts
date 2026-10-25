@@ -849,7 +849,10 @@ export interface VenueServiceContribution {
     menuIds: readonly string[],
     items: readonly { productId: string; variantId: string | null }[],
   ): Promise<ReadonlySet<string>>;
-  /** Whether a dish sent after its period ended in this department needs a manager's PIN. */
+  /**
+   * Whether a dish sent after its period ended in this department needs someone holding
+   * `venue_service.manage`: the sender, or a manager's PIN.
+   */
   readLateSendNeedsManager(
     tx: Transaction,
     cfg: { locationId: LocationId },

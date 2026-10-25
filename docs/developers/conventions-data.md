@@ -619,7 +619,7 @@ in the zone also sells its product and variant, and otherwise refuses it `menu_p
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
 rows (`working_line_contexts.late_period_name` and `late_confirmed_by`) record the period and who
 confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan
-D19–D27. Saving an unsent table draft does not check the window: the till gates additions and
+D19–D28. Saving an unsent table draft does not check the window: the till gates additions and
 increases, and the server checks the window when the order is sent. A period save changes no time
 and takes no clock revision. Picking and sending remain separate from the department's actual open
 state. The [A789 plan](../superpowers/plans/2026-10-21-a789-last-orders.md) records the decisions

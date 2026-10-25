@@ -1603,8 +1603,8 @@ describe("a dish sent after its period", () => {
   const ticket = (items: KitchenTicketItem[], locale = "en-GB"): KitchenTicket => ({
     locale,
     scope: "station",
-    stationName: "Cocina",
-    tableLabel: "Mesa 4",
+    stationName: "Kitchen",
+    tableLabel: "Table 4",
     orderNumber: "A-17",
     firedAt: at,
     items,
@@ -1630,8 +1630,8 @@ describe("a dish sent after its period", () => {
       );
       expect(banner("Lunch", "en")).toBe("** AFTER LUNCH — AGREED **");
       expect(lines).toEqual([
-        "Cocina",
-        "Mesa 4",
+        "Kitchen",
+        "Table 4",
         "A-17",
         "14:30",
         "** AFTER LUNCH — AGREED **",
@@ -1646,16 +1646,16 @@ describe("a dish sent after its period", () => {
   it("prints the mark in the ticket's language", () => {
     const lines = printedLines(
       formatKitchenTicket(
-        ticket([{ qty: 1, name: "Steak", afterPeriod: "Almuerzo" }], "es-ES"),
+        ticket([{ qty: 1, name: "Steak", afterPeriod: "Lunch" }], "es-ES"),
         KITCHEN_80,
       ),
     );
     expect(lines).toEqual([
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
-      banner("Almuerzo", "es"),
+      banner("Lunch", "es"),
       "1 x Steak",
       "",
     ]);
@@ -1698,8 +1698,8 @@ describe("a dish sent after its period", () => {
         {
           stationName: "Grill",
           fromNumber: "28",
-          fromText: "Mesa 91",
-          toText: "Mesa 92",
+          fromText: "Table 91",
+          toText: "Table 92",
           at: at.toISOString(),
           items: [{ qty: 1, name: "Steak", afterPeriod: "Lunch" }],
           held: [{ group: 2, items: [{ qty: 1, name: "Fish", group: 2, afterPeriod: "Lunch" }] }],
@@ -1712,8 +1712,8 @@ describe("a dish sent after its period", () => {
       "*** MOVED ***",
       "Grill",
       "Order 28",
-      "From: Mesa 91",
-      "To:   Mesa 92",
+      "From: Table 91",
+      "To:   Table 92",
       "14:30",
       "1 x Steak",
       "HOLD",
@@ -1734,8 +1734,8 @@ describe("a dish sent after its period", () => {
       ),
     );
     expect(lines).toEqual([
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "GROUP 1",

@@ -5123,7 +5123,7 @@ export interface UpdateHeldOrderRequest {
   revision: number;
   /** Who saves: credited with the lines the save adds, and named by a group it starts or removes. */
   operatorId?: string;
-  /** The till's confirmation of the save's fresh dishes whose period ended earlier today. */
+  /** The request's confirmation of the save's fresh dishes whose period ended earlier today. */
   lateSend?: LateSendConfirmation;
 }
 

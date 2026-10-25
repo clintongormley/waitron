@@ -487,7 +487,7 @@ export class TillStationQueue extends LitElement {
         text-transform: none;
       }
 
-      /* The printing-problem tell: a warning chip on the card, words first so it never rests on colour. */
+      /* Warning chips — the printing-problem tell and the late-send mark — words first so neither rests on colour. */
       .print-problem,
       .after-period {
         padding: var(--wt-space-1) var(--wt-space-2);

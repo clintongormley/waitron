@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
+import "./errors.js";
 
 export async function readLateSendNeedsManager(
   tx: Transaction,
