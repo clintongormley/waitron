@@ -28,8 +28,8 @@ function escapeHtml(value: string): string {
 }
 
 const REMOVAL_INTRO = `If you have installed a Waitron certificate on this computer before, then you
-  will need to remove it before installing the new certificate. Remove only Waitron's own entry — if
-  you cannot tell which one it is, ask whoever installed this server.`;
+  will need to remove it before installing the new certificate. Remove only Waitron's own entry.
+  If you cannot identify the old Waitron entry, stop and use another venue device.`;
 
 function notes(help: DeviceHelp): string {
   return (help.notes ?? []).map((n) => `<p class="note">${n}</p>`).join("");
@@ -56,8 +56,7 @@ function deviceDetails(id: DeviceId): string {
 }
 
 const MANAGED = `<p class="note">These steps use your device's own settings, with no terminal. Menu
-  names vary by version. On a device your employer manages, an administrator may have to install the
-  certificate for you.</p>`;
+  names vary by version. If installation is blocked, use a venue device that permits it.</p>`;
 
 function installSection(device: DeviceId | "unknown"): string {
   if (device === "unknown")
@@ -88,9 +87,9 @@ export function renderTrustPage(input: TrustPageInput): string {
        or the file never reaches the disk.</p></section>
        ${installSection(device)}`
     : `<section><h2>1. Get the certificate</h2>
-       <p>This server has no certificate to download. If it uses one your installer supplied, ask
-       whoever installed it to check its trust, its expiry, and the address you are opening. A
-       certificate downloaded before a re-image may no longer apply.</p></section>`;
+       <p>This server has no certificate to download. Check its known HTTPS address below and stop
+       if it shows a certificate warning. This page cannot replace a separately installed certificate.
+       A certificate downloaded before a re-image may no longer apply.</p></section>`;
 
   return `<!doctype html>
 <html lang="en"><head>

@@ -818,6 +818,13 @@ workflow and [linked-layout repair](box.md#public-tls-repair-refuses-linked-layo
 This slice does not qualify replacement of an external certificate or repair of a linked layout.
 The earlier audit and milestone above retain their historical wording.
 
+The same rework also removes the older `/setup/trust` page’s installer and administrator
+referrals. It offers another venue device if you cannot identify the old certificate or install
+its replacement; a separately supplied certificate keeps its HTTPS-address choice and explicit
+replacement limit. Linux and Chromebook notes carry the device alternative in both languages.
+Without JavaScript, the connection page hides its script-only actions and explains how to enable
+them. Tests cover a changed inspection after Check again and both pending repair and Reconnect.
+
 ### boot-recovery
 
 **Boot recovery must offer choices instead of an installer referral.** Recheck the cause-specific

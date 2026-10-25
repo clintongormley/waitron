@@ -14,9 +14,10 @@ export const CONNECTION_TEXT = {
     certificateReady: "Certificate ready. Follow the instructions, then reconnect.",
     open: "Open Waitron below.",
     failed:
-      "The connection could not be set up. Retry to run the repair again. If it keeps failing, stop here: this page cannot fix every certificate problem.",
+      "The connection could not be set up. Choose Set up secure connection to retry. If it keeps failing, stop here: this page cannot fix every certificate problem.",
     operator:
       "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate.",
+    javascript: "Enable JavaScript in your browser, then reload this page to use these choices.",
     check: "Check again",
     stop: "Stop",
     stopped: "Stopped. You can close this tab, or check the connection again.",
@@ -51,9 +52,10 @@ export const CONNECTION_TEXT = {
     certificateReady: "Certificado listo. Sigue las instrucciones y reconecta.",
     open: "Abre Waitron abajo.",
     failed:
-      "No se ha podido configurar la conexión. Reintenta la reparación. Si sigue fallando, detente aquí: esta página no puede reparar todos los problemas de certificados.",
+      "No se ha podido configurar la conexión. Elige Configurar conexión segura para reintentar. Si sigue fallando, detente aquí: esta página no puede reparar todos los problemas de certificados.",
     operator:
       "Este servidor usa un certificado instalado por separado. Comprueba la dirección HTTPS de abajo. Si muestra un aviso del certificado, detente: esta página no puede sustituirlo.",
+    javascript: "Activa JavaScript en tu navegador y recarga esta página para usar estas opciones.",
     check: "Comprobar de nuevo",
     stop: "Detener",
     stopped: "Intento detenido. Puedes cerrar esta pestaña o comprobar la conexión de nuevo.",
@@ -126,6 +128,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     ],
     notes: [
       "Instala el archivo en cada navegador que uses. Firefox en Linux tiene su propia lista; sigue sus instrucciones.",
+      "Si este dispositivo bloquea la instalación del certificado, usa uno del local que la permita.",
     ],
   },
   chromeos: {
@@ -138,6 +141,9 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
       "Busca Administrar certificados en la configuración de Chrome, o abre <code>chrome://certificate-manager</code>.",
       "Importa el archivo en Certificados personalizados, Certificados de confianza. Si aparece Autoridades, permite identificar sitios web.",
       "Cierra por completo Chrome y vuelve a abrir esta página.",
+    ],
+    notes: [
+      "Si este dispositivo bloquea la instalación del certificado, usa uno del local que la permita.",
     ],
   },
   android: {

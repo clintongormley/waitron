@@ -82,7 +82,8 @@ If your device blocks installation, use a venue device that permits it.
 
 **Check again** reloads the public inspection without sending repair. **Stop** hides this attempt's
 actions without another request; you can close the tab or check again. Both controls wait while a
-repair request is pending. If repair keeps failing, stop here: some certificate problems need a
+repair request is pending. Without JavaScript, the page hides script-only actions and explains
+how to enable them. If repair keeps failing, stop here: some certificate problems need a
 repair this page does not offer. Authenticated certificate diagnosis/replacement and linked-layout
 repair remain [open work](../../docs/backlog/box.md#authenticated-server-certificate-recovery).
 
