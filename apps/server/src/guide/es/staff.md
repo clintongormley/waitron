@@ -20,8 +20,17 @@ invitación. Los gerentes no ven estas acciones.
 
 ## Tu propia cuenta {#own-account}
 
-Abre **Tu perfil** desde el menú de cuenta para cambiar tus propios datos de acceso. Puedes
-seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en dos pasos.
+Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus propios datos de
+acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en
+dos pasos.
+
+## Descargar tus datos {#own-data}
+
+Abre **Configuración de la cuenta** desde el menú de cuenta y, en **Tus datos**, pulsa
+**Descargar** junto a **Copia de tus datos**. Recibes un archivo ZIP con tus datos de perfil y de
+acceso en archivos `.json`, y un `README.txt` que explica cada archivo, quién más recibe los
+datos, cuánto tiempo se guardan y tus derechos. Nunca contiene secretos como tu PIN o tu
+contraseña. Para cualquier otra cosa sobre tus datos, pregunta al local.
 
 ## Eliminar un rol de personal {#delete-staff-role}
 

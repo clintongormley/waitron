@@ -72,10 +72,25 @@ by the answers):
 - **S2** — a staff member downloads their own data from their profile; an admin downloads another
   person's under a new admin-only permission, `personal_data.export`. The server route for a
   person's own download exists (`GET /management-api/me/personal-data/export`, a ZIP of their
-  profile and sign-in details), but nothing in the dashboard links to it yet. Left: **S2a2** (the
-  Profile page's button, the explanation file inside the ZIP, and the guide pages, in English and
-  Spanish), **S2b** (the workforce and staffing files) and **S2c** (the counts of voids, refunds and
-  drawer openings, and an admin's download of another person's data).
+  profile and sign-in details with a `README.txt` first, in the person's own language, English or
+  Spanish), the Profile page has a **Download** button beside **Copy of your data**, and the Users
+  guide has a "Download your data" section (`{#own-data}`) in English and Spanish. Left:
+  - **S2b** — the workforce and staffing files and the working-time export. It adds README words
+    for each file it adds (`apps/server/src/i18n/personal-data-readme.ts`), widens the guide
+    section's and the Profile help text's list of contents ("your profile and sign-in details"),
+    and adds its own "how long it is kept" and "who else receives it" sentences (for example the
+    four-year working-time floor, design §2.1 row s11, and the employment records and pay rate the
+    configuration export carries, design §2.4 r4).
+  - **S2c** — the counts of voids, refunds and drawer openings (`actions.csv`) and an admin's
+    download of another person's data. Its `authorize` returns a README language too, and it adds
+    README words for `actions.csv`. It also widens the guide section's and the Profile help text's
+    list of contents ("your profile and sign-in details", the `own-data` section of
+    `apps/server/src/guide/{en,es}/staff.md` and `profile.data_copy_help` in
+    `apps/dashboard/src/i18n/strings.ts`) for `actions.csv`, and adds guide text for an admin's
+    download of another person's data.
+
+  A new section in the Users guide (`apps/server/src/guide/<language>/staff.md`) also goes into
+  that page's section-id list in `apps/server/src/guide-content.test.ts`.
 - **Mount the own download from `boot.ts`** — the route is mounted through `mountMeApi`, which
   gets module names and rebuilds the modules with `modulesNamed` (`apps/server/src/modules.ts`),
   and is not given boot's `now`, because #1990 was editing `boot.ts` while the route was built.

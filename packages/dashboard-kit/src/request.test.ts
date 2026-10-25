@@ -266,6 +266,84 @@ it('decodes a refusal the same way with as: "blob"', async () => {
   expect(onError).toHaveBeenCalledWith("management.request_invalid", 400);
 });
 
+describe('a download that keeps the server\'s file name (as: "file")', () => {
+  const PATH = "/management-api/me/personal-data/export";
+
+  function fileResponse(headers: Record<string, string>): Response {
+    return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0xd1]), { status: 200, headers });
+  }
+
+  async function download(headers: Record<string, string>) {
+    const request = createRequest({
+      fetchImpl: vi.fn<FetchLike>().mockResolvedValue(fileResponse(headers)),
+    });
+    return request<{ blob: Blob; fileName: string | null }>(PATH, "GET", undefined, {
+      as: "file",
+    });
+  }
+
+  it("resolves to the quoted file name and the body's bytes unchanged", async () => {
+    const out = await download({
+      "content-disposition": 'attachment; filename="marta-lopez-2026-10-05.zip"',
+    });
+
+    expect(out.fileName).toBe("marta-lopez-2026-10-05.zip");
+    expect(out.blob).toBeInstanceOf(Blob);
+    expect([...new Uint8Array(await out.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 0x03, 0xd1]);
+  });
+
+  it("names no file when there is no Content-Disposition", async () => {
+    const out = await download({});
+
+    expect(out.fileName).toBeNull();
+    expect([...new Uint8Array(await out.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 0x03, 0xd1]);
+  });
+
+  it.each([
+    ["the extended form", "attachment; filename*=UTF-8''x.zip"],
+    ["an unquoted name", "attachment; filename=x.zip"],
+    ["an inline disposition", 'inline; filename="x.zip"'],
+  ])("names no file for %s", async (_label, disposition) => {
+    const out = await download({ "content-disposition": disposition });
+
+    expect(out.fileName).toBeNull();
+  });
+
+  it("decodes a refusal the same way", async () => {
+    const onError = vi.fn();
+    const request = createRequest({
+      fetchImpl: vi
+        .fn<FetchLike>()
+        .mockResolvedValue(
+          jsonResponse(
+            { error: { code: "management.request_invalid", params: { field: "period" } } },
+            400,
+          ),
+        ),
+      onError,
+    });
+
+    await expect(request(PATH, "GET", undefined, { as: "file" })).rejects.toEqual({
+      code: "management.request_invalid",
+      params: { field: "period" },
+      status: 400,
+    });
+    expect(onError).toHaveBeenCalledWith("management.request_invalid", 400);
+  });
+
+  it("reports session activity for a download a person asked for", async () => {
+    const onSuccess = vi.fn();
+    const request = createRequest({
+      fetchImpl: vi.fn<FetchLike>().mockResolvedValue(fileResponse({})),
+      onSuccess,
+    });
+
+    await request(PATH, "GET", undefined, { as: "file" });
+
+    expect(onSuccess).toHaveBeenCalledWith(PATH);
+  });
+});
+
 describe("the time limit on a read", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -450,6 +528,19 @@ describe("the time limit on a read", () => {
     const out = track(
       createRequest({ fetchImpl })("/management-api/reports/modelo-303", "GET", undefined, {
         as: "blob",
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(out.settled).toBeUndefined();
+    expect(fetchImpl.mock.calls[0]![1]).not.toHaveProperty("signal");
+  });
+
+  it('puts no limit on a file download that keeps its name (as: "file")', async () => {
+    const fetchImpl = hangingFetch();
+    const out = track(
+      createRequest({ fetchImpl })("/management-api/me/personal-data/export", "GET", undefined, {
+        as: "file",
       }),
     );
 

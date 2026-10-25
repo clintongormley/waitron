@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { locations, nodes, type Database, type Transaction } from "@waitron/db";
+import { locations, nodes, readTenant, type Database, type Transaction } from "@waitron/db";
 import { resolveManagementSession } from "@waitron/identity";
 import {
   personalDataParts,
@@ -9,10 +9,13 @@ import {
   type PersonalDataPart,
   type WaitronModule,
 } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { civilDateOf } from "@waitron/reporting";
+import { AppError, resolveActiveLocale } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { archiveFileName, zipArchive } from "./download-archive.js";
+import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
+import { personalDataReadme } from "./personal-data-readme.js";
 import { knownZone } from "./venue-time-zone.js";
 
 export interface PersonalDataExportDeps {
@@ -21,11 +24,13 @@ export interface PersonalDataExportDeps {
   modules: readonly WaitronModule[];
   /** Parts the server adds itself. */
   serverParts?: readonly PersonalDataPart[];
+  venueLocale: string;
+  privacyNoticeUrl?: string;
   now?: () => Date;
 }
 export type PersonalDataAuthorize = (
   tx: Transaction,
-) => Promise<{ personId: string; label: string }>;
+) => Promise<{ personId: string; label: string; language: "en" | "es" }>;
 
 export const withPersonalDataErrors = createErrorBoundary(
   {
@@ -62,8 +67,9 @@ export async function sendPersonalData(
   const snapshot = await deps.db.withWriteLock(async () => {
     const who = await authorize(tx);
     const place = await venuePlace(tx, deps.nodeId);
+    const tenant = await readTenant(tx);
     const build = await preparePersonalData(tx, parts, { personId: who.personId, at, ...place });
-    return { who, place, build };
+    return { who, place, tenant, build };
   });
   // Building outlives the snapshot turn, so authority is checked again before any bytes go.
   const files = await snapshot.build();
@@ -72,7 +78,15 @@ export async function sendPersonalData(
     if (again.personId !== snapshot.who.personId)
       throw new Error("personal-data authorisation named a different person after building");
   });
-  const body = zipArchive(files, at);
+  const readme = personalDataReadme({
+    language: snapshot.who.language,
+    venue: snapshot.tenant?.legalName ?? null,
+    person: snapshot.who.label,
+    date: civilDateOf(at, snapshot.place.timeZone),
+    privacyNoticeUrl: deps.privacyNoticeUrl,
+    files: files.map((f) => f.name),
+  });
+  const body = zipArchive([{ name: "README.txt", content: readme }, ...files], at);
   c.header("Content-Type", "application/zip");
   c.header(
     "Content-Disposition",
@@ -92,10 +106,17 @@ export function mountPersonalDataExportApi(
     withPersonalDataErrors(c, log, () => {
       const token = requireManagementSession(c);
       const hasQuery = new URL(c.req.url).search !== "";
+      const browserLocale = resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale);
       return sendPersonalData(c, deps, async (tx) => {
         const viewer = await resolveManagementSession(tx, token, { touch: false });
         if (hasQuery) throw new AppError("management.request_invalid", { field: "query" });
-        return { personId: viewer.personId, label: viewer.displayName };
+        // The rule the dashboard uses to pick its own language, so the README matches the screen.
+        const locale = resolveActiveLocale(viewer.locale, browserLocale);
+        return {
+          personId: viewer.personId,
+          label: viewer.displayName,
+          language: locale.startsWith("es-") ? "es" : "en",
+        };
       });
     }),
   );

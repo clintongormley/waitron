@@ -303,7 +303,11 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       },
       () => {},
     );
-    mountPersonalDataExportApi(app, { db, nodeId: "no-node", modules: ALL_MODULES }, () => {});
+    mountPersonalDataExportApi(
+      app,
+      { db, nodeId: "no-node", modules: ALL_MODULES, venueLocale: "en-GB" },
+      () => {},
+    );
   });
 
   afterAll(async () => {

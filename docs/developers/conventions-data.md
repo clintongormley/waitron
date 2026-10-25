@@ -2584,11 +2584,11 @@ case is "the managers' email reads its context on a full disk with a change wait
 
 Since A980 S2a1, the staff personal-data download (`GET /management-api/me/personal-data/export`,
 `apps/server/src/personal-data-export-api.ts`) reads in two `withWriteLock` turns with no drain —
-every part in the first, the session checked again in the second after the files are built — and
-resolves the session with `touch: false`, so it answers on a full disk with a change waiting. The
-case is "a person's own personal-data download answers on a full disk with a change waiting" in
-`apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one `withTransaction`
-per route.
+every part, and the venue's name for the README, in the first, the session checked again in the
+second after the files are built — and resolves the session with `touch: false`, so it answers on a
+full disk with a change waiting. The case is "a person's own personal-data download answers on a
+full disk with a change waiting" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated
+exception to one `withTransaction` per route.
 
 **What refused them.**
 

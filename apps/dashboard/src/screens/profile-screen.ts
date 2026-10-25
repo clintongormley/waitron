@@ -23,8 +23,10 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
@@ -156,6 +158,10 @@ export class ProfileScreen extends LitElement {
         gap: var(--wt-space-1);
         min-width: 0;
       }
+      .action-row .labelled {
+        position: relative;
+        align-self: flex-start;
+      }
       .field-label {
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
@@ -245,6 +251,10 @@ export class ProfileScreen extends LitElement {
   @state() private recoveryCodes: string[] = [];
   @state() private googleConfigured = false;
   @state() private privacyNoticeUrl = "";
+  @state() private downloading = false;
+  /** Kept apart from `error`, so it never replaces a read's message or shows in an edit dialog. */
+  @state() private downloadError = "";
+  #download = 0;
 
   #operation = 0;
   #scope?: DraftScope<Record<Field, string>>;
@@ -289,6 +299,8 @@ export class ProfileScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#operation++;
+    this.#download++;
+    this.downloading = false;
     this.busy = false;
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -745,6 +757,26 @@ export class ProfileScreen extends LitElement {
     link.click();
     URL.revokeObjectURL(url);
   }
+  async #downloadDataCopy(): Promise<void> {
+    if (this.downloading) return;
+    const download = ++this.#download;
+    this.downloading = true;
+    this.downloadError = "";
+    try {
+      const file = await this.api.downloadOwnPersonalData();
+      if (this.#download !== download) return;
+      const url = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.fileName ?? "personal-data.zip";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      if (this.#download === download) this.downloadError = codeMessage(codeOf(error));
+    } finally {
+      if (this.#download === download) this.downloading = false;
+    }
+  }
   async #addPasskey(
     credentials: { currentPassword?: string; totp?: string },
     name: string,
@@ -862,6 +894,36 @@ export class ProfileScreen extends LitElement {
               >${this.locales.find((l) => l.code === (p.locale ?? this.venueLocale))?.label}</span
             >
           </div>
+          <div class="action-row">
+            <div class="text">
+              <span class="labelled"
+                ><span class="field-value">${t("profile.data_copy")}</span
+                ><wt-help-tooltip
+                  mode="help-mode"
+                  aria-label=${t("profile.data_copy_help_label")}
+                  guide-href=${guideHref("staff.own-data")}
+                  guide-label=${t("profile.data_copy_help_guide")}
+                  >${t("profile.data_copy_help")}</wt-help-tooltip
+                ></span
+              >
+              <span class="field-meta">${t("profile.data_copy_hint")}</span>
+            </div>
+            <wt-button
+              data-test="download-data-copy"
+              class="card-action accent-primary"
+              aria-label=${t(this.downloading ? "profile.data_copy_busy" : "profile.data_copy_download")}
+              ?loading=${this.downloading}
+              @click=${() => void this.#downloadDataCopy()}
+              >${this.downloading ? t("profile.data_copy_busy") : t("action.download")}</wt-button
+            >
+          </div>
+          ${
+            this.downloadError === ""
+              ? nothing
+              : html`<p class="error" role="alert" data-test="download-data-copy-error">
+                  ${this.downloadError}
+                </p>`
+          }
         </div>
         <div slot="security">
           <div class="action-row">

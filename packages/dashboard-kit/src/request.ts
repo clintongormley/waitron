@@ -6,15 +6,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export interface DownloadedFile {
+  readonly blob: Blob;
+  /** From `Content-Disposition: attachment; filename="<name>"` only; otherwise null. */
+  readonly fileName: string | null;
+}
+
 /**
- * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download; a
- * refusal is decoded exactly as without it. `timeLimitMs` replaces `READ_TIME_LIMIT_MS` for one GET other
+ * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download;
+ * `as: "file"` resolves to a `DownloadedFile`, the bytes with the server's file name. A refusal is
+ * decoded exactly as without either. `timeLimitMs` replaces `READ_TIME_LIMIT_MS` for one GET other
  * than a file download.
  */
 export interface RequestOptions {
   passive?: boolean;
-  as?: "blob";
+  as?: "blob" | "file";
   timeLimitMs?: number;
+}
+
+// Only the exact form the server writes; a name holding a quote or a backslash is not read.
+const ATTACHMENT_NAME = /^attachment; filename="([^"\\]+)"$/;
+
+function attachmentName(disposition: string | null): string | null {
+  return disposition === null ? null : (ATTACHMENT_NAME.exec(disposition)?.[1] ?? null);
 }
 
 /** How long a read may take, response and body together, before it fails as `connection.timed_out`. */
@@ -36,8 +50,8 @@ export type DashboardRequest = <T>(
  * becomes a rejected `{ code, status }` read from the server's `{ error: { code } }` envelope, falling
  * back to `server.internal` when the body is missing, non-JSON or names no code — so callers branch
  * on a stable domain code, never an HTTP status, while `status` (the answered response's HTTP status)
- * rides along for the rare caller that needs it. Without `as: "blob"`, a 2xx with an EMPTY body
- * resolves to `undefined`, keyed off the empty body, not the status. A GET other than a blob download
+ * rides along for the rare caller that needs it. Without `as`, a 2xx with an EMPTY body
+ * resolves to `undefined`, keyed off the empty body, not the status. A GET other than a file download
  * is aborted after its time limit and fails as `connection.timed_out`, while a fetch that fails on
  * its own fails as `connection.failed`; it is aborted rather than only abandoned, so it does not keep
  * holding one of the browser's connections to the box. `onError` hears each non-2xx answer's code
@@ -82,7 +96,7 @@ export function createRequest(
       opts.onError?.(code);
       return { code };
     };
-    const limit = method === "GET" && options?.as !== "blob" ? new AbortController() : undefined;
+    const limit = method === "GET" && options?.as === undefined ? new AbortController() : undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Raced against every wait below, so a fetch or body that ignores the signal still settles.
     const timedOut =
@@ -127,13 +141,20 @@ export function createRequest(
       }
       let read: Blob | string;
       try {
-        read = await within<Blob | string>(options?.as === "blob" ? res.blob() : res.text());
+        read = await within<Blob | string>(options?.as === undefined ? res.text() : res.blob());
       } catch (error) {
         if (limit?.signal.aborted === true) throw fail("connection.timed_out");
         throw error;
       }
       if (!passive) opts.onSuccess?.(path);
-      if (typeof read !== "string") return read as T;
+      if (typeof read !== "string") {
+        if (options?.as !== "file") return read as T;
+        const file: DownloadedFile = {
+          blob: read,
+          fileName: attachmentName(res.headers.get("content-disposition")),
+        };
+        return file as T;
+      }
       return (read === "" ? undefined : JSON.parse(read)) as T;
     } finally {
       clearTimeout(timer);
