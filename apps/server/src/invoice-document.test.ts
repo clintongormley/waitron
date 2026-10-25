@@ -1064,44 +1064,63 @@ describe("the theme's logo on the A4 invoice", () => {
     expect(trimLogo(document)).toBeUndefined();
   });
 
+  async function expectNoLogoOnceUntrusted(
+    untrusted: (typeof UNTRUSTED_CASES)[number],
+    own: boolean,
+  ): Promise<void> {
+    const backend = none();
+    const departmentId = await department();
+    if (own) await ownLogo(departmentId);
+    const saleId = await saleIn(backend, departmentId);
+    const [foreign] = await suite.db
+      .insert(locations)
+      .values({
+        name: randomUUID(),
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+      })
+      .returning({ id: locations.id });
+    const at = { departmentId, locationId: venue.cfg.locationId, foreignLocationId: foreign!.id };
+    await putThemeInUse(suite.db);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const control = await read(backend, saleId);
+      expect(control.logo).toEqual(
+        own ? { widthDots: 8, heightDots: 1, bits: new Uint8Array([64]) } : THEME_80MM,
+      );
+      const invoiceNumber = control.result.invoiceNumber;
+      expect(invoiceNumber).not.toBe("");
+      await untrusted.apply(suite.db, at);
+      let document;
+      try {
+        document = await read(backend, saleId);
+      } finally {
+        await untrusted.undo(suite.db, at);
+      }
+      expect(document.logo).toBeNull();
+      expect(trimLogo(document)).toBeUndefined();
+      expect(printedOf(document)).toContain(`"${invoiceNumber}"`);
+    } finally {
+      warning.mockRestore();
+      await clearThemes(suite.db);
+    }
+  }
+
   it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
     "prints no logo when the department cannot be trusted: %s",
     async (_name, untrusted) => {
-      const backend = none();
-      const departmentId = await department();
-      const saleId = await saleIn(backend, departmentId);
-      const [foreign] = await suite.db
-        .insert(locations)
-        .values({
-          name: randomUUID(),
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Hospitality",
-        })
-        .returning({ id: locations.id });
-      const at = { departmentId, locationId: venue.cfg.locationId, foreignLocationId: foreign!.id };
-      await putThemeInUse(suite.db);
-      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-      try {
-        const control = await read(backend, saleId);
-        expect(control.logo).toEqual(THEME_80MM);
-        await untrusted.apply(suite.db, at);
-        let document;
-        try {
-          document = await read(backend, saleId);
-        } finally {
-          await untrusted.undo(suite.db, at);
-        }
-        expect(document.logo).toBeNull();
-        expect(trimLogo(document)).toBeUndefined();
-        expect(printedOf(document)).toContain(`"${document.result.invoiceNumber}"`);
-      } finally {
-        warning.mockRestore();
-        await clearThemes(suite.db);
-      }
+      await expectNoLogoOnceUntrusted(untrusted, false);
     },
   );
 
-  it("the page draws the theme's dots centred at the top", async () => {
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "prints neither the department's own logo nor the theme's once it cannot be trusted: %s",
+    async (_name, untrusted) => {
+      await expectNoLogoOnceUntrusted(untrusted, true);
+    },
+  );
+
+  it("the page draws the theme's dots centred, above every line of text", async () => {
     const backend = none();
     const saleId = await saleIn(backend, await department());
     await putThemeInUse(suite.db);
@@ -1112,8 +1131,9 @@ describe("the theme's logo on the A4 invoice", () => {
       const [logo] = logos;
       expect(logo).toMatchObject({ raster: THEME_80MM });
       expect(logo!.x + logo!.width / 2).toBeCloseTo(INVOICE_PAGE_WIDTH / 2);
-      const others = first!.elements.filter((element) => element.kind !== "logo");
-      expect(Math.min(...others.map((element) => element.y))).toBeGreaterThan(logo!.y);
+      const texts = first!.elements.filter((element) => element.kind === "text");
+      expect(texts.length).toBeGreaterThan(0);
+      expect(Math.min(...texts.map((element) => element.y))).toBeGreaterThan(logo!.y);
     } finally {
       await clearThemes(suite.db);
     }
