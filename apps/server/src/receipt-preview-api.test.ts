@@ -2,7 +2,7 @@ import { registerModulePermissions } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
   devices,
@@ -11,6 +11,7 @@ import {
   readTenant,
   tenantReceipts,
   withTransaction,
+  type Database,
 } from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -30,6 +31,8 @@ import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
 import type { TillConfig } from "./till-config.js";
 import { deletePrinter } from "./printer-delete.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { clearThemes, putThemeInUse, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -974,6 +977,182 @@ describe("the receipt preview's top block", () => {
     await spoilImageBytes(spoiled);
     const undecodable = await rendered({ logo: spoiled });
     expect([sizes(undecodable), undecodable.marks.logo]).toEqual([[], null]);
+  });
+
+  describe("the theme's logo in a department's preview", () => {
+    afterEach(async () => {
+      await clearThemes(suite.db);
+    });
+
+    const at = () => ({
+      departmentId,
+      locationId: venue.cfg.locationId,
+      foreignLocationId: randomUUID(),
+    });
+    const readableNoLogo = () =>
+      suite.db
+        .insert(departmentReceipts)
+        .values({ departmentId, receipt: { phone: "910111111" } })
+        .onConflictDoUpdate({
+          target: departmentReceipts.departmentId,
+          set: { receipt: { phone: "910111111" } },
+        });
+
+    /** Runs `fn` with the department's receipt read renaming its table after its `nth` call. */
+    async function hidingReceiptsAfterRead<T>(nth: number, fn: () => Promise<T>): Promise<T> {
+      const read = VENUE_SERVICE.readDepartmentReceipt;
+      const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
+      let calls = 0;
+      let hidden = false;
+      const spy = vi
+        .spyOn(VENUE_SERVICE, "readDepartmentReceipt")
+        .mockImplementation(async (...args) => {
+          const result = await read(...args);
+          calls += 1;
+          if (calls === nth) {
+            await hide.apply(args[0] as unknown as Database, at());
+            hidden = true;
+          }
+          return result;
+        });
+      try {
+        return await fn();
+      } finally {
+        spy.mockRestore();
+        if (hidden) await hide.undo(suite.db, at());
+      }
+    }
+
+    it("a draft with no logo draws the theme's dots for the paper, and marks them", async () => {
+      await putThemeInUse(suite.db);
+      const wide = await rendered({});
+      expect(sizes(wide)).toEqual([[16, 1]]);
+      expect(wide.marks.logo).not.toBeNull();
+      const response = await preview({ receipt: {}, paperWidth: "58mm" });
+      expect(response.status).toBe(200);
+      const narrow = (await response.json()) as ReceiptPreviewResponse;
+      expect(sizes(narrow)).toEqual([[8, 1]]);
+      expect(narrow.marks.logo).not.toBeNull();
+    });
+
+    it("a draft naming a logo draws that logo, never the theme's", async () => {
+      const logo = await libraryImage(45);
+      const control = sizes(await rendered({ logo }));
+      expect(control).toHaveLength(1);
+      expect(control).not.toEqual([[16, 1]]);
+      await putThemeInUse(suite.db);
+      expect(sizes(await rendered({ logo }))).toEqual(control);
+    });
+
+    it("a failed theme read draws the preview without a logo and reports it", async () => {
+      await putThemeInUse(suite.db);
+      expect(sizes(await rendered({}))).toEqual([[16, 1]]);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await suite.db.execute(sql`alter table custom_themes rename to test_hidden_custom_themes`);
+      try {
+        const result = await rendered({});
+        expect([sizes(result), result.marks.logo]).toEqual([[], null]);
+        expect(printedLines(result)).toContain(legal());
+        expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
+          operation: "readPrintedThemeLogo",
+          code: "receipt.read_failed",
+        });
+      } finally {
+        await suite.db.execute(sql`alter table test_hidden_custom_themes rename to custom_themes`);
+        warning.mockRestore();
+      }
+    });
+
+    it("no theme in use draws none", async () => {
+      await clearThemes(suite.db);
+      const result = await rendered({});
+      expect([sizes(result), result.marks.logo]).toEqual([[], null]);
+    });
+
+    it.each(
+      UNTRUSTED_CASES.filter((c) => c.name !== "a department not in this location").map(
+        (c) => [c.name, c] as const,
+      ),
+    )(
+      "a draft with no logo draws no logo while the stored settings cannot be trusted: %s",
+      async (name, untrusted) => {
+        await putThemeInUse(suite.db);
+        await readableNoLogo();
+        const control = await rendered({});
+        expect(sizes(control)).toEqual([[16, 1]]);
+        let result: ReceiptPreviewResponse;
+        if (name === "the read throws") {
+          result = await hidingReceiptsAfterRead(1, () => rendered({}));
+        } else {
+          await untrusted.apply(suite.db, at());
+          result = await rendered({});
+        }
+        expect([sizes(result), result.marks.logo]).toEqual([[], null]);
+        expect(printedLines(result)).toContain(legal());
+      },
+    );
+
+    it("a draft naming its saved logo draws it from its image when the printed read throws", async () => {
+      await putThemeInUse(suite.db);
+      const logo = await libraryImage(46);
+      const fromImage = sizes(await rendered({ logo }));
+      expect(fromImage).toHaveLength(1);
+      expect(fromImage).not.toEqual([[16, 1]]);
+      const raster = {
+        widthDots: 16,
+        heightDots: 2,
+        data: Buffer.from([1, 2, 3, 4]).toString("base64"),
+      };
+      await suite.db.insert(departmentReceipts).values({
+        departmentId,
+        receipt: { logo },
+        logoRasters: { "58mm": raster, "80mm": raster },
+      });
+      expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
+      // The table comes back inside the same transaction: drawing the image lists its uses, which
+      // reads department_receipts after the snapshot's transaction ends.
+      const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
+      const printed = VENUE_SERVICE.readPrintedDepartmentReceipt;
+      const answers: unknown[] = [];
+      const spy = vi
+        .spyOn(VENUE_SERVICE, "readPrintedDepartmentReceipt")
+        .mockImplementation(async (...args) => {
+          const tx = args[0] as unknown as Database;
+          await hide.apply(tx, at());
+          try {
+            const answer = await printed(...args);
+            answers.push(answer);
+            return answer;
+          } finally {
+            await hide.undo(tx, at());
+          }
+        });
+      let result: ReceiptPreviewResponse;
+      try {
+        result = await rendered({ logo });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(answers).toEqual([{ receipt: {}, logo: null, unreadable: true }]);
+      expect(sizes(result)).toEqual(fromImage);
+    });
+
+    it.each(
+      UNTRUSTED_CASES.filter(
+        (c) => c.name !== "the read throws" && c.name !== "a department not in this location",
+      ).map((c) => [c.name, c] as const),
+    )(
+      "a draft naming a logo draws it from its image while the stored settings cannot be trusted: %s",
+      async (_name, untrusted) => {
+        await putThemeInUse(suite.db);
+        const logo = await libraryImage(47);
+        const control = sizes(await rendered({ logo }));
+        expect(control).toHaveLength(1);
+        expect(control).not.toEqual([[16, 1]]);
+        await untrusted.apply(suite.db, at());
+        expect(sizes(await rendered({ logo }))).toEqual(control);
+      },
+    );
   });
 });
 
