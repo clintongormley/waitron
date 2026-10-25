@@ -26,8 +26,8 @@ const suite = useVenueDb({
   ),
 });
 
-describe("the own personal-data download in a real start", () => {
-  it("answers a signed-in person with their own profile in primary mode", async () => {
+describe("the personal-data downloads in a real start", () => {
+  it("answers a signed-in person with their own profile, gives an administrator another person's, and refuses a manager, in primary mode", async () => {
     beforeServerStarts();
     const venue = await createClockVenue(suite.db, () => new Date(), modules);
     const session = await withTransaction(suite.db, (tx) =>
@@ -39,6 +39,17 @@ describe("the own personal-data download in a real start", () => {
       body: JSON.stringify({ expectedEntryId: null }),
     });
     expect(clockedIn.status).toBe(200);
+    const [admin, manager] = await suite.db
+      .insert(persons)
+      .values([
+        { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
+        { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
+      ])
+      .returning({ id: persons.id });
+    const [adminSession, managerSession] = await withTransaction(suite.db, async (tx) => [
+      await startManagementSession(tx, { personId: admin!.id }),
+      await startManagementSession(tx, { personId: manager!.id }),
+    ]);
     await stampDeployment(suite.db, "preproduction");
     const scratch = await mkdtemp(join(tmpdir(), "waitron-personal-data-boot-"));
     let server: StartedServer | undefined;
@@ -78,62 +89,19 @@ describe("the own personal-data download in a real start", () => {
         Object.hasOwn(files, "time-record.pdf"),
         Object.hasOwn(files, "staff-roles.json"),
       ]).toEqual([true, true, false]);
-    } finally {
-      await server?.close();
-      await rm(scratch, { recursive: true, force: true });
-    }
-    beforeServerStarts();
-  }, 60_000);
-});
 
-describe("an administrator's download of another person in a real start", () => {
-  it("gives an administrator another person's download, and refuses a manager", async () => {
-    beforeServerStarts();
-    const venue = await createClockVenue(suite.db, () => new Date(), modules);
-    const [admin, manager] = await suite.db
-      .insert(persons)
-      .values([
-        { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
-        { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
-      ])
-      .returning({ id: persons.id });
-    const [adminSession, managerSession] = await withTransaction(suite.db, async (tx) => [
-      await startManagementSession(tx, { personId: admin!.id }),
-      await startManagementSession(tx, { personId: manager!.id }),
-    ]);
-    await stampDeployment(suite.db, "preproduction");
-    const scratch = await mkdtemp(join(tmpdir(), "waitron-personal-data-boot-"));
-    let server: StartedServer | undefined;
-    try {
-      await copyMigrationsRoot(join(scratch, "migrations"));
-      await writeFile(
-        join(scratch, "modules.json"),
-        JSON.stringify({ modules: Object.fromEntries([...disabled].map((m) => [m, false])) }),
-      );
-      const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-      const [port] = await freePorts(1);
-      server = await startServer({
-        WAITRON_HTTP_LANDING_PORT: "0",
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-        WAITRON_CREDENTIALS_KEY_VERSION: "1",
-        WAITRON_STATE_DIR: scratch,
-        WAITRON_VENUE_DIR: dirname(database),
-        WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
-        WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
-        WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
-        WAITRON_ENV: "preproduction",
-      });
-      await awaitListening(port);
       const url = `http://127.0.0.1:${port}/management-api/staff/${venue.personId}/personal-data/export`;
-      const response = await fetch(url, {
+      const other = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${adminSession.token}` },
       });
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("application/zip");
-      const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
-      const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
-      expect([profile.id, profile.displayName]).toEqual([venue.personId, "Ana"]);
+      expect(other.status).toBe(200);
+      expect(other.headers.get("content-type")).toBe("application/zip");
+      const otherFiles = unzipSync(new Uint8Array(await other.arrayBuffer()));
+      const otherProfile = JSON.parse(strFromU8(otherFiles["profile.json"]!)) as Record<
+        string,
+        unknown
+      >;
+      expect([otherProfile.id, otherProfile.displayName]).toEqual([venue.personId, "Ana"]);
 
       const refused = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },

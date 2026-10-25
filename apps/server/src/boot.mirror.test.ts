@@ -176,7 +176,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
 }
 
 describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
-  it("serves a dashboard read via the ambient viewer and refuses writes", async () => {
+  it("serves dashboard reads, another person's download among them, via the ambient viewer and refuses writes", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -195,6 +195,17 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       const read = await fetch(`${base}/management-api/catalogues`, { headers: { cookie } });
       expect(read.status).toBe(200);
       expect(await read.json()).toEqual([]);
+
+      // An administrator's download of another person answers on a mirror like every other read.
+      const download = await fetch(
+        `${base}/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
+        { headers: { cookie } },
+      );
+      expect(download.status).toBe(200);
+      expect(download.headers.get("content-type")).toBe("application/zip");
+      const files = unzipSync(new Uint8Array(await download.arrayBuffer()));
+      const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
+      expect([profile.id, profile.displayName]).toEqual([MIRROR_STAFF_ID, "Marta"]);
 
       const write = await fetch(`${base}/management-api/catalogues`, {
         method: "POST",
@@ -246,32 +257,6 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       await server.close();
     }
     await expect(fetch(`${base}/api/node`)).rejects.toThrow();
-  }, 60_000);
-
-  it("answers an administrator's download of another person on a mirror, like every other read", async () => {
-    const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: venueDir.mirror,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
-    const base = `http://127.0.0.1:${port}`;
-    try {
-      const primer = await fetch(`${base}/management-api/catalogues`);
-      const cookie = primer.headers.get("set-cookie")!.split(";")[0]!;
-      const response = await fetch(
-        `${base}/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
-        { headers: { cookie } },
-      );
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("application/zip");
-      const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
-      const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
-      expect([profile.id, profile.displayName]).toEqual([MIRROR_STAFF_ID, "Marta"]);
-    } finally {
-      await server.close();
-    }
   }, 60_000);
 
   it("runs the trivial empty pass on a mirror — the fiscal drain (AEAT submission) is never invoked", async () => {
