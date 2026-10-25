@@ -26,6 +26,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
+import "../widgets/misdated-note-dialog.js";
 import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
@@ -205,8 +206,10 @@ export class BoxStatusScreen extends LitElement {
         gap: var(--wt-space-2);
         margin: 0 0 var(--wt-space-3);
       }
-      .misdated-entry > wt-button {
-        justify-self: start;
+      .misdated-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
       .misdated-entry > .error {
         margin: 0;
@@ -249,6 +252,9 @@ export class BoxStatusScreen extends LitElement {
   /** Incident ids whose file is being asked for, and the refusal last shown under each entry. */
   @state() private downloading: ReadonlySet<string> = new Set();
   @state() private downloadRefusals: ReadonlyMap<string, string> = new Map();
+  /** The entry the note dialog was last opened for; kept while it closes. */
+  @state() private noteTarget: { mode: "handle" | "note"; entry: MisdatedOpenView } | null = null;
+  @state() private noteOpen = false;
   @state() private clockCheckOpen = false;
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
@@ -767,7 +773,7 @@ export class BoxStatusScreen extends LitElement {
     )
       return null;
     return html`<div class="misdated-entry" data-test="misdated-entry">
-      ${this.#misdatedBody(open, sentence, records, severalTables)}
+      ${this.#misdatedBody(open, sentence, records, severalTables, this.#noteButton("handle", open))}
     </div>`;
   }
 
@@ -802,6 +808,7 @@ export class BoxStatusScreen extends LitElement {
         this.#misdatedSentence(episode),
         episode.records ?? undefined,
         severalTables,
+        episode.note === null ? this.#noteButton("note", episode) : nothing,
       )}
     </div>`;
   }
@@ -811,49 +818,81 @@ export class BoxStatusScreen extends LitElement {
     sentence: string | null,
     records: MisdatedRecordView[] | undefined,
     severalTables: boolean,
+    noteButton: TemplateResult | typeof nothing,
   ): TemplateResult {
     return html`${
-      sentence === null
-        ? nothing
-        : html`<p class="detail" data-test="misdated-sentence">${wholeTimes(sentence)}</p>`
-    }
-    ${
-      records === undefined
-        ? nothing
-        : html`<wt-data-table
-            data-test="misdated-table"
-            aria-label=${
-              severalTables && open.to !== undefined
-                ? fill("box_status.misdated.table_range", {
-                    from: wallMinute(open.from, open.fromOffsetMinutes),
-                    to: wallMinute(open.to, open.toOffsetMinutes!),
-                  })
-                : t("box_status.misdated.title")
-            }
-            .rows=${records}
-            .columns=${this.#misdatedColumns()}
-            .rowKey=${(record: MisdatedRecordView) => record.recordId}
-          ></wt-data-table>`
-    }
-    ${open.unconfirmed ? nothing : this.#downloadButton(open)}`;
+        sentence === null
+          ? nothing
+          : html`<p class="detail" data-test="misdated-sentence">${wholeTimes(sentence)}</p>`
+      }
+      ${
+        records === undefined
+          ? nothing
+          : html`<wt-data-table
+              data-test="misdated-table"
+              aria-label=${
+                severalTables && open.to !== undefined
+                  ? fill("box_status.misdated.table_range", {
+                      from: wallMinute(open.from, open.fromOffsetMinutes),
+                      to: wallMinute(open.to, open.toOffsetMinutes!),
+                    })
+                  : t("box_status.misdated.title")
+              }
+              .rows=${records}
+              .columns=${this.#misdatedColumns()}
+              .rowKey=${(record: MisdatedRecordView) => record.recordId}
+            ></wt-data-table>`
+      }
+      <div class="misdated-actions">
+        ${open.unconfirmed ? nothing : this.#downloadButton(open)} ${noteButton}
+      </div>
+      ${this.#downloadRefusal(open)}`;
+  }
+
+  #noteButton(mode: "handle" | "note", entry: MisdatedOpenView): TemplateResult {
+    return html`<wt-button
+      size="sm"
+      variant="secondary"
+      data-test=${mode === "handle" ? "misdated-mark-handled" : "misdated-add-note"}
+      @click=${() => {
+        this.noteTarget = { mode, entry };
+        this.noteOpen = true;
+      }}
+      >${t(mode === "handle" ? "alerts.mark_handled" : "box_status.misdated.add_note")}</wt-button
+    >`;
+  }
+
+  #renderNoteDialog(): TemplateResult {
+    const target = this.noteTarget;
+    return html`<dashboard-misdated-note-dialog
+      .api=${this.api}
+      .open=${this.noteOpen}
+      .mode=${target?.mode ?? "handle"}
+      .incidentId=${target?.entry.incidentId ?? ""}
+      .summary=${target === null ? "" : alertMessage(MISDATED, { ...target.entry }, currentLocale())}
+      @saved=${() => this.api.liveData.refresh()}
+      @note-close=${() => (this.noteOpen = false)}
+    ></dashboard-misdated-note-dialog>`;
   }
 
   #downloadButton(open: MisdatedOpenView): TemplateResult {
-    const refusal = this.downloadRefusals.get(open.incidentId);
     return html`<wt-button
-        size="sm"
-        variant="secondary"
-        data-test="misdated-download"
-        ?loading=${this.downloading.has(open.incidentId)}
-        @click=${() => void this.#download(open)}
-        >${t("box_status.misdated.download")}</wt-button
-      >${
-        refusal === undefined
-          ? nothing
-          : html`<p class="error" role="alert" data-test="misdated-download-error">
-              ${codeMessage(refusal)}
-            </p>`
-      }`;
+      size="sm"
+      variant="secondary"
+      data-test="misdated-download"
+      ?loading=${this.downloading.has(open.incidentId)}
+      @click=${() => void this.#download(open)}
+      >${t("box_status.misdated.download")}</wt-button
+    >`;
+  }
+
+  #downloadRefusal(open: MisdatedOpenView): TemplateResult | typeof nothing {
+    const refusal = this.downloadRefusals.get(open.incidentId);
+    return refusal === undefined
+      ? nothing
+      : html`<p class="error" role="alert" data-test="misdated-download-error">
+          ${codeMessage(refusal)}
+        </p>`;
   }
 
   async #download(open: MisdatedOpenView): Promise<void> {
@@ -1013,6 +1052,7 @@ export class BoxStatusScreen extends LitElement {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderClockCheckDialog()}
+      ${this.#renderNoteDialog()}
     `;
   }
 }

@@ -321,6 +321,40 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     },
   );
 
+  it("renders an open list with Download and Mark handled accessibly", async () => {
+    const { el, host } = await mountWidget<BoxStatusScreen>(
+      "dashboard-box-status-screen",
+      { api: withMisdated(LIST), canOpen: () => true },
+      theme,
+    );
+    await flush(el);
+    const entry = el.shadowRoot!.querySelector("[data-test=misdated-entry]")!;
+    expect(entry.querySelector("[data-test=misdated-download]")).not.toBeNull();
+    expect(entry.querySelector("[data-test=misdated-mark-handled]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a handled list with no note, and its Add note button, accessibly", async () => {
+    const api = {
+      ...withHandled(),
+      clockMisdatedHandled: vi.fn().mockResolvedValue({
+        episodes: [{ ...HANDLED.episodes[0]!, note: null }],
+      } satisfies ClockMisdatedHandledView),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<BoxStatusScreen>(
+      "dashboard-box-status-screen",
+      { api, canOpen: () => true },
+      theme,
+    );
+    await flush(el);
+    const fold = el.shadowRoot!.querySelector<HTMLElement>("[data-test=misdated-handled]")!;
+    await userEvent.click(fold.shadowRoot!.querySelector<HTMLElement>("button.header")!);
+    await flush(el);
+    await vi.waitFor(() => expect(fold.shadowRoot!.querySelector(".body.animating")).toBeNull());
+    expect(el.shadowRoot!.querySelector("[data-test=misdated-add-note]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   describe("the check of the box's clock with this device", () => {
     const STOPPED = health({ clockStop: { ...PROOF_READY.clockStop!, proof: "none" } });
 

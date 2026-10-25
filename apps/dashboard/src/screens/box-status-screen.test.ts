@@ -1794,4 +1794,143 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       expect(text(buttonIn(openEntries(el)[0]!))).toBe(es["box_status.misdated.download"]);
     });
   });
+
+  describe("Mark handled and Add note", () => {
+    type Episode = ClockMisdatedHandledView["episodes"][number];
+    const NO_NOTE: Episode = {
+      ...OPEN,
+      incidentId: "h5",
+      confirmationId: "hc5",
+      count: 1,
+      from: "2026-10-19T10:00:00.000Z",
+      to: "2026-10-19T10:00:00.000Z",
+      handledAt: "2026-10-20T09:00:00.000Z",
+      handledBy: { kind: "person", name: "Odalys" },
+      note: null,
+      records: [
+        {
+          recordId: "hr5",
+          series: "T4",
+          number: 2,
+          at: "2026-10-19T10:00:00.000Z",
+          offsetMinutes: 120,
+        },
+      ],
+    };
+    const NOTED: Episode = {
+      ...NO_NOTE,
+      incidentId: "h6",
+      confirmationId: "hc6",
+      note: "Adviser filed the correction",
+    };
+
+    function withNotes(
+      open: MisdatedOpenView[],
+      handled: Episode[] = [],
+      overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
+    ): DashboardApi {
+      return stubApi(
+        {
+          clockMisdated: vi.fn().mockResolvedValue(LISTS),
+          clockMisdatedHandled: vi.fn().mockResolvedValue({ episodes: handled }),
+          markIncidentHandled: vi.fn().mockResolvedValue(undefined),
+          addIncidentNote: vi.fn().mockResolvedValue(undefined),
+          ...overrides,
+        },
+        { ...health(), misdatedOpen: open, misdatedHandledCount: handled.length },
+      );
+    }
+    type NoteDialog = HTMLElement & {
+      open: boolean;
+      mode: string;
+      incidentId: string;
+      summary: string;
+    };
+    const noteDialog = (el: BoxStatusScreen) =>
+      q(el, "dashboard-misdated-note-dialog") as NoteDialog | null;
+    const markIn = (entry: Element) =>
+      entry.querySelector("[data-test=misdated-mark-handled]") as HTMLElement | null;
+    const addNoteIn = (entry: Element) =>
+      entry.querySelector("[data-test=misdated-add-note]") as HTMLElement | null;
+    async function openFold(el: BoxStatusScreen) {
+      const fold = q(el, "[data-test=misdated-handled]") as HTMLElement;
+      (fold.shadowRoot!.querySelector("button.header") as HTMLElement).click();
+      await flush(el);
+    }
+
+    it("Mark handled on an open entry opens the dialog to mark that entry's alert handled, with the alert's sentence", async () => {
+      const { el } = await mount(withNotes([OPEN, UNCONFIRMED]));
+      const [listed, cannotTell] = qa(el, "[data-test=misdated-entry]");
+      const mark = markIn(listed!)!;
+      expect(text(mark)).toBe(t("alerts.mark_handled"));
+      expect(mark.getAttribute("variant")).toBe("secondary");
+      expect(markIn(cannotTell!)).not.toBeNull();
+      expect(qa(el, "[data-test=misdated-add-note]")).toHaveLength(0);
+      expect(noteDialog(el)?.open ?? false).toBe(false);
+      await userEvent.click(mark);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(dialog.open).toBe(true);
+      expect(dialog.mode).toBe("handle");
+      expect(dialog.incidentId).toBe("i1");
+      expect(dialog.summary).toBe(
+        alertMessage("clock.records_misdated", { ...OPEN }, currentLocale()),
+      );
+    });
+
+    it("gives an entry that cannot tell the alert's own sentence for that case", async () => {
+      const { el } = await mount(withNotes([UNCONFIRMED]));
+      await userEvent.click(markIn(qa(el, "[data-test=misdated-entry]")[0]!)!);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(dialog.incidentId).toBe("i2");
+      expect(dialog.summary).toBe(
+        alertMessage("clock.records_misdated", { ...UNCONFIRMED }, currentLocale()),
+      );
+    });
+
+    it("Add note on a handled entry with no note opens the dialog to add its note; one with a note has none", async () => {
+      const { el } = await mount(withNotes([], [NO_NOTE, NOTED]));
+      await openFold(el);
+      const [bare, noted] = qa(el, "[data-test=misdated-handled-entry]");
+      expect(addNoteIn(noted!)).toBeNull();
+      expect(qa(el, "[data-test=misdated-mark-handled]")).toHaveLength(0);
+      const add = addNoteIn(bare!)!;
+      expect(text(add)).toBe(t("box_status.misdated.add_note"));
+      expect(add.getAttribute("variant")).toBe("secondary");
+      await userEvent.click(add);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(dialog.open).toBe(true);
+      expect(dialog.mode).toBe("note");
+      expect(dialog.incidentId).toBe("h5");
+      expect(dialog.summary).toBe(
+        alertMessage("clock.records_misdated", { ...NO_NOTE }, currentLocale()),
+      );
+    });
+
+    it("reads the box again once the dialog has saved, and closes it", async () => {
+      const api = withNotes([OPEN]);
+      const { el } = await mount(api);
+      const refresh = vi.spyOn(api.liveData, "refresh");
+      await userEvent.click(markIn(qa(el, "[data-test=misdated-entry]")[0]!)!);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(refresh).not.toHaveBeenCalled();
+      (dialog.shadowRoot!.querySelector("[data-test=note-submit]") as HTMLElement).click();
+      await flush(el);
+      expect(api.markIncidentHandled).toHaveBeenCalledWith("i1", undefined);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(dialog.open).toBe(false);
+    });
+
+    it("words Add note in Spanish from the strings tables", async () => {
+      setLocale("es");
+      const { el } = await mount(withNotes([], [NO_NOTE]));
+      await openFold(el);
+      expect(text(addNoteIn(qa(el, "[data-test=misdated-handled-entry]")[0]!))).toBe(
+        es["box_status.misdated.add_note"],
+      );
+    });
+  });
 });
