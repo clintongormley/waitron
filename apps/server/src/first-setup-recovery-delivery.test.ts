@@ -473,7 +473,7 @@ it("the owned API saves public recovery bindings and requires explicit kept conf
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
 });
 
-it("an empty never-activated setup retains its public recovery binding when starting again", async () => {
+it("an empty never-activated setup deletes its recovery document when starting again", async () => {
   const f = await documentFixture();
   await f.register();
   await f.kept();

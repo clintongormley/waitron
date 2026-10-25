@@ -167,7 +167,7 @@ it("an unused PDF remains eligible after a publication binding was staged but ac
   await expect(f.start()).resolves.toBeUndefined();
   expect(await startAgainNoteName(f)).toBe(nameOf(f));
 });
-it("successive never-activated PDFs retain every old block while allowing a third replacement", async () => {
+it("three never-activated PDFs start again in the same folders, and the note holds the latest name", async () => {
   const first = await fixture();
   const folders = { root: first.root, venueDir: first.venueDir, stateDir: first.stateDir };
   await first.start();
@@ -239,7 +239,7 @@ async function abandonedWithMissingDatabase(
   const summary = () => f.actions.startAgainSummary(ids);
   return { f, name, startAgain, summary, attemptFiles, confirmations };
 }
-it("an earlier abandoned activation with a missing database does not become empty because a replacement has an unused PDF", async () => {
+it("an abandoned activation with a missing database starts again only once confirmed, and a later attempt cannot reuse its name", async () => {
   const { f, name, startAgain, summary, attemptFiles, confirmations } =
     await abandonedWithMissingDatabase(["activation-started"]);
   const before = await attemptFiles();

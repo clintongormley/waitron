@@ -22,7 +22,11 @@ import {
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
-import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
+import {
+  expectStartAgainDeleted,
+  startAgainNoteName,
+  startAgainUnchanged,
+} from "../test/start-again-deleted.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
 afterEach(async () => {
@@ -107,7 +111,7 @@ async function actionsFixture() {
   };
   return { ...f, actions: service, startRequest: request };
 }
-it("Start again retires a qualified unused workspace without a password and never changes its original claim", async () => {
+it("Start again deletes a qualified unused attempt without a password, and first setup is allowed again", async () => {
   const f = await actionsFixture();
   await f.actions.startAgainFirstSetup(await f.startRequest());
   await expectStartAgainDeleted(f);
@@ -175,7 +179,7 @@ it.each(["file", "directory"] as const)(
     await unchanged();
   },
 );
-it("an authenticated missing-database retirement preserves spent intent and all document bytes", async () => {
+it("an authenticated missing-database Start again, once confirmed, deletes the attempt and its documents", async () => {
   const f = await actionsFixture();
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
   const inspection = await f.service.inspectFirstSetupResolution();
@@ -247,7 +251,7 @@ it("an authenticated missing-database retirement preserves spent intent and all 
     code: "ENOENT",
   });
 });
-it("Start again rejects a stale snapshot before recording retirement", async () => {
+it("Start again rejects a stale snapshot and changes nothing", async () => {
   const f = await actionsFixture();
   const unchanged = await startAgainUnchanged(f);
   const request = await f.startRequest();
@@ -321,10 +325,11 @@ it("Start again serialises two browsers so an unchanged old claim is retired onl
   expect(target.binding).not.toBeNull();
 });
 
-it("Start again can retire two fresh attempts while discovery stays at the original roots", async () => {
+it("Start again deletes two attempts in turn in the same folders, writing no note when no name was picked", async () => {
   const f = await actionsFixture();
   await f.actions.startAgainFirstSetup(await f.startRequest());
   await expectStartAgainDeleted(f);
+  expect(await startAgainNoteName(f)).toBeUndefined();
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
   const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
   const host = createFirstSetupModuleHost({
@@ -347,6 +352,7 @@ it("Start again can retire two fresh attempts while discovery stays at the origi
     register: { kind: "no-current-master", confirmed: true },
   });
   await expectStartAgainDeleted(f);
+  expect(await startAgainNoteName(f)).toBeUndefined();
 });
 
 it("retirement captures stable physical paths for configured ancestor aliases and deduplicates the same original", async () => {

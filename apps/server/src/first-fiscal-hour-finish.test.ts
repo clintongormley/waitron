@@ -270,7 +270,7 @@ it("exact hour Finish publishes after password recovery without register consult
   ]);
 });
 
-it("empty never-activated hour restart retains originals and burns the entire hour on every base", async () => {
+it("empty never-activated hour restart deletes the attempt and burns the entire hour on every base", async () => {
   const f = await fixture();
   await f.host.keys.stageInitialNodeKey(
     f.owner(),
@@ -469,7 +469,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
   }
 });
 
-it("a missing hour database needs freshly recovered ownership before retirement", async () => {
+it("a missing hour database needs freshly recovered ownership before Start again", async () => {
   const f = await fixture();
   await f.recover();
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
