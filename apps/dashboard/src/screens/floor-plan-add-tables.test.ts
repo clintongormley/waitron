@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { WtButton, WtFormActions, WtModal } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -22,6 +23,7 @@ const table = (key: string, label: string): DraftTable => ({
   id: key,
   liveTableId: null,
   label,
+  shortName: proposeShortName(label),
   seats: null,
   fixed: false,
   placement: null,
@@ -154,6 +156,7 @@ it("automatic names number on from the highest with the prefix", async () => {
       id: null,
       liveTableId: null,
       label,
+      shortName: `T${i + 11}`,
       seats: 4,
       fixed: false,
       placement: null,

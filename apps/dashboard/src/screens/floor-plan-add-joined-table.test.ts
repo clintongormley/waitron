@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { ComboboxOption, WtButton, WtFormActions, WtModal } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
@@ -25,6 +26,7 @@ const table = (key: string, label: string, seats: number | null, more: Partial<D
     id: key,
     liveTableId: null,
     label,
+    shortName: proposeShortName(label),
     seats,
     fixed: false,
     placement: null,
@@ -255,6 +257,7 @@ it("adds Long table, 10 seats, made of Counter 3, 4 and 5, at the first free spo
       id: null,
       liveTableId: null,
       label: "Long table",
+      shortName: "LT",
       seats: 10,
       fixed: false,
       placement: { x: 11, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },

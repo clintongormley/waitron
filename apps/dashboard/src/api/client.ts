@@ -717,6 +717,7 @@ export interface FloorPlanSave {
     id?: string;
     key: string;
     label: string;
+    shortName: string;
     seats: number | null;
     fixed: boolean;
     placement: PlanPlacement | null;

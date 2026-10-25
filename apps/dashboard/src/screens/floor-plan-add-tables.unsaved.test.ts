@@ -16,6 +16,7 @@ const draft: FloorPlanDraft = {
       id: "m1",
       liveTableId: null,
       label: "Terrace 1",
+      shortName: "T1",
       seats: 4,
       fixed: false,
       placement: null,

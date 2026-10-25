@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -26,6 +27,7 @@ const table = (
   id: key,
   liveTableId: null,
   label,
+  shortName: proposeShortName(label),
   seats,
   fixed: false,
   placement: placed ? { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } : null,

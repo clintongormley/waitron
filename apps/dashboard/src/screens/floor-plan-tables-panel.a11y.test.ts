@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WtSheet } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-sheet.js";
@@ -13,6 +14,7 @@ const table = (key: string, label: string, placed: boolean, seats: number | null
   id: key,
   liveTableId: null,
   label,
+  shortName: proposeShortName(label),
   seats,
   fixed: false,
   placement: placed ? { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } : null,

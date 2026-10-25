@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -14,6 +15,7 @@ const table = (key: string, label: string, seats: number): DraftTable => ({
   id: key,
   liveTableId: null,
   label,
+  shortName: proposeShortName(label),
   seats,
   fixed: false,
   placement: null,

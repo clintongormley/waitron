@@ -796,6 +796,7 @@ it("the save body never carries a remembered place", async () => {
     id: "m1",
     key: "m1",
     label: "T1",
+    shortName: "T1",
     seats: 4,
     fixed: false,
     placement: null,

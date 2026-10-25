@@ -1,4 +1,4 @@
-import { createLabelComparator } from "@waitron/shared";
+import { createLabelComparator, proposeShortName } from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
@@ -11,6 +11,7 @@ export interface DraftTable {
   id: string | null;
   liveTableId: string | null;
   label: string;
+  shortName: string;
   seats: number | null;
   fixed: boolean;
   placement: PlanPlacement | null;
@@ -52,7 +53,9 @@ export const seatCount = (seats: number) =>
 export const tablesChosen = (count: number) =>
   fill("floor_plan_editor.tables_chosen", { count: String(count) });
 
-type TablePatch = Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placement">>;
+type TablePatch = Partial<
+  Pick<DraftTable, "label" | "shortName" | "seats" | "fixed" | "placement">
+>;
 
 export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
   return {
@@ -61,6 +64,7 @@ export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
       id: t.id,
       liveTableId: t.liveTableId,
       label: t.label,
+      shortName: t.shortName ?? proposeShortName(t.label),
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement === null ? null : { ...t.placement },
@@ -77,6 +81,7 @@ export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPla
       ...(t.id !== null ? { id: t.id } : {}),
       key: t.key,
       label: t.label,
+      shortName: t.shortName.trim(),
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement,
@@ -277,7 +282,7 @@ export function restoreTable(
 
 export function addTables(
   draft: FloorPlanDraft,
-  tables: { label: string; seats: number | null; fixed: boolean }[],
+  tables: { label: string; shortName?: string; seats: number | null; fixed: boolean }[],
   nextKey: () => string,
 ): FloorPlanDraft {
   return {
@@ -289,6 +294,7 @@ export function addTables(
         id: null,
         liveTableId: null,
         label: t.label,
+        shortName: t.shortName ?? proposeShortName(t.label),
         seats: t.seats,
         fixed: t.fixed,
         placement: null,
@@ -301,7 +307,7 @@ export function addTables(
 
 export function addJoinedTable(
   draft: FloorPlanDraft,
-  table: { label: string; seats: number | null; parts: readonly string[] },
+  table: { label: string; shortName?: string; seats: number | null; parts: readonly string[] },
   nextKey: () => string,
 ): FloorPlanDraft {
   return {
@@ -313,6 +319,7 @@ export function addJoinedTable(
         id: null,
         liveTableId: null,
         label: table.label,
+        shortName: table.shortName ?? proposeShortName(table.label),
         seats: table.seats,
         fixed: false,
         placement: null,

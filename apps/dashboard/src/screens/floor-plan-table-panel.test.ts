@@ -1,3 +1,4 @@
+import { proposeShortName } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
@@ -396,6 +397,7 @@ const joined = (): FloorPlanDraft => ({
       id: key,
       liveTableId: `l${key}`,
       label,
+      shortName: proposeShortName(label),
       seats,
       fixed: false,
       placement: null,
@@ -407,6 +409,7 @@ const joined = (): FloorPlanDraft => ({
       id: "long",
       liveTableId: "llong",
       label: "Long table",
+      shortName: "LT",
       seats: 10,
       fixed: false,
       placement: m1Placement,
@@ -418,6 +421,7 @@ const joined = (): FloorPlanDraft => ({
       id: "bar",
       liveTableId: "lbar",
       label: "Bar",
+      shortName: "Bar",
       seats: 4,
       fixed: false,
       placement: null,

@@ -135,6 +135,52 @@ function table(draft: FloorPlanDraft, key: string) {
   return draft.tables.find((t) => t.key === key)!;
 }
 
+function shortNamePlan(): FloorPlan {
+  const base = { seats: null, fixed: false, placement: null, partIds: [], keptSize: null };
+  return {
+    ...plan,
+    tables: [
+      { ...base, id: "a", liveTableId: "la", label: "Terrace 1", shortName: "Tb1" },
+      { ...base, id: "b", liveTableId: "lb", label: "Window", shortName: null },
+    ],
+  };
+}
+
+describe("short names", () => {
+  it("opens each table with its stored short name, or its name's proposal when it has none", () => {
+    const d = draftFromPlan(shortNamePlan());
+    expect(d.tables.map((t) => t.shortName)).toEqual(["Tb1", "Win"]);
+  });
+
+  it("sends every table's short name, trimmed", () => {
+    const d = patchTable(draftFromPlan(shortNamePlan()), "a", { shortName: " Tb1 " });
+    expect(saveFromDraft(3, d).tables.map((t) => t.shortName)).toEqual(["Tb1", "Win"]);
+  });
+
+  it("a new table takes its name's proposal unless it is given one", () => {
+    const added = addTables(
+      { tables: [] },
+      [
+        { label: "Top floor 12", seats: null, fixed: false },
+        { label: "Top floor 12", shortName: "Up12", seats: null, fixed: false },
+      ],
+      counter("new"),
+    );
+    expect(added.tables.map((t) => t.shortName)).toEqual(["TF12", "Up12"]);
+    const proposed = addJoinedTable(
+      { tables: [] },
+      { label: "Top floor 12", seats: null, parts: [] },
+      counter("new"),
+    );
+    const given = addJoinedTable(
+      { tables: [] },
+      { label: "Top floor 12", shortName: "Up12", seats: null, parts: [] },
+      counter("new"),
+    );
+    expect([proposed.tables[0]!.shortName, given.tables[0]!.shortName]).toEqual(["TF12", "Up12"]);
+  });
+});
+
 describe("floor plan draft", () => {
   it("keys every master table by id", () => {
     const d = open();
@@ -144,6 +190,7 @@ describe("floor plan draft", () => {
       id: "m9",
       liveTableId: "l9",
       label: "T9",
+      shortName: "T9",
       seats: null,
       fixed: false,
       placement: null,
@@ -155,6 +202,7 @@ describe("floor plan draft", () => {
       id: "m1",
       liveTableId: "l1",
       label: "T1",
+      shortName: "T1",
       seats: 4,
       fixed: false,
       placement: m1Placement,
@@ -173,16 +221,27 @@ describe("floor plan draft", () => {
           id: "m1",
           key: "m1",
           label: "T1",
+          shortName: "T1",
           seats: 4,
           fixed: false,
           placement: m1Placement,
           partKeys: [],
         },
-        { id: "m2", key: "m2", label: "T2", seats: 2, fixed: true, placement: null, partKeys: [] },
+        {
+          id: "m2",
+          key: "m2",
+          label: "T2",
+          shortName: "T2",
+          seats: 2,
+          fixed: true,
+          placement: null,
+          partKeys: [],
+        },
         {
           id: "m9",
           key: "m9",
           label: "T9",
+          shortName: "T9",
           seats: null,
           fixed: false,
           placement: null,
@@ -200,6 +259,7 @@ describe("floor plan draft", () => {
     expect(saveFromDraft(3, d).tables[3]).toEqual({
       key: "new:1",
       label: "T5",
+      shortName: "T5",
       seats: 3,
       fixed: true,
       placement: null,
@@ -213,6 +273,7 @@ describe("floor plan draft", () => {
     expect(sent).toEqual({
       key: "new:1",
       label: "T5",
+      shortName: "T5",
       seats: 3,
       fixed: true,
       placement: null,
@@ -238,6 +299,7 @@ describe("floor plan draft", () => {
       id: "m9",
       key: "m9",
       label: "T9",
+      shortName: "T9",
       seats: null,
       fixed: false,
       placement: null,
@@ -248,6 +310,7 @@ describe("floor plan draft", () => {
       id: "m5",
       key: "m5",
       label: "T5",
+      shortName: "T5",
       seats: 3,
       fixed: false,
       placement: null,
@@ -441,6 +504,7 @@ describe("floor plan draft", () => {
         id: null,
         liveTableId: null,
         label: "T5",
+        shortName: "T5",
         seats: 3,
         fixed: false,
         placement: null,
@@ -452,6 +516,7 @@ describe("floor plan draft", () => {
         id: null,
         liveTableId: null,
         label: "T6",
+        shortName: "T6",
         seats: null,
         fixed: true,
         placement: null,
@@ -530,6 +595,7 @@ describe("floor plan draft", () => {
       id: null,
       liveTableId: null,
       label: `F${i}`,
+      shortName: `F${i}`,
       seats: null,
       fixed: false,
       placement: {
@@ -750,6 +816,7 @@ describe("floor plan draft", () => {
       id: null,
       liveTableId: null,
       label: "Long table",
+      shortName: "LT",
       seats: 10,
       fixed: false,
       placement: null,
