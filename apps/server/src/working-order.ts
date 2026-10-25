@@ -8189,6 +8189,8 @@ export interface TableToday {
 export interface TableState {
   id: string;
   label: string;
+  /** The table's saved short name, else its full name: always a string a tight place can show. */
+  shortName: string;
   zoneId: string | null;
   /** `open-tab` while a party holds the table, whether or not it has a bill still open. */
   state: "free" | "open-tab" | "delivery-pending";
@@ -8240,6 +8242,7 @@ export async function listTablesWithState(
   const result = await tx.execute<{
     id: string;
     label: string;
+    short_name: string | null;
     zone_id: string | null;
     open_bills: number;
     tab_line_count: number;
@@ -8259,7 +8262,7 @@ export async function listTablesWithState(
       select f.root, p.id from parties p join family f on p.merged_into_party_id = f.id
     )
     select
-      dt.id, dt.label, dt.zone_id, dt.needs_clearing_since,
+      dt.id, dt.label, dt.short_name, dt.zone_id, dt.needs_clearing_since,
       cast(coalesce(tab.open_bills, 0) as int) as open_bills,
       cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
       tab.tab_total,
@@ -8366,6 +8369,7 @@ export async function listTablesWithState(
     return {
       id: r.id,
       label: r.label,
+      shortName: r.short_name ?? r.label,
       zoneId: r.zone_id,
       state,
       hasOpenTab,
