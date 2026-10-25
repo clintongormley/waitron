@@ -59,6 +59,7 @@ function table(
           },
     signals: [],
     party: null,
+    shortName: over.label ?? id.slice(1),
     ...over,
   };
 }

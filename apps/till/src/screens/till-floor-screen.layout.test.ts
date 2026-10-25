@@ -27,6 +27,7 @@ function table(id: string, zoneId: string, today: Partial<TableToday> | null): T
   return {
     id,
     label: id.slice(1),
+    shortName: id.slice(1),
     zoneId,
     state: "free",
     condition: "free",

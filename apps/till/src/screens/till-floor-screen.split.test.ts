@@ -24,6 +24,7 @@ function table(id: string, label: string, x: number, over: Partial<TableToday> =
   return {
     id,
     label,
+    shortName: label,
     zoneId: "z1",
     state: "free",
     condition: "free",

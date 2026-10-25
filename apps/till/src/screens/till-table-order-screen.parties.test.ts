@@ -312,6 +312,7 @@ describe("till-table-order-screen: the bill request", () => {
   const floorRow = (requested: boolean): TableState => ({
     id: "t4",
     label: "4",
+    shortName: "4",
     zoneId: "z1",
     state: "open-tab",
     condition: "held",

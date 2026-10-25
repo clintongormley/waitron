@@ -56,6 +56,7 @@ const detail: DepartmentTransferDetail = {
 const table: TableState = {
   id: "table-one",
   label: "1",
+  shortName: "1",
   zoneId: "terrace",
   state: "free",
   hasOpenTab: false,

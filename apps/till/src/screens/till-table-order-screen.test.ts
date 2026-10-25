@@ -4114,6 +4114,7 @@ describe("till-table-order-screen", () => {
       today: null,
       signals: [],
       party: null,
+      shortName: over.label ?? "1",
       ...over,
     });
 

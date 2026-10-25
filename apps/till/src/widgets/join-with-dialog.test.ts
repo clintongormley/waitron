@@ -26,6 +26,7 @@ function table(id: string, over: Partial<TableState> = {}): TableState {
     today: null,
     signals: [],
     party: null,
+    shortName: over.label ?? id.slice(1),
     ...over,
   };
 }

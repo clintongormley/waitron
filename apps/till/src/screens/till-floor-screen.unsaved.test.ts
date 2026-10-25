@@ -10,6 +10,7 @@ import "./till-floor-screen.js";
 const freeTable: TableState = {
   id: "t1",
   label: "4",
+  shortName: "4",
   zoneId: "z1",
   state: "free",
   condition: "free",

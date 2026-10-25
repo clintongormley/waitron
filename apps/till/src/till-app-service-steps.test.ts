@@ -33,6 +33,7 @@ function seated(signals: TableState["signals"]): TableState {
   return {
     id: "t9",
     label: "T9",
+    shortName: "T9",
     zoneId: "z1",
     state: "open-tab",
     condition: "held",

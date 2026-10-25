@@ -273,6 +273,7 @@ it("acceptance sends a selected table in its chosen zone", async () => {
   const table: TableState = {
     id: "table-one",
     label: "1",
+    shortName: "1",
     zoneId: "terrace",
     state: "free",
     hasOpenTab: false,
@@ -319,6 +320,7 @@ it("offers the zone's tables in number order after no table", async () => {
   const table = (id: string, label: string): TableState => ({
     id,
     label,
+    shortName: label,
     zoneId: "terrace",
     state: "free",
     hasOpenTab: false,
@@ -361,6 +363,7 @@ const joinedFloor = (): TableState[] => {
   ): TableState => ({
     id,
     label,
+    shortName: label,
     zoneId: "terrace",
     state: "free",
     hasOpenTab: false,
@@ -465,6 +468,7 @@ it("refuses a retained selected table removed from the current table list", asyn
   const table: TableState = {
     id: "table-one",
     label: "1",
+    shortName: "1",
     zoneId: "terrace",
     state: "free",
     hasOpenTab: false,

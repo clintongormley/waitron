@@ -47,6 +47,7 @@ function planned(
   return {
     id,
     label: id.slice(1),
+    shortName: id.slice(1),
     zoneId: "z1",
     state: seated === null ? "free" : "open-tab",
     condition: seated === null ? "free" : "held",

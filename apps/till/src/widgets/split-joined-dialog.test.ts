@@ -43,6 +43,7 @@ function table(id: string, label: string, over: Partial<TableState> = {}): Table
     today: today(4),
     signals: [],
     party: null,
+    shortName: over.label ?? label,
     ...over,
   };
 }

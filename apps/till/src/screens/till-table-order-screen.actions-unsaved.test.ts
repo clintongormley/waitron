@@ -60,6 +60,7 @@ const lines: TabLine[] = [1, 2].map((lineNo) => ({
 const tables: TableState[] = ["t1", "t2"].map((id) => ({
   id,
   label: id,
+  shortName: id,
   party,
   signals: [],
   zoneId: null,

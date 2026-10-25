@@ -45,6 +45,7 @@ const tables: TableState[] = [
   {
     id: "t1",
     label: "1",
+    shortName: "1",
     zoneId: "z1",
     state: "open-tab",
     condition: "free",
@@ -63,6 +64,7 @@ const tables: TableState[] = [
   {
     id: "t2",
     label: "2",
+    shortName: "2",
     zoneId: "z1",
     state: "delivery-pending",
     condition: "free",
@@ -79,6 +81,7 @@ const tables: TableState[] = [
   {
     id: "t3",
     label: "3",
+    shortName: "3",
     zoneId: "z1",
     state: "free",
     condition: "free",
@@ -95,6 +98,7 @@ const tables: TableState[] = [
   {
     id: "t9",
     label: "9",
+    shortName: "9",
     zoneId: null,
     state: "free",
     condition: "free",
@@ -111,6 +115,7 @@ const tables: TableState[] = [
   {
     id: "t5",
     label: "5",
+    shortName: "5",
     zoneId: "z1",
     state: "open-tab",
     condition: "free",
@@ -129,6 +134,7 @@ const tables: TableState[] = [
   {
     id: "t6",
     label: "6",
+    shortName: "6",
     zoneId: "z1",
     state: "open-tab",
     condition: "free",

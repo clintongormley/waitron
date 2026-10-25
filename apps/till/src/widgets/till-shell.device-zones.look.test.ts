@@ -73,6 +73,7 @@ for (const locale of ["en-GB", "es-ES"]) {
             {
               id: "table",
               label: "1",
+              shortName: "1",
               zoneId: "room",
               state: "free",
               condition: "free",

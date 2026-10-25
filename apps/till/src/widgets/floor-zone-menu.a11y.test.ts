@@ -12,6 +12,7 @@ function table(id: string, over: Partial<TableToday> = {}): TableState {
   return {
     id,
     label: id.slice(1),
+    shortName: id.slice(1),
     zoneId: "z1",
     state: "free",
     condition: "free",

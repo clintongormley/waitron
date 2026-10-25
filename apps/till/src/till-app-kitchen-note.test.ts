@@ -905,6 +905,7 @@ const tableParty = (note = partyNote): TableParty & { kitchenNote: typeof partyN
 const tableRow = (party: TableParty | null): TableState => ({
   id: "table-four",
   label: "Four",
+  shortName: "Four",
   zoneId: "zone-counter",
   state: party ? "open-tab" : "free",
   condition: party ? "held" : "free",

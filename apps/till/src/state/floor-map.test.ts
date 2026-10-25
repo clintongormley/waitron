@@ -19,6 +19,7 @@ function table(over: Partial<TableState> = {}): TableState {
     today: null,
     signals: [],
     party: null,
+    shortName: over.label ?? "1",
     ...over,
   };
 }

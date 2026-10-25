@@ -29,6 +29,7 @@ function planned(id: string, x: number, needsMoving: boolean): TableState {
   return {
     id,
     label: id.slice(1),
+    shortName: id.slice(1),
     zoneId: "z1",
     state: "free",
     condition: "free",

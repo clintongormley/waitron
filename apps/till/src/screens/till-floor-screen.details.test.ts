@@ -78,6 +78,7 @@ function table(id: string, over: Partial<TableState> = {}): TableState {
     today: today(),
     signals: [],
     party: null,
+    shortName: over.label ?? `Terrace ${id.slice(1)}`,
     ...over,
   };
 }

@@ -31,6 +31,7 @@ const updated: FloorZone = { ...offered, layoutSetName: "Dinner", layoutDue: nul
 const placed: TableState = {
   id: "t1",
   label: "1",
+  shortName: "1",
   zoneId: "z1",
   state: "free",
   condition: "free",

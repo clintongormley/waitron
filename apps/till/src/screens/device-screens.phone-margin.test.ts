@@ -173,6 +173,7 @@ describe("device screens at phone width", () => {
 const plannedTable: TableState = {
   id: "t1",
   label: "1",
+  shortName: "1",
   zoneId: "z1",
   state: "free",
   condition: "free",

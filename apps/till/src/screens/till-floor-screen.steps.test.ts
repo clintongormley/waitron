@@ -80,6 +80,7 @@ function seated(over: Partial<TableState> = {}): TableState {
     today: null,
     signals: [],
     party: party(),
+    shortName: over.label ?? "T9",
     ...over,
   };
 }

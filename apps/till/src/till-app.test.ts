@@ -149,6 +149,7 @@ const floorZone: FloorZone = {
 const freeTable: TableState = {
   id: "t1",
   label: "1",
+  shortName: "1",
   zoneId: "z1",
   state: "free",
   condition: "free",
@@ -166,6 +167,7 @@ const freeTable: TableState = {
 const openTable: TableState = {
   id: "t2",
   label: "2",
+  shortName: "2",
   zoneId: "z1",
   state: "open-tab",
   condition: "free",
