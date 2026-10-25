@@ -1,8 +1,9 @@
 // Weaker than its name: it finds a person's table only through declared foreign keys, so a person
 // id held without one, or inside a JSON column (`attendance_response_commands.input`,
-// `pay_period_closures.snapshot`, `attendance_questions.evidence_keys`), is not seen; and it proves
-// a column was classified, not that WORKFORCE_PERSONAL_DATA honours the classification
-// (personal-data.test.ts's exact-files cases do that).
+// `pay_period_closures.snapshot`, `attendance_questions.evidence_keys`), is not seen, nor is a
+// JSON list of ids of rows that name a person (`attendance_day_work.deferred_shift_ids`, shift
+// ids); and it proves a column was classified, not that WORKFORCE_PERSONAL_DATA honours the
+// classification (personal-data.test.ts's exact-files cases do that).
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
