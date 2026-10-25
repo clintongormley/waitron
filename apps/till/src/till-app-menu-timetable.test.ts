@@ -1895,7 +1895,9 @@ describe("a dish whose period ended earlier today", () => {
     };
     const COMEDOR = offers("zone-comedor", [DESAYUNOS, ALMUERZO], "desayunos", "table_tab");
 
-    it("marks the draft line and leaves Send all enabled", async () => {
+    /** Opens the table during Breakfast; `lunch` polls into Lunch with `endedName` as
+     * Desayunos' ended period. */
+    async function openTable() {
       let current = catalogue(COMEDOR, "breakfast");
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
@@ -1933,15 +1935,24 @@ describe("a dish whose period ended earlier today", () => {
       const browser = screen().querySelector<
         HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
       >("till-menu-browser")!;
+      const lunch = async (endedName: string | null = "Breakfast") => {
+        current = catalogue(COMEDOR, "lunch", endedName);
+        await poll(el);
+      };
+      const marks = () =>
+        [...screen().querySelectorAll("till-basket")].flatMap((basket) => [
+          ...basket.shadowRoot!.querySelectorAll("[data-period-ended]"),
+        ]);
+      return { el, screen, browser, lunch, marks };
+    }
+
+    it("marks the draft line and leaves Send all enabled", async () => {
+      const { el, screen, browser, lunch, marks } = await openTable();
       browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
       await flush(el);
-      current = catalogue(COMEDOR, "lunch");
-      await poll(el);
+      await lunch();
       expect(browser.store.lines[0]?.blocked).toBeUndefined();
-      const marks = [...screen().querySelectorAll("till-basket")].flatMap((basket) => [
-        ...basket.shadowRoot!.querySelectorAll("[data-period-ended]"),
-      ]);
-      expect(marks.map((mark) => mark.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      expect(marks().map((mark) => mark.textContent?.replace(/\s+/g, " ").trim())).toEqual([
         "⚠ Breakfast ended",
       ]);
       expect(screen().querySelector("[data-flag-remove]")).toBeNull();
@@ -1950,6 +1961,70 @@ describe("a dish whose period ended earlier today", () => {
       )!;
       expect(sendAll.disabled).toBe(false);
       expect(sendAll.variant).toBe("primary");
+    });
+
+    /** A line sent earlier and recalled into the person's draft, from Desayunos' offer. */
+    function seedRecalled(): void {
+      const line: import("./api/client.js").RecalledDraftLine["source"]["line"] = {
+        changesAfterSending: null,
+        id: "sent-toast",
+        name: DESAYUNOS.product,
+        productId: DESAYUNOS.product,
+        parentProductId: null,
+        menuItemId: `offer-${DESAYUNOS.id}`,
+        lineNo: 1,
+        parentLineNo: null,
+        quantity: "1",
+        priceQuantity: "1",
+        unitPrecision: 0,
+        unitPriceGross: "3.00",
+        listUnitPriceGross: "3.00",
+        servedAt: null,
+        courseId: null,
+        sentAt: null,
+        firedAt: null,
+        state: null,
+        stationId: null,
+        movable: true,
+        groupId: null,
+        note: null,
+        listId: null,
+      };
+      drafts.drafts.push({
+        id: "draft-recalled",
+        partyId: "party-a",
+        billId: "wo-7",
+        ownerId: "p1",
+        ownerName: "Ana",
+        revision: 2,
+        takenOverFrom: null,
+        lines: [
+          {
+            id: "reference-sent-toast",
+            sourceLineId: "sent-toast",
+            source: { line, extras: [], netAmount: "2.48" },
+            quantity: "1",
+            note: null,
+            courseId: null,
+            makeAt: null,
+            noMerge: true,
+            unavailable: false,
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
+          },
+        ],
+      });
+    }
+
+    it("neither marks nor flags a recalled line whose menu ended today", async () => {
+      seedRecalled();
+      const { screen, browser, lunch, marks } = await openTable();
+      expect(browser.store.lines.map((line) => line.source?.line.id)).toEqual(["sent-toast"]);
+      await lunch();
+      expect(browser.store.lines[0]?.blocked).toBeUndefined();
+      expect(marks()).toEqual([]);
+      expect(screen().querySelector("[data-flag-remove]")).toBeNull();
     });
   });
 });

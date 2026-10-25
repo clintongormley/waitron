@@ -18,6 +18,7 @@ import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
+import type { EndedPeriod } from "./late-send.js";
 import type {
   KitchenNoteSnapshot,
   HeldExtra,
@@ -85,7 +86,7 @@ export interface OrderLine {
   blocked?: BlockReason;
   /** The period that ended earlier today on this unsent line's menu, with no orderable menu
    * selling the dish. Display only; never sent. */
-  endedPeriod?: { menuId: string; periodName: string };
+  endedPeriod?: EndedPeriod;
   /**
    * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
    * frozen wording (`deriveOptionSelections`), so a list whose wording nothing matches is missing here.
@@ -876,10 +877,7 @@ export class WorkingOrderStore {
   }
 
   /** One entry per line, as {@link setBlocked}. */
-  setEndedPeriods(
-    marks: readonly ({ menuId: string; periodName: string } | undefined)[],
-    notify = true,
-  ): void {
+  setEndedPeriods(marks: readonly (EndedPeriod | undefined)[], notify = true): void {
     let changed = false;
     this.#lines.forEach((line, index) => {
       const mark = marks[index];

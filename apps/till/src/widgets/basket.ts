@@ -866,15 +866,10 @@ export class TillBasket extends LitElement {
         ${shown.map(([line, index]) => {
           const listed = this.#listed(line, listing);
           const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
+          const ended = line.blocked === undefined ? line.endedPeriod : undefined;
           return html`
             <slot name=${`before-${index}`}></slot>
-            <div
-              class=${
-                line.blocked === undefined && line.endedPeriod !== undefined
-                  ? "entry period-ended-entry"
-                  : "entry"
-              }
-            >
+            <div class=${ended === undefined ? "entry" : "entry period-ended-entry"}>
               <div class="entry-body">
                 <div
                   class="line"
@@ -915,9 +910,7 @@ export class TillBasket extends LitElement {
                     >${this.#nutrition(line)}${
                       line.notOffered ? notOfferedMarker() : nothing
                     }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
-                      line.blocked === undefined && line.endedPeriod !== undefined
-                        ? periodEndedMarker(line.endedPeriod.periodName)
-                        : nothing
+                      ended === undefined ? nothing : periodEndedMarker(ended.periodName)
                     }${
                       line.unavailableOnServer === true &&
                       line.blocked === undefined &&

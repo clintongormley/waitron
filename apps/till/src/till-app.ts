@@ -13,7 +13,7 @@ import {
 } from "./widgets/party-allergy-dialog.js";
 import type { BillEditExpected, BillUnsent, Tender } from "./api/client.js";
 import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
-import { endedPeriodOf } from "./state/late-send.js";
+import { endedPeriodOf, type EndedPeriod } from "./state/late-send.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
@@ -1520,7 +1520,7 @@ class ZoneOfferIndex {
   }
 
   /** The ended period each line is marked with; nothing while the offers could not be read. */
-  endedPeriods(lines: readonly OrderLine[]): ReturnType<typeof endedPeriodOf>[] {
+  endedPeriods(lines: readonly OrderLine[]): (EndedPeriod | undefined)[] {
     return lines.map((line) => (this.loaded ? endedPeriodOf(line, this) : undefined));
   }
 }

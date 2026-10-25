@@ -690,6 +690,33 @@ describe("till-basket", () => {
     }
   });
 
+  it("shows a block rather than the ended-period mark on a line that has both", async () => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale("en-GB");
+      const store = new WorkingOrderStore();
+      store.addProduct({ ...cafe, id: "soup", name: "Soup" }, "1");
+      store.addProduct({ ...cafe, id: "toast", name: "Toast" }, "1");
+      const breakfast = { menuId: "breakfast", periodName: "Breakfast" };
+      store.setEndedPeriods([breakfast, breakfast]);
+      store.setBlocked(["extra_removed", undefined]);
+      const { el } = await mountWidget<TillBasket>("till-basket", { store });
+      const entries = [...el.shadowRoot!.querySelectorAll(".entry")];
+      expect(
+        entries.map((entry) => [
+          (entry.querySelector(".line > .name")?.textContent ?? "").replace(/\s+/g, " ").trim(),
+          entry.querySelector("[data-period-ended]") !== null,
+          entry.classList.contains("period-ended-entry"),
+        ]),
+      ).toEqual([
+        ["Soup An extra or choice has changed", false, false],
+        ["Toast ⚠ Breakfast ended", true, true],
+      ]);
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("marks a line whose dish is sold only as an extra, in English and in Spanish", async () => {
     const previousLocale = currentLocale();
     try {
