@@ -1022,6 +1022,7 @@ const BREAKFAST_CONFIRMED = { menuIds: [DESAYUNOS.id] };
 
 /** The counter's menus, which a counter case moves from Breakfast to Lunch. */
 let counterMenus: ZoneOfferCatalogue;
+let counterFlow: "prepay" | "ticket_then_pay";
 const counterScreen = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
 const counterNames = (el: TillApp) =>
@@ -1048,10 +1049,15 @@ const heldOmelette = {
  * `products` from Desayunos; nothing is marked yet. */
 async function counterBasket(
   overrides: Record<string, unknown> = {},
-  { products = ["Omelette", "Coffee"], held = false } = {},
+  {
+    products = ["Omelette", "Coffee"],
+    held = false,
+    flow = "prepay",
+  }: { products?: string[]; held?: boolean; flow?: "prepay" | "ticket_then_pay" } = {},
 ): Promise<TillApp> {
   current = catalogue("breakfast");
-  counterMenus = catalogue("breakfast", "zone-barra", "prepay");
+  counterFlow = flow;
+  counterMenus = catalogue("breakfast", "zone-barra", flow);
   const { el } = await mountApp({
     listDefaultZoneOffers: vi.fn(async () => counterMenus),
     listZoneOffers: vi.fn(async (zoneId: string) =>
@@ -1084,10 +1090,10 @@ async function counterBasket(
 /** As `counterBasket`, then lets Lunch start at the counter: the new Omelette is marked. */
 async function lateCounter(
   overrides: Record<string, unknown> = {},
-  options: { products?: string[]; held?: boolean } = {},
+  options: { products?: string[]; held?: boolean; flow?: "prepay" | "ticket_then_pay" } = {},
 ): Promise<TillApp> {
   const el = await counterBasket(overrides, options);
-  counterMenus = catalogue("lunch", "zone-barra", "prepay");
+  counterMenus = catalogue("lunch", "zone-barra", counterFlow);
   await poll(el);
   expect(
     counterScreen(el)
@@ -1769,5 +1775,259 @@ describe("counter pay with a manager's PIN", () => {
       MARTA_OVERRIDE("4567"),
     ]);
     expect(approval(el)).toBeNull();
+  });
+});
+
+describe("counter place and park", () => {
+  const PLACE = { flow: "ticket_then_pay" as const };
+  const parking = (overrides: Record<string, unknown> = {}) => ({
+    parkOrder: vi.fn().mockResolvedValue({ id: "wo-new", orderNumber: 7 }),
+    placeOrder: vi.fn().mockResolvedValue({ id: "wo-new", status: "placed" }),
+    askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [], stations: [] }),
+    ...overrides,
+  });
+  const agreedText = (el: TillApp) =>
+    windowOf(el)!.shadowRoot!.querySelector("[data-late-agreed]")!.textContent!.trim();
+  const parkedLateSends = () => api.parkOrder!.mock.calls.map(([request]) => request.lateSend);
+  const VERSION_CHANGED = {
+    code: "menu.version_changed",
+    status: 409,
+    menus: [{ menuId: LUNCH.id, liveVersionId: "v1" }],
+  };
+
+  async function place(el: TillApp): Promise<void> {
+    emit(counterScreen(el), "place-order");
+    await flush(el, 6);
+  }
+  async function park(el: TillApp): Promise<void> {
+    emit(counterScreen(el), "park-order", {});
+    await flush(el, 6);
+  }
+
+  it("asks about the marked dish before Place parks anything, offering to send", async () => {
+    const el = await lateCounter(parking(), PLACE);
+    await place(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(agreedText(el)).toBe("Kitchen agreed — send");
+    expect(api.parkOrder).not.toHaveBeenCalled();
+    expect(api.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("parks with the ended menu once the kitchen agreed, then places", async () => {
+    const el = await lateCounter(parking(), PLACE);
+    await place(el);
+
+    await choose(el, "data-late-agreed");
+
+    expect(parkedLateSends()).toEqual([BREAKFAST_CONFIRMED]);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+    expect(api.parkOrder!.mock.invocationCallOrder[0]).toBeLessThan(
+      api.placeOrder!.mock.invocationCallOrder[0]!,
+    );
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("saves a retrieved order with the ended menu before Place", async () => {
+    const el = await lateCounter(parking(), { ...PLACE, products: ["Omelette"], held: true });
+    await place(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    await choose(el, "data-late-agreed");
+
+    expect(savedLateSends()).toEqual([BREAKFAST_CONFIRMED]);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+  });
+
+  it("opens the window from Place's refusal of a dish the till had not marked", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await counterBasket(parking({ parkOrder }), PLACE);
+    await place(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(api.placeOrder).not.toHaveBeenCalled();
+
+    await choose(el, "data-late-agreed");
+
+    expect(parkedLateSends()).toEqual([undefined, BREAKFAST_CONFIRMED]);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the confirmation on the Place it repeats after a menu version change", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce(VERSION_CHANGED)
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await lateCounter(parking({ parkOrder }), PLACE);
+    await place(el);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(parkedLateSends()).toEqual([BREAKFAST_CONFIRMED, BREAKFAST_CONFIRMED]);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the confirmation on the Place it repeats after the dead-ends question", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "route.station_inactive", status: 409 })
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await lateCounter(parking({ parkOrder }), PLACE);
+    await place(el);
+
+    await choose(el, "data-late-agreed");
+
+    expect(parkedLateSends()).toEqual([BREAKFAST_CONFIRMED, BREAKFAST_CONFIRMED]);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+  });
+
+  it("asks for a manager on Place, and parks again with their PIN", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await lateCounter(
+      parking({ parkOrder, serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]) }),
+      PLACE,
+    );
+    await place(el);
+    await choose(el, "data-late-agreed");
+
+    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    await authorize(el, "0123");
+
+    expect(parkedLateSends()).toEqual([
+      BREAKFAST_CONFIRMED,
+      { ...BREAKFAST_CONFIRMED, override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+    expect(approval(el)).toBeNull();
+  });
+
+  it("asks about the marked dish before Park saves anything, offering to save", async () => {
+    const el = await lateCounter(parking());
+    await park(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(agreedText(el)).toBe("Kitchen agreed — save");
+    expect(api.parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("parks with the ended menu once the kitchen agreed", async () => {
+    const el = await lateCounter(parking());
+    await park(el);
+
+    await choose(el, "data-late-agreed");
+
+    expect(parkedLateSends()).toEqual([BREAKFAST_CONFIRMED]);
+    expect(windowOf(el)).toBeNull();
+    expect(counterNames(el)).toEqual([]);
+  });
+
+  it("saves a retrieved order with the ended menu on Park", async () => {
+    const el = await lateCounter(parking(), { products: ["Omelette"], held: true });
+    await park(el);
+
+    expect(agreedText(el)).toBe("Kitchen agreed — save");
+    await choose(el, "data-late-agreed");
+
+    expect(savedLateSends()).toEqual([BREAKFAST_CONFIRMED]);
+  });
+
+  it("keeps the confirmation on the Park it repeats after a menu version change", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce(VERSION_CHANGED)
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await lateCounter(parking({ parkOrder }));
+    await park(el);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(parkedLateSends()).toEqual([BREAKFAST_CONFIRMED, BREAKFAST_CONFIRMED]);
+  });
+
+  it("keeps the confirmation on the Park it repeats after the dead-ends question", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "route.station_inactive", status: 409 })
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await lateCounter(parking({ parkOrder }));
+    await park(el);
+
+    await choose(el, "data-late-agreed");
+
+    expect(parkedLateSends()).toEqual([BREAKFAST_CONFIRMED, BREAKFAST_CONFIRMED]);
+  });
+
+  it("opens the window from Park's refusal of a dish the till had not marked", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await counterBasket(parking({ parkOrder }));
+    await park(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(agreedText(el)).toBe("Kitchen agreed — save");
+
+    await choose(el, "data-late-agreed");
+
+    expect(parkedLateSends()).toEqual([undefined, BREAKFAST_CONFIRMED]);
+  });
+
+  it("takes the marked dish out of the basket on Remove them and parks nothing", async () => {
+    const el = await lateCounter(parking());
+    await park(el);
+
+    await choose(el, "data-late-remove");
+
+    expect(counterNames(el)).toEqual(["Coffee"]);
+    expect(api.parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("asks for a manager on Park, and parks again with their PIN", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await lateCounter(
+      parking({ parkOrder, serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]) }),
+    );
+    await park(el);
+    await choose(el, "data-late-agreed");
+
+    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    await authorize(el, "0123");
+
+    expect(parkedLateSends()).toEqual([
+      BREAKFAST_CONFIRMED,
+      { ...BREAKFAST_CONFIRMED, override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(counterNames(el)).toEqual([]);
+  });
+
+  it("keeps the dialog open on a wrong PIN at Park", async () => {
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockRejectedValueOnce(WRONG_PIN)
+      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
+    const el = await lateCounter(
+      parking({ parkOrder, serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]) }),
+    );
+    await park(el);
+    await choose(el, "data-late-agreed");
+    await authorize(el, "0123");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(parkOrder).toHaveBeenCalledTimes(2);
   });
 });

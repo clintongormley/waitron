@@ -6307,14 +6307,19 @@ export class TillApp extends LitElement {
   #askLateSendAtCounter(
     lateSend: LateSend | undefined,
     retry: (lateSend: LateSend) => Promise<void>,
+    purpose: "send" | "save" = "send",
   ): boolean {
-    return this.#openLateSendFromMarks(this.#store.lines, lateSend, "send", retry, (listed) =>
+    return this.#openLateSendFromMarks(this.#store.lines, lateSend, purpose, retry, (listed) =>
       this.#removeDraftLines(this.#store, listed),
     );
   }
 
-  #openCounterLateSend(asked: LateSendAsked, retry: (lateSend: LateSend) => Promise<void>): void {
-    this.#openLateSend(asked.listed, asked.periods, "send", retry, (listed) =>
+  #openCounterLateSend(
+    asked: LateSendAsked,
+    retry: (lateSend: LateSend) => Promise<void>,
+    purpose: "send" | "save" = "send",
+  ): void {
+    this.#openLateSend(asked.listed, asked.periods, purpose, retry, (listed) =>
       this.#removeDraftLines(this.#store, listed),
     );
   }
@@ -7195,8 +7200,11 @@ export class TillApp extends LitElement {
     retried = false,
     refusalRetry = false,
     clearInactiveChoices = false,
+    lateSend?: LateSend,
   ): Promise<void> {
     if (this.placing) return;
+    const retry = (confirmed: LateSend) => this.#onPlaceOrder(false, false, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.placing = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -7207,6 +7215,7 @@ export class TillApp extends LitElement {
       session === this.#operatorSession &&
       api === this.api &&
       basketVisit === this.#store.loadGeneration;
+    const basketLines = [...this.#store.lines];
     if (!refusalRetry) this.errorKey = undefined;
     let reachedPlace = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
@@ -7248,7 +7257,7 @@ export class TillApp extends LitElement {
         const label = this.#store.label;
         const payload = this.#basketPayload();
         if (this.#store.persisted) {
-          if (!(await this.#syncIfDirty(id, lines, label)) || !current()) return;
+          if (!(await this.#syncIfDirty(id, lines, label, lateSend)) || !current()) return;
           // A refused save can precede a replay, but unsaved edits are a different placement.
           if (this.#basketPayload() !== this.#basketBaseline) {
             this.errorKey = "place.error";
@@ -7260,6 +7269,7 @@ export class TillApp extends LitElement {
             lines,
             label,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+            ...(lateSend === undefined ? {} : { lateSend }),
           });
           if (!current()) return;
           if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
@@ -7296,7 +7306,13 @@ export class TillApp extends LitElement {
       // about refunds.
       if (!current()) return;
       if (!isNetworkFailure(error)) this.#unconfirmedPlace = undefined;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry);
+      // Awaited before `finally` so `placing` stays set while the managers are read.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !refusalRetry &&
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
@@ -7321,10 +7337,12 @@ export class TillApp extends LitElement {
         ["waiting", "refresh.waiting_after_place"],
       ]);
     if (refreshed !== undefined)
-      await this.#afterVersionRefusal(refreshed, retried, () => this.#onPlaceOrder(true));
+      await this.#afterVersionRefusal(refreshed, retried, () =>
+        this.#onPlaceOrder(true, false, false, lateSend),
+      );
     if (recheck) {
       this.errorKey = "place.refused";
-      await this.#onPlaceOrder(retried, true, inactiveChoice);
+      await this.#onPlaceOrder(retried, true, inactiveChoice, lateSend);
     }
   }
 
@@ -8357,8 +8375,10 @@ export class TillApp extends LitElement {
     this.#pushDrill({ kind: "expo" });
   }
 
-  async #onParkOrder(event: Event, retried = false): Promise<void> {
+  async #onParkOrder(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     if (this.parking) return;
+    const retry = (confirmed: LateSend) => this.#onParkOrder(event, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry, "save")) return;
     this.parking = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -8368,6 +8388,7 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
+    const basketLines = [...this.#store.lines];
     this.errorKey = undefined;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let parked = false;
@@ -8386,7 +8407,7 @@ export class TillApp extends LitElement {
           if (session !== this.#operatorSession) return;
           this.#store.markSaved(saved.revision);
         } else if (
-          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label)) ||
+          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label, lateSend)) ||
           basketVisit !== this.#store.loadGeneration
         )
           return;
@@ -8396,6 +8417,7 @@ export class TillApp extends LitElement {
           lines,
           label,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+          ...(lateSend === undefined ? {} : { lateSend }),
         });
       }
       if (session !== this.#operatorSession) return;
@@ -8410,7 +8432,13 @@ export class TillApp extends LitElement {
       parked = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry, "save");
+      // Awaited before `finally` so `parking` stays set while the managers are read.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
@@ -8431,14 +8459,16 @@ export class TillApp extends LitElement {
     if (languageUnsaved) this.errorKey = "receipt_language.held_unsaved";
     if (parked) void this.#refreshListsAfterWrite(session, [["held", "refresh.held_after_park"]]);
     if (refreshed !== undefined)
-      await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
+      await this.#afterVersionRefusal(refreshed, retried, () =>
+        this.#onParkOrder(event, true, lateSend),
+      );
     if (recheck) {
       this.errorKey = "held.park_error";
       if (
         (await this.#askCounterDeadEnds("place", false, inactiveChoice)) &&
         session === this.#operatorSession
       )
-        await this.#onParkOrder(event, true);
+        await this.#onParkOrder(event, true, lateSend);
     }
   }
 
