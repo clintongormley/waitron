@@ -46,10 +46,10 @@ const at = (time: string, day = "2026-10-05") => {
 let nifCounter = 0;
 
 /**
- * Lunch sells Almuerzo 12:00–14:00 and Dinner sells Desayunos 19:00–23:00 on the given weekdays
- * (Monday by default), each with Bebidas and Café as staff menus. The Tostada is on both: 4.00 on
- * Almuerzo, 2.50 on Desayunos. The Ensalada is on Almuerzo alone, with an Aguacate extras list. The
- * Caña is on Bebidas. The Zumo is on Almuerzo and Desayunos, and only Almuerzo's live version lists
+ * Lunch sells Set lunch 12:00–14:00 and Dinner sells Brunch 19:00–23:00 on the given weekdays
+ * (Monday by default), each with Drinks and Coffee as staff menus. The Toast is on both: 4.00 on
+ * Set lunch, 2.50 on Brunch. The Salad is on Set lunch alone, with an Avocado extras list. The
+ * Beer is on Drinks. The Juice is on Set lunch and Brunch, and only Set lunch's live version lists
  * its Small variant.
  */
 async function mealVenue(weekdays: readonly number[] = [1]) {
@@ -60,14 +60,14 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
       const effective = new Date("2026-10-05T10:00:00+02:00");
       const restaurant = await createBareDepartment(tx, cfg, "Restaurant", effective);
       const diningZone = (
-        await createServiceZone(tx, cfg, { name: "Sala", departmentId: restaurant })
+        await createServiceZone(tx, cfg, { name: "Dining room", departmentId: restaurant })
       ).id;
       const menu = async (name: string) => (await createCatalogue(tx, { name })).id;
       const menus = {
-        desayunos: await menu("Desayunos"),
-        almuerzo: await menu("Almuerzo"),
-        bebidas: await menu("Bebidas"),
-        cafe: await menu("Café"),
+        brunch: await menu("Brunch"),
+        setLunch: await menu("Set lunch"),
+        drinks: await menu("Drinks"),
+        coffee: await menu("Coffee"),
       };
       const product = async (catalogueId: string, name: string, unitPrice: string) =>
         (
@@ -80,21 +80,21 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
             vatClass: "general",
           })
         ).id;
-      const toastId = await product(menus.desayunos, "Tostada", "3.00");
-      const saladId = await product(menus.almuerzo, "Ensalada", "8.00");
+      const toastId = await product(menus.brunch, "Toast", "3.00");
+      const saladId = await product(menus.setLunch, "Salad", "8.00");
       const offer = async (menuId: string, productId: string, grossPrice: string) =>
         (await addProductToMenu(tx, { menuId, productId, grossPrice })).id;
       const toast = {
-        desayunos: await offer(menus.desayunos, toastId, "2.50"),
-        almuerzo: await offer(menus.almuerzo, toastId, "4.00"),
+        brunch: await offer(menus.brunch, toastId, "2.50"),
+        setLunch: await offer(menus.setLunch, toastId, "4.00"),
       };
-      const salad = await offer(menus.almuerzo, saladId, "8.00");
-      const avocadoId = await product(menus.almuerzo, "Aguacate", "1.50");
+      const salad = await offer(menus.setLunch, saladId, "8.00");
+      const avocadoId = await product(menus.setLunch, "Avocado", "1.50");
       const avocadoList = (
         await createExtraList(
           tx,
           {
-            name: "Aguacate",
+            name: "Avocado",
             minPicks: 0,
             maxPicks: null,
             items: [{ productId: avocadoId, maxQuantity: 1, price: "1.00" }],
@@ -107,8 +107,8 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         ...carried.map((each) => ({ kind: each.kind, id: each.id })),
         { kind: "extras", id: avocadoList },
       ]);
-      const caña = await offer(menus.bebidas, await product(menus.bebidas, "Caña", "2.00"), "2.00");
-      const juiceId = await product(menus.almuerzo, "Zumo", "3.00");
+      const beer = await offer(menus.drinks, await product(menus.drinks, "Beer", "2.00"), "2.00");
+      const juiceId = await product(menus.setLunch, "Juice", "3.00");
       const variant = (name: string, unitPrice: string) => ({
         name,
         customerName: null,
@@ -119,28 +119,28 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
       });
       const [large] = await setProductVariants(tx, juiceId, [variant("Large", "3.50")], cfg.locale);
       const juice = {
-        almuerzo: await offer(menus.almuerzo, juiceId, "3.00"),
-        desayunos: await offer(menus.desayunos, juiceId, "3.00"),
+        setLunch: await offer(menus.setLunch, juiceId, "3.00"),
+        brunch: await offer(menus.brunch, juiceId, "3.00"),
       };
       for (const menuId of Object.values(menus)) await publishWorkingMenu(tx, menuId);
-      // Small is added after Desayunos was published, so only Almuerzo's live version lists it.
+      // Small is added after Brunch was published, so only Set lunch's live version lists it.
       const [, small] = await setProductVariants(
         tx,
         juiceId,
         [{ ...variant("Large", "3.50"), id: large!.id }, variant("Small", "2.50")],
         cfg.locale,
       );
-      await publishWorkingMenu(tx, menus.almuerzo);
+      await publishWorkingMenu(tx, menus.setLunch);
       const period = async (name: string, menuId: string) =>
         (
           await saveMenuPeriod(tx, cfg, restaurant, {
             name,
             menuId,
-            staffMenuIds: [menus.bebidas, menus.cafe],
+            staffMenuIds: [menus.drinks, menus.coffee],
           })
         ).id;
-      const lunch = await period("Lunch", menus.almuerzo);
-      const dinner = await period("Dinner", menus.desayunos);
+      const lunch = await period("Lunch", menus.setLunch);
+      const dinner = await period("Dinner", menus.brunch);
       await replaceMenuWeek(
         tx,
         cfg,
@@ -167,7 +167,7 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         toast,
         salad,
         avocado: { listId: avocadoList, productId: avocadoId },
-        caña,
+        beer,
         juice,
         variants: { large: large!.id, small: small!.id },
       };
@@ -234,13 +234,13 @@ describe("a dish whose period ended earlier today", () => {
     const v = await mealVenue();
     const id = randomUUID();
     await expect(
-      open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id),
+      open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id),
     ).rejects.toMatchObject({
       code: "menu_period.ended",
       params: {
         departmentId: v.restaurant,
-        menus: [{ menuId: v.menus.almuerzo, periodName: "Lunch" }],
-        menuItemIds: [v.toast.almuerzo],
+        menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }],
+        menuItemIds: [v.toast.setLunch],
         needsManager: false,
       },
     });
@@ -253,7 +253,7 @@ describe("a dish whose period ended earlier today", () => {
       at(time);
       const v = await mealVenue();
       const id = randomUUID();
-      await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id);
+      await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id);
       expect(await linesOf(id)).toMatchObject([{ unitPriceGross: 400 }]);
       expect(
         await suite.db
@@ -275,7 +275,7 @@ describe("a dish whose period ended earlier today", () => {
     at("14:05");
     const v = await mealVenue();
     await withTransaction(suite.db, (tx) => updateProduct(tx, v.toastId, { available: false }));
-    await expect(open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }])).rejects.toMatchObject({
+    await expect(open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }])).rejects.toMatchObject({
       code: "product.unavailable",
       params: { productId: v.toastId },
     });
@@ -295,12 +295,12 @@ describe("a dish whose period ended earlier today", () => {
       await expect(
         open(v, [
           ...[1, 2, 3].map(() => ({ menuItemId: v.salad, quantity: "1" })),
-          ...[1, 2].map(() => ({ menuItemId: v.toast.almuerzo, quantity: "1" })),
+          ...[1, 2].map(() => ({ menuItemId: v.toast.setLunch, quantity: "1" })),
         ]),
       ).rejects.toMatchObject({
         code: "menu_period.ended",
         params: {
-          menus: [{ menuId: v.menus.almuerzo, periodName: "Lunch" }],
+          menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }],
           menuItemIds: [v.salad],
         },
       });
@@ -315,19 +315,19 @@ describe("a dish whose period ended earlier today", () => {
     const v = await mealVenue();
     await expect(
       open(v, [
-        { menuItemId: v.toast.almuerzo, quantity: "1" },
-        { menuItemId: v.caña, quantity: "1" },
+        { menuItemId: v.toast.setLunch, quantity: "1" },
+        { menuItemId: v.beer, quantity: "1" },
         { menuItemId: v.salad, quantity: "1" },
-        { menuItemId: v.caña, quantity: "1" },
+        { menuItemId: v.beer, quantity: "1" },
       ]),
     ).rejects.toMatchObject({
       code: "menu_period.ended",
       params: {
         menus: [
-          { menuId: v.menus.almuerzo, periodName: "Lunch" },
-          { menuId: v.menus.bebidas, periodName: "Lunch" },
+          { menuId: v.menus.setLunch, periodName: "Lunch" },
+          { menuId: v.menus.drinks, periodName: "Lunch" },
         ],
-        menuItemIds: [v.toast.almuerzo, v.caña, v.salad],
+        menuItemIds: [v.toast.setLunch, v.beer, v.salad],
       },
     });
   });
@@ -338,15 +338,15 @@ describe("a dish whose period ended earlier today", () => {
     const id = randomUUID();
     await open(
       v,
-      [{ menuItemId: v.juice.almuerzo, variantId: v.variants.large, quantity: "1" }],
+      [{ menuItemId: v.juice.setLunch, variantId: v.variants.large, quantity: "1" }],
       id,
     );
     expect(await linesOf(id)).toMatchObject([{ unitPriceGross: 350 }]);
     await expect(
-      open(v, [{ menuItemId: v.juice.almuerzo, variantId: v.variants.small, quantity: "1" }]),
+      open(v, [{ menuItemId: v.juice.setLunch, variantId: v.variants.small, quantity: "1" }]),
     ).rejects.toMatchObject({
       code: "menu_period.ended",
-      params: { menuItemIds: [v.juice.almuerzo] },
+      params: { menuItemIds: [v.juice.setLunch] },
     });
   });
 
@@ -355,21 +355,21 @@ describe("a dish whose period ended earlier today", () => {
     const v = await mealVenue();
     await withTransaction(suite.db, async (tx) => {
       await updateProduct(tx, v.toastId, { ordering: "not_sold_separately" });
-      // Only Desayunos is published again, so Almuerzo's live version still sells it on its own.
-      await publishWorkingMenu(tx, v.menus.desayunos);
+      // Only Brunch is published again, so Set lunch's live version still sells it on its own.
+      await publishWorkingMenu(tx, v.menus.brunch);
       await updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true });
     });
-    await expect(open(v, [{ menuItemId: v.toast.desayunos, quantity: "1" }])).rejects.toMatchObject(
-      { code: "product.not_sold_separately" },
-    );
+    await expect(open(v, [{ menuItemId: v.toast.brunch, quantity: "1" }])).rejects.toMatchObject({
+      code: "product.not_sold_separately",
+    });
     const id = randomUUID();
     await expect(
-      open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id),
+      open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id),
     ).rejects.toMatchObject({
       code: "menu_period.ended",
       params: {
-        menus: [{ menuId: v.menus.almuerzo, periodName: "Lunch" }],
-        menuItemIds: [v.toast.almuerzo],
+        menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }],
+        menuItemIds: [v.toast.setLunch],
         needsManager: true,
       },
     });
@@ -379,9 +379,9 @@ describe("a dish whose period ended earlier today", () => {
   it("is accepted at its taken price and marked when a confirmation covers its menu", async () => {
     at("14:05");
     const v = await mealVenue();
-    const { personId, lateSend } = confirming([v.menus.almuerzo]);
+    const { personId, lateSend } = confirming([v.menus.setLunch]);
     const id = randomUUID();
-    await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id, lateSend);
+    await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id, lateSend);
     expect(await linesOf(id)).toMatchObject([{ unitPriceGross: 400 }]);
     expect(await marksOf(id)).toEqual([{ latePeriodName: "Lunch", lateConfirmedBy: personId }]);
     expect(lateSend.confirm).toHaveBeenCalledTimes(1);
@@ -391,7 +391,7 @@ describe("a dish whose period ended earlier today", () => {
   it("marks every row of a confirmed dish, its extras' rows included", async () => {
     at("14:05");
     const v = await mealVenue();
-    const { personId, lateSend } = confirming([v.menus.almuerzo]);
+    const { personId, lateSend } = confirming([v.menus.setLunch]);
     const id = randomUUID();
     await open(
       v,
@@ -417,13 +417,13 @@ describe("a dish whose period ended earlier today", () => {
   it("is refused menu_period.ended when the confirmation covers another menu, and writes nothing", async () => {
     at("14:05");
     const v = await mealVenue();
-    const { lateSend } = confirming([v.menus.bebidas]);
+    const { lateSend } = confirming([v.menus.drinks]);
     const id = randomUUID();
     await expect(
-      open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id, lateSend),
+      open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id, lateSend),
     ).rejects.toMatchObject({
       code: "menu_period.ended",
-      params: { menus: [{ menuId: v.menus.almuerzo, periodName: "Lunch" }] },
+      params: { menus: [{ menuId: v.menus.setLunch, periodName: "Lunch" }] },
     });
     expect(lateSend.confirm).not.toHaveBeenCalled();
     expect(await orderRows(id)).toEqual([]);
@@ -432,14 +432,14 @@ describe("a dish whose period ended earlier today", () => {
   it("is refused menu_period.ended when the confirmation covers only some late menus, and writes nothing", async () => {
     at("14:05");
     const v = await mealVenue();
-    const { lateSend } = confirming([v.menus.almuerzo]);
+    const { lateSend } = confirming([v.menus.setLunch]);
     const id = randomUUID();
     await expect(
       open(
         v,
         [
-          { menuItemId: v.toast.almuerzo, quantity: "1" },
-          { menuItemId: v.caña, quantity: "1" },
+          { menuItemId: v.toast.setLunch, quantity: "1" },
+          { menuItemId: v.beer, quantity: "1" },
         ],
         id,
         lateSend,
@@ -452,13 +452,13 @@ describe("a dish whose period ended earlier today", () => {
   it("marks only the late dish, not an also-sold dish beside it", async () => {
     at("19:30");
     const v = await mealVenue();
-    const { personId, lateSend } = confirming([v.menus.almuerzo]);
+    const { personId, lateSend } = confirming([v.menus.setLunch]);
     const id = randomUUID();
     await open(
       v,
       [
         { menuItemId: v.salad, quantity: "1" },
-        { menuItemId: v.toast.almuerzo, quantity: "1" },
+        { menuItemId: v.toast.setLunch, quantity: "1" },
       ],
       id,
       lateSend,
@@ -490,8 +490,8 @@ describe("a dish whose period ended earlier today", () => {
     await withTransaction(suite.db, (tx) =>
       updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
     );
-    const { lateSend } = confirming([v.menus.almuerzo]);
-    await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], randomUUID(), lateSend);
+    const { lateSend } = confirming([v.menus.setLunch]);
+    await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], randomUUID(), lateSend);
     expect(lateSend.confirm).toHaveBeenCalledTimes(1);
     expect(lateSend.confirm).toHaveBeenCalledWith(expect.anything(), true);
   });
@@ -500,9 +500,9 @@ describe("a dish whose period ended earlier today", () => {
     at("14:05");
     const v = await mealVenue();
     await withTransaction(suite.db, (tx) => updateProduct(tx, v.toastId, { available: false }));
-    const { lateSend } = confirming([v.menus.almuerzo]);
+    const { lateSend } = confirming([v.menus.setLunch]);
     await expect(
-      open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], randomUUID(), lateSend),
+      open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], randomUUID(), lateSend),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: v.toastId } });
     expect(lateSend.confirm).not.toHaveBeenCalled();
   });
@@ -510,9 +510,9 @@ describe("a dish whose period ended earlier today", () => {
   it("asks no confirmation when nothing is late", async () => {
     at("19:30");
     const v = await mealVenue();
-    const { lateSend } = confirming([v.menus.almuerzo]);
+    const { lateSend } = confirming([v.menus.setLunch]);
     const id = randomUUID();
-    await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id, lateSend);
+    await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id, lateSend);
     expect(lateSend.confirm).not.toHaveBeenCalled();
     expect(await marksOf(id)).toEqual([{ latePeriodName: null, lateConfirmedBy: null }]);
   });
@@ -524,17 +524,17 @@ describe("a dish whose period has not ended today", () => {
     async (confirmed) => {
       at("13:00");
       const v = await mealVenue();
-      const { lateSend } = confirming([v.menus.desayunos]);
+      const { lateSend } = confirming([v.menus.brunch]);
       await expect(
         open(
           v,
-          [{ menuItemId: v.toast.desayunos, quantity: "1" }],
+          [{ menuItemId: v.toast.brunch, quantity: "1" }],
           randomUUID(),
           confirmed ? lateSend : undefined,
         ),
       ).rejects.toMatchObject({
         code: "menu_period.not_running",
-        params: { departmentId: v.restaurant, menuId: v.menus.desayunos },
+        params: { departmentId: v.restaurant, menuId: v.menus.brunch },
       });
       expect(lateSend.confirm).not.toHaveBeenCalled();
     },
@@ -545,17 +545,17 @@ describe("a dish whose period has not ended today", () => {
     async (confirmed) => {
       at("10:00", "2026-10-06");
       const v = await mealVenue([1, 2]);
-      const { lateSend } = confirming([v.menus.almuerzo]);
+      const { lateSend } = confirming([v.menus.setLunch]);
       await expect(
         open(
           v,
-          [{ menuItemId: v.toast.almuerzo, quantity: "1" }],
+          [{ menuItemId: v.toast.setLunch, quantity: "1" }],
           randomUUID(),
           confirmed ? lateSend : undefined,
         ),
       ).rejects.toMatchObject({
         code: "menu_period.not_running",
-        params: { departmentId: v.restaurant, menuId: v.menus.almuerzo },
+        params: { departmentId: v.restaurant, menuId: v.menus.setLunch },
       });
       expect(lateSend.confirm).not.toHaveBeenCalled();
     },
@@ -567,7 +567,7 @@ describe("a raised quantity of a stored line", () => {
     at("13:50");
     const v = await mealVenue();
     const id = randomUUID();
-    await open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id);
+    await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id);
     const before = await linesOf(id);
     const [{ revision }] = (await suite.db
       .select({ revision: workingOrders.revision })
@@ -579,13 +579,13 @@ describe("a raised quantity of a stored line", () => {
         revision,
         expectedEdit: null,
         lines: [
-          { workingOrderLineId: before[0]!.id, menuItemId: v.toast.almuerzo, quantity: "2" },
+          { workingOrderLineId: before[0]!.id, menuItemId: v.toast.setLunch, quantity: "2" },
           { menuItemId: v.salad, quantity: "1" },
         ],
       }),
     ).rejects.toMatchObject({
       code: "menu_period.not_running",
-      params: { departmentId: v.restaurant, menuId: v.menus.almuerzo },
+      params: { departmentId: v.restaurant, menuId: v.menus.setLunch },
     });
     expect(await linesOf(id)).toEqual(before);
   });
