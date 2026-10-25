@@ -170,11 +170,11 @@ una placa blanca.
 Las demás pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan
 un cambio de colores, como describe «Guarda un tema», más abajo.
 
-Cuando una pantalla no puede cargar la imagen, la franja superior del panel muestra el logotipo de
-Waitron, la barra de un terminal de camarero muestra la palabra «Waitron» y la pantalla de inicio de
-sesión de una caja registradora o de un terminal de camarero no muestra ningún logotipo, sin dejar
-un hueco donde iría. No se ve la línea «Con la tecnología de». La pantalla vuelve a intentar cargar
-la imagen cada minuto y la muestra en cuanto carga.
+Cuando una de las demás pantallas no puede cargar la imagen, la franja superior del panel muestra
+el logotipo de Waitron, la barra de un terminal de camarero muestra la palabra «Waitron» y la
+pantalla de inicio de sesión de una caja registradora o de un terminal de camarero no muestra ningún
+logotipo, sin dejar un hueco donde iría. No se ve la línea «Con la tecnología de». La pantalla vuelve
+a intentar cargar la imagen cada minuto y la muestra en cuanto carga.
 
 ## En los tickets y las facturas {#logo-receipts}
 
