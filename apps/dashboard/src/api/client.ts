@@ -2365,6 +2365,14 @@ export class DashboardApi {
       { as: "file" },
     );
   }
+  downloadPersonalData(personId: string): Promise<DownloadedFile> {
+    return this.#request<DownloadedFile>(
+      `/management-api/staff/${encodeURIComponent(personId)}/personal-data/export`,
+      "GET",
+      undefined,
+      { as: "file" },
+    );
+  }
   getGoogleConfig(): Promise<{ configured: boolean; privacyNoticeUrl?: string }> {
     return this.#request<{ configured: boolean; privacyNoticeUrl?: string }>(
       "/management-api/google/config",

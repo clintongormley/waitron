@@ -17,6 +17,8 @@ export class StaffList extends LitElement {
 
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
+  @property({ type: Boolean }) canExportPersonalData = false;
+  @property({ attribute: false }) downloadingPersonId: string | null = null;
   @property() searchTerm = "";
   /** What the table says with no rows; the screen filters by role and status before the table, so
    * it names its own. */
@@ -36,7 +38,13 @@ export class StaffList extends LitElement {
   #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<PersonSummary>[] };
 
   #columns(): DataTableColumn<PersonSummary>[] {
-    const inputs = [currentLocale(), this.currentPersonId, this.canAdminister];
+    const inputs = [
+      currentLocale(),
+      this.currentPersonId,
+      this.canAdminister,
+      this.canExportPersonalData,
+      this.downloadingPersonId,
+    ];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#columnsMemo.columns;
     const columns: DataTableColumn<PersonSummary>[] = [
@@ -110,6 +118,7 @@ export class StaffList extends LitElement {
                 : this.#action(person, "disable", t("person.disable"))
             }
             ${person.status === "pending" ? this.#action(person, "resend-invitation", t("person.resend_invitation")) : nothing}
+            ${this.#downloadData(person)}
           </wt-row-actions>
         `,
       },
@@ -136,6 +145,27 @@ export class StaffList extends LitElement {
         );
       }}
       >${label}</wt-button
+    >`;
+  }
+
+  #downloadData(person: PersonSummary) {
+    if (!this.canExportPersonalData) return nothing;
+    return html`<wt-button
+      variant="ghost"
+      align="start"
+      data-test=${`download-data-${person.personId}`}
+      ?disabled=${this.downloadingPersonId !== null}
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        this.dispatchEvent(
+          new CustomEvent<{ personId: string }>("download-person-data", {
+            detail: { personId: person.personId },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }}
+      >${t("person.download_data")}</wt-button
     >`;
   }
 

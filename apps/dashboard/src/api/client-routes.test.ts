@@ -1716,3 +1716,26 @@ it("downloads a staff member's own personal data with the server's file name", a
   expect(init.credentials).toBe("include");
   expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
 });
+
+it("downloads another person's personal data by id with the server's file name", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(
+    new Response(new Uint8Array([0x50, 0x4b, 0x05, 0x06]), {
+      status: 200,
+      headers: {
+        "content-type": "application/zip",
+        "content-disposition": 'attachment; filename="ana-ruiz-2026-10-25.zip"',
+      },
+    }),
+  );
+  const api = new DashboardApi("", fetchImpl);
+
+  const out = await api.downloadPersonalData("p 1");
+
+  expect(out.fileName).toBe("ana-ruiz-2026-10-25.zip");
+  expect([...new Uint8Array(await out.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 0x05, 0x06]);
+  const [[url, init]] = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(url).toBe("/management-api/staff/p%201/personal-data/export");
+  expect(init.method).toBe("GET");
+  expect(init.credentials).toBe("include");
+  expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
+});
