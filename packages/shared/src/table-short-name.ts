@@ -19,8 +19,7 @@ export function isShortNameShaped(value: string): boolean {
   return value.trim() !== "" && shortNameLength(value) <= SHORT_NAME_MAX;
 }
 
-/** The steps are `@waitron/identity`'s `foldForUniqueness`, whose comment gives the reason for
- * each. */
+/** The steps are `@waitron/identity`'s `foldForUniqueness`. */
 export function shortNameKey(shortName: string): string {
   return shortName.trim().normalize("NFC").toLowerCase().normalize("NFC");
 }

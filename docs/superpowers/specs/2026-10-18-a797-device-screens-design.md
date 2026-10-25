@@ -507,8 +507,9 @@ Each point is (read); the plan confirms it before relying on it.
   table with none rather than refusing the save; but a table the save adds or renames that is left
   with none is refused `table.label_taken` when another zone's table already holds its name as a
   short name, or as its full name having none; see the
-  [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4.. An import that carries no short name leaves its tables with none, and a file never carries
-  `short_name_key`, which the import sets; see the build plan's slice 1, D10.)
+  [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4. An import that
+  carries no short name leaves its tables with none, and a file never carries `short_name_key`,
+  which the import sets; see the build plan's slice 1, D10.)
 - **Whose unsent dishes** (slice 3). The floor read gives each party's unsent New orders with the
   owner's name only (`UnsentDraft`, `apps/server/src/order-drafts.ts:343-348`); the bar needs the
   owner's id and the draft's last-saved time (`order_drafts.owner_id`, `.updated_at`,

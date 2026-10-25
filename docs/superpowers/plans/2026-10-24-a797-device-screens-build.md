@@ -1773,8 +1773,8 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   Also exported: `SHORT_NAME_MAX = 5`, `shortNameLength(value)` (code points of the NFC form) and
   `shortNameKey(shortName)` (D3). Another answer to Q51 (a) changes this one file and its tests
   (design §8).
-- **D3. Two short names clash when their keys are equal: `shortNameKey(s) = s.normalize("NFC").toLowerCase()`**
-  — the fold the till's renaming already uses for names (`sameName`, `apps/server/src/floor-today-name.ts:16-18`),
+- **D3. Two short names clash when their keys are equal: `shortNameKey(s) = s.trim().normalize("NFC").toLowerCase().normalize("NFC")`**
+  — the steps of `@waitron/identity`'s `foldForUniqueness` and the catalogue's `foldName`,
   so "t1" is "T1" (design §3.7: "Compared ignoring case"). The stored `short_name` keeps what was
   given, trimmed. `packages/db/src/table-short-names.ts` (new) exports
   `shortNameColumns(shortName: string | null): { shortName: string | null; shortNameKey: string | null }`,
@@ -1894,9 +1894,10 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   its tables' short names joined for one of today's joins** — "T4+T5", in number order with
   "+", exactly as the map names a join with no name of its own (`mergeLabel`,
   `packages/ui/src/components/wt-floor-map.ts:144-145`), whatever today's names say. A new till
-  function `tightName(table, tables)` in `apps/till/src/state/floor-today.ts` (beside `shownUnder`,
-  `:70-72`): with `today.joinId` set, `mergeLabel` over the short names of the tables in `tables`
-  with that `joinId`; else `table.shortName`. **Why:** a tight place is where a runner finds the
+  function `tightName(table, joins)` in `apps/till/src/state/floor-today.ts` (beside `shownUnder`,
+  `:70-72`): with `today.joinId` set, `mergeLabel` over the short names of that join's tables in
+  `joins` (`joinMembersById` of the tables in view, built once by `readyTables`); else
+  `table.shortName`. **Why:** a tight place is where a runner finds the
   physical table; a today's name is free text of up to 40 characters (`normalisePartyName`,
   `packages/shared/src/party-name.ts:4`, `:31-38`, used by `nameToday`) and not short, and the
   members' short names are unique and already on the tables. A saved joined table (one the plan
