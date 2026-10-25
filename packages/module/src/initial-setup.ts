@@ -74,6 +74,14 @@ export interface InitialSetupContribution {
     readonly keys: readonly string[];
     readonly positions: readonly { namespace: string; position: number }[];
   };
+  startAgainFloor?(input: {
+    readonly attempts: readonly {
+      readonly context: InitialSetupContext;
+      readonly input: unknown;
+    }[];
+    readonly preparations: readonly unknown[];
+    readonly publicEvidence: readonly unknown[];
+  }): { readonly floorMs: number; readonly lastName: string } | null;
 
   assignmentPositions?(
     context: InitialSetupContext,

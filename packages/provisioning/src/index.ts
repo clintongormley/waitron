@@ -168,6 +168,13 @@ export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
 export { boxFolders } from "./box-folders.js";
 export {
+  START_AGAIN_NOTE_FILE,
+  raiseStartAgainNote,
+  readStartAgainNote,
+  startAgainFloorSources,
+  type StartAgainNote,
+} from "./first-setup-start-again-note.js";
+export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,

@@ -145,6 +145,8 @@ export const FIRST_SETUP_HOST_FILES = [
   "first-setup-selection.json",
   "first-setup-retirement.json",
   "first-setup-workspace.json",
+  "first-setup-start-again.json",
+  "first-setup-deleting.json",
 ] as const;
 export function isFirstSetupHostPath(path: string): boolean {
   return FIRST_SETUP_HOST_FILES.some((name) => path === name || path.startsWith(`${name}/`));

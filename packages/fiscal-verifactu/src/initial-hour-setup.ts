@@ -8,7 +8,9 @@ import {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { encodeMinuteIdentity, decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
+import { projectHourHistory } from "./hour-history.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
+import { publicHourSelectionHistory } from "./hour-selection.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import {
@@ -80,6 +82,23 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   return structuredClone(expected);
 }
 
+const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
+const MINUTE_MS = 60_000;
+function preparedMinutes(preparations: readonly unknown[]): number[] {
+  return publicHourSelectionHistory(preparations).records.map((row) => {
+    const scope = row as { taxpayerNif: unknown; environment: unknown };
+    const checked = projectHourHistory({
+      scope: { taxpayerNif: scope.taxpayerNif, environment: scope.environment },
+      sources: [{ reference: "prepared-hours", complete: true, records: [row] }],
+    });
+    if (checked.contradictions.length > 0) refuse();
+    return checked.greatestSpentMinute!;
+  });
+}
+function isHourNamespace(namespace: string): boolean {
+  return (JSON.parse(namespace) as unknown[]).at(-1) === "hour";
+}
+
 async function reviewCommandClock(
   actions: InitialSetupCommandActions,
 ): Promise<{ status: "ready"; comparisonId: string } | { status: "cancelled" }> {
@@ -109,7 +128,7 @@ export function createHourInitialSetup(
   base: InitialSetupContribution,
 ): InitialSetupContribution {
   const candidates = new WeakSet<object>();
-  return {
+  const seat: InitialSetupContribution = {
     ...base,
     configure: undefined,
     resolutionEvidence: () => ({ files: [], directories: [] }),
@@ -302,5 +321,39 @@ export function createHourInitialSetup(
         },
       ];
     },
+    startAgainFloor({ attempts, preparations, publicEvidence }) {
+      let minutes: number[];
+      try {
+        minutes = [
+          ...attempts.flatMap(({ context, input }) =>
+            context.request == null && input === undefined
+              ? []
+              : [
+                  decodeMinuteIdentity(
+                    readHourSetupInput(
+                      context,
+                      input ?? (context.request as { input: unknown }).input,
+                    ).allocation.installationIdentity,
+                  ),
+                ],
+          ),
+          ...preparedMinutes(preparations),
+          ...publicEvidence.flatMap((evidence) =>
+            seat.retainedAssignments!(evidence)
+              .positions.filter(({ namespace }) => isHourNamespace(namespace))
+              .map(({ position }) => position),
+          ),
+        ];
+      } catch {
+        return refuse("history_invalid");
+      }
+      if (minutes.length === 0) return null;
+      const minute = Math.max(...minutes);
+      return {
+        floorMs: EPOCH_MS + (minute + 1) * MINUTE_MS,
+        lastName: encodeMinuteIdentity(EPOCH_MS + minute * MINUTE_MS),
+      };
+    },
   };
+  return seat;
 }
