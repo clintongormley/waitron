@@ -16,3 +16,9 @@ private key and modern encryption. The export instructions are on the certificat
 
 If a certificate is refused while finishing an interrupted setup, correct it first. Setup then
 asks you to confirm ownership again before you continue.
+
+## Retry a check in Venue settings {#dashboard-check}
+
+If replacing a certificate fails with an HTTP error or an unexpected check failure, the current
+certificate stays installed. Ask the box's administrator to check its connection to AEAT, then
+select **Save** again. An HTTP status alone does not tell you whether waiting will help.

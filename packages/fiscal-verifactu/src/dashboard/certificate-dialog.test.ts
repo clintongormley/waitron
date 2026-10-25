@@ -394,19 +394,19 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "an HTTP error",
       { outcome: "refused", reason: "aeat_http", details: { status: 503 } },
       "bottom",
-      "AEAT answered with HTTP error 503. The current certificate is unchanged. Try again later.",
+      "AEAT answered with HTTP error 503. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
     ],
     [
       "anything else",
       { outcome: "refused", reason: "check_failed" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Try again; if it fails again, contact support.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
     ],
     [
       "a reason this copy does not know",
       { outcome: "refused", reason: "something_new" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Try again; if it fails again, contact support.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
     ],
   ];
 
