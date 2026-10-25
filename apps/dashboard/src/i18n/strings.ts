@@ -1277,7 +1277,8 @@ export const en = {
   "floor_plan_editor.rectangle": "Rectangle",
   "floor_plan_editor.round": "Round",
   "floor_plan_editor.booked": "Booked {date}, {time}",
-  "floor_plan_editor.label_shown_as_short_name": "{takenBy} already uses that as its short name",
+  "floor_plan_editor.label_shown_as_short_name":
+    "{takenBy} already uses that as its short name. Choose another name for this table.",
   "kitchen.stations_title": "Stations",
   "kitchen.station_name": "Name",
   "kitchen.station_order": "Order",
@@ -4660,7 +4661,8 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.rectangle": "Rectángulo",
   "floor_plan_editor.round": "Redonda",
   "floor_plan_editor.booked": "Reservada el {date}, {time}",
-  "floor_plan_editor.label_shown_as_short_name": "{takenBy} ya lo usa como nombre corto",
+  "floor_plan_editor.label_shown_as_short_name":
+    "{takenBy} ya lo usa como nombre corto. Elige otro nombre para esta mesa.",
   "kitchen.stations_title": "Estaciones",
   "kitchen.station_name": "Nombre",
   "kitchen.station_order": "Orden",

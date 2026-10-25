@@ -1834,7 +1834,11 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   "Window 1" and "Wall 1", both "W1") could not save that zone at all, with no field to fix it.
   The plan's table gets the resolved value (`masterColumns`, `:396-398`, gains it), and
   `changedShared` (`:602-626`) counts a changed short name as a change of the zone's shared
-  tables, so other sets' editors see a new revision, as for a rename.
+  tables, so other sets' editors see a new revision, as for a rename. **2026-10-25, during the
+  build:** a kept stored short name another table now holds leaves the table with none; and the
+  save refuses (`table.label_taken`, with `takenBy`) a table it adds or renames that is left with
+  no short name while another zone's table already holds its full name, folded, as a short name
+  (or as its full name, having none); a table left under its stored name is never refused.
 - **D5. The plan read carries each table's short name** — `PlanTable.shortName: string | null`
   (`floor-plan.ts:26-37`, filled at `:205-214`), `null` for a table with none. Slice 2's field
   shows it, or the proposal when it is `null`. One existing check changes (Changed test checks).

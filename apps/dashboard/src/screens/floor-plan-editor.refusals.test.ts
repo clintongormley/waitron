@@ -165,11 +165,13 @@ it("a name another table uses as its short name says which table, in English and
   expect(el.fieldError).toEqual({
     key: "m2",
     field: "label",
-    message: "Terrace 1 already uses that as its short name",
+    message: "Terrace 1 already uses that as its short name. Choose another name for this table.",
   });
   setLocale("es-ES");
   await el.updateComplete;
-  expect(el.fieldError?.message).toBe("Terrace 1 ya lo usa como nombre corto");
+  expect(el.fieldError?.message).toBe(
+    "Terrace 1 ya lo usa como nombre corto. Elige otro nombre para esta mesa.",
+  );
 });
 
 it("a taken name no draft table carries shows the code's own sentence and selects nothing", async () => {
