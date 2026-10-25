@@ -3234,6 +3234,18 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A department's Receipts preview does not redraw when the theme in use changes while it is open**
   (A841 slice 9, [the plan](superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
 
+- **A department's Receipts preview logs nothing when its saved logo's read fails.** When the draft
+  names the saved logo, `apps/server/src/receipt-preview-api.ts` reads the stored picture through
+  `readPrintedDepartmentReceipt` with the plain scope, no `receiptDiagnostic`, unlike the no-logo
+  branch beside it (since `082553a65`, 2026-10-12; found by #2050's review). Pass the same
+  diagnostic, with a test that a failed read warns.
+
+- **Half of an older receipt test can no longer fail.** In `apps/server/src/receipt-print.test.ts`,
+  "omits a corrupt explicit department picture without substituting the `tenant_receipts` logo"
+  checks that no `tenant_receipts` logo is substituted, but printing never passed that logo (found
+  by #2050's review); the newer case for a department naming a logo whose pictures are bad covers
+  the real rule. Owner's call: delete the old test, or keep only its corrupt-picture half.
+
 - **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
   the printer reappears, so the drawer can open long after the sale (`packages/printing/src/runtime.ts`).
   [Detail](backlog/printers.md#a-drawer-kick-for-a-usb-printer-that-is-not-connected-waits-with-no-expiry)
