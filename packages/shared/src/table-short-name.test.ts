@@ -29,6 +29,7 @@ describe("proposeShortName", () => {
     ["T1", "T1"],
     ["ß ß ß 7", "SSSS7"],
     ["éclair 2", "É2"],
+    ["e\u0301clair 2", "\u00c92"],
     [" Bar ", "Bar"],
     ["B  2", "B 2"],
     ["-- 123", "123"],
@@ -51,9 +52,9 @@ describe("proposeShortName", () => {
   });
 
   it("counts a composed and a decomposed é as one character and one key", () => {
-    expect(shortNameLength("é")).toBe(1);
-    expect(shortNameKey("Té")).toBe(shortNameKey("Té"));
-    expect(shortNameKey("Té")).toBe(shortNameKey("TÉ"));
+    expect(shortNameLength("e\u0301")).toBe(1);
+    expect(shortNameKey("T\u00e9")).toBe(shortNameKey("Te\u0301"));
+    expect(shortNameKey("T\u00e9")).toBe(shortNameKey("T\u00c9"));
   });
 
   it("folds case for the key, keeping the short name as given", () => {
