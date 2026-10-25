@@ -6,7 +6,6 @@ import { departments } from "@waitron/venue-service";
 import { localWallClock, shifts } from "@waitron/workforce";
 import { personStaffRoles, shiftAssignments, staffRoles } from "./schema/staffing.js";
 
-/** Built only when the person holds a role or has a shift with an assignment. */
 export const STAFFING_PERSONAL_DATA: ModulePersonalData = {
   files: ["staff-roles.json"],
 

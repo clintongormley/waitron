@@ -72,7 +72,8 @@ async function seedAll() {
       { personId: colleague, staffRoleId: SOMMELIER },
     ]);
     // The night shift starts later but has the lower id and is inserted first; its local date
-    // (+01:00) is the day after its UTC date.
+    // (+01:00) is the day after its UTC date. The evening shift ends at a different offset from
+    // its start, as across a daylight-saving change.
     await tx.insert(shifts).values([
       {
         id: NIGHT_SHIFT,
@@ -90,7 +91,7 @@ async function seedAll() {
         startsAt: "2026-03-10T18:00:00Z",
         startsOffsetMinutes: 60,
         endsAt: "2026-03-10T22:45:00Z",
-        endsOffsetMinutes: 60,
+        endsOffsetMinutes: 120,
       },
     ]);
     await tx.insert(shifts).values({
@@ -126,7 +127,7 @@ const MARTA_STAFF_ROLES = {
   shiftRoles: [
     {
       startsAt: "2026-03-10T19:00:00+01:00",
-      endsAt: "2026-03-10T23:45:00+01:00",
+      endsAt: "2026-03-11T00:45:00+02:00",
       area: "Grill",
       staffRole: "Bartender",
     },
@@ -150,6 +151,40 @@ describe("STAFFING_PERSONAL_DATA", () => {
     const files = await download(marta);
     expect(files.map((f) => f.name)).toEqual(["staff-roles.json"]);
     expect(files[0]!.text).toBe(asFile(MARTA_STAFF_ROLES));
+  });
+
+  it("orders shifts that start together by shift id", async () => {
+    const venue = await seedVenue(suite.db);
+    const locationId = venue.cfg.locationId;
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(staffRoles).values({ id: WAITER, locationId, name: "Waiter" });
+      // The higher id is inserted first, so storage order is the reverse of id order.
+      for (const id of [EVENING_SHIFT, NIGHT_SHIFT])
+        await tx.insert(shifts).values({
+          id,
+          personId: venue.marc,
+          locationId,
+          startsAt: "2026-03-10T18:00:00Z",
+          startsOffsetMinutes: 60,
+          endsAt: "2026-03-10T22:00:00Z",
+          endsOffsetMinutes: 60,
+        });
+      await tx.insert(shiftAssignments).values([
+        { shiftId: EVENING_SHIFT, staffRoleId: WAITER, stationId: venue.stationId },
+        { shiftId: NIGHT_SHIFT, staffRoleId: WAITER, departmentId: venue.departmentId },
+      ]);
+    });
+    const [file] = await download(venue.marc);
+    const together = { startsAt: "2026-03-10T19:00:00+01:00", endsAt: "2026-03-10T23:00:00+01:00" };
+    expect(file!.text).toBe(
+      asFile({
+        staffRoles: [],
+        shiftRoles: [
+          { ...together, area: "Dining room", staffRole: "Waiter" },
+          { ...together, area: "Grill", staffRole: "Waiter" },
+        ],
+      }),
+    );
   });
 
   it("holds only her rows: the colleague's role and area appear nowhere", async () => {
