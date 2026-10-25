@@ -79,8 +79,7 @@ function storedDocument(name: string, receipt: string): UntrustedCase {
       await db.execute(
         sql`insert into department_receipts (department_id, receipt, logo_rasters, updated_at)
             values (${at.departmentId}, ${receipt}, null, '2026-10-10T00:00:00Z')
-            on conflict (department_id) do update set receipt = excluded.receipt,
-              logo_rasters = excluded.logo_rasters`,
+            on conflict (department_id) do update set receipt = excluded.receipt`,
       );
     },
     async undo(db, at) {

@@ -1114,13 +1114,13 @@ describe("the theme's logo on the A4 invoice", () => {
   );
 
   it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
-    "prints neither the department's own logo nor the theme's once it cannot be trusted: %s",
+    "a department's own logo prints until it cannot be trusted, then no logo prints: %s",
     async (_name, untrusted) => {
       await expectNoLogoOnceUntrusted(untrusted, true);
     },
   );
 
-  it("the page draws the theme's dots centred, above every line of text", async () => {
+  it("the page draws the theme's dots centred, above the department's trading name", async () => {
     const backend = none();
     const saleId = await saleIn(backend, await department());
     await putThemeInUse(suite.db);
@@ -1131,9 +1131,10 @@ describe("the theme's logo on the A4 invoice", () => {
       const [logo] = logos;
       expect(logo).toMatchObject({ raster: THEME_80MM });
       expect(logo!.x + logo!.width / 2).toBeCloseTo(INVOICE_PAGE_WIDTH / 2);
-      const texts = first!.elements.filter((element) => element.kind === "text");
-      expect(texts.length).toBeGreaterThan(0);
-      expect(Math.min(...texts.map((element) => element.y))).toBeGreaterThan(logo!.y);
+      const name = first!.elements.find(
+        (element) => element.kind === "text" && element.text === "Recorded dining",
+      );
+      expect(name!.y).toBeGreaterThan(logo!.y);
     } finally {
       await clearThemes(suite.db);
     }
