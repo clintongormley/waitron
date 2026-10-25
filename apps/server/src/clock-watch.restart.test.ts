@@ -448,7 +448,7 @@ describe("the clock watch over the real seat", () => {
     },
   );
 
-  it("closes nothing on two agreeing devices and keeps the same check open when the clock steps back again while AEAT is asked", async () => {
+  it("closes nothing and keeps the same check open when the clock steps back again while AEAT is asked, as the step drops the two devices' readings", async () => {
     const at = await steppedBack();
     let ask = false;
     const w = watch(at, () => {
@@ -467,5 +467,60 @@ describe("the clock watch over the real seat", () => {
     await w.stop();
     expect(checks().map((row) => row.id)).toEqual([opened!.id]);
     expect(count("clock_confirmations")).toBe(0);
+  });
+
+  // AEAT's disagreeing answer is kept across a clock step, so it is a witness either way; only the
+  // reading the closing judges at decides whether the check still waits.
+  it("closes nothing on AEAT disagreeing and keeps the same check open when the clock steps back into a stop while AEAT is asked", async () => {
+    const at = await steppedBack();
+    let ask = false;
+    const w = watch(at, () => {
+      if (!ask) return null;
+      const sample = truth(at, 10 * M);
+      at.clocks.skew = -10 * M;
+      return sample;
+    });
+    await w.look(T);
+    const [opened] = checks();
+    at.clocks.skew = 0;
+    ask = true;
+    await w.look(T + 60 * S);
+    await w.stop();
+    expect(w.readAuthorityTime).toHaveBeenCalledTimes(2);
+    expect(count("clock_confirmations")).toBe(0);
+    expect(at.store.witnesses()).toContainEqual(expect.objectContaining({ kind: "authority" }));
+    expect(checks().map((row) => row.id)).toEqual([opened!.id]);
+    at.clocks.skew = 0;
+    const waiting = await withTransaction(venue.db, (tx) =>
+      venue.backend.waitingClockCheck!(tx, { instant: new Date(at.reading()), offsetMinutes: 60 }),
+    );
+    expect(waiting).toEqual({ checkId: opened!.id, openedAt: new Date(T - 10 * M).toISOString() });
+  });
+
+  it("closes a waiting check on the boot reading taken after AEAT answers, so the stop's start is when the check opened", async () => {
+    const at = await steppedBack();
+    let ask = false;
+    const w = watch(at, () => {
+      if (!ask) return null;
+      at.clocks.real += 30 * S;
+      return truth(at);
+    });
+    await w.look(T);
+    const [opened] = checks();
+    at.clocks.skew = 0;
+    ask = true;
+    await w.look(T + 60 * S);
+    await w.stop();
+    const [row] = suite.db.all<{ check_id: string; confirmed_at: string; proof: string }>(
+      sql`select check_id, confirmed_at, proof from clock_confirmations`,
+    );
+    expect(row).toMatchObject({
+      check_id: opened!.id,
+      confirmed_at: new Date(T + 90 * S).toISOString(),
+    });
+    expect((JSON.parse(row!.proof) as { closing: Record<string, unknown> }).closing).toMatchObject({
+      bootMs: BOOT_AT_T0 + 105 * S,
+      correctedStart: new Date(T).toISOString(),
+    });
   });
 });
