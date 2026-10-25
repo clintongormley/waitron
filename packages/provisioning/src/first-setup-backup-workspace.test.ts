@@ -633,6 +633,20 @@ it.each(["prepared", "placement-started", "restored"] as const)(
     await provision.assertFirstSetupBackupBootTarget(f.anchor);
   },
 );
+it("reads a recovery's own chain after the attempt's files change, and still refuses a damaged chain", async () => {
+  const f = await fixture(),
+    input = await f.input();
+  expect(await f.store.readChain()).toEqual([]);
+  const saved = await f.store.append(input);
+  await writeFile(join(f.anchor.stateDir, "first-setup.json"), "rewritten by the password step");
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await f.store.readChain()).toEqual([saved]);
+  await writeFile(
+    join(f.base, "000001.json"),
+    JSON.stringify({ ...saved, recordedAt: "2026-01-01T00:00:00.000Z" }),
+  );
+  await expect(f.store.readChain()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+});
 it("refuses to abandon a selected recovery", async () => {
   const { f } = await journalAt("restored");
   await f.store.select((await f.store.read()).at(-1)!);

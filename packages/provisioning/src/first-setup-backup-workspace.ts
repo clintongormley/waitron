@@ -562,10 +562,10 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
     const anchor = await canonical(anchorInput);
     return digest(await stableOriginals(anchor, sourceFor(anchor), id));
   }
-  async function readRecords(): Promise<BackupRepairRecord[]> {
+  async function readRecords(chainOnly = false): Promise<BackupRepairRecord[]> {
     const anchor = await canonical(anchorInput),
       selected = await witness(anchor);
-    return selected === null ? [] : checkedRecords(anchor, selected);
+    return selected === null ? [] : checkedRecords(anchor, selected, chainOnly);
   }
   async function append(input: RecordInput, selecting = false): Promise<BackupRepairRecord> {
     inputValid(input);
@@ -671,7 +671,10 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
   }
   return {
     inspect,
-    read: readRecords,
+    read: () => readRecords(),
+    // The recovery's own records, as abandon reads them: the attempt it was taken against may
+    // have changed since.
+    readChain: () => readRecords(true),
     // The authenticated host holds anchor/source exclusion before entering this independent turn.
     append: async (input: RecordInput) => {
       inputValid(input);

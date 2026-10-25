@@ -1,10 +1,12 @@
 import { clock } from "../test/hour-recovery-host.js";
 
 import { randomBytes } from "node:crypto";
-import { access, readdir, writeFile } from "node:fs/promises";
+import { access, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { expect, it, vi } from "vitest";
+
+import { AppError } from "@waitron/shared";
 
 import * as restore from "./restore.js";
 import * as sources from "./first-setup-backup-source.js";
@@ -16,6 +18,7 @@ import {
 } from "../test/first-setup-backup-recovery-fixture.js";
 import { selectedRepair as cloudSelectedRepair } from "../test/first-setup-backup-cloud-fixture.js";
 import { PASSWORD } from "../test/first-fiscal.js";
+import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 
 vi.mock("./backup-verification-target.js", { spy: true });
 vi.mock("./state-secrets.js", { spy: true });
@@ -34,6 +37,17 @@ async function preparedSession() {
   const records = await f.workspace.read();
   expect(records.at(-1)!.phase).toBe("prepared");
   return { ...f, service, session, records };
+}
+
+async function changeAttempt(f: Awaited<ReturnType<typeof preparedSession>>) {
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  await f.host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
 }
 
 async function corruptJournal(stateDir: string) {
@@ -143,7 +157,7 @@ it("stops at once when a commit throws after placement-started, and refuses the 
   });
   await expect(
     f.service.commit(f.session.sessionId, f.selected.input, client),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(() => f.service.renew(f.session.sessionId)).toThrow(
     expect.objectContaining({ code: "setup.owner_required" }),
   );
@@ -151,24 +165,65 @@ it("stops at once when a commit throws after placement-started, and refuses the 
 
 it("fails a session whose attempt changed under it, refusing its steps and renewals", async () => {
   const f = await preparedSession();
-  const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  await f.host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
+  await changeAttempt(f);
   await expect(
     f.service.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(await f.service.liveness()).toMatchObject({ state: "stopped", failed: true });
+  expect(await f.service.liveness()).toMatchObject({
+    state: "stopped",
+    phase: "prepared",
+    recoveryId: f.session.recoveryId,
+    failed: true,
+  });
   expect(() => f.service.renew(f.session.sessionId)).toThrow(
     expect.objectContaining({ code: "setup.owner_required" }),
   );
   await expect(
     f.service.prepare(f.session.sessionId, { action: "clock-challenge" }, client),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(f.service.runningInMemory()).toBe(false);
+});
+
+it("reads a damaged chain as no recovery, even once the attempt has changed", async () => {
+  const f = await preparedSession();
+  await changeAttempt(f);
+  await f.service.close(f.session.sessionId);
+  const first = join(dirname(dirname(f.records[0]!.target.target.stateDir)), "000001.json");
+  const record = JSON.parse(await readFile(first, "utf8")) as Record<string, unknown>;
+  await writeFile(first, JSON.stringify({ ...record, recordedAt: "2026-01-01T00:00:00.000Z" }));
+  expect(await f.service.liveness()).toBeNull();
+});
+
+it("refuses a failed session's next step once the existing checks let it through", async () => {
+  const f = await selectedRepair();
+  const append = f.workspace.append;
+  const interrupted = vi.spyOn(f.workspace, "append").mockImplementation(async (record) => {
+    const saved = await append(record);
+    if (record.phase === "placement-started") throw new AppError("setup.attempt_invalid", {});
+    return saved;
+  });
+  await expect(
+    f.service.commit(f.session.sessionId, f.selected.input, client),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  interrupted.mockRestore();
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  const reopened = await restarted.open({ ...f.request, recoveryId: f.session.recoveryId }, client);
+  const selected = (await recoverySelectPastWaits(
+    clock,
+    { prepare: (proposal, onBox) => restarted.prepare(reopened.sessionId, proposal, onBox) },
+    client,
+  )) as { status: string; input: unknown };
+  expect(selected.status).toBe("selected");
+  vi.mocked(restore.writeValidated).mockRejectedValueOnce(new Error("placement interrupted"));
+  await expect(restarted.commit(reopened.sessionId, selected.input, client)).rejects.toThrow(
+    "placement interrupted",
+  );
+  expect(await restarted.liveness()).toMatchObject({ state: "stopped", failed: true });
+  await expect(restarted.commit(reopened.sessionId, selected.input, client)).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("placement-started");
 });
 
 it("reads a live session as running even when its journal has become unreadable", async () => {

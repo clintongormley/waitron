@@ -45,6 +45,7 @@ export function firstSetupBackupRecoveryFor(
     workspace: {
       inspect: async (id) => (await workspace()).inspect(id),
       read: async () => (await workspace()).read(),
+      readChain: async () => (await workspace()).readChain(),
       append: async (record) => (await workspace()).append(record),
       select: async (record) => (await workspace()).select(record),
       abandon: async (id) => (await workspace()).abandon(id),

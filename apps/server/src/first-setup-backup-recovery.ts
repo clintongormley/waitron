@@ -353,18 +353,21 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     )
       refuse();
   };
+  // A failed session is refused by `unfailed`, after the step's own journal and phase checks.
   const admitted = async (sessionId: string) => {
     if (
       active === undefined ||
       active.session.sessionId !== sessionId ||
-      active.failed !== undefined ||
       active.sealed !== undefined
     )
       ownerRequired();
     const entry = active;
     await recheck(entry);
-    touch(entry);
+    if (entry.failed === undefined) touch(entry);
     return entry;
+  };
+  const unfailed = (entry: Entry) => {
+    if (entry.failed !== undefined) ownerRequired();
   };
   const existingTarget = async (record: NonNullable<Entry["record"]>) => {
     for (const directory of Object.values(record.target.target))
@@ -1063,6 +1066,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               !(entry.sourceReopened && entry.record.phase === "placement-started"))
           )
             conflict();
+          unfailed(entry);
           const service = await preparation(entry);
           const store = await openVenueDatabase(entry.working!);
           try {
@@ -1115,6 +1119,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             !isDeepStrictEqual(entry.record.input, input)
           )
             conflict();
+          unfailed(entry);
           const assertCommitted = options.modules.find(
             (module) => module.name === entry.session.binding.module,
           )?.backup?.assertRestoreCommitted;
@@ -1347,7 +1352,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       }
       let records: BackupRepairRecord[];
       try {
-        records = await options.workspace.read();
+        records = await options.workspace.readChain();
       } catch {
         return null;
       }
