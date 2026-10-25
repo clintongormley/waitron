@@ -5,8 +5,8 @@ import { ALL_MODULES } from "@waitron/composition";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import {
   assertFirstSetupBackupBootTarget,
+  canonicalFirstSetupDirectory,
   createFirstSetupBackupWorkspace,
-  firstSetupAnchorFor,
   resolveFirstSetupBackupWorkspace,
   type BackupRepairTarget,
 } from "@waitron/provisioning";
@@ -32,7 +32,11 @@ export function firstSetupBackupRecoveryFor(
 ) {
   roots = { venueDir: roots.venueDir, stateDir: roots.stateDir };
   const selectedEnvironment = deploymentEnvironmentFor(environment.WAITRON_ENV) ?? "preproduction";
-  const workspace = async () => createFirstSetupBackupWorkspace(await firstSetupAnchorFor(roots));
+  const workspace = async () =>
+    createFirstSetupBackupWorkspace({
+      venueDir: await canonicalFirstSetupDirectory(roots.venueDir),
+      stateDir: await canonicalFirstSetupDirectory(roots.stateDir),
+    });
   return createFirstSetupBackupRecovery({
     ...roots,
     host,
@@ -85,15 +89,7 @@ export async function resolveFirstSetupBackupEntry(roots: FirstSetupRoots) {
         present = true;
     }
   }
-  if (!present) {
-    try {
-      const anchor = await firstSetupAnchorFor(roots);
-      if (!isDeepStrictEqual(anchor, roots)) return resolveFirstSetupBackupEntry(anchor);
-    } catch {
-      // The ordinary entry path retains responsibility for invalid V1 metadata.
-    }
-    return { kind: "absent" as const };
-  }
+  if (!present) return { kind: "absent" as const };
   let selected: Awaited<ReturnType<typeof resolveFirstSetupBackupWorkspace>>;
   try {
     selected = await resolveFirstSetupBackupWorkspace(roots);

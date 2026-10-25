@@ -16,9 +16,7 @@ import {
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
   assertNoStartAgainDeletion,
-  firstSetupAnchorFor,
   canonicalFirstSetupDirectory,
-  resolveFirstSetupWorkspace,
   readDurableHostJson,
   writeDurableHostJson,
   type FirstSetupHold,
@@ -168,9 +166,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
     let cloud = clouds.get(id);
     if (cloud === undefined) {
-      const anchor = await firstSetupAnchorFor(options);
       const stateDir = join(
-        anchor.stateDir,
+        await canonicalFirstSetupDirectory(options.stateDir),
         "first-setup-resolutions",
         "backup-recovery",
         id,
@@ -386,8 +383,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       });
     }
     if (history.databases.length > 0 && Object.keys(documents).length === 0) return refuse();
-    const anchor = await firstSetupAnchorFor(options);
-    const source = await resolveFirstSetupWorkspace(options);
+    const anchor = {
+      stateDir: await canonicalFirstSetupDirectory(options.stateDir),
+      venueDir: await canonicalFirstSetupDirectory(options.venueDir),
+    };
     const base = join(
       anchor.stateDir,
       "first-setup-resolutions",
@@ -399,10 +398,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       target: {
         recoveryId: entry.session.recoveryId,
         anchor,
-        source: {
-          stateDir: await canonicalFirstSetupDirectory(source.stateDir),
-          venueDir: await canonicalFirstSetupDirectory(source.venueDir),
-        },
+        source: anchor,
         target: { stateDir: join(base, "state"), venueDir: join(base, "venue") },
         generation: 1,
       },
