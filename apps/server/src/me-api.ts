@@ -106,7 +106,8 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * Staff self-service routes. Every route acts as the person its management session names, never
  * one the request body names. Deliberately role-blind — never `authorizeManager`: a `staff` person
  * holds none of the permissions the management routes ask for, so that gate would refuse every
- * staff member.
+ * staff member. The personal-data mount this calls also carries the admin's download of another
+ * person's data, which does call `authorizeManager`.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing;
