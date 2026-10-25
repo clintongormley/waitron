@@ -6,17 +6,12 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { civilDateOf } from "@waitron/reporting";
+import { addDays } from "@waitron/venue-service";
 import { timeEntries } from "@waitron/workforce";
 import { renderAttendanceCsv } from "./attendance-export-csv.js";
 import { renderAttendancePdf } from "./attendance-export-pdf.js";
 
 export const TIME_RECORD_FILES = ["time-record.pdf", "time-record.csv"] as const;
-
-function dayAfter(date: string): string {
-  const next = new Date(`${date}T00:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  return next.toISOString().slice(0, 10);
-}
 
 /** The person's working-time record at this node's location, through the same export seat and the
  * same call the own-export route makes. Empty unless `workforce` (whose tables the exporter reads)
@@ -44,7 +39,7 @@ export function timeRecordPersonalData(modules: readonly WaitronModule[]): Perso
       const format = await exporter.prepare(tx, {
         locationId,
         personId: subject.personId,
-        period: { start: days.first, end: dayAfter(days.last > today ? days.last : today) },
+        period: { start: days.first, end: addDays(days.last > today ? days.last : today, 1) },
         audience: "standard",
         locale: subject.language,
       });
