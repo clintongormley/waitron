@@ -2916,7 +2916,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   cases at 130% hold the counter, the floor, a kitchen queue, the dashboard's shell and the Look
   card. The Look card's preview hyphenates its sample name the same way. Names in a language
   Chromium does not hyphenate, English among them, still break inside a long word with no hyphen.
-  Next: 9, 11, 12 and 14.
+  Slice 9a landed 2026-10-25 (#2050): the logo of the theme in use prints on receipts and A4
+  invoices of every department with no receipt logo of its own and of a sale with no department, a
+  department's own logo still first; a department whose receipt settings cannot be trusted prints
+  no logo; the till's ticket view and a department's Receipts preview follow the same rule.
+  Next: 9b, 11, 12 and 14.
 
 - **The theme delete dialog does not say the tills' text changes size (A841 slice 10a's review,
   #2045).** Deleting the theme in use puts Waitron's theme, at 100%, on every screen; the switch
