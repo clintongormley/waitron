@@ -4,10 +4,14 @@ import { applyTokens } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
+  distance,
   draftServer,
   mountWidget,
+  oneLine,
   pageAt,
+  paintedAt,
   resetPage,
+  rgb,
   servedMenus,
   toggleFloorView,
 } from "./widgets/test-helpers.js";
@@ -2037,28 +2041,6 @@ describe("a handheld's zones", () => {
       await floor(el).updateComplete;
     }
 
-    const rgb = (colour: string) => colour.match(/\d+/g)!.slice(0, 3).map(Number);
-    const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
-    /** The colour painted at page point (x, y), read from a real screenshot of `within`. */
-    async function paintedAt(within: HTMLElement, x: number, y: number): Promise<number[]> {
-      const shot: unknown = await page.screenshot({ element: within, base64: true, save: false });
-      const image = new Image();
-      image.src = `data:image/png;base64,${shot as string}`;
-      await image.decode();
-      const canvas = document.createElement("canvas");
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const context = canvas.getContext("2d")!;
-      context.drawImage(image, 0, 0);
-      const box = within.getBoundingClientRect();
-      const k = image.width / box.width;
-      return [
-        ...context
-          .getImageData(Math.round((x - box.left) * k), Math.round((y - box.top) * k), 1, 1)
-          .data.slice(0, 3),
-      ];
-    }
-
     it.each(handhelds)(
       "a handheld's Floor draws the Ready bar for its chosen zones only (%s)",
       async (formFactor) => {
@@ -2224,16 +2206,6 @@ describe("a handheld's zones", () => {
       await onReadyFloor(el);
       await el.updateComplete;
       return toast();
-    }
-
-    /** `calc(var(--wt-tap-min) + 2 * var(--wt-space-3))` in px, the toast's offset on a till. */
-    function oneLine(): number {
-      const probe = document.createElement("div");
-      probe.style.height = "calc(var(--wt-tap-min) + 2 * var(--wt-space-3))";
-      document.body.append(probe);
-      const line = probe.getBoundingClientRect().height;
-      probe.remove();
-      return line;
     }
 
     it.each([

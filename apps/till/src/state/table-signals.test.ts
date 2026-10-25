@@ -16,7 +16,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     guestCount: 2,
     state: "open",
     name: null,
-    displayName: "Mesa 2",
+    displayName: "Table 2",
     mainBillId: "wo-2",
     outstanding: "20.00",
     billCount: 1,
@@ -46,7 +46,7 @@ function today(over: Partial<TableToday> = {}): TableToday {
 function table(over: Partial<TableState> = {}): TableState {
   return {
     id: "t2",
-    label: "Mesa 2",
+    label: "Table 2",
     zoneId: "z1",
     state: "open-tab",
     condition: "held",
@@ -82,54 +82,54 @@ describe("readyTables", () => {
       table({ signals: [ready(["bar", "Bar", 3])] }),
       table({
         id: "t8",
-        label: "Mesa 8",
-        party: party({ id: "v8", displayName: "Mesa 8", tableIds: ["t8"] }),
+        label: "Table 8",
+        party: party({ id: "v8", displayName: "Table 8", tableIds: ["t8"] }),
         signals: [ready(["bar", "Bar", 1], ["kitchen", "Kitchen", 2])],
       }),
-      table({ id: "t3", label: "Mesa 3", party: null, state: "free", signals: [] }),
+      table({ id: "t3", label: "Table 3", party: null, state: "free", signals: [] }),
     ];
     expect(readyTables(tables, shown)).toEqual([
-      { partyId: "v2", tableId: "t2", name: "Mesa 2", count: 3 },
-      { partyId: "v8", tableId: "t8", name: "Mesa 8", count: 3 },
+      { partyId: "v2", tableId: "t2", name: "Table 2", count: 3 },
+      { partyId: "v8", tableId: "t8", name: "Table 8", count: 3 },
     ]);
   });
 
   it("names a party at joined tables by today's join name, once", () => {
-    const joined = party({ id: "v5", displayName: "Mesa 5+6", tableIds: ["t5", "t6"] });
+    const joined = party({ id: "v5", displayName: "Table 5+6", tableIds: ["t5", "t6"] });
     const signals = [ready(["kitchen", "Kitchen", 2])];
     const tables = [
       table({
         id: "t5",
-        label: "Mesa 5",
+        label: "Table 5",
         party: joined,
         signals,
-        today: today({ joinName: "Mesa 5+6" }),
+        today: today({ joinName: "Table 5+6" }),
       }),
       table({
         id: "t6",
-        label: "Mesa 6",
+        label: "Table 6",
         party: joined,
         signals,
-        today: today({ joinName: "Mesa 5+6" }),
+        today: today({ joinName: "Table 5+6" }),
       }),
     ];
     expect(readyTables(tables, shown)).toEqual([
-      { partyId: "v5", tableId: "t5", name: "Mesa 5+6", count: 2 },
+      { partyId: "v5", tableId: "t5", name: "Table 5+6", count: 2 },
     ]);
   });
 
   it("names a party at two separate tables by both, and by the shown one only when a zone is hidden", () => {
-    const apart = party({ id: "v5", displayName: "Mesa 5", tableIds: ["t5", "t6"] });
+    const apart = party({ id: "v5", displayName: "Table 5", tableIds: ["t5", "t6"] });
     const signals = [ready(["kitchen", "Kitchen", 1])];
     const tables = [
-      table({ id: "t5", label: "Mesa 5", zoneId: "z1", party: apart, signals }),
-      table({ id: "t6", label: "Mesa 6", zoneId: "z2", party: apart, signals }),
+      table({ id: "t5", label: "Table 5", zoneId: "z1", party: apart, signals }),
+      table({ id: "t6", label: "Table 6", zoneId: "z2", party: apart, signals }),
     ];
     expect(readyTables(tables, shown)).toEqual([
-      { partyId: "v5", tableId: "t5", name: "Mesa 5+Mesa 6", count: 1 },
+      { partyId: "v5", tableId: "t5", name: "Table 5+Table 6", count: 1 },
     ]);
     expect(readyTables(tables, new Set(["z2"]))).toEqual([
-      { partyId: "v5", tableId: "t6", name: "Mesa 6", count: 1 },
+      { partyId: "v5", tableId: "t6", name: "Table 6", count: 1 },
     ]);
   });
 
@@ -138,9 +138,9 @@ describe("readyTables", () => {
       table({ zoneId: "z3", signals: [ready(["bar", "Bar", 3])] }),
       table({
         id: "t9",
-        label: "Mesa 9",
+        label: "Table 9",
         zoneId: null,
-        party: party({ id: "v9", displayName: "Mesa 9", tableIds: ["t9"] }),
+        party: party({ id: "v9", displayName: "Table 9", tableIds: ["t9"] }),
         signals: [ready(["bar", "Bar", 1])],
       }),
     ];

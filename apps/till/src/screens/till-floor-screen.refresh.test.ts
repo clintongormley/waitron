@@ -69,7 +69,7 @@ function party(): TableParty {
     guestCount: 2,
     state: "open",
     name: null,
-    displayName: "Mesa 2",
+    displayName: "Table 2",
     mainBillId: "wo-2",
     outstanding: "20.00",
     billCount: 1,
@@ -79,11 +79,11 @@ function party(): TableParty {
   };
 }
 
-/** Mesa 2, seated in the list-view zone, with `ready` dishes waiting at the bar (0: none). */
-function mesa2(ready: number): TableState {
+/** Table 2, seated in the list-view zone, with `ready` dishes waiting at the bar (0: none). */
+function table2(ready: number): TableState {
   return table({
     id: "t2",
-    label: "Mesa 2",
+    label: "Table 2",
     state: "open-tab",
     condition: "held",
     hasOpenTab: true,
@@ -195,7 +195,7 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(details).toEqual([{ poll: true }]);
   });
 
-  it("does not ask while the list shows", async () => {
+  it("a till does not ask while the list shows", async () => {
     const el = await mount();
     const seen = countRefreshes(el);
 
@@ -235,19 +235,19 @@ describe("till-floor-screen's guest count and re-read", () => {
     }
 
     async function listHandheld(): Promise<TillFloorScreen> {
-      const el = await mount({ handheld: true, tables: [table(), mesa2(0)] });
+      const el = await mount({ handheld: true, tables: [table(), table2(0)] });
       expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
       return el;
     }
 
     it("the bar appears once a re-read brings food ready", async () => {
       const el = await listHandheld();
-      answerRefreshes(el, [[table(), mesa2(3)]]);
+      answerRefreshes(el, [[table(), table2(3)]]);
       expect(readyBar(el)).toBeNull();
 
       vi.advanceTimersByTime(15_000);
       await el.updateComplete;
-      expect(entries(el)).toEqual(["Mesa 2 · 3"]);
+      expect(entries(el)).toEqual(["Table 2 · 3"]);
     });
 
     it("the bar and its space go once a re-read has nothing ready", async () => {
@@ -255,8 +255,8 @@ describe("till-floor-screen's guest count and re-read", () => {
       const before = lastCardBottom(el);
       const height = el.getBoundingClientRect().height;
       answerRefreshes(el, [
-        [table(), mesa2(3)],
-        [table(), mesa2(0)],
+        [table(), table2(3)],
+        [table(), table2(0)],
       ]);
       vi.advanceTimersByTime(15_000);
       await el.updateComplete;

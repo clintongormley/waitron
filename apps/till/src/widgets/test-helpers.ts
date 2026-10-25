@@ -713,3 +713,37 @@ export async function toggleFloorView(
   toggle.click();
   await floor.updateComplete;
 }
+
+export const rgb = (colour: string) => colour.match(/\d+/g)!.slice(0, 3).map(Number);
+export const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
+
+/** The colour painted at page point (x, y), read from a real screenshot of `within`. */
+export async function paintedAt(within: HTMLElement, x: number, y: number): Promise<number[]> {
+  // With `save: false` the screenshot comes back as the base64 string itself.
+  const shot: unknown = await page.screenshot({ element: within, base64: true, save: false });
+  const image = new Image();
+  image.src = `data:image/png;base64,${shot as string}`;
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const box = within.getBoundingClientRect();
+  const k = image.width / box.width;
+  return [
+    ...context
+      .getImageData(Math.round((x - box.left) * k), Math.round((y - box.top) * k), 1, 1)
+      .data.slice(0, 3),
+  ];
+}
+
+/** `calc(var(--wt-tap-min) + 2 * var(--wt-space-3))` in px, read from the tokens in force. */
+export function oneLine(inside: HTMLElement = document.body): number {
+  const probe = document.createElement("div");
+  probe.style.height = "calc(var(--wt-tap-min) + 2 * var(--wt-space-3))";
+  inside.append(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return height;
+}
