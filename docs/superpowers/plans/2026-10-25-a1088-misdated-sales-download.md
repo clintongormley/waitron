@@ -121,7 +121,7 @@ is parked for the owner.
   `-instant.getTimezoneOffset()` (`apps/server/src/till-backend.ts:14-25`), not
   `locations.time_zone`: measured in `docs/backlog/fiscal.md:11-24` (at `2026-10-14T23:30:00Z`,
   `2026-10-14` under `TZ=UTC`, `2026-10-15` under `TZ=Europe/Madrid`; the deployment sets no `TZ`).
-  The owner chose the venue's zone for new records (A696, `docs/backlog/fiscal.md:33-36`); not
+  The owner chose the venue's zone for new records (A696, `docs/backlog/fiscal.md:37-40`); not
   built, and old records stay as they are. **A cancellation stores the cancelled invoice's date**
   (`backend.ts:405-414`; `docs/backlog/fiscal.md:31`).
 - **The Box status table and the emails write each time at the record's stored offset**
@@ -150,7 +150,7 @@ is parked for the owner.
   closing that cannot tell starts earlier (`clock-stop-incidents.ts:100-120`).
 - **Error codes**: `alert.not_found` is declared in `apps/server/src/errors.ts:1292-1294`;
   `box-health-api.ts`'s `STATUS` (`:41-50`) does not map it, an unmapped `AppError` answers 400
-  (`packages/server-kit/src/error-boundary.ts:42`), and that file does not import `./errors.js`.
+  (`packages/server-kit/src/error-boundary.ts:42`, `status[cause.code] ?? 400`), and that file does not import `./errors.js`.
   The server's registry has no barrel; every file that throws one of its codes imports it directly
   (`errors.ts:20-21`), and `scripts/errors-reachable.test.ts` walks packages' `src/index.ts` only
   (its header, `:6-17`), so it does not see `apps/server`.
@@ -161,7 +161,7 @@ Each is the DEFAULT this build makes; the owner may override any of them, and th
 wait.
 
 1. **The history loads on demand.** The 15-second box read (`getBoxHealth`, polled,
-   `apps/dashboard/src/api/live-queries.ts:527-529`) keeps `misdatedOpen` (open alerts, oldest first,
+   `apps/dashboard/src/api/live-queries.ts:527-529`, an empty dependency list, so the timer refreshes it) keeps `misdatedOpen` (open alerts, oldest first,
    each gaining `incidentId`) and gains only `misdatedHandledCount`, one index-served count. The
    handled episodes and their lists come from a new `GET /api/box/clock-misdated/handled`, read
    only while the manager has the **Handled lists** fold open, and again on an `incidents` change
@@ -183,7 +183,7 @@ wait.
    offers **Add note** once; a second note on the same alert is refused **409 `alert.note_exists`**.
    (c) A Mark handled carrying a note on an alert that is already handled is refused **409
    `alert.already_handled`**, never a silent success; without a note it still answers 204, as
-   today (`client.ts:4240`). (d) Add note on an alert not yet handled is refused **409
+   today (`client.ts:4241`). (d) Add note on an alert not yet handled is refused **409
    `alert.not_handled`**. The three codes are declared in `apps/server/src/errors.ts` beside
    `alert.not_found` and worded in English and Spanish in `apps/dashboard/src/i18n/codes.ts`. The
    bell's and the Alerts screen's Mark handled stay one click, and the Alerts screen's Handled tab
@@ -602,7 +602,7 @@ imported from `@waitron/fiscal`, `packages/fiscal/src/index.ts:13`) and `confirm
 "Desconocida". Amount: decision 10 through the local `amountCell`, "Cancellation" / "Anulación"
 (through `csvCell`) for a cancellation. Different day (decision 9): compare `issueDate` with the
 bound's calendar date at the record's own offset (the bound shifted by `offsetMinutes`, then its
-UTC date, as `receipt-dates.ts:28-33` shifts) — "Yes"/"Sí", "Cannot tell"/"No se sabe", "Not
+UTC date, as `receipt-dates.ts:27-32` shifts) — "Yes"/"Sí", "Cannot tell"/"No se sabe", "Not
 applicable"/"No aplicable". `{count}` is `records.length`.
 
 1. Failing cases, the words read from `MISDATED_SALES_WORDS` in each language, never Spanish
@@ -771,7 +771,7 @@ the coordinator; Cancel and Escape through `requestClose`. On success: `commit`,
 and a plain `saved` event for the screen. A refusal `management.request_invalid` with `field:
 "note"` puts "Write a note of 500 characters or fewer." (or "Write a note." when empty) under the
 field and `t("form.fix_fields")` (`strings.ts:773`) as the bottom message, and moves focus to the
-field with `focusFirstInvalid` (design-system.md → Forms, `:2486-2491`), until the note changes;
+field with `focusFirstInvalid` (design-system.md → Forms, `:2470`, `:2486-2491`), until the note changes;
 any other refusal (`alert.already_handled`, `alert.note_exists`, `alert.not_handled`,
 `alert.not_found`) shows `codeMessage(code)` as the bottom message; no refusal disables the action.
 
