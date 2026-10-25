@@ -662,6 +662,41 @@ A987's design does not change the route
     `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10).
     [Detail](../backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
 
+## Transactions opened outside the write queue at the same time get a wrong error message.
+
+**Transactions opened outside the write queue at the same time get a wrong error message.** When
+two callers open a `db.transaction` outside the queue concurrently (unsupported: they share one
+writer connection), one caller's commit ends the shared transaction, and the other is told "the
+engine ended the transaction this savepoint was in", though the engine did not. Later writes are
+served normally. Found by #1936's review; no product code is known to do this. Next step: decide
+whether the store should refuse a second outside transaction outright, or only word the error
+for this case (`packages/store/src/node-sqlite-adapter.ts`).
+
+## Recovery actions the 2026-09-08 node-containers design handed on
+
+**Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
+a module that fails at start, undoing the last module change, and a migration that applied only in
+part. Not designed. Only undoing the last module change waits for modules that can be installed on
+a running box; a migration that applies only in part can happen on any upgrade today. A798 covers a
+box that is still trading.
+
+## The Backups screen's bucket fields copy the bucket copy panel's.
+
+**The Backups screen's bucket fields copy the bucket copy panel's.** The field table, the
+required checks and the reveal button exist in both `apps/dashboard/src/screens/backup-screen.ts`
+(`CUSTOM_FIELDS`) and `stream-settings-panel.ts` (`FIELDS`), and `normalisePrefix` in
+`backup-destination-model.ts` copies the stream package's (`packages/stream/src/names.ts`). Share
+them. Left open by A538-6.
+
+## The refund guide does not say that recording a separate-terminal refund is refused during a full-disk stop.
+
+**The refund guide does not say that recording a separate-terminal refund is refused during a
+full-disk stop.** `apps/server/src/guide/en/table-service.md` `{#separate-terminal}` (and its
+Spanish twin, both new from A803) tells staff to refund on the separate terminal and then record it
+in Waitron; while the stop holds, that recording is refused after the money has gone back. One
+sentence in each language, as the kitchen-service guide already has. Raised by #1950's rebase
+review, 2026-10-22.
+
 ## Decisions and deliberate limits
 
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
