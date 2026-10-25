@@ -10,6 +10,7 @@ import {
   rmdir,
   writeFile,
 } from "node:fs/promises";
+import * as fsPromises from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +31,7 @@ import {
   readStartAgainNote,
   startAgainMarkerFor,
   writeStartAgainMarker,
+  writeStartAgainConfirmation,
   firstSetupFrozenDigest,
   assertOtherFirstSetupAllowed,
   createFirstSetupBackupWorkspace,
@@ -54,9 +56,11 @@ import {
 } from "./setup-first-fiscal-api.js";
 import { createLogger } from "./logger.js";
 import { writeValidated } from "./restore.js";
-import { runStagedRestore } from "./restore-request.js";
+import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { runRestore } from "./restore-command.js";
-import { runStagedReset } from "./reset-request.js";
+import { runStagedReset, stageResetRequest } from "./reset-request.js";
+import { createSetupOperationStore } from "./setup-operation.js";
+import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { mountSetup } from "./setup-api.js";
 import { createRecoveryEntryRunner } from "./recovery-entry.js";
 import { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
@@ -1336,3 +1340,202 @@ it.each([
     expect(await folderTrees(pending.f)).toEqual(before);
   },
 );
+
+const NOTE = "first-setup-start-again.json";
+const KEPT_ATTEMPT = "11111111-1111-4111-8111-111111111111";
+
+/** A note far above any name these cases choose, and one earlier confirmation record. */
+async function seedKept(stateDir: string) {
+  await raiseStartAgainNote(stateDir, {
+    floorMs: Date.parse("2026-12-01T00:00:00Z"),
+    lastName: "LATER",
+    module: "fiscal-verifactu",
+  });
+  const record = await writeStartAgainConfirmation(stateDir, {
+    at: "2026-10-01T00:00:00.000Z",
+    attemptId: KEPT_ATTEMPT,
+    database: "missing",
+    administrator: { displayName: "Elena", email: "elena@example.test" },
+    ownerGeneration: 1,
+    shown: { reached: "named", lastName: "0CNQT" },
+  });
+  const paths = [join(stateDir, NOTE), join(stateDir, CONFIRMATIONS, record)];
+  const bytes = () => Promise.all(paths.map((path) => readFile(path)));
+  return { before: await bytes(), bytes };
+}
+
+async function emptyFolders() {
+  const root = await mkdtemp(join(tmpdir(), "start-again-kept-"));
+  roots.push(root);
+  const folders = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
+  await mkdir(folders.stateDir);
+  await mkdir(folders.venueDir);
+  return folders;
+}
+
+it("lifetime: Start again with the database present leaves the note and the confirmation record unchanged", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  const kept = await seedKept(f.stateDir);
+  await actions.startAgainFirstSetup(startRequest);
+  await expectAttemptGone(f);
+  expect(await kept.bytes()).toEqual(kept.before);
+});
+
+it("lifetime: a confirmed Start again on a missing database whose attempt chose no name does not rewrite the note", async () => {
+  const { folders, host } = await claimedWithoutName();
+  const kept = await seedKept(folders.stateDir);
+  await rm(join(folders.venueDir, "venue.db"));
+  const inspected = await host.resolution.inspectFirstSetupResolution();
+  const recovered = await host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const current = await host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const owner = {
+    attemptId: recovered.state.attemptId,
+    revision: recovered.state.revision,
+    ownerGeneration: recovered.state.ownerGeneration,
+    capability: recovered.capability,
+  };
+  const actions = createFirstSetupResolutionActions({ ...folders, host });
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown).toEqual({ reached: "claimed", lastName: null });
+  vi.mocked(raiseStartAgainNote).mockClear();
+  await actions.startAgainFirstSetup({
+    ...ids,
+    owner,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  expect(vi.mocked(raiseStartAgainNote)).not.toHaveBeenCalled();
+  expect(await readdir(join(folders.stateDir, CONFIRMATIONS))).toHaveLength(2);
+  expect(await kept.bytes()).toEqual(kept.before);
+});
+
+it("lifetime: a start that finishes an interrupted deletion leaves the note and the confirmation record unchanged", async () => {
+  const { f } = await pendingDeletion();
+  const kept = await seedKept(f.stateDir);
+  await finishStartAgainDeletion(f);
+  await expectAttemptGone(f);
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  expect(await kept.bytes()).toEqual(kept.before);
+});
+
+it.each([
+  ["placed", async () => {}, true],
+  [
+    "discarded",
+    async () => {
+      throw new Error("refused placement");
+    },
+    false,
+  ],
+] as const)(
+  "lifetime: a staged restore %s leaves the note and the confirmation record unchanged",
+  async (_name, placement, placed) => {
+    const folders = await emptyFolders();
+    const kept = await seedKept(folders.stateDir);
+    await stageRestoreRequest(folders.stateDir, {
+      artifact: new Uint8Array([1, 2, 3]),
+      recoveryKey: "key",
+      environment: "production",
+    });
+    const restore = vi.fn(placement);
+    const run = runStagedRestore(
+      { ...folders, migrationsRoot: null, log: () => {} },
+      restore,
+      restore,
+    );
+    if (placed) await expect(run).resolves.toBe(true);
+    else await expect(run).rejects.toThrow("refused placement");
+    expect(restore).toHaveBeenCalledOnce();
+    await expect(access(join(folders.stateDir, "restore-request.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await kept.bytes()).toEqual(kept.before);
+  },
+);
+
+it("lifetime: the in-app reset leaves the note and the confirmation record unchanged", async () => {
+  const folders = await emptyFolders();
+  const kept = await seedKept(folders.stateDir);
+  const operations = createSetupOperationStore(folders.stateDir);
+  await operations
+    .run("adopt", "a-request", async (operation) => {
+      await operation.advance("venue_committed", { resetProof: {} });
+      throw new Error("stopped partway");
+    })
+    .catch(() => {});
+  await stageResetRequest(folders.stateDir, (await operations.read())!.id);
+  expect(await runStagedReset({ ...folders, log: () => {} })).toBe(true);
+  expect(await operations.read()).toBeNull();
+  expect(await kept.bytes()).toEqual(kept.before);
+});
+
+it("lifetime: a restart of the repair listener leaves the note and the confirmation record unchanged", async () => {
+  const { f } = await abandonedAttempt();
+  await rm(join(f.venueDir, "venue.db"));
+  const kept = await seedKept(f.stateDir);
+  const served: { app: Hono; onRepaired?: () => Promise<void> }[] = [];
+  const closes: number[] = [];
+  const server = await startServerOrFirstSetupResolution(
+    { WAITRON_STATE_DIR: f.stateDir, WAITRON_VENUE_DIR: f.venueDir },
+    {},
+    {
+      startServer: async () => {
+        throw new Error("ordinary boot reached");
+      },
+      serveResolution: async (app, options) => {
+        served.push({ app, onRepaired: options.onRepaired });
+        return { close: async () => void closes.push(1) };
+      },
+    },
+  );
+  try {
+    await served[0]!.onRepaired!();
+  } finally {
+    await server.close();
+  }
+  expect(served).toHaveLength(2);
+  expect(closes).toHaveLength(2);
+  for (const { app } of served)
+    expect((await app.request("/setup-api/first-setup/resolution")).status).toBe(200);
+  expect(await kept.bytes()).toEqual(kept.before);
+});
+
+it("lifetime: a later name raises the note, and the old note is whole until the rename", async () => {
+  const { f } = await abandonedAttempt();
+  const kept = await seedKept(f.stateDir);
+  const [oldNote] = kept.before;
+  const seenAtRename: (Buffer | null)[] = [];
+  const io = {
+    ...fsPromises,
+    rename: async (from: string, to: string) => {
+      seenAtRename.push(await readFile(join(f.stateDir, NOTE)).catch(() => null));
+      await fsPromises.rename(from, to);
+    },
+  };
+  const later = Date.parse("2026-12-02T00:00:00Z");
+  await raiseStartAgainNote(
+    f.stateDir,
+    { floorMs: later, lastName: "LATEST", module: "fiscal-verifactu" },
+    io,
+  );
+  expect(seenAtRename).toEqual([oldNote]);
+  const [note, confirmation] = await kept.bytes();
+  expect(note).not.toEqual(oldNote);
+  expect(confirmation).toEqual(kept.before[1]);
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs: later,
+    lastName: "LATEST",
+    module: "fiscal-verifactu",
+  });
+});
