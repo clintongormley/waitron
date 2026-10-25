@@ -44,20 +44,6 @@ export async function readTimeRecord(
     record.sessions = record.sessions.filter((s) => s.personId === personId);
     record.entries = record.entries.filter((e) => e.entry.personId === personId);
     record.closedPeriodImpacts = record.closedPeriodImpacts.filter((i) => i.personId === personId);
-    record.closures = record.closures.map((closure) => {
-      const snapshot = closure.snapshot;
-      const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
-      const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
-      return {
-        ...closure,
-        snapshot: {
-          sessions: snapshot.sessions.filter((s) => s.personId === personId),
-          entries: ownEntries,
-          summaries: snapshot.summaries.filter((s) => s.personId === personId),
-          markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
-        },
-      };
-    });
   }
   return record;
 }

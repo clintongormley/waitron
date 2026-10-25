@@ -11,7 +11,11 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { computeClosureHash } from "./pay-period-chain.js";
-import type { PayPeriodClosure } from "./record-types.js";
+import type { PayPeriodClosure, TimeRecord } from "./record-types.js";
+import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
+import { readClosures } from "./pay-period-reads.js";
+import { projectTimeRecord } from "./record-projection.js";
+import { recordInPeriod } from "./record-period.js";
 const backend = new WorkforceBackend(),
   origin = jobOrigin("dashboard");
 const suite = useVenueDb({
@@ -316,4 +320,124 @@ it("lets an approved missing end close the prior live shift and permits the next
     run((tx) => backend.clockIn(tx, event("2026-01-06T10:00:00Z"))),
   ).rejects.toMatchObject({ code: "attendance.already_open" });
   expect((await query()).sessions[0]!.workedMinutes).toBe(480);
+});
+
+async function twoPeopleClosedJanuary() {
+  for (const [subject, at, clock] of [
+    [personId, "2026-01-05T09:00:00Z", "in"],
+    [other, "2026-01-05T09:30:00Z", "in"],
+    [personId, "2026-01-05T17:00:00Z", "out"],
+    [other, "2026-01-05T17:30:00Z", "out"],
+    [personId, "2026-01-06T08:00:00Z", "in"],
+    [other, "2026-01-06T08:15:00Z", "in"],
+    [personId, "2026-01-06T16:00:00Z", "out"],
+    [other, "2026-01-06T16:15:00Z", "out"],
+  ] as const)
+    await run((tx) =>
+      clock === "in"
+        ? backend.clockIn(tx, event(at, subject))
+        : backend.clockOut(tx, event(at, subject)),
+    );
+  const outs = await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "out"));
+  const outOf = (subject: string) => outs.filter((e) => e.personId === subject)[0]!.id;
+  const record = await run((tx) => backend.timeRecord(tx, { period: january, locationId }));
+  const row: Omit<PayPeriodClosure, "closureHash"> = {
+    id: "018ee400-0000-7000-8000-000000000002",
+    nodeId,
+    locationId,
+    period: january,
+    clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
+    scheduledCloseAt: "2026-02-01T06:00:00.000Z",
+    closedAt: "2026-02-01T06:00:00.000Z",
+    sequenceNo: 1,
+    prevClosureHash: null,
+    snapshot: {
+      sessions: record.sessions,
+      entries: record.entries,
+      summaries: [
+        { personId: other, summary: null },
+        { personId, summary: null },
+      ],
+      markedAutomaticEntryIds: [outOf(other), outOf(personId)],
+    },
+  };
+  await suite.db.insert(payPeriodClosures).values({
+    ...row,
+    periodStart: january.start,
+    periodEnd: january.end,
+    closureHash: computeClosureHash(row),
+  });
+  await correct(outOf(personId), "2026-01-05T18:00:00Z");
+  const request = await run((tx) =>
+    backend.requestCorrection(tx, {
+      nodeId,
+      correctsEntryId: outOf(other),
+      at: "2026-01-05T18:30:00Z",
+      offsetMinutes: 0,
+      reason: "Correct departure",
+      actorPersonId: other,
+      origin,
+    }),
+  );
+  await run((tx) =>
+    backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: manager }),
+  );
+  return { closureId: row.id, ownMarked: outOf(personId) };
+}
+it("gives one person exactly the full closure read cut to her in JavaScript", async () => {
+  const { closureId, ownMarked } = await twoPeopleClosedJanuary();
+  const { narrowed, reference } = await run(async (tx) => {
+    const narrowed = await readTimeRecord(tx, { period: january, personId });
+    const entries = await readRecordedEntries(tx, { personId });
+    const closures = await readClosures(tx, { period: january });
+    const record: TimeRecord = recordInPeriod(projectTimeRecord(entries, closures), january);
+    record.sessions = record.sessions.filter((s) => s.personId === personId);
+    record.entries = record.entries.filter((e) => e.entry.personId === personId);
+    record.closedPeriodImpacts = record.closedPeriodImpacts.filter((i) => i.personId === personId);
+    record.closures = record.closures.map((closure) => {
+      const snapshot = closure.snapshot;
+      const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
+      const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
+      return {
+        ...closure,
+        snapshot: {
+          sessions: snapshot.sessions.filter((s) => s.personId === personId),
+          entries: ownEntries,
+          summaries: snapshot.summaries.filter((s) => s.personId === personId),
+          markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
+        },
+      };
+    });
+    return { narrowed, reference: record };
+  });
+  expect(reference.closures.map((c) => c.closureId)).toEqual([closureId]);
+  expect(reference.closures[0]!.snapshot.sessions).toHaveLength(2);
+  expect(reference.closures[0]!.snapshot.entries).toHaveLength(4);
+  expect(reference.closures[0]!.snapshot.markedAutomaticEntryIds).toEqual([ownMarked]);
+  expect(reference.closedPeriodImpacts).toHaveLength(1);
+  expect(reference.entries.some((e) => e.closedPeriodIds.includes(closureId))).toBe(true);
+  expect(narrowed).toEqual(reference);
+});
+it("reads a closure's snapshot cut to the one person asked for", async () => {
+  const { closureId } = await twoPeopleClosedJanuary();
+  const [full, own] = await run(async (tx) => [
+    await readClosures(tx, { locationId, period: january }),
+    await readClosures(tx, { locationId, period: january, personId }),
+  ]);
+  const snapshot = full[0]!.snapshot;
+  const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
+  const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
+  expect(own).toEqual([
+    {
+      ...full[0]!,
+      id: closureId,
+      snapshot: {
+        sessions: snapshot.sessions.filter((s) => s.personId === personId),
+        entries: ownEntries,
+        summaries: snapshot.summaries.filter((s) => s.personId === personId),
+        markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
+      },
+    },
+  ]);
+  expect(snapshot.sessions.map((s) => s.personId)).toContain(other);
 });
