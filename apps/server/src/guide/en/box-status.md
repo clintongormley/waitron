@@ -103,7 +103,7 @@ bigger disk. The sizes under **Disk space** show what is filling the disk.
 When the bell says a backup could not be prepared because there is not enough space, open
 **Box status** and check **Disk space**. Use **Free** if it is available, or leave without
 pressing it to skip cleanup. Freeing space does not start a backup. If the cleanup is not enough,
-Waitron cannot remove other files for you; keep your database, recovery keys and saved backups.
+**Free** cannot remove other files for you; keep your database, recovery keys and saved backups.
 
 ## When the box is out of space {#out-of-space}
 

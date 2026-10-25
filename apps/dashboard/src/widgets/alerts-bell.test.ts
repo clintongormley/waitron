@@ -446,7 +446,7 @@ describe("backup preparation space guidance", () => {
       expect(message).toContain(fill("box_status.free", { size: "" }).trim());
       if (locale === "en") {
         expect(message).toContain("leftover working files, old logs and crash reports");
-        expect(message).toContain("cannot remove other files");
+        expect(message).toContain("Free cannot remove other files");
         expect(message).toContain("Leave without pressing Free");
         expect(message).not.toContain("Contact support");
       }

@@ -445,8 +445,8 @@ export const ALERT_WORDS: Readonly<
   backup_stop: {
     words: {
       "backup.staging_space_low": {
-        en: "The box does not have enough free disk space to prepare it. On Box status, use Free if available to delete leftover working files, old logs and crash reports. Leave without pressing Free to skip cleanup. If that is not enough, Waitron cannot remove other files for you.",
-        es: "El equipo no tiene espacio libre suficiente en disco para prepararla. En Estado del equipo, pulsa Liberar si está disponible para borrar archivos de trabajo sobrantes, registros antiguos e informes de fallos. Sal sin pulsar Liberar para no hacer la limpieza. Si no basta, Waitron no puede borrar otros archivos por ti.",
+        en: "The box does not have enough free disk space to prepare it. On Box status, use Free if available to delete leftover working files, old logs and crash reports. Leave without pressing Free to skip cleanup. If that is not enough, Free cannot remove other files for you.",
+        es: "El equipo no tiene espacio libre suficiente en disco para prepararla. En Estado del equipo, pulsa Liberar si está disponible para borrar archivos de trabajo sobrantes, registros antiguos e informes de fallos. Sal sin pulsar Liberar para no hacer la limpieza. Si no basta, Liberar no puede borrar otros archivos por ti.",
       },
       "recovery.state_incomplete": {
         en: "Some of the box's own files that every backup must include are missing. Contact support.",

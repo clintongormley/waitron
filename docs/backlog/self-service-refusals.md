@@ -769,7 +769,7 @@ and leaving without cleanup. Free's filesystem cases exercise leftovers, log/cra
 rules, active-backup exclusion and retained data; the dashboard cases exercise an explicit press
 and leaving without one. They do not establish that cleanup frees enough for every backup.
 
-**Still open: space beyond the supported cleanup.** The message states that Waitron cannot remove
+**Still open: space beyond the supported cleanup.** The message states that Free cannot remove
 other files. Box status's existing footer still refers to an installer, and safe in-app guidance
 when no reclaimable files remain needs a separate fix. Do not delete database files, keys or
 saved backups to silence the alert. The historical source inventory above remains unchanged.

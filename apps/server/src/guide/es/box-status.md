@@ -109,7 +109,7 @@ llenando el disco.
 Si la campana avisa de que no se pudo preparar una copia por falta de espacio, abre
 **Estado del equipo** y revisa **Espacio en disco**. Pulsa **Liberar** si está disponible, o sal
 sin pulsarlo para no hacer la limpieza. Liberar espacio no inicia una copia. Si no basta,
-Waitron no puede borrar otros archivos por ti; conserva la base de datos, las claves de
+**Liberar** no puede borrar otros archivos por ti; conserva la base de datos, las claves de
 recuperación y las copias guardadas.
 
 ## Cuando el equipo no tiene espacio {#out-of-space}
