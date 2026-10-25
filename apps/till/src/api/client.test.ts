@@ -19,6 +19,7 @@ import {
   type MyShift,
   type MySwap,
   type KitchenNotice,
+  type LateSend,
   type TabLine,
   type TableState,
   type TillMenuOffer,
@@ -5725,4 +5726,73 @@ it.each([
   const api = new TillApi("", fetchStub);
   await expect(api.getDeviceZones()).rejects.toMatchObject({ code });
   await expect(api.setDeviceZones({ ...deviceZoneSelection })).rejects.toMatchObject({ code });
+});
+
+describe("a late-send confirmation on a request", () => {
+  const menuId = "6f1c2a4e-0b7d-4c8e-9a3f-2d5e7b9c1a04";
+  const confirmations: [string, LateSend | undefined][] = [
+    ["no confirmation", undefined],
+    ["a confirmation", { menuIds: [menuId] }],
+    ["a manager's confirmation", { menuIds: [menuId], override: { personId: "p-9", pin: "4321" } }],
+  ];
+  const lines = [{ menuItemId: "toast", quantity: "1" }];
+  const sends: [string, (api: TillApi, lateSend: LateSend | undefined) => Promise<unknown>][] = [
+    [
+      "recordSale",
+      (api, lateSend) =>
+        api.recordSale(
+          lines,
+          { method: "cash", amount: "3.00" },
+          "wo-1",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          null,
+          lateSend,
+        ),
+    ],
+    [
+      "pay",
+      (api, lateSend) =>
+        api.pay({ expectedEdit: null, id: "wo-1", lines, ...(lateSend && { lateSend }) }),
+    ],
+    [
+      "parkOrder",
+      (api, lateSend) => api.parkOrder({ id: "wo-1", lines, ...(lateSend && { lateSend }) }),
+    ],
+    [
+      "updateWorkingOrder",
+      (api, lateSend) =>
+        api.updateWorkingOrder("wo-1", {
+          lines,
+          revision: 2,
+          expectedEdit: null,
+          ...(lateSend && { lateSend }),
+        }),
+    ],
+    [
+      "submitDraft",
+      (api, lateSend) =>
+        api.submitDraft("v1", "d1", {
+          submissionId: "sub-1",
+          expectedPartyRevision: 4,
+          draftRevision: 2,
+          expectedEdit: { billId: "b1", editorVersion: 1, draftId: "d1", draftRevision: 2 },
+          groups: [{ lineIds: ["dl-1"], release: "fire" }],
+          ...(lateSend && { lateSend }),
+        }),
+    ],
+  ];
+
+  describe.each(sends)("%s", (_name, send) => {
+    it.each(confirmations)("carries %s exactly as given", async (_label, lateSend) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({}));
+      await send(new TillApi("", fetchStub), lateSend);
+      const body = JSON.parse(fetchStub.mock.calls[0]![1].body) as Record<string, unknown>;
+      if (lateSend === undefined) expect(Object.keys(body)).not.toContain("lateSend");
+      else expect(body.lateSend).toEqual(lateSend);
+    });
+  });
 });

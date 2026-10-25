@@ -35,3 +35,61 @@ export function endedPeriodOf(line: OrderLine, index: LateSendIndex): EndedPerio
   );
   return soldNow ? undefined : { menuId: offer.menuId, periodName };
 }
+
+/** What a `menu_period.ended` refusal names: the ended menus, and the late dishes by offer id. */
+export interface LateSendRefusal {
+  menus: EndedPeriod[];
+  menuItemIds: string[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isEndedPeriod(value: unknown): value is EndedPeriod {
+  return (
+    isRecord(value) && typeof value.menuId === "string" && typeof value.periodName === "string"
+  );
+}
+
+/** The params of a `menu_period.ended` refusal, or undefined when it is another error or they are unusable. */
+export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
+  if (!isRecord(error) || error.code !== "menu_period.ended") return undefined;
+  const { menus, menuItemIds } = error;
+  if (!Array.isArray(menus) || !menus.every(isEndedPeriod)) return undefined;
+  if (!Array.isArray(menuItemIds) || !menuItemIds.every((id) => typeof id === "string")) {
+    return undefined;
+  }
+  return {
+    menus: menus.map(({ menuId, periodName }) => ({ menuId, periodName })),
+    menuItemIds: [...menuItemIds],
+  };
+}
+
+/**
+ * The request's new lines the refusal names. A stored or recalled line is left out: the server lists
+ * only new dishes (`priceOrderLines`, `apps/server/src/working-order.ts`), and one can share an
+ * offer id with a fresh late dish.
+ */
+export function refusedLines<T extends OrderLine>(
+  lines: readonly T[],
+  refusal: LateSendRefusal,
+): T[] {
+  const ids = new Set(refusal.menuItemIds);
+  return lines.filter(
+    (line) =>
+      line.workingOrderLineId === undefined &&
+      line.source === undefined &&
+      line.product.menuItemId !== undefined &&
+      ids.has(line.product.menuItemId),
+  );
+}
+
+/** A send refused because confirming it needs a manager's PIN. */
+export function isLateSendManagerRefusal(error: unknown): boolean {
+  return (
+    isRecord(error) &&
+    error.code === "authorization.not_permitted" &&
+    error.permission === "venue_service.manage"
+  );
+}

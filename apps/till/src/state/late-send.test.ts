@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { TillMenuOffer, TillProduct } from "../api/client.js";
-import { endedPeriodOf } from "./late-send.js";
+import {
+  endedPeriodOf,
+  isLateSendManagerRefusal,
+  lateSendRefusalOf,
+  refusedLines,
+} from "./late-send.js";
 import type { OrderLine } from "./working-order.js";
 
 function offer(
@@ -88,5 +93,102 @@ describe("endedPeriodOf", () => {
         offers,
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("lateSendRefusalOf", () => {
+  const menus = [{ menuId: "breakfast", periodName: "Breakfast" }];
+
+  it("reads the ended menus and the late dishes from the server's refusal", () => {
+    const error = {
+      code: "menu_period.ended",
+      status: 409,
+      departmentId: "kitchen",
+      menus,
+      menuItemIds: ["toast-breakfast"],
+      needsManager: false,
+    };
+    expect(lateSendRefusalOf(error)).toEqual({ menus, menuItemIds: ["toast-breakfast"] });
+  });
+
+  it("is undefined for the refusal without its params", () => {
+    expect(lateSendRefusalOf({ code: "menu_period.ended", status: 409 })).toBeUndefined();
+  });
+
+  it.each([
+    ["menus not a list", { menus: "Breakfast", menuItemIds: ["x"] }],
+    ["a menu with no name", { menus: [{ menuId: "breakfast" }], menuItemIds: ["x"] }],
+    ["a menu that is not an object", { menus: [null], menuItemIds: ["x"] }],
+    ["a dish id that is not text", { menus, menuItemIds: [7] }],
+    ["no dish ids", { menus }],
+  ])("is undefined for %s", (_label, params) => {
+    expect(
+      lateSendRefusalOf({ code: "menu_period.ended", status: 409, ...params }),
+    ).toBeUndefined();
+  });
+
+  it("is undefined for another code carrying the same params", () => {
+    expect(
+      lateSendRefusalOf({ code: "product.unavailable", menus, menuItemIds: ["x"] }),
+    ).toBeUndefined();
+  });
+
+  it.each([undefined, null, "menu_period.ended", new Error("menu_period.ended")])(
+    "is undefined for %s",
+    (error) => {
+      expect(lateSendRefusalOf(error)).toBeUndefined();
+    },
+  );
+});
+
+describe("refusedLines", () => {
+  const refusal = {
+    menus: [{ menuId: "breakfast", periodName: "Breakfast" }],
+    menuItemIds: ["egg-breakfast", "toast-breakfast", "absent"],
+  };
+
+  it("keeps the request's order and ignores ids it does not hold", () => {
+    const toastLine = line("toast-breakfast");
+    const beerLine = line("beer-lunch");
+    const eggLine = line("egg-breakfast");
+    expect(refusedLines([toastLine, beerLine, eggLine], refusal)).toEqual([toastLine, eggLine]);
+  });
+
+  it("leaves out a stored line and a recalled line sharing a fresh late dish's offer id", () => {
+    const stored = line("toast-breakfast", { workingOrderLineId: "wol-1" });
+    const recalled = line("toast-breakfast", {
+      source: { kind: "line" } as unknown as OrderLine["source"],
+    });
+    const fresh = line("toast-breakfast");
+    const result = refusedLines([stored, recalled, fresh], refusal);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(fresh);
+  });
+
+  it("matches nothing for a line with no offer id", () => {
+    const noOffer = { product: { id: "p" } as unknown as TillProduct, quantity: "1" };
+    expect(refusedLines([noOffer], { ...refusal, menuItemIds: [""] })).toEqual([]);
+  });
+});
+
+describe("isLateSendManagerRefusal", () => {
+  it("is true for a refusal for want of venue_service.manage", () => {
+    expect(
+      isLateSendManagerRefusal({
+        code: "authorization.not_permitted",
+        status: 403,
+        permission: "venue_service.manage",
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["another permission", { code: "authorization.not_permitted", permission: "cash.drawer" }],
+    ["no permission", { code: "authorization.not_permitted" }],
+    ["another code", { code: "pin.invalid", permission: "venue_service.manage" }],
+    ["no object", undefined],
+    ["null", null],
+  ])("is false for %s", (_label, error) => {
+    expect(isLateSendManagerRefusal(error)).toBe(false);
   });
 });
