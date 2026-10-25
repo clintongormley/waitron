@@ -311,7 +311,7 @@ it("fresh events cannot reuse a retired hour with another allocation ID", async 
   });
 });
 it.each(["later-hour", "other-taxpayer", "other-environment"])(
-  "after Start again the note permits only a later hour, under any taxpayer or environment: %s",
+  "after Start again the note refuses the abandoned hour under another taxpayer or environment, and permits a later hour: %s",
   async (which) => {
     const f = await fixture(
       which === "later-hour" ? 2 : 1,
