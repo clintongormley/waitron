@@ -61,7 +61,7 @@ import "./errors.js";
 // `resetPerTest: false`: the venue is provisioned once, and each case seats its own tables.
 let v: PartyVenue;
 /** A second zone of dining tables. */
-let terrazaZone: string;
+let terraceZone: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -69,7 +69,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    terrazaZone = await inTx(v, async (tx) => {
+    terraceZone = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
         .values({ locationId: v.cfg.locationId, name: "Terraza" })
@@ -298,17 +298,17 @@ describe("move guests", () => {
 
   it("gives the party's open and presented bills a free table's zone when it is in another zone", async () => {
     const [m4] = await tables("Zona", 4);
-    const terraza = await v.table("Zona T1", terrazaZone);
+    const terrace = await v.table("Zona T1", terraceZone);
     const ana = await seat(v, m4);
     await order(v, ana.tabId, "Burger");
     const second = await splitOff(ana.partyId, ana.tabId, [1]);
     await placeByHand(v, second);
 
     const moving = await opts(ana.partyId);
-    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, terraza, moving));
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, terrace, moving));
 
-    expect(await zoneOf(v, ana.tabId)).toBe(terrazaZone);
-    expect(await zoneOf(v, second)).toBe(terrazaZone);
+    expect(await zoneOf(v, ana.tabId)).toBe(terraceZone);
+    expect(await zoneOf(v, second)).toBe(terraceZone);
     expect((await billRow(v, second)).status).toBe("placed");
   });
 
@@ -398,21 +398,21 @@ describe("move guests", () => {
 
   it("gives the moving party's open and presented bills the receiving party's zone when it sits in another", async () => {
     const [m4] = await tables("Area", 4);
-    const terraza = await v.table("Area T7", terrazaZone);
+    const terrace = await v.table("Area T7", terraceZone);
     const ana = await seat(v, m4);
-    const luis = await seat(v, terraza);
+    const luis = await seat(v, terrace);
     await order(v, ana.tabId, "Burger", "Agua");
     const presented = await splitOff(ana.partyId, ana.tabId, [2]);
     await placeByHand(v, presented);
 
     const moving = await opts(ana.partyId, luis.partyId, "separate");
-    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, terraza, moving));
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, terrace, moving));
 
-    expect(await zoneOf(v, ana.tabId)).toBe(terrazaZone);
+    expect(await zoneOf(v, ana.tabId)).toBe(terraceZone);
     expect(await linesOf(v, ana.tabId)).toMatchObject([
       { name: "Burger", unitPriceGross: 1200, vatClass: "general" },
     ]);
-    expect(await zoneOf(v, presented)).toBe(terrazaZone);
+    expect(await zoneOf(v, presented)).toBe(terraceZone);
     expect(await billRow(v, presented)).toMatchObject({ status: "placed", partyId: luis.partyId });
   });
 
@@ -490,19 +490,19 @@ describe("move guests", () => {
 
     it("refuses a free table in a zone that seats no one, as seating does", async () => {
       const [m4] = await tables("Barra", 4);
-      const barra = await v.table("Barra B9", v.counter.zoneId);
+      const counterTable = await v.table("Barra B9", v.counter.zoneId);
       const ana = await seat(v, m4);
       const moving = await opts(ana.partyId);
 
-      const error = await refused([ana.partyId], [ana.tabId], [m4, barra], () =>
-        act((tx) => moveGuests(tx, v.cfg, ana.partyId, barra, moving)),
+      const error = await refused([ana.partyId], [ana.tabId], [m4, counterTable], () =>
+        act((tx) => moveGuests(tx, v.cfg, ana.partyId, counterTable, moving)),
       );
 
       expect(error).toMatchObject({
         code: "service_zone.mode_incompatible",
         params: { zoneId: v.counter.zoneId, expected: "table_tab" },
       });
-      expect(await partyAt(v, barra)).toBeNull();
+      expect(await partyAt(v, counterTable)).toBeNull();
     });
 
     it("refuses a stale revision of the party at the table", async () => {
@@ -1019,15 +1019,15 @@ describe("join tables", () => {
   describe("what it refuses, changing nothing", () => {
     it("refuses a table in another zone", async () => {
       const [m4] = await tables("Otra zona", 4);
-      const terraza = await v.table("Otra zona T5", terrazaZone);
-      const held = await v.table("Otra zona T6", terrazaZone);
+      const terrace = await v.table("Otra zona T5", terraceZone);
+      const held = await v.table("Otra zona T6", terraceZone);
       const ana = await seat(v, m4);
       const luis = await seat(v, held);
       const joiningFree = await opts(ana.partyId);
       const joining = await opts(ana.partyId, luis.partyId);
 
-      const free = await refused([ana.partyId], [ana.tabId], [m4, terraza], () =>
-        act((tx) => joinTables(tx, v.cfg, ana.partyId, terraza, joiningFree)),
+      const free = await refused([ana.partyId], [ana.tabId], [m4, terrace], () =>
+        act((tx) => joinTables(tx, v.cfg, ana.partyId, terrace, joiningFree)),
       );
       const other = await refused(
         [ana.partyId, luis.partyId],
@@ -1037,8 +1037,8 @@ describe("join tables", () => {
       );
 
       for (const [error, tableZone] of [
-        [free, terrazaZone],
-        [other, terrazaZone],
+        [free, terraceZone],
+        [other, terraceZone],
       ] as const) {
         expect(error).toMatchObject({
           code: "service_zone.join_mismatch",

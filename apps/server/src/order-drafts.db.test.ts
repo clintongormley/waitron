@@ -474,16 +474,16 @@ describe("floor bill/editor pairs", () => {
 describe("separate drafts (spec §12 item 1)", () => {
   it("keeps Alex's and Sam's drafts apart, refuses Sam's save onto Alex's, and shows each unsent order on the table", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const alex = await save(v, mesa4.partyId, ALEX, null, 0, [
+    const table4 = await seated(v);
+    const alex = await save(v, table4.partyId, ALEX, null, 0, [
       item(v, "beer", { quantity: "2" }),
       item(v, "burger"),
     ]);
-    const sam = await saveOnSeparateBill(v, mesa4.partyId, SAM, null, 0, [item(v, "fish")]);
+    const sam = await saveOnSeparateBill(v, table4.partyId, SAM, null, 0, [item(v, "fish")]);
 
-    expect(alex).toMatchObject({ partyId: mesa4.partyId, ownerId: ALEX, ownerName: "Alex" });
-    expect(sam).toMatchObject({ partyId: mesa4.partyId, ownerId: SAM, ownerName: "Sam" });
-    const drafts = byOwner(await draftsOf(v, mesa4.partyId));
+    expect(alex).toMatchObject({ partyId: table4.partyId, ownerId: ALEX, ownerName: "Alex" });
+    expect(sam).toMatchObject({ partyId: table4.partyId, ownerId: SAM, ownerName: "Sam" });
+    const drafts = byOwner(await draftsOf(v, table4.partyId));
     expect(drafts).toEqual([alex, sam]);
     expect(drafts.map(orders)).toEqual([
       [
@@ -494,15 +494,15 @@ describe("separate drafts (spec §12 item 1)", () => {
     ]);
 
     await expect(
-      save(v, mesa4.partyId, SAM, alex.id, alex.revision, [item(v, "beer")]),
+      save(v, table4.partyId, SAM, alex.id, alex.revision, [item(v, "beer")]),
     ).rejects.toMatchObject({
       code: "draft.taken_over",
       params: { draftId: alex.id, ownerId: ALEX, ownerName: "Alex" },
     });
-    expect(byOwner(await draftsOf(v, mesa4.partyId))).toEqual([alex, sam]);
+    expect(byOwner(await draftsOf(v, table4.partyId))).toEqual([alex, sam]);
 
     // Two rows on Alex's draft hold three units: the count is of rows.
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
       { billId: alex.billId, billNumber: 1, ownerName: "Alex", lineCount: 2 },
       { billId: sam.billId, billNumber: 2, ownerName: "Sam", lineCount: 1 },
     ]);
@@ -510,43 +510,43 @@ describe("separate drafts (spec §12 item 1)", () => {
 
   it("does not show a draft with no lines as an unsent order, nor another party's drafts", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
-    const alex = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
-    const sam = await save(v, mesa5.partyId, SAM, null, 0, [item(v, "fish")]);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+    const table4 = await seated(v);
+    const table5 = await seated(v, "Mesa 5");
+    const alex = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer")]);
+    const sam = await save(v, table5.partyId, SAM, null, 0, [item(v, "fish")]);
+    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
       { billId: alex.billId, billNumber: 1, ownerName: "Alex", lineCount: 1 },
     ]);
 
-    await save(v, mesa4.partyId, ALEX, alex.id, alex.revision, []);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([]);
-    expect(await unsentDraftsAt(v, mesa5.tableId)).toEqual([
+    await save(v, table4.partyId, ALEX, alex.id, alex.revision, []);
+    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([]);
+    expect(await unsentDraftsAt(v, table5.tableId)).toEqual([
       { billId: sam.billId, billNumber: 1, ownerName: "Sam", lineCount: 1 },
     ]);
   });
 
   it("does not show a draft that is no longer open, even one still holding lines", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const alex = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
+    const table4 = await seated(v);
+    const alex = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer")]);
     await db.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, alex.id));
     expect(await storedLines(alex.id)).toHaveLength(1);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([]);
-    expect(await draftsOf(v, mesa4.partyId)).toEqual([]);
+    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([]);
+    expect(await draftsOf(v, table4.partyId)).toEqual([]);
   });
 });
 
 describe("saving a draft", () => {
   it("names an owner with no person record as empty text, wherever the name is shown", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
+    const table4 = await seated(v);
     const nobody = randomUUID();
-    const draft = await save(v, mesa4.partyId, nobody, null, 0, [item(v, "beer")]);
+    const draft = await save(v, table4.partyId, nobody, null, 0, [item(v, "beer")]);
     expect(draft).toMatchObject({ ownerId: nobody, ownerName: "" });
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
       { billId: draft.billId, billNumber: 1, ownerName: "", lineCount: 1 },
     ]);
-    await expect(save(v, mesa4.partyId, SAM, draft.id, 0, [])).rejects.toMatchObject({
+    await expect(save(v, table4.partyId, SAM, draft.id, 0, [])).rejects.toMatchObject({
       code: "draft.taken_over",
       params: { draftId: draft.id, ownerId: nobody, ownerName: null },
     });
@@ -729,28 +729,28 @@ describe("saving a draft", () => {
 
   it("answers draft.not_found for an unknown draft, a draft of another party and a discarded draft", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
-    const other = await save(v, mesa5.partyId, ALEX, null, 0, [item(v, "beer")]);
+    const table4 = await seated(v);
+    const table5 = await seated(v, "Mesa 5");
+    const other = await save(v, table5.partyId, ALEX, null, 0, [item(v, "beer")]);
     const unknown = randomUUID();
-    await expect(save(v, mesa4.partyId, ALEX, unknown, 0, [])).rejects.toMatchObject({
+    await expect(save(v, table4.partyId, ALEX, unknown, 0, [])).rejects.toMatchObject({
       code: "draft.not_found",
       params: { draftId: unknown },
     });
-    await expect(save(v, mesa4.partyId, ALEX, other.id, 0, [])).rejects.toMatchObject({
+    await expect(save(v, table4.partyId, ALEX, other.id, 0, [])).rejects.toMatchObject({
       code: "draft.not_found",
       params: { draftId: other.id },
     });
-    await expect(save(v, mesa4.partyId, ALEX, "draft-1", 0, [])).rejects.toMatchObject({
+    await expect(save(v, table4.partyId, ALEX, "draft-1", 0, [])).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "expectedEdit.draftId" },
     });
-    await expect(takeOver(v, mesa4.partyId, "draft-1", SAM, 0)).rejects.toMatchObject({
+    await expect(takeOver(v, table4.partyId, "draft-1", SAM, 0)).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "draftId" },
     });
     await db.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, other.id));
-    await expect(save(v, mesa5.partyId, ALEX, other.id, 0, [])).rejects.toMatchObject({
+    await expect(save(v, table5.partyId, ALEX, other.id, 0, [])).rejects.toMatchObject({
       code: "draft.out_of_date",
       params: { billId: other.billId, draftId: null, revision: null },
     });
@@ -1865,20 +1865,20 @@ describe("a refused save writes nothing", () => {
 describe("taking over a draft (D5, spec §2)", () => {
   it("gives Sam Alex's Beer, adds Sam's Beer into it, and refuses Alex's next save", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const alex = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
+    const table4 = await seated(v);
+    const alex = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer")]);
 
-    const taken = await takeOver(v, mesa4.partyId, alex.id, SAM, 0);
+    const taken = await takeOver(v, table4.partyId, alex.id, SAM, 0);
     expect(taken).toMatchObject({ id: alex.id, ownerId: SAM, ownerName: "Sam", revision: 1 });
     expect(taken.lines).toEqual(alex.lines);
 
-    const sams = await save(v, mesa4.partyId, SAM, alex.id, 1, [...taken.lines, item(v, "beer")]);
+    const sams = await save(v, table4.partyId, SAM, alex.id, 1, [...taken.lines, item(v, "beer")]);
     expect(sams).toMatchObject({ id: alex.id, ownerId: SAM, revision: 2 });
     expect(orders(sams)).toEqual([
       { menuItemId: v.offer("beer"), quantity: "2.000", unavailable: false },
     ]);
 
-    await expect(save(v, mesa4.partyId, ALEX, alex.id, 2, [])).rejects.toMatchObject({
+    await expect(save(v, table4.partyId, ALEX, alex.id, 2, [])).rejects.toMatchObject({
       code: "draft.taken_over",
       params: { draftId: alex.id, ownerId: SAM, ownerName: "Sam" },
     });
@@ -1886,7 +1886,7 @@ describe("taking over a draft (D5, spec §2)", () => {
       { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
       { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
       { billId: alex.billId, billNumber: 1, ownerName: "Sam", lineCount: 1 },
     ]);
   });
@@ -1968,31 +1968,31 @@ describe("taking over a draft (D5, spec §2)", () => {
 
   it("takes a bill in place while preserving the taker's own bill and its quantities", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const alex = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer"), item(v, "burger")]);
-    const sam = await saveOnSeparateBill(v, mesa4.partyId, SAM, null, 0, [
+    const table4 = await seated(v);
+    const alex = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer"), item(v, "burger")]);
+    const sam = await saveOnSeparateBill(v, table4.partyId, SAM, null, 0, [
       item(v, "fish"),
       item(v, "beer", { quantity: "2" }),
     ]);
     const alexRows = await storedLines(alex.id);
     const samRows = await storedLines(sam.id);
-    const taken = await takeOver(v, mesa4.partyId, alex.id, SAM, 0);
+    const taken = await takeOver(v, table4.partyId, alex.id, SAM, 0);
     expect(taken).toMatchObject({ id: alex.id, ownerId: SAM, ownerName: "Sam", revision: 1 });
     expect(orders(taken)).toEqual(orders(alex));
     expect(taken.lines.map((line) => line.id)).toEqual(alex.lines.map((line) => line.id));
     expect(await storedLines(alex.id)).toEqual(alexRows);
     expect(await storedLines(sam.id)).toEqual(samRows);
-    expect(await draftsOf(v, mesa4.partyId)).toEqual([taken, sam]);
+    expect(await draftsOf(v, table4.partyId)).toEqual([taken, sam]);
     expect(await draftRow(alex.id)).toMatchObject({ state: "open", ownerId: SAM, revision: 1 });
     expect(await eventsOf(alex.id)).toEqual([
       { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
       { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+    expect(await unsentDraftsAt(v, table4.tableId)).toEqual([
       { billId: alex.billId, billNumber: 1, ownerName: "Sam", lineCount: 2 },
       { billId: sam.billId, billNumber: 2, ownerName: "Sam", lineCount: 2 },
     ]);
-    await refusedWritingNothing(() => save(v, mesa4.partyId, ALEX, alex.id, 1, []), {
+    await refusedWritingNothing(() => save(v, table4.partyId, ALEX, alex.id, 1, []), {
       code: "draft.taken_over",
       params: { draftId: alex.id, ownerId: SAM },
     });
@@ -3283,29 +3283,32 @@ describe("merging parties (D2)", () => {
 
   it("merges the main bills after explicit takeover, retaining every row and the separate bill", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
+    const table4 = await seated(v);
+    const table5 = await seated(v, "Mesa 5");
     const mia = randomUUID();
-    const miasSent = await save(v, mesa5.partyId, mia, null, 0, [item(v, "fish")]);
-    await submit(v, mesa5.partyId, miasSent, mia, [
+    const miasSent = await save(v, table5.partyId, mia, null, 0, [item(v, "fish")]);
+    await submit(v, table5.partyId, miasSent, mia, [
       { lineIds: lineIds(miasSent), release: "fire" },
     ]);
     const sentRow = await draftRow(miasSent.id);
-    const alexOn4 = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
-    const alexOn5 = await save(v, mesa5.partyId, ALEX, null, 0, [
+    const alexOn4 = await save(v, table4.partyId, ALEX, null, 0, [
+      item(v, "beer"),
+      item(v, "fish"),
+    ]);
+    const alexOn5 = await save(v, table5.partyId, ALEX, null, 0, [
       item(v, "beer", { quantity: "2" }),
       burger(v),
     ]);
-    const samOn5 = await saveOnSeparateBill(v, mesa5.partyId, SAM, null, 0, [
+    const samOn5 = await saveOnSeparateBill(v, table5.partyId, SAM, null, 0, [
       item(v, "wine", { variantId: v.glass }),
     ]);
 
-    await refusedWritingNothing(() => merge(v, mesa4, mesa5, SAM), { code: "draft.taken_over" });
-    const moved = await takeOver(v, mesa5.partyId, samOn5.id, ALEX, samOn5.revision);
-    await merge(v, mesa4, mesa5, ALEX);
-    await takeOver(v, mesa4.partyId, samOn5.id, SAM, moved.revision + 1);
+    await refusedWritingNothing(() => merge(v, table4, table5, SAM), { code: "draft.taken_over" });
+    const moved = await takeOver(v, table5.partyId, samOn5.id, ALEX, samOn5.revision);
+    await merge(v, table4, table5, ALEX);
+    await takeOver(v, table4.partyId, samOn5.id, SAM, moved.revision + 1);
 
-    const [alex, sam] = byOwner(await draftsOf(v, mesa4.partyId));
+    const [alex, sam] = byOwner(await draftsOf(v, table4.partyId));
     expect(alex).toEqual({
       ...alexOn4,
       revision: alexOn4.revision + 1,
@@ -3314,16 +3317,16 @@ describe("merging parties (D2)", () => {
     expect((await storedLines(alexOn4.id)).map((row) => row.position)).toEqual([1, 2, 3, 4]);
     expect(sam).toEqual({
       ...samOn5,
-      partyId: mesa4.partyId,
+      partyId: table4.partyId,
       billId: samOn5.billId,
       revision: samOn5.revision + 3,
       takenOverFrom: { personId: ALEX, name: "Alex" },
     });
-    expect(await openOwnersOn(mesa4.partyId)).toEqual([ALEX, SAM].sort());
-    expect(await draftsOf(v, mesa5.partyId)).toEqual([]);
+    expect(await openOwnersOn(table4.partyId)).toEqual([ALEX, SAM].sort());
+    expect(await draftsOf(v, table5.partyId)).toEqual([]);
 
     expect(await draftRow(alexOn5.id)).toMatchObject({
-      partyId: mesa5.partyId,
+      partyId: table5.partyId,
       state: "discarded",
       ownerId: ALEX,
       revision: alexOn5.revision + 1,
@@ -3349,7 +3352,7 @@ describe("merging parties (D2)", () => {
     expect(await draftRow(miasSent.id)).toEqual(sentRow);
 
     // The source's table now seats the target's party, and shows its unsent orders.
-    expect(await unsentDraftsAt(v, mesa5.tableId)).toEqual([
+    expect(await unsentDraftsAt(v, table5.tableId)).toEqual([
       { billId: alexOn4.billId, billNumber: 1, ownerName: "Alex", lineCount: 4 },
       { billId: samOn5.billId, billNumber: 2, ownerName: "Sam", lineCount: 1 },
     ]);
@@ -3357,30 +3360,30 @@ describe("merging parties (D2)", () => {
 
   it("refuses a save prepared before the merge, on the closed party or the one the draft moved to", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
-    const alexOn4 = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
-    const alexOn5 = await save(v, mesa5.partyId, ALEX, null, 0, [item(v, "fish")]);
-    const samOn5 = await saveOnSeparateBill(v, mesa5.partyId, SAM, null, 0, [item(v, "fish")]);
+    const table4 = await seated(v);
+    const table5 = await seated(v, "Mesa 5");
+    const alexOn4 = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer")]);
+    const alexOn5 = await save(v, table5.partyId, ALEX, null, 0, [item(v, "fish")]);
+    const samOn5 = await saveOnSeparateBill(v, table5.partyId, SAM, null, 0, [item(v, "fish")]);
 
-    await refusedWritingNothing(() => merge(v, mesa4, mesa5, SAM), { code: "draft.taken_over" });
-    const moved = await takeOver(v, mesa5.partyId, samOn5.id, ALEX, samOn5.revision);
-    await merge(v, mesa4, mesa5, ALEX);
-    await takeOver(v, mesa4.partyId, samOn5.id, SAM, moved.revision + 1);
+    await refusedWritingNothing(() => merge(v, table4, table5, SAM), { code: "draft.taken_over" });
+    const moved = await takeOver(v, table5.partyId, samOn5.id, ALEX, samOn5.revision);
+    await merge(v, table4, table5, ALEX);
+    await takeOver(v, table4.partyId, samOn5.id, SAM, moved.revision + 1);
 
     for (const [partyId, draft, operatorId, code] of [
-      [mesa5.partyId, samOn5, SAM, "party.not_open"],
-      [mesa4.partyId, samOn5, SAM, "draft.out_of_date"],
-      [mesa5.partyId, alexOn5, ALEX, "party.not_open"],
-      [mesa4.partyId, alexOn5, ALEX, "draft.not_found"],
-      [mesa4.partyId, alexOn4, ALEX, "draft.out_of_date"],
+      [table5.partyId, samOn5, SAM, "party.not_open"],
+      [table4.partyId, samOn5, SAM, "draft.out_of_date"],
+      [table5.partyId, alexOn5, ALEX, "party.not_open"],
+      [table4.partyId, alexOn5, ALEX, "draft.not_found"],
+      [table4.partyId, alexOn4, ALEX, "draft.out_of_date"],
     ] as const) {
       await refusedWritingNothing(
         () => save(v, partyId, operatorId, draft.id, draft.revision, [item(v, "wine")]),
         { code },
       );
     }
-    const sam = await save(v, mesa4.partyId, SAM, samOn5.id, samOn5.revision + 3, [
+    const sam = await save(v, table4.partyId, SAM, samOn5.id, samOn5.revision + 3, [
       item(v, "fish", { quantity: "2" }),
     ]);
     expect(orders(sam)).toEqual([
@@ -3392,22 +3395,22 @@ describe("merging parties (D2)", () => {
 describe("a retried submission of a draft a merge moved or discarded", () => {
   it("answers the first result when the draft was added into its owner's draft on the target and discarded", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
-    await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "fish")]);
-    const alexOn5 = await save(v, mesa5.partyId, ALEX, null, 0, [item(v, "beer"), burger(v)]);
+    const table4 = await seated(v);
+    const table5 = await seated(v, "Mesa 5");
+    await save(v, table4.partyId, ALEX, null, 0, [item(v, "fish")]);
+    const alexOn5 = await save(v, table5.partyId, ALEX, null, 0, [item(v, "beer"), burger(v)]);
     const submissionId = randomUUID();
     const expectedEdit = await expectedDraftEditForTest(db, alexOn5);
-    const partyRevisionSeen = await partyRevision(mesa5.partyId);
+    const partyRevisionSeen = await partyRevision(table5.partyId);
     const sent = [{ lineIds: [alexOn5.lines[0]!.id], release: "fire" as const }];
-    const first = await submit(v, mesa5.partyId, alexOn5, ALEX, sent, {
+    const first = await submit(v, table5.partyId, alexOn5, ALEX, sent, {
       submissionId,
       expectedEdit,
     });
-    await merge(v, mesa4, mesa5, ALEX);
+    await merge(v, table4, table5, ALEX);
     const before = await everything();
 
-    const again = await submit(v, mesa5.partyId, alexOn5, ALEX, sent, {
+    const again = await submit(v, table5.partyId, alexOn5, ALEX, sent, {
       submissionId,
       expectedEdit,
       partyRevision: partyRevisionSeen,
@@ -3419,32 +3422,32 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
 
   it("answers the first result when asked on the party the draft was sent from, and refuses it as out of date on the party it moved to", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
-    const samOn5 = await save(v, mesa5.partyId, SAM, null, 0, [item(v, "beer"), item(v, "fish")]);
+    const table4 = await seated(v);
+    const table5 = await seated(v, "Mesa 5");
+    const samOn5 = await save(v, table5.partyId, SAM, null, 0, [item(v, "beer"), item(v, "fish")]);
     const submissionId = randomUUID();
     const input = {
       operatorId: SAM,
       submissionId,
       expectedEdit: await expectedDraftEditForTest(db, samOn5),
       draftRevision: samOn5.revision,
-      expectedPartyRevision: await partyRevision(mesa5.partyId),
+      expectedPartyRevision: await partyRevision(table5.partyId),
       groups: [{ lineIds: [samOn5.lines[0]!.id], release: "fire" as const }],
     };
-    const first = await inTx((tx) => submitDraft(tx, v.cfg, mesa5.partyId, samOn5.id, input));
-    await merge(v, mesa4, mesa5, SAM);
+    const first = await inTx((tx) => submitDraft(tx, v.cfg, table5.partyId, samOn5.id, input));
+    await merge(v, table4, table5, SAM);
     const before = await everything();
 
-    const again = await inTx((tx) => submitDraft(tx, v.cfg, mesa5.partyId, samOn5.id, input));
+    const again = await inTx((tx) => submitDraft(tx, v.cfg, table5.partyId, samOn5.id, input));
 
     expect(again).toEqual(first);
     expect(await everything()).toEqual(before);
     await refusedWritingNothing(
       () =>
         inTx((tx) =>
-          submitDraft(tx, v.cfg, mesa4.partyId, samOn5.id, {
+          submitDraft(tx, v.cfg, table4.partyId, samOn5.id, {
             ...input,
-            expectedEdit: { ...input.expectedEdit, billId: mesa4.tabId },
+            expectedEdit: { ...input.expectedEdit, billId: table4.tabId },
           }),
         ),
       {
@@ -3458,30 +3461,30 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
 describe("a draft named on another party", () => {
   it("is not found for a takeover or a submission scoped to that party", async () => {
     const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
-    const alex = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
+    const table4 = await seated(v);
+    const table5 = await seated(v, "Mesa 5");
+    const alex = await save(v, table4.partyId, ALEX, null, 0, [item(v, "beer")]);
 
     await refusedWritingNothing(
-      () => inTx((tx) => takeOverDraft(tx, v.cfg, mesa5.partyId, alex.id, SAM, alex.revision)),
+      () => inTx((tx) => takeOverDraft(tx, v.cfg, table5.partyId, alex.id, SAM, alex.revision)),
       { code: "draft.not_found", params: { draftId: alex.id } },
     );
     await refusedWritingNothing(
       () =>
         inTx(async (tx) =>
-          submitDraft(tx, v.cfg, mesa5.partyId, alex.id, {
+          submitDraft(tx, v.cfg, table5.partyId, alex.id, {
             operatorId: ALEX,
             submissionId: randomUUID(),
             expectedEdit: await expectedDraftEditForTest(db, alex),
             draftRevision: alex.revision,
-            expectedPartyRevision: await partyRevision(mesa5.partyId),
+            expectedPartyRevision: await partyRevision(table5.partyId),
             groups: [{ lineIds: lineIds(alex), release: "fire" }],
           }),
         ),
       { code: "draft.not_found", params: { draftId: alex.id } },
     );
     const taken = await inTx((tx) =>
-      takeOverDraft(tx, v.cfg, mesa4.partyId, alex.id, SAM, alex.revision),
+      takeOverDraft(tx, v.cfg, table4.partyId, alex.id, SAM, alex.revision),
     );
     expect(taken.ownerId).toBe(SAM);
   });
