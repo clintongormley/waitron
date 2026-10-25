@@ -478,10 +478,10 @@ describe("readTableSteps", () => {
     const v = await setupPartyVenue(suite.db);
     const department = await tablesDepartment(v);
     const [setUp] = await setSteps(v, department, [seated("Set up")]);
-    const mesa1 = await v.table("Mesa 1");
-    const mesa2 = await v.table("Mesa 2");
-    const { partyId } = await seat(v, mesa1);
-    await join(v, partyId, mesa2);
+    const firstTable = await v.table("Mesa 1");
+    const secondTable = await v.table("Mesa 2");
+    const { partyId } = await seat(v, firstTable);
+    await join(v, partyId, secondTable);
     await setOpenedAt(v, partyId, OPENED);
 
     const steps = await stepsOf(v, [partyId]);
@@ -497,8 +497,8 @@ describe("readTableSteps", () => {
         },
       ],
     };
-    expect(steps.get(mesa1)).toEqual(expected);
-    expect(steps.get(mesa2)).toEqual(expected);
+    expect(steps.get(firstTable)).toEqual(expected);
+    expect(steps.get(secondTable)).toEqual(expected);
   });
 
   it("a party merged into another brings its orders and dishes", async () => {
@@ -508,22 +508,22 @@ describe("readTableSteps", () => {
       { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
       { name: "Anything else?", start: "all_served", courseId: null, minutes: 10 },
     ]);
-    const mesa1 = await v.table("Mesa 1");
-    const mesa2 = await v.table("Mesa 2");
-    const a = await seat(v, mesa1);
+    const firstTable = await v.table("Mesa 1");
+    const secondTable = await v.table("Mesa 2");
+    const a = await seat(v, firstTable);
     await setOpenedAt(v, a.partyId, OPENED);
-    const b = await seat(v, mesa2);
+    const b = await seat(v, secondTable);
     const { tabId } = await orderForParty(v, b.partyId, ["Agua"]);
     const servedAt = await serve(v, tabId, "Agua");
     // A paid bill stays with the party merged away.
     await pay(v, tabId, "2.00");
     const ordered = await lastOrderAt(v, b.partyId);
-    expect((await liveAt(v, a.partyId, mesa1))!.map((step) => step.stepId)).toEqual([setUp]);
+    expect((await liveAt(v, a.partyId, firstTable))!.map((step) => step.stepId)).toEqual([setUp]);
 
     const into = await commandFor(v, a.partyId);
     const from = await commandFor(v, b.partyId);
     await inTx(v, (tx) =>
-      joinTables(tx, v.cfg, a.partyId, mesa2, {
+      joinTables(tx, v.cfg, a.partyId, secondTable, {
         ...into,
         bills: "merge",
         otherPartyId: b.partyId,
@@ -545,8 +545,8 @@ describe("readTableSteps", () => {
         dueAt: ordered + 20 * MINUTE,
       },
     ];
-    expect(await liveAt(v, a.partyId, mesa1, ordered + 25 * MINUTE)).toEqual(live);
-    expect(await liveAt(v, a.partyId, mesa2, ordered + 25 * MINUTE)).toEqual(live);
+    expect(await liveAt(v, a.partyId, firstTable, ordered + 25 * MINUTE)).toEqual(live);
+    expect(await liveAt(v, a.partyId, secondTable, ordered + 25 * MINUTE)).toEqual(live);
   });
 
   it("reads every fact once, whatever the number of parties", async () => {

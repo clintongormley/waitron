@@ -532,10 +532,9 @@ until A977).
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The separate core-comment [PR #1986](https://github.com/clintongormley/waitron/pull/1986) awaits the owner to land it.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
-  Keep the service-period suite's menu keys with its fixture names under A976; its zone, dish and
-  initial period locals now use English identifiers. Schedule-route, opening-hours, zone-closure,
-  period-deletion, printing-problem, main-bill and seasonal-menu suites use English helper
-  identifiers; their fixture text remains A976's.
+  Keep the service-period suite's menu keys with its fixture names under A976. Other private
+  naming sites remain, including table locals in `apps/server/src/order-drafts.db.test.ts`
+  and `apps/server/src/party-table-actions.test.ts`. Fixture text remains A976's.
   Developer/demo script names remain A975's. Low priority.
 - **Setup receipt-language selection lookup.** `apps/setup/src/screens/venue-screen.ts` still
   treats an inherited property such as `constructor` as a language entry. A974's review lookup
