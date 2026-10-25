@@ -3878,8 +3878,12 @@ function uploadAttempts(text) {
   const isUpload = (step) => step?.uses?.startsWith("actions/upload-artifact@") ?? false;
   const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
   const strict = (step) => step?.continueOnError === undefined || step.continueOnError === "false";
-  const inputsWithoutOverwrite = ({ overwrite: _overwrite, ...inputs }) =>
-    JSON.stringify(Object.entries(inputs).sort());
+  const inputsWithoutOverwrite = (inputs) =>
+    JSON.stringify(
+      Object.entries(inputs)
+        .filter(([key]) => key !== "overwrite")
+        .sort(),
+    );
   const attempts = [];
   for (const { id: job, lines } of jobBlocks(text)) {
     const steps = workflowSteps(lines.join("\n"));
