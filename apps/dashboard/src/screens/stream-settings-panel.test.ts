@@ -1613,3 +1613,74 @@ describe("stream-settings-panel: which kit is on screen", () => {
     },
   );
 });
+
+describe("A1089 unsafe bucket settings choices", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    it(`explains testing and saving corrected settings after a refusal (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const refused = withStatus({ ...STREAMING, state: "refused", reason: "config_unsafe" });
+        const api = stubApi({}, refused);
+        vi.mocked(api.testStreamBucket).mockRejectedValueOnce({
+          code: "backup.stream_config_unsafe",
+          params: { field: "prefix" },
+        });
+        const { el } = await mount(api);
+        const message = alertMessage("backup.stream_settings_unusable", {}, locale);
+        expect(message).toContain(q(el, "[data-test=change]")!.textContent!.trim());
+        await press(el, "change");
+        for (const action of ["test", "save", "cancel"]) {
+          expect(message).toContain(q(el, `[data-test=${action}]`)!.textContent!.trim());
+        }
+        type(el, "bucket-secret-access-key", "replacement-test-secret");
+        type(el, "bucket-prefix", "saved/../copy");
+        await press(el, "test");
+        expect(field(el, "bucket-prefix").error).toBe(t("stream.field.prefix_folders"));
+        expect(field(el, "bucket-prefix").value).toBe("saved/../copy");
+        expect(api.saveStreamSettings).not.toHaveBeenCalled();
+        type(el, "bucket-prefix", "saved/copy");
+        await press(el, "test");
+        expect(text(el, "[data-test=test-passed]")).toBe(t("stream.form.test_passed"));
+        expect(api.saveStreamSettings).not.toHaveBeenCalled();
+        await press(el, "save");
+        expect(api.saveStreamSettings).toHaveBeenCalledExactlyOnceWith({
+          endpoint: "",
+          region: "eu-west-1",
+          bucket: "venue-copy",
+          prefix: "saved/copy",
+          accessKeyId: "AKIAEXAMPLE",
+          secretAccessKey: "replacement-test-secret",
+        });
+        expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
+        expect(q(el, "[data-test=kit]")).not.toBeNull();
+        expect(api.turnOffStream).not.toHaveBeenCalled();
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`explains cancelling a settings change without a save or shutdown (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const refused = withStatus({ ...STREAMING, state: "refused", reason: "config_unsafe" });
+        const api = stubApi({}, refused);
+        const { el } = await mount(api);
+        const message = alertMessage("backup.stream_settings_unusable", {}, locale);
+        expect(message).toContain(t("stream.form.cancel"));
+        await press(el, "change");
+        type(el, "bucket-prefix", "reconsidered");
+        await press(el, "cancel");
+        expect(q(el, "[data-test=change]")).not.toBeNull();
+        expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.unusable"));
+        expect(api.saveStreamSettings).not.toHaveBeenCalled();
+        expect(api.testStreamBucket).not.toHaveBeenCalled();
+        expect(api.turnOffStream).not.toHaveBeenCalled();
+        expect(api.getRecoveryKit).not.toHaveBeenCalled();
+      } finally {
+        setLocale(previous);
+      }
+    });
+  }
+});

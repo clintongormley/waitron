@@ -55,6 +55,12 @@ los ajustes, puede fallar su carga: comprueba el estado antes de confiar en una 
 Esta página no permite diagnosticar todos los fallos persistentes del equipo o de sus claves;
 conserva las claves de recuperación y los archivos de copia existentes.
 
+Si la copia en el bucket indica que no se han podido usar sus ajustes de forma segura, elige
+**Cambiar de bucket** en **Copias de seguridad**. Corrige los campos señalados. **Probar** comprueba
+el bucket sin guardar ajustes; **Guardar y activar** los aplica. **Cancelar** deja los ajustes
+guardados como estaban. Este formulario no puede diagnosticar un fallo de configuración del propio
+equipo. Conserva las claves de recuperación y las copias existentes si el rechazo persiste.
+
 ## Crea las nuevas series {#series}
 
 Usa los controles bajo los datos autenticados. Vuelve a introducir la clave correspondiente, confirma
