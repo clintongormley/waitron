@@ -50,8 +50,9 @@ API before ordinary database opens or staged restore/reset work. It offers inspe
 (`GET /setup-api/first-setup/resolution`), ownership recovery with the setup password, recovery from
 a backup (under `/setup-api/first-setup/resolution/backup/`), Start again and publication-only
 Finish (`apps/server/src/setup-first-fiscal-api.ts`, `setup-first-backup-api.ts`). Start again runs
-over HTTPS only: it deletes the interrupted attempt, keeps one small note of the last invoice series
-name the attempt chose (`first-setup-start-again.json` in the state folder) and restarts the server.
+over HTTPS only: it deletes the interrupted attempt, keeps a small note of the last invoice series
+name it chose, if any (`first-setup-start-again.json` in the state folder), and ends the process so
+its supervisor starts it again.
 With the venue database missing, it also needs the setup password and a confirmation that nothing
 was filed or sold. To finish over HTTPS, recover ownership, retrieve the staged publication
 reference, confirm the current document and submit the unchanged publication inputs.

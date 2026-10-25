@@ -1100,8 +1100,8 @@ recorded with the refusal (`refusedTriggers`) and shown under that line, one lin
 that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/status` reports
 `refused`, not the names.
 
-**A full disk at start** (A798-B slice 2). Every start, except one that serves the setup
-repair page for an unfinished backup recovery (`runEntry`, `apps/server/src/node-entry.ts`),
+**A full disk at start** (A798-B slice 2). Every start, except one that finds a backup
+recovery's journal at its repair stage or unreadable (`runEntry`, `apps/server/src/node-entry.ts`),
 deletes the copies a cut-off backup run left in backup staging, and the staged recovery copies in `restore-staging/staged-recovery`,
 unless another process holds the venue folder's lock — in the folders a backup recovery from the
 setup repair page selected instead, when there is one (the heartbeat fallback is in

@@ -96,7 +96,7 @@ it("recovers from a new tab with the original password, before offering Start ag
   expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(venue.admin.password);
 });
 
-it("requires an explicit confirmation before asking to retire an empty workspace", async () => {
+it("sends no Start again request until it is confirmed", async () => {
   const { app, requests } = await mount();
   await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
   expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);

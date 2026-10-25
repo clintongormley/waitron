@@ -272,8 +272,8 @@ Never edit rows in the database to repair it.
 #### When the page names `storage.disk_full`
 
 The box's disk is full, so Waitron cannot save anything. Before it opens its database, every start,
-whatever the free space, except one that serves the setup repair page for an unfinished backup
-recovery, deletes the database copy and encrypted copy a backup run that was cut off
+whatever the free space, except one that finds a backup recovery's journal at its repair stage or
+unreadable, deletes the database copy and encrypted copy a backup run that was cut off
 left in `backup-staging` in the state folder, found by the names a backup run gives them. It keeps
 them while another process, such as a running server, holds the database folder. When the start
 cannot find that out, as on a disk with no room left for the note it writes while it holds the
@@ -282,9 +282,8 @@ In the same step it deletes `restore-staging/staged-recovery` in the state folde
 wizard keeps a backup uploaded for checking. On a box where a backup recovery from the setup
 repair page has selected its own folders, the start does this in those folders instead.
 
-Every start, with the same exception, also checks the free space in the state folder and in the
-database's folder. Below
-256 MiB, it deletes as well:
+Every start, with the same exception, also deletes, when the state folder or the database's folder
+has under 256 MiB free:
 
 - rotated log files except the newest (`waitron.log.2` and later; `waitron.log` and `waitron.log.1`
   stay);
@@ -372,8 +371,8 @@ a branch install pinned an image there, the box comes back on that same image. O
 volumes is wiped, and that includes the venue's databases, because they live in the `state` volume.
 
 A reset during an unfinished first setup forgets the series name that setup chose; the box's clock
-check still guards it (a new name is the current UTC minute, taken only after a clock on another
-machine agrees with the box's within 30 seconds).
+check still guards it (outside the preproduction throwaway, a new name is the current UTC minute,
+taken only after a clock on another machine agrees with the box's within 30 seconds).
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.
