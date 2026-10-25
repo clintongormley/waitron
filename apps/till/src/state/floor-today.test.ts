@@ -1093,6 +1093,12 @@ describe("tightName", () => {
     expect(tightName(t9, tables)).toBe("T9+T10");
     expect(tightName(t3, tables)).toBe("T3");
   });
+
+  it("falls back to its own short name when its join's tables are not in the list", () => {
+    const t9 = table("t9", "Table 9", { shortName: "T9", today: today({ joinId: "j1" }) });
+    const t3 = table("t3", "Table 3", { shortName: "T3" });
+    expect(tightName(t9, [t3])).toBe("T9");
+  });
 });
 
 describe("today's names on a drop and a group split", () => {
