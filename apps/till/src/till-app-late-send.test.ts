@@ -905,6 +905,31 @@ describe("a manager's PIN", () => {
     expect(windowOf(el)).toBeNull();
   });
 
+  it("keeps Send busy while the managers are read, so a second Send opens no window under the PIN dialog", async () => {
+    let answer!: (managers: (typeof MARTA)[]) => void;
+    const el = await lateTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(MANAGER_NEEDED),
+      serviceDayAuthorizers: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    await act(el, "send-all");
+    await choose(el, "data-late-agreed");
+    expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
+    await userEvent.click(screen(el).querySelector<HTMLElement>("[data-review-open]")!);
+    await flush(el);
+
+    const send = screen(el).querySelector<HTMLElement>('[data-draft-action="send-all"]')!;
+    expect(send.hasAttribute("disabled")).toBe(true);
+    await userEvent.click(send, { force: true });
+    await flush(el, 6);
+    expect(windowOf(el)).toBeNull();
+
+    answer([MARTA]);
+    await flush(el, 6);
+    expect(approval(el)).not.toBeNull();
+    expect(windowOf(el)).toBeNull();
+    expect(submissions()).toHaveLength(1);
+  });
+
   it("keeps the dialog open on a wrong PIN, and closes it once a right one sends", async () => {
     const el = await managerAsked(WRONG_PIN);
     await authorize(el, "0123");
@@ -1219,6 +1244,79 @@ describe("an allergy party's send the till marked, that needs a manager's PIN", 
       menuIds: ["lunch"],
       override: { personId: MARTA.personId, pin: "0123" },
     });
+  });
+});
+
+describe("an allergy party's send the till marked, refused for a menu version change", () => {
+  beforeEach(() => resetAllergyFixture());
+
+  /** Sends a Steak marked "Lunch ended", answers the allergy question after Kitchen agreed, and has
+   * that send refused for a menu version change whose new version keeps every price. */
+  async function answeredThenVersionChanged(
+    submitDraft: ReturnType<typeof vi.fn<TillApi["submitDraft"]>>,
+    previewPartyAllergy: (id: string, target: AllergySendTarget) => Promise<unknown>,
+  ): Promise<TillApp> {
+    const { el } = await mountAllergyApp({ submitDraft, previewPartyAllergy });
+    await openAllergyTable(el);
+    await addSteak(el);
+    allergyDraft(el).setEndedPeriods([{ menuId: "lunch", periodName: "Lunch" }], false);
+    await userEvent.click(
+      allergyOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+    await choose(el, "data-late-agreed");
+    allergyApi.listZoneOffers!.mockResolvedValue(allergyCatalogue("v2"));
+    await answerAllergy(el, "Blue shirt");
+    await vi.waitFor(() => expect(submitDraft).toHaveBeenCalled());
+    await flush(el, 15);
+    return el;
+  }
+
+  const versionChanged = {
+    code: "menu.version_changed",
+    status: 409,
+    menus: [{ menuId: "lunch", liveVersionId: "v2" }],
+  };
+
+  it("sends again with the answer just given when the party and its dishes are unchanged", async () => {
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(versionChanged)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    const previewPartyAllergy = vi.fn(async (_id: string, target: AllergySendTarget) =>
+      allergyView(null, target),
+    );
+    const el = await answeredThenVersionChanged(submitDraft, previewPartyAllergy);
+
+    await vi.waitFor(() => expect(submitDraft).toHaveBeenCalledTimes(2));
+    await flush(el, 6);
+    expect(allergyDialog(el)).toBeNull();
+    expect(previewPartyAllergy).toHaveBeenCalledTimes(2);
+    const [first, rerun] = submitDraft.mock.calls.map((call) => call[2]);
+    expect(first!.allergy?.party?.guests).toEqual([
+      expect.objectContaining({ who: "Blue shirt", allergens: { milk: {} } }),
+    ]);
+    expect(rerun!.allergy).toEqual(first!.allergy);
+    expect(rerun!.expectedPartyRevision).toBe(first!.expectedPartyRevision);
+    expect(rerun!.lateSend).toEqual({ menuIds: ["lunch"] });
+  });
+
+  it("asks again when the party read after the refusal names other dishes", async () => {
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(versionChanged)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    let reads = 0;
+    const previewPartyAllergy = vi.fn(async (_id: string, target: AllergySendTarget) => {
+      const view = allergyView(null, target);
+      if (++reads >= 2)
+        view.dishes = view.dishes.map((dish) => ({ ...dish, allergens: { milk: {} } }));
+      return view;
+    });
+    const el = await answeredThenVersionChanged(submitDraft, previewPartyAllergy);
+
+    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
+    expect(submitDraft).toHaveBeenCalledOnce();
   });
 });
 
@@ -1801,6 +1899,36 @@ describe("counter pay of a partly paid order", () => {
     expect(approval(el)).toBeNull();
     expect(billPayDialog(el)).not.toBeNull();
   });
+  it("holds Pay while the managers are read, so a second Pay opens no window under the PIN dialog", async () => {
+    let answer!: (managers: (typeof MARTA)[]) => void;
+    const el = await lateCounter(
+      billPayment({
+        updateWorkingOrder: vi.fn().mockRejectedValueOnce(MANAGER_NEEDED),
+        serviceDayAuthorizers: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+      }),
+      { products: ["Omelette"], held: true },
+    );
+    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+    expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
+    const payRest = counterScreen(el).shadowRoot!.querySelector<
+      HTMLElement & { disabled: boolean }
+    >("[data-pay-rest]")!;
+    expect(payRest.disabled).toBe(true);
+
+    await userEvent.click(payRest);
+    await flush(el, 6);
+    expect(windowOf(el)).toBeNull();
+
+    answer([MARTA]);
+    await flush(el, 6);
+    expect(approval(el)).not.toBeNull();
+    expect(windowOf(el)).toBeNull();
+    expect(payRest.disabled).toBe(false);
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+  });
+
   it("keeps the dialog open on a wrong PIN on the save, and opens the bill payment once a right one saves", async () => {
     const updateWorkingOrder = vi
       .fn()

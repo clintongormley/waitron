@@ -11673,6 +11673,15 @@ export class TillApp extends LitElement {
         lateSend,
         answered,
       );
+      // Awaited before `finally` so `store.sending` stays set while the managers are read: a second
+      // Send meanwhile cannot open the late-send window under the PIN dialog.
+      if (typeof followUp === "object" && "approval" in followUp) {
+        const { approval, answered: carried } = followUp;
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, (confirmed) =>
+          this.#sendDraft(detail, confirmed, carried),
+        );
+        return;
+      }
     } finally {
       store.sending = false;
     }
@@ -11685,13 +11694,6 @@ export class TillApp extends LitElement {
         "send",
         (confirmed) => this.#sendDraft(detail, confirmed, carried),
         (listed) => this.#removeDraftLines(store, listed),
-      );
-      return;
-    }
-    if (typeof followUp === "object" && "approval" in followUp) {
-      const { approval, answered: carried } = followUp;
-      await this.#askLateSendApproval(approval.lateSend, approval.pinError, (confirmed) =>
-        this.#sendDraft(detail, confirmed, carried),
       );
       return;
     }
@@ -12033,7 +12035,7 @@ export class TillApp extends LitElement {
             live,
             true,
             lateSend,
-            answered,
+            carried ?? answered,
           );
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
@@ -17037,7 +17039,8 @@ export class TillApp extends LitElement {
    * on it, once an edit made to it in the basket is saved, as a single payment saves it first. */
   async #onCounterBillPay(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     const { amount } = (event as CustomEvent<{ amount: string }>).detail;
-    if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
+    if (this.submitting || this.billPaying !== null || this.#basketPaidInPart() === undefined)
+      return;
     const retry = (confirmed: LateSend) => this.#onCounterBillPay(event, false, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.#counterSends++;
@@ -17045,6 +17048,9 @@ export class TillApp extends LitElement {
     const basketVisit = this.#store.loadGeneration;
     const session = this.#operatorSession;
     const basketLines = [...this.#store.lines];
+    let refused = false;
+    let deadEnd: string | undefined;
+    this.submitting = true;
     try {
       if (
         !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label, lateSend)) ||
@@ -17052,24 +17058,27 @@ export class TillApp extends LitElement {
       )
         return;
     } catch (error) {
+      refused = true;
       if (!this.#hasLeftCounterOrder(id, session)) {
         const asked = lateSendAsked(error, basketLines);
         if (asked !== undefined) return this.#openCounterLateSend(asked, retry);
         const approval = lateSendApprovalAsked(error, lateSend);
+        // Awaited before `finally` so `submitting` stays set while the managers are read: a second
+        // Pay tap meanwhile cannot open the late-send window under the PIN dialog.
         if (approval !== undefined)
-          return this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+          return await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
         this.errorKey = counterError(error, "sale.error");
       }
+      const code = (error as { code?: string }).code ?? "";
+      if (!retried && ["station.no_replacement", "route.station_inactive"].includes(code))
+        deadEnd = code;
+    } finally {
+      this.submitting = false;
+    }
+    if (refused) {
       if (
-        !retried &&
-        ["station.no_replacement", "route.station_inactive"].includes(
-          (error as { code?: string }).code ?? "",
-        ) &&
-        (await this.#askCounterDeadEnds(
-          "place",
-          false,
-          (error as { code?: string }).code === "route.station_inactive",
-        ))
+        deadEnd !== undefined &&
+        (await this.#askCounterDeadEnds("place", false, deadEnd === "route.station_inactive"))
       ) {
         this.errorKey = undefined;
         await this.#onCounterBillPay(event, true, lateSend);
