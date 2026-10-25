@@ -6718,7 +6718,7 @@ export const es: Record<StringKey, string> = {
   "box_status.misdated.title": "Ventas con fecha incorrecta",
   "box_status.misdated.table_range": "Ventas con fecha incorrecta de {from} a {to}",
   "box_status.misdated.line":
-    "Descarga cada lista para tu asesor, revísala con él y después marca el aviso como resuelto aquí con una nota de lo que se hizo.",
+    "Descarga cada lista para tu asesor, revísala con su ayuda y después marca el aviso como resuelto aquí con una nota de lo que se hizo.",
   "box_status.misdated.col_invoice": "Factura",
   "box_status.misdated.col_at": "Hora registrada",
   "box_status.misdated.read_error": "No se ha podido leer la lista de ventas con fecha incorrecta.",

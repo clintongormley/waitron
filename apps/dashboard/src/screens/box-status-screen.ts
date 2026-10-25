@@ -318,6 +318,7 @@ export class BoxStatusScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#closeHandled();
+    this.#watchingMisdated = false;
   }
 
   #toggleHandled(open: boolean): void {
@@ -844,7 +845,8 @@ export class BoxStatusScreen extends LitElement {
             ></wt-data-table>`
       }
       <div class="misdated-actions">
-        ${open.unconfirmed ? nothing : this.#downloadButton(open)} ${noteButton}
+        ${records === undefined || open.unconfirmed ? nothing : this.#downloadButton(open)}
+        ${noteButton}
       </div>
       ${this.#downloadRefusal(open)}`;
   }
@@ -936,7 +938,11 @@ export class BoxStatusScreen extends LitElement {
     return html`<wt-disclosure
       data-test="misdated-handled"
       heading=${fill("box_status.misdated.handled_heading", {
-        count: String(health.misdatedHandledCount),
+        count: String(
+          this.handledOpen && this.handledEpisodes !== null
+            ? this.handledEpisodes.length
+            : health.misdatedHandledCount,
+        ),
       })}
       ?open=${this.handledOpen}
       @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => this.#toggleHandled(event.detail.open)}

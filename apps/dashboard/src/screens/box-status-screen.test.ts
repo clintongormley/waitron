@@ -1252,6 +1252,21 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     );
   });
 
+  it("reads the open lists again when the screen is taken off the page and put back", async () => {
+    const api = withOpen([OPEN]);
+    const { el } = await mount(api);
+    expect(api.clockMisdated).toHaveBeenCalledTimes(1);
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await flush(el);
+    const reads = (api.clockMisdated as ReturnType<typeof vi.fn>).mock.calls.length;
+    api.liveData.refresh();
+    await flush(el);
+    expect(api.clockMisdated).toHaveBeenCalledTimes(reads + 1);
+    expect(cells(el)).toHaveLength(2);
+  });
+
   it("draws a table for a found list beside a sentence for one that cannot tell", async () => {
     const { el } = await mount(withOpen([UNCONFIRMED, OPEN]));
     expect(qa(el, "[data-test=misdated-entry]")).toHaveLength(2);
@@ -1550,6 +1565,62 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       expect(api.clockMisdated).not.toHaveBeenCalled();
     });
 
+    it("counts the episodes it has read while open, and the box's count while closed", async () => {
+      // The box's count lags the handled lists by up to one health read.
+      const { el } = await mount(withHandled(2, { episodes: [NOTED] }));
+      await toggle(el);
+      expect(entries(el)).toHaveLength(1);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "1" }));
+      await toggle(el);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+    });
+
+    it("keeps the box's count while open until its read answers", async () => {
+      const answer = deferred<ClockMisdatedHandledView>();
+      const api = withHandled(2, { episodes: [] });
+      (api.clockMisdatedHandled as ReturnType<typeof vi.fn>).mockReturnValue(answer.promise);
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+      answer.resolve({ episodes: [NOTED] });
+      await flush(el);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "1" }));
+    });
+
+    it("closes and forgets the fold when the screen is taken off the page, and reads it only once reopened", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(entries(el)).toHaveLength(1);
+      const parent = el.parentElement!;
+      el.remove();
+      parent.append(el);
+      await flush(el);
+      expect(fold(el)!.open).toBe(false);
+      expect(entries(el)).toHaveLength(0);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(1);
+      await toggle(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+      expect(entries(el)).toHaveLength(1);
+    });
+
+    it("clears its read failure once a later read answers", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      (api.clockMisdatedHandled as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error("down"),
+      );
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(q(el, "[data-test=misdated-handled-unavailable]")).not.toBeNull();
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+      expect(q(el, "[data-test=misdated-handled-unavailable]")).toBeNull();
+      expect(entries(el)).toHaveLength(1);
+    });
+
     it("draws no fold when nothing has been handled", async () => {
       const { el } = await mount(withHandled(0, { episodes: [] }, [OPEN]));
       expect(fold(el)).toBeNull();
@@ -1793,6 +1864,20 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       expect(downloads).toEqual(["misdated-sales-2026-10-22.csv"]);
     });
 
+    it("offers none on a handled entry the box sent with no list, even one not marked as cannot tell", async () => {
+      const { el } = await mount(
+        withDownload(
+          vi.fn(),
+          [],
+          [HANDLED, { ...HANDLED, incidentId: "h9", confirmationId: "hc9", records: null }],
+        ),
+      );
+      await openFold(el);
+      const [listed, listless] = handledEntries(el);
+      expect(buttonIn(listed!)).not.toBeNull();
+      expect(buttonIn(listless!)).toBeNull();
+    });
+
     it("words its button in Spanish from the strings tables", async () => {
       setLocale("es");
       const { el } = await mount(withDownload(vi.fn(), [OPEN]));
@@ -1884,6 +1969,70 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
           count: "2",
           from: "2026-10-22 21:00",
           to: "2026-10-22 21:05",
+        }),
+      );
+    });
+
+    it("writes an entry's end at its own offset when summer time ends inside it: label, cell and summary", async () => {
+      const ACROSS_CHANGE: MisdatedOpenView = {
+        ...OPEN,
+        incidentId: "i4",
+        confirmationId: "c4",
+        from: "2026-10-24T23:00:00.000Z",
+        to: "2026-10-25T01:30:00.000Z",
+        toOffsetMinutes: 60,
+      };
+      const lists: ClockMisdatedView = {
+        lists: [
+          ...LISTS.lists,
+          {
+            confirmationId: "c4",
+            records: [
+              {
+                recordId: "r4",
+                series: "T1",
+                number: 10,
+                at: ACROSS_CHANGE.from,
+                offsetMinutes: 120,
+              },
+              {
+                recordId: "r5",
+                series: "T1",
+                number: 11,
+                at: ACROSS_CHANGE.to!,
+                offsetMinutes: 60,
+              },
+            ],
+          },
+        ],
+      };
+      const { el } = await mount(
+        withNotes([OPEN, ACROSS_CHANGE], [], { clockMisdated: vi.fn().mockResolvedValue(lists) }),
+      );
+      const across = qa(el, "[data-test=misdated-entry]")[1]!;
+      const table = across.querySelector("[data-test=misdated-table]")!;
+      // At +120 the end would read 03:30.
+      expect(table.getAttribute("aria-label")).toBe(
+        fill("box_status.misdated.table_range", {
+          from: "2026-10-25 01:00",
+          to: "2026-10-25 02:30",
+        }),
+      );
+      expect(
+        [...table.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+          [...row.querySelectorAll("td")].map((cell) => text(cell)),
+        ),
+      ).toEqual([
+        ["T1/10", "2026-10-25 01:00"],
+        ["T1/11", "2026-10-25 02:30"],
+      ]);
+      await userEvent.click(markIn(across)!);
+      await flush(el);
+      expect(noteDialog(el)!.summary).toBe(
+        fill("box_status.misdated.summary", {
+          count: "2",
+          from: "2026-10-25 01:00",
+          to: "2026-10-25 02:30",
         }),
       );
     });
