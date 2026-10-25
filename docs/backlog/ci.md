@@ -375,6 +375,14 @@ change a test/limit or bypass the hook. Investigate the monitor's observed phase
 missing diagnostic match separately from the mutation fixture's elapsed-time limit. The new
 failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
 
+## Switching the till's language mid-screen with `setLocale` left no error banner in some browser tests.
+
+- **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
+  tests.** The park, place and fire-all clock cases (A798-B slice 8, Task 13b) failed that way and
+  were changed to start the till in the language instead; the table-service and parties cases
+  switch mid-screen and pass. Not diagnosed: a test-harness effect, or a refusal a language change
+  hides. Left open by A798-B slice 8 (#2012).
+
 ## Decisions and deliberate limits
 
 - **Upgrade-test work budget follows the migration count (A489, 2026-10-11) and counts the walk's

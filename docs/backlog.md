@@ -5241,10 +5241,8 @@ values rather than PIN substrings inside random IDs. See the
   plan, E8 and E13). Found while planning A798-B slice 8.
 
 - **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
-  tests.** The park, place and fire-all clock cases (A798-B slice 8, Task 13b) failed that way and
-  were changed to start the till in the language instead; the table-service and parties cases
-  switch mid-screen and pass. Not diagnosed: a test-harness effect, or a refusal a language change
-  hides. Left open by A798-B slice 8 (#2012).
+  tests.** Not diagnosed: a test-harness effect, or a refusal a language change hides.
+  [Detail](backlog/ci.md#switching-the-tills-language-mid-screen-with-setlocale-left-no-error-banner-in-some-browser-tests)
 
 - **The UI showcase overflows a phone and inherits black text in its dark panel.**
   [Detail](backlog/ci.md#the-ui-showcase-overflows-a-phone-and-inherits-black-text-in-its-dark-panel).
