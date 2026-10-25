@@ -9,6 +9,9 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   endManagementSession,
+  hashPin,
+  hashSessionToken,
+  managementSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -16,6 +19,7 @@ import {
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { locationId as brandLocationId } from "@waitron/shared";
+import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
 import {
   mountPersonalDataExportApi,
@@ -33,7 +37,8 @@ const MARTA = {
   email: "marta@example.test",
   telephone: "+34611222333",
   firstNames: "MARTA-FIRST-CANARY",
-  pinHash: "MARTA-PIN-CANARY",
+  // A real hash, so her export reads it as a set PIN rather than a placeholder.
+  pinHash: hashPin("2468"),
 };
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
@@ -41,7 +46,10 @@ const logger = vi.fn();
 let nodeId: string;
 let ids: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff" | "marta", string>;
 let tokens: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff", string>;
+let martaToken: string;
 let subjects: PersonalDataSubject[];
+let duringBuild: (() => Promise<void>) | undefined;
+let extraContent: string;
 
 const stubPart: PersonalDataPart = {
   owner: "server",
@@ -49,12 +57,15 @@ const stubPart: PersonalDataPart = {
     files: ["extra.json"],
     prepare: async (_tx, subject) => {
       subjects.push(subject);
-      return async () => [{ name: "extra.json", content: '{"extra":true}\n' }];
+      return async () => {
+        await duringBuild?.();
+        return [{ name: "extra.json", content: extraContent }];
+      };
     },
   },
 };
 
-function mounted() {
+function mounted(patch: Partial<PersonalDataExportDeps> = {}) {
   const app = new Hono();
   const deps: PersonalDataExportDeps = {
     db: suite.db,
@@ -63,14 +74,26 @@ function mounted() {
     serverParts: [stubPart],
     venueLocale: "en-GB",
     now: () => NOW,
+    ...patch,
   };
   mountPersonalDataExportApi(app, deps, logger);
   return app;
 }
-const ask = (path: string, token: string | null) =>
-  mounted().request(path, {
-    headers: token === null ? {} : { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+const ask = (
+  path: string,
+  token: string | null,
+  patch: Partial<PersonalDataExportDeps> = {},
+  headers: Record<string, string> = {},
+) =>
+  mounted(patch).request(path, {
+    headers: token === null ? headers : { ...headers, cookie: `${MANAGEMENT_COOKIE}=${token}` },
   });
+const lastSeen = (token: string) =>
+  suite.db
+    .select({ lastSeenAt: managementSessions.lastSeenAt })
+    .from(managementSessions)
+    .where(eq(managementSessions.tokenHash, hashSessionToken(token)))
+    .get()!.lastSeenAt;
 async function unzipped(response: Response) {
   const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
   return Object.fromEntries(Object.entries(files).map(([name, data]) => [name, strFromU8(data)]));
@@ -91,6 +114,8 @@ beforeAll(() => {
 
 beforeEach(async () => {
   subjects = [];
+  duringBuild = undefined;
+  extraContent = '{"extra":true}\n';
   logger.mockClear();
   await seedTenant(suite.db);
   const [location] = await suite.db
@@ -123,11 +148,13 @@ beforeEach(async () => {
     staff: staff!,
     marta: marta!,
   };
+  const start = (personId: string) =>
+    withTransaction(suite.db, async (tx) => (await startManagementSession(tx, { personId })).token);
+  martaToken = await start(ids.marta);
   suite.db.run(
     sql`update persons set status = 'suspended', locale = 'es-ES' where id = ${ids.marta}`,
   );
-  const start = (personId: string) =>
-    withTransaction(suite.db, async (tx) => (await startManagementSession(tx, { personId })).token);
+  suite.db.run(sql`update persons set locale = 'en-GB' where id = ${ids.admin}`);
   tokens = {
     admin: await start(ids.admin),
     otherAdmin: await start(ids.otherAdmin),
@@ -195,6 +222,19 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
     expect(subjects).toEqual([]);
   });
 
+  it("checks the permission before the query: a manager sending one is refused the permission", async () => {
+    await refused(await ask(`${staffPath(ids.marta)}?x=1`, tokens.manager), 403, notPermitted);
+    expect(subjects).toEqual([]);
+  });
+
+  it("checks the query before the id: an admin's malformed id with a query is refused the query", async () => {
+    await refused(await ask(`${staffPath(MALFORMED_ID)}?x=1`, tokens.admin), 400, {
+      code: "management.request_invalid",
+      params: { field: "query" },
+    });
+    expect(subjects).toEqual([]);
+  });
+
   it("refuses an admin's request carrying a query", async () => {
     await refused(await ask(`${staffPath(ids.marta)}?x=1`, tokens.admin), 400, {
       code: "management.request_invalid",
@@ -224,5 +264,93 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
       code: "person.suspended",
       params: { personId: ids.admin },
     });
+  });
+
+  it("writes the README in her language, not the admin's saved or browser language", async () => {
+    const response = await ask(
+      staffPath(ids.marta),
+      tokens.admin,
+      {},
+      {
+        "accept-language": "en-GB",
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(subjects.map((s) => s.language)).toEqual(["es"]);
+    const files = await unzipped(response);
+    expect(files["README.txt"]!.split("\n")[0]).toBe(
+      PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"),
+    );
+  });
+
+  for (const [venueLocale, language] of [
+    ["es-ES", "es"],
+    ["en-GB", "en"],
+  ] as const) {
+    it(`writes the README in the venue's language (${venueLocale}) when she has none saved`, async () => {
+      const response = await ask(staffPath(ids.otherAdmin), tokens.admin, { venueLocale });
+      expect(response.status).toBe(200);
+      expect(subjects.map((s) => s.language)).toEqual([language]);
+      const files = await unzipped(response);
+      expect(files["README.txt"]!.split("\n")[0]).toBe(
+        PERSONAL_DATA_README_WORDS[language].title.replace("{venue}", "Test SL"),
+      );
+    });
+  }
+
+  it("checks the permission again after building, and sends nothing to a demoted admin", async () => {
+    duringBuild = () =>
+      withTransaction(suite.db, async (tx) => {
+        await tx.update(persons).set({ role: "manager" }).where(eq(persons.id, ids.admin));
+      });
+    await refused(await ask(staffPath(ids.marta), tokens.admin), 403, notPermitted);
+    expect(subjects.map((s) => s.personId)).toEqual([ids.marta]);
+  });
+
+  it("checks again after building, and sends nothing to an admin disabled meanwhile", async () => {
+    duringBuild = () =>
+      withTransaction(suite.db, async (tx) => {
+        await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, ids.admin));
+      });
+    await refused(await ask(staffPath(ids.marta), tokens.admin), 403, {
+      code: "person.suspended",
+      params: { personId: ids.admin },
+    });
+    expect(subjects.map((s) => s.personId)).toEqual([ids.marta]);
+  });
+
+  it("checks again after building, and sends nothing once the admin's session has ended", async () => {
+    duringBuild = () =>
+      withTransaction(suite.db, async (tx) => {
+        await endManagementSession(tx, tokens.admin);
+      });
+    await refused(await ask(staffPath(ids.marta), tokens.admin), 401, {
+      code: "management_session.required",
+      params: {},
+    });
+    expect(subjects.map((s) => s.personId)).toEqual([ids.marta]);
+  });
+
+  it("leaves the admin session's last-seen time as it was", async () => {
+    suite.db
+      .update(managementSessions)
+      .set({ lastSeenAt: new Date(Date.now() - 5 * 60_000).toISOString() })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(tokens.admin)))
+      .run();
+    const before = lastSeen(tokens.admin);
+    expect((await ask(staffPath(ids.marta), tokens.admin)).status).toBe(200);
+    expect(lastSeen(tokens.admin)).toBe(before);
+  });
+
+  it("carries none of her hashes, nor the admin's session token hash", async () => {
+    const response = await ask(staffPath(ids.marta), tokens.admin);
+    expect(response.status).toBe(200);
+    const files = await unzipped(response);
+    const text = Object.values(files).join("\n");
+    expect(text).toContain(MARTA.email);
+    expect((JSON.parse(files["sign-in.json"]!) as { pinSet: boolean }).pinSet).toBe(true);
+    expect(text).not.toContain(hashSessionToken(martaToken));
+    expect(text).not.toContain(MARTA.pinHash);
+    expect(text).not.toContain(hashSessionToken(tokens.admin));
   });
 });
