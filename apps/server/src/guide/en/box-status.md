@@ -218,10 +218,11 @@ recorded before the stop with a time more than a minute after the moment the box
 It lists them on this page under **Sales dated wrongly**, with each sale's **Invoice** and **Time
 recorded**, and says **Download each list for your tax adviser and go through it with them, then
 mark it handled here with a note of what was done.** [Sales dated
-wrongly](box-status.md#sales-dated-wrongly) explains the download and the note. The bell has an alert with how many sales there are and the first and last times, and
-the box emails the people who manage the system. If the box itself restarted during the stop, it
-cannot be sure when the stop began, so the list may be short, and the alert says so. When no sale
-was dated wrongly, there is no list and no alert.
+wrongly](box-status.md#sales-dated-wrongly) explains the download and the note. The bell has an
+alert with how many sales there are and the first and last times, and the box emails the people who
+manage the system. If the box itself restarted during the stop, it cannot be sure when the stop
+began, so the list may be short, and the alert says so. When no sale was dated wrongly, there is no
+list and no alert.
 
 The stop can also end by itself, because the clock was set right or reached the time of the last
 sale. The box still needs a confirmation to know which sales were dated wrongly, so until it gets
@@ -267,7 +268,7 @@ The way out is to set the clock right.
 A sale recorded with the wrong time stays as it was recorded, so what matters afterwards is what
 your tax adviser makes of it, and keeping a record of what was decided. The **Sales dated wrongly**
 section on this page helps with both: each list can be downloaded as a file for your adviser, and
-each list keeps a note of what was done once you mark it handled.
+each list can keep a note of what was done once you mark it handled.
 
 Under each list, **Download for your adviser** saves a spreadsheet file (CSV) named after the day
 of the first sale's recorded time, for example `misdated-sales-2026-10-23.csv`. An entry where the
@@ -278,15 +279,15 @@ Its first line says what happened, for example: **Bar Sol: 3 sales were recorded
 than the real one, from 23/10/2026 21:12 to 23/10/2026 21:40. Each was made before 23/10/2026
 21:11. The clock was confirmed by two tills or handhelds on 23/10/2026 21:42.** The "made before"
 time is when the payment stop began by the confirmed clock, plus the one minute a confirmation
-allows, rounded up to the next whole minute. If the box restarted during the stop, the line ends
+allows, rounded up to a whole minute. If the box restarted during the stop, the line ends
 with **The box restarted during the stop, so the list may be short.**
 
 Then comes one row per sale, with these columns:
 
 - **Series** and **Number**: the invoice shown in the section's **Invoice** column, split in two.
 - **Invoice date**: the date on the invoice, as it was recorded.
-- **Time recorded**: the time the sale was recorded with. The file writes its times in the time
-  zone the box recorded with the sales, as the section's lists and the box's email do, so a sale's
+- **Time recorded**: the time the sale was recorded with. The sales' times are written in the time
+  zone the box recorded with each sale, as the section's lists and the box's email do, so a sale's
   time here is the clock time its list shows, and the first and last match the email.
 - **Real time**: **Unknown** on every row. The box does not know when each sale was really made,
   only that it was made before the time in the first line.
@@ -307,7 +308,7 @@ page also offer **Mark handled** on the alert, but they take no note.
 A handled list leaves the open lists and moves under **Handled lists**, a fold at the end of the
 section whose heading counts them, for example **Handled lists (2)**. Open it to see every handled
 list, newest first. Each shows its sales and its download, unless the box could not tell which
-sales they were, and says who handled it and when, for example
+sales they were, and usually says who handled it and when, for example
 **Marked handled by Ana on 2026-10-24 10:05.**, and its note, as **Note: …**. The time it was
 marked handled is shown in your own device's time zone, while the sales' times are the clock times
 they were recorded with. When a later check also cannot tell which sales were dated wrongly, and
@@ -317,9 +318,9 @@ sales the old one asked about, so the box marks the old entry handled itself. Th
 
 A handled list that has no note, whoever handled it, offers **Add note**, so you can add the one
 note it may take. Its dialog, **Add a note**, needs a note before **Save** works. Once a list has a
-note, it cannot be changed or replaced. If someone else marked a list handled while you were
-writing a note for it, **Mark handled** says **This alert was already marked handled, so the note was
-not saved. Add it from Handled lists on the Box status page.**
+note, it cannot be changed or replaced. If the list was marked handled elsewhere while you were
+writing a note for it, **Mark handled** says **This alert was already marked handled, so the note
+was not saved. Add it from Handled lists on the Box status page.**
 
 ## Devices as clock witnesses {#clock-witnesses}
 
