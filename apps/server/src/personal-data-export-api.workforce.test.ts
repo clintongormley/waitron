@@ -20,6 +20,7 @@ import {
   attendanceQuestions,
   availability,
   employments,
+  localWallClock,
   rosterVersions,
   shiftSwaps,
   shifts,
@@ -64,11 +65,25 @@ const MARTA = {
   email: "marta.canary@example.test",
   passkeyOfferedAt: "2026-02-27T11:11:11.000Z",
 };
+/** Every clock-in and clock-out the fixture records is at this offset. */
+const CLOCK_OFFSET_MINUTES = 60;
 const COLLEAGUE = {
   name: "Colleague Ruiz",
   email: "colleague.ruiz@example.test",
   passkeyOfferedAt: "2026-03-13T13:13:13.000Z",
+  payRateCents: 1999,
+  employmentCreatedAt: "2023-05-25T07:30:00.000Z",
   absenceNote: "Colleague moving house",
+  shift: { startsAt: "2026-03-05T02:17:00Z", offsetMinutes: 60 },
+  availabilityCreatedAt: "2026-02-27T06:56:00.000Z",
+  swapCreatedAt: "2026-04-04T04:04:00.000Z",
+  questionCreatedAt: "2026-04-26T04:02:00.000Z",
+  reminderRecipient: "ruiz.mail@example.test",
+  responseReason: "Colleague was on a delivery run",
+  fact: { at: "2026-04-25T20:47:00.000Z", offsetMinutes: 180 },
+  staffRole: "Sommelier",
+  area: "Cellar",
+  clockInAt: "2026-03-04T09:07:00.000Z",
 };
 const MANAGER = { name: "Luis Manager", email: "luis.manager@example.test" };
 
@@ -87,7 +102,8 @@ const MARTA_VALUES: [file: string, value: string][] = [
   ["attendance.json", "marta.reminders@example.test"],
   ["attendance.json", "Forgot to clock in after the delivery"],
   ["attendance.json", "2026-03-07T22:30:00+01:00"],
-  ["staff-roles.json", "Bartender"],
+  ["staff-roles.json", '"name": "Bartender"'],
+  ["staff-roles.json", '"staffRole": "Barback"'],
   ["staff-roles.json", "Rooftop bar"],
   ["time-record.csv", "2026-03-03T00:30:00+01:00"],
 ];
@@ -96,19 +112,19 @@ const MARTA_VALUES: [file: string, value: string][] = [
 const COLLEAGUE_VALUES = [
   COLLEAGUE.email,
   COLLEAGUE.passkeyOfferedAt,
-  "19.99",
-  "2023-05-25T07:30:00.000Z",
+  (COLLEAGUE.payRateCents / 100).toFixed(2),
+  COLLEAGUE.employmentCreatedAt,
   COLLEAGUE.absenceNote,
-  "2026-03-05T03:17:00+01:00",
-  "2026-02-27T06:56:00.000Z",
-  "2026-04-04T04:04:00.000Z",
-  "2026-04-26T04:02:00.000Z",
-  "ruiz.mail@example.test",
-  "Colleague was on a delivery run",
-  "2026-04-25T23:47:00+03:00",
-  "Sommelier",
-  "Cellar",
-  "2026-03-04T10:07:00+01:00",
+  localWallClock(COLLEAGUE.shift.startsAt, COLLEAGUE.shift.offsetMinutes),
+  COLLEAGUE.availabilityCreatedAt,
+  COLLEAGUE.swapCreatedAt,
+  COLLEAGUE.questionCreatedAt,
+  COLLEAGUE.reminderRecipient,
+  COLLEAGUE.responseReason,
+  localWallClock(COLLEAGUE.fact.at, COLLEAGUE.fact.offsetMinutes),
+  COLLEAGUE.staffRole,
+  COLLEAGUE.area,
+  localWallClock(COLLEAGUE.clockInAt, CLOCK_OFFSET_MINUTES),
 ];
 
 const logger = vi.fn();
@@ -155,7 +171,7 @@ beforeEach(async () => {
       nodeId: NODE_ID,
       locationId,
       personId,
-      offsetMinutes: 60,
+      offsetMinutes: CLOCK_OFFSET_MINUTES,
       origin: jobOrigin("dashboard"),
       at,
     });
@@ -163,7 +179,7 @@ beforeEach(async () => {
     await withTransaction(suite.db, (tx) => backend.clockOut(tx, event(outAt)));
   };
   await clock(martaId, "2026-03-02T23:30:00.000Z", "2026-03-03T07:15:00.000Z");
-  await clock(colleagueId, "2026-03-04T09:07:00.000Z", "2026-03-04T17:43:00.000Z");
+  await clock(colleagueId, COLLEAGUE.clockInAt, "2026-03-04T17:43:00.000Z");
 
   const [entry] = await suite.db
     .select({ id: timeEntries.id })
@@ -185,8 +201,8 @@ beforeEach(async () => {
       contractedMinutesPerWeek: 1800,
       contractType: "seasonal",
       startDate: "2023-06-01",
-      payRate: 1999,
-      createdAt: "2023-05-25T07:30:00.000Z",
+      payRate: COLLEAGUE.payRateCents,
+      createdAt: COLLEAGUE.employmentCreatedAt,
     },
   ]);
 
@@ -241,8 +257,8 @@ beforeEach(async () => {
       {
         personId: colleagueId,
         locationId,
-        startsAt: "2026-03-05T02:17:00Z",
-        startsOffsetMinutes: 60,
+        startsAt: COLLEAGUE.shift.startsAt,
+        startsOffsetMinutes: COLLEAGUE.shift.offsetMinutes,
         endsAt: "2026-03-05T09:17:00Z",
         endsOffsetMinutes: 60,
         rosterVersionId: null,
@@ -268,7 +284,7 @@ beforeEach(async () => {
       availableToMinute: 710,
       effectiveFrom: "2026-03-03",
       effectiveTo: "2026-09-09",
-      createdAt: "2026-02-27T06:56:00.000Z",
+      createdAt: COLLEAGUE.availabilityCreatedAt,
     },
   ]);
 
@@ -288,7 +304,7 @@ beforeEach(async () => {
       fromShiftId: colleagueShift!.id,
       toPersonId: managerId,
       status: "requested",
-      createdAt: "2026-04-04T04:04:00.000Z",
+      createdAt: COLLEAGUE.swapCreatedAt,
     },
   ]);
 
@@ -319,7 +335,7 @@ beforeEach(async () => {
       kind: "missing-times",
       missingKinds: ["out"],
       evidenceKeys: ["order:evidence-colleague"],
-      createdAt: "2026-04-26T04:02:00.000Z",
+      createdAt: COLLEAGUE.questionCreatedAt,
     },
   ]);
   await suite.db.insert(attendanceMail).values([
@@ -338,7 +354,7 @@ beforeEach(async () => {
       claimToken: "holder-9:colleague-claim-token",
       claimedAt: "2026-04-26T04:03:00.000Z",
       nextAttemptAt: "2026-04-26T04:18:00.000Z",
-      recipient: "ruiz.mail@example.test",
+      recipient: COLLEAGUE.reminderRecipient,
       outcome: "rejected",
     },
   ]);
@@ -399,7 +415,7 @@ beforeEach(async () => {
     input: {
       action: "disagree",
       itemId: "00000000-0000-4000-8000-0000000000c9",
-      reason: "Colleague was on a delivery run",
+      reason: COLLEAGUE.responseReason,
     },
     createdAt: "2026-04-27T09:11:00.000Z",
   });
@@ -421,8 +437,8 @@ beforeEach(async () => {
       personId: colleagueId,
       locationId,
       kind: "order",
-      at: "2026-04-25T20:47:00.000Z",
-      offsetMinutes: 180,
+      at: COLLEAGUE.fact.at,
+      offsetMinutes: COLLEAGUE.fact.offsetMinutes,
       businessDay: "2026-04-25",
       outcome: "refused",
     },
@@ -433,14 +449,16 @@ beforeEach(async () => {
     .insert(departments)
     .values([
       { locationId, name: "Rooftop bar", tradingName: "Rooftop bar" },
-      { locationId, name: "Cellar", tradingName: "Cellar" },
+      { locationId, name: COLLEAGUE.area, tradingName: COLLEAGUE.area },
     ])
     .returning({ id: departments.id });
   const bartender = "00000000-0000-4000-8000-000000000001";
   const sommelier = "00000000-0000-4000-8000-000000000002";
+  const barback = "00000000-0000-4000-8000-000000000003";
   for (const [id, name] of [
     [bartender, "Bartender"],
-    [sommelier, "Sommelier"],
+    [sommelier, COLLEAGUE.staffRole],
+    [barback, "Barback"],
   ] as const)
     await suite.db.run(
       sql`insert into staff_roles (id, location_id, name) values (${id}, ${locationId}, ${name})`,
@@ -453,7 +471,7 @@ beforeEach(async () => {
       sql`insert into person_staff_roles (person_id, staff_role_id) values (${personId}, ${roleId})`,
     );
   for (const [shiftId, departmentId, roleId] of [
-    [martaShift!.id, rooftop!.id, bartender],
+    [martaShift!.id, rooftop!.id, barback],
     [colleagueShift!.id, cellar!.id, sommelier],
   ] as const)
     await suite.db.run(
