@@ -1093,10 +1093,7 @@ describe("the receipt preview's top block", () => {
           } else {
             await untrusted.apply(suite.db, at());
             result = await rendered({});
-            expect(warning).not.toHaveBeenCalledWith(
-              "receipt.optional_read_failed",
-              expect.anything(),
-            );
+            expect(warning).not.toHaveBeenCalled();
           }
         } finally {
           warning.mockRestore();

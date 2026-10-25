@@ -1683,9 +1683,9 @@ nothing and left two holes):
 
   So the build makes "cannot be trusted" visible: `readPrintedDepartmentReceipt` also reads whether
   the receipt row exists, whether its document is valid JSON whose top level is an object, and
-  whether it has a `logo` key, and answers `unreadable: true` beside the empty receipt in cases 1
-  to 4 — a document with a `logo` key and no kept name is case 3. (Case 3 keeps its readable fields:
-  section 16, lane A ruling 2026-10-25.) A department with no receipt row,
+  whether it has a `logo` key, and answers `unreadable: true` beside the empty receipt in cases 1,
+  2 and 4, and beside the readable fields in case 3 — a document with a `logo` key and no kept name
+  is case 3. A department with no receipt row,
   or with a readable document that has no `logo` key, is not unreadable, and takes the venue's logo.
   **The two that print** — the receipt (`apps/server/src/receipt-print.ts:199`) and the A4 invoice
   (`apps/server/src/invoice-document.ts:103`) — then take no logo at all, the sale still printing as

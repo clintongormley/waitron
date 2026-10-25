@@ -199,14 +199,13 @@ export async function resolvePrintedLogo(tx: Transaction, department: PrintedDep
 export async function readVenueLogoName(tx: Transaction, department: PrintedDepartmentReceipt | null, diagnostic: ReceiptReadDiagnostic): Promise<VenueReceiptConfig>;
 ```
 
-**Every decision whether the venue's logo may print goes through `venueLogoMayPrint`**, and
-nowhere else: `resolvePrintedLogo`, `readVenueLogoName` and the preview (D7) each ask it once and
-have no branch of their own on `unreadable` or on the department's logo. `resolvePrintedLogo`: when
+**`resolvePrintedLogo` and `readVenueLogoName` decide only by calling `venueLogoMayPrint`**, with
+no branch of their own on `unreadable` or the department's logo; the preview also asks it. `resolvePrintedLogo`: when
 `venueLogoMayPrint` says no → `{ venue: {}, logo: department?.logo ?? null }` — a department naming
 its own logo prints its picture, or nothing when that picture is bad (the fallback follows the
 name), and an untrusted department, whose answer never holds a logo (D2), prints nothing; when it
 says yes → the theme's `{ venue: { logo: name }, logo: picture }`, or `{ venue: {}, logo: null }`
-without one. Task A5's proof by deletion relies on this single decision point. A failed theme read reports
+without one. Task A5's proof by deletion relies on those two having no branch of their own. A failed theme read reports
 `{ operation: "readPrintedThemeLogo", code: "receipt.read_failed" }` (`readVenueLogoName`:
 `"readThemeInUse"`) and prints no venue logo; the sale prints, as every other optional read does
 (`receipt-print.ts:187-192`). `readVenueLogoName` reads `readThemeInUse` (the ticket view needs the
