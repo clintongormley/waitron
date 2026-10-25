@@ -624,10 +624,6 @@ export function mountFirstSetupResolutionApi(
     >["startAgainSummary"];
     requestRestart?: () => void;
     withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
-    selection?: Pick<
-      ReturnType<typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions>,
-      "inspectWorkspaceSelection" | "resumeWorkspaceSelection"
-    >;
   } = {},
 ) {
   const root = "/setup-api/first-setup";
@@ -642,61 +638,6 @@ export function mountFirstSetupResolutionApi(
       return c.json(await host.resolution.inspectFirstSetupResolution());
     }),
   );
-  if (options.selection !== undefined) {
-    const selection = options.selection;
-    app.get(`${root}/resolution/selection`, (c) =>
-      boundary(c, log, async () => {
-        assertFirstFiscalRequest(c);
-        return c.json(await selection.inspectWorkspaceSelection());
-      }),
-    );
-    app.post(`${root}/resolution/resume-selection`, (c) =>
-      boundary(c, log, async () => {
-        assertFirstFiscalRequest(c);
-        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-        if (!(socket instanceof TLSSocket) || !socket.encrypted)
-          throw new AppError("setup.owner_required", {});
-        const rawBody = object(await readFirstFiscalBody(c));
-        const withPassword = Object.hasOwn(rawBody, "password");
-        const body = exact(rawBody, [
-          "inspectionId",
-          "revision",
-          "ownerGeneration",
-          "workspaceId",
-          "selectionGeneration",
-          ...(withPassword ? ["password"] : Object.hasOwn(rawBody, "register") ? ["register"] : []),
-        ]);
-        if (
-          ![body.revision, body.ownerGeneration, body.selectionGeneration].every(
-            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-          )
-        )
-          invalid();
-        let proof:
-          { password: string } | { register?: import("@waitron/provisioning").RegisterAnswer };
-        if (withPassword) proof = { password: text(body.password) };
-        else {
-          proof = Object.hasOwn(body, "register")
-            ? { register: registerAnswer(body.register) }
-            : {};
-        }
-        const selected = await selection.resumeWorkspaceSelection({
-          inspectionId: text(body.inspectionId),
-          revision: body.revision as number,
-          ownerGeneration: body.ownerGeneration as number,
-          workspaceId: text(body.workspaceId),
-          selectionGeneration: body.selectionGeneration as number,
-          ...proof,
-        });
-        setTimeout(() => options.requestRestart?.(), 0);
-        return c.json({
-          workspaceId: selected.workspaceId,
-          selectionGeneration: selected.selectionGeneration,
-          restarting: true,
-        });
-      }),
-    );
-  }
   app.post(`${root}/resolution/recover`, (c) =>
     boundary(c, log, async () => {
       assertFirstFiscalRequest(c);

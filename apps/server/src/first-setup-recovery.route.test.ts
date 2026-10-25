@@ -176,6 +176,69 @@ it("binds HTTPS password recovery to a fresh server inspection and exact request
   }
 });
 
+it("throttles failed passwords on unfinished-setup ownership recovery, then refuses the right one", async () => {
+  const f = await firstFiscalFixture();
+  let server: StartedServer | undefined;
+  let agent: Agent | undefined;
+  try {
+    const migrations = join(f.root, "migrations");
+    await copyMigrationsRoot(migrations);
+    const [port] = await freePorts(1);
+    server = await startServer({
+      WAITRON_ENV: "production",
+      WAITRON_STATE_DIR: f.stateDir,
+      WAITRON_VENUE_DIR: f.venueDir,
+      WAITRON_MIGRATIONS_DIR: migrations,
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_MANAGEMENT_RP_ID: "localhost",
+      WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
+    });
+    agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
+    const origin = `https://127.0.0.1:${port}`;
+    const inspection = await (
+      await fetch(`${origin}/setup-api/first-setup/resolution`, {
+        dispatcher: agent,
+      } as RequestInit)
+    ).json();
+    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const post = (password: string) =>
+      fetch(`${origin}/setup-api/first-setup/resolution/recover`, {
+        dispatcher: agent,
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          inspectionId: inspection.inspectionId,
+          revision: inspection.revision,
+          ownerGeneration: inspection.ownerGeneration,
+          clientClaimNonce: randomBytes(32).toString("base64url"),
+          password,
+        }),
+      } as RequestInit);
+    let throttled = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const response = await post("wrong");
+      if (response.status === 429) {
+        expect(await response.json()).toMatchObject({ error: { code: "password.throttled" } });
+        throttled = true;
+        break;
+      }
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: { code: "setup.owner_required" } });
+    }
+    expect(throttled).toBe(true);
+    const recovery = await post(PASSWORD);
+    expect(recovery.status).toBe(429);
+    expect(await recovery.json()).toMatchObject({ error: { code: "password.throttled" } });
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  } finally {
+    await server?.close();
+    await agent?.close();
+    await f.dispose();
+  }
+});
+
 it("refuses resolution password submission on an actual HTTP socket", async () => {
   const f = await firstFiscalFixture();
   let server: ReturnType<typeof serve> | undefined;

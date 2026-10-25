@@ -1,12 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import {
-  createFirstSetupCoordinator,
-  createFirstSetupResolutionStore,
-  createFirstSetupStore,
-  inspectFirstSetupWorkspaceSelection,
   assertNoLegacyFirstSetupWorkspace,
-  selectFirstSetupWorkspace,
   firstSetupModuleContext,
   raiseStartAgainNote,
   readModulePreparationHistory,
@@ -23,10 +18,8 @@ import {
   START_AGAIN_MARKER_LIMIT,
   type StartAgainSummary,
   type RegisterAnswer,
-  type WorkspaceBinding,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import { lockVenueDatabase } from "@waitron/db";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
 import { readFirstFiscalEvidenceSnapshot } from "./first-fiscal-evidence.js";
 import { readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
@@ -181,155 +174,7 @@ export function createFirstSetupResolutionActions(
     )
       conflict();
   };
-  const inspectSelection = async () => {
-    const inspected = await inspectFirstSetupWorkspaceSelection(options);
-    if (inspected === null) return null;
-    const retained = await createFirstSetupStore({
-      ...inspected.retired,
-      coordinator: createFirstSetupCoordinator(),
-    }).readForRepair();
-    if (
-      retained === null ||
-      retained.state.frozen.attemptId !== inspected.record.attemptId ||
-      retained.state.revision !== inspected.record.observedRevision ||
-      retained.state.ownerGeneration !== inspected.record.observedOwnerGeneration
-    )
-      conflict();
-    return { ...inspected, state: retained.state };
-  };
   return {
-    async inspectWorkspaceSelection() {
-      const inspected = await inspectSelection();
-      if (inspected === null) return null;
-      return {
-        inspectionId: inspected.inspectionId,
-        revision: inspected.state.revision,
-        ownerGeneration: inspected.state.ownerGeneration,
-        workspaceId: inspected.binding.workspaceId,
-        selectionGeneration: inspected.binding.selectionGeneration,
-      };
-    },
-    async resumeWorkspaceSelection(
-      request: {
-        inspectionId: string;
-        revision: number;
-        ownerGeneration: number;
-        workspaceId: string;
-        selectionGeneration: number;
-      } & (
-        { password: string; register?: never } | { register?: RegisterAnswer; password?: never }
-      ),
-    ): Promise<WorkspaceBinding> {
-      const inspected = await inspectSelection();
-      if (inspected === null) conflict();
-      if (
-        request.inspectionId !== inspected.inspectionId ||
-        request.revision !== inspected.state.revision ||
-        request.ownerGeneration !== inspected.state.ownerGeneration ||
-        request.workspaceId !== inspected.binding.workspaceId ||
-        request.selectionGeneration !== inspected.binding.selectionGeneration
-      )
-        conflict();
-      const assertLocalReset = async (
-        current: NonNullable<Awaited<ReturnType<typeof inspectSelection>>>,
-      ) => {
-        if (
-          current.record.database !== "empty-preactivation" ||
-          current.record.action !== "retire" ||
-          !(await host.resolution.recheckEmptyDatabase(
-            current.retired,
-            current.state.frozen.modules.map((entry) => entry.module),
-          )) ||
-          (await host.resolution.inspectFirstSetupResolution()).artifacts.some((artifact) =>
-            artifact.name.startsWith("outside-"),
-          )
-        )
-          unavailable();
-        if (
-          current.record.authority === "local-empty-no-custodian" &&
-          request.register?.kind === "no-current-master" &&
-          request.register.confirmed === true &&
-          current.record.register?.kind === "no-current-master" &&
-          unused(current.state)
-        )
-          return;
-        if (
-          current.record.authority === "local-empty-unused-assignment" &&
-          request.register?.kind === "current-master" &&
-          current.record.register?.kind === "current-master" &&
-          typeof request.register.consultedAt === "string" &&
-          Number.isFinite(Date.parse(request.register.consultedAt)) &&
-          new Date(request.register.consultedAt).toISOString() === request.register.consultedAt &&
-          isDeepStrictEqual(
-            { ...request.register, consultedAt: current.record.register.consultedAt },
-            current.record.register,
-          ) &&
-          host.modules !== undefined
-        ) {
-          const archive = createFirstSetupResolutionStore({
-            venueDir: current.binding.anchorVenueDir,
-            stateDir: current.binding.anchorStateDir,
-            coordinator: createFirstSetupCoordinator(),
-          });
-          if (
-            await firstSetupUnusedAssignment(
-              current.state,
-              await archive.readOriginals(current.record.resolutionId),
-              host.modules,
-            )
-          )
-            return;
-        }
-        if (
-          current.record.authority === "local-empty-unused-assignment" &&
-          current.record.register === null &&
-          request.register === undefined &&
-          host.modules !== undefined
-        ) {
-          const archive = createFirstSetupResolutionStore({
-            venueDir: current.binding.anchorVenueDir,
-            stateDir: current.binding.anchorStateDir,
-            coordinator: createFirstSetupCoordinator(),
-          });
-          if (
-            unused(current.state) ||
-            (await firstSetupUnusedAssignment(
-              current.state,
-              await archive.readOriginals(current.record.resolutionId),
-              host.modules,
-            ))
-          )
-            return;
-        }
-        unavailable();
-      };
-      const resume = async () => {
-        const anchor = {
-          venueDir: inspected.binding.anchorVenueDir,
-          stateDir: inspected.binding.anchorStateDir,
-        };
-        const hold = await lockVenueDatabase(anchor.venueDir);
-        let target: Awaited<ReturnType<typeof lockVenueDatabase>> | undefined;
-        try {
-          if (inspected.retired.venueDir !== anchor.venueDir)
-            target = await lockVenueDatabase(inspected.retired.venueDir);
-          return await host.coordinator.run(async () => {
-            const current = await inspectSelection();
-            if (current === null || current.inspectionId !== inspected.inspectionId) conflict();
-            if (request.password === undefined) await assertLocalReset(current);
-            return selectFirstSetupWorkspace(anchor, current.record);
-          });
-        } finally {
-          target?.release();
-          hold.release();
-        }
-      };
-      if (request.password !== undefined)
-        return host.owner.withResolutionPassword(inspected.state, request.password, resume);
-      // Only resume the recorded empty reset; selection rechecks every archived local original.
-      await assertLocalReset(inspected);
-      return resume();
-    },
     startAgainSummary(request: StartAgainSummaryRequest): Promise<StartAgainSummary> {
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {

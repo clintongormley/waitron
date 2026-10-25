@@ -47,7 +47,6 @@ export async function firstSetupUnusedAssignment(
     "venue/venue.db-wal",
     "state/first-setup-node-key.json",
     "directory:state/first-fiscal-documents",
-    "workspace:predecessor",
   ]);
   if (
     originals.some(
