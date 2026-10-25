@@ -24,10 +24,7 @@ import { readTenantIdentities } from "./tenant-guard.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 import { moveFakeClockPast, printedWaitTarget } from "../test/settle-wait.js";
-import { randomBytes, randomUUID } from "node:crypto";
-import { createFirstSetupCoordinator } from "./first-setup-state.js";
-import { createFirstSetupResolutionStore } from "./first-setup-resolution.js";
-import { selectFirstSetupWorkspace } from "./first-setup-workspace.js";
+import { randomBytes } from "node:crypto";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -272,65 +269,6 @@ it("a differently stamped database is refused before recording a new setup attem
   );
   expect(await f.runtime.store.read()).toBeNull();
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
-});
-
-it("a command without a retired-evidence adapter refuses a successor workspace", async () => {
-  const f = await fixture();
-  await runCli(f.args, f.deps);
-  const snapshot = await f.runtime.resolution.captureFirstSetupOriginals();
-  const state = (await f.runtime.store.read())!;
-  const resolutionId = randomUUID();
-  const workspaceId = randomUUID();
-  const roots = { stateDir: state.stateDir, venueDir: state.venueDir };
-  const base = join(state.stateDir, "first-setup-workspaces", workspaceId);
-  const binding = {
-    workspaceId,
-    resolutionId,
-    anchorVenueDir: state.venueDir,
-    anchorStateDir: state.stateDir,
-    venueDir: join(base, "venue"),
-    stateDir: join(base, "state"),
-    selectionGeneration: 1,
-  };
-  const records = createFirstSetupResolutionStore({
-    ...roots,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  const prepared = await records.prepare(
-    {
-      resolutionId,
-      attemptId: state.frozen.attemptId,
-      observedRevision: state.revision,
-      observedOwnerGeneration: state.ownerGeneration,
-      database: "missing",
-      authority: "original-password",
-      action: "retire",
-      nextWorkspace: binding,
-      register: {
-        kind: "current-master",
-        status: "Unknown",
-        custodian: "Elena",
-        reference: "c".repeat(64),
-        consultedAt: "2026-10-16T11:40:00.000Z",
-      },
-    },
-    snapshot.originals,
-  );
-  await selectFirstSetupWorkspace(roots, await records.apply(prepared));
-  const runtime = createFirstSetupRuntime({
-    stateDir: binding.stateDir,
-    venueDir: binding.venueDir,
-    environment: {},
-    modules: ALL_MODULES,
-    database: () => venue.db,
-  });
-  f.deps.configureFirstSetup = () => runtime;
-  const args = [...f.args];
-  args[args.indexOf("--venue-dir") + 1] = binding.venueDir;
-  expect(await runCli(args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.not_ready {}");
-  expect((await runtime.store.read())!.inputs).toEqual({});
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
 });
 
 it("declining a resumed plan does not rotate ownership or open the database", async () => {

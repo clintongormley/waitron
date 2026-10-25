@@ -1,7 +1,4 @@
-import {
-  assertFirstSetupVenueTarget,
-  readRetiredFirstSetupStates,
-} from "./first-setup-workspace.js";
+import { assertFirstSetupVenueTarget } from "./first-setup-workspace.js";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -664,16 +661,13 @@ export function createFirstSetupStore(options: {
                   ATTEMPT_KEYS.map((key) => [key, old[key as keyof FirstSetupState]]),
                 ) as unknown as Attempt,
               ];
-        const retired = await readRetiredFirstSetupStates({ venueDir, stateDir });
         const allIds = new Set(
-          [...previous, ...retired.flatMap((state) => [state, ...state.previous])].flatMap(
-            (attempt) => [
-              attempt.frozen.attemptId,
-              attempt.frozen.nodeId,
-              attempt.frozen.administratorId,
-              ...attempt.frozen.modules.map((module) => module.eventId),
-            ],
-          ),
+          previous.flatMap((attempt) => [
+            attempt.frozen.attemptId,
+            attempt.frozen.nodeId,
+            attempt.frozen.administratorId,
+            ...attempt.frozen.modules.map((module) => module.eventId),
+          ]),
         );
         if (
           [

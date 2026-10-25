@@ -5,11 +5,7 @@ import { basename, dirname, join, resolve, relative, isAbsolute, sep } from "nod
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
-import {
-  createFirstSetupCoordinator,
-  parseState,
-  type FirstSetupState,
-} from "./first-setup-state.js";
+import { createFirstSetupCoordinator } from "./first-setup-state.js";
 import {
   canonicalFirstSetupDirectory,
   firstSetupDirectory,
@@ -511,56 +507,6 @@ async function assertBootTarget(
   }
 }
 
-export async function readFirstSetupRetirementArchives(targetInput: FirstSetupAnchor): Promise<
-  {
-    state: FirstSetupState;
-    record: ResolutionRecord;
-    originals: { name: string; bytes: Buffer | null }[];
-  }[]
-> {
-  try {
-    const cache = createFirstSetupOriginalsCache();
-    const target = await canonical(targetInput);
-    await assertBootTarget(target, cache);
-    const value = await read(join(target.venueDir, "first-setup-workspace.json"));
-    if (value === null) return [];
-    let witness: Witness | null = checkedWitness(value);
-    const anchor = {
-      venueDir: witness.binding.anchorVenueDir,
-      stateDir: witness.binding.anchorStateDir,
-    };
-    const retirements: {
-      state: FirstSetupState;
-      record: ResolutionRecord;
-      originals: { name: string; bytes: Buffer | null }[];
-    }[] = [];
-    while (witness !== null) {
-      const { retired, predecessor, record } = await checkedChain(anchor, witness, cache);
-      const originals = await store(anchor, cache).readOriginals(witness.binding.resolutionId);
-      const bytes = originals.find((original) => original.name === "state/first-setup.json")?.bytes;
-      if (bytes == null) uncertain();
-      retirements.push({
-        state: parseState(JSON.parse(bytes.toString("utf8")), retired.venueDir, retired.stateDir),
-        record,
-        originals,
-      });
-      witness = predecessor;
-    }
-    return retirements;
-  } catch {
-    uncertain();
-  }
-}
-
-export async function readFirstSetupRetirements(
-  target: FirstSetupAnchor,
-): Promise<{ state: FirstSetupState; record: ResolutionRecord }[]> {
-  return (await readFirstSetupRetirementArchives(target)).map(({ state, record }) => ({
-    state,
-    record,
-  }));
-}
-
 export async function firstSetupAnchorFor(
   targetInput: FirstSetupAnchor,
 ): Promise<FirstSetupAnchor> {
@@ -570,10 +516,4 @@ export async function firstSetupAnchorFor(
   if (value === null) return target;
   const { binding } = checkedWitness(value);
   return { venueDir: binding.anchorVenueDir, stateDir: binding.anchorStateDir };
-}
-
-export async function readRetiredFirstSetupStates(
-  target: FirstSetupAnchor,
-): Promise<FirstSetupState[]> {
-  return (await readFirstSetupRetirements(target)).map((entry) => entry.state);
 }

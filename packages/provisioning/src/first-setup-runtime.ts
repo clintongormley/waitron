@@ -28,7 +28,6 @@ import {
   createFirstSetupPreparation,
   type PreparationAuthority,
 } from "./first-setup-preparation.js";
-import { readFirstSetupRetirements } from "./first-setup-workspace.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import { createFirstSetupRecoveryDelivery } from "./first-setup-recovery-delivery.js";
 import { createFirstSetupCommandDelivery } from "./first-setup-command-document.js";
@@ -40,7 +39,6 @@ export function createModuleOperationHost(
   evidence?: {
     read?: ModuleOperationHost["readPublicEvidence"];
     withPreparationState?: ModuleOperationHost["withPreparationState"];
-    readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
     readSetupFacts?: ModuleOperationHost["readSetupFacts"];
     readRecoveryFacts?: ModuleOperationHost["readRecoveryFacts"];
     testClock?: ModuleOperationHost["testClock"];
@@ -56,9 +54,6 @@ export function createModuleOperationHost(
     ...(evidence?.withPreparationState === undefined
       ? {}
       : { withPreparationState: evidence.withPreparationState }),
-    ...(evidence?.readRetiredSetup === undefined
-      ? {}
-      : { readRetiredSetup: evidence.readRetiredSetup }),
     readPublicEvidence: async (binding: OperationBinding) => evidence?.read?.(binding),
   });
 }
@@ -78,19 +73,11 @@ export function createFirstSetupRuntime(options: {
   >;
   assertClaimAllowed?: (hold: FirstSetupHold) => Promise<void>;
   readPublicEvidence?: ModuleOperationHost["readPublicEvidence"];
-  readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
   onOwnershipRecovered?: (attemptId: string) => void;
   testClock?: ModuleOperationHost["testClock"];
   /** Set only by a test: the clock that expires the owner's password grants. */
   grantClock?: () => number;
 }) {
-  const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> =
-    options.readRetiredSetup ??
-    (async () => {
-      if ((await readFirstSetupRetirements(options)).length !== 0)
-        throw new AppError("setup.not_ready", {});
-      return [];
-    });
   const sharedCoordinator = createFirstSetupCoordinator();
   const holds = new AsyncLocalStorage<FirstSetupHold>();
   const replacementAuthority = new AsyncLocalStorage<PreparationAuthority>();
@@ -114,7 +101,6 @@ export function createFirstSetupRuntime(options: {
       return preparation.current.readSetupFacts(binding);
     },
     read: async (binding) => options.readPublicEvidence?.(binding),
-    readRetiredSetup,
     withPreparationState: (binding, run) => {
       if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
       return preparation.current.withPreparationState(binding, run);
@@ -211,7 +197,6 @@ export function createFirstSetupRuntime(options: {
         )
       )
         throw new AppError("setup.attempt_conflict", {});
-      if (options.readRetiredSetup === undefined) await readRetiredSetup(held.module);
       const database = options.database?.();
       const contribution = initialSetupFor(modules, held.module);
       if (database === undefined || contribution?.localHistory === undefined)
@@ -282,7 +267,6 @@ export function createFirstSetupRuntime(options: {
   };
   const setupPreparation = createFirstSetupPreparation({
     ...options,
-    readRetiredSetup,
     ...authorization,
     modules,
     owner,

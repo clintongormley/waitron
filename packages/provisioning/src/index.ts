@@ -67,9 +67,6 @@ export type {
 export {
   firstSetupAnchorFor,
   inspectFirstSetupWorkspaceSelection,
-  readRetiredFirstSetupStates,
-  readFirstSetupRetirements,
-  readFirstSetupRetirementArchives,
   selectFirstSetupWorkspace,
   resolveFirstSetupWorkspace,
   assertFirstSetupBootTarget,
