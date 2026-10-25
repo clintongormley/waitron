@@ -138,7 +138,7 @@ repeat: **Done** clears the one on show, and another order starts the count agai
 
 When the kitchen has dishes ready, you want to know which tables to take them to without going to
 look. On a phone or tablet, a bar at the foot of the **Floor** lists each table with food ready and
-how many dishes are waiting, such as **Ready · Mesa 2 · 3**. Tap a table to open it, or tap
+how many dishes are waiting, such as **Ready · Table 2 · 3**. Tap a table to open it, or tap
 **Open ›** to open the first table listed. The bar lists only the tables in the zones this device
 shows, and it goes away once nothing is ready. A till shows the same food in a **Ready** list above
 the tables instead, one line for each station.
