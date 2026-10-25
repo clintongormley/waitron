@@ -2804,6 +2804,48 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   "Mesa 1" and "Mesa 2" among them), so renaming a label means renaming its short name too. Low
   priority.
 
+- **A1103. At 390 px the floor plan editor leaves a refused Name field half under the panel's
+  heading.** Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-390-light-en.png` in
+  `~/waitron-campaign-c/a797-1-shots/`): after a refused save the Name field is scrolled only partly
+  into view, and its "Name *" label sits under the panel's sticky heading ("W1 ⌄"), so only the
+  value and the refusal under it show; scrolled by hand, the label shows
+  (`r-refusal-field-390-light-en.png`). Slice 1 changed which sentence the editor shows, not where
+  it scrolls.
+
+- **A1104. Should the till's Ready bar sort by the short name it shows?** Seen, 2026-10-25 (the
+  A797 slice 1 look, `e-bar-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): the
+  bar lists parties in the order their first table appears in the floor's tables (slice 5 of the
+  [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md)), which in the look ran
+  by full name, so "Window 1", shown as W1, came last: "2 · 1", "T1+T2 · 1", "W1 · 1". Ask the
+  owner.
+
+- **A1105. At 390 px in English the till's Ready bar hides its last entry under "Open ›".** Seen,
+  2026-10-25 (the A797 slice 1 look, `e-bar-dining-390-light-en.png` in
+  `~/waitron-campaign-c/a797-1-shots/`): with three entries the last, "W1 · 1", is cut off by the
+  "Open ›" button and the bar scrolls sideways to reach it; in Spanish all three fit
+  (`e-bar-dining-390-light-es.png`).
+
+- **A1106. The till's List cards say "1 items".** Seen, 2026-10-25 (the A797 slice 1 look,
+  `h-list-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): Window 1's card reads
+  "€6.50, 1 items". Fix: a singular wording for a count of 1.
+
+- **A1107. Spanish calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its
+  List card.** Seen, 2026-10-25 (the A797 slice 1 look, `g-details-window1-390-light-es.png` and
+  `h-list-dining-390-light-es.png` in `~/waitron-campaign-c/a797-1-shots/`), for the same table.
+  A1076 is a different Spanish wording of the same flag, in the station editor.
+
+- **A1108. The till order screen's Sent panel reads "Sent !" and "Held ·".** Seen, 2026-10-25 (the
+  A797 slice 1 look, `f-header-window1-1024-light-en.png` and `f-header-window1-1024-dark-es.png` in
+  `~/waitron-campaign-c/a797-1-shots/`): a space before the "!" ("Sent !", «Enviado !»), and the
+  Held line ends in a separator with nothing after it, where the Served line above reads
+  "Served · 0 · €0.00".
+
+- **A1109. The floor plan editor opens Terrace as an empty grid, and its phone Tables panel has a
+  large blank gap.** Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-1280-light-en.png` and
+  `r-tables-panel-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): at 1280 the demo's
+  Terrace tables lie beyond the visible canvas, so none shows without scrolling; at 390 the Tables
+  panel leaves a large blank space between Add tables / Add joined table and the list.
+
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
     the cookie names a disabled device, so the response time hints that an id is a disabled device;
