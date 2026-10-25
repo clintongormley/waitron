@@ -3,8 +3,8 @@ import type { Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { locationId as brandLocationId } from "@waitron/shared";
-import { asc, eq } from "drizzle-orm";
+import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -431,31 +431,44 @@ const COLLEAGUE_VALUES = [
  * facts, sequence numbers) in the reverse of its sort order, and its created_at order differs
  * from its first sort key's, so neither tie-break can stand in for the sort.
  */
+/** A clock-in, then the automatic clock-out the end-of-day job writes (`recordAutomaticClose`);
+ * returns the two entries' ids. */
+async function clockInThenAutomaticOut(
+  db: Database,
+  input: { nodeId: string; personId: string; locationId: string; inAt: string; outAt: string },
+): Promise<[string, string]> {
+  const { nodeId, personId, locationId } = input;
+  await insertTimeEntry(db, { nodeId, personId, locationId, entryKind: "in", eventAt: input.inAt });
+  const [open] = await db
+    .select({ id: timeEntries.id })
+    .from(timeEntries)
+    .where(eq(timeEntries.personId, personId));
+  const automatic = await withTransaction(db, (tx) =>
+    new WorkforceBackend().recordAutomaticClose(tx, {
+      nodeId,
+      personId,
+      locationId,
+      openEntryId: open!.id,
+      at: input.outAt,
+      offsetMinutes: 0,
+      origin: jobOrigin("dashboard"),
+    }),
+  );
+  return [open!.id, automatic];
+}
+
 async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof seedAll>>) {
   const { manager, marta, colleague } = people;
   await seedTenant(db);
   const locationId = await seedLocation(db);
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  await insertTimeEntry(db, {
+  const [openEntry, automaticEntry] = await clockInThenAutomaticOut(db, {
     nodeId,
     personId: marta,
     locationId,
-    entryKind: "in",
-    eventAt: "2026-03-07T08:00:00Z",
+    inAt: "2026-03-07T08:00:00Z",
+    outAt: "2026-03-08T04:00:00Z",
   });
-  await insertTimeEntry(db, {
-    nodeId,
-    personId: marta,
-    locationId,
-    entryKind: "out",
-    eventAt: "2026-03-08T04:00:00Z",
-  });
-  const entries = await db
-    .select({ id: timeEntries.id })
-    .from(timeEntries)
-    .where(eq(timeEntries.personId, marta))
-    .orderBy(asc(timeEntries.eventAt));
-  const [openEntry, automaticEntry] = entries.map((e) => e.id) as [string, string];
 
   const missingTimes = "00000000-0000-4000-8000-0000000000a1";
   await db.insert(attendanceQuestions).values({
@@ -997,26 +1010,13 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     const people = await seedAll(suite.db);
     const { locationId, nodeId } = await seedAttendance(suite.db, people);
     const person = await seedPerson(suite.db, "Confirms Only");
-    await insertTimeEntry(suite.db, {
+    const [openEntry, automaticEntry] = await clockInThenAutomaticOut(suite.db, {
       nodeId,
       personId: person,
       locationId,
-      entryKind: "in",
-      eventAt: "2026-06-02T08:00:00Z",
+      inAt: "2026-06-02T08:00:00Z",
+      outAt: "2026-06-03T04:00:00Z",
     });
-    await insertTimeEntry(suite.db, {
-      nodeId,
-      personId: person,
-      locationId,
-      entryKind: "out",
-      eventAt: "2026-06-03T04:00:00Z",
-    });
-    const entries = await suite.db
-      .select({ id: timeEntries.id })
-      .from(timeEntries)
-      .where(eq(timeEntries.personId, person))
-      .orderBy(asc(timeEntries.eventAt));
-    const [openEntry, automaticEntry] = entries.map((e) => e.id) as [string, string];
     // Only an automatic clock-out can be confirmed, and such a question gets no reminder.
     const questionId = "00000000-0000-4000-8000-0000000000d1";
     await suite.db.insert(attendanceQuestions).values({
