@@ -188,10 +188,13 @@ describe("STAFFING_PERSONAL_DATA", () => {
   });
 
   it("holds only her rows: the colleague's role and area appear nowhere", async () => {
-    const { marta } = await seedAll();
+    const { marta, colleague } = await seedAll();
     const [file] = await download(marta);
     expect(file!.text).not.toContain("Sommelier");
     expect(file!.text).not.toContain("Terrace");
+    const [own] = await download(colleague);
+    expect(own!.text).toContain("Sommelier");
+    expect(own!.text).toContain("Terrace");
   });
 
   it("builds no file for a person with no role and no assigned shift", async () => {
