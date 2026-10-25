@@ -164,9 +164,9 @@ describe("where a period is painted", () => {
     const v = await venue();
     const lunch = [slot(v.lunch, "13:00", "16:00")];
     await specialDay(v, "Fiesta pasada", ["2026-09-01"], lunch);
-    const verbena = await specialDay(v, "Verbena", [TODAY], lunch);
-    const navidad = await specialDay(v, "Navidad", ["2025-12-25"], lunch, true);
-    const aniversario = await specialDay(v, "Aniversario", ["2026-10-20"], lunch);
+    const festival = await specialDay(v, "Verbena", [TODAY], lunch);
+    const christmas = await specialDay(v, "Navidad", ["2025-12-25"], lunch, true);
+    const anniversary = await specialDay(v, "Aniversario", ["2026-10-20"], lunch);
 
     const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
 
@@ -176,9 +176,9 @@ describe("where a period is painted", () => {
         { id: v.seasons.autumn, name: "Autumn" },
       ],
       specialDays: [
-        { id: aniversario, name: "Aniversario" },
-        { id: navidad, name: "Navidad" },
-        { id: verbena, name: "Verbena" },
+        { id: anniversary, name: "Aniversario" },
+        { id: christmas, name: "Navidad" },
+        { id: festival, name: "Verbena" },
       ],
     });
   });
@@ -212,7 +212,7 @@ describe("where a period is painted", () => {
 
   it("lists a special day once when several of its dates paint the period, and when only a later one is still to come", async () => {
     const v = await venue();
-    const feria = await specialDay(
+    const fair = await specialDay(
       v,
       "Feria",
       ["2026-09-01", "2026-10-21", "2026-10-22"],
@@ -222,7 +222,7 @@ describe("where a period is painted", () => {
     const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
 
-    expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: feria, name: "Feria" }]);
+    expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: fair, name: "Feria" }]);
     expect(impact.specialDays).toBe(1);
   });
 
@@ -293,7 +293,7 @@ describe("where a period is painted", () => {
 
   it("lists every special day that paints the period when the clock cannot be read", async () => {
     const v = await venue();
-    const pasada = await specialDay(
+    const pastSpecialDay = await specialDay(
       v,
       "Fiesta pasada",
       ["2026-09-01"],
@@ -304,7 +304,9 @@ describe("where a period is painted", () => {
     const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
 
-    expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: pasada, name: "Fiesta pasada" }]);
+    expect(painted.get(v.afternoon)!.specialDays).toEqual([
+      { id: pastSpecialDay, name: "Fiesta pasada" },
+    ]);
     expect(impact.specialDays).toBe(1);
   });
 });
@@ -387,7 +389,7 @@ describe("deleting a period", () => {
    *  Lunch (Barra), Afternoon (Cocina) and Dinner (Cocina). */
   async function deleteVenue() {
     const v = await venue();
-    const [barra] = await db
+    const [barStation] = await db
       .insert(kitchenStations)
       .values({ locationId: v.locationId, name: "Barra" })
       .returning({ id: kitchenStations.id });
@@ -408,8 +410,8 @@ describe("deleting a period", () => {
       db
         .insert(routingCellPeriods)
         .values({ cellId, periodId, departmentId: v.restaurant, stationId });
-    await line(noCategory, v.lunch, barra!.id);
-    await line(cocktailsCell, v.lunch, barra!.id);
+    await line(noCategory, v.lunch, barStation!.id);
+    await line(cocktailsCell, v.lunch, barStation!.id);
     await line(cocktailsCell, v.afternoon, v.stationId);
     await line(cocktailsCell, v.dinner, v.stationId);
     return {
@@ -420,7 +422,7 @@ describe("deleting a period", () => {
       ]),
       stationNames: new Map([
         [v.stationId, "Cocina"],
-        [barra!.id, "Barra"],
+        [barStation!.id, "Barra"],
       ]),
     };
   }
