@@ -75,6 +75,10 @@ function courseOrder(course: StationQueueCourse | null): number {
   return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
 }
 
+function afterPeriodWords(period: string): string {
+  return t("station.after_period").replace("{period}", () => period);
+}
+
 /**
  * One station's ticket items grouped by order, shown as a kanban board (a column per kitchen state) or a
  * ticket rail (a card per order). A pure view: the container owns {@link groups} and turns the events
@@ -484,9 +488,8 @@ export class TillStationQueue extends LitElement {
       }
 
       /* The printing-problem tell: a warning chip on the card, words first so it never rests on colour. */
-      .print-problem {
-        align-self: flex-start;
-        margin: 0;
+      .print-problem,
+      .after-period {
         padding: var(--wt-space-1) var(--wt-space-2);
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-warning);
@@ -495,13 +498,13 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .after-period {
-        padding: var(--wt-space-1) var(--wt-space-2);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-warning);
-        color: var(--wt-color-on-warning);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
+      .print-problem {
+        align-self: flex-start;
+        margin: 0;
+      }
+
+      .cell .after-period {
+        margin: 0 0 var(--wt-space-1);
       }
 
       .print-problems {
@@ -942,9 +945,7 @@ export class TillStationQueue extends LitElement {
       const period = item.afterPeriod;
       const mark =
         period !== undefined && items[index - 1]?.afterPeriod !== period
-          ? html`<li class="after-period" data-after-period>
-              ${t("station.after_period").replace("{period}", () => period)}
-            </li>`
+          ? html`<li class="after-period" data-after-period>${afterPeriodWords(period)}</li>`
           : nothing;
       return html`${mark}
         <li>${this.#line(group, item)}</li>`;
@@ -1040,7 +1041,13 @@ export class TillStationQueue extends LitElement {
   #kanbanCell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const band = this.#band(group);
     return html`<div class="cell ${this.#accentClasses(band)}">
-      ${this.#kitchenNote(group)}${this.#bumpable(item) ? this.#wholeTicket(group) : nothing}${this.#cell(group, item)}
+      ${this.#kitchenNote(group)}${this.#bumpable(item) ? this.#wholeTicket(group) : nothing}${
+        item.afterPeriod === undefined
+          ? nothing
+          : html`<p class="after-period" data-after-period>
+              ${afterPeriodWords(item.afterPeriod)}
+            </p>`
+      }${this.#cell(group, item)}
     </div>`;
   }
 

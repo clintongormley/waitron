@@ -609,22 +609,25 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("a rail card marking dishes sent after their period has no violations", async () => {
-    const { el, host } = await mountWidget<TillStationQueue>(
-      "till-station-queue",
-      {
-        groups: [
-          {
-            ...groups[0]!,
-            items: groups[0]!.items.map((item) => ({ ...item, afterPeriod: "Lunch" })),
-          },
-        ],
-        stationId: "st-1",
-        view: "rail",
-      },
-      theme,
-    );
-    expect(el.shadowRoot!.querySelector("[data-after-period]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
+  it.each(["rail", "kanban"] as const)(
+    "dishes sent after their period in %s have no violations",
+    async (view) => {
+      const { el, host } = await mountWidget<TillStationQueue>(
+        "till-station-queue",
+        {
+          groups: [
+            {
+              ...groups[0]!,
+              items: groups[0]!.items.map((item) => ({ ...item, afterPeriod: "Lunch" })),
+            },
+          ],
+          stationId: "st-1",
+          view,
+        },
+        theme,
+      );
+      expect(el.shadowRoot!.querySelector("[data-after-period]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
 });

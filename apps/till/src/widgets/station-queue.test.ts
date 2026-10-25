@@ -2824,6 +2824,35 @@ describe("till-station-queue — a dish sent after its period", () => {
     expect(el.shadowRoot!.querySelector("[data-after-period]")).toBeNull();
   });
 
+  it("board: labels a marked dish's cell, and not an unmarked one's", async () => {
+    const el = await mount([line("tortilla", starters, "Lunch"), line("bread", starters)], {
+      view: "kanban",
+    });
+    const mark = (id: string) =>
+      el
+        .shadowRoot!.querySelector(`[data-item="${id}"]`)!
+        .closest(".cell")!
+        .querySelector("[data-after-period]")
+        ?.textContent?.trim();
+    expect(mark("tortilla")).toBe("After Lunch — agreed");
+    expect(mark("bread")).toBeUndefined();
+  });
+
+  it("board: words the mark in Spanish", async () => {
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const el = await mount([line("tortilla", starters, "Lunch $&")], { view: "kanban" });
+      const expected = t("station.after_period").replace("{period}", () => "Lunch $&");
+      expect(expected).not.toContain("After");
+      expect(el.shadowRoot!.querySelector(".cell [data-after-period]")!.textContent!.trim()).toBe(
+        expected,
+      );
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("words the mark in Spanish", async () => {
     const previous = currentLocale();
     setLocale("es-ES");
