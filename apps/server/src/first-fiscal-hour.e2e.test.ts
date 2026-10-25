@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { ALL_MODULES } from "@waitron/composition";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import { request, PASSWORD } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -13,7 +13,28 @@ import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { FRESH, writeRecoveryState } from "./recovery-state.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 import { startAgainNoteName } from "../test/start-again-deleted.js";
+
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 500,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }),
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -24,11 +45,17 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
   "%s refuses a password-authorised Start again while a restore or reset request waits, then deletes the attempt in place and starts fresh in the same folders",
   async (script) => {
     const f = await fixture();
-    const host = createFirstSetupModuleHost({ ...f, modules: ALL_MODULES, environment: f.env });
-    await host.owner.claimFirstSetup(
-      { environment: "preproduction", request },
-      randomBytes(32).toString("base64url"),
-    );
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime("2026-10-16T11:40:00Z");
+    try {
+      await hourFirstFiscalFixture({
+        clock: createFakeTimersHourClock(),
+        database: () => suite.db,
+        workspace: f,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
     await ensureBoxSecrets({
       stateDir: f.stateDir,
       hostnames: ["localhost", "waitron.local"],
@@ -110,6 +137,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       );
       await rm(join(f.stateDir, "restore-request.json"));
       await rm(join(f.stateDir, "reset-request.json"));
+      // Removing the waiting requests changes the state a Start again must match, so read it again.
       const cleared = await (await get("/setup-api/first-setup/resolution")).json();
       const clearedIds = {
         inspectionId: cleared.inspectionId,
@@ -123,6 +151,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       );
       expect(clearedSummary.status, await clearedSummary.clone().text()).toBe(200);
       const shown = await clearedSummary.json();
+      expect(shown.lastName).toEqual(expect.any(String));
       const selected = await post(
         "/setup-api/first-setup/resolution/start-again",
         { ...clearedIds, confirmMissingDatabase: { nothingFiledOrSold: true, shown } },
@@ -141,7 +170,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       child = childProcess(script, f.env);
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
-      expect(await startAgainNoteName(f)).toEqual(expect.any(String));
+      expect(await startAgainNoteName(f)).toBe(shown.lastName);
       expect(await readdir(join(f.stateDir, "first-setup-start-again-confirmations"))).toHaveLength(
         1,
       );
