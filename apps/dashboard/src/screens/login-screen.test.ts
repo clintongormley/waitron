@@ -4210,3 +4210,43 @@ it.each(["en-GB", "es-ES"])(
     }
   },
 );
+
+it.each(["en-GB", "es-ES"])(
+  "explains Continue after an autofilled passkey is refused, then opens password reset (%s)",
+  async (locale) => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale(locale);
+      conditionalMediationAvailable.mockResolvedValue(true);
+      const api = stubApi({
+        passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.verification_failed" }),
+      });
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      await vi.waitFor(async () =>
+        expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
+      );
+      const choices = el.shadowRoot!.querySelector("[data-test=passkey-recovery-choices]");
+      expect(choices).not.toBeNull();
+      if (locale === "en-GB")
+        expect(choices!.textContent!.trim()).toBe(
+          "Continue to enter your password or request a password reset email.",
+        );
+      else expect(choices!.textContent!.trim()).toBe(t("login.passkey_email_recovery_choices"));
+      input(el, "email", "owner@example.test");
+      await el.updateComplete;
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!);
+      await el.updateComplete;
+      expect(field(el, "password")).not.toBeNull();
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=reset-sent]"))
+        .not.toBeNull();
+      expect(api.requestPasswordReset).toHaveBeenCalledExactlyOnceWith("owner@example.test");
+      expect(await bottomOf(el)).toBe("");
+    } finally {
+      setLocale(previousLocale);
+    }
+  },
+);

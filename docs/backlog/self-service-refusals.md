@@ -33,7 +33,7 @@ referrals, not completed recovery experiments.
 
 | Area | Work still required under the clarified rule |
 | --- | --- |
-| [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and the passkey screen explains password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
+| [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and explicit/autofill refusal views explain password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
 | [Public connection](#tls-repair), #2055 | Replace the installer referral with a connection-repair choice the reader can complete. Include installer-supplied certificates and managed-device installation restrictions, which also refer to another person. Retain the separate linked-layout recovery gap and public-page privacy. |
 | [Certificate](#certificate), #2056 | Replace the administrator referral with certificate/check/connection choices, preserving the installed certificate. Add sign-in at the action if extra rights are needed. |
 | [Backup key](#backup-key), #2058 | Replace the administrator referral with a way to inspect and correct effective configuration. Explain what each key choice does and keep both key records until their use is established. |
@@ -710,9 +710,10 @@ changes take their required review and existing protected-writer approvals.
 
 **2026-10-25 self-service rework:** the shared refusal says the passkey could not be verified and
 offers retry. After an explicit passkey sign-in refusal, the screen explains that **Use your password**
-opens password entry and the emailed-reset request. Browser cases in
+opens password entry and the emailed-reset request. An autofill refusal on the email screen explains
+the same choices through **Continue**. Browser cases in
 `apps/dashboard/src/screens/login-screen.test.ts` exercise retry, password sign-in and reset request
-after refusal in both languages; the existing profile suite exercises the shared registration
+after refusal in both languages, including reset after an autofill refusal; the existing profile suite exercises the shared registration
 message. The server reset-route case requests and completes a reset and checks the same
 acknowledgement for unknown email addresses. No account-status check was added to the public screen.
 
