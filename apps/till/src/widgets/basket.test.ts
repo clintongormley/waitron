@@ -1349,7 +1349,7 @@ describe("till-basket: the ended-period mark", () => {
     try {
       setLocale("es-ES");
       const store = new WorkingOrderStore();
-      for (const name of ["Croquetas", "Gambas", "Caña"])
+      for (const name of ["Croquettes", "Prawns", "Beer"])
         store.addProduct({ ...cafe, id: name, name }, "1");
       const open = { menuId: "open", periodName: "Open" };
       store.setEndedPeriods([open, open, open]);

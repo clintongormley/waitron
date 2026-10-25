@@ -21,14 +21,15 @@ const dishes = [
 ];
 
 describe.each(["light", "dark"] as const)("till-late-send-dialog a11y (%s theme)", (theme) => {
-  it.each<[string, TillLateSendDialog["periodNames"]]>([
-    ["one period", ["Lunch"]],
-    ["two periods", ["Breakfast", "Lunch"]],
-  ])("has no violations with %s", async (_state, periodNames) => {
+  it.each<[string, TillLateSendDialog["periodNames"], TillLateSendDialog["purpose"]]>([
+    ["one period", ["Lunch"], "send"],
+    ["two periods", ["Breakfast", "Lunch"], "send"],
+    ["two periods, park", ["Breakfast", "Lunch"], "save"],
+  ])("has no violations with %s", async (_state, periodNames, purpose) => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillLateSendDialog>(
       "till-late-send-dialog",
-      { dishes, periodNames, purpose: "send" },
+      { dishes, periodNames, purpose },
       theme,
     );
     await expectNoA11yViolations(host);

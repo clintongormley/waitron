@@ -42,8 +42,12 @@ interface Menu {
   name: string;
   products: string[];
 }
-/** Breakfast's menu; its Coffee is also sold by Lunch, as a running menu sells the caña. */
-const DESAYUNOS: Menu = { id: "desayunos", name: "Desayunos", products: ["Omelette", "Coffee"] };
+/** Breakfast's menu; its Coffee is also sold by Lunch, as a running menu sells a drink. */
+const BREAKFAST_MENU: Menu = {
+  id: "breakfast-menu",
+  name: "Breakfast menu",
+  products: ["Omelette", "Coffee"],
+};
 const LUNCH: Menu = { id: "lunch", name: "Lunch", products: ["Steak", "Coffee"] };
 
 const unit = {
@@ -101,13 +105,13 @@ const lunchRunning = {
   periodOccurrenceKey: '["department","2026-10-12","Lunch","12:00"]',
 };
 
-/** Breakfast running with Desayunos orderable, or Lunch running with Breakfast ended earlier today. */
+/** Breakfast running with the Breakfast menu orderable, or Lunch running with Breakfast ended earlier today. */
 function catalogue(
   phase: "breakfast" | "lunch",
-  zoneId = "zone-comedor",
+  zoneId = "zone-dining-room",
   serviceMode: ZoneOfferCatalogue["context"]["serviceMode"] = "table_tab",
 ): ZoneOfferCatalogue {
-  const running = phase === "breakfast" ? DESAYUNOS.id : LUNCH.id;
+  const running = phase === "breakfast" ? BREAKFAST_MENU.id : LUNCH.id;
   return {
     service: phase === "breakfast" ? breakfastRunning : lunchRunning,
     context: {
@@ -117,12 +121,12 @@ function catalogue(
       serviceMode,
     },
     defaultMenuId: running,
-    menus: [DESAYUNOS, LUNCH].map((menu) => ({
+    menus: [BREAKFAST_MENU, LUNCH].map((menu) => ({
       id: menu.id,
       name: menu.name,
       isDefault: menu.id === running,
       orderable: menu.id === running,
-      endedPeriodName: phase === "lunch" && menu.id === DESAYUNOS.id ? "Breakfast" : null,
+      endedPeriodName: phase === "lunch" && menu.id === BREAKFAST_MENU.id ? "Breakfast" : null,
       audience: "customer",
       versionId: "v1",
       structure: {
@@ -138,11 +142,11 @@ function catalogue(
         till: HOME_DISPLAY_DEFAULTS.till,
       },
     })),
-    offers: [DESAYUNOS, LUNCH].flatMap((menu) => menu.products.map((p) => offer(menu, p))),
+    offers: [BREAKFAST_MENU, LUNCH].flatMap((menu) => menu.products.map((p) => offer(menu, p))),
     zones: [
       {
-        id: "zone-comedor",
-        name: "Comedor",
+        id: "zone-dining-room",
+        name: "Dining room",
         departmentId: "department-restaurant",
         departmentName: "Restaurant",
         serviceMode: "table_tab",
@@ -166,7 +170,7 @@ function polled(current: ZoneOfferCatalogue): MenuState & { defaultMenuId?: stri
 }
 
 /** The counter's zone, which stays on Breakfast's menus throughout. */
-const BARRA = catalogue("breakfast", "zone-barra", "prepay");
+const BAR = catalogue("breakfast", "zone-bar", "prepay");
 
 const tableFormFactor: FormFactor = "till";
 
@@ -191,7 +195,7 @@ const till = {
 const table = {
   id: "t2",
   label: "2",
-  zoneId: "zone-comedor",
+  zoneId: "zone-dining-room",
   state: "open-tab",
   hasOpenTab: true,
   tabLineCount: 0,
@@ -226,7 +230,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
   return {
     getDeviceZones: vi
       .fn()
-      .mockResolvedValue(deviceZonesFixture(["zone-barra"], ["z1", "zone-comedor"])),
+      .mockResolvedValue(deviceZonesFixture(["zone-bar"], ["z1", "zone-dining-room"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] }),
@@ -245,9 +249,13 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       formFactor: "till",
     }),
     listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi.fn(async () => BARRA),
-    listZoneOffers: vi.fn(async (zoneId: string) => (zoneId === "zone-comedor" ? current : BARRA)),
-    menuState: vi.fn(async (zoneId: string) => polled(zoneId === "zone-comedor" ? current : BARRA)),
+    listDefaultZoneOffers: vi.fn(async () => BAR),
+    listZoneOffers: vi.fn(async (zoneId: string) =>
+      zoneId === "zone-dining-room" ? current : BAR,
+    ),
+    menuState: vi.fn(async (zoneId: string) =>
+      polled(zoneId === "zone-dining-room" ? current : BAR),
+    ),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
@@ -256,8 +264,8 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getTablesState: vi.fn().mockResolvedValue([table]),
     listZones: vi.fn().mockResolvedValue([
       {
-        id: "zone-comedor",
-        name: "Comedor",
+        id: "zone-dining-room",
+        name: "Dining room",
         displayOrder: 0,
         active: true,
         serviceMode: "table_tab",
@@ -317,7 +325,7 @@ const windowDishes = (el: TillApp) =>
 const names = () => store.lines.map((line) => line.product.name);
 const submissions = () => api.submitDraft!.mock.calls.map((call) => call[2] as DraftSubmission);
 
-/** Seats table 2 under Breakfast and orders an Omelette and a Coffee from Desayunos; no poll has
+/** Seats table 2 under Breakfast and orders an Omelette and a Coffee from the Breakfast menu; no poll has
  * yet told the till that Breakfast ended, so nothing is marked. */
 async function breakfastTable(overrides: Record<string, unknown> = {}): Promise<TillApp> {
   current = catalogue("breakfast");
@@ -336,7 +344,7 @@ async function breakfastTable(overrides: Record<string, unknown> = {}): Promise<
     "till-menu-browser",
   )!.store;
   for (const product of ["Omelette", "Coffee"])
-    store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"), "1");
+    store.addProduct(menuOfferToTillProduct(offer(BREAKFAST_MENU, product), "v1"), "1");
   await flush(el);
   return el;
 }
@@ -348,7 +356,7 @@ async function lateTable(overrides: Record<string, unknown> = {}): Promise<TillA
   current = catalogue("lunch");
   await poll(el);
   expect(store.lines.map((line) => line.endedPeriod)).toEqual([
-    { menuId: DESAYUNOS.id, periodName: "Breakfast" },
+    { menuId: BREAKFAST_MENU.id, periodName: "Breakfast" },
     undefined,
   ]);
   return el;
@@ -404,13 +412,13 @@ describe("a table's send from the marks", () => {
 
     expect(windowOf(el)).toBeNull();
     expect(submissions()).toHaveLength(1);
-    expect(submissions()[0]!.lateSend).toEqual({ menuIds: [DESAYUNOS.id] });
+    expect(submissions()[0]!.lateSend).toEqual({ menuIds: [BREAKFAST_MENU.id] });
     expect(
       drafts
         .sentGroups(submissions()[0]!)
         .flatMap((group) => group.lines.map((line) => line.menuItemId))
         .sort(),
-    ).toEqual([offerId(DESAYUNOS, "Coffee"), offerId(DESAYUNOS, "Omelette")]);
+    ).toEqual([offerId(BREAKFAST_MENU, "Coffee"), offerId(BREAKFAST_MENU, "Omelette")]);
   });
 
   it("keeps the confirmation on the send it repeats after a menu version change", async () => {
@@ -428,8 +436,8 @@ describe("a table's send from the marks", () => {
     expect(windowOf(el)).toBeNull();
     expect(submissions()).toHaveLength(2);
     expect(submissions().map((each) => each.lateSend)).toEqual([
-      { menuIds: [DESAYUNOS.id] },
-      { menuIds: [DESAYUNOS.id] },
+      { menuIds: [BREAKFAST_MENU.id] },
+      { menuIds: [BREAKFAST_MENU.id] },
     ]);
   });
 
@@ -447,7 +455,9 @@ describe("a table's send from the marks", () => {
       () => {
         expect(api.saveDraft!.mock.calls.length).toBeGreaterThan(saves);
         const saved = api.saveDraft!.mock.calls.at(-1)![1] as { lines: { menuItemId: string }[] };
-        expect(saved.lines.map((line) => line.menuItemId)).toEqual([offerId(DESAYUNOS, "Coffee")]);
+        expect(saved.lines.map((line) => line.menuItemId)).toEqual([
+          offerId(BREAKFAST_MENU, "Coffee"),
+        ]);
       },
       { timeout: DRAFT_SAVE_DELAY_MS * 5 },
     );
@@ -470,7 +480,7 @@ describe("a table's send from the marks", () => {
     await act(el, "send-all");
     store.setEndedPeriods(
       [
-        { menuId: DESAYUNOS.id, periodName: "Breakfast" },
+        { menuId: BREAKFAST_MENU.id, periodName: "Breakfast" },
         { menuId: "brunch", periodName: "Brunch" },
       ],
       false,
@@ -486,7 +496,7 @@ describe("a table's send from the marks", () => {
     );
     await choose(el, "data-late-agreed");
     expect(submissions().map((each) => each.lateSend)).toEqual([
-      { menuIds: ["brunch", DESAYUNOS.id] },
+      { menuIds: ["brunch", BREAKFAST_MENU.id] },
     ]);
   });
 
@@ -564,8 +574,8 @@ function refusal(periods: readonly { menuId: string; periodName: string }[], ite
   };
 }
 const BREAKFAST_ENDED = refusal(
-  [{ menuId: DESAYUNOS.id, periodName: "Breakfast" }],
-  [offerId(DESAYUNOS, "Omelette")],
+  [{ menuId: BREAKFAST_MENU.id, periodName: "Breakfast" }],
+  [offerId(BREAKFAST_MENU, "Omelette")],
 );
 
 /** An Omelette sent earlier and recalled into Ana's draft on table 2. */
@@ -576,7 +586,7 @@ function seedRecalledOmelette(): void {
     name: "Omelette",
     productId: "Omelette",
     parentProductId: null,
-    menuItemId: offerId(DESAYUNOS, "Omelette"),
+    menuItemId: offerId(BREAKFAST_MENU, "Omelette"),
     lineNo: 1,
     parentLineNo: null,
     quantity: "1",
@@ -643,7 +653,7 @@ describe("a table's send from the refusal", () => {
 
     expect(windowOf(el)).toBeNull();
     expect(submissions()).toHaveLength(2);
-    expect(submissions()[1]!.lateSend).toEqual({ menuIds: [DESAYUNOS.id] });
+    expect(submissions()[1]!.lateSend).toEqual({ menuIds: [BREAKFAST_MENU.id] });
   });
 
   it("opens the window again from a second refusal naming another period", async () => {
@@ -652,7 +662,10 @@ describe("a table's send from the refusal", () => {
         .fn(drafts.submitDraft)
         .mockRejectedValueOnce(BREAKFAST_ENDED)
         .mockRejectedValueOnce(
-          refusal([{ menuId: "brunch", periodName: "Brunch" }], [offerId(DESAYUNOS, "Omelette")]),
+          refusal(
+            [{ menuId: "brunch", periodName: "Brunch" }],
+            [offerId(BREAKFAST_MENU, "Omelette")],
+          ),
         ),
     });
     await act(el, "send-all");
@@ -664,7 +677,7 @@ describe("a table's send from the refusal", () => {
     await choose(el, "data-late-agreed");
     expect(submissions().map((each) => each.lateSend)).toEqual([
       undefined,
-      { menuIds: [DESAYUNOS.id] },
+      { menuIds: [BREAKFAST_MENU.id] },
       { menuIds: ["brunch"] },
     ]);
   });
@@ -697,7 +710,7 @@ describe("a table's send from the refusal", () => {
       submitDraft: vi
         .fn(drafts.submitDraft)
         .mockRejectedValueOnce(
-          refusal([{ menuId: DESAYUNOS.id, periodName: "Breakfast" }], ["offer-elsewhere"]),
+          refusal([{ menuId: BREAKFAST_MENU.id, periodName: "Breakfast" }], ["offer-elsewhere"]),
         ),
     });
 
@@ -730,7 +743,7 @@ describe("a table's send from the refusal", () => {
     await choose(el, "data-late-agreed");
     expect(submissions().map((each) => each.lateSend)).toEqual([
       undefined,
-      { menuIds: [DESAYUNOS.id] },
+      { menuIds: [BREAKFAST_MENU.id] },
     ]);
   });
 });
@@ -898,8 +911,8 @@ describe("a manager's PIN", () => {
     await authorize(el, "0123");
 
     expect(submissions().map((each) => each.lateSend)).toEqual([
-      { menuIds: [DESAYUNOS.id] },
-      { menuIds: [DESAYUNOS.id], override: { personId: MARTA.personId, pin: "0123" } },
+      { menuIds: [BREAKFAST_MENU.id] },
+      { menuIds: [BREAKFAST_MENU.id], override: { personId: MARTA.personId, pin: "0123" } },
     ]);
     expect(approval(el)).toBeNull();
     expect(windowOf(el)).toBeNull();
@@ -1335,7 +1348,7 @@ const saleResult: TillSaleResult = {
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=12-10-2026&total=6.00",
 };
 const CASH = { method: "cash", amount: "10" };
-const BREAKFAST_CONFIRMED = { menuIds: [DESAYUNOS.id] };
+const BREAKFAST_CONFIRMED = { menuIds: [BREAKFAST_MENU.id] };
 
 /** The counter's menus, which a counter case moves from Breakfast to Lunch. */
 let counterMenus: ZoneOfferCatalogue;
@@ -1346,7 +1359,7 @@ const counterNames = (el: TillApp) =>
   counterScreen(el).store.lines.map((line) => line.product.name);
 const lastArgument = (fn: ReturnType<typeof vi.fn>, call: number) => fn.mock.calls[call]!.at(-1);
 
-/** An order held earlier with one Omelette of Desayunos already stored on it. */
+/** An order held earlier with one Omelette of the Breakfast menu already stored on it. */
 const heldOmelette = {
   kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
   id: "wo-1",
@@ -1355,7 +1368,7 @@ const heldOmelette = {
   revision: 3,
   lines: [
     {
-      menuItemId: offerId(DESAYUNOS, "Omelette"),
+      menuItemId: offerId(BREAKFAST_MENU, "Omelette"),
       quantity: "1.000",
       workingOrderLineId: "wol-omelette",
     },
@@ -1363,7 +1376,7 @@ const heldOmelette = {
 };
 
 /** Signs in at the counter under Breakfast; `held` retrieves `heldOmelette` first. Then adds
- * `products` from Desayunos; nothing is marked yet. */
+ * `products` from the Breakfast menu; nothing is marked yet. */
 async function counterBasket(
   overrides: Record<string, unknown> = {},
   {
@@ -1374,14 +1387,14 @@ async function counterBasket(
 ): Promise<TillApp> {
   current = catalogue("breakfast");
   counterFlow = flow;
-  counterMenus = catalogue("breakfast", "zone-barra", flow);
+  counterMenus = catalogue("breakfast", "zone-bar", flow);
   const { el } = await mountApp({
     listDefaultZoneOffers: vi.fn(async () => counterMenus),
     listZoneOffers: vi.fn(async (zoneId: string) =>
-      zoneId === "zone-comedor" ? current : counterMenus,
+      zoneId === "zone-dining-room" ? current : counterMenus,
     ),
     menuState: vi.fn(async (zoneId: string) =>
-      polled(zoneId === "zone-comedor" ? current : counterMenus),
+      polled(zoneId === "zone-dining-room" ? current : counterMenus),
     ),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOmelette),
@@ -1397,7 +1410,7 @@ async function counterBasket(
   }
   for (const product of products)
     counterScreen(el).store.addProduct(
-      menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"),
+      menuOfferToTillProduct(offer(BREAKFAST_MENU, product), "v1"),
       "1",
     );
   await flush(el);
@@ -1410,13 +1423,13 @@ async function lateCounter(
   options: { products?: string[]; held?: boolean; flow?: "prepay" | "ticket_then_pay" } = {},
 ): Promise<TillApp> {
   const el = await counterBasket(overrides, options);
-  counterMenus = catalogue("lunch", "zone-barra", counterFlow);
+  counterMenus = catalogue("lunch", "zone-bar", counterFlow);
   await poll(el);
   expect(
     counterScreen(el)
       .store.lines.filter((line) => line.endedPeriod !== undefined)
       .map((line) => line.endedPeriod),
-  ).toEqual([{ menuId: DESAYUNOS.id, periodName: "Breakfast" }]);
+  ).toEqual([{ menuId: BREAKFAST_MENU.id, periodName: "Breakfast" }]);
   return el;
 }
 
@@ -1653,7 +1666,7 @@ describe("counter pay", () => {
 
   it("asks nothing and carries no confirmation when a stored dish's quantity is raised after its period", async () => {
     const el = await counterBasket({}, { products: [], held: true });
-    counterMenus = catalogue("lunch", "zone-barra", "prepay");
+    counterMenus = catalogue("lunch", "zone-bar", "prepay");
     await poll(el);
     counterScreen(el).store.setLineQuantity(0, "2");
     await flush(el);
@@ -1730,14 +1743,14 @@ describe("counter pay", () => {
       counterScreen(el).store.loadFrom(
         "large",
         ["Omelette", "Coffee"].map((product) => ({
-          product: menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"),
+          product: menuOfferToTillProduct(offer(BREAKFAST_MENU, product), "v1"),
           quantity: "1",
         })),
       );
-      counterMenus = catalogue("lunch", "zone-barra", "prepay");
+      counterMenus = catalogue("lunch", "zone-bar", "prepay");
       await poll(el);
       expect(counterScreen(el).store.lines.map((line) => line.endedPeriod?.menuId)).toEqual([
-        DESAYUNOS.id,
+        BREAKFAST_MENU.id,
         undefined,
       ]);
       emit(counterScreen(el), event, detail);
