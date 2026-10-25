@@ -77,7 +77,7 @@ export async function misdatedRecords(
 }
 
 /** `misdatedRecords`' list with each record's kind, stored issue date and stored amount, and the
- * closing's own values. Reads only, two selects in turn after the list's. Null when no
+ * closing's own values. Reads only, at most two selects in turn after the list's. Null when no
  * confirmation has the id. */
 export async function misdatedDetail(
   tx: Transaction,
@@ -96,13 +96,13 @@ export async function misdatedDetail(
     .from(clockConfirmations)
     .leftJoin(clockChecks, eq(clockChecks.id, clockConfirmations.checkId))
     .where(eq(clockConfirmations.id, confirmationId));
-  // misdatedRecords answered a list, so the row and its readable closing exist.
+  // misdatedRecords answered a list, so the row, its readable closing and its check exist.
   const closing = (
     parsedStored(row!.proof) as {
       closing: { correctedStart: string; partial?: unknown };
     }
   ).closing;
-  const stored = (row!.detail === null ? null : parsedStored(row!.detail)) as {
+  const stored = parsedStored(row!.detail!) as {
     offsetMinutes?: unknown;
   } | null;
   const startOffsetMinutes =
@@ -122,7 +122,8 @@ export async function misdatedDetail(
           .where(inArray(registrosFacturacion.id, ids));
   const byId = new Map(found.map((record) => [record.id, record]));
   const records = list.records.map((record): MisdatedDetailRecord => {
-    const stored = byId.get(record.recordId)!;
+    const stored = byId.get(record.recordId);
+    if (stored === undefined) throw new Error(`listed record ${record.recordId} was not found`);
     return {
       ...record,
       kind: stored.kind === "anulacion" ? "cancellation" : "issue",

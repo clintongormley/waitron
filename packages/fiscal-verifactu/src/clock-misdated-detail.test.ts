@@ -304,7 +304,15 @@ describe("misdatedDetail", () => {
       closing: closingFor(check, X + 90 * M, { ms: BOOT_MS + 90 * M, id: "boot-1" }),
     });
     const found = await detail(id);
-    expect(found).toMatchObject({ known: true, closing: { startOffsetMinutes: null } });
+    if (found === null || !found.known) throw new Error(`expected a list, got ${String(found)}`);
+    expect(found.closing).toEqual({
+      source: "admin",
+      personId: PERSON,
+      confirmedAt: iso(X + 90 * M),
+      correctedStart: iso(X),
+      partial: false,
+      startOffsetMinutes: null,
+    });
   });
 
   it("answers a partial closing's own start", async () => {
