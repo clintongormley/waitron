@@ -159,18 +159,15 @@ describe("renderMisdatedSalesCsv", () => {
     const records = [
       record({ amount: "12.3" }),
       record({ amount: "-5.00" }),
-      record({ invoiceNumber: "=1+1/3" }),
-      record({ invoiceNumber: "-1+1/4" }),
+      record({ invoiceNumber: "=1+1/3", amount: "7.00" }),
+      record({ invoiceNumber: "-1+1/4", amount: "7.00" }),
     ];
-    const en = text(renderMisdatedSalesCsv(input(records)));
-    const es = text(renderMisdatedSalesCsv(input(records, { language: "es" })));
-    expect(en).toContain(',"12.30",');
-    expect(en).toContain(',"-5.00",');
-    expect(es).toContain(',"12,30",');
-    expect(es).toContain(',"-5,00",');
-    expect(en).not.toContain("'-5");
-    expect(es).not.toContain("'-5");
     const lines = rows(renderMisdatedSalesCsv(input(records)));
+    const linesEs = rows(renderMisdatedSalesCsv(input(records, { language: "es" })));
+    expect(lines[2]![5]).toBe("12.30");
+    expect(linesEs[2]![5]).toBe("12,30");
+    expect(lines[3]![5]).toBe("-5.00");
+    expect(linesEs[3]![5]).toBe("-5,00");
     expect(lines[4]!.slice(0, 2)).toEqual(["'=1+1", "3"]);
     expect(lines[5]!.slice(0, 2)).toEqual(["'-1+1", "4"]);
   });
@@ -215,7 +212,12 @@ describe("renderMisdatedSalesCsv", () => {
     it("uses the one-sale form, and appends the partial sentence", () => {
       const one = input([record()], {
         closing: { source: "authority", partial: true },
-        episode: { from: "2026-10-24T22:30:00.000Z", fromOffsetMinutes: 120 },
+        episode: {
+          from: "2026-10-24T22:30:00.000Z",
+          fromOffsetMinutes: 120,
+          to: "2026-10-24T22:30:00.000Z",
+          toOffsetMinutes: 120,
+        },
       });
       expect(rows(renderMisdatedSalesCsv(one))[0]).toEqual([
         `Harbour Bar: One sale was recorded with a time later than the real one, at 25/10/2026 00:30. It was made before 24/10/2026 23:01. The clock was confirmed by the tax agency's time on 25/10/2026 10:00. ${CLOCK_MISDATED_EMAIL_WORDS.en.partial}`,
@@ -251,6 +253,12 @@ describe("renderMisdatedSalesCsv", () => {
           input([record({ offsetMinutes: 60 }), record()], {
             closing: { startOffsetMinutes: null },
             confirmedByName: null,
+            episode: {
+              from: "2026-10-24T22:30:00.000Z",
+              fromOffsetMinutes: 60,
+              to: "2026-10-24T23:10:00.000Z",
+              toOffsetMinutes: 120,
+            },
           }),
         ),
       );

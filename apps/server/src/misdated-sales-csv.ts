@@ -1,4 +1,8 @@
-import { CLOCK_WITNESS_MARGIN_MS, type MisdatedDetail } from "@waitron/fiscal";
+import {
+  CLOCK_WITNESS_MARGIN_MS,
+  type ClockConfirmationSource,
+  type MisdatedDetail,
+} from "@waitron/fiscal";
 import { decimal, toScale, type Decimal } from "@waitron/shared";
 import { csvCell } from "./attendance-export-csv.js";
 import { CLOCK_CONFIRMED_BY_WORDS, CLOCK_MISDATED_EMAIL_WORDS } from "./i18n/box-emails.js";
@@ -13,11 +17,18 @@ export interface MisdatedSalesInput {
   language: Language;
   /** The administrator's display name, for a closing an administrator confirmed. */
   confirmedByName: string | null;
-  episode: { from: string; fromOffsetMinutes: number; to?: string; toOffsetMinutes?: number };
+  episode: { from: string; fromOffsetMinutes: number; to: string; toOffsetMinutes: number };
   detail: Extract<MisdatedDetail, { known: true }>;
 }
 
 const MINUTE_MS = 60_000;
+
+const SOURCE_WORD = {
+  authority: "authority",
+  devices: "devices",
+  admin: "admin",
+  elapsed: "otherwise",
+} as const satisfies Record<ClockConfirmationSource, keyof (typeof CLOCK_CONFIRMED_BY_WORDS)["en"]>;
 
 /** The calendar date (`YYYY-MM-DD`) of an instant at a stored offset. */
 function dateAt(instantMs: number, offsetMinutes: number): string {
@@ -44,23 +55,16 @@ function header(input: MisdatedSalesInput, boundMs: number, offsetMinutes: numbe
   const words = MISDATED_SALES_WORDS[input.language];
   const by = CLOCK_CONFIRMED_BY_WORDS[input.language];
   const confirmedBy =
-    closing.source === "admin"
-      ? input.confirmedByName === null
-        ? by.admin
-        : `${by.admin} (${input.confirmedByName})`
-      : closing.source === "elapsed"
-        ? by.otherwise
-        : by[closing.source];
+    closing.source === "admin" && input.confirmedByName !== null
+      ? `${by.admin} (${input.confirmedByName})`
+      : by[SOURCE_WORD[closing.source]];
   // "Made before" stays true at minute precision only when a bound with seconds is rounded up.
   const roundedBound = Math.ceil(boundMs / MINUTE_MS) * MINUTE_MS;
   const sentence = fill(records.length === 1 ? words.header.one : words.header.text, {
     venue: input.venue,
     count: String(records.length),
     from: time(input.episode.from, input.episode.fromOffsetMinutes),
-    to: time(
-      input.episode.to ?? input.episode.from,
-      input.episode.toOffsetMinutes ?? input.episode.fromOffsetMinutes,
-    ),
+    to: time(input.episode.to, input.episode.toOffsetMinutes),
     bound: time(new Date(roundedBound).toISOString(), offsetMinutes),
     confirmedBy,
     confirmedAt: time(closing.confirmedAt, offsetMinutes),
@@ -74,8 +78,7 @@ export function renderMisdatedSalesCsv(input: MisdatedSalesInput): Uint8Array {
   const { closing, records } = input.detail;
   const words = MISDATED_SALES_WORDS[input.language];
   const boundMs = Date.parse(closing.correctedStart) + CLOCK_WITNESS_MARGIN_MS;
-  const headerOffset =
-    closing.startOffsetMinutes ?? records[0]?.offsetMinutes ?? input.episode.fromOffsetMinutes;
+  const headerOffset = closing.startOffsetMinutes ?? input.episode.fromOffsetMinutes;
   const c = words.columns;
   const lines = [
     csvCell(header(input, boundMs, headerOffset)),
@@ -103,7 +106,7 @@ export function renderMisdatedSalesCsv(input: MisdatedSalesInput): Uint8Array {
         csvCell(words.unknown),
         cancellation
           ? csvCell(words.cancellation)
-          : amountCell(decimal(record.amount ?? ""), input.language),
+          : amountCell(decimal(record.amount!), input.language),
         csvCell(dayMark),
       ].join(","),
     );
