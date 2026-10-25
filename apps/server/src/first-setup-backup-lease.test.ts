@@ -607,18 +607,6 @@ async function closedCloudSession() {
   return { ...f, session };
 }
 
-it("answers Check and Start again on a sealed Cloud wait without renewing it", async () => {
-  const f = await closedCloudSession();
-  clock.advance(LEASE + 1);
-  f.service.sealLapsed();
-  expect((await f.service.cloudStatus()).state).toBe("approved");
-  expect(await f.service.liveness()).toMatchObject({ state: "stopped" });
-  f.control.expired = true;
-  expect((await f.service.cloudStartAgain()).state).toBe("awaiting_owner");
-  expect(f.service.runningInMemory()).toBe(false);
-  expect(await f.service.liveness()).toMatchObject({ state: "stopped", cloud: true });
-});
-
 it("seals a closed Cloud session's recovery at once, so its holder's Check and Start again renew nothing", async () => {
   const f = await closedCloudSession();
   f.service.sealLapsed();
@@ -718,4 +706,63 @@ it("leaves a lapsed Cloud wait unsealed while an open runs, so its holder's Chec
   expect(f.service.runningInMemory()).toBe(false);
   expect((await f.service.cloudStatus("A")).state).toBe("approved");
   expect(f.service.runningInMemory()).toBe(true);
+});
+
+it("reads a Cloud call in flight as running, so a seal during it leaves the wait to lease", async () => {
+  const f = await cloudFixture();
+  const gate = barrier();
+  const reached = barrier();
+  const service = recovery({
+    ...f.options,
+    cloud: {
+      ...f.options.cloud,
+      fetch: async (url: string | URL | Request, init?: RequestInit) => {
+        reached.resolve();
+        await gate.promise;
+        return f.options.cloud.fetch(url, init);
+      },
+    },
+  });
+  const starting = service.cloudStart("A");
+  starting.catch(() => {});
+  try {
+    await reached.promise;
+    expect(service.runningInMemory()).toBe(true);
+    expect(await service.liveness()).toMatchObject({ state: "running" });
+    service.sealLapsed();
+  } finally {
+    gate.resolve();
+  }
+  expect((await starting).state).toBe("awaiting_owner");
+  expect(service.runningInMemory()).toBe(true);
+  service.cloudRenew("A");
+});
+
+it("keeps A's Cloud wait held when B opens an upload session beside it", async () => {
+  const f = await heldCloudWait();
+  const session = await f.service.open(
+    {
+      ...f.request,
+      source: {
+        kind: "archive",
+        artifact: f.artifact,
+        recoveryKey: f.restore.recoveryKey,
+        environment: "preproduction",
+      },
+    },
+    client,
+  );
+  f.service.cloudRenew("A");
+  await f.service.close(session.sessionId);
+  expect(f.service.runningInMemory()).toBe(true);
+});
+
+it("answers a stale tab's Check after a finished Cloud recovery, and leases nothing", async () => {
+  const f = await heldCloudCommit(cloudSelectedWithHolder);
+  f.gate.resolve();
+  await f.commit;
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("selected");
+  expect((await f.service.cloudStatus("A")).state).toBe("approved");
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(() => f.service.cloudRenew("A")).toThrow(refused);
 });
