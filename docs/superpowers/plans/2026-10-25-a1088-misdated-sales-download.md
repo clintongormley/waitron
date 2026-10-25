@@ -1,5 +1,17 @@
 # A1088: wrongly dated sales stay listed after "handled", download for the adviser, and a note
 
+> **Revision 3 (2026-10-25): round 3 folded** (`~/waitron-campaign-b/a1088-plan-review/round3-check.md`,
+> I1 and m1–m11, read at `85473b4d2`; `8520199cc`'s pointer fixes kept). I1, under the controller's
+> option (a): the "Sales dated wrongly" section and the Handled lists fold write each sale's time at
+> its stored offset, as the CSV and the emails do (new Task 9, its changed assertions listed); the
+> false sentence that the Box status table already did so, behind R1, is corrected. M6 applied in
+> full: a note is checked only after the session, visibility and claim checks (Tasks 4a, 4b). Also:
+> a malformed body is refused, not read as "no note" (m5); both note paths take
+> `clock.records_misdated` only (m7); one file-name rule for server and browser (m8); the bound is
+> written rounded up to the minute (m3); "about one episode per closing" (m2); the fallback offset's
+> false citation dropped (m1); "by the confirmed clock" (m9); Task 2's test lives in `apps/server`
+> (m6); the query-plan receipt saved with and without the index (m10); two pointers (m11).
+>
 > **Revision 2 (2026-10-25): round 1 folded.** Review `~/waitron-campaign-b/a1088-plan-review/round1-review.md`
 > (I1–I4, M1–M14), claim check `round1-claim-check.md` (every FALSE, OVERSTATED and gap line),
 > under the controller's rulings `round1-rulings.md` (R1–R9). What changed:
@@ -84,7 +96,7 @@ is parked for the owner.
   migrating (`packages/db/src/change-feed.ts:103-133`, `apps/server/src/boot.ts:1667`), and the
   migrator drops them first (`packages/migrations/src/apply.ts:65`). So: the ADD COLUMN needs
   nothing more; after the next boot the update trigger compares the new column too
-  (`change-feed.ts:115`), and an UPDATE that sets the acknowledgement or the note records a change
+  (`change-feed.ts:116`), and an UPDATE that sets the acknowledgement or the note records a change
   of `incidents`, which is what makes the dashboard's `incidents` queries re-read.
 - **Acknowledging is today the one permitted change** (`incidents.ts:14-16`). Decision 4 widens it
   by one: adding a note once to a handled incident. Task 2 rewrites that comment and cuts its stale
@@ -97,8 +109,10 @@ is parked for the owner.
   today's indexes plans `SCAN` (claim check #84), and nothing deletes incidents. With an index on
   `(code, detected_at)` the handled read, the open read and the handled count each plan
   `SEARCH … USING INDEX incidents_code_detected_idx (code=?)`; without it the handled read and the
-  count plan `SCAN` (`~/waitron-campaign-b/a1088-scripts/eqp2.mjs`, `node:sqlite`, 5 000 rows,
-  run 2026-10-25).
+  count plan `SCAN` (`~/waitron-campaign-b/a1088-scripts/eqp2-with-index.mjs` and
+  `eqp2-without-index.mjs`, `node:sqlite`, 5 000 rows, run 2026-10-25; round 3 repeated it on the
+  schema built from every core migration up to a generated 0190, with and without `ANALYZE`,
+  `a1088-plan-review/scratch/r3/eqp3.mjs`).
 - **The real time of a listed sale is not stored anywhere.** A closing stores the corrected start
   and its own readings (`clock-checks.ts:148-162`); the check stores the box's reading when the stop
   began, which is after the clock was put back (`clock-checks.ts:257-273`). Neither gives the error
@@ -124,11 +138,19 @@ is parked for the owner.
   The owner chose the venue's zone for new records (A696, `docs/backlog/fiscal.md:37-40`); not
   built, and old records stay as they are. **A cancellation stores the cancelled invoice's date**
   (`backend.ts:405-414`; `docs/backlog/fiscal.md:31`).
-- **The Box status table and the emails write each time at the record's stored offset**
-  (`apps/server/src/box-alert-email.ts:93-104`, `receiptDateTimeNumeric`,
-  `apps/server/src/receipt-dates.ts:44-53`, which formats date and time separately and joins them
-  with a space: `25/10/2026 00:30`; one `Intl.DateTimeFormat` with both gives `25/10/2026, 00:30`,
-  claim check #68).
+- **The emails write each time at the record's stored offset** (`apps/server/src/box-alert-email.ts:93-104`,
+  `receiptDateTimeNumeric`, `apps/server/src/receipt-dates.ts:44-53`, which formats date and time
+  separately and joins them with a space: `25/10/2026 00:30`; one `Intl.DateTimeFormat` with both
+  gives `25/10/2026, 00:30`, claim check #68). **The Box status table does not**: its time cell and
+  its range label use `formatIsoMinute` (`apps/dashboard/src/screens/box-status-screen.ts:700`,
+  `:733-738`), which reads the browser's zone with `getHours()` and never the stored offset
+  (`packages/dashboard-kit/src/date-format.ts:5-9`); the same instant printed `2026-10-24 22:30`,
+  `2026-10-25 00:30` or `2026-10-25 07:30` under `TZ=UTC`, `Europe/Madrid` and `Asia/Tokyo`
+  (round 3, `scratch/r3/fim.mts`). Task 9 moves that section onto the stored offset with the
+  dashboard's existing `wallClock` (`apps/dashboard/src/date-utils.ts:24-28`, "a stored instant plus
+  the wall offset recorded beside it"), already used by `my-schedule-screen.ts:389-390`. The
+  dashboard's browser tests run Chromium in UTC (`apps/dashboard/vitest.config.ts:60`, `:85`) and its
+  Node tests in `America/New_York` (`:101`).
 - **The venue's language** is worked out at boot as `venueLocale === "es-ES" ? "es" : "en"` for the
   managers' emails (`apps/server/src/boot.ts:1738`, `:2297`), read once.
 - **The amount a record holds** is `registros_facturacion.importe_total`, plain text because it is
@@ -153,7 +175,7 @@ is parked for the owner.
   (`packages/server-kit/src/error-boundary.ts:42`, `status[cause.code] ?? 400`), and that file does not import `./errors.js`.
   The server's registry has no barrel; every file that throws one of its codes imports it directly
   (`errors.ts:20-21`), and `scripts/errors-reachable.test.ts` walks packages' `src/index.ts` only
-  (its header, `:6-17`), so it does not see `apps/server`.
+  (its header, `:7-18`), so it does not see `apps/server`.
 
 ## Decisions this plan makes that the item does not
 
@@ -167,7 +189,8 @@ wait.
    only while the manager has the **Handled lists** fold open, and again on an `incidents` change
    while it is open. Why: the poll stays one indexed count however many episodes a venue gathers,
    and the two reads per episode (`clock-misdated.ts:31-38`, `:46-67`) happen only when asked. The
-   on-demand read has no time window and no cap (one episode per clock stop; the bell's Handled tab
+   on-demand read has no time window and no cap (about one episode per closing of a clock check, and one stop can carry two, a "cannot tell"
+   and a list, as `clock-confirm.route.test.ts:1465-1525` builds; the bell's Handled tab
    keeps 30 days, `apps/server/src/alerts.ts:17`, too short for a tax period); a backlog entry
    records it. `GET /api/box/clock-misdated` keeps its meaning: open lists only.
 2. **Who handled it.** A person's display name (read from `persons`, as `readHandledAlerts` does,
@@ -191,23 +214,31 @@ wait.
 5. **CSV only, no printable page**: the reporting area has none to follow (receipt above).
 6. **The CSV is in the venue's language** (worked out as the emails' is, `boot.ts:2297`), not the
    signed-in person's dashboard language, and is fixed until the server restarts, as the emails
-   are. The file name is English: `misdated-sales-<yyyy-mm-dd>.csv`, the date being the first
-   listed record's stored issue date.
+   are. The file name is English: `misdated-sales-<yyyy-mm-dd>.csv`, the date being the episode's
+   `from` at its stored `fromOffsetMinutes` (the first listed record's stamp,
+   `clock-stop-incidents.ts:69-70`). Server (`Content-Disposition`) and browser (`link.download`,
+   the name the user gets, `vat-return-screen.ts:126`) both compute it from those two params with
+   the same rule, and one fixture tests both.
 7. **Every time in the CSV is written at the record's own stored offset**, with
-   `receiptDateTimeNumeric(at, "en-GB", offsetMinutes)` (`dd/mm/yyyy hh:mm`, as the emails and the
-   Box status table write them). The header's bound and confirmation times are written at the
-   offset the check stored when it opened (`clock-checks.ts:266`), or, for a check with none, the
-   first listed record's offset (the fallback `recordMisdated` uses, `clock-stop-incidents.ts:77-85`).
-   An **Invoice date** column writes the stored `fecha_expedicion_factura` as `dd/mm/yyyy`. The
-   venue's saved time zone is not read: the stored date follows the server process's zone today
-   (receipt above), and the CSV must agree with what AEAT holds and with every other view.
+   `receiptDateTimeNumeric(at, "en-GB", offsetMinutes)` (`dd/mm/yyyy hh:mm`, as the emails write
+   them). The header's confirmation time is written at the offset the check stored when it opened
+   (`clock-checks.ts:266`), or, for a check with none, the first listed record's offset (a choice of
+   this plan; `recordMisdated`'s own fallback is the closing reading's offset, which is not stored,
+   `clock-stop-incidents.ts:77-85`). The bound is written at the same offset, **rounded up to the
+   next whole minute** when it has seconds, so "made before {bound}" stays true at minute
+   precision. An **Invoice date** column writes the stored `fecha_expedicion_factura` as
+   `dd/mm/yyyy`. The venue's saved time zone is not read: the stored date follows the server
+   process's zone today (receipt above), and the CSV must agree with what AEAT holds, with the
+   emails, and, after Task 9, with the Box status section's times (the same clock time, written
+   `yyyy-mm-dd hh:mm` there).
 8. **"Real time" reads "Unknown" on every row in this build** (no stored value gives it). The header
    gives the bound instead: every listed sale was made before the corrected start plus one minute,
    the confirmation's tolerance. Slice 9c's change checks are the first place a real time could be
    worked out (design §4.9 f, the e₀ paragraph); a backlog entry says so.
 9. **"Different day" is "Yes", "Cannot tell" or "Not applicable", never "No"**: "Yes" when the
    record's stored issue date is later than the bound's calendar date at the record's own offset
-   (the sale was then really made on an earlier day, so possibly in a different VAT period — asesor
+   (by the confirmed clock, the sale was then made on an earlier day, so possibly in a different
+   VAT period — asesor
    Q60 (b), not answered); otherwise "Cannot tell"; "Not applicable" for a cancellation, whose
    stored date is the cancelled invoice's. A `partial` closing's corrected start is the closing's
    own time (`clock-checks.ts:83-84`), later than the real start, so the bound still holds, only
@@ -270,7 +301,8 @@ wait.
   method opens none. Queries are awaited in turn, never `Promise.all`. The CSV is built after the
   turn.
 - **Each note write** is the one `withTransaction` its route opens (`alerts-api.ts:39-49`); the
-  body is checked after `requireManagementSession` and before the transaction.
+  body's text is read before the transaction, and the note is checked inside it only after the
+  session, visibility and claim checks, before any write (review M6, round 3 m4).
 - **Migration**: generated by `pnpm --filter @waitron/db db:generate --name incident_acknowledged_note`,
   never hand-edited; no shipped migration file is touched. A number collision on rebase is fixed by
   regenerating (CLAUDE.md §3).
@@ -312,9 +344,11 @@ wait.
 
 ## Review focus
 
-- **The by-id reads** (Tasks 1, 4b, 7): an incident id from another code, a "cannot tell" episode,
-  a malformed id and an unknown id each answer 404 `alert.not_found`; a supervisor without
-  `system.manage` answers 403 before any read.
+- **The by-id reads**: the download (Task 7) answers 404 `alert.not_found` for an incident id of
+  another code, a "cannot tell" episode, a malformed id and an unknown id; the two note paths
+  (Tasks 4a, 4b) answer 404 `alert.not_found` for another code, a malformed id and an unknown id,
+  and take a note on a "cannot tell" episode; a session without the permission answers 403 before
+  any read of the incident's contents, and a note is never checked before that.
 - **The migration** (Task 2): the generated SQL is one `ALTER TABLE … ADD` and one plain
   `CREATE INDEX`; no rebuild, no index dropped; the index's query plan is shown.
 - **The note's guarded writes** (Tasks 3, 4a, 4b): the first handling writes the note in its own
@@ -322,6 +356,7 @@ wait.
   its own code, never a silent 204 with a note dropped.
 - **The seat contract** (Task 5): a new optional method on `FiscalBackend`; `fiscal-none` and the
   fake backend leave it undefined, and the download route is mounted only where it exists.
+- **One clock time per sale across the CSV, the emails and the Box status section** (Task 9).
 - **Every sentence the CSV, the screen and the guide say about time**: "Unknown", the bound and
   "Cannot tell" are claims (decisions 8 and 9); the review checks the bound against
   `clock-misdated.ts:54-66`, `clock-checks.ts:85-87` and the 60 000 ms margin. VAT is mentioned
@@ -395,7 +430,9 @@ not know (logged as `:123-126` does).
 
 Files: `packages/db/src/schema/incidents.ts`, the generated
 `packages/db/drizzle/0190_incident_acknowledged_note.sql`, `meta/0190_snapshot.json`,
-`meta/_journal.json`, a new `packages/db/src/schema/incidents-index.test.ts`.
+`meta/_journal.json`, `apps/server/src/box-health.ts`, `apps/server/src/box-health.test.ts`. The
+query-plan test lives in `apps/server`: `packages/db` cannot import from `apps/server`, which
+depends on it (a loop `scripts/workspace-cycles.test.ts` refuses, round 3 m6).
 
 Schema: `acknowledgedNote: label("acknowledged_note")` beside `acknowledgedBy`, and
 `index("incidents_code_detected_idx").on(t.code, t.detectedAt)` with a one-line comment naming the
@@ -404,13 +441,14 @@ incident is not rewritten; marking it handled, with an optional note, and adding
 handled incident with none are the only permitted changes; nothing in the database enforces that,
 and the table carries no trigger that guards it (only the change feed's, `change-feed.ts:103-133`).
 
-1. Failing test: in `incidents-index.test.ts` (`useVenueDb`, core migrations), `explain query plan`
-   on the exact SQL of Task 1's three reads (emitted with `.toSQL()` from the real query builders,
-   not retyped) contains `USING INDEX incidents_code_detected_idx` and no `SCAN incidents`; and an
-   insert with `acknowledged_note` reads back. Run
-   `pnpm --filter @waitron/db exec vitest run src/schema/incidents-index.test.ts`; watch it fail.
-   (If importing Task 1's builders from `apps/server` is not possible from `packages/db`, the test
-   lives in `apps/server/src/box-health.test.ts` instead; say which in the commit.)
+1. In `box-health.ts`, Task 1's three reads are split into exported builders
+   (`misdatedOpenQuery(tx)`, `misdatedHandledQuery(tx)`, `misdatedHandledCountQuery(tx)`, each
+   returning the unexecuted drizzle query) and the readers that await them, so a test can take
+   `.toSQL()`. Failing test in `box-health.test.ts` (its `useVenueDb`): `explain query plan` on each
+   builder's `.toSQL()` (SQL and params, not retyped) contains `USING INDEX
+   incidents_code_detected_idx` and no `SCAN incidents`; and an insert with `acknowledged_note`
+   reads back. Run `pnpm --filter @waitron/server exec vitest run src/box-health.test.ts`; watch it
+   fail.
 2. Add the column and the index; run
    `pnpm --filter @waitron/db db:generate --name incident_acknowledged_note`. **Read the SQL: it
    must be exactly ``ALTER TABLE `incidents` ADD `acknowledged_note` text;`` and one
@@ -421,8 +459,9 @@ and the table carries no trigger that guards it (only the change feed's, `change
    scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
    scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts
    scripts/classification-complete.test.ts scripts/migration-upgrade.test.ts
-   scripts/column-vocabulary.test.ts`, then `pnpm --filter @waitron/db exec vitest run` and
-   `pnpm --filter @waitron/db typecheck`. Read every count.
+   scripts/column-vocabulary.test.ts scripts/workspace-cycles.test.ts`, then
+   `pnpm --filter @waitron/db exec vitest run`, `pnpm --filter @waitron/server exec vitest run
+   src/box-health.test.ts`, and `typecheck` in both. Read every count.
 
 ## Task 3 — the note in core
 
@@ -451,13 +490,20 @@ changes no row, one select tells which of the other three answers holds.
 Files: `apps/server/src/alerts-api.ts`, `apps/server/src/alerts-api.test.ts`,
 `apps/server/src/errors.ts`, `apps/dashboard/src/i18n/codes.ts`.
 
-Route `POST /management-api/alerts/incidents/:id/handled`: `requireManagementSession` first, then
-the body through `readRawJsonBody` (`packages/server-kit/src/read-json-body.ts:21-26`; null for an
-empty body, claim check #56): null, `{}` or `{ note: undefined }` → no note; a string → trimmed,
-`""` → no note, over 500 characters → `management.request_invalid` `{ field: "note" }`; any other
-type, or a body that is not an object → the same refusal. In the transaction: the existing checks
-(`:93-98`), then `markIncidentHandled`; when it answers false and a note was given →
-`alert.already_handled` `{ id }`. `STATUS` gains `"management.request_invalid": 400` and
+Route `POST /management-api/alerts/incidents/:id/handled`: `requireManagementSession` (which only
+checks the cookie is there, `alerts-api.ts:43`), then the body's **text** with `c.req.text()`, not
+`readRawJsonBody`, which answers null for a malformed body as well as an empty one
+(`packages/server-kit/src/read-json-body.ts:17-26`) and would turn `{note:"x"` into a silent "no
+note" (round 3 m5). Nothing is judged yet. In `inSession`'s transaction (`:39-49`), after the
+session is resolved and the existing visibility and claim checks (`:93-98`), and before any write,
+the text is judged: empty → no note; text that does not parse → `management.request_invalid`
+`{ field: "body" }`; parsed `null`, `{}` or `{ note: undefined }` → no note; `note` a string →
+trimmed, `""` → no note, over 500 characters → `management.request_invalid` `{ field: "note" }`;
+`note` any other type, or a body that is not an object → `{ field: "note" }`. A note is taken only
+for a `clock.records_misdated` incident: a note on any other code → 404 `alert.not_found` (no
+screen shows another code's note, round 3 m7); without a note every code is handled as today.
+Then `markIncidentHandled`; when it answers false and a note was given → `alert.already_handled`
+`{ id }`. `STATUS` gains `"management.request_invalid": 400` and
 `"alert.already_handled": 409`. `errors.ts` declares `alert.already_handled` beside `alert.not_found`
 (`:1292-1294`) with a one-line doc; `codes.ts` words it in English and Spanish ("This alert was
 already marked handled, so the note was not saved. Add it from Handled lists on the Box status
@@ -467,13 +513,18 @@ page." and its Spanish twin).
    characters accepted, 501 refused with the code and `field`; whitespace-only stores null; a
    number refused; no body still works (the existing case at `:228` stays as it is); a note on an
    already-handled incident answers 409 `alert.already_handled` and stores nothing; the same
-   without a note still answers 204 (the case at `:257`, unchanged); an unauthenticated request
-   with a 501-character note answers 401, not 400. In `apps/dashboard/src/i18n/codes.test.ts`, the
+   without a note still answers 204 (the case at `:257`, unchanged); with a 501-character note, a
+   request with no cookie answers 401, an expired session 401, a session that sees no alerts 404 and
+   one without the claim's permission 403, never 400 (review M6); a body `{note:"x"` (unparsable)
+   answers 400 `{ field: "body" }` and leaves the incident open; a note on a printer incident answers
+   404 `alert.not_found` and leaves it open, while the same request without a note handles it. In `apps/dashboard/src/i18n/codes.test.ts`, the
    new code has an English and a Spanish sentence (read from `codes.ts`, not retyped). Run
    `pnpm --filter @waitron/server exec vitest run src/alerts-api.test.ts src/alerts-api.full-disk.test.ts`
    and `pnpm --filter @waitron/dashboard exec vitest run src/i18n/codes.test.ts`; watch them fail.
 2. Implement. Controls, each run and reverted: skip the trim → the whitespace case fails; answer 204
-   when `markIncidentHandled` answers false with a note → the 409 case fails.
+   when `markIncidentHandled` answers false with a note → the 409 case fails; judge the note before
+   `inSession` → the expired-session case answers 400 and fails; use `readRawJsonBody` → the
+   unparsable case answers 204 and fails.
 3. Run the same files and `typecheck` in `@waitron/server` and `@waitron/dashboard`.
 
 ## Task 4b — "Add note" on a handled alert, and the note on the history (server)
@@ -482,9 +533,11 @@ Files: `apps/server/src/alerts-api.ts`, `apps/server/src/alerts-api.test.ts`,
 `apps/server/src/errors.ts`, `apps/dashboard/src/i18n/codes.ts`, `apps/server/src/box-health.ts`,
 `apps/server/src/box-health.test.ts`.
 
-Route `POST /management-api/alerts/incidents/:id/note`, body `{ note: string }` checked as Task 4a's
-but required (missing, empty or whitespace → `management.request_invalid` `{ field: "note" }`). In
-one transaction: the same visibility and claim-permission checks as the handled route (`:92-98`),
+Route `POST /management-api/alerts/incidents/:id/note`, body `{ note: string }`. The text is read
+as in Task 4a; in one transaction, the session, the same visibility and claim-permission checks as
+the handled route (`:92-98`) and a `clock.records_misdated` code (any other → 404
+`alert.not_found`) come first; then the note is judged as Task 4a's but required (missing, empty or
+whitespace → `management.request_invalid` `{ field: "note" }`; unparsable → `{ field: "body" }`);
 then `addIncidentNote`: "added" → 204; "note_exists" → 409 `alert.note_exists` `{ id }`;
 "not_handled" → 409 `alert.not_handled` `{ id }`; "not_found" → 404 `alert.not_found`. Both codes
 declared in `errors.ts` and worded in `codes.ts` ("This alert already has a note." / "This alert has
@@ -493,8 +546,9 @@ not been marked handled yet.", and Spanish). `MisdatedHandled` gains `note: stri
 
 1. Failing cases: the note is added to a handled incident (by a person, and by the box: null
    handler) and read back; a second answers 409 `alert.note_exists` with the first kept; an open
-   incident answers 409 `alert.not_handled`; a malformed or unknown id 404; a session without the
-   claim's permission 403; an empty note 400 with `field`; the handled route's episode carries the
+   incident answers 409 `alert.not_handled`; a malformed or unknown id 404; a handled printer
+   incident 404 with nothing stored; with an empty note, an expired session answers 401 and a
+   session without the claim's permission 403, and only a permitted one 400 with `field`; the handled route's episode carries the
    note, and `null` without one. `codes.test.ts` covers both codes. Run the Task 4a commands plus
    `src/box-health.test.ts`; watch them fail.
 2. Implement. Control, run and reverted: call `markIncidentHandled` instead of `addIncidentNote` →
@@ -586,7 +640,7 @@ export interface MisdatedSalesInput {
   detail: Extract<MisdatedDetail, { known: true }>;
 }
 export function renderMisdatedSalesCsv(input: MisdatedSalesInput): Uint8Array;
-export function misdatedSalesFileName(input: MisdatedSalesInput): string;
+export function misdatedSalesFileName(episode: { from: string; fromOffsetMinutes: number }): string;
 ```
 
 Layout: line 1 the header sentence (decision 12) in one cell; line 2 the column headings — Series,
@@ -625,11 +679,15 @@ applicable"/"No aplicable". `{count}` is `records.length`.
      `-1+1` → `"'=1+1"` and `"'-1+1"` (the guard still applies to every other column).
    - **Header**: the exact English sentence for two records from an admin closing named "Mario"
      (`… confirmed by an administrator (Mario) on …`, the bound one minute after the corrected
-     start), the one-sale form, the `partial` sentence appended, and the Spanish header equals the
+     start); a bound with seconds is rounded up: corrected start `2026-10-24T21:59:30.000Z`, check
+     offset 120, bound `22:00:30Z` → written `25/10/2026 00:01`, never `00:00` (round 3 m3, whose
+     run printed `00:00` for plain formatting); the one-sale form, the `partial` sentence appended, and the Spanish header equals the
      Spanish template filled with the same values; `{count}` follows the rows when the alert's
      param says otherwise.
    - **Shape**: BOM first, CRLF line ends, every cell quoted; the file name is
-     `misdated-sales-2026-10-24.csv` for record A first.
+     `misdated-sales-2026-10-25.csv` for an episode whose `from` is `2026-10-24T22:30:00.000Z` at
+     `fromOffsetMinutes` 120, and `misdated-sales-2026-10-24.csv` at 0 (decision 6); Task 9b's
+     browser case uses the same `from`, offset and expected name.
    Run `pnpm --filter @waitron/server exec vitest run src/misdated-sales-csv.test.ts`; watch it fail.
 2. Add the one export line; `pnpm --filter @waitron/server exec vitest run src/attendance-export-csv.test.ts src/attendance-export-api.test.ts`
    stays green with no test edited.
@@ -705,6 +763,40 @@ path with `{ as: "blob" }`, as `downloadVatReturnFile`. `QUERY_DEPENDENCIES` gai
    `pnpm exec vitest run scripts/live-subscriptions.test.ts`.
 3. Run `pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts src/screens/box-status-rows.test.ts src/screens/box-status-rows.tax.test.ts`.
 
+## Task 9 — Box status: the section writes each sale's time at its stored offset
+
+Files: `apps/dashboard/src/screens/box-status-screen.ts`, `apps/dashboard/src/screens/box-status-screen.test.ts`,
+`apps/dashboard/src/date-utils.test.ts`.
+
+Scope (controller's ruling on round 3 I1, option (a)): only the "Sales dated wrongly" section. The
+table's Time recorded cell (`box-status-screen.ts:700`) becomes `` `${date} ${time}` `` from
+`wallClock(record.at, record.offsetMinutes)` (`apps/dashboard/src/date-utils.ts:24-28`; the list
+route already sends `offsetMinutes`, `apps/server/src/box-health-api.ts:133-134`), and the
+several-tables label (`:733-738`) uses `wallClock(open.from, open.fromOffsetMinutes)` and
+`wallClock(open.to, open.toOffsetMinutes)`. `formatIsoMinute` and its other callers are not
+changed. The "cannot tell" and `partial` sentences come from the shared alert wording
+(`alertMessage`, the bell's too) and are not changed.
+
+Existing dashboard assertions that change, each because the section now writes the stored offset
+instead of the browser's zone (the fixtures' `offsetMinutes: 120` against the browser tests' UTC,
+`apps/dashboard/vitest.config.ts:60`, so each fails on the old code):
+- `box-status-screen.test.ts:1149-1150`: the cells expect `wallClock(OPEN.from, 120)`'s
+  `2026-10-22 21:00` and `21:05`, not `formatIsoMinute`'s `19:00` and `19:05`;
+- `:1221-1238`: the range labels, English and Spanish, built from `wallClock` with the entries'
+  `fromOffsetMinutes` and `toOffsetMinutes`;
+- `:1260`: the `ODD` row's cell, the same way.
+Unchanged on purpose: `:1183-1190` (the "cannot tell" sentence, from `alertMessage`).
+
+1. Change those three assertions, and add a case across midnight: a record at
+   `2026-10-22T23:30:00.000Z` with `offsetMinutes: 120` shows `2026-10-23 01:30` (the browser's UTC
+   would show `2026-10-22 23:30`). In `date-utils.test.ts` (Node, `America/New_York`), `wallClock`
+   of that instant at 120 gives `{ date: "2026-10-23", time: "01:30" }`, whatever the host zone. Run
+   (memory first) `pnpm --filter @waitron/dashboard exec vitest run src/screens/box-status-screen.test.ts src/date-utils.test.ts`;
+   watch the screen cases fail.
+2. Implement. Control, run and reverted: put `formatIsoMinute` back in the cell → the cell cases
+   fail.
+3. Run both files, `src/screens/box-status-screen.a11y.test.ts`, and the typecheck.
+
 ## Task 9a — Box status: the Handled lists fold
 
 Files: `apps/dashboard/src/screens/box-status-screen.ts`, `apps/dashboard/src/i18n/strings.ts`,
@@ -717,7 +809,9 @@ headed "Handled lists ({count})", closed by default. On its `wt-toggle` to open,
 `clockMisdatedHandled` (released on close and on disconnect); each episode, newest first: a line
 "Marked handled by {name} on {time}." / "Marked handled by the box on {time}." / "Marked handled on
 {time}." (no name), the note as "Note: {note}" when there is one, the episode's sentence and table
-as an open entry draws them. A failed read says "The handled lists could not be read." inside the
+as an open entry draws them (at the stored offset, Task 9). `handledAt` carries no stored offset,
+so "on {time}" is written with `formatIsoMinute`, in the viewer's zone, and the guide says so. A
+failed read says "The handled lists could not be read." inside the
 fold. The several-tables label (`:733-738`) counts the tables drawn. New `box_status.misdated.*`
 keys in both languages.
 
@@ -739,12 +833,15 @@ Files: as Task 9a.
 
 Each open and handled entry with a list gains **Download for your adviser** (`secondary`), never a
 "cannot tell" entry (decision 14). It calls `api.downloadMisdatedSales(incidentId)` and saves through
-a link as `vat-return-screen.ts:122-128` does, named `misdated-sales-<from's date>.csv`; `loading` on
+a link as `vat-return-screen.ts:122-128` does, named `misdated-sales-<wallClock(from,
+fromOffsetMinutes).date>.csv` (decision 6, the same rule as the server's); `loading` on
 its own button while asked; a failure shows `codeMessage(code)` under that entry until the next
 press.
 
 1. Failing cases: Download asks for the entry's incident id and clicks a link whose `download` is
-   the file name (spy on `HTMLAnchorElement.prototype.click`); none for "cannot tell", open or
+   `misdated-sales-2026-10-25.csv` for `from` `2026-10-24T22:30:00.000Z` at offset 120 (Task 6's
+   fixture; under the browser tests' UTC a browser-zone date would give `…-10-24`), spied on
+   `HTMLAnchorElement.prototype.click`; none for "cannot tell", open or
    handled; a refused download shows the sentence under that entry only. Run as Task 9a; watch them
    fail.
 2. Implement; add the open-entry-with-button state to the a11y file, both themes.
@@ -817,9 +914,10 @@ Files: `apps/server/src/guide/en/box-status.md`, `apps/server/src/guide/es/box-s
    screen's own words: each list stays under **Handled lists** after it is marked handled, with who,
    when and any note, newest first, including the box's own handling when a later check replaced a
    "cannot tell"; **Download for your adviser** gives a CSV in the venue's language with the header
-   line, the columns, times as each sale recorded them, "Unknown" real times with the "made before"
-   time, and "Yes" ("the sale was made on an earlier day than its invoice date, so possibly in a
-   different VAT period; ask your tax adviser"), "Cannot tell" or "Not applicable"; amounts as
+   line, the columns, times as each sale recorded them (the same clock times the section shows; when
+   a list was handled is shown in the viewer's own time zone), "Unknown" real times with the "made before"
+   time, and "Yes" ("by the confirmed clock, the sale was made on an earlier day than its invoice
+   date, so possibly in a different VAT period; ask your tax adviser"), "Cannot tell" or "Not applicable"; amounts as
    recorded; **Mark handled** on this page takes an optional note of up to 500 characters, the
    bell's does not, and a list handled without a note can take one note later with **Add note**. No
    sentence claims more than decisions 3 to 15 deliver; none says "certainly".
