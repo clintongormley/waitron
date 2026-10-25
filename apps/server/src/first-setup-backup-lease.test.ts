@@ -10,6 +10,7 @@ import { expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 
 import * as restore from "./restore.js";
+import * as stateSecrets from "./state-secrets.js";
 import * as sources from "./first-setup-backup-source.js";
 import {
   recovery,
@@ -118,34 +119,84 @@ it("revives a lapsed session that A renews before anyone seals it, and never aft
   expect(await f.service.liveness()).toEqual(stopped);
 });
 
+async function reopenHeldAfterTakingSession() {
+  const f = await preparedSession();
+  await f.service.close(f.session.sessionId);
+  const { lstat } = await vi.importActual<typeof filesystem>("node:fs/promises");
+  const gate = barrier();
+  const reached = barrier();
+  vi.spyOn(filesystem, "lstat").mockImplementation(async (path, options) => {
+    if (String(path).endsWith("/publication.json")) {
+      reached.resolve();
+      await gate.promise;
+    }
+    return lstat(path, options as never);
+  });
+  const reopening = f.service.open({ ...f.request, recoveryId: f.session.recoveryId }, client);
+  reopening.catch(() => {});
+  await reached.promise;
+  return { ...f, reopening, release: gate.resolve };
+}
+
 it.each([1, 6])(
   "never seals a reopen still in flight %i minutes after it took the session",
   async (minutes) => {
-    const f = await preparedSession();
-    await f.service.close(f.session.sessionId);
-    const { lstat } = await vi.importActual<typeof filesystem>("node:fs/promises");
-    const gate = barrier();
-    const reached = barrier();
-    vi.spyOn(filesystem, "lstat").mockImplementation(async (path, options) => {
-      if (String(path).endsWith("/publication.json")) {
-        reached.resolve();
-        await gate.promise;
-      }
-      return lstat(path, options as never);
-    });
-    const reopening = f.service.open({ ...f.request, recoveryId: f.session.recoveryId }, client);
-    reopening.catch(() => {});
-    await reached.promise;
+    const f = await reopenHeldAfterTakingSession();
     clock.advance(minutes * 60_000);
     expect(f.service.runningInMemory()).toBe(true);
     f.service.sealLapsed();
     expect(f.service.runningInMemory()).toBe(true);
-    gate.resolve();
-    const reopened = await reopening;
+    f.release();
+    const reopened = await f.reopening;
     f.service.renew(reopened.sessionId);
     await f.service.prepare(reopened.sessionId, { action: "clock-challenge" }, client);
   },
 );
+
+it("hands back a reopen held 6 minutes with a fresh lease, so a seal right after leaves it", async () => {
+  const f = await reopenHeldAfterTakingSession();
+  clock.advance(6 * 60_000);
+  f.release();
+  const reopened = await f.reopening;
+  f.service.sealLapsed();
+  f.service.renew(reopened.sessionId);
+  expect(await f.service.liveness()).toMatchObject({ state: "running" });
+});
+
+it("hands back a resume held 6 minutes with a fresh lease, so a seal right after leaves it", async () => {
+  const f = await selectedRepair();
+  vi.mocked(stateSecrets.unpackBundleToDir).mockRejectedValueOnce(new Error("interrupted secrets"));
+  await expect(f.service.commit(f.session.sessionId, f.selected.input, client)).rejects.toThrow(
+    "interrupted secrets",
+  );
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  const inspect = f.workspace.inspect.bind(f.workspace);
+  const gate = barrier();
+  const reached = barrier();
+  vi.spyOn(f.workspace, "inspect").mockImplementationOnce(async (recoveryId) => {
+    reached.resolve();
+    await gate.promise;
+    return inspect(recoveryId);
+  });
+  const resuming = restarted.resume(
+    {
+      observation: f.request.observation,
+      recoveryId: f.session.recoveryId,
+      nodeRecoverySecret: f.request.nodeRecoverySecret,
+      context: { oldBoxGone: true, soleRecovery: true },
+    },
+    client,
+  );
+  resuming.catch(() => {});
+  await reached.promise;
+  clock.advance(6 * 60_000);
+  gate.resolve();
+  const resumed = await resuming;
+  restarted.sealLapsed();
+  restarted.renew(resumed.sessionId);
+  expect(await restarted.liveness()).toMatchObject({ state: "running" });
+});
 
 it("reports an open's own times while it runs beside an older, lapsed session", async () => {
   const f = await preparedSession();

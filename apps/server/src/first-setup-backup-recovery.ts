@@ -851,6 +851,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
                 }
                 await recheck(entry);
               }
+              refresh(entry);
               touch(entry);
               owned = false;
               return structuredClone(session);
@@ -1044,6 +1045,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             await admitCloud(entry);
             buildPreparation(entry);
             await recheck(entry);
+            refresh(entry);
             touch(entry);
             owned = false;
             return structuredClone(session);
