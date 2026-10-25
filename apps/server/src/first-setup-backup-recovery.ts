@@ -369,6 +369,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
   const unfailed = (entry: Entry) => {
     if (entry.failed !== undefined) ownerRequired();
   };
+  // A seal deletes the copy under a failed session's checks, so what they then throw is the seal's doing.
+  const sealedUnder = (entry: Entry | undefined, error: unknown): never => {
+    if (entry?.sealed !== undefined && !isAppError(error)) ownerRequired();
+    throw error;
+  };
   const existingTarget = async (record: NonNullable<Entry["record"]>) => {
     for (const directory of Object.values(record.target.target))
       if ((await canonicalFirstSetupDirectory(directory)) !== directory) conflict();
@@ -1057,6 +1062,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       const proposal = structuredClone(supplied);
       return turn(async (hold) => {
         const step = enter(sessionId);
+        const own = active?.session.sessionId === sessionId ? active : undefined;
         try {
           const entry = await admitted(sessionId);
           if (
@@ -1095,6 +1101,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           } finally {
             await store.close();
           }
+        } catch (error) {
+          return sealedUnder(own, error);
         } finally {
           leave(step);
         }
@@ -1105,6 +1113,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       void _client;
       return turn(async (hold) => {
         const step = enter(sessionId);
+        const own = active?.session.sessionId === sessionId ? active : undefined;
         let begun = false;
         try {
           const entry = await admitted(sessionId);
@@ -1310,7 +1319,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             ["placement-started", "restored"].includes(step.entry.record?.phase ?? "")
           )
             fail(step.entry);
-          throw error;
+          sealedUnder(own, error);
         } finally {
           leave(step);
         }
@@ -1334,15 +1343,15 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     },
     sealLapsed(): void {
       const entry = active;
-      if (entry === undefined || inFlight(entry) || leased(entry)) return;
-      // drop() deletes the selected copy, which a step in flight would still be reading.
+      if (openings.size > 0 || entry === undefined || inFlight(entry) || leased(entry)) return;
+      // drop() deletes the selected copy, which an open or a step in flight would still be reading.
       entry.sealed = { at: new Date().toISOString() };
       void drop().catch(() => {});
     },
     runningInMemory,
     async liveness(): Promise<BackupRepairActivity | null> {
       if (runningInMemory()) {
-        const entry = [...steps][0]?.entry ?? active;
+        const entry = [...steps][0]?.entry ?? (leased(active) ? active : undefined);
         const opened = [...openings.values()][0];
         return {
           state: "running",
