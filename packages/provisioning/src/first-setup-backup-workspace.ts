@@ -311,6 +311,7 @@ async function originals(
   const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
   async function walk(path: string, isRoot = false): Promise<void> {
     if (path === output || pointers.has(path)) return;
+    // A discarded recovery is not one of the box's originals, and emptying it changes its folder.
     if (dirname(path) === recoveries && (await abandonedJournal(anchor, basename(path)))) return;
     // Lock journals and holder heartbeats carry no setup or recovery authority.
     if (

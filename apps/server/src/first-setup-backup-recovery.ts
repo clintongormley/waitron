@@ -590,16 +590,16 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           });
         if (request.context.oldBoxGone !== true || request.context.soleRecovery !== true)
           throw new AppError("module.operation_invalid", { module: "core" });
-        const recoveryId =
-          request.recoveryId ??
-          (request.source.kind === "cloud" ? pendingCloudId : undefined) ??
-          randomUUID();
         const before = await turn(async () => {
           if (disposed) ownerRequired();
           await assertNoStartAgainDeletion(options.venueDir);
           if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
           const records = await liveRecords();
           const record = records.at(-1);
+          const recoveryId =
+            request.recoveryId ??
+            (request.source.kind === "cloud" ? pendingCloudId : undefined) ??
+            randomUUID();
           if (
             request.recoveryId === undefined
               ? records.length !== 0
@@ -615,8 +615,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             conflict();
           const digest = await options.workspace.inspect(recoveryId);
           if (record !== undefined && digest !== record.observation.originalsDigest) conflict();
-          return { digest, generation: ++generation, record };
+          return { digest, generation: ++generation, record, recoveryId };
         });
+        const { recoveryId } = before;
         // Decrypted copies and key derivation stay outside the retained roots and their action lock.
         const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
         let selected: Selected | undefined;
