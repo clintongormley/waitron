@@ -1110,3 +1110,70 @@ describe("the full-disk page's free space and uncounted start", () => {
     expect(stopped).not.toContain("This start was not counted");
   });
 });
+
+describe("a start refused before it began", () => {
+  const ROWS = [
+    {
+      code: "setup.workspace_unsupported",
+      "en-GB": {
+        title: "This box holds a first setup kept by an older Waitron.",
+        action: "Ask whoever installed this box to reinstall Waitron on it.",
+      },
+      "es-ES": {
+        title: "Este equipo guarda una configuración inicial de una versión anterior de Waitron.",
+        action: "Pide a quien instaló este equipo que reinstale Waitron en él.",
+      },
+    },
+    {
+      code: "setup.start_again_incomplete",
+      "en-GB": {
+        title: "Start again did not finish, and the box found files it did not expect.",
+        action:
+          "Ask whoever installed this box to look at its setup folders before anything else: the files it found may be a restored venue.",
+      },
+      "es-ES": {
+        title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+        action:
+          "Antes de nada, pide a quien instaló este equipo que revise sus carpetas de configuración: los archivos que encontró pueden ser un local recuperado.",
+      },
+    },
+  ] as const;
+
+  async function refusedPage(code: string, acceptLanguage: string): Promise<string> {
+    const app = recoveryApp({
+      state: { ...FRESH, level: "recovery", lastErrorCode: code },
+      logDir: "/nonexistent",
+      onRetry: vi.fn(),
+      refusedAtStart: true,
+    });
+    return await (
+      await app.request("/", { headers: { "Accept-Language": acceptLanguage } })
+    ).text();
+  }
+
+  it.each(ROWS)("names $code in both languages", async (row) => {
+    for (const [lang, acceptLanguage] of LOCALES) {
+      const body = await pageFor(row.code, undefined, acceptLanguage);
+      expect(body, lang).toContain(escapeHtml(row[lang].title));
+      expect(body, lang).toContain(escapeHtml(row[lang].action));
+    }
+  });
+
+  it.each(ROWS)(
+    "says a refused $code start was not counted, and never mentions the disk",
+    async (row) => {
+      const english = await refusedPage(row.code, "en-GB");
+      expect(english).toContain(
+        `<p>${escapeHtml("Level: recovery. This start was refused before it began, and was not counted.")}</p>`,
+      );
+      expect(english).not.toContain("Failed 0 times");
+      expect(english).not.toMatch(/disk/i);
+      const spanish = await refusedPage(row.code, SPANISH);
+      expect(spanish).toContain(
+        `<p>${escapeHtml("Nivel: recovery. Este arranque se rechazó antes de empezar y no se ha contado.")}</p>`,
+      );
+      expect(spanish).not.toContain("Intentos fallidos: 0");
+      expect(spanish).not.toMatch(/disco/i);
+    },
+  );
+});

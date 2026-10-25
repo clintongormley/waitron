@@ -22,6 +22,8 @@ export interface RecoveryDeps {
   freeSpace?: () => Promise<number | null>;
   /** This start could not record its failure, so `failures` does not count it. */
   uncounted?: true;
+  /** This start was refused before it began, so `failures` does not count it. */
+  refusedAtStart?: true;
   log?: Logger;
 }
 
@@ -146,6 +148,7 @@ const PAGE_TEXT: Readonly<
       status: (level: string, failures: number) => string;
       stoppedStatus: (level: string) => string;
       uncountedStatus: (level: string) => string;
+      refusedAtStartStatus: (level: string) => string;
       freeSpace: (amount: string) => string;
       unknownSpace: string;
       missingTriggers: (names: string) => string;
@@ -167,6 +170,8 @@ const PAGE_TEXT: Readonly<
     status: (level, failures) => `Level: ${level}. Failed ${failures} times.`,
     stoppedStatus: (level) => `Level: ${level}. Stopped while running.`,
     uncountedStatus: (level) => `Level: ${level}. This start was not counted: the disk is full.`,
+    refusedAtStartStatus: (level) =>
+      `Level: ${level}. This start was refused before it began, and was not counted.`,
     freeSpace: (amount) => `Free space on the box's disk: ${amount}.`,
     unknownSpace: "unknown",
     missingTriggers: (names) => `Missing triggers: ${names}`,
@@ -187,6 +192,8 @@ const PAGE_TEXT: Readonly<
     stoppedStatus: (level) => `Nivel: ${level}. Se detuvo mientras funcionaba.`,
     uncountedStatus: (level) =>
       `Nivel: ${level}. Este arranque no se ha contado: el disco está lleno.`,
+    refusedAtStartStatus: (level) =>
+      `Nivel: ${level}. Este arranque se rechazó antes de empezar y no se ha contado.`,
     freeSpace: (amount) => `Espacio libre en el disco del equipo: ${amount}.`,
     unknownSpace: "desconocido",
     missingTriggers: (names) => `Disparadores que faltan: ${names}`,
@@ -450,6 +457,28 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       action: "Reinstala Waitron en este equipo.",
     },
   },
+  "setup.workspace_unsupported": {
+    "en-GB": {
+      title: "This box holds a first setup kept by an older Waitron.",
+      action: "Ask whoever installed this box to reinstall Waitron on it.",
+    },
+    "es-ES": {
+      title: "Este equipo guarda una configuración inicial de una versión anterior de Waitron.",
+      action: "Pide a quien instaló este equipo que reinstale Waitron en él.",
+    },
+  },
+  "setup.start_again_incomplete": {
+    "en-GB": {
+      title: "Start again did not finish, and the box found files it did not expect.",
+      action:
+        "Ask whoever installed this box to look at its setup folders before anything else: the files it found may be a restored venue.",
+    },
+    "es-ES": {
+      title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+      action:
+        "Antes de nada, pide a quien instaló este equipo que revise sus carpetas de configuración: los archivos que encontró pueden ser un local recuperado.",
+    },
+  },
   // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.
   [HOLDER_STALLED]: holderStalledText(undefined),
 };
@@ -532,9 +561,11 @@ function renderPage(
   const heading = refused ? page.stoppedHeading : page.heading;
   const status = refused
     ? page.stoppedStatus(state.level)
-    : deps.uncounted === true
-      ? page.uncountedStatus(state.level)
-      : page.status(state.level, state.failures);
+    : deps.refusedAtStart === true
+      ? page.refusedAtStartStatus(state.level)
+      : deps.uncounted === true
+        ? page.uncountedStatus(state.level)
+        : page.status(state.level, state.failures);
   const lastError = page.lastError(
     state.lastErrorCode ?? page.noCode,
     state.lastFailureAt ?? page.noTime,
