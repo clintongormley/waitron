@@ -1,6 +1,11 @@
-import { and, asc, eq, gt, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lte, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { MisdatedRecords } from "@waitron/fiscal";
+import type {
+  ClockConfirmationSource,
+  MisdatedDetail,
+  MisdatedDetailRecord,
+  MisdatedRecords,
+} from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
 import { CLOCK_BEHIND_MARGIN_MS, parsedStored, storedHeads } from "./clock-behind.js";
 import { clockChecks } from "./schema/clock-checks.js";
@@ -68,5 +73,73 @@ export async function misdatedRecords(
   return {
     known: true,
     records: rows.map(({ at, ...record }) => ({ ...record, generatedAt: at.toISOString() })),
+  };
+}
+
+/** `misdatedRecords`' list with each record's kind, stored issue date and stored amount, and the
+ * closing's own values. Reads only, two selects in turn after the list's. Null when no
+ * confirmation has the id. */
+export async function misdatedDetail(
+  tx: Transaction,
+  confirmationId: string,
+): Promise<MisdatedDetail | null> {
+  const list = await misdatedRecords(tx, confirmationId);
+  if (list === null || !list.known) return list;
+  const [row] = await tx
+    .select({
+      source: clockConfirmations.source,
+      personId: clockConfirmations.personId,
+      confirmedAt: clockConfirmations.confirmedAt,
+      proof: sql<string>`${clockConfirmations.proof}`,
+      detail: sql<string | null>`${clockChecks.detail}`,
+    })
+    .from(clockConfirmations)
+    .leftJoin(clockChecks, eq(clockChecks.id, clockConfirmations.checkId))
+    .where(eq(clockConfirmations.id, confirmationId));
+  // misdatedRecords answered a list, so the row and its readable closing exist.
+  const closing = (
+    parsedStored(row!.proof) as {
+      closing: { correctedStart: string; partial?: unknown };
+    }
+  ).closing;
+  const stored = (row!.detail === null ? null : parsedStored(row!.detail)) as {
+    offsetMinutes?: unknown;
+  } | null;
+  const startOffsetMinutes =
+    typeof stored?.offsetMinutes === "number" ? stored.offsetMinutes : null;
+  const ids = list.records.map((record) => record.recordId);
+  const found =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({
+            id: registrosFacturacion.id,
+            kind: registrosFacturacion.tipoRegistro,
+            issueDate: registrosFacturacion.fechaExpedicionFactura,
+            amount: registrosFacturacion.importeTotal,
+          })
+          .from(registrosFacturacion)
+          .where(inArray(registrosFacturacion.id, ids));
+  const byId = new Map(found.map((record) => [record.id, record]));
+  const records = list.records.map((record): MisdatedDetailRecord => {
+    const stored = byId.get(record.recordId)!;
+    return {
+      ...record,
+      kind: stored.kind === "anulacion" ? "cancellation" : "issue",
+      issueDate: stored.issueDate,
+      amount: stored.amount,
+    };
+  });
+  return {
+    known: true,
+    closing: {
+      source: row!.source as ClockConfirmationSource,
+      personId: row!.personId,
+      confirmedAt: row!.confirmedAt.toISOString(),
+      correctedStart: closing.correctedStart,
+      partial: closing.partial === true,
+      startOffsetMinutes,
+    },
+    records,
   };
 }

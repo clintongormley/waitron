@@ -270,6 +270,30 @@ export interface MisdatedRecord {
 /** What a closing found: the wrongly dated records, or that the box cannot tell which they are. */
 export type MisdatedRecords = { known: true; records: MisdatedRecord[] } | { known: false };
 
+export interface MisdatedDetailRecord extends MisdatedRecord {
+  kind: "issue" | "cancellation";
+  /** The stored fecha_expedicion_factura, YYYY-MM-DD; a cancellation's is the cancelled invoice's. */
+  issueDate: string;
+  /** The record's stored total, as hashed; null on a cancellation. */
+  amount: string | null;
+}
+
+export type MisdatedDetail =
+  | {
+      known: true;
+      closing: {
+        source: ClockConfirmationSource;
+        personId: string | null;
+        confirmedAt: string;
+        correctedStart: string;
+        partial: boolean;
+        /** The offset the check stored when it opened; null when it stored none. */
+        startOffsetMinutes: number | null;
+      };
+      records: MisdatedDetailRecord[];
+    }
+  | { known: false };
+
 export interface ClockProvedWrong {
   trustedUntil: Date;
   observedAt: Date;
@@ -365,6 +389,10 @@ export interface FiscalBackend {
   /** The records the confirmation `confirmationId` found wrongly dated, from stored values only;
    * null when no confirmation has the id. */
   misdatedRecords?(tx: Transaction, confirmationId: string): Promise<MisdatedRecords | null>;
+
+  /** misdatedRecords' list with each record's kind, issue date and amount, and the closing's own
+   * values; reads only. Null when no confirmation has the id. */
+  misdatedDetail?(tx: Transaction, confirmationId: string): Promise<MisdatedDetail | null>;
 
   /** The clock was proved wrong after `trustedUntil`, noticed at `observedAt`; answers the
    * confirmation ids it recorded, those with nothing written under them, and those another open

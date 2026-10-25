@@ -168,6 +168,35 @@ describe("VerifactuBackend confirms the clock through the seat", () => {
         backend.misdatedRecords!(tx, "00000000-0000-4000-8000-000000000000"),
       ),
     ).toBeNull();
+    expect(
+      await withTransaction(suite.db, (tx) => backend.misdatedDetail!(tx, confirmation!.id)),
+    ).toEqual({
+      known: true,
+      closing: {
+        source: "admin",
+        personId: PERSON,
+        confirmedAt: iso(at),
+        correctedStart: iso(R),
+        partial: false,
+        startOffsetMinutes: 60,
+      },
+      records: [
+        {
+          recordId: sold,
+          invoiceNumber: invoiceNumber(sold),
+          generatedAt: iso(T),
+          offsetMinutes: 60,
+          kind: "issue",
+          issueDate: "2026-10-19",
+          amount: "14.41",
+        },
+      ],
+    });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        backend.misdatedDetail!(tx, "00000000-0000-4000-8000-000000000000"),
+      ),
+    ).toBeNull();
   });
 
   it("answers a check that waits, and closes it only on a fresh witness", async () => {

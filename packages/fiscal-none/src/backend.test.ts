@@ -78,6 +78,7 @@ describe("NoneBackend records nothing", () => {
     expect(backend.closeClockCheckByItself).toBeUndefined();
     expect(backend.waitingClockCheck).toBeUndefined();
     expect(backend.misdatedRecords).toBeUndefined();
+    expect(backend.misdatedDetail).toBeUndefined();
     expect(backend.noteClockProvedWrong).toBeUndefined();
   });
 

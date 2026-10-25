@@ -20,6 +20,7 @@ import type {
   FiledReceipt,
   FiscalRecordRef,
   IntegrityReport,
+  MisdatedDetail,
   MisdatedRecords,
   NodeRegistration,
   ReceiptQrText,
@@ -55,7 +56,7 @@ import {
 } from "./clock-behind.js";
 import { closeClockCheckByItself, openClockCheck, waitingClockCheck } from "./clock-checks.js";
 import { clockStopState, confirmClockStop, noteClockProvedWrong } from "./clock-confirmation.js";
-import { misdatedRecords } from "./clock-misdated.js";
+import { misdatedDetail, misdatedRecords } from "./clock-misdated.js";
 import { readAuthorityTime } from "./authority-time.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
@@ -224,6 +225,10 @@ export class VerifactuBackend implements FiscalBackend {
 
   misdatedRecords(tx: Transaction, confirmationId: string): Promise<MisdatedRecords | null> {
     return misdatedRecords(tx, confirmationId);
+  }
+
+  misdatedDetail(tx: Transaction, confirmationId: string): Promise<MisdatedDetail | null> {
+    return misdatedDetail(tx, confirmationId);
   }
 
   noteClockProvedWrong(

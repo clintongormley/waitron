@@ -46,6 +46,8 @@ export type {
   FiscalState,
   IntegrityIssue,
   IntegrityReport,
+  MisdatedDetail,
+  MisdatedDetailRecord,
   MisdatedRecord,
   MisdatedRecords,
   NodeRegistration,
