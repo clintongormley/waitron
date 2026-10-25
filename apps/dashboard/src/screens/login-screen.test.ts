@@ -4094,3 +4094,36 @@ it.each(["keep", "discard"] as const)(
     }
   },
 );
+
+it.each(["en-GB", "es-ES"])(
+  "offers administrator help after a passkey refusal and keeps password sign-in usable (%s)",
+  async (locale) => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale(locale);
+      const api = stubApi({
+        passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.verification_failed" }),
+      });
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      const loggedIn: unknown[] = [];
+      el.addEventListener("logged-in", (event) => loggedIn.push((event as CustomEvent).detail));
+      await flush(el);
+      await openPasskey(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+      await vi.waitFor(async () =>
+        expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
+      );
+      if (locale === "en-GB") expect(await bottomOf(el)).toContain("administrator");
+      expect(loggedIn).toHaveLength(0);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=use-password]")!.click();
+      await el.updateComplete;
+      input(el, "password", "correct horse battery");
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+      await vi.waitFor(() => expect(loggedIn).toHaveLength(1));
+      expect(loggedIn[0]).toMatchObject({ personId: "p1", loginMethod: "password" });
+    } finally {
+      setLocale(previousLocale);
+    }
+  },
+);

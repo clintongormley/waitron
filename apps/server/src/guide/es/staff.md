@@ -18,6 +18,9 @@ nueva invitación. Deshabilitar una cuenta también borra su PIN, contraseña, l
 verificación en dos pasos y vínculo con Google. Al volver a habilitarla se envía una nueva
 invitación. Los gerentes no ven estas acciones.
 
+Si Waitron no puede verificar tu passkey, pide al administrador que revise tu cuenta. También
+puedes elegir **Usar tu contraseña** en la página de acceso.
+
 ## Tu propia cuenta {#own-account}
 
 Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus propios datos de
