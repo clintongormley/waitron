@@ -223,17 +223,18 @@ más de un minuto más atrás que cuando se confirmó, o más de un minuto antes
 desde entonces, los cobros se vuelven a parar hasta que la hora se confirme otra vez, de cualquiera
 de las mismas formas. Pasa igual aunque el reloj retroceda poco a poco.
 
-Una parada así suele significar que el reloj del equipo iba adelantado desde hacía un tiempo, así que
-algunas ventas se registraron con una hora posterior a la real. Quedan como se registraron: una
+Una parada así suele significar que el reloj del equipo iba adelantado desde hacía un tiempo, así
+que algunas ventas se registraron con una hora posterior a la real. Quedan como se registraron: una
 venta registrada para Hacienda no se puede cambiar. Cuando se confirma la hora, el equipo calcula
 cuáles son: las ventas registradas antes de la parada con una hora de más de un minuto después del
 momento en que el equipo notó la parada. Las muestra en esta página en **Ventas con fecha
-incorrecta**, con la **Factura** y la **Hora registrada** de cada una, y dice **Revísalas con tu
-asesor y después marca el aviso como resuelto.** La campana tiene un aviso con cuántas ventas son y
-la primera y la última hora, y el equipo envía un correo a las personas que gestionan el sistema. Si
-el propio equipo se reinició durante la parada, no puede estar seguro de cuándo empezó, así que puede
-faltar alguna venta en la lista, y el aviso lo dice. Cuando ninguna venta tiene la fecha mal, no hay
-lista ni aviso.
+incorrecta**, con la **Factura** y la **Hora registrada** de cada una, y dice **Descarga cada lista
+para tu asesor, revísala con su ayuda y después marca el aviso como resuelto aquí con una nota de
+lo que se hizo.** [Ventas con fecha incorrecta](box-status.md#sales-dated-wrongly) explica la
+descarga y la nota. La campana tiene un aviso con cuántas ventas son y la primera y la última hora,
+y el equipo envía un correo a las personas que gestionan el sistema. Si el propio equipo se reinició
+durante la parada, no puede estar seguro de cuándo empezó, así que puede faltar alguna venta en la
+lista, y el aviso lo dice. Cuando ninguna venta tiene la fecha mal, no hay lista ni aviso.
 
 La parada también puede terminar sola, porque se puso bien la hora o el reloj llegó a la hora de la
 última venta. El equipo sigue necesitando una confirmación para saber qué ventas tienen la fecha
@@ -276,6 +277,73 @@ Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales mu
 **No se pueden registrar ventas: la hora del equipo es incorrecta**, y la campana también lo dice,
 con la fecha que marca el reloj del equipo. Entonces nada puede confirmar la hora, y la página no
 ofrece **Comprobar con la hora de este dispositivo**. La salida es poner la hora bien.
+
+## Ventas con fecha incorrecta {#sales-dated-wrongly}
+
+Una venta registrada con la hora mal se queda como se registró, así que lo que importa después es
+qué opina tu asesor fiscal y dejar constancia de lo que se decidió. La sección **Ventas con fecha
+incorrecta** de esta página ayuda con las dos cosas: cada lista se puede descargar en un archivo
+para tu asesor, y cada lista puede guardar una nota de lo que se hizo cuando la marcas como
+resuelta.
+
+Debajo de cada lista, **Descargar para tu asesor** guarda un archivo de hoja de cálculo (CSV) con el
+nombre del día de la hora registrada de la primera venta, por ejemplo
+`misdated-sales-2026-10-23.csv`. Una entrada en la que el equipo no puede saber qué ventas tienen la
+fecha mal no tiene lista, así que tampoco tiene descarga. El archivo está en el idioma del local,
+español o inglés, no en el idioma que elegiste para el panel de gestión.
+
+Su primera línea dice qué pasó, por ejemplo: **Bar Sol: se registraron 3 ventas con una hora
+posterior a la real, de 23/10/2026 21:12 a 23/10/2026 21:40. Cada una se hizo antes del 23/10/2026
+21:11. La hora del equipo se confirmó con dos cajas o terminales el 23/10/2026 21:42.** La hora de
+"antes del" es cuándo empezó la parada de cobros según la hora confirmada, más el minuto de margen
+que admite una confirmación, redondeada hacia arriba al minuto entero. Si el equipo se reinició
+durante la parada, la línea termina con **El equipo se reinició durante la parada, así que puede
+faltar alguna.**
+
+Después viene una fila por venta, con estas columnas:
+
+- **Serie** y **Número**: la factura que muestra la columna **Factura** de la sección, separada en
+  dos.
+- **Fecha de factura**: la fecha de la factura, tal como se registró.
+- **Hora registrada**: la hora con la que se registró la venta. Las horas de las ventas se escriben
+  en la zona horaria que el equipo registró con cada venta, como hacen las listas de la sección y el
+  correo del equipo, así que la hora de una venta aquí es la misma que muestra su lista, y la
+  primera y la última coinciden con el correo.
+- **Hora real**: **Desconocida** en todas las filas. El equipo no sabe cuándo se hizo de verdad cada
+  venta, solo que se hizo antes de la hora de la primera línea.
+- **Importe (EUR)**: el total de la factura tal como se registró, con dos decimales, la coma decimal
+  en un archivo en español y sin símbolo de moneda. Una anulación muestra **Anulación** en su lugar.
+- **Otro día**: **Sí** cuando, según la hora confirmada, la venta se hizo un día anterior a la fecha
+  de su factura, así que quizá en otro periodo de IVA; consulta estas con tu asesor fiscal. **No se
+  sabe** para cualquier otra venta, porque puede que aun así se hiciera en la fecha de su factura.
+  **No aplicable** para una anulación, cuya fecha de factura es la de la factura que anula. La
+  columna nunca dice "No", porque el equipo no sabe la hora real de cada venta.
+
+Cuando hayas revisado una lista con tu asesor, pulsa **Marcar como resuelto** debajo de ella. Un
+diálogo pide una **Nota**, por ejemplo lo que dijo tu asesor o lo que se hizo. La nota es opcional y
+puede tener hasta 500 caracteres; **Marcar como resuelto** funciona con ella o sin ella. Una entrada
+en la que el equipo no puede saber qué ventas tienen la fecha mal también tiene **Marcar como
+resuelto**. La campana y la página **Avisos** también ofrecen **Marcar como resuelto** en el aviso,
+pero no admiten nota.
+
+Una lista resuelta deja las listas abiertas y pasa a **Listas resueltas**, un desplegable al final
+de la sección cuyo título las cuenta, por ejemplo **Listas resueltas (2)**. Ábrelo para ver todas
+las listas resueltas, de la más reciente a la más antigua. Cada una muestra sus ventas y su
+descarga, salvo si el equipo no pudo saber qué ventas eran, y normalmente dice quién la resolvió y
+cuándo, por ejemplo **Marcada como resuelta por Ana el 2026-10-24 10:05.**, y su nota, como **Nota:
+…**. La hora en que se marcó como resuelta se muestra en la zona horaria de tu propio dispositivo,
+mientras que las horas de las ventas son las horas con las que se registraron. Cuando una
+comprobación posterior tampoco puede saber qué ventas tienen la fecha mal, y su parada de cobros
+empezó antes que la de una entrada abierta de "no puede saber", la nueva entrada cubre las ventas
+por las que preguntaba la antigua, así que el equipo marca la antigua como resuelta por sí solo. Esa
+entrada dice **Marcada como resuelta por el equipo el …**
+
+Una lista resuelta sin nota, la resolviera quien la resolviera, ofrece **Añadir nota**, para añadir
+la única nota que admite. Su diálogo, **Añadir una nota**, necesita una nota para que **Guardar**
+funcione. Cuando una lista tiene nota, no se puede cambiar ni sustituir. Si la lista se marcó como
+resuelta en otro sitio mientras escribías una nota para ella, **Marcar como resuelto** dice **Este
+aviso ya estaba marcado como resuelto, así que la nota no se ha guardado. Añádela desde Listas
+resueltas en Estado del equipo.**
 
 ## Dispositivos como testigos de la hora {#clock-witnesses}
 

@@ -299,16 +299,50 @@ export async function currentIncidentsOf(
 }
 
 /**
- * Marks an open incident handled. Marking an already-handled incident changes nothing, so it keeps
- * its first handler and time. Handling frees the `incidents_open_dedup` key: a producer that detects
- * the same condition again records a new incident. A null `personId` is the system handling it.
+ * Marks an open incident handled, with an optional note, and answers whether it did. Marking an
+ * already-handled incident changes nothing, so it keeps its first handler, time and note. Handling
+ * frees the `incidents_open_dedup` key: a producer that detects the same condition again records a
+ * new incident. A null `personId` is the system handling it.
  */
 export async function markIncidentHandled(
   tx: Transaction,
-  input: { id: string; personId: string | null; handledAt: Date },
-): Promise<void> {
-  await tx
+  input: { id: string; personId: string | null; handledAt: Date; note?: string | null },
+): Promise<boolean> {
+  const changed = await tx
     .update(incidents)
-    .set({ acknowledgedAt: input.handledAt.toISOString(), acknowledgedBy: input.personId })
-    .where(and(eq(incidents.id, input.id), isNull(incidents.acknowledgedAt)));
+    .set({
+      acknowledgedAt: input.handledAt.toISOString(),
+      acknowledgedBy: input.personId,
+      acknowledgedNote: input.note ?? null,
+    })
+    .where(and(eq(incidents.id, input.id), isNull(incidents.acknowledgedAt)))
+    .returning({ id: incidents.id });
+  return changed.length > 0;
+}
+
+export type AddIncidentNoteResult = "added" | "note_exists" | "not_handled" | "not_found";
+
+/** Adds a note to a handled incident that has none; a note, once there, is never replaced. */
+export async function addIncidentNote(
+  tx: Transaction,
+  input: { id: string; note: string },
+): Promise<AddIncidentNoteResult> {
+  const changed = await tx
+    .update(incidents)
+    .set({ acknowledgedNote: input.note })
+    .where(
+      and(
+        eq(incidents.id, input.id),
+        isNotNull(incidents.acknowledgedAt),
+        isNull(incidents.acknowledgedNote),
+      ),
+    )
+    .returning({ id: incidents.id });
+  if (changed.length > 0) return "added";
+  const [row] = await tx
+    .select({ acknowledgedAt: incidents.acknowledgedAt })
+    .from(incidents)
+    .where(eq(incidents.id, input.id));
+  if (row === undefined) return "not_found";
+  return row.acknowledgedAt === null ? "not_handled" : "note_exists";
 }

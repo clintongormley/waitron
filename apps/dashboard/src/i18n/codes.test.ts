@@ -755,3 +755,26 @@ it("words a refused confirmation of the clock in both languages", () => {
     "No se ha podido confirmar la hora. Mira Estado del equipo.",
   );
 });
+
+it("words a note refused on an already handled alert in both languages", () => {
+  expect(codeMessage("alert.already_handled", "en")).toBe(
+    "This alert was already marked handled, so the note was not saved. Add it from Handled lists on the Box status page.",
+  );
+  const spanish = codeMessage("alert.already_handled", "es");
+  expect(spanish).not.toBe(codeMessage("unknown.code", "es"));
+  expect(spanish).not.toBe(codeMessage("alert.already_handled", "en"));
+});
+
+it("words a refused note on an alert in both languages", () => {
+  expect(codeMessage("alert.note_exists", "en")).toBe(
+    "This alert already has a note, which cannot be changed. Close this window to see it under Handled lists.",
+  );
+  expect(codeMessage("alert.not_handled", "en")).toBe(
+    "This alert has not been marked handled yet. Close this window and use Mark handled, which takes a note too.",
+  );
+  for (const code of ["alert.note_exists", "alert.not_handled"]) {
+    const spanish = codeMessage(code, "es");
+    expect(spanish).not.toBe(codeMessage("unknown.code", "es"));
+    expect(spanish).not.toBe(codeMessage(code, "en"));
+  }
+});

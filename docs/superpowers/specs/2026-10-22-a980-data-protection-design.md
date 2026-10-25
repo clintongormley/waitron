@@ -209,6 +209,10 @@ under C-LIVE like the venue's own invoices, and no slice here touches it.
 - d8 `packages/db/src/schema/incidents.ts:35-41`
 - d9 `docs/backlog/alerts.md:30-81`; A982's [plan](../plans/2026-10-22-a982-one-touch-problem-reports.md) for the manual report
 
+_2026-10-25: A1088 added `incidents.acknowledged_note` (core migration 0190), free text a manager
+writes when marking a `clock.records_misdated` alert handled, or adds afterwards; the Incidents row
+predates it._
+
 ### 2.4 Copies and routes off the box
 
 | Route | What goes | Who receives it | Protection today | Ref |

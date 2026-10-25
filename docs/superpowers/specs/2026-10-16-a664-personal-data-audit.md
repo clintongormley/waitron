@@ -129,6 +129,9 @@ The latest snapshots enumerate **211 application tables and 1654 columns across 
 
 **2026-10-23:** `order_group_hold_stations`, a core table not in the list above, was added (A756 PR 6, core migration 0187): **L**: `group_id`, `station_id`. Out: `group_id` → `order_groups(id)` [no action]; `station_id` → `kitchen_stations(id)` [no action].
 
+**2026-10-25:** `incidents` gained `acknowledged_note` (A1088, core migration 0190): free text a
+manager writes when marking a `clock.records_misdated` alert handled, or adds afterwards.
+
 ## catalogue (22 tables)
 
 | Table and source block                                                                    | D / H / S / L / U / R: all declared fields                                                                                                                                                                                                                                             |

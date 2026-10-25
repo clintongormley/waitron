@@ -2830,6 +2830,9 @@ and nothing guards it across screens:
   Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
   till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
   `*.unsaved.test.ts`;
+- A1088: Box status's note dialog (`apps/dashboard/src/widgets/misdated-note-dialog.ts`); Add
+  note's Save follows the rule. Its leave cases are in `misdated-note-dialog.unsaved.test.ts`
+  beside it;
 - A585-1: the Staff roles page's staff-role dialog (`packages/staffing/src/dashboard/staff-role-dialog.ts`).
   Its leave cases are in `packages/staffing/src/dashboard/staff-role-dialog.unsaved.test.ts`;
 - A585-4: the season and special-day staffing painters
@@ -2887,6 +2890,8 @@ These open already savable:
 - the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
 - the theme name dialog's Make a copy and Save as new theme…: pressing Save is the copy
   (`savableAtOpen`, `apps/dashboard/src/widgets/theme-name-dialog.ts`);
+- the note dialog's Mark handled: marking the list handled is the action, and the note is optional
+  (`savableAtOpen`, `apps/dashboard/src/widgets/misdated-note-dialog.ts`);
 - the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
   default settings, and after a re-add pressing Save is what keeps the printer on, because closing
   the wizard switches it off again (`#calibrationOpenedByAdd` in
@@ -5471,7 +5476,7 @@ slot" in `apps/till/src/widgets/till-shell.test.ts`, and `apps/till/src/till-app
 `dashboard-box-status-screen` (`apps/dashboard/src/screens/box-status-screen.ts`, rows worked out
 in `box-status-rows.ts`) is under Settings, before Diagnostics, for people with `system.manage`. It
 reads `GET /api/box/health` every 15 seconds (passively after the first read) and the bell's own
-alert list, and holds no staged input.
+alert list. Its one staged input is the note in its note dialog, which takes its own draft scope.
 
 - **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Printers, Card readers
   (left out when the payments module is off), Clock and Disk space. Each has a dot, the part's name
@@ -5547,21 +5552,48 @@ alert list, and holds no staged input.
   `wt-help-tooltip` ("What this check does") that says what the check does and links to the
   guide's `box-status#clock-behind` section, its badge hung over the button's top trailing corner
   as Free's and Retry now's are.
-- **Sales dated wrongly.** Under the rows, one section headed "Sales dated wrongly", with "Go
-  through these with your tax adviser, then mark the alert as handled in the bell." under the
-  heading and one entry for each open `clock.records_misdated` alert. An alert that lists sales draws them in a
+- **Sales dated wrongly.** Under the rows, one section headed "Sales dated wrongly", with
+  "Download each list for your tax adviser and go through it with them, then mark it handled here
+  with a note of what was done." under the heading and one entry for each open
+  `clock.records_misdated` alert. An alert that lists sales draws them in a
   `wt-data-table` (Invoice, Time recorded), read from `GET /api/box/clock-misdated` only while such
   an alert is open, with a sentence above it when the list may be short (`partial`); an alert that
-  cannot tell draws its sentence and no table. A failed list read says "The list of sales dated
-  wrongly could not be read." under the section. The section is not drawn while no alert has
-  anything to show and the list read has not failed.
+  cannot tell draws its sentence and no table. Each entry ends with a row of small secondary
+  buttons that wraps: "Download for your adviser" (only beside a drawn list, so never on an alert
+  that cannot tell), which
+  saves `GET /api/box/clock-misdated/:incidentId/download` as `misdated-sales-<date>.csv` and shows
+  a refusal under the row, and Mark handled. A failed list read says "The list of sales dated
+  wrongly could not be read." under the section. Below the entries, while any alert has been
+  handled, a closed `wt-disclosure` "Handled lists ({count})" counts them from the box read while closed, and the lists it read
+  while open; only
+  while it is open does the page read `GET /api/box/clock-misdated/handled`, again when alerts or
+  people change. Each handled entry, newest first, says who marked it handled and when
+  ("Marked handled by {name} on {time}.", "by the box", or no name), its note ("Note: …") when it
+  has one, and the same sentence, table and Download as an open entry; one with no note offers Add
+  note. A failed read says "The handled lists could not be read." inside the fold. The section is
+  not drawn while no alert has anything to show, none has been handled and the list read has not
+  failed.
+- **The note dialog.** `dashboard-misdated-note-dialog`
+  (`apps/dashboard/src/widgets/misdated-note-dialog.ts`) opens from Mark handled or Add note, with
+  a one-line summary of the alert (how many sales, from when to when) above one `wt-textarea` named
+  `note` (at most 500
+  characters). From Mark handled the note is optional and Mark handled is enabled from the start,
+  an action rather than a save; from Add note ("Add a note") the note is required and Save stays
+  quiet and disabled until it has text (`saveActionState`). Both take a draft scope, so a typed
+  note asks before the dialog closes or the page is left. A refusal naming the `note` field is
+  said under the field, with the form's fix-the-fields line at the bottom; any other refusal
+  (`alert.already_handled`, `alert.note_exists`, `alert.not_handled`) is worded by its code at the
+  bottom, and none disables the button. The bell's and the Alerts screen's Mark handled take no
+  note.
 - **Errors.** A refused Free shows its message above the rows, and a refused Retry now under the
   Tax agency row's words; a failed box read shows the read error above the rows, never replacing a
   press's refusal.
 
 Cases: `apps/dashboard/src/screens/box-status-screen.test.ts`, its `box-status-screen.a11y.test.ts`,
-`box-status-rows.test.ts`, and for Retry now `box-status-screen.retry.test.ts`,
-`box-status-screen.retry.a11y.test.ts` and `box-status-rows.tax.test.ts`.
+`box-status-rows.test.ts`, for Retry now `box-status-screen.retry.test.ts`,
+`box-status-screen.retry.a11y.test.ts` and `box-status-rows.tax.test.ts`, and for the note dialog
+`apps/dashboard/src/widgets/misdated-note-dialog.test.ts`, `misdated-note-dialog.unsaved.test.ts`
+and `misdated-note-dialog.a11y.test.ts`.
 
 ### Counter basket and payment space
 

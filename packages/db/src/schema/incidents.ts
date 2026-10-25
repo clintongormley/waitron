@@ -11,9 +11,11 @@ export type IncidentSeverity = "warning" | "error";
  * Incidents: problems recorded as they happen, shown as alerts on the management dashboard to anyone
  * holding the permission for their area, who can mark them handled there.
  *
- * An incident is a record of what happened, not a note anyone may rewrite: acknowledging one is the
- * sole permitted mutation. **Nothing in the database enforces that.** This engine has no roles and
- * no grants, and the table carries no trigger, so the rule is the code's to keep.
+ * An incident is a record of what happened and is not rewritten. Marking it handled, with an
+ * optional note, and adding a note once to a handled incident that has none are the only permitted
+ * changes. **Nothing in the database enforces that.** This engine has no roles and no grants, and
+ * no trigger on this table guards it (its only triggers are the change feed's,
+ * `packages/db/src/change-feed.ts`), so the rule is the code's to keep.
  *
  * `code` and `params` come from a structured code+params pair rather than from a message
  * string, so the dashboard can word each alert in English or Spanish
@@ -39,12 +41,15 @@ export const incidents = table(
     detectedAt: tsString("detected_at").notNull(),
     acknowledgedAt: tsString("acknowledged_at"),
     acknowledgedBy: id("acknowledged_by"),
+    acknowledgedNote: label("acknowledged_note"),
   },
   (t) => [
     // `openIncidents` (packages/core): what is open for one source and device, newest first.
     index("incidents_origin_open_idx").on(t.source, t.deviceId, t.detectedAt),
     // The dashboard's Handled tab: incidents handled since a date, most recent first.
     index("incidents_handled_idx").on(t.acknowledgedAt),
+    // Box status's wrongly dated sales reads (`apps/server/src/box-health.ts`): one code, by detection.
+    index("incidents_code_detected_idx").on(t.code, t.detectedAt),
     // At most one OPEN incident per (source, device, code, sale), so a repeat of the same problem
     // collides rather than stacking a second alert on the dashboard. Partial on
     // `acknowledged_at is null`, so handled rows accumulate freely.

@@ -1289,9 +1289,16 @@ declare module "@waitron/shared" {
     "mirror.primary_url_invalid": Record<string, never>;
     // `reason` is a fixed enum string, never a raw input value.
     "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
-    /** No incident with this id exists in this venue. Also answered for a malformed id and to a
-     * session that can see no alerts. */
+    /** No incident with this id exists in this venue. Also answered for a malformed id, to a
+     * session that can see no alerts, to a note sent for an alert whose code takes none, and by the
+     * wrongly dated sales download for an id that names no such alert with a list. */
     "alert.not_found": { id: string };
+    /** A note came with marking an incident handled that was already handled, so it was not saved. */
+    "alert.already_handled": { id: string };
+    /** A note was sent for an incident that already has one; the first is kept. */
+    "alert.note_exists": { id: string };
+    /** A note was sent for an incident not yet marked handled. */
+    "alert.not_handled": { id: string };
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */
     "alert.source_unavailable": { area: string };

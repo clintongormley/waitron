@@ -3,11 +3,20 @@ import { CORE_MIGRATIONS, incidents, invoiceSeries, locations, printers } from "
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
+import { hashPin, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, DEMO_READER_ID, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { sql } from "drizzle-orm";
-import { collectBoxHealth, type BoxHealthReaders, type ClockStopView } from "./box-health.js";
+import { eq, sql } from "drizzle-orm";
+import {
+  collectBoxHealth,
+  misdatedHandledCountQuery,
+  misdatedHandledQuery,
+  misdatedOpenQuery,
+  readMisdatedHandled,
+  type BoxHealthReaders,
+  type ClockStopView,
+} from "./box-health.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
 
 const NOW = new Date("2026-10-22T10:00:00.000Z");
@@ -19,7 +28,9 @@ const READING: TrustedReading = {
   anchorAgeSeconds: 0,
 };
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, PAYMENTS_MIGRATIONS],
+});
 
 function stubReaders(over: Partial<BoxHealthReaders> = {}): BoxHealthReaders {
   return {
@@ -124,6 +135,7 @@ describe("collectBoxHealth", () => {
       clockStop: null,
       clockCheckWaiting: null,
       misdatedOpen: [],
+      misdatedHandledCount: 0,
     });
   });
 
@@ -363,7 +375,7 @@ describe("collectBoxHealth", () => {
     expect((await collectBoxHealth(suite.db, stubReaders())).clockCheckWaiting).toBeNull();
   });
 
-  it("lists each open wrongly-dated-sales alert's params, oldest first, and no handled one", async () => {
+  it("lists each open wrongly-dated-sales alert's params with its incident id, oldest first, and counts the handled one without listing it", async () => {
     const params = (confirmationId: string) => ({
       confirmationId,
       count: 2,
@@ -374,41 +386,134 @@ describe("collectBoxHealth", () => {
       partial: false,
       unconfirmed: false,
     });
-    await suite.db.insert(incidents).values([
-      {
-        source: "dashboard",
-        code: "clock.records_misdated",
-        params: params("later"),
-        severity: "error",
-        detectedAt: "2026-10-22T09:30:00.000Z",
-      },
-      {
-        source: "fiscal_filing",
-        code: "clock.records_misdated",
-        params: params("earlier"),
-        severity: "error",
-        detectedAt: "2026-10-22T09:00:00.000Z",
-      },
-      {
-        source: "payment_check",
-        code: "clock.records_misdated",
-        params: params("handled"),
-        severity: "error",
-        detectedAt: "2026-10-22T08:00:00.000Z",
-        acknowledgedAt: "2026-10-22T09:45:00.000Z",
-      },
-      {
-        source: "dashboard",
-        code: "clock.behind_chain_restarted",
-        params: params("other code"),
-        severity: "warning",
-        detectedAt: "2026-10-22T08:00:00.000Z",
-      },
-    ]);
+    const ids = await suite.db
+      .insert(incidents)
+      .values([
+        {
+          source: "dashboard",
+          code: "clock.records_misdated",
+          params: params("later"),
+          severity: "error",
+          detectedAt: "2026-10-22T09:30:00.000Z",
+        },
+        {
+          source: "fiscal_filing",
+          code: "clock.records_misdated",
+          params: params("earlier"),
+          severity: "error",
+          detectedAt: "2026-10-22T09:00:00.000Z",
+        },
+        {
+          source: "payment_check",
+          code: "clock.records_misdated",
+          params: params("handled"),
+          severity: "error",
+          detectedAt: "2026-10-22T08:00:00.000Z",
+          acknowledgedAt: "2026-10-22T09:45:00.000Z",
+        },
+        {
+          source: "dashboard",
+          code: "clock.behind_chain_restarted",
+          params: params("other code"),
+          severity: "warning",
+          detectedAt: "2026-10-22T08:00:00.000Z",
+        },
+      ])
+      .returning({ id: incidents.id });
 
     const health = await collectBoxHealth(suite.db, stubReaders());
 
-    expect(health.misdatedOpen).toEqual([params("earlier"), params("later")]);
+    expect(health.misdatedOpen).toEqual([
+      { incidentId: ids[1]!.id, ...params("earlier") },
+      { incidentId: ids[0]!.id, ...params("later") },
+    ]);
+    expect(health.misdatedHandledCount).toBe(1);
+  });
+
+  it("reads the handled wrongly-dated-sales alerts newest first, each with who handled it", async () => {
+    const params = (confirmationId: string) => ({
+      confirmationId,
+      count: 0,
+      from: "2026-10-22T08:00:00.000Z",
+      fromOffsetMinutes: 0,
+      partial: true,
+      unconfirmed: true,
+    });
+    const [rosa] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Rosa Handler", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const ids = await suite.db
+      .insert(incidents)
+      .values([
+        {
+          source: "dashboard",
+          code: "clock.records_misdated",
+          params: params("by the box"),
+          severity: "error",
+          detectedAt: "2026-10-22T08:00:00.000Z",
+          acknowledgedAt: "2026-10-22T11:00:00.000Z",
+        },
+        {
+          source: "fiscal_filing",
+          code: "clock.records_misdated",
+          params: params("by Rosa"),
+          severity: "error",
+          detectedAt: "2026-10-22T09:30:00.000Z",
+          acknowledgedAt: "2026-10-22T09:45:00.000Z",
+          acknowledgedBy: rosa!.id,
+          acknowledgedNote: "Sent to the accountant",
+        },
+        {
+          source: "payment_check",
+          code: "clock.records_misdated",
+          params: params("by nobody known"),
+          severity: "error",
+          detectedAt: "2026-10-22T09:00:00.000Z",
+          acknowledgedAt: "2026-10-22T10:00:00.000Z",
+          acknowledgedBy: "99999999-9999-4999-8999-999999999999",
+        },
+        {
+          source: "dashboard",
+          code: "clock.records_misdated",
+          params: params("open"),
+          severity: "error",
+          detectedAt: "2026-10-22T10:00:00.000Z",
+        },
+        {
+          source: "dashboard",
+          code: "clock.behind_chain_restarted",
+          params: params("other code"),
+          severity: "warning",
+          detectedAt: "2026-10-22T10:30:00.000Z",
+          acknowledgedAt: "2026-10-22T10:45:00.000Z",
+        },
+      ])
+      .returning({ id: incidents.id });
+
+    expect(await suite.db.withWriteLock(() => readMisdatedHandled(suite.db))).toEqual([
+      {
+        incidentId: ids[1]!.id,
+        ...params("by Rosa"),
+        handledAt: "2026-10-22T09:45:00.000Z",
+        handledBy: { kind: "person", name: "Rosa Handler" },
+        note: "Sent to the accountant",
+      },
+      {
+        incidentId: ids[2]!.id,
+        ...params("by nobody known"),
+        handledAt: "2026-10-22T10:00:00.000Z",
+        handledBy: { kind: "person", name: null },
+        note: null,
+      },
+      {
+        incidentId: ids[0]!.id,
+        ...params("by the box"),
+        handledAt: "2026-10-22T11:00:00.000Z",
+        handledBy: { kind: "box" },
+        note: null,
+      },
+    ]);
   });
 
   it("settles the notice log, so an owner that stops failing is logged as recovered", async () => {
@@ -431,5 +536,50 @@ describe("collectBoxHealth", () => {
     fail = false;
     await collectBoxHealth(suite.db, readers);
     expect(lines).toEqual(["staff_notice.source_unavailable", "staff_notice.source_recovered"]);
+  });
+});
+
+function replayEmitted(emitted: { sql: string; params: unknown[] }, prefix: string) {
+  const parts = emitted.sql.split("?");
+  expect(parts).toHaveLength(emitted.params.length + 1);
+  const statement = sql.raw(`${prefix}${parts[0]}`);
+  for (let i = 0; i < emitted.params.length; i++) {
+    statement.append(sql`${emitted.params[i]}`);
+    statement.append(sql.raw(parts[i + 1]!));
+  }
+  return statement;
+}
+
+describe("the wrongly dated sales reads", () => {
+  it.each([
+    ["open", () => misdatedOpenQuery(suite.db).toSQL()],
+    ["handled", () => misdatedHandledQuery(suite.db).toSQL()],
+    ["handled count", () => misdatedHandledCountQuery(suite.db).toSQL()],
+  ])("plans the %s read on the code and detection index, not a scan", async (_name, emit) => {
+    const plan = await suite.db.execute<{ detail: string }>(
+      replayEmitted(emit(), "explain query plan "),
+    );
+    const details = plan.rows.map((row) => row.detail);
+    expect(details.some((d) => d.includes("USING INDEX incidents_code_detected_idx"))).toBe(true);
+    expect(details.some((d) => d.includes("SCAN incidents"))).toBe(false);
+  });
+
+  it("stores and reads back a handled incident's note", async () => {
+    const [row] = await suite.db
+      .insert(incidents)
+      .values({
+        source: "dashboard",
+        code: "clock.records_misdated",
+        severity: "error",
+        detectedAt: "2026-10-22T08:00:00.000Z",
+        acknowledgedAt: "2026-10-22T11:00:00.000Z",
+        acknowledgedNote: "Checked with the accountant",
+      })
+      .returning({ id: incidents.id });
+    const [read] = await suite.db
+      .select({ note: incidents.acknowledgedNote })
+      .from(incidents)
+      .where(eq(incidents.id, row!.id));
+    expect(read).toEqual({ note: "Checked with the accountant" });
   });
 });

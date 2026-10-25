@@ -1747,10 +1747,12 @@ export interface BoxHealth {
   /** Since the waiting check's opening reading; null when no check waits. */
   clockCheckWaiting: { since: string } | null;
   misdatedOpen: MisdatedOpenView[];
+  misdatedHandledCount: number;
 }
 
 /** LOCAL copy of the server's `MisdatedOpen` (`apps/server/src/box-health.ts`). */
 export interface MisdatedOpenView {
+  incidentId: string;
   confirmationId: string;
   count: number;
   from: string;
@@ -1766,15 +1768,29 @@ export interface MisdatedOpenView {
 export interface ClockMisdatedView {
   lists: {
     confirmationId: string;
-    records: {
-      recordId: string;
-      series: string;
-      /** Null when the recorded invoice number has no whole number after its last slash. */
-      number: number | null;
-      at: string;
-      offsetMinutes: number;
-    }[];
+    records: MisdatedRecordView[];
   }[];
+}
+
+export interface MisdatedRecordView {
+  recordId: string;
+  series: string;
+  /** Null when the recorded invoice number has no whole number after its last slash. */
+  number: number | null;
+  at: string;
+  offsetMinutes: number;
+}
+
+/** LOCAL copy of `GET /api/box/clock-misdated/handled`'s answer (`apps/server/src/box-health-api.ts`),
+ * newest first; `records` is null when the box cannot list the sales. */
+export interface ClockMisdatedHandledView {
+  episodes: (MisdatedOpenView & {
+    handledAt: string;
+    /** The box handled it itself; a person whose row is gone has no name. */
+    handledBy: { kind: "box" } | { kind: "person"; name: string | null };
+    note: string | null;
+    records: MisdatedRecordView[] | null;
+  })[];
 }
 
 /** LOCAL copy of the Retry now route's answer (`packages/fiscal-verifactu/src/routes.ts`). */
@@ -4238,11 +4254,20 @@ export class DashboardApi {
     return this.#request<AlertsResponse>("/management-api/alerts/handled", "GET");
   }
 
-  /** Succeeds when the incident is already handled. */
-  markIncidentHandled(incidentId: string): Promise<void> {
+  /** A non-blank note on an already-handled alert is refused. */
+  markIncidentHandled(incidentId: string, note?: string): Promise<void> {
     return this.#request<void>(
       `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/handled`,
       "POST",
+      note === undefined ? undefined : { note },
+    );
+  }
+
+  addIncidentNote(incidentId: string, note: string): Promise<void> {
+    return this.#request<void>(
+      `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/note`,
+      "POST",
+      { note },
     );
   }
 
@@ -4256,6 +4281,19 @@ export class DashboardApi {
 
   clockMisdated(): Promise<ClockMisdatedView> {
     return this.#request<ClockMisdatedView>("/api/box/clock-misdated", "GET");
+  }
+
+  clockMisdatedHandled(): Promise<ClockMisdatedHandledView> {
+    return this.#request<ClockMisdatedHandledView>("/api/box/clock-misdated/handled", "GET");
+  }
+
+  downloadMisdatedSales(incidentId: string): Promise<Blob> {
+    return this.#request<Blob>(
+      `/api/box/clock-misdated/${encodeURIComponent(incidentId)}/download`,
+      "GET",
+      undefined,
+      { as: "blob" },
+    );
   }
 
   clockChallenge(): Promise<ClockChallengeView> {

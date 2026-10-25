@@ -1200,6 +1200,9 @@ The list is on the Box status page, and a recorded alert, `clock.records_misdate
 the owner's task until it is marked handled: "go through these with your tax adviser". Nothing is
 rewritten; `registros_facturacion` is append-only.
 
+_2026-10-25: A1088 keeps each list after its alert is handled, adds a note and a file for the
+adviser: [plan](../plans/2026-10-25-a1088-misdated-sales-download.md)._
+
 #### g. The time service is watched
 
 "We must ensure that ntp is up and running." The host service reports whether a time service is

@@ -529,6 +529,7 @@ export const QUERY_DEPENDENCIES = {
   getBoxHealth: [],
   // Each list is read from stored records that never change; which lists exist follows the alerts.
   clockMisdated: ["incidents"],
+  clockMisdatedHandled: ["incidents", "persons"],
   listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions"],
   listHandledAlerts: ["incidents", "persons"],
 } as const;

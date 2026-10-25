@@ -1239,11 +1239,50 @@ See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verif
 
 ## The Box status page reads the wrongly-dated-sales alerts' params through a cast
 
-`readMisdatedOpen` (`apps/server/src/box-health.ts`) finds the open `clock.records_misdated` alerts
-by their code name and reads each alert's params as `MisdatedOpen` behind an `as unknown as` cast,
-so the server keeps its own copy of a shape the Veri\*Factu module writes. The compiler does not
+`readMisdatedOpen`, `readMisdatedHandled` and `readMisdatedEpisode` (`apps/server/src/box-health.ts`)
+find the `clock.records_misdated` alerts (open, handled, and one by id for the download) by their
+code name and read each alert's params through one `as unknown as` cast (`misdatedParams`), so the
+server keeps its own copy of a shape the Veri\*Factu module writes. The compiler does not
 check the two agree; only the field checks in `apps/server/src/clock-confirm.route.test.ts`, where
 the real module writes the alert, do. A fiscal seat method (for example `openMisdated(tx)`)
-answering the typed list would remove the copy. Naming a code as a string in `apps/server` is house
+answering the typed lists would remove the copy. Naming a code as a string in `apps/server` is house
 practice (`apps/server/src/payments-api.ts`'s status map), so the code name alone is not the
 problem.
+
+## Some sales dated wrongly are in no list
+
+Two kinds of sale dated wrongly reach no list on the Box status page and no file for the adviser
+(design §4.9 f):
+
+- **A clock put right from little more than a minute ahead.** A clock that ran ahead while a clock
+  check waited is caught when putting it right brings the payment stop back, but only when the box's
+  15-second look sees the stop return, which it can miss when the clock was little more than a
+  minute ahead; the sales that clock dated are then in no list.
+- **A stop the box "cannot tell" about.** When the stop ended by itself but nothing confirmed the
+  box's clock, the alert asks the manager to go through every sale since the stop began,
+  but the box lists none of them, so the page shows no table and offers no download
+  (`apps/dashboard/src/screens/box-status-screen.ts`, the actions row; the download route answers
+  `alert.not_found` for it, `apps/server/src/box-health-api.ts`).
+
+Left open by A1088.
+
+## The adviser's file is comma-separated in both languages
+
+The file for the adviser (`apps/server/src/misdated-sales-csv.ts`) joins its cells with `,` whatever
+the venue's language, and writes a Spanish amount with a decimal comma inside a quoted cell
+(`12,30`). LibreOffice set to es-ES opened the Spanish file in columns (A1088 visual check,
+2026-10-25). A spreadsheet set to expect `;` may open it in one column;
+Excel is not installed on the machine that checked, so Excel in Spain is untested. The working-time
+export (`apps/server/src/attendance-export-csv.ts`) also joins with `,` in every language. Whether
+the `es` file should use `;` is the owner's decision.
+
+Two smaller points from the same check, in LibreOffice:
+
+- Amounts are shown without fixed decimals: `12.30` shows as `12.3` and `-5.00` as `-5`. The file
+  holds both places; the spreadsheet drops them.
+- A cell the shared formula guard protects shows its apostrophe: `=1+1` shows as `'=1+1`. The guard
+  (`csvCell`, `apps/server/src/attendance-export-csv.ts`) puts an apostrophe before text that starts,
+  after any spaces, with `=`, `+`, `-` or `@`, or with a tab or a carriage return, so the
+  spreadsheet does not run it as a formula.
+
+Left open by A1088.

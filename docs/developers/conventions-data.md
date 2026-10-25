@@ -2602,6 +2602,13 @@ full disk with a change waiting. The case is "a person's own personal-data downl
 full disk with a change waiting" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated
 exception to one `withTransaction` per route.
 
+Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
+one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
+`apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain. The cases are
+"reads a waiting check and the wrongly dated sales on a full disk with a change waiting, and leaves
+the change waiting" and "downloads a list on a full disk with a change waiting, and leaves the
+change waiting" in `apps/server/src/clock-confirm.route.test.ts`.
+
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a
@@ -3864,7 +3871,11 @@ one when a second closing that cannot tell opened at the same reading",
 cannot tell, whatever sale each names", `apps/server/src/clock-confirm.route.test.ts`). A list
 still folds into an open list whose earliest record is the same sale; `GET /api/box/clock-misdated`
 gives a list only for a confirmation an open alert names (`readMisdatedOpen`,
-`apps/server/src/box-health.ts`), so the later list is then not shown. Every closing stays in
+`apps/server/src/box-health.ts`), and `GET /api/box/clock-misdated/handled` only for one a handled
+alert names (`readMisdatedHandled`), so the later list is then not shown by either. The download,
+`GET /api/box/clock-misdated/:incidentId/download` (`apps/server/src/box-health-api.ts`), serves
+the list of the alert it names, open or handled, and answers `alert.not_found` for one that cannot
+tell. Every closing stays in
 `clock_confirmations`. The managers' email duty emails each open `clock.behind_chain_restarted` and
 `clock.records_misdated` once (`CLOCK_INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
 

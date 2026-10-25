@@ -6,12 +6,13 @@ import type {
   AlertView,
   AlertsResponse,
   BoxHealth,
+  ClockMisdatedHandledView,
   ClockMisdatedView,
   DashboardApi,
   FreedSpaceView,
   MisdatedOpenView,
 } from "../api/client.js";
-import { formatIsoMinute } from "../date-utils.js";
+import { formatIsoMinute, wallClock } from "../date-utils.js";
 import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -69,6 +70,7 @@ function health(overrides: Partial<BoxHealth> = {}, disk: Partial<BoxHealth["dis
     clockStop: null,
     clockCheckWaiting: null,
     misdatedOpen: [],
+    misdatedHandledCount: 0,
   } satisfies BoxHealth;
 }
 
@@ -1085,6 +1087,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
 
 describe("dashboard-box-status-screen's sales dated wrongly", () => {
   const OPEN: MisdatedOpenView = {
+    incidentId: "i1",
     confirmationId: "c1",
     count: 2,
     from: "2026-10-22T19:00:00.000Z",
@@ -1095,6 +1098,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     unconfirmed: false,
   };
   const UNCONFIRMED: MisdatedOpenView = {
+    incidentId: "i2",
     confirmationId: "c2",
     count: 0,
     from: "2026-10-22T17:00:00.000Z",
@@ -1146,8 +1150,8 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       t("box_status.misdated.col_at"),
     ]);
     expect(cells(el)).toEqual([
-      ["T1/7", formatIsoMinute(OPEN.from)],
-      ["T1/8", formatIsoMinute(OPEN.to!)],
+      ["T1/7", "2026-10-22 21:00"],
+      ["T1/8", "2026-10-22 21:05"],
     ]);
     expect(q(el, "[data-test=misdated-sentence]")).toBeNull();
     expect(qa(el, "ul.rows > li")).toHaveLength(7);
@@ -1190,7 +1194,12 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(sentence);
     expect(q(el, "[data-test=misdated-table]")).toBeNull();
     expect(text(section(el))).toBe(
-      [t("box_status.misdated.title"), t("box_status.misdated.line"), sentence].join(" "),
+      [
+        t("box_status.misdated.title"),
+        t("box_status.misdated.line"),
+        sentence,
+        t("alerts.mark_handled"),
+      ].join(" "),
     );
     expect(api.clockMisdated).not.toHaveBeenCalled();
   });
@@ -1198,6 +1207,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
   it("labels each table by its times when two are drawn, and by the title when one is", async () => {
     const SECOND = {
       ...OPEN,
+      incidentId: "i3",
       confirmationId: "c3",
       from: "2026-10-22T20:00:00.000Z",
       to: "2026-10-22T20:10:00.000Z",
@@ -1219,9 +1229,13 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(labels(one.el)).toEqual(["Sales dated wrongly"]);
     cleanupWidgets();
     const two = await mount(withOpen([OPEN, SECOND], lists));
+    const minute = (instant: string, offsetMinutes: number) => {
+      const { date, time } = wallClock(instant, offsetMinutes);
+      return `${date} ${time}`;
+    };
     const range = (open: MisdatedOpenView) => [
-      formatIsoMinute(open.from),
-      formatIsoMinute(open.to!),
+      minute(open.from, open.fromOffsetMinutes),
+      minute(open.to!, open.toOffsetMinutes!),
     ];
     expect(labels(two.el)).toEqual(
       [OPEN, SECOND].map((open) => {
@@ -1236,6 +1250,21 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(labels(spanish.el)[0]).toBe(
       es["box_status.misdated.table_range"].replace("{from}", from!).replace("{to}", to!),
     );
+  });
+
+  it("reads the open lists again when the screen is taken off the page and put back", async () => {
+    const api = withOpen([OPEN]);
+    const { el } = await mount(api);
+    expect(api.clockMisdated).toHaveBeenCalledTimes(1);
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await flush(el);
+    const reads = (api.clockMisdated as ReturnType<typeof vi.fn>).mock.calls.length;
+    api.liveData.refresh();
+    await flush(el);
+    expect(api.clockMisdated).toHaveBeenCalledTimes(reads + 1);
+    expect(cells(el)).toHaveLength(2);
   });
 
   it("draws a table for a found list beside a sentence for one that cannot tell", async () => {
@@ -1257,7 +1286,28 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       ],
     };
     const { el } = await mount(withOpen([{ ...OPEN, count: 1 }], lists));
-    expect(cells(el)).toEqual([["ODD", formatIsoMinute(OPEN.from)]]);
+    expect(cells(el)).toEqual([["ODD", "2026-10-22 21:00"]]);
+  });
+
+  it("writes a sale's time at its own recorded offset, across midnight, not the browser's zone", async () => {
+    const lists: ClockMisdatedView = {
+      lists: [
+        {
+          confirmationId: "c1",
+          records: [
+            {
+              recordId: "r10",
+              series: "T1",
+              number: 10,
+              at: "2026-10-22T23:30:00.000Z",
+              offsetMinutes: 120,
+            },
+          ],
+        },
+      ],
+    };
+    const { el } = await mount(withOpen([{ ...OPEN, count: 1 }], lists));
+    expect(cells(el)).toEqual([["T1/10", "2026-10-23 01:30"]]);
   });
 
   it("draws nothing once the alert is handled", async () => {
@@ -1379,5 +1429,718 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       t("box_status.misdated.read_error"),
     );
     expect(q(el, "[data-test=misdated-entry]")).toBeNull();
+  });
+
+  describe("Handled lists", () => {
+    type Episode = ClockMisdatedHandledView["episodes"][number];
+    const NOTED: Episode = {
+      ...OPEN,
+      incidentId: "h1",
+      confirmationId: "hc1",
+      count: 1,
+      from: "2026-10-20T10:00:00.000Z",
+      to: "2026-10-20T10:00:00.000Z",
+      handledAt: "2026-10-21T09:15:00.000Z",
+      handledBy: { kind: "person", name: "Harriet Quill" },
+      note: "The adviser filed a correction",
+      records: [
+        {
+          recordId: "hr1",
+          series: "T2",
+          number: 3,
+          at: "2026-10-20T10:00:00.000Z",
+          offsetMinutes: 120,
+        },
+      ],
+    };
+    const BY_BOX: Episode = {
+      ...UNCONFIRMED,
+      incidentId: "h2",
+      confirmationId: "hc2",
+      from: "2026-10-18T08:00:00.000Z",
+      handledAt: "2026-10-19T07:40:00.000Z",
+      handledBy: { kind: "box" },
+      note: null,
+      records: null,
+    };
+    const NAMELESS: Episode = {
+      ...NOTED,
+      incidentId: "h3",
+      confirmationId: "hc3",
+      handledAt: "2026-10-17T12:00:00.000Z",
+      handledBy: { kind: "person", name: null },
+      note: null,
+    };
+
+    function withHandled(
+      count: number,
+      answer: ClockMisdatedHandledView | Error,
+      open: MisdatedOpenView[] = [],
+    ) {
+      return stubApi(
+        {
+          clockMisdated: vi.fn().mockResolvedValue(LISTS),
+          clockMisdatedHandled:
+            answer instanceof Error
+              ? vi.fn().mockRejectedValue(answer)
+              : vi.fn().mockResolvedValue(answer),
+        },
+        { ...health(), misdatedOpen: open, misdatedHandledCount: count },
+      );
+    }
+
+    const fold = (el: BoxStatusScreen) =>
+      q(el, "[data-test=misdated-handled]") as
+        (HTMLElement & { heading: string; open: boolean }) | null;
+    async function toggle(el: BoxStatusScreen) {
+      (fold(el)!.shadowRoot!.querySelector("button.header") as HTMLElement).click();
+      await flush(el);
+    }
+    const entries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-handled-entry]");
+    const lineOf = (entry: Element, name: string) =>
+      text(entry.querySelector(`[data-test=${name}]`));
+    const entryCells = (entry: Element) =>
+      [
+        ...(entry
+          .querySelector("[data-test=misdated-table]")
+          ?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
+      ].map((row) => [...row.querySelectorAll("td")].map((cell) => text(cell)));
+
+    it("shows the count, closed, and reads nothing until it is opened", async () => {
+      const api = withHandled(2, { episodes: [NOTED, BY_BOX] }, [OPEN]);
+      const { el } = await mount(api);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+      expect(fold(el)!.open).toBe(false);
+      expect(entries(el)).toHaveLength(0);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).not.toHaveBeenCalled();
+    });
+
+    it("opened, shows a handled list's table with who handled it, when, and its note", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(1);
+      const [entry] = entries(el);
+      expect(lineOf(entry!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_person", {
+          name: "Harriet Quill",
+          time: formatIsoMinute(NOTED.handledAt),
+        }),
+      );
+      expect(lineOf(entry!, "misdated-note")).toBe(
+        fill("box_status.misdated.note", { note: "The adviser filed a correction" }),
+      );
+      expect(entryCells(entry!)).toEqual([["T2/3", "2026-10-20 12:00"]]);
+    });
+
+    it("draws the episodes newest first, as the answer gives them, and the box's own line", async () => {
+      const { el } = await mount(withHandled(3, { episodes: [NOTED, BY_BOX, NAMELESS] }));
+      await toggle(el);
+      const drawn = entries(el);
+      expect(drawn.map((entry) => entry.getAttribute("data-incident"))).toEqual(["h1", "h2", "h3"]);
+      expect(lineOf(drawn[1]!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_box", { time: formatIsoMinute(BY_BOX.handledAt) }),
+      );
+      expect(lineOf(drawn[1]!, "misdated-sentence")).toBe(
+        alertMessage("clock.records_misdated", { ...BY_BOX }),
+      );
+      expect(drawn[1]!.querySelector("[data-test=misdated-note]")).toBeNull();
+      expect(drawn[1]!.querySelector("[data-test=misdated-table]")).toBeNull();
+      expect(lineOf(drawn[2]!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_unknown", {
+          time: formatIsoMinute(NAMELESS.handledAt),
+        }),
+      );
+    });
+
+    it("draws the section when only handled lists exist, and reads no open list", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
+      expect(text(q(el, "[data-test=misdated-line]"))).toBe(t("box_status.misdated.line"));
+      expect(fold(el)).not.toBeNull();
+      expect(q(el, "[data-test=misdated-entry]")).toBeNull();
+      expect(api.clockMisdated).not.toHaveBeenCalled();
+    });
+
+    it("counts the episodes it has read while open, and the box's count while closed", async () => {
+      // The box's count lags the handled lists by up to one health read.
+      const { el } = await mount(withHandled(2, { episodes: [NOTED] }));
+      await toggle(el);
+      expect(entries(el)).toHaveLength(1);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "1" }));
+      await toggle(el);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+    });
+
+    it("keeps the box's count while open until its read answers", async () => {
+      const answer = deferred<ClockMisdatedHandledView>();
+      const api = withHandled(2, { episodes: [] });
+      (api.clockMisdatedHandled as ReturnType<typeof vi.fn>).mockReturnValue(answer.promise);
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+      answer.resolve({ episodes: [NOTED] });
+      await flush(el);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "1" }));
+    });
+
+    it("closes and forgets the fold when the screen is taken off the page, and reads it only once reopened", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(entries(el)).toHaveLength(1);
+      const parent = el.parentElement!;
+      el.remove();
+      parent.append(el);
+      await flush(el);
+      expect(fold(el)!.open).toBe(false);
+      expect(entries(el)).toHaveLength(0);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(1);
+      await toggle(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+      expect(entries(el)).toHaveLength(1);
+    });
+
+    it("clears its read failure once a later read answers", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      (api.clockMisdatedHandled as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error("down"),
+      );
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(q(el, "[data-test=misdated-handled-unavailable]")).not.toBeNull();
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+      expect(q(el, "[data-test=misdated-handled-unavailable]")).toBeNull();
+      expect(entries(el)).toHaveLength(1);
+    });
+
+    it("draws no fold when nothing has been handled", async () => {
+      const { el } = await mount(withHandled(0, { episodes: [] }, [OPEN]));
+      expect(fold(el)).toBeNull();
+    });
+
+    it("stops reading when it is closed", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      await toggle(el);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+      await toggle(el);
+      expect(entries(el)).toHaveLength(0);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+    });
+
+    it("says the handled lists could not be read, inside the fold", async () => {
+      const { el } = await mount(withHandled(1, new Error("down"), [OPEN]));
+      await toggle(el);
+      const failed = q(el, "[data-test=misdated-handled] [data-test=misdated-handled-unavailable]");
+      expect(text(failed)).toBe(t("box_status.misdated.handled_read_error"));
+      expect(q(el, "[data-test=misdated-unavailable]")).toBeNull();
+      expect(cells(el)).toHaveLength(2);
+    });
+
+    it("labels every drawn table by its times once a handled one joins an open one", async () => {
+      const { el } = await mount(withHandled(1, { episodes: [NOTED] }, [OPEN]));
+      const labels = () =>
+        qa(el, "[data-test=misdated-table]").map((table) => table.getAttribute("aria-label"));
+      expect(labels()).toEqual([t("box_status.misdated.title")]);
+      await toggle(el);
+      expect(labels()).toEqual([
+        fill("box_status.misdated.table_range", {
+          from: "2026-10-22 21:00",
+          to: "2026-10-22 21:05",
+        }),
+        fill("box_status.misdated.table_range", {
+          from: "2026-10-20 12:00",
+          to: "2026-10-20 12:00",
+        }),
+      ]);
+    });
+
+    it("draws its words in Spanish from the strings tables", async () => {
+      setLocale("es");
+      const { el } = await mount(withHandled(2, { episodes: [NOTED, BY_BOX] }));
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+      // The refusal of a note on an already-handled alert sends the reader to this fold by name.
+      expect(codeMessage("alert.already_handled")).toContain(
+        t("box_status.misdated.handled_heading").replace(" ({count})", ""),
+      );
+      await toggle(el);
+      const [noted, byBox] = entries(el);
+      expect(lineOf(noted!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_person", {
+          name: "Harriet Quill",
+          time: formatIsoMinute(NOTED.handledAt),
+        }),
+      );
+      expect(lineOf(noted!, "misdated-note")).toBe(
+        es["box_status.misdated.note"].replace("{note}", NOTED.note!),
+      );
+      expect(lineOf(byBox!, "misdated-handled-by")).toBe(
+        es["box_status.misdated.handled_by_box"].replace(
+          "{time}",
+          formatIsoMinute(BY_BOX.handledAt),
+        ),
+      );
+    });
+  });
+
+  describe("Download for your adviser", () => {
+    type Episode = ClockMisdatedHandledView["episodes"][number];
+    // Under the browser tests' UTC, a browser-zone date would read 2026-10-24.
+    const NEAR_MIDNIGHT: MisdatedOpenView = {
+      ...OPEN,
+      incidentId: "i9",
+      confirmationId: "c9",
+      count: 1,
+      from: "2026-10-24T22:30:00.000Z",
+      to: "2026-10-24T22:30:00.000Z",
+    };
+    const BOTH_LISTS: ClockMisdatedView = {
+      lists: [
+        ...LISTS.lists,
+        {
+          confirmationId: "c9",
+          records: [
+            {
+              recordId: "r9",
+              series: "T3",
+              number: 1,
+              at: NEAR_MIDNIGHT.from,
+              offsetMinutes: 120,
+            },
+          ],
+        },
+      ],
+    };
+    const HANDLED: Episode = {
+      ...OPEN,
+      incidentId: "h7",
+      confirmationId: "hc7",
+      count: 1,
+      from: "2026-10-19T10:00:00.000Z",
+      to: "2026-10-19T10:00:00.000Z",
+      handledAt: "2026-10-20T09:00:00.000Z",
+      handledBy: { kind: "box" },
+      note: null,
+      records: [
+        {
+          recordId: "hr7",
+          series: "T4",
+          number: 2,
+          at: "2026-10-19T10:00:00.000Z",
+          offsetMinutes: 120,
+        },
+      ],
+    };
+    const HANDLED_UNCONFIRMED: Episode = {
+      ...UNCONFIRMED,
+      incidentId: "h8",
+      confirmationId: "hc8",
+      handledAt: "2026-10-18T09:00:00.000Z",
+      handledBy: { kind: "box" },
+      note: null,
+      records: null,
+    };
+
+    let downloads: string[] = [];
+    beforeEach(() => {
+      downloads = [];
+      const spy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+        this: HTMLAnchorElement,
+      ) {
+        downloads.push(this.download);
+      });
+      onTestFinished(() => spy.mockRestore());
+    });
+
+    function withDownload(
+      download: unknown,
+      open: MisdatedOpenView[],
+      handled: Episode[] = [],
+    ): DashboardApi {
+      return stubApi(
+        {
+          clockMisdated: vi.fn().mockResolvedValue(BOTH_LISTS),
+          clockMisdatedHandled: vi.fn().mockResolvedValue({ episodes: handled }),
+          downloadMisdatedSales: download,
+        },
+        { ...health(), misdatedOpen: open, misdatedHandledCount: handled.length },
+      );
+    }
+    const openEntries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-entry]");
+    const handledEntries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-handled-entry]");
+    const buttonIn = (entry: Element) =>
+      entry.querySelector("[data-test=misdated-download]") as
+        (HTMLElement & { loading: boolean; disabled: boolean }) | null;
+    const errorIn = (entry: Element) => entry.querySelector("[data-test=misdated-download-error]");
+    async function openFold(el: BoxStatusScreen) {
+      const fold = q(el, "[data-test=misdated-handled]") as HTMLElement;
+      (fold.shadowRoot!.querySelector("button.header") as HTMLElement).click();
+      await flush(el);
+    }
+
+    it("asks for the entry's list and saves it named by its first sale's date at its own offset", async () => {
+      const api = withDownload(vi.fn().mockResolvedValue(new Blob(["a,b"])), [NEAR_MIDNIGHT]);
+      const { el } = await mount(api);
+      const [entry] = openEntries(el);
+      const button = buttonIn(entry!)!;
+      expect(text(button)).toBe(t("box_status.misdated.download"));
+      expect(button.getAttribute("variant")).toBe("secondary");
+      expect(button.disabled).toBe(false);
+      await userEvent.click(button);
+      await flush(el);
+      expect(api.downloadMisdatedSales).toHaveBeenCalledWith("i9");
+      expect(downloads).toEqual(["misdated-sales-2026-10-25.csv"]);
+      expect(errorIn(entry!)).toBeNull();
+    });
+
+    it("offers it on a handled list too, and never for an entry that cannot tell, open or handled", async () => {
+      const api = withDownload(
+        vi.fn().mockResolvedValue(new Blob(["a,b"])),
+        [UNCONFIRMED],
+        [HANDLED, HANDLED_UNCONFIRMED],
+      );
+      const { el } = await mount(api);
+      expect(qa(el, "[data-test=misdated-download]")).toHaveLength(0);
+      await openFold(el);
+      const [handled, handledUnconfirmed] = handledEntries(el);
+      expect(buttonIn(handledUnconfirmed!)).toBeNull();
+      expect(qa(el, "[data-test=misdated-download]")).toHaveLength(1);
+      await userEvent.click(buttonIn(handled!)!);
+      await flush(el);
+      expect(api.downloadMisdatedSales).toHaveBeenCalledWith("h7");
+      expect(downloads).toEqual(["misdated-sales-2026-10-19.csv"]);
+    });
+
+    it("shows loading only on the asked entry's button while its file is asked for", async () => {
+      const sent = deferred<Blob>();
+      const api = withDownload(vi.fn().mockReturnValue(sent.promise), [OPEN, NEAR_MIDNIGHT]);
+      const { el } = await mount(api);
+      const [first, second] = openEntries(el);
+      await userEvent.click(buttonIn(second!)!);
+      await el.updateComplete;
+      expect(buttonIn(second!)!.loading).toBe(true);
+      expect(buttonIn(first!)!.loading).toBe(false);
+      expect(buttonIn(first!)!.disabled).toBe(false);
+      buttonIn(second!)!.click();
+      await el.updateComplete;
+      expect(api.downloadMisdatedSales).toHaveBeenCalledTimes(1);
+      sent.resolve(new Blob(["a,b"]));
+      await flush(el);
+      expect(buttonIn(second!)!.loading).toBe(false);
+      expect(downloads).toEqual(["misdated-sales-2026-10-25.csv"]);
+    });
+
+    it("says a refused download under that entry only, until its button is pressed again", async () => {
+      const again = deferred<Blob>();
+      const download = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "alert.not_found" })
+        .mockReturnValueOnce(again.promise);
+      const { el } = await mount(withDownload(download, [OPEN, NEAR_MIDNIGHT]));
+      const [first, second] = openEntries(el);
+      await userEvent.click(buttonIn(first!)!);
+      await flush(el);
+      expect(text(errorIn(first!))).toBe(codeMessage("alert.not_found"));
+      expect(errorIn(second!)).toBeNull();
+      expect(downloads).toEqual([]);
+      await userEvent.click(buttonIn(first!)!);
+      await el.updateComplete;
+      expect(errorIn(first!)).toBeNull();
+      again.resolve(new Blob(["a,b"]));
+      await flush(el);
+      expect(errorIn(first!)).toBeNull();
+      expect(downloads).toEqual(["misdated-sales-2026-10-22.csv"]);
+    });
+
+    it("offers none on a handled entry the box sent with no list, even one not marked as cannot tell", async () => {
+      const { el } = await mount(
+        withDownload(
+          vi.fn(),
+          [],
+          [HANDLED, { ...HANDLED, incidentId: "h9", confirmationId: "hc9", records: null }],
+        ),
+      );
+      await openFold(el);
+      const [listed, listless] = handledEntries(el);
+      expect(buttonIn(listed!)).not.toBeNull();
+      expect(buttonIn(listless!)).toBeNull();
+    });
+
+    it("words its button in Spanish from the strings tables", async () => {
+      setLocale("es");
+      const { el } = await mount(withDownload(vi.fn(), [OPEN]));
+      expect(text(buttonIn(openEntries(el)[0]!))).toBe(es["box_status.misdated.download"]);
+    });
+  });
+
+  describe("Mark handled and Add note", () => {
+    type Episode = ClockMisdatedHandledView["episodes"][number];
+    const NO_NOTE: Episode = {
+      ...OPEN,
+      incidentId: "h5",
+      confirmationId: "hc5",
+      count: 1,
+      from: "2026-10-19T10:00:00.000Z",
+      to: "2026-10-19T10:00:00.000Z",
+      handledAt: "2026-10-20T09:00:00.000Z",
+      handledBy: { kind: "person", name: "Odalys" },
+      note: null,
+      records: [
+        {
+          recordId: "hr5",
+          series: "T4",
+          number: 2,
+          at: "2026-10-19T10:00:00.000Z",
+          offsetMinutes: 120,
+        },
+      ],
+    };
+    const NOTED: Episode = {
+      ...NO_NOTE,
+      incidentId: "h6",
+      confirmationId: "hc6",
+      note: "Adviser filed the correction",
+    };
+
+    function withNotes(
+      open: MisdatedOpenView[],
+      handled: Episode[] = [],
+      overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
+    ): DashboardApi {
+      return stubApi(
+        {
+          clockMisdated: vi.fn().mockResolvedValue(LISTS),
+          clockMisdatedHandled: vi.fn().mockResolvedValue({ episodes: handled }),
+          markIncidentHandled: vi.fn().mockResolvedValue(undefined),
+          addIncidentNote: vi.fn().mockResolvedValue(undefined),
+          ...overrides,
+        },
+        { ...health(), misdatedOpen: open, misdatedHandledCount: handled.length },
+      );
+    }
+    type NoteDialog = HTMLElement & {
+      open: boolean;
+      mode: string;
+      incidentId: string;
+      summary: string;
+    };
+    const noteDialog = (el: BoxStatusScreen) =>
+      q(el, "dashboard-misdated-note-dialog") as NoteDialog | null;
+    const markIn = (entry: Element) =>
+      entry.querySelector("[data-test=misdated-mark-handled]") as HTMLElement | null;
+    const addNoteIn = (entry: Element) =>
+      entry.querySelector("[data-test=misdated-add-note]") as HTMLElement | null;
+    async function openFold(el: BoxStatusScreen) {
+      const fold = q(el, "[data-test=misdated-handled]") as HTMLElement;
+      (fold.shadowRoot!.querySelector("button.header") as HTMLElement).click();
+      await flush(el);
+    }
+
+    it("Mark handled on an open entry opens the dialog to mark that entry's alert handled, with its sales' count and times", async () => {
+      const { el } = await mount(withNotes([OPEN, UNCONFIRMED]));
+      const [listed, cannotTell] = qa(el, "[data-test=misdated-entry]");
+      const mark = markIn(listed!)!;
+      expect(text(mark)).toBe(t("alerts.mark_handled"));
+      expect(mark.getAttribute("variant")).toBe("secondary");
+      expect(markIn(cannotTell!)).not.toBeNull();
+      expect(qa(el, "[data-test=misdated-add-note]")).toHaveLength(0);
+      expect(noteDialog(el)?.open ?? false).toBe(false);
+      await userEvent.click(mark);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(dialog.open).toBe(true);
+      expect(dialog.mode).toBe("handle");
+      expect(dialog.incidentId).toBe("i1");
+      // The times are the entry's stored offset (+120), not the browser's UTC.
+      expect(dialog.summary).toBe(
+        fill("box_status.misdated.summary", {
+          count: "2",
+          from: "2026-10-22 21:00",
+          to: "2026-10-22 21:05",
+        }),
+      );
+    });
+
+    it("writes an entry's end at its own offset when summer time ends inside it: label, cell and summary", async () => {
+      const ACROSS_CHANGE: MisdatedOpenView = {
+        ...OPEN,
+        incidentId: "i4",
+        confirmationId: "c4",
+        from: "2026-10-24T23:00:00.000Z",
+        to: "2026-10-25T01:30:00.000Z",
+        toOffsetMinutes: 60,
+      };
+      const lists: ClockMisdatedView = {
+        lists: [
+          ...LISTS.lists,
+          {
+            confirmationId: "c4",
+            records: [
+              {
+                recordId: "r4",
+                series: "T1",
+                number: 10,
+                at: ACROSS_CHANGE.from,
+                offsetMinutes: 120,
+              },
+              {
+                recordId: "r5",
+                series: "T1",
+                number: 11,
+                at: ACROSS_CHANGE.to!,
+                offsetMinutes: 60,
+              },
+            ],
+          },
+        ],
+      };
+      const { el } = await mount(
+        withNotes([OPEN, ACROSS_CHANGE], [], { clockMisdated: vi.fn().mockResolvedValue(lists) }),
+      );
+      const across = qa(el, "[data-test=misdated-entry]")[1]!;
+      const table = across.querySelector("[data-test=misdated-table]")!;
+      // At +120 the end would read 03:30.
+      expect(table.getAttribute("aria-label")).toBe(
+        fill("box_status.misdated.table_range", {
+          from: "2026-10-25 01:00",
+          to: "2026-10-25 02:30",
+        }),
+      );
+      expect(
+        [...table.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+          [...row.querySelectorAll("td")].map((cell) => text(cell)),
+        ),
+      ).toEqual([
+        ["T1/10", "2026-10-25 01:00"],
+        ["T1/11", "2026-10-25 02:30"],
+      ]);
+      await userEvent.click(markIn(across)!);
+      await flush(el);
+      expect(noteDialog(el)!.summary).toBe(
+        fill("box_status.misdated.summary", {
+          count: "2",
+          from: "2026-10-25 01:00",
+          to: "2026-10-25 02:30",
+        }),
+      );
+    });
+
+    it("gives an entry that cannot tell the alert's own sentence for that case", async () => {
+      const { el } = await mount(withNotes([UNCONFIRMED]));
+      await userEvent.click(markIn(qa(el, "[data-test=misdated-entry]")[0]!)!);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(dialog.incidentId).toBe("i2");
+      expect(dialog.summary).toBe(
+        alertMessage("clock.records_misdated", { ...UNCONFIRMED }, currentLocale()),
+      );
+    });
+
+    it.each(["en", "es"] as const)(
+      "never breaks a time across two lines in the dialog's summary, for a list and for one that cannot tell (%s)",
+      async (locale) => {
+        setLocale(locale);
+        const { innerWidth, innerHeight } = window;
+        onTestFinished(() => page.viewport(innerWidth, innerHeight));
+        const { el } = await mount(withNotes([OPEN, UNCONFIRMED]));
+        const broken: string[] = [];
+        let checked = 0;
+        for (const [index, entry] of qa(el, "[data-test=misdated-entry]").entries()) {
+          await userEvent.click(markIn(entry)!);
+          await flush(el);
+          const dialog = noteDialog(el)!;
+          const summary = () => dialog.shadowRoot!.querySelector("[data-test=note-summary]");
+          expect(summary()).not.toBeNull();
+          // Past phone widths the dialog stops growing, so its summary's lines stop moving.
+          for (let width = 320; width <= 560; width += 8) {
+            await page.viewport(width, 900);
+            await el.updateComplete;
+            const found = timesAcrossLines([summary()!]);
+            checked += found.checked;
+            broken.push(...found.broken.map((time) => `entry ${index}, ${width}px: ${time}`));
+          }
+          (dialog.shadowRoot!.querySelector("[data-test=note-cancel]") as HTMLElement).click();
+          await flush(el);
+          await vi.waitFor(() => expect(dialog.open).toBe(false));
+        }
+        // Each width checks the list's two times and the cannot-tell sentence's one.
+        expect(checked).toBe(31 * 3);
+        expect(broken).toEqual([]);
+      },
+    );
+
+    it("Add note on a handled entry with no note opens the dialog to add its note; one with a note has none", async () => {
+      const { el } = await mount(withNotes([], [NO_NOTE, NOTED]));
+      await openFold(el);
+      const [bare, noted] = qa(el, "[data-test=misdated-handled-entry]");
+      expect(addNoteIn(noted!)).toBeNull();
+      expect(qa(el, "[data-test=misdated-mark-handled]")).toHaveLength(0);
+      const add = addNoteIn(bare!)!;
+      expect(text(add)).toBe(t("box_status.misdated.add_note"));
+      expect(add.getAttribute("variant")).toBe("secondary");
+      await userEvent.click(add);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(dialog.open).toBe(true);
+      expect(dialog.mode).toBe("note");
+      expect(dialog.incidentId).toBe("h5");
+      expect(dialog.summary).toBe(
+        fill("box_status.misdated.summary_one", { from: "2026-10-19 12:00" }),
+      );
+    });
+
+    it("reads the box again once the dialog has saved, and closes it", async () => {
+      const api = withNotes([OPEN]);
+      const { el } = await mount(api);
+      const refresh = vi.spyOn(api.liveData, "refresh");
+      await userEvent.click(markIn(qa(el, "[data-test=misdated-entry]")[0]!)!);
+      await flush(el);
+      const dialog = noteDialog(el)!;
+      expect(refresh).not.toHaveBeenCalled();
+      (dialog.shadowRoot!.querySelector("[data-test=note-submit]") as HTMLElement).click();
+      await flush(el);
+      expect(api.markIncidentHandled).toHaveBeenCalledWith("i1", undefined);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(dialog.open).toBe(false);
+    });
+
+    it.each(["note-cancel", "note-submit"])(
+      "opens the dialog again when Mark handled is pressed after the dialog closed by %s",
+      async (button) => {
+        const { el } = await mount(withNotes([OPEN]));
+        const mark = () => markIn(qa(el, "[data-test=misdated-entry]")[0]!)!;
+        await userEvent.click(mark());
+        await flush(el);
+        const dialog = noteDialog(el)!;
+        expect(dialog.open).toBe(true);
+        (dialog.shadowRoot!.querySelector(`[data-test=${button}]`) as HTMLElement).click();
+        await flush(el);
+        await vi.waitFor(() => expect(dialog.open).toBe(false));
+        await userEvent.click(mark());
+        await flush(el);
+        await vi.waitFor(() => expect(noteDialog(el)!.open).toBe(true));
+      },
+    );
+
+    it("words Add note in Spanish from the strings tables", async () => {
+      setLocale("es");
+      const { el } = await mount(withNotes([], [NO_NOTE]));
+      await openFold(el);
+      expect(text(addNoteIn(qa(el, "[data-test=misdated-handled-entry]")[0]!))).toBe(
+        es["box_status.misdated.add_note"],
+      );
+    });
   });
 });

@@ -5,18 +5,20 @@ import { baseStyles, visuallyHiddenStyles, type DataTableColumn } from "@waitron
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   AlertView,
   BoxHealth,
+  ClockMisdatedHandledView,
   ClockMisdatedView,
   DashboardApi,
   FiscalRetryView,
   MisdatedOpenView,
 } from "../api/client.js";
-import { formatIsoMinute } from "../date-utils.js";
+import { formatIsoMinute, wallClock } from "../date-utils.js";
 import { ALERT_MESSAGES } from "../i18n/alert-messages.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -24,6 +26,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
+import "../widgets/misdated-note-dialog.js";
 import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
@@ -49,6 +52,7 @@ interface ClockReading {
 }
 
 type MisdatedRecordView = ClockMisdatedView["lists"][number]["records"][number];
+type HandledEpisode = ClockMisdatedHandledView["episodes"][number];
 
 type ReadName = "getBoxHealth" | "listAlerts";
 
@@ -202,6 +206,14 @@ export class BoxStatusScreen extends LitElement {
         gap: var(--wt-space-2);
         margin: 0 0 var(--wt-space-3);
       }
+      .misdated-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .misdated-entry > .error {
+        margin: 0;
+      }
     `,
   ];
 
@@ -232,6 +244,17 @@ export class BoxStatusScreen extends LitElement {
   @state() private misdatedLists: ReadonlyMap<string, MisdatedRecordView[]> | null = null;
   @state() private misdatedFailed = false;
   #watchingMisdated = false;
+  /** Whether the Handled lists fold is open; its episodes are read only while it is. */
+  @state() private handledOpen = false;
+  /** The handled episodes, newest first as the box sends them; null until read. */
+  @state() private handledEpisodes: HandledEpisode[] | null = null;
+  @state() private handledFailed = false;
+  /** Incident ids whose file is being asked for, and the refusal last shown under each entry. */
+  @state() private downloading: ReadonlySet<string> = new Set();
+  @state() private downloadRefusals: ReadonlyMap<string, string> = new Map();
+  /** The entry the note dialog was last opened for; kept while it closes. */
+  @state() private noteTarget: { mode: "handle" | "note"; entry: MisdatedOpenView } | null = null;
+  @state() private noteOpen = false;
   @state() private clockCheckOpen = false;
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
@@ -262,6 +285,11 @@ export class BoxStatusScreen extends LitElement {
     () => this.api,
     () => (this.misdatedFailed = true),
   );
+  readonly #handledQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => (this.handledFailed = true),
+  );
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -285,6 +313,33 @@ export class BoxStatusScreen extends LitElement {
         this.#readSucceeded("listAlerts");
       })
       .catch(() => undefined);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#closeHandled();
+    this.#watchingMisdated = false;
+  }
+
+  #toggleHandled(open: boolean): void {
+    if (!open) {
+      this.#closeHandled();
+      return;
+    }
+    this.handledOpen = true;
+    void this.#handledQueries
+      .watch("clockMisdatedHandled", [], (answer) => {
+        this.handledEpisodes = answer.episodes;
+        this.handledFailed = false;
+      })
+      .catch(() => undefined);
+  }
+
+  #closeHandled(): void {
+    this.#handledQueries.release("clockMisdatedHandled");
+    this.handledOpen = false;
+    this.handledEpisodes = null;
+    this.handledFailed = false;
   }
 
   /** Reads the lists only while an open alert has one; a closing that cannot tell lists none. */
@@ -697,7 +752,7 @@ export class BoxStatusScreen extends LitElement {
       {
         key: "at",
         label: t("box_status.misdated.col_at"),
-        cell: (record) => wholeTimes(formatIsoMinute(record.at)),
+        cell: (record) => wholeTimes(wallMinute(record.at, record.offsetMinutes)),
       },
     ];
   }
@@ -719,7 +774,54 @@ export class BoxStatusScreen extends LitElement {
     )
       return null;
     return html`<div class="misdated-entry" data-test="misdated-entry">
+      ${this.#misdatedBody(open, sentence, records, severalTables, this.#noteButton("handle", open))}
+    </div>`;
+  }
+
+  #handledLine(episode: HandledEpisode): string {
+    const time = formatIsoMinute(episode.handledAt);
+    if (episode.handledBy.kind === "box")
+      return fill("box_status.misdated.handled_by_box", { time });
+    const name = episode.handledBy.name;
+    return name === null
+      ? fill("box_status.misdated.handled_by_unknown", { time })
+      : fill("box_status.misdated.handled_by_person", { name, time });
+  }
+
+  #renderHandledEntry(episode: HandledEpisode, severalTables: boolean): TemplateResult {
+    return html`<div
+      class="misdated-entry"
+      data-test="misdated-handled-entry"
+      data-incident=${episode.incidentId}
+    >
+      <p class="detail" data-test="misdated-handled-by">
+        ${wholeTimes(this.#handledLine(episode))}
+      </p>
       ${
+        episode.note === null
+          ? nothing
+          : html`<p class="detail" data-test="misdated-note">
+              ${fill("box_status.misdated.note", { note: episode.note })}
+            </p>`
+      }
+      ${this.#misdatedBody(
+        episode,
+        this.#misdatedSentence(episode),
+        episode.records ?? undefined,
+        severalTables,
+        episode.note === null ? this.#noteButton("note", episode) : nothing,
+      )}
+    </div>`;
+  }
+
+  #misdatedBody(
+    open: MisdatedOpenView,
+    sentence: string | null,
+    records: MisdatedRecordView[] | undefined,
+    severalTables: boolean,
+    noteButton: TemplateResult | typeof nothing,
+  ): TemplateResult {
+    return html`${
         sentence === null
           ? nothing
           : html`<p class="detail" data-test="misdated-sentence">${wholeTimes(sentence)}</p>`
@@ -732,8 +834,8 @@ export class BoxStatusScreen extends LitElement {
               aria-label=${
                 severalTables && open.to !== undefined
                   ? fill("box_status.misdated.table_range", {
-                      from: formatIsoMinute(open.from),
-                      to: formatIsoMinute(open.to),
+                      from: wallMinute(open.from, open.fromOffsetMinutes),
+                      to: wallMinute(open.to, open.toOffsetMinutes!),
                     })
                   : t("box_status.misdated.title")
               }
@@ -742,17 +844,137 @@ export class BoxStatusScreen extends LitElement {
               .rowKey=${(record: MisdatedRecordView) => record.recordId}
             ></wt-data-table>`
       }
-    </div>`;
+      <div class="misdated-actions">
+        ${records === undefined || open.unconfirmed ? nothing : this.#downloadButton(open)}
+        ${noteButton}
+      </div>
+      ${this.#downloadRefusal(open)}`;
+  }
+
+  #noteButton(mode: "handle" | "note", entry: MisdatedOpenView): TemplateResult {
+    return html`<wt-button
+      size="sm"
+      variant="secondary"
+      data-test=${mode === "handle" ? "misdated-mark-handled" : "misdated-add-note"}
+      @click=${() => {
+        this.noteTarget = { mode, entry };
+        this.noteOpen = true;
+      }}
+      >${t(mode === "handle" ? "alerts.mark_handled" : "box_status.misdated.add_note")}</wt-button
+    >`;
+  }
+
+  #noteSummary(entry: MisdatedOpenView): string {
+    if (entry.unconfirmed) return alertMessage(MISDATED, { ...entry }, currentLocale());
+    const from = wallMinute(entry.from, entry.fromOffsetMinutes);
+    if (entry.count === 1) return fill("box_status.misdated.summary_one", { from });
+    return fill("box_status.misdated.summary", {
+      count: String(entry.count),
+      from,
+      to: wallMinute(entry.to ?? entry.from, entry.toOffsetMinutes ?? entry.fromOffsetMinutes),
+    });
+  }
+
+  #renderNoteDialog(): TemplateResult {
+    const target = this.noteTarget;
+    return html`<dashboard-misdated-note-dialog
+      .api=${this.api}
+      .open=${this.noteOpen}
+      .mode=${target?.mode ?? "handle"}
+      .incidentId=${target?.entry.incidentId ?? ""}
+      .summary=${target === null ? "" : this.#noteSummary(target.entry)}
+      @saved=${() => this.api.liveData.refresh()}
+      @note-close=${() => (this.noteOpen = false)}
+    ></dashboard-misdated-note-dialog>`;
+  }
+
+  #downloadButton(open: MisdatedOpenView): TemplateResult {
+    return html`<wt-button
+      size="sm"
+      variant="secondary"
+      data-test="misdated-download"
+      ?loading=${this.downloading.has(open.incidentId)}
+      @click=${() => void this.#download(open)}
+      >${t("box_status.misdated.download")}</wt-button
+    >`;
+  }
+
+  #downloadRefusal(open: MisdatedOpenView): TemplateResult | typeof nothing {
+    const refusal = this.downloadRefusals.get(open.incidentId);
+    return refusal === undefined
+      ? nothing
+      : html`<p class="error" role="alert" data-test="misdated-download-error">
+          ${codeMessage(refusal)}
+        </p>`;
+  }
+
+  async #download(open: MisdatedOpenView): Promise<void> {
+    const id = open.incidentId;
+    if (this.downloading.has(id)) return;
+    this.downloading = new Set([...this.downloading, id]);
+    const refusals = new Map(this.downloadRefusals);
+    refusals.delete(id);
+    this.downloadRefusals = refusals;
+    try {
+      const file = await this.api.downloadMisdatedSales(id);
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      // The server's own name for the file: the first sale's date as the box's clock read it.
+      link.download = `misdated-sales-${wallClock(open.from, open.fromOffsetMinutes).date}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.downloadRefusals = new Map([...this.downloadRefusals, [id, codeOf(error)]]);
+    } finally {
+      const asked = new Set(this.downloading);
+      asked.delete(id);
+      this.downloading = asked;
+    }
+  }
+
+  #renderHandled(health: BoxHealth, severalTables: boolean): TemplateResult | typeof nothing {
+    if (health.misdatedHandledCount === 0) return nothing;
+    return html`<wt-disclosure
+      data-test="misdated-handled"
+      heading=${fill("box_status.misdated.handled_heading", {
+        count: String(
+          this.handledOpen && this.handledEpisodes !== null
+            ? this.handledEpisodes.length
+            : health.misdatedHandledCount,
+        ),
+      })}
+      ?open=${this.handledOpen}
+      @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => this.#toggleHandled(event.detail.open)}
+      >${
+        this.handledOpen
+          ? html`${(this.handledEpisodes ?? []).map((episode) =>
+              this.#renderHandledEntry(episode, severalTables),
+            )}${
+              this.handledFailed
+                ? html`<p class="note" data-test="misdated-handled-unavailable">
+                    ${t("box_status.misdated.handled_read_error")}
+                  </p>`
+                : nothing
+            }`
+          : nothing
+      }</wt-disclosure
+    >`;
   }
 
   #renderMisdated(health: BoxHealth): TemplateResult | typeof nothing {
-    const tables = health.misdatedOpen.filter(
-      (open) => !open.unconfirmed && this.misdatedLists?.has(open.confirmationId) === true,
-    ).length;
+    const handledTables = this.handledOpen
+      ? (this.handledEpisodes ?? []).filter((episode) => episode.records !== null).length
+      : 0;
+    const tables =
+      health.misdatedOpen.filter(
+        (open) => !open.unconfirmed && this.misdatedLists?.has(open.confirmationId) === true,
+      ).length + handledTables;
     const entries = health.misdatedOpen
       .map((open) => this.#renderMisdatedEntry(open, tables > 1))
       .filter((entry) => entry !== null);
-    if (entries.length === 0 && !this.misdatedFailed) return nothing;
+    if (entries.length === 0 && !this.misdatedFailed && health.misdatedHandledCount === 0)
+      return nothing;
     return html`<section class="misdated" data-test="misdated">
       <h2>${t("box_status.misdated.title")}</h2>
       <p class="note" data-test="misdated-line">${t("box_status.misdated.line")}</p>
@@ -764,6 +986,7 @@ export class BoxStatusScreen extends LitElement {
             </p>`
           : nothing
       }
+      ${this.#renderHandled(health, tables > 1)}
     </section>`;
   }
 
@@ -846,8 +1069,15 @@ export class BoxStatusScreen extends LitElement {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderClockCheckDialog()}
+      ${this.#renderNoteDialog()}
     `;
   }
+}
+
+/** A sale's minute on the wall clock at the offset stored beside it, not the browser's zone. */
+function wallMinute(instant: string, offsetMinutes: number): string {
+  const { date, time } = wallClock(instant, offsetMinutes);
+  return `${date} ${time}`;
 }
 
 /** A time to the second, written so `wholeTimes` keeps its date and minute on one line. */

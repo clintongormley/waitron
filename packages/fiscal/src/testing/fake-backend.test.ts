@@ -70,6 +70,7 @@ describe("the clock-stop methods", () => {
     expect(fake.closeClockCheckByItself).toBeUndefined();
     expect(fake.waitingClockCheck).toBeUndefined();
     expect(fake.misdatedRecords).toBeUndefined();
+    expect(fake.misdatedDetail).toBeUndefined();
     expect(fake.noteClockProvedWrong).toBeUndefined();
   });
 });
