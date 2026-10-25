@@ -766,9 +766,11 @@ it("words a note refused on an already handled alert in both languages", () => {
 });
 
 it("words a refused note on an alert in both languages", () => {
-  expect(codeMessage("alert.note_exists", "en")).toBe("This alert already has a note.");
+  expect(codeMessage("alert.note_exists", "en")).toBe(
+    "This alert already has a note, which cannot be changed. Close this window to see it under Handled lists.",
+  );
   expect(codeMessage("alert.not_handled", "en")).toBe(
-    "This alert has not been marked handled yet.",
+    "This alert has not been marked handled yet. Close this window and use Mark handled, which takes a note too.",
   );
   for (const code of ["alert.note_exists", "alert.not_handled"]) {
     const spanish = codeMessage(code, "es");

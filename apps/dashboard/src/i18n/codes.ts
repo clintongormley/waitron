@@ -1269,12 +1269,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este aviso ya estaba marcado como resuelto, así que la nota no se ha guardado. Añádela desde Listas resueltas en Estado del equipo.",
   },
   "alert.note_exists": {
-    en: "This alert already has a note.",
-    es: "Este aviso ya tiene una nota.",
+    en: "This alert already has a note, which cannot be changed. Close this window to see it under Handled lists.",
+    es: "Este aviso ya tiene una nota, que no se puede cambiar. Cierra esta ventana para verla en Listas resueltas.",
   },
   "alert.not_handled": {
-    en: "This alert has not been marked handled yet.",
-    es: "Este aviso aún no se ha marcado como resuelto.",
+    en: "This alert has not been marked handled yet. Close this window and use Mark handled, which takes a note too.",
+    es: "Este aviso aún no se ha marcado como resuelto. Cierra esta ventana y usa Marcar como resuelto, que también admite una nota.",
   },
   "fiscal.not_filing": {
     en: "This box does not send records to the tax agency.",

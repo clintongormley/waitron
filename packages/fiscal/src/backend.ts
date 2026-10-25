@@ -272,7 +272,7 @@ export type MisdatedRecords = { known: true; records: MisdatedRecord[] } | { kno
 
 export interface MisdatedDetailRecord extends MisdatedRecord {
   kind: "issue" | "cancellation";
-  /** The stored fecha_expedicion_factura, YYYY-MM-DD; a cancellation's is the cancelled invoice's. */
+  /** The stored invoice issue date, YYYY-MM-DD; a cancellation's is the cancelled invoice's. */
   issueDate: string;
   /** The record's stored total, as hashed; null on a cancellation. */
   amount: string | null;

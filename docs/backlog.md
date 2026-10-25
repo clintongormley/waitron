@@ -4804,6 +4804,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   tab shows no notes; only the Box status page writes and shows them (A1088 decision 4). Left open
   by A1088.
 
+- **Box status's "cannot tell" sentence, and the note dialog's summary of it, write the stop's start
+  in the browser's time zone**, while the section's tables and the adviser's file write each sale's
+  time at its stored offset: the sentence is the shared `alertMessage` wording. Left open by A1088.
+
+- **An open list of wrongly dated sales whose list read failed shows Mark handled but no
+  Download** until a later read of the lists answers. Left open by A1088.
+
 - **The Box status page's Handled lists fold reads every handled list when opened, with no
   limit** (A1088 decision 1); page it if a venue gathers many. Left open by A1088.
 

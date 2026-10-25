@@ -2602,6 +2602,13 @@ full disk with a change waiting. The case is "a person's own personal-data downl
 full disk with a change waiting" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated
 exception to one `withTransaction` per route.
 
+Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
+one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
+`apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain. The cases are
+"reads a waiting check and the wrongly dated sales on a full disk with a change waiting, and leaves
+the change waiting" and "downloads a list on a full disk with a change waiting, and leaves the
+change waiting" in `apps/server/src/clock-confirm.route.test.ts`.
+
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a

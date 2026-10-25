@@ -2830,6 +2830,9 @@ and nothing guards it across screens:
   Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
   till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
   `*.unsaved.test.ts`;
+- A1088: Box status's note dialog (`apps/dashboard/src/widgets/misdated-note-dialog.ts`); Add
+  note's Save follows the rule. Its leave cases are in `misdated-note-dialog.unsaved.test.ts`
+  beside it;
 - A585-1: the Staff roles page's staff-role dialog (`packages/staffing/src/dashboard/staff-role-dialog.ts`).
   Its leave cases are in `packages/staffing/src/dashboard/staff-role-dialog.unsaved.test.ts`;
 - A585-4: the season and special-day staffing painters
@@ -2887,6 +2890,8 @@ These open already savable:
 - the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
 - the theme name dialog's Make a copy and Save as new theme…: pressing Save is the copy
   (`savableAtOpen`, `apps/dashboard/src/widgets/theme-name-dialog.ts`);
+- the note dialog's Mark handled: marking the list handled is the action, and the note is optional
+  (`savableAtOpen`, `apps/dashboard/src/widgets/misdated-note-dialog.ts`);
 - the calibration wizard when an add opened it: after a fresh add it confirms a new printer's
   default settings, and after a re-add pressing Save is what keeps the printer on, because closing
   the wizard switches it off again (`#calibrationOpenedByAdd` in
