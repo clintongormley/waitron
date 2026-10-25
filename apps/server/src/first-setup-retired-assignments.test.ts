@@ -190,6 +190,7 @@ async function fixture(
     previousIndex?: number;
     document?: boolean;
     damage?: "missing-original" | "syntax" | "binding" | "digest";
+    stray?: boolean;
     source?: "local" | "outside";
     outsideChange?: "replace" | "remove";
   },
@@ -257,6 +258,8 @@ async function fixture(
       else manifest.statement.createdAt = "2025-10-16T11:40:00.000Z";
       await writeFile(path, JSON.stringify(manifest));
     }
+    if (retained.stray)
+      await writeFile(join(anchor.stateDir, "first-fiscal-documents", "stray.json"), "{}");
   }
   const publicPath =
     retained?.source === "outside"
@@ -586,6 +589,16 @@ it("a damaged recovery document does not hide the rest of the history: the note 
     history: retainedHour(),
   });
   await expectNoteBounds(f, encodeMinuteIdentity(instant(42)), false);
+});
+it("a damaged recovery document beside another file in the documents folder still refuses with a domain refusal", async () => {
+  await expectStartAgainRefused(
+    fixture(43, request.taxId, "production", false, 1, {
+      document: true,
+      damage: "syntax",
+      stray: true,
+    }),
+    "setup.attempt_invalid",
+  );
 });
 it("a damaged recovery document beside invalid public evidence still refuses with a domain refusal", async () => {
   await expectStartAgainRefused(
