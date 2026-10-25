@@ -1258,8 +1258,8 @@ Two kinds of sale dated wrongly reach no list on the Box status page and no file
   check waited is caught when putting it right brings the payment stop back, but only when the box's
   15-second look sees the stop return, which it can miss when the clock was little more than a
   minute ahead; the sales that clock dated are then in no list.
-- **A stop the box "cannot tell" about.** When the stop ended by itself and the next witness
-  disagreed with the box, the alert asks the manager to go through every sale since the stop began,
+- **A stop the box "cannot tell" about.** When the stop ended by itself but nothing confirmed the
+  box's clock, the alert asks the manager to go through every sale since the stop began,
   but the box lists none of them, so the page shows no table and offers no download
   (`apps/dashboard/src/screens/box-status-screen.ts`, the actions row; the download route answers
   `alert.not_found` for it, `apps/server/src/box-health-api.ts`).

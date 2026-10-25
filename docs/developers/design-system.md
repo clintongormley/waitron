@@ -5554,11 +5554,13 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   `wt-data-table` (Invoice, Time recorded), read from `GET /api/box/clock-misdated` only while such
   an alert is open, with a sentence above it when the list may be short (`partial`); an alert that
   cannot tell draws its sentence and no table. Each entry ends with a row of small secondary
-  buttons that wraps: "Download for your adviser" (never on an alert that cannot tell), which
+  buttons that wraps: "Download for your adviser" (only beside a drawn list, so never on an alert
+  that cannot tell), which
   saves `GET /api/box/clock-misdated/:incidentId/download` as `misdated-sales-<date>.csv` and shows
   a refusal under the row, and Mark handled. A failed list read says "The list of sales dated
   wrongly could not be read." under the section. Below the entries, while any alert has been
-  handled, a closed `wt-disclosure` "Handled lists ({count})" counts them from the box read; only
+  handled, a closed `wt-disclosure` "Handled lists ({count})" counts them from the box read while closed, and the lists it read
+  while open; only
   while it is open does the page read `GET /api/box/clock-misdated/handled`, again when alerts or
   people change. Each handled entry, newest first, says who marked it handled and when
   ("Marked handled by {name} on {time}.", "by the box", or no name), its note ("Note: …") when it
