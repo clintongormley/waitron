@@ -412,7 +412,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function optionalString(value: unknown, field: string): string | undefined {
+function stringUnlessNullish(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "string") throw new AppError("management.request_invalid", { field });
   return value;
@@ -439,8 +439,8 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
       if (typeof table.label !== "string") refuse(`${at}.label`);
       if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
       if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
-      const id = optionalString(table.id, `${at}.id`);
-      const shortName = optionalString(table.shortName, `${at}.shortName`);
+      const id = stringUnlessNullish(table.id, `${at}.id`);
+      const shortName = stringUnlessNullish(table.shortName, `${at}.shortName`);
       const partKeys = table.partKeys;
       if (!Array.isArray(partKeys) || !partKeys.every((key) => typeof key === "string")) {
         refuse(`${at}.partKeys`);

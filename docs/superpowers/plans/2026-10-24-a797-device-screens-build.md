@@ -2039,7 +2039,7 @@ the builders of the five suites that draw or compute the Ready bar
   with short names "T5" and "T6" → one entry `"T5+T6"`. Reason: D8.
 - "uses today's name, not the party's given name" (`:150-160`): expected "Ventana" (today's
   name). Becomes "uses the saved short name, not today's name or the party's": `shortName: "T2"`,
-  today's name "Ventana", party name "Ana" → `"T2"`. Reason: D8.
+  today's name "Window", party name "Alex" → `"T2"`. Reason: D8.
 The four other suites pass because their builders' short name equals the label, which is what
 they show today (each case's text is unchanged).
 

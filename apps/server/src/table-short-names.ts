@@ -1,6 +1,3 @@
-// Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
-// its codes.
-import "./errors.js";
 import {
   AppError,
   SHORT_NAME_MAX,
@@ -8,6 +5,7 @@ import {
   shortNameKey,
   shortNameLength,
 } from "@waitron/shared";
+import "./errors.js";
 
 export interface ShortNameEntry {
   label: string;

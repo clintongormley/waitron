@@ -8,6 +8,7 @@ import type { FloorPlanEditor } from "./floor-plan-editor.js";
 import type { FloorPlanTablesPanel } from "./floor-plan-tables-panel.js";
 import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import {
   addTables,
   changePlacement,
@@ -170,7 +171,7 @@ it("a name another table uses as its short name says which table, in English and
   setLocale("es-ES");
   await el.updateComplete;
   expect(el.fieldError?.message).toBe(
-    "Terrace 1 ya lo usa como nombre corto. Elige otro nombre para esta mesa.",
+    es["floor_plan_editor.label_shown_as_short_name"].replace("{takenBy}", "Terrace 1"),
   );
 });
 

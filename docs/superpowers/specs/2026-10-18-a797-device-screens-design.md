@@ -385,6 +385,8 @@ Every table gets a **short name** beside its full name (owner, Q42 (a), ~21:12).
   floor 1" → "TF1"). When the automatic short name clashes, it is still proposed in the field and
   the save refuses it the same way; nothing picks another one silently. Compared ignoring case
   ("t1" is "T1"), and enforced by the database (§5).
+  (2026-10-25, slice 1: until slice 2's field, a proposal another table holds leaves the table
+  with none; see §5 and the build plan's slice 1, D4.)
 - **Where it shows:** tight places show the short name — the handheld's bar buttons, the Ready bar,
   kitchen-screen cards and pass cards. The table's own header and receipts show the full name.
 - **Where it is edited:** the floor-plan editor's table panel (its Name field,
@@ -505,7 +507,8 @@ Each point is (read); the plan confirms it before relying on it.
   table with none rather than refusing the save; but a table the save adds or renames that is left
   with none is refused `table.label_taken` when another zone's table already holds its name as a
   short name, or as its full name having none; see the
-  [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4.)
+  [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4.. An import that carries no short name leaves its tables with none, and a file never carries
+  `short_name_key`, which the import sets; see the build plan's slice 1, D10.)
 - **Whose unsent dishes** (slice 3). The floor read gives each party's unsent New orders with the
   owner's name only (`UnsentDraft`, `apps/server/src/order-drafts.ts:343-348`); the bar needs the
   owner's id and the draft's last-saved time (`order_drafts.owner_id`, `.updated_at`,

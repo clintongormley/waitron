@@ -19,11 +19,20 @@ describe("the zone error codes carry their declared params", () => {
     expect(error.code).toBe("zone.name_taken");
     expect(error.params).toEqual({ name: "Terraza" });
   });
+});
 
+describe("the table error codes carry their declared params", () => {
   it("constructs table.short_name_taken with the short name, the table holding it and its field", () => {
     const params = { shortName: "T1", takenBy: "Terrace 1", field: "shortName" as const };
     const error = new AppError("table.short_name_taken", params);
     expect(error.code).toBe("table.short_name_taken");
+    expect(error.params).toEqual(params);
+  });
+
+  it("constructs table.label_taken with the name and the table showing it as its short name", () => {
+    const params = { label: "T1", takenBy: "Terrace 1" };
+    const error = new AppError("table.label_taken", params);
+    expect(error.code).toBe("table.label_taken");
     expect(error.params).toEqual(params);
   });
 });

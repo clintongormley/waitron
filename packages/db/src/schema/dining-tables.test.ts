@@ -35,7 +35,7 @@ describe("dining_tables columns", () => {
         id: LOCATION_B,
         name: "Loc B",
         invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
+        operationDescription: "Restaurant",
       },
     ]);
   });
