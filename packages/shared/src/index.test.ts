@@ -148,6 +148,7 @@ describe("package public surface (./index.js)", () => {
     expect(shared.shortNameLength).toBe(tableShortName.shortNameLength);
     expect(shared.shortNameKey).toBe(tableShortName.shortNameKey);
     expect(shared.proposeShortName).toBe(tableShortName.proposeShortName);
+    expect(shared.isShortNameShaped).toBe(tableShortName.isShortNameShaped);
   });
 
   it("re-exports the string-to-stored-count converters", () => {

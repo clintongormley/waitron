@@ -14,6 +14,11 @@ export function shortNameLength(value: string): number {
   return characters(value).length;
 }
 
+/** Not blank, and at most {@link SHORT_NAME_MAX} characters. */
+export function isShortNameShaped(value: string): boolean {
+  return value.trim() !== "" && shortNameLength(value) <= SHORT_NAME_MAX;
+}
+
 /** The steps are `@waitron/identity`'s `foldForUniqueness`, whose comment gives the reason for
  * each. */
 export function shortNameKey(shortName: string): string {

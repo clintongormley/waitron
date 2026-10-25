@@ -71,6 +71,7 @@ export {
   TABLE_SEPARATOR,
 } from "./party-name.js";
 export {
+  isShortNameShaped,
   proposeShortName,
   SHORT_NAME_MAX,
   shortNameKey,

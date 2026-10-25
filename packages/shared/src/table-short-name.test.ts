@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isShortNameShaped,
   proposeShortName,
   SHORT_NAME_MAX,
   shortNameKey,
@@ -69,4 +70,17 @@ describe("proposeShortName", () => {
 
 it("holds a short name to five characters", () => {
   expect(SHORT_NAME_MAX).toBe(5);
+});
+
+describe("isShortNameShaped", () => {
+  it.each([
+    ["T1", true],
+    ["T1234", true],
+    ["Té123", true],
+    ["T12345", false],
+    ["", false],
+    ["   ", false],
+  ])("judges %j as %s", (value, expected) => {
+    expect(isShortNameShaped(value)).toBe(expected);
+  });
 });

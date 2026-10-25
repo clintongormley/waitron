@@ -1,10 +1,4 @@
-import {
-  AppError,
-  SHORT_NAME_MAX,
-  proposeShortName,
-  shortNameKey,
-  shortNameLength,
-} from "@waitron/shared";
+import { AppError, isShortNameShaped, proposeShortName, shortNameKey } from "@waitron/shared";
 import "./errors.js";
 
 export interface ShortNameEntry {
@@ -48,7 +42,7 @@ export function resolveShortNames(
   entries.forEach((entry, index) => {
     if (entry.shortName === undefined) return;
     const value = entry.shortName.trim();
-    if (value === "" || shortNameLength(value) > SHORT_NAME_MAX) {
+    if (!isShortNameShaped(value)) {
       throw new AppError("floor_plan.invalid", { field: `tables.${index}.shortName` });
     }
     const holder = claimed.get(shortNameKey(value));
