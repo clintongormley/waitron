@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright";
 import { renderTrustPage, type TrustPageInput } from "./trust-page.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
+import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 
 let browser: Browser | undefined;
@@ -92,7 +93,9 @@ it.each([403, 503])(
       await page.locator("#connection-repair").click();
       await expect
         .poll(() => page.locator("#connection-error").textContent())
-        .toBe("The connection could not be set up. Try again.");
+        .toBe(
+          "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection.",
+        );
       expect(await page.locator("body").textContent()).not.toContain("private filesystem details");
       expect(await page.locator("#connection-repair").isEnabled()).toBe(true);
       await page.locator("#connection-repair").click();
@@ -160,7 +163,9 @@ it("does not call a nonhealthy reply a completed connection", async () => {
     await page.locator("#connection-repair").click();
     await expect
       .poll(() => page.locator("#connection-error").textContent())
-      .toBe("The connection could not be set up. Try again.");
+      .toBe(
+        "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection.",
+      );
     expect(await page.locator("#connection-continue").isVisible()).toBe(false);
     expect(await page.locator("#connection-repair").isEnabled()).toBe(true);
   } finally {
@@ -244,3 +249,32 @@ it("a reloaded healthy bootstrap retains its public certificate before reconnect
     await page.close();
   }
 });
+
+it.each(["en", "es"] as const)(
+  "a refused layout gives an installer next step before and after another refusal (%s)",
+  async (locale) => {
+    const page = await browser!.newPage();
+    try {
+      const guidance =
+        locale === "en"
+          ? "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection."
+          : CONNECTION_TEXT.es.failed;
+      await open(
+        page,
+        { state: "refused", trust: "retained", caAvailable: false },
+        async () => ({ status: 503, body: { error: "private filesystem details" } }),
+        { locale },
+      );
+      expect(await page.locator("#connection-status").textContent()).toBe(guidance);
+      expect(await page.locator("#connection-continue").isVisible()).toBe(false);
+      await page.locator("#connection-repair").click();
+      await expect.poll(() => page.locator("#connection-error").textContent()).toBe(guidance);
+      expect(await page.locator("#connection-repair").isEnabled()).toBe(true);
+      expect(await page.locator("#connection-continue").isVisible()).toBe(false);
+      expect(await page.locator("body").textContent()).not.toContain("private filesystem details");
+      expect(await page.locator("input,form,textarea,select").count()).toBe(0);
+    } finally {
+      await page.close();
+    }
+  },
+);

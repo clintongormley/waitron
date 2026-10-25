@@ -8,7 +8,10 @@ node recovery key. The old attempt and its files stay in their own folders; open
 does not give you access to those local records.
 
 Use the box's secure connection. If your browser does not trust it, choose **Set up secure
-connection** on the repair page first. Stop the former box and coordinate with the other venues:
+connection** on the repair page first. If the connection still cannot be set up after retrying,
+ask whoever installed the server to check its secure connection.
+
+Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.
 
 ## Choose your copy {#source}

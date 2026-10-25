@@ -8,8 +8,10 @@ del nodo indicada en la copia elegida. El intento anterior y sus archivos se con
 carpetas; abrir una copia no da acceso a esos registros locales.
 
 Usa la conexión segura del equipo. Si el navegador no confía en ella, elige primero **Configurar
-conexión segura** en la página de reparación. Apaga la caja anterior y coordínate con los otros
-locales: solo una persona debe recuperar este contribuyente a la vez.
+conexión segura** en la página de reparación. Si sigue sin poder configurarse después de
+reintentarlo, pide a quien instaló el servidor que revise su conexión segura.
+
+Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
 ## Elige tu copia {#source}
 

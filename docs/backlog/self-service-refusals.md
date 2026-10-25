@@ -709,6 +709,8 @@ changes take their required review and existing protected-writer approvals.
 
 ### tls-repair
 
-Use the existing **Public TLS repair refuses linked layouts** entry in the Box area. Add truthful
-installer/administrator guidance for the existing refusal; changing linked-file custody checks is
-a separate implementation decision. No duplicate backlog entry is needed.
+2026-10-25: the public connection page now names the installer as the next step after a repeated
+failure, in English and Spanish, for an initial refusal and a failed repair request. It keeps the
+retry action and does not show private server details. The linked-layout checks are unchanged.
+Supporting repair of a damaged linked layout remains in **Public TLS repair refuses linked layouts**
+in the Box area; the original audit above records the earlier wording.

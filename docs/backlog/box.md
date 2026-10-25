@@ -565,7 +565,9 @@ A987's design does not change the route
   but a damaged linked folder or managed file cannot be repaired through the public guide.
   Decide whether to support links contained within the state folder while retaining archive,
   exclusion and path-containment checks; cover the restored-layout startup and repair path.
-  Found by A733's whole-branch review; see the server README's secure-connection section.
+  The public refusal now directs you to the installer after a repeated failure (A1089); support
+  for repairing linked layouts remains open. Found by A733's whole-branch review; see the server
+  README's secure-connection section.
 
 ## On a full disk, a box whose kept certificates cannot be used shows the connection set-up page, with no word of the full disk.
 
