@@ -1342,7 +1342,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   APPROVED 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by default);
   building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
   retired) landed in #2047; slice 3 (a confirmed late send accepted and marked; the
-  manager's-PIN setting is per department) in review as #2051;
+  manager's-PIN setting is per department) landed in #2051;
   slice 4 (the till's window) next.
   [Detail](backlog/service-periods.md#a789--last-orders-without-an-offset-a-period-is-when-its-menu-can-be-ordered)
 
