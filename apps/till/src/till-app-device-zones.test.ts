@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeviceZoneSelection } from "@waitron/venue-service";
+import { applyTokens } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, draftServer, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  draftServer,
+  mountWidget,
+  pageAt,
+  resetPage,
+  servedMenus,
+  toggleFloorView,
+} from "./widgets/test-helpers.js";
+import { billOptions, listPage } from "../test/find-bill-fixtures.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillApi, FloorZone, ZoneOfferCatalogue } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
@@ -1991,5 +2001,264 @@ describe("a handheld's zones", () => {
   it("a kitchen display reads no zones", async () => {
     const { api } = await mountHandheld(selection(["garden"], "garden"), "kds");
     expect(api.getDeviceZones).not.toHaveBeenCalled();
+  });
+
+  describe("the Ready bar and the remembered view", () => {
+    const readyIn = (id: string, zoneId: string) => ({
+      ...tableIn(id, zoneId),
+      signals: [{ kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] }],
+    });
+    const readyTables = () => [readyIn("t-room", "room"), readyIn("t-garden", "garden")];
+    const floorKeys = () =>
+      Object.keys(localStorage).filter((key) => key.startsWith("waitron.floorView."));
+    afterEach(async () => {
+      for (const key of floorKeys()) localStorage.removeItem(key);
+      vi.restoreAllMocks();
+      document.documentElement.removeAttribute("data-wt-theme-root");
+      await resetPage();
+    });
+    const readyBar = (el: TillApp) => floor(el)?.shadowRoot!.querySelector("[data-ready-bar]");
+    const summary = (el: TillApp) => floor(el)?.shadowRoot!.querySelector("[data-station-summary]");
+    const readyEntries = (el: TillApp) =>
+      [...floor(el).shadowRoot!.querySelectorAll("[data-ready-table]")].map((entry) =>
+        entry.getAttribute("data-ready-table"),
+      );
+    const viewOf = (el: TillApp) =>
+      floor(el).shadowRoot!.querySelector("wt-floor-map") === null ? "list" : "map";
+    async function showZone(el: TillApp, zoneId: string) {
+      floor(el).shadowRoot!.querySelector<HTMLElement>(`.tabs [data-zone="${zoneId}"]`)!.click();
+      await floor(el).updateComplete;
+      await vi.waitFor(() => expect(activeTab(el)).resolves.toBe(zoneId));
+    }
+    async function onReadyFloor(el: TillApp) {
+      await vi.waitFor(() => expect(floor(el)?.tables.length).toBe(2));
+      await floor(el).updateComplete;
+    }
+
+    const rgb = (colour: string) => colour.match(/\d+/g)!.slice(0, 3).map(Number);
+    const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
+    /** The colour painted at page point (x, y), read from a real screenshot of `within`. */
+    async function paintedAt(within: HTMLElement, x: number, y: number): Promise<number[]> {
+      const shot: unknown = await page.screenshot({ element: within, base64: true, save: false });
+      const image = new Image();
+      image.src = `data:image/png;base64,${shot as string}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const box = within.getBoundingClientRect();
+      const k = image.width / box.width;
+      return [
+        ...context
+          .getImageData(Math.round((x - box.left) * k), Math.round((y - box.top) * k), 1, 1)
+          .data.slice(0, 3),
+      ];
+    }
+
+    it.each(handhelds)(
+      "a handheld's Floor draws the Ready bar for its chosen zones only (%s)",
+      async (formFactor) => {
+        const { el } = await mountHandheld(selection(["room"], "room"), formFactor, {
+          getTablesState: vi.fn().mockResolvedValue(readyTables()),
+        });
+        await onReadyFloor(el);
+        await vi.waitFor(() => expect(readyBar(el)).not.toBeNull());
+        expect(readyEntries(el)).toEqual(["t-room"]);
+        expect(summary(el)).toBeNull();
+      },
+    );
+
+    it("a till with the same tables draws the summary and no bar", async () => {
+      const { el } = await mount(selection(["room"], "room"), {
+        getTablesState: vi.fn().mockResolvedValue(readyTables()),
+      });
+      await onReadyFloor(el);
+      await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+      expect(readyBar(el)).toBeNull();
+    });
+
+    it.each([
+      ["phone-portrait", 390, 844],
+      ["tablet-landscape", 1024, 768],
+    ] as const)(
+      "opening a table from the bar takes the Floor and its bar off the screen; an overlay from ☰ is drawn over the bar (%s, %i px)",
+      async (formFactor, width, height) => {
+        // The real page: tokens on <html> (main.ts), index.html's style, and the app inside #app.
+        await pageAt(width, height);
+        applyTokens(document.documentElement);
+        const drafts = draftServer(() => ({ tabId: "bill-t-room", revision: 1, groups: [] }));
+        drafts.bills.add("bill-t-room");
+        const { el } = await mountHandheld(selection(["room"], "room"), formFactor, {
+          getTablesState: vi.fn().mockResolvedValue(readyTables()),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+          listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+          getPartyBills: vi.fn().mockResolvedValue([]),
+          listDrafts: drafts.listDrafts,
+          saveDraft: drafts.saveDraft,
+          submitDraft: drafts.submitDraft,
+          findBillOptions: vi.fn().mockResolvedValue(billOptions),
+          listBills: vi.fn().mockResolvedValue(listPage()),
+        });
+        el.parentElement!.id = "app";
+        await onReadyFloor(el);
+        await vi.waitFor(() => expect(readyBar(el)).not.toBeNull());
+        // D6's open point: the bar's foot is on screen in the real page frame.
+        expect(readyBar(el)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          window.innerHeight,
+        );
+
+        floor(el).shadowRoot!.querySelector<HTMLElement>('[data-ready-table="t-room"]')!.click();
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("till-table-order-screen")).not.toBeNull(),
+        );
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("till-floor-screen")).toBeNull();
+
+        await userEvent.click(
+          [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+            (tab) => tab.textContent!.trim() === "Floor",
+          )!,
+        );
+        await onReadyFloor(el);
+        await vi.waitFor(() => expect(readyBar(el)).not.toBeNull());
+        const more = shell(el).shadowRoot!.querySelector<
+          HTMLElement & { updateComplete: Promise<unknown> }
+        >('header wt-row-actions[data-test="more-menu"]')!;
+        await more.updateComplete;
+        await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+        await userEvent.click(more.querySelector<HTMLElement>("wt-button.find-bill")!);
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("till-find-bill-screen")).not.toBeNull(),
+        );
+        const drill = shell(el).shadowRoot!.querySelector<HTMLElement>(".drill")!;
+        await vi.waitFor(() => expect(drill.hidden).toBe(false));
+        await el.updateComplete;
+        const bar = readyBar(el)!;
+        const box = bar.getBoundingClientRect();
+        const centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        expect(centre.y).toBeLessThan(window.innerHeight);
+        const painted = await paintedAt(document.body, centre.x, centre.y);
+        const overlay = rgb(getComputedStyle(drill).backgroundColor);
+        const barColour = rgb(getComputedStyle(bar).backgroundColor);
+        // The control: the bar and the overlay are painted in colours the check can tell apart.
+        expect(distance(overlay, barColour)).toBeGreaterThan(4);
+        expect(distance(painted, overlay)).toBeLessThan(4);
+      },
+    );
+
+    it.each(handhelds)(
+      "List or Map survives a reload on this device, per zone (%s)",
+      async (formFactor) => {
+        const chosen = selection(["room", "garden"], "room");
+        const first = await mountHandheld(chosen, formFactor);
+        await showZone(first.el, "room");
+        expect(viewOf(first.el)).toBe("list");
+        await toggleFloorView(floor(first.el));
+        expect(viewOf(first.el)).toBe("map");
+        cleanupWidgets();
+
+        const { el } = await mountHandheld(chosen, formFactor);
+        await showZone(el, "room");
+        expect(viewOf(el)).toBe("map");
+        await showZone(el, "garden");
+        expect(viewOf(el)).toBe("list");
+        const keys = floorKeys();
+        expect(keys).toHaveLength(1);
+        expect(keys[0]).toContain('"device"');
+        expect(keys[0]).toContain('"room"');
+      },
+    );
+
+    it("another device id in the same browser starts from the default", async () => {
+      const chosen = selection(["room", "garden"], "room");
+      const first = await mountHandheld(chosen);
+      await showZone(first.el, "room");
+      await toggleFloorView(floor(first.el));
+      expect(viewOf(first.el)).toBe("map");
+      cleanupWidgets();
+
+      const { el } = await mountHandheld(chosen, "phone-portrait", {
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "other",
+          name: "Phone",
+          formFactor: "phone-portrait",
+          profileId: "profile",
+        }),
+      });
+      await showZone(el, "room");
+      expect(viewOf(el)).toBe("list");
+    });
+
+    it("a refused store still keeps the choice for this session", async () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new DOMException("refused", "QuotaExceededError");
+      });
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"));
+      await showZone(el, "room");
+      await toggleFloorView(floor(el));
+      expect(viewOf(el)).toBe("map");
+      await showZone(el, "garden");
+      expect(viewOf(el)).toBe("list");
+      await showZone(el, "room");
+      expect(viewOf(el)).toBe("map");
+      expect(floorKeys()).toEqual([]);
+    });
+
+    it("the bar follows a profile switch from a till profile to a handheld one", async () => {
+      const handheldSetup = {
+        locale: "en-GB",
+        invoiceLocale: "en-GB",
+        venueName: "Restaurant",
+        nif: "B12345678",
+        orderFlow: "prepay",
+        fireControl: "waiter",
+        courses: [],
+        cardProvider: "none",
+        tipsEnabled: false,
+        formFactor: "phone-portrait",
+        capabilities: ["take-orders"],
+        inactivityTimeoutSeconds: null,
+        nodeId: "node",
+        servers: [],
+      };
+      const { el, api } = await mount(selection(["room"], "room"), {
+        getTablesState: vi.fn().mockResolvedValue(readyTables()),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "device",
+          name: "Till",
+          formFactor: "till",
+          profileId: "profile",
+          approvedProfiles: [
+            { id: "profile", name: "Bar till" },
+            { id: "other", name: "Waiter" },
+          ],
+        }),
+        switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: "other" }),
+      });
+      await onReadyFloor(el);
+      await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+      expect(readyBar(el)).toBeNull();
+      api.getTill.mockResolvedValue(handheldSetup);
+      api.getDeviceZones.mockResolvedValue({
+        ...selection(["room"], "room"),
+        profileId: "other",
+        snapshot: "other",
+      });
+      shell(el).dispatchEvent(new CustomEvent("open-profile", { bubbles: true, composed: true }));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-profile-dialog")).not.toBeNull(),
+      );
+      el.shadowRoot!.querySelector("till-profile-dialog")!.dispatchEvent(
+        new CustomEvent("profile-switch", {
+          detail: { profileId: "other" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await vi.waitFor(() => expect(readyBar(el)).toBeTruthy());
+      expect(summary(el)).toBeNull();
+    });
   });
 });
