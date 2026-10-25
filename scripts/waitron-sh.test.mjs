@@ -1521,6 +1521,7 @@ describe("waitron.sh reset", () => {
     writeFileSync(join(state, "first-setup-start-again-confirmations", "one.json"), "{}");
     writeFileSync(join(state, "first-setup.json"), "{}");
     writeFileSync(join(state, "trading.env"), "WAITRON_ENV=preproduction\n");
+    writeFileSync(join(state, ".leftover"), "x");
     const r = spawnSync("sh", ["-c", match[1]], {
       encoding: "utf8",
       env: { PATH: process.env.PATH, WAITRON_STATE_DIR: state },
