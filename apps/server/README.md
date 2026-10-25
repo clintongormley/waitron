@@ -69,16 +69,22 @@ it will keep failing until whatever is wrong is fixed.
 If your server cannot serve its saved connection certificate, open its known HTTP address on the
 venue network and choose **Set up secure connection**. The public page is also at
 `/setup/connection`; interrupted setup opens it in a separate tab so your password draft stays in
-place. This HTTP page accepts only a certificate-repair action. Do not enter a password, recovery
-key or private certificate there.
+place. The HTTP page offers managed certificate repair, a read-only **Check again** and **Stop**
+for the current browser attempt. Do not enter a password, recovery key or private certificate there.
 
 Repair keeps the existing certificate authority when its certificate and signing key remain usable.
 If your device already trusts that authority, keep its installed certificate. If the authority is lost
 or unusable, the page tells you to install and trust the new public certificate on each device.
 Follow the device's installation help, then open the HTTPS link and check that the page it opens
-has no certificate warning before recovering setup. An installer-supplied certificate needs your
-installer's attention; this action repairs only Waitron-managed material. If repair still fails
-after retrying, ask whoever installed the server to check its secure connection.
+has no certificate warning before recovering setup. With a separately installed certificate,
+check the HTTPS address and stop on a warning; this page cannot replace that certificate.
+If your device blocks installation, use a venue device that permits it.
+
+**Check again** reloads the public inspection without sending repair. **Stop** hides this attempt's
+actions without another request; you can close the tab or check again. Both controls wait while a
+repair request is pending. If repair keeps failing, stop here: some certificate problems need a
+repair this page does not offer. Authenticated certificate diagnosis/replacement and linked-layout
+repair remain [open work](../../docs/backlog/box.md#authenticated-server-certificate-recovery).
 
 Repair retains the original fixed TLS files under a private `tls/repair-archive/` directory and
 resumes a reserved replacement after interruption. It does not recreate the vault or change the

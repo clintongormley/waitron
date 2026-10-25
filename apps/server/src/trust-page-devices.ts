@@ -60,7 +60,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
     ],
     removal: [
       "Search the Start menu for “Manage user certificates”. Under Trusted Root Certification Authorities, then Certificates, delete the old Waitron entry.",
-      "An administrator must remove a copy that was installed for the whole computer.",
+      "For a copy installed for the whole computer, sign in to Windows with an administrator account to remove it.",
     ],
     notes: [
       "Using Firefox? Allow installed third-party root certificates in its Privacy &amp; Security settings, or import the file with Firefox's own certificate manager.",
@@ -80,7 +80,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
     ],
     notes: [
       "Install the file in each browser you will use. Firefox on Linux keeps its own list — see its instructions.",
-      "If a browser your administrator manages offers no import, ask them to install the file for you.",
+      "If importing or removing is blocked, use a venue device that permits it.",
     ],
   },
   chromeos: {
@@ -92,9 +92,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Close Chrome completely, then reopen this page.",
     ],
     removal: ["Delete the old Waitron entry in the same certificate manager you imported it into."],
-    notes: [
-      "On a managed Chromebook, ask your administrator if importing or removing is unavailable to you.",
-    ],
+    notes: ["If importing or removing is blocked, use a venue device that permits it."],
   },
   android: {
     heading: "Install it on this Android phone or tablet",
