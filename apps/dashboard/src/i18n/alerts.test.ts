@@ -309,10 +309,10 @@ describe("a backup that stopped before reaching any destination", () => {
   it("says the box is short of disk space", () => {
     const params = { errorCode: "backup.staging_space_low" };
     expect(alertMessage("backup.run_stopped", params, "en")).toBe(
-      `${LEAD_EN} The box does not have enough free disk space to prepare it. Contact support.`,
+      `${LEAD_EN} The box does not have enough free disk space to prepare it. On Box status, use Free if available to delete leftover working files, old logs and crash reports. Leave without pressing Free to skip cleanup. If that is not enough, Free cannot remove other files for you.`,
     );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} El equipo no tiene espacio libre suficiente en disco para prepararla. Contacta con soporte.`,
+      `${LEAD_ES} ${ALERT_WORDS.backup_stop!.words["backup.staging_space_low"]!.es}`,
     );
   });
 
