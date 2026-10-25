@@ -21,6 +21,7 @@ import {
   type LateSendAsked,
 } from "./state/late-send.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
+import { floorViewChoices, type FloorViewChoices } from "./state/floor-view-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
@@ -1757,6 +1758,15 @@ export class TillApp extends LitElement {
         z-index: 10;
       }
 
+      /* The Ready bar, no taller than the offset above, sits at the scrolling area's foot, which
+         the page's padding lifts off the window's bottom. */
+      .app:has(till-floor-screen[ready-bar]) .submitted-toast {
+        bottom: calc(
+          var(--wt-page-padding) + var(--wt-tap-min) + 2 * var(--wt-space-3) +
+            env(safe-area-inset-bottom)
+        );
+      }
+
       .error-action {
         display: block;
         margin-top: var(--wt-space-2);
@@ -2846,6 +2856,7 @@ export class TillApp extends LitElement {
   @state() private profileServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
   #zoneMenuMemory?: ZoneMenuMemory;
+  #floorViewMemory?: { origin: string; deviceId: string; choices: FloorViewChoices };
   #counterDefaultMenuId: string | null = null;
   #tableDefaultMenuId: string | null = null;
   #heldOpenCheck: number | undefined;
@@ -5877,6 +5888,24 @@ export class TillApp extends LitElement {
       this.#zoneMenuMemory = new ZoneMenuMemory(storage);
     }
     return this.#zoneMenuMemory;
+  }
+
+  /** The same object while the origin and device stay, so a redraw does not reset the Floor's view. */
+  #floorViewChoices(): FloorViewChoices | undefined {
+    const deviceId = this.deviceId;
+    if (deviceId === undefined) return undefined;
+    const origin = this.router?.current ?? location.origin;
+    const kept = this.#floorViewMemory;
+    if (kept?.origin === origin && kept.deviceId === deviceId) return kept.choices;
+    let storage: Storage | null = null;
+    try {
+      storage = localStorage;
+    } catch {
+      // A refused storage getter still permits this app instance's choices.
+    }
+    const choices = floorViewChoices(storage, { origin, deviceId });
+    this.#floorViewMemory = { origin, deviceId, choices };
+    return choices;
   }
 
   #zoneMenuIdentity(zoneId: string | undefined): ZoneMenuIdentity | undefined {
@@ -18224,6 +18253,8 @@ export class TillApp extends LitElement {
         .canOpenStation=${this.#allowsDestination("station")}
         .canChangeToday=${this.capabilities.includes("take-orders")}
         .canMarkSteps=${this.capabilities.includes("take-orders")}
+        .handheld=${kindOfFormFactor(this.formFactor ?? "") === "handheld"}
+        .viewMemory=${this.#floorViewChoices()}
       ></till-floor-screen>`;
     }
     if (tab === "order") return this.#embeddedOrderBody();

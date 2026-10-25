@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-he
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { TillSeatDialog } from "../widgets/seat-dialog.js";
-import type { FloorZone, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -59,6 +59,45 @@ function today(over: Partial<TableToday> = {}): TableToday {
 
 function planned(id: string, over: Partial<TableToday> = {}): TableState {
   return table({ id, label: id.slice(1), today: today(over) });
+}
+
+function party(): TableParty {
+  return {
+    kitchenNote: { scope: { partyId: "v2" }, note: null, revision: 0, ownerRevision: 3 },
+    id: "v2",
+    revision: 3,
+    guestCount: 2,
+    state: "open",
+    name: null,
+    displayName: "Table 2",
+    mainBillId: "wo-2",
+    outstanding: "20.00",
+    billCount: 1,
+    tableIds: ["t2"],
+    unsentDrafts: [],
+    reminder: null,
+  };
+}
+
+/** Table 2, seated in the list-view zone, with `ready` dishes waiting at the bar (0: none). */
+function table2(ready: number): TableState {
+  return table({
+    id: "t2",
+    label: "Table 2",
+    state: "open-tab",
+    condition: "held",
+    hasOpenTab: true,
+    party: party(),
+    signals:
+      ready === 0
+        ? []
+        : [
+            {
+              kind: "ready",
+              byStation: [{ stationId: "bar", stationName: "Bar", count: ready }],
+            },
+          ],
+  });
 }
 
 async function mount(over: Partial<TillFloorScreen> = {}): Promise<TillFloorScreen> {
@@ -156,7 +195,7 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(details).toEqual([{ poll: true }]);
   });
 
-  it("does not ask while the list shows", async () => {
+  it("a till does not ask while the list shows", async () => {
     const el = await mount();
     const seen = countRefreshes(el);
 
@@ -164,6 +203,88 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
     vi.advanceTimersByTime(30_000);
     expect(seen.count).toBe(0);
+  });
+
+  it("a handheld asks every 15 s while the list shows", async () => {
+    const el = await mount({ handheld: true });
+    const details: unknown[] = [];
+    el.addEventListener("floor-refresh", (event) => details.push((event as CustomEvent).detail));
+
+    await toggleFloorView(el);
+    expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
+    vi.advanceTimersByTime(30_000);
+    expect(details).toEqual([{ poll: true }, { poll: true }]);
+  });
+
+  describe("a handheld on a list-view zone", () => {
+    const readyBar = (el: TillFloorScreen) => el.shadowRoot!.querySelector("[data-ready-bar]");
+    const entries = (el: TillFloorScreen) =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-ready-table]")].map((entry) =>
+        entry.textContent!.replace(/\s+/g, " ").trim(),
+      );
+    const lastCardBottom = (el: TillFloorScreen) =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-table]")]
+        .at(-1)!
+        .getBoundingClientRect().bottom;
+
+    /** Answers each `floor-refresh` with the next of `answers`, as `TillApp` sets `tables`. */
+    function answerRefreshes(el: TillFloorScreen, answers: TableState[][]): void {
+      el.addEventListener("floor-refresh", () => {
+        el.tables = answers.shift()!;
+      });
+    }
+
+    async function listHandheld(): Promise<TillFloorScreen> {
+      const el = await mount({ handheld: true, tables: [table(), table2(0)] });
+      expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
+      return el;
+    }
+
+    it("the bar appears once a re-read brings food ready", async () => {
+      const el = await listHandheld();
+      answerRefreshes(el, [[table(), table2(3)]]);
+      expect(readyBar(el)).toBeNull();
+
+      vi.advanceTimersByTime(15_000);
+      await el.updateComplete;
+      expect(entries(el)).toEqual(["Table 2 · 3"]);
+    });
+
+    it("the bar and its space go once a re-read has nothing ready", async () => {
+      const el = await listHandheld();
+      const before = lastCardBottom(el);
+      const height = el.getBoundingClientRect().height;
+      answerRefreshes(el, [
+        [table(), table2(3)],
+        [table(), table2(0)],
+      ]);
+      vi.advanceTimersByTime(15_000);
+      await el.updateComplete;
+      expect(readyBar(el)).not.toBeNull();
+      expect(el.getBoundingClientRect().height).toBeGreaterThan(height);
+
+      vi.advanceTimersByTime(15_000);
+      await el.updateComplete;
+      expect(readyBar(el)).toBeNull();
+      expect(lastCardBottom(el)).toBe(before);
+      expect(el.getBoundingClientRect().height).toBe(height);
+    });
+
+    it("stops when the screen leaves", async () => {
+      const el = await listHandheld();
+      const seen = countRefreshes(el);
+      vi.advanceTimersByTime(15_000);
+      expect(seen.count).toBe(1);
+
+      const host = el.parentElement!;
+      el.remove();
+      vi.advanceTimersByTime(30_000);
+      expect(seen.count).toBe(1);
+
+      host.appendChild(el);
+      vi.advanceTimersByTime(15_000);
+      expect(seen.count).toBe(2);
+    });
   });
 
   it("a redraw while the map stays up keeps the running interval", async () => {

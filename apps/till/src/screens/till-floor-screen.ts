@@ -10,6 +10,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
@@ -121,7 +122,13 @@ import {
   topTabKind,
   type MapKind,
 } from "../state/floor-look.js";
-import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
+import {
+  readyByStation,
+  readyTables,
+  signalOf,
+  type ReadyTable,
+  type StationReady,
+} from "../state/table-signals.js";
 import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { stepChip, stepChipStyles } from "../widgets/step-chip.js";
 import { currentStep, nextStepDueAt } from "../state/service-steps.js";
@@ -333,15 +340,25 @@ export class TillFloorScreen extends LitElement {
     stepChipStyles,
     helpAnchorStyles,
     css`
+      /* Isolated so nothing raised inside the Floor, the Ready bar included, paints over an overlay
+         the shell lays over it; at least the scrolling area's height so the bar sits at its foot. */
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        isolation: isolate;
+        min-height: 100%;
       }
 
       .screen {
         display: flex;
+        flex: 1;
         flex-direction: column;
         gap: var(--wt-space-4);
         padding: var(--wt-space-4);
+      }
+
+      .screen:has(> .ready-bar) {
+        padding-block-end: 0;
       }
 
       @media ${unsafeCSS(PHONE_WIDTH)} {
@@ -351,7 +368,8 @@ export class TillFloorScreen extends LitElement {
 
         /* Room for the badge hanging past the trailing edge, whether help is on or off. */
         .actions,
-        .layout-due {
+        .layout-due,
+        .ready-bar {
           margin-inline-end: calc(var(--wt-help-badge-target) / 2);
         }
       }
@@ -793,6 +811,49 @@ export class TillFloorScreen extends LitElement {
         min-width: 0;
         overflow-wrap: anywhere;
       }
+
+      /* Above the cards' raised parts (z-index 1), which scroll under it. */
+      .ready-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-block-start: auto;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-success);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface-raised);
+      }
+
+      .ready-bar h2,
+      .ready-bar [data-ready-open],
+      .ready-tables wt-button {
+        flex: none;
+        white-space: nowrap;
+      }
+
+      .ready-tables wt-button::part(button) {
+        border-radius: var(--wt-radius-full);
+      }
+
+      .ready-bar h2 {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .ready-tables {
+        display: flex;
+        flex: 1;
+        gap: var(--wt-space-2);
+        min-width: 0;
+        overflow-x: auto;
+      }
     `,
   ];
 
@@ -813,6 +874,8 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) canOpenStation = false;
   /** Mounted inside a card host, which supplies the header; the view toggle stays. */
   @property({ type: Boolean }) embedded = false;
+  /** On a handheld, which draws the Ready bar in place of the stations' summary. */
+  @property({ type: Boolean }) handheld = false;
   /**
    * `undefined` checks the live `prefers-reduced-motion` query on every render; a test injects a value.
    *
@@ -827,8 +890,11 @@ export class TillFloorScreen extends LitElement {
 
   @state() private activeZone: string | undefined = undefined;
   @property() selectedZoneId: string | undefined = undefined;
-  /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
-  @state() private viewOverride: "map" | "list" | undefined = undefined;
+  /** List or Map as this device last chose it for each zone; unset, each zone derives its view. */
+  @property({ attribute: false }) viewMemory?: FloorViewChoices;
+  /** A toggle tap this session, per zone (`undefined` on a floor with no zones); it wins over
+   * `viewMemory`, and a zone with neither derives its view. */
+  @state() private viewOverride: ReadonlyMap<string | undefined, FloorView> = new Map();
   /** The free table whose guest count is being asked for, with the tables seated beside it. */
   @state() private seating: {
     table: TableState;
@@ -979,6 +1045,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   override updated(): void {
+    // Read by the app, which lifts the Sent and Served toasts clear of the bar.
+    this.toggleAttribute("ready-bar", this.shadowRoot!.querySelector("[data-ready-bar]") !== null);
     this.#watchReminders();
     this.#watchFloor();
     this.#watchTabs();
@@ -991,8 +1059,9 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
+  /** A handheld re-reads in list view too, so its Ready bar stays current. */
   #watchFloor(): void {
-    if (this.#zone.view !== "map" || !this.isConnected) {
+    if ((this.#zone.view !== "map" && !this.handheld) || !this.isConnected) {
       clearInterval(this.#rereadTimer);
       this.#rereadTimer = undefined;
       return;
@@ -1246,8 +1315,11 @@ export class TillFloorScreen extends LitElement {
     this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key });
   }
 
-  #toggleView(current: "map" | "list"): void {
-    this.viewOverride = current === "map" ? "list" : "map";
+  #toggleView(current: FloorView): void {
+    const next = current === "map" ? "list" : "map";
+    const key = this.#zone.activeKey;
+    this.viewOverride = new Map(this.viewOverride).set(key, next);
+    if (key !== undefined) this.viewMemory?.remember(key, next);
   }
 
   #onCanvasOpen(event: Event): void {
@@ -2233,6 +2305,7 @@ export class TillFloorScreen extends LitElement {
       this.activeZone,
       this.refusedZoneId,
       this.viewOverride,
+      this.viewMemory,
       this.#pending,
       currentLocale(),
       reminderClock(this.tables, this.#drawnAt),
@@ -2258,7 +2331,10 @@ export class TillFloorScreen extends LitElement {
     const onMap = mapTables(drawn, this.#drawnAt);
     const mapIds = new Set(onMap.map((table) => table.id));
     const unplaced = listed.filter((table) => !mapIds.has(table.id));
-    const view = this.viewOverride ?? (onMap.length > 0 ? "map" : "list");
+    const view =
+      this.viewOverride.get(activeKey) ??
+      (activeKey === undefined ? undefined : this.viewMemory?.read(activeKey)) ??
+      (onMap.length > 0 ? "map" : "list");
     return {
       tabs,
       marks,
@@ -2397,7 +2473,7 @@ export class TillFloorScreen extends LitElement {
         }
         ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
         ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()}
-        ${this.#renameWindow()} ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#renameWindow()} ${this.#billChoice()} ${this.#joinWith()} ${this.#readyBar()}
       </section>
     `;
   }
@@ -2905,8 +2981,10 @@ export class TillFloorScreen extends LitElement {
     return marks;
   }
 
-  /** Every zone's tables, not only the zone on screen: a station serves the whole floor. */
+  /** Every zone's tables, not only the zone on screen: a station serves the whole floor. A handheld
+   * draws the Ready bar instead. */
   #stationSummary(): TemplateResult | typeof nothing {
+    if (this.handheld) return nothing;
     const stations = readyByStation(this.tables);
     if (stations.length === 0) return nothing;
     return html`<section class="stations" data-station-summary aria-labelledby="stations-title">
@@ -2915,6 +2993,50 @@ export class TillFloorScreen extends LitElement {
         ${stations.map((station) => this.#stationRow(station))}
       </ul>
     </section>`;
+  }
+
+  /** The tables with food ready in the zones this Floor shows; Open opens the first listed. */
+  #readyBar(): TemplateResult | typeof nothing {
+    if (!this.handheld) return nothing;
+    const ready = readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)));
+    const first = ready[0];
+    if (first === undefined) return nothing;
+    return html`<section
+      class="ready-bar help-anchor"
+      data-ready-bar
+      aria-labelledby="ready-bar-title"
+    >
+      <h2 id="ready-bar-title">
+        <wt-icon name="floor-ready" size="sm"></wt-icon>${t("floor.ready_title")}
+      </h2>
+      <div class="ready-tables">${ready.map((entry) => this.#readyEntry(entry))}</div>
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-ready-open
+        aria-label=${t("floor.ready_bar_open_label").replace("{table}", () => first.name)}
+        @click=${() => this.#openReady(first)}
+        >${t("floor.ready_bar_open")}</wt-button
+      >
+      ${helpBadge("help.floor.ready_bar", t("floor.ready_title"))}
+    </section>`;
+  }
+
+  #readyEntry(entry: ReadyTable): TemplateResult {
+    return html`<wt-button
+      size="sm"
+      variant="secondary"
+      data-ready-table=${entry.tableId}
+      @click=${() => this.#openReady(entry)}
+      >${t("floor.ready_bar_table")
+        .replace("{table}", () => entry.name)
+        .replace("{n}", String(entry.count))}</wt-button
+    >`;
+  }
+
+  #openReady(entry: ReadyTable): void {
+    const table = this.tables.find((candidate) => candidate.id === entry.tableId);
+    if (table !== undefined) this.#openTable(table);
   }
 
   #stationRow(station: StationReady): TemplateResult {

@@ -334,7 +334,7 @@ describe("till-floor-screen: what each station has ready", () => {
       canOpenStation: true,
     });
     expect(el.shadowRoot!.querySelector("[data-station-summary] h2")!.textContent!.trim()).toBe(
-      "Listo para servir",
+      "Listo",
     );
     expect(el.shadowRoot!.querySelector('[data-open-station="bar"]')!.textContent!.trim()).toBe(
       "Abrir Barra",

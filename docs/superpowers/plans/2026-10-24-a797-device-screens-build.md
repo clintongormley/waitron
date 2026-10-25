@@ -3,8 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
 
 **Goal:** Build design §8's slices one pull request at a time. This plan outlines every slice and
-gives **slice 4 — Zones on this device on a handheld** in full tasks; each other slice is expanded
-into tasks when it starts.
+gives **slice 4 — Zones on this device on a handheld** and **slice 5 — The Ready bar and remembered
+List/Map** in full tasks; each other slice is expanded into tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
 argues from it). Pictures: `docs/backlog/mockups/a797-device-screens/`.
@@ -85,7 +85,9 @@ is open. So:
 1. **Slice 4** first — independent, no migration (this plan, below).
 2. **Slice 5** next — independent, LIGHT, no migration.
 3. **Slices 1–3** once #2037 lands; then 6–7 (slice 6 is also a core migration, on
-   `kitchen_stations`, which #2037 also changes).
+   `kitchen_stations`, which #2037 also changes). _2026-10-25: #2037 landed on 2026-10-24 and
+   slice 4 in #2041, so slices 1–3 are no longer barred; slice 5 is being built first, then 1
+   (see "Build order now" in the slice 5 section)._
 4. Slices 8–9c take turns with lane G's A773-2 (design §7); 10–11 wait for A803's slice 3 (not on
    `main`: ran `git log --oneline -400 | grep -i a803` shows slice 5, #1953, and no slice 3); 12b
    follows A773-2.
@@ -162,7 +164,7 @@ instead of the session-only `viewOverride` (`till-floor-screen.ts:831`, `:1249-1
 4 the floor is handed only the chosen zones but every table (`till-app.ts:17752-17766`); decide
 whether the bar follows the zone choice, and say so. The storage key names venue and device
 (design §3.6). Until slice 1 lands the bar shows full names. **Dependencies:** none (slice 4 first,
-so the zone question above is real). **Migration:** no.
+so the zone question above is real). **Migration:** no. _Expanded into tasks below (2026-10-25)._
 
 ### Slice 6 — Ready warning time, data (FULL; migration, core set)
 
@@ -984,6 +986,645 @@ section together.
   it on its Floor.
 - After merge: delete the branch local and remote and check the remote one is gone; update the
   ledger; then slice 5.
+
+## Slice 5 — The Ready bar and remembered List/Map (one PR, branch `feat/a797-5-ready-bar`)
+
+**What it changes.** On a handheld's Floor, a bar fixed at the bottom of the screen lists the tables
+with food ready: "Ready · T5 · 2 · T9 · 1 · Open ›" («Listo · T5 · 2 · T9 · 1 · Abrir ›», design
+§3.1, §10 (g)). Tapping a table opens it; Open › opens the first table listed (D4). The bar shows
+only while something is ready, and on a handheld it takes the place of today's per-station summary
+above the tables. A till keeps the summary, retitled "Ready" «Listo» (Q51 (f) 8). And List or Map
+is remembered on the device for each zone, instead of one choice for the whole session.
+
+**Review path: LIGHT.** No server read, route, schema or shared type changes: the bar reads the
+floor read's `ready` signal the till already has (`TableSignal` `ready`, `packages/shared/src/table-signals.ts:13`,
+read), and the remembered view is kept in the device's browser. None of the risk triggers applies
+(read: the changed files are all under `apps/till/src/` and the guides). **Migration: none.**
+
+How claims are marked in this section: **(ran)** means run on 2026-10-25 against `main` at
+`46bd9213d` (this worktree's base); **(read)** means read in the code at that commit. The probe was
+a throwaway worktree (`git worktree add --detach /tmp/a797-5-probe.TwzF/wt 46bd9213d`), removed
+afterwards; none of it is in this branch.
+
+### Build order now
+
+#2037 has landed (ran: `gh pr view 2037 --json state,mergedAt` → `MERGED 2026-10-24T09:57:19Z`;
+`git merge-base --is-ancestor 6037aa68a HEAD` → on `main`), and so has slice 4 (#2041, merged
+2026-10-24T11:09:11Z, ran). So slices 1–3 are no longer barred by a parked migration branch. The
+lane builds slice 5 now because it is LIGHT and already started; slice 1 follows.
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+| Where | What it does today |
+| --- | --- |
+| `apps/till/src/screens/till-floor-screen.ts:2909-2918` `#stationSummary` | the per-station "Ready to serve" list, every table of `this.tables` whatever the zone (comment `:2908`); drawn above the tables at `:2392` |
+| same file `:2920-2948` `#stationRow` | "Bar: Mesa 2 ×3, Mesa 8 ×1" and, where `canOpenStation`, an "Open Bar" button emitting `show-station` |
+| `apps/till/src/state/table-signals.ts:33-48` `readyByStation` | groups the `ready` signals per station, a party at several tables counted once, in the floor read's order; its only caller is `#stationSummary` (ran: `grep -rn "readyByStation" apps/till/src packages --include='*.ts'`) |
+| `till-floor-screen.ts:831` `viewOverride` | one `"map" \| "list" \| undefined` for the whole screen: a tap pins it for every zone until the page reloads |
+| same file `:1249-1251` `#toggleView`; `:2235` (a `#zoneOnScreen` input); `:2261` | the tap; `view = viewOverride ?? (a table on the map ? "map" : "list")` |
+| same file `:2341-2352`, `:2108-2117` | the toolbar's List/Map button above phone width; at phone width the zone menu's item (`till-floor-zone-menu`'s `zone-toggle-view`) |
+| same file `:994-1004` `#watchFloor` | re-reads the floor every 15 s **only while the map shows** (since #1517, ran: `git log -L994,1003:…`) |
+| same file `:1034-1059` `#openTable` | a seated table emits `open-table` `{ tableId, seated: true }` |
+| same file `:909` `#phone` (`PHONE_WIDTH`, `(max-width: 40rem)`, `apps/till/src/widgets/language-chooser-styles.ts:4`) | moves List/Map into the zone menu at phone width |
+| `apps/till/src/till-app.ts:18205-18227` | the one `<till-floor-screen>` mount, on a till and on a handheld (ran: `grep -n "<till-floor-screen" apps/till/src/*.ts`). It hands `.zones` the zones the device's choice keeps (slice 4) and `.tables` every table of the read, unfiltered; it passes no form factor and no device id |
+| `till-app.ts:2444`, `:4206-4209` `handheldMode` | true for `phone-portrait` and `tablet-landscape` (`kindOfFormFactor`, `apps/till/src/layout.ts:25-38`), set at start-up only; a profile switch updates `formFactor` but not it (Task 6) |
+| `till-app.ts:5869-5890` `#menuMemory`, `#zoneMenuIdentity` | the sibling per-zone memory: `localStorage` behind a `try`, identity `{ origin: this.router?.current ?? location.origin, deviceId, profileId, zoneId }` |
+| `apps/till/src/state/zone-menu-memory.ts:10-89` `ZoneMenuMemory` | the key `waitron.zoneMenu.${JSON.stringify([origin, deviceId, profileId, zoneId])}` (`:52`); an in-memory copy so a refused store still remembers for this app instance; a bad stored value is removed |
+| `apps/till/src/widgets/till-shell.ts:386-390`, `:1102-1107` `main.body` | the scrolling area every tab's body is drawn in (`overflow: auto`); made `inert` while an overlay is open |
+| same file `:395-400`, `:1105-1107` `.drill` | the overlay (Find a bill, Pass, Kitchen, My schedule, My hours, a till's table screen; `#pushDrill` kinds, `till-app.ts:4495`, `:8059`, `:8367`, `:8399`, `:10332`, `:5517`): `position: absolute; inset: 0` over the region, a later sibling of `main`, drawn over a Floor that stays on the page |
+| `till-app.ts:5513-5519`, `:18113-18117`, `:18339-18342` | on a handheld a table opens on the **Order tab**, and only the active tab is drawn, so the Floor leaves the page (its timers stop, `till-floor-screen.ts:922-928`); on a till it opens as the overlay above |
+| `till-app.ts:1680-1683`, `till-shell.ts:144`, `apps/till/index.html:13-31` | the app's root is `height: 100%` of a page padded 24 px (8 px at phone width); the shell inside it is `100dvh` tall |
+| `till-app.ts:1752-1758` `.submitted-toast` | the Sent and Served toasts, fixed at `bottom: calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom))`, shown on the Floor after a send (`:11727-11729`) |
+| `apps/till/src/i18n/strings.ts:1018`, `:2751` | `floor.ready_title` "Ready to serve" / «Listo para servir» |
+
+Other per-device keys in the till, for the naming pattern (ran: `grep -rn "localStorage\|sessionStorage" apps/till/src --include='*.ts' | grep -v test`):
+`waitron.makeNow.${deviceId}` (`till-app.ts:2463`), `waitron.stationScreenView.${deviceId}`
+(`till-station-screen.ts:60`), `waitron.lastOperator.${deviceId}` (`till-lock-screen.ts:23`),
+and `waitron.zoneMenu.…` above. The till has no venue id of its own: `TillInfo` carries
+`venueName` and `nodeId`, no venue or location id (read, `apps/till/src/api/client.ts:157-208`),
+which is why the sibling names the venue by the server's origin.
+
+### Plan decisions for slice 5
+
+- **D1. The bar lists only tables in the zones the Floor shows** (`this.zones`), so on a handheld it
+  follows the device's zone choice. After slice 4 a handheld's Floor is handed exactly its chosen
+  zones, every kind (slice 4 D2; `till-app.ts:18207-18211`), and with no saved choice every zone its
+  profile allows. A party is listed when at least one of its tables is in a shown zone, named by
+  those tables only. A table with no zone is on no tab and is left out. **Why:** the choice means
+  "the zones this device works in" (slice 4 D3); worked example 6's Luis, who unticked Inside and
+  Bar, would otherwise be shown Inside's food and sent by Open › to a table his device hides, where
+  he can add nothing. **The till's summary keeps every zone** (its comment, `:2908`, and the case
+  "covers tables in every zone, not only the zone on screen" stay as they are): it is a per-station
+  view with Open {station} buttons, not a way into tables, and a till's Floor drops its counter
+  zones (`till-app.ts:18210` with `floorZoneIds`, slice 4 D2), whose seated tables would otherwise
+  leave it. **Alternative, for the owner:** the bar lists every zone's tables, as the summary does.
+- **D2. Zero ready tables: no bar at all**, and nothing reserved for it. Design §3.1: "It shows only
+  while something is ready." The summary already draws nothing then (`:2911`, pinned by "is not
+  shown while nothing is ready").
+- **D3. The bar is drawn on a handheld at every width, in place of the summary; a till keeps the
+  summary at every width.** The floor gains `@property({ type: Boolean }) handheld = false`, which
+  `TillApp` sets from its current form factor (Task 6). **This is a reading of the spec, not its
+  letter.** §3.1 says the bar "replaces at phone width today's summary" and "Above phone width the
+  summary stays where it is"; §3.2 says of a handheld on a tablet, whose screen is wider than 40rem,
+  "The bar's table buttons, the Ready bar and its warning are as on a phone"; §6 retires "the Ready
+  summary above the floor at phone width". Taken literally, a tablet handheld keeps the summary
+  **and** gets the bar. The plan reads §3.1 as the phone's own section and §3.2 as "a tablet is
+  drawn as a phone", so the split is handheld against till: one place for ready food on any one
+  screen, the same on a phone and a tablet. A till at phone width is not a case the design draws.
+  **Alternative, for the owner (the literal reading):** a tablet handheld shows both, the bar at
+  the foot and the summary above the tables; a phone shows the bar only. Either way the 414 px test
+  frame (`apps/till/src/widgets/test-helpers.ts:108`, inside `PHONE_WIDTH`) is a test matter, not a
+  reason: a width rule would move the seven summary cases to a wider frame (the probe, below). On a
+  handheld the summary's Open {station} buttons go with it; Kitchen stays in ☰ where the profile
+  allows it (`till-app.ts:18224` `#allowsDestination("station")`, slice 4 D6's list).
+- **D4. "Open ›" opens the first table the bar lists, in the floor read's order, until slice 7.**
+  Design §3.1 says it "opens the table whose food has waited longest", but the till does not know
+  when a dish became ready: the `ready` signal carries only `stationId`, `stationName` and `count`
+  (`ReadyAtStation`, `packages/shared/src/table-signals.ts:38-42`, read); slice 6 adds each
+  station's oldest ready time, and slice 7 orders the bar by it ("names the table waiting longest
+  first"), after which Open › opens that first table without further change. The bar's order is the
+  order `readyByStation` already keeps (the first table of each party as the read lists them). A
+  table tapped, or Open ›, goes through `#openTable` (`:1034`), so it opens exactly as a tap on that
+  table's card does; for a party at several tables, its first table in a shown zone. Open ›'s
+  accessible name names the table ("Open T5" «Abrir T5»).
+- **D5. What the bar says.** Each entry is the party's tables as the Floor shows them
+  (`shownUnder`, `apps/till/src/state/floor-today.ts:70-72`: today's join name, else today's name,
+  else the label), distinct, joined with "+", then " · " and the party's ready count summed over its
+  stations. It does not use the party's `displayName`, which is the name staff gave the party when
+  there is one (`client.ts:2062-2063`, read): the bar is a tight place, which design §3.7 gives the
+  table's name. Until slice 1 lands these are the full names ("Mesa 2"); slice 1 swaps in the short
+  name. The ready icon is the floor's own `floor-ready` icon (`packages/ui/src/floor-chips.ts:12`),
+  the 🍽 of the picture. The word is `floor.ready_title`, now "Ready" «Listo» in both places (one
+  key: Q51 (f) 8 retitles the summary so the word is the bar's). New keys, en / es:
+  `floor.ready_bar_table` "{table} · {n}" / same; `floor.ready_bar_open` "Open ›" / «Abrir ›»;
+  `floor.ready_bar_open_label` "Open {table}" / «Abrir {table}». **An entry has no label of its
+  own:** its name is its visible text ("Mesa 2 · 3"), read inside the section named "Ready", so the
+  name always contains what is shown (WCAG 2.5.3, label in name) and no count needs a plural form
+  («Mesa 2 · 1», never «1 listos»). Open ›'s name starts with its visible word ("Open Mesa 2"; the
+  › is a mark, not a word). Help (`help-strings.ts`, both
+  languages): `help.floor.ready_bar` "Tables with food ready to take out. Tap one to open it; Open
+  opens the first." / «Mesas con comida lista para llevar. Toca una para abrirla; Abrir abre la
+  primera.» (slice 7 rewords "the first" when it reorders). No live region: the bar changes on every
+  15-second read, and announcing each would talk over the waiter.
+- **D6. Where the bar sits: at the foot of the shell's scrolling area, and never over an
+  overlay.** `position: sticky; bottom: 0` as the last child of the floor's `.screen`, as the menu's
+  weigh bar does (`apps/till/src/widgets/menu-browser.ts:351-356`), with the floor's `:host` and
+  `.screen` at least the height of the scrolling area (`min-height: 100%`, a column with the bar
+  pushed down by `margin-block-start: auto`) so that on a short list the bar still sits at the
+  foot. And the floor's `:host` gets **`isolation: isolate`**, so nothing inside the Floor, the bar
+  included, can paint over the overlay that ☰'s Find a bill, Pass, Kitchen, My schedule or My hours
+  lays over a Floor that stays on the page (`till-shell.ts:395-400`, `:1105-1107`; the floor
+  already raises elements with `z-index: 1`, `till-floor-screen.ts:468-470`, `:577-579`).
+  **Receipts (ran, 2026-10-25):** a static copy of the page, shell, scrolling area, overlay and
+  Floor (`apps/till/index.html:13-31`, `till-shell.ts:141-147`, `:378-400`, `:1102-1107`;
+  `/Users/clintongormley/waitron-campaign-c/a797-5-scripts/sticky-probe.mjs`), in Playwright
+  Chromium at 390 × 844 and 1024 × 844, reading the **painted colour** at the bar's centre with the
+  overlay open (bar `#99cc99`, overlay `#ffffff`): window-pinned or sticky, a bar raised with
+  `z-index` and no isolation painted **over** the overlay (`#99cc99`, both widths: the reviewer's
+  finding reproduced); with `isolation: isolate` on the Floor both were covered (`#ffffff`). So
+  sticky alone does not fix it; the isolation does. With 20 rows of cards the sticky bar left the
+  last card clear when scrolled to the end, and a window-pinned one covered it. **A hit test cannot
+  measure this**: `main` is `inert` while an overlay is open, and `elementFromPoint` skips inert
+  elements, so it answered the overlay in every run, the failing one included; tests read the
+  painted colour or `getComputedStyle`, never `elementFromPoint` alone. **To check in the real
+  app (Task 6, Task 8):** in the static copy the scrolling area's bottom was 8 px below an 844 px
+  window at 390 and 24 px below at 1024, because the `100dvh` shell sits inside the padded page
+  (rows above); if the real app shows the bar's foot below the window, STOP and report: that is
+  the shell's height, outside this slice. **Look (picture 01):** the bar is inset to the floor's
+  own content edges, not full width, with rounded corners (`--wt-radius-*`), and its entries are
+  small rounded labels (still buttons); one line, "Ready" at the start and Open › at the end
+  staying put while the entries between scroll sideways when they do not fit. No taller than
+  `var(--wt-tap-min) + 2 * var(--wt-space-3)` (`till-app.ts:1756`), so the Sent and Served toasts
+  shown on the Floor after a send (`:11727-11729`) sit above it. `--wt-*` tokens only (CLAUDE.md
+  §3); the calm bar takes the floor's ready chip's colours. The on-screen keyboard can cover the
+  bar only while a field has focus, and the Floor's fields are all in its dialogs (ran: `grep -n
+  "<wt-input\|<input\|<wt-textarea" apps/till/src/screens/till-floor-screen.ts` → nothing; its
+  dialogs `:1456`–`:2661`), so that is accepted.
+- **D7. A handheld's Floor re-reads every 15 s in list view too.** Today it re-reads only while the
+  map shows (`#watchFloor`, `:994-1004`), and nothing else in `TillApp` re-reads the tables on a
+  timer (read: `grep -n setInterval apps/till/src/till-app.ts` finds only the pending-payment re-read
+  at `:17219`). A zone with no placed tables opens in list view (`:2261`), so without this the bar on
+  such a zone would show what was ready when the person last opened the Floor. The rule becomes:
+  re-read while the map shows **or the floor is a handheld's**. A till keeps today's rule, so the
+  pinned case "does not ask while the list shows" (`till-floor-screen.refresh.test.ts:159`, which
+  mounts no `handheld`) is unchanged. Cost: one `GET /api/tables/state` per handheld per 15 s,
+  which a handheld on a map zone already makes, and it goes on while one of ☰'s overlays covers
+  the Floor, as the map's re-read does today. It stops while a table is open: on a handheld that is
+  the Order tab, which takes the Floor off the page (rows above). **Alternative, for the owner:** keep list view
+  unpolled and accept a stale bar there.
+- **D8. List/Map is remembered per zone, on this device, in the browser.** A new module
+  `apps/till/src/state/floor-view-memory.ts`, after `ZoneMenuMemory`'s shape:
+  - **Key** `waitron.floorView.${JSON.stringify([origin, deviceId, zoneId])}`, value `"map"` or
+    `"list"`. `origin` is the sibling's (`this.router?.current ?? location.origin`,
+    `till-app.ts:5885`), standing for the venue, since the till holds no venue id (above); a JSON
+    array keeps an id containing a dot from running into the next part (the sibling's reason). **No
+    profile in the key**, unlike the menu memory: which menu a zone opens on depends on the profile,
+    while how a zone's tables are drawn does not.
+  - **Default:** no stored value → today's rule, Map when the zone has a table on the map, else
+    List (`:2261`). The value tapped is stored whether or not it equals that default, and from then
+    on wins for that zone on this device, including a stored Map for a zone whose plan later empties
+    (a tap on such a zone already draws an empty map: "polls an empty map with no today's rows after
+    the view is chosen", `till-floor-screen.refresh.test.ts:142`).
+  - **Per zone, also within the session:** `viewOverride` becomes a `ReadonlyMap<string | undefined,
+    FloorView>` of this screen's taps, keyed by the zone on screen (`#zone.activeKey`), so a tap on
+    Terrace no longer changes Inside. A floor with no zone on screen (the zone-menu suite's "a floor
+    with no zones") has `activeKey` `undefined` and keeps its tap in that map under `undefined`, for
+    the session only; only a defined key reaches the device's memory.
+  - **A stored value for a zone that no longer exists** is never read (only zones on screen are
+    looked up) and is not pruned: pruning would need every zone of the venue, and the device sees
+    only its profile's, narrowed by its choice, so it would wipe the choice for a zone that is merely
+    hidden. Zone ids are not reused (`floorZones.id` defaults to `newId`,
+    `packages/db/src/schema/floor-zones.ts:16`, read).
+  - **Storage that throws** (a private window, blocked site data; the till already guards this at
+    `till-app.ts:5871-5876` and `till-station-screen.ts:316`): reads and writes are wrapped; the
+    module keeps its own in-memory copy, so the choice still lasts for this app instance. A stored
+    value that is not exactly `"map"` or `"list"` is ignored and removed, as the sibling does.
+  - **Wiring:** the floor gains `viewMemory?: FloorViewChoices` (`read(zoneId)`, `remember(zoneId,
+    view)`); `TillApp` builds one per `(origin, deviceId)` and hands it over, cached so a redraw does
+    not hand the floor a new object (which would re-run `#zoneOnScreen`); with no `deviceId` it hands
+    `undefined` and the floor remembers per zone for the session only. A floor mounted on its own in
+    a test gets no memory, so no floor suite starts writing to the test browser's `localStorage`.
+
+### Changed test checks (from the probe; the implementer confirms each)
+
+The probe (ran, in `/tmp/a797-5-probe.TwzF/wt`): `viewOverride` made per zone as D8 says (no
+storage), a `handheld` property, and a crude bar drawn **in place of the summary when
+`handheld || PHONE_WIDTH`** (the width rule D3 rejects), with `TillApp` passing `.handheld`. Then
+`pnpm exec vitest run src/screens/till-floor-screen src/screens/text-size.layout src/screens/device-screens src/widgets/till-shell.device-zones`
+in `apps/till` → `Test Files 2 failed | 28 passed (30)`, `Tests 7 failed | 747 passed (754)`. The
+seven were the summary's own cases at the 414 px default frame: in `till-floor-screen.signals.test.ts`
+"lists each station's tables with their counts, a party at joined tables once", "covers tables in
+every zone, not only the zone on screen", "opens the station's own view from its row where the
+device has one", "offers no way into a station on a device without the station view" and "says it
+in Spanish"; in `till-floor-screen.a11y.test.ts` "has no violations with signals side by side and
+the stations' summary, on the list" (light and dark). Under D3 (the form factor) none of those mounts
+sets `handheld`, so they keep the summary; **only one check changes**:
+
+- `till-floor-screen.signals.test.ts` "says it in Spanish" (`:331-342`): the heading «Listo para
+  servir» becomes «Listo». Reason: Q51 (f) 8. No case pins the English title (ran: `grep -rn "Ready
+  to serve" apps packages` → `strings.ts:1018` only).
+
+Then `pnpm exec vitest run src/till-app src/screens/till-counter-cleanup.look src/widgets/guide-sheet`
+→ `Test Files 43 passed (43)`, `Tests 4361 passed (4361)`: the per-zone view and `.handheld`
+broke no app suite. No `till-app*` suite or `apps/till/test/` fixture carries a `ready` signal
+(ran: `grep -rln 'kind: "ready"\|ready(\[' apps/till/src apps/till/test --include='*.ts'` → 15
+files besides `till-app.ts`: three source files and 12 tests, four of them floor-screen suites;
+none is a `till-app*` suite or under `apps/till/test/`).
+D7 (polling) and D8's storage were not probed; Task 5's and Task 3's commands name the suites to
+run. The one class of failure the plan expects beyond the line above is Task 6 Step 4's: an app
+suite counting table reads on a list-view handheld sees D7's extra read. Any other failure is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **A party at two tables in different zones, one hidden.** Listed once, named by the shown table
+   only, and Open › opens the shown table (D1, D4). Task 1 pins it.
+2. **A joined table today.** Both tables carry the party's signals (`readyByStation`'s comment,
+   `table-signals.ts:29-32`) and one `joinName`, so the bar shows one entry with the join's name,
+   not two (D5). Task 1 pins it.
+3. **Two devices in one browser profile, or one device id at two venues.** The key names the origin
+   and the device, so neither sees the other's choice (D8). Task 2 pins it with two identities that
+   differ in one part each.
+4. **Storage whose getter throws, whose `setItem` throws, or which holds "grid".** The floor still
+   toggles and keeps the choice for the session; "grid" falls back to the default and is removed
+   (D8). Task 2 pins all three.
+5. **The Sent toast after a send, on a handheld with food ready.** It shows above the bar, not over
+   it (D6). Task 7 looks.
+6. **A handheld on a list-view zone when food becomes ready, and when the last of it is served.**
+   The bar appears within 15 s, and goes, with its space, once a re-read has nothing ready (D7,
+   D2). Task 5 pins both with fake timers.
+7. **One of ☰'s overlays over a Floor with food ready** (Find a bill, Pass, Kitchen). The overlay
+   is drawn over the bar, never the bar over the overlay (D6). Tasks 4b and 6 pin it by painted
+   colour; Task 8 looks.
+8. **A profile switch between a till profile and a handheld one on the same device.** The bar
+   follows the current profile's form factor (Task 6).
+
+---
+
+**Task order and why.** The two pure pieces first, each with its own tests (Task 1, which tables the
+bar lists and what it calls them; Task 2, the remembered view's store); the floor's per-zone view on
+top of Task 2 (Task 3); the bar on top of Task 1, then its accessibility and layout (Tasks 4a, 4b);
+the list-view re-read (Task 5); `TillApp`'s wiring (Task 6); the docs (Task 7); the LOOK (Task 8).
+Each leaves the tree green and is sized well under 100 tool calls.
+
+### Task 1: Which tables the Ready bar lists, and what it calls them
+
+**Files:**
+- Modify: `apps/till/src/state/table-signals.ts` (new `readyTables` beside `readyByStation` `:33`)
+- Test: create `apps/till/src/state/table-signals.test.ts` (none exists; ran: `ls apps/till/src/state | grep signal`)
+
+**Interfaces:**
+- Produces: `export interface ReadyTable { partyId: string; tableId: string; name: string; count: number }`
+  and `export function readyTables(tables: readonly TableState[], zoneIds: ReadonlySet<string>): ReadyTable[]`
+  — one entry per party with a `ready` signal and at least one table whose `zoneId` is in
+  `zoneIds`; `tableId` its first such table in `tables` order; `name` the distinct `shownUnder` of
+  its such tables, in `tables` order, joined with "+"; `count` the sum of `byStation[].count`;
+  entries in the order each party's first such table appears. Consumed by Task 4a.
+
+- [ ] **Step 1: Failing tests** (build `TableState`s as `till-floor-screen.signals.test.ts:13-79`
+  does; copy its `party`, `table` and `ready` helpers):
+  1. "lists each party with food ready once, its count summed over its stations" — Mesa 2 (bar 3),
+     Mesa 8 (bar 1, kitchen 2), a free table → `[{ name: "Mesa 2", count: 3 }, { name: "Mesa 8",
+     count: 3 }]` (with ids).
+  2. "names a party at joined tables by today's join name, once" — two tables of one party, both
+     `today.joinName: "Mesa 5+6"` and the party's `ready` → one entry `"Mesa 5+6"`, `tableId` the
+     first (Review focus 2).
+  3. "names a party at two separate tables by both, and by the shown one only when a zone is hidden"
+     — party at `t5` (zone `z1`) and `t6` (`z2`), no join: with both zones → `"Mesa 5+Mesa 6"`,
+     `tableId: "t5"`; with only `z2` → `"Mesa 6"`, `tableId: "t6"` (Review focus 1).
+  4. "leaves out a party whose tables are all in hidden zones, and a table with no zone".
+  5. "uses today's name, not the party's given name" — a party with `name: "Ana"`, `displayName:
+     "Ana"`, at a table with `today.name: "Ventana"` → `"Ventana"` (D5).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/table-signals.test.ts`
+  (`readyTables` is not exported).
+- [ ] **Step 3: Implement** per the Interfaces block, reusing `signalOf` and importing `shownUnder`
+  from `./floor-today.js`.
+- [ ] **Step 4: Run; expect PASS** — read the `Tests` count (5, or more if a case is an `it.each`).
+- [ ] **Step 5:** `pnpm --filter @waitron/till typecheck`; `pnpm exec eslint apps/till/src/state/table-signals.ts apps/till/src/state/table-signals.test.ts`;
+  `pnpm format:check`; ledger; `git commit -s -m "A797-5: which tables the Ready bar lists, and what it calls them"`
+
+### Task 2: The device remembers List or Map per zone
+
+**Files:**
+- Create: `apps/till/src/state/floor-view-memory.ts`
+- Test: create `apps/till/src/state/floor-view-memory.test.ts` (model: `zone-menu-memory.test.ts`)
+
+**Interfaces:**
+- Produces:
+  ```ts
+  export type FloorView = "map" | "list";
+  export interface FloorViewIdentity { origin: string; deviceId: string }
+  export interface FloorViewChoices {
+    read(zoneId: string): FloorView | undefined;
+    remember(zoneId: string, view: FloorView): void;
+  }
+  export function floorViewChoices(
+    storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null,
+    identity: FloorViewIdentity,
+  ): FloorViewChoices;
+  ```
+  Key `waitron.floorView.${JSON.stringify([origin, deviceId, zoneId])}` (D8). Consumed by Tasks 3
+  and 6.
+
+- [ ] **Step 1: Failing tests**, each with a `Map`-backed fake storage like the sibling's test:
+  1. "remembers a zone's view across a restart" — `remember("z1", "list")`; a second
+     `floorViewChoices` over the same storage reads `"list"` for `z1` and `undefined` for `z2`; the
+     storage holds exactly the key `waitron.floorView.["https://venue.example","device-1","z1"]`.
+  2. "keeps devices and venues apart" — the same storage, identities differing only in `deviceId`,
+     then only in `origin`: neither reads the other's value (Review focus 3).
+  3. "ignores and removes a stored value that is not map or list" — storage holds `"grid"` under
+     `z1`'s key, then `"\"map\""` (a JSON string, not the bare word): `read` answers `undefined`
+     both times and the key is gone (Review focus 4).
+  4. "a store that refuses every call still remembers for this instance" — `getItem`, `setItem` and
+     `removeItem` all throw: `remember("z1", "map")` does not throw and `read("z1")` answers
+     `"map"`; a `null` storage behaves the same.
+  5. "a refused removal does not bring the bad value back" — `removeItem` throws, storage holds
+     `"grid"`: two `read`s both answer `undefined`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/floor-view-memory.test.ts`
+  (no such module).
+- [ ] **Step 3: Implement** after `ZoneMenuMemory` (`zone-menu-memory.ts:10-89`): an in-memory map
+  of key → `FloorView | null` consulted first, writes and removals in `try`, a value accepted only
+  when it is exactly `"map"` or `"list"`.
+- [ ] **Step 4: Run; expect PASS** (read the count).
+- [ ] **Step 5:** typecheck till; eslint both files; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-5: the device remembers List or Map for each zone"`
+
+### Task 3: The Floor keeps List or Map per zone, and reads the device's memory
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (`viewOverride` `:831`, `#toggleView`
+  `:1249-1251`, `#zoneOnScreen` inputs `:2230-2239` and `view` `:2261`; new
+  `@property({ attribute: false }) viewMemory?: FloorViewChoices`)
+- Test: create `apps/till/src/screens/till-floor-screen.view-memory.test.ts` (mount helpers as
+  `till-floor-screen.zone-menu.test.ts` builds a floor with two zones; toggle with
+  `toggleFloorView`, `apps/till/src/widgets/test-helpers.ts:704-716`)
+
+**Interfaces:**
+- Consumes: Task 2's `FloorViewChoices`. Produces: the `viewMemory` property, set by Task 6.
+
+- [ ] **Step 1: Failing tests** — two zones, `z1` with a table placed on the map and `z2` with none,
+  so their defaults differ (Map and List):
+  1. "a tap on one zone leaves the other zone's view alone" — no `viewMemory`: on `z1` toggle to
+     List; select `z2` → List (its default); toggle `z2` to Map; back to `z1` → still List. Today
+     the one `viewOverride` carries `z1`'s List to `z2` and `z2`'s Map back to `z1`, so the last
+     check fails.
+  2. "opens each zone in the view this device remembered" — a `viewMemory` fake answering `"list"`
+     for `z1` and nothing for `z2`: `z1` opens as a list (its default is Map), `z2` as a list (its
+     default).
+  3. "a tap tells the device's memory" — toggling on `z1` calls `remember("z1", "list")` once.
+  4. "a tap this session wins over the memory" — memory answers `"list"` for `z1`; toggle → Map.
+  5. "a floor with no zones toggles without remembering" — `zones: []`: the toggle still changes the
+     view and `remember` is never called.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.view-memory.test.ts`
+  — case 1 on its last check, 2–4 (no `viewMemory` property is read).
+- [ ] **Step 3: Implement** D8's per-zone override: `viewOverride: ReadonlyMap<string | undefined,
+  FloorView>`; `#toggleView` writes a new map under `this.#zone.activeKey` (`undefined` on a floor
+  with no zones) and, only when that key is defined, calls `viewMemory?.remember`; `view = viewOverride.get(key) ?? viewMemory?.read(key) ?? derived`; add
+  `this.viewMemory` to `#zoneOnScreen`'s inputs. Update the property's comment (`:830`): it no
+  longer says "not persisted".
+- [ ] **Step 4: Run; expect PASS**, then every floor suite, which the probe ran green with the same
+  per-zone change: `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen src/screens/text-size.layout src/screens/device-screens src/widgets/till-shell.device-zones`
+  (`src/screens/till-floor-screen` matches every `till-floor-screen*.test.ts` by name). Expected:
+  all pass. A failure is a STOP.
+- [ ] **Step 5:** typecheck till; eslint; format check; ledger; `git commit -s -m "A797-5: the Floor keeps List or Map for each zone"`
+
+### Task 4a: A handheld's Floor shows the Ready bar; a till's summary reads "Ready"
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (new `handheld` property; new `#readyBar()`
+  beside `#stationSummary` `:2909`; `#stationSummary` returns `nothing` when `handheld`; the bar
+  drawn as the last child of `.screen`), `apps/till/src/i18n/strings.ts` (`floor.ready_title`
+  `:1018`, `:2751`; D5's four new keys beside them), `apps/till/src/i18n/help-strings.ts`
+  (`help.floor.ready_bar`, English beside `:27`, Spanish beside `:73`)
+- Test: create `apps/till/src/screens/till-floor-screen.ready-bar.test.ts` (fixtures copied from
+  `till-floor-screen.signals.test.ts:13-128`); change one check in `till-floor-screen.signals.test.ts`
+
+**Interfaces:**
+- Consumes: Task 1's `readyTables`, called with `new Set(this.zones.map((zone) => zone.id))`.
+- Produces: `[data-ready-bar]` (a `section` named by its "Ready" text through `aria-labelledby`),
+  holding the `floor-ready` icon, the word, one `wt-button[data-ready-table=<tableId>]` per entry
+  (text `floor.ready_bar_table`, no `aria-label`: its text is its name, D5) and
+  `wt-button[data-ready-open]` (text `floor.ready_bar_open`, `aria-label` `floor.ready_bar_open_label`
+  naming the first entry), and the `help.floor.ready_bar` badge (`helpBadge`, `apps/till/src/widgets/help-badge.ts:7`).
+
+- [ ] **Step 1: Failing tests** (mount with `handheld: true` unless the case says otherwise):
+  1. "a handheld lists the tables with food ready, in place of the summary" — Mesa 2 (bar 3) and
+     Mesa 8 (bar 1, kitchen 2): the bar's entries read `["Mesa 2 · 3", "Mesa 8 · 3"]`, then
+     "Open ›"; no `[data-station-summary]`.
+  2. "the bar lists only the zones the Floor shows" — Mesa 8 in `z2`, `zones` holding only `z1`:
+     the entries are `["Mesa 2 · 3"]` (D1). With both zones, both.
+  3. "tapping a table opens it, and Open opens the first" — clicking `[data-ready-table="t8"]`
+     emits one `open-table` `{ tableId: "t8", seated: true }`; `[data-ready-open]` emits one for
+     `t2`; its `aria-label` is "Open Mesa 2".
+  4. "draws nothing while nothing is ready" — no `[data-ready-bar]` and no space kept for it (D2).
+  5. "a till keeps the summary, titled Ready, and draws no bar" — `handheld` unset: the summary's
+     `h2` reads "Ready" and `[data-ready-bar]` is absent.
+  6. "says it in Spanish, one dish or several" — `setLocale("es")`, Mesa 2 with 1 dish ready and
+     Mesa 8 with 3: the word «Listo», entries «Mesa 2 · 1» and «Mesa 8 · 3», «Abrir ›» named
+     «Abrir Mesa 2»; each entry's accessible name (`computedName` through the a11y helpers the
+     floor's a11y suite uses, or the button's text where it has no `aria-label`) equals its visible
+     text, and no name contains «listos» (D5).
+  In `till-floor-screen.signals.test.ts` "says it in Spanish" (`:336-338`): expect «Listo» (the
+  section's one changed check, Q51 (f) 8; ledger).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.ready-bar.test.ts src/screens/till-floor-screen.signals.test.ts`.
+- [ ] **Step 3: Implement** D3–D5: the property, the bar's markup and plain styles (where it sits,
+  its stacking and its look are Task 4b), the strings, the help badge, and `#stationSummary` returning
+  `nothing` on a handheld. The summary's comment (`:2908`) gains "A handheld draws the Ready bar
+  instead."
+- [ ] **Step 4: Run; expect PASS**, then the floor suites (Task 3's Step 4 command). Expected: all
+  pass; the seven summary cases the probe failed pass because they mount no `handheld`.
+- [ ] **Step 5:** typecheck till; eslint; format check; `pnpm exec vitest run scripts/english-only.test.ts`;
+  ledger (the changed Spanish check); `git commit -s -m "A797-5: a handheld's Floor shows the Ready bar"`
+
+### Task 4b: The Ready bar sits at the foot of the scrolling area, under any overlay, in both themes
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (the floor's `:host` gains `isolation:
+  isolate` and `min-height: 100%`; `.screen` becomes a column at least that tall; the bar's sticky
+  styles and look, D6)
+- Test: `apps/till/src/screens/till-floor-screen.ready-bar.test.ts` (layout cases),
+  `apps/till/src/screens/till-floor-screen.a11y.test.ts` (new case, run by its existing light and
+  dark `describe`s)
+
+- [ ] **Step 1: Failing tests.** The layout cases mount the floor inside a stand-in for the shell's
+  scrolling area: a `div` with `position: relative`, a fixed height and `overflow: auto` (the
+  scrolling area, `till-shell.ts:386-390`), holding the floor, and a sibling `div` with
+  `position: absolute; inset: 0` and a token background (the overlay, `:395-400`), `hidden` unless
+  the case opens it. Use `pageAt(390, 844)` then `pageAt(1024, 768)` (`test-helpers.ts:117`, undone
+  by `resetPage`).
+  1. "sits at the foot of the scrolling area, with two tables or forty" — with two cards and with
+     enough to scroll: the bar's bottom edge equals the scrolling area's bottom edge (within 1 px);
+     scrolled to the end, the last card's bottom is above the bar's top. Before the change the bar
+     is in the flow, so with two cards its bottom is far above the area's.
+  2. "fits one line" — height at most `tap-min + 2 × space-3` read from the computed tokens (D6);
+     with eight entries the word and Open › are both inside the area and the entries' strip scrolls
+     sideways (`scrollWidth > clientWidth`) instead of wrapping.
+  3. "is drawn under an overlay" — open the overlay; take the bar's centre point and compare the
+     **painted colour** there with the overlay's background (`page.screenshot` of a 1 × 1 clip, the
+     route the probe took, D6) — never `elementFromPoint` alone, which skips the `inert` Floor. Also
+     assert `getComputedStyle(floor).isolation === "isolate"`. Control by deletion: remove the
+     isolation and the case must fail on the colour (the probe painted the bar there). Record the
+     failing colour in the ledger.
+  4. a11y: "has no violations with the Ready bar, on the list" — `handheld: true`, two ready
+     tables, at 390 and 1024 px, in English and Spanish, axe as the file's other cases do; the bar's
+     text has the contrast axe requires in both themes.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.ready-bar.test.ts src/screens/till-floor-screen.a11y.test.ts`
+  — cases 1 and 3.
+- [ ] **Step 3: Implement** D6 with `--wt-*` tokens only (guards: `packages/ui/src/no-hardcoded-chrome.test.ts`
+  reads `packages/ui` alone, so check by eye that no hex, `rem` or `em` is added;
+  `scripts/style-token-names.test.ts` checks the names). Text in the brand colour, if Open › is
+  drawn so, reads `--wt-color-primary-text` (CLAUDE.md §3). The floor's `min-height: 100%` must not
+  change a till's layout: the floor suites in Step 4, including `till-floor-screen.layout`, are the
+  check.
+- [ ] **Step 4: Run; expect PASS**, then the floor suites (Task 3's Step 4 command) and
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`.
+- [ ] **Step 5:** typecheck till; eslint; format check; ledger; `git commit -s -m "A797-5: the Ready bar sits at the foot of a handheld's Floor, under any overlay"`
+
+### Task 5: A handheld's Floor re-reads in list view too
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (`#watchFloor` `:994-1004`: re-read when
+  `this.#zone.view === "map" || this.handheld`; `updated` must re-run it when `handheld` changes)
+- Test: `apps/till/src/screens/till-floor-screen.refresh.test.ts` (new cases beside "does not ask
+  while the list shows", `:159`)
+
+- [ ] **Step 1: Failing tests** (the file's fake timers and `countRefreshes`):
+  1. "a handheld asks every 15 s while the list shows" — mount with `handheld: true`, toggle to
+     List: after 30 s, two `floor-refresh` events, each `{ poll: true }`.
+  2. "the bar appears on a list-view handheld once a re-read brings food ready" — a handheld on a
+     list zone with nothing ready; advance 15 s; the test answers the refresh by setting `tables`
+     to a copy with Mesa 2 ready; `[data-ready-bar]` now lists "Mesa 2 · 3" (Review focus 6).
+  3. "the bar and its space go once a re-read has nothing ready" — from case 2's state, the next
+     refresh answers with Mesa 2 served: no `[data-ready-bar]`, and the last card's bottom moves
+     down to where it was before the bar appeared (D2).
+  4. "stops when the screen leaves" for a handheld in list view, as the existing case
+     (`:180`) does for the map.
+  The till's case "does not ask while the list shows" runs unchanged and must still pass.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.refresh.test.ts`.
+- [ ] **Step 3: Implement** D7.
+- [ ] **Step 4: Run; expect PASS**, then the floor suites (Task 3's Step 4 command).
+- [ ] **Step 5:** typecheck till; eslint; format check; ledger; `git commit -s -m "A797-5: a handheld's Floor keeps its Ready bar current in list view"`
+
+### Task 6: The till app hands the Floor its form factor and the device's memory
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts` (the floor mount `:18205-18227`: `.handheld=${kindOfFormFactor(this.formFactor ?? "") === "handheld"}`
+  and `.viewMemory=${this.#floorViewChoices()}`; new `#floorViewChoices()` beside `#menuMemory`
+  `:5869`, cached by `origin` and `deviceId`, `undefined` without a `deviceId`, storage obtained as
+  `:5871-5876` does)
+- Test: `apps/till/src/till-app-device-zones.test.ts` (a new `describe` inside "a handheld's zones",
+  `:1140`, reusing `mountHandheld` `:1177` and `tableIn` `:1146`); clear `waitron.floorView.` keys
+  in its `afterEach`, as `till-app-parties.test.ts:11279` clears its own prefix
+
+**Why the form factor, not `handheldMode`:** `handheldMode` is set once, from the identity read at
+start-up (`till-app.ts:4170`, `:4206-4209`), while a profile switch updates `formFactor`
+(`#applyProfileSetup`, `:9851-9858`) and leaves `handheldMode` as it was (read: nothing else
+assigns it, `grep -n "handheldMode =" apps/till/src/till-app.ts` → the declaration `:2444` and the
+assignments `:4170`, `:4209`). Slice 4's
+`#choosesZones` (`:9375-9381`) reads `formFactor` the same way. `kindOfFormFactor` is
+`apps/till/src/layout.ts:25`.
+
+- [ ] **Step 1: Failing tests** (both handheld form factors where cheap):
+  1. "a handheld's Floor draws the Ready bar for its chosen zones only" — choice `["room"]`, a
+     ready party at a `room` table and one at a `garden` table: the bar lists only the `room` table;
+     a till (the file's `mount`) with the same tables draws the summary and no bar.
+  2. "opening a table from the bar takes the Floor and its bar off the screen" — tap the bar's
+     `room` entry: the Order tab shows, and no `till-floor-screen` (hence no `[data-ready-bar]`) is
+     left in the app's shadow root (`till-app.ts:18339-18342` draws one tab). Then "an overlay from
+     ☰ is drawn over the bar": back on the Floor, open ☰ → Find a bill; the painted colour at the
+     bar's centre is the overlay's, read as Task 4b case 3 does (D6; `elementFromPoint` alone cannot
+     tell, the Floor being `inert`). Real-app check of D6's open point: the bar's bottom edge is at
+     or above `window.innerHeight` at 390 and 1024 px; if it is below, STOP and report (D6).
+  3. "List or Map survives a reload on this device, per zone" — toggle the Floor's view on `room`;
+     unmount and mount again with the same device id: `room` opens in the tapped view and `garden`
+     in its default; `localStorage` holds exactly one `waitron.floorView.` key, naming `device` and
+     `room`.
+  4. "another device id in the same browser starts from the default" — mount with device id
+     `other`: `room` opens in its default view.
+  5. "a refused store still keeps the choice for this session" — `vi.spyOn(Storage.prototype, "setItem")`
+     throwing: the toggle works, and selecting another zone and coming back keeps it.
+  6. "the bar follows a profile switch" — a device that starts on a till profile and switches to a
+     handheld one (the file's switch helpers, as slice 4's Review focus 1 case does): the Floor draws
+     the bar after the switch (with `handheldMode` it would not).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-device-zones.test.ts`
+  — cases 1, 2's overlay half and 6 (no `handheld` is passed), case 3 (nothing is stored).
+- [ ] **Step 3: Implement** the two bindings and `#floorViewChoices()`.
+- [ ] **Step 4: Run; expect PASS**, then the app suites the probe ran:
+  `pnpm --filter @waitron/till exec vitest run src/till-app src/screens/till-counter-cleanup.look src/widgets/guide-sheet`
+  (the probe: 43 files, 4361 tests, all passed; read the count). **Expected new failures, not a
+  STOP:** from here a handheld's Floor re-reads in list view (Task 5, D7), so an app suite that
+  mounts a handheld on a list-view zone, fakes `setInterval` and counts `getTablesState` calls can
+  see one more call per 15 s (the fake-timer suites include `till-app-device-zones.test.ts:204` and
+  `:1537`; the probe ran before D7 existed, so it could not show which). Fix each by expecting the
+  extra read, list it under Changed test checks with D7 as the reason, and name it in the ledger.
+  Any failure of another shape is a STOP.
+- [ ] **Step 5:** typecheck till; eslint; format check; ledger; `git commit -s -m "A797-5: a handheld's Floor gets the Ready bar and remembers its view"`
+
+### Task 7: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/table-service.md`, `apps/server/src/guide/es/table-service.md`
+  (two new sections each, before "Choose the zones this device shows" `{#device-zones}`, en `:137`,
+  es `:141`), `docs/developers/design-system.md` (the floor paragraph at `:978-990`),
+  `docs/backlog.md` (the two A797 entries, `:120-128` and `:2766-2776`), `docs/backlog/till.md`
+  (the A797 entry, `:1046`), this plan's slice 5 outline (one line: expanded below)
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+No guide mentions the summary or List/Map today (ran: `grep -rniE "ready to serve|listo para servir|list or map|lista o mapa" apps/server/src/guide`
+→ nothing).
+
+- [ ] **Step 1: Guides.** `## See which tables have food ready {#ready-bar}` /
+  `## Ver qué mesas tienen comida lista {#ready-bar}`: on a phone or tablet, a bar at the foot of
+  the Floor lists the tables with food ready and how many dishes; tap a table to open it, or Open
+  for the first; it lists only the zones this device shows, and goes when nothing is ready; a till
+  shows the same as a "Ready" list per station above the tables. `## Show a zone as a map or a list
+  {#floor-view}` / `## Ver una zona como mapa o lista {#floor-view}`: List or Map (in the zone's ⋯
+  menu on a phone) is kept for each zone on this device, so the zone opens that way next time; a
+  zone you have not switched opens as a map when its tables are placed, else as a list. Three to
+  five sentences each; Spanish only in the Spanish file.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md** — in the floor paragraph: "List/Map is remembered per zone on
+  the device (`apps/till/src/state/floor-view-memory.ts`)." and one sentence for the bar: on a
+  handheld a fixed Ready bar at the foot of the Floor replaces the per-station summary, listing the
+  shown zones' tables with food ready; a till keeps the summary, titled "Ready".
+- [ ] **Step 4: Backlog** — both A797 entries and `till.md`'s: slice 5 in review with this plan
+  linked; slices 1–3 next (#2037 landed). D1, D3 and D7's alternatives go in the PR's Owner FYI
+  (Closing slice 5), not the backlog.
+- [ ] **Step 5: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 6: Commit** `git commit -s -m "docs: A797-5 — guides, design system and backlog for the Ready bar and remembered List/Map"`
+
+### Task 8 (visual): LOOK at the Ready bar and the remembered view
+
+- [ ] **Step 1: Start the stack** from the worktree: `wa-wt demo waitron-feat-a797-5-ready-bar`;
+  `wa-wt ls` gives the URLs. Enrol a browser context on the Handheld profile («Móvil»), as slice
+  4's Task 6 did, and sign in.
+- [ ] **Step 2: Make food ready.** Seat two tables in one zone and one in another, send a dish to
+  each, and mark them ready on the kitchen screen (a second context on a kitchen display, or the
+  station view from ☰ → Kitchen).
+- [ ] **Step 3: Look** with the workspace's Playwright Chromium (the script in
+  `/Users/clintongormley/waitron-campaign-c/a797-5-scripts/`, never in the worktree), at **390 px**
+  and **1024 px**, **light and dark**, **English and Spanish**:
+  - the bar at the foot of the Floor, its entries in full names until slice 1 lands, Open › at the
+    end; on a list-view zone it appears within 15 s of a dish turning ready (D7);
+  - after a send, the Sent toast sits above the bar, not over it (D6);
+  - open ☰ → Find a bill, then Pass or Kitchen, over a Floor with food ready: the overlay hides the
+    bar entirely (D6); and the bar's foot is on screen, not cut by the window's edge (D6's open
+    point: if it is cut, STOP and report);
+  - turn help on at 390 px: the bar's help badge shows and does not push "Ready" or Open › out of
+    view;
+  - with enough ready tables to overflow at 390 px, the entries scroll sideways and "Ready" and
+    Open › stay in view;
+  - the last row of tables scrolls clear of the bar;
+  - untick a zone in ☰ → Zones on this device: its tables leave the bar (D1);
+  - toggle List/Map on one zone, reload: it opens as left; the other zone keeps its default;
+  - on a till (a third context on a till profile, 1280 px), the summary reads "Ready" / «Listo».
+- [ ] **Step 4: Save** each screenshot as a PNG under `/Users/clintongormley/waitron-campaign-c/a797-5-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, and describe what was seen in the ledger and
+  the PR body.
+- [ ] **Step 5: Stop** what you started: the script's process by its recorded id, then
+  `wa-wt down waitron-feat-a797-5-ready-bar`.
+
+### Closing slice 5
+
+- Focused runs per task as above; CI runs the till's package suites and coverage. Read the
+  `changes` job's outputs and the till's coverage job on the current head before calling the PR
+  green.
+- `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read and one
+  Codex run-it review.
+- PR body sections: **Build order** (#2037 and slice 4 landed; slice 1 next); **Changed test
+  checks** (`till-floor-screen.signals.test.ts` "says it in Spanish", «Listo para servir» →
+  «Listo», Q51 (f) 8; and any app suite Task 6 Step 4 changed for D7's extra read, from the
+  ledger); **Decisions** D1–D8 in one line each; **Till behaviour changes**: the
+  summary's title, and List/Map now per zone and remembered on a till too; **Handheld behaviour
+  changes**: the bar replaces the summary and its Open {station} buttons, and the Floor re-reads in
+  list view (D7); **LOOK** (what the screenshots showed). First line: no venue reset.
+- **Owner FYI** (one line each in the PR and the lane's questions file, not questions): D1 (the bar
+  follows the zone choice; the till's summary does not), D3 (a tablet handheld shows the bar in
+  place of the summary; the spec's letter would show both), D4 (Open › opens the first table until
+  slice 7 can order by waiting time), D7 (list view now re-reads on a handheld).
+- After merge: delete the branch local and remote and check the remote one is gone; update the
+  ledger; then slice 1.
 
 ---
 
