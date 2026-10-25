@@ -5733,7 +5733,13 @@ describe("a late-send confirmation on a request", () => {
   const confirmations: [string, LateSend | undefined][] = [
     ["no confirmation", undefined],
     ["a confirmation", { menuIds: [menuId] }],
-    ["a manager's confirmation", { menuIds: [menuId], override: { personId: "p-9", pin: "4321" } }],
+    [
+      "a manager's confirmation",
+      {
+        menuIds: [menuId],
+        override: { personId: "0b9e4d2c-7a31-4f6e-8c15-3d2a9f7e6b10", pin: "4321" },
+      },
+    ],
   ];
   const lines = [{ menuItemId: "toast", quantity: "1" }];
   const sends: [string, (api: TillApi, lateSend: LateSend | undefined) => Promise<unknown>][] = [
@@ -5753,15 +5759,8 @@ describe("a late-send confirmation on a request", () => {
           lateSend,
         ),
     ],
-    [
-      "pay",
-      (api, lateSend) =>
-        api.pay({ expectedEdit: null, id: "wo-1", lines, ...(lateSend && { lateSend }) }),
-    ],
-    [
-      "parkOrder",
-      (api, lateSend) => api.parkOrder({ id: "wo-1", lines, ...(lateSend && { lateSend }) }),
-    ],
+    ["pay", (api, lateSend) => api.pay({ expectedEdit: null, id: "wo-1", lines, lateSend })],
+    ["parkOrder", (api, lateSend) => api.parkOrder({ id: "wo-1", lines, lateSend })],
     [
       "updateWorkingOrder",
       (api, lateSend) =>
@@ -5769,7 +5768,7 @@ describe("a late-send confirmation on a request", () => {
           lines,
           revision: 2,
           expectedEdit: null,
-          ...(lateSend && { lateSend }),
+          lateSend,
         }),
     ],
     [
@@ -5781,7 +5780,7 @@ describe("a late-send confirmation on a request", () => {
           draftRevision: 2,
           expectedEdit: { billId: "b1", editorVersion: 1, draftId: "d1", draftRevision: 2 },
           groups: [{ lineIds: ["dl-1"], release: "fire" }],
-          ...(lateSend && { lateSend }),
+          lateSend,
         }),
     ],
   ];

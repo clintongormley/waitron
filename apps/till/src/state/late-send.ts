@@ -56,7 +56,9 @@ function isEndedPeriod(value: unknown): value is EndedPeriod {
 export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
   if (!isRecord(error) || error.code !== "menu_period.ended") return undefined;
   const { menus, menuItemIds } = error;
-  if (!Array.isArray(menus) || !menus.every(isEndedPeriod)) return undefined;
+  if (!Array.isArray(menus) || menus.length === 0 || !menus.every(isEndedPeriod)) {
+    return undefined;
+  }
   if (!Array.isArray(menuItemIds) || !menuItemIds.every((id) => typeof id === "string")) {
     return undefined;
   }
@@ -75,12 +77,11 @@ export function refusedLines<T extends OrderLine>(
   lines: readonly T[],
   refusal: LateSendRefusal,
 ): T[] {
-  const ids = new Set(refusal.menuItemIds);
+  const ids = new Set<string | undefined>(refusal.menuItemIds);
   return lines.filter(
     (line) =>
       line.workingOrderLineId === undefined &&
       line.source === undefined &&
-      line.product.menuItemId !== undefined &&
       ids.has(line.product.menuItemId),
   );
 }

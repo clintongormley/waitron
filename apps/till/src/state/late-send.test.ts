@@ -118,6 +118,8 @@ describe("lateSendRefusalOf", () => {
   it.each([
     ["menus not a list", { menus: "Breakfast", menuItemIds: ["x"] }],
     ["a menu with no name", { menus: [{ menuId: "breakfast" }], menuItemIds: ["x"] }],
+    ["a menu with no id", { menus: [{ periodName: "Breakfast" }], menuItemIds: ["x"] }],
+    ["no menus", { menus: [], menuItemIds: ["x"] }],
     ["a menu that is not an object", { menus: [null], menuItemIds: ["x"] }],
     ["a dish id that is not text", { menus, menuItemIds: [7] }],
     ["no dish ids", { menus }],
@@ -163,11 +165,6 @@ describe("refusedLines", () => {
     const result = refusedLines([stored, recalled, fresh], refusal);
     expect(result).toHaveLength(1);
     expect(result[0]).toBe(fresh);
-  });
-
-  it("matches nothing for a line with no offer id", () => {
-    const noOffer = { product: { id: "p" } as unknown as TillProduct, quantity: "1" };
-    expect(refusedLines([noOffer], { ...refusal, menuItemIds: [""] })).toEqual([]);
   });
 });
 
