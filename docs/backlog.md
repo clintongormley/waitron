@@ -2560,18 +2560,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a1012-delivery-for-online-orders)
 
 - **Loose ends left by A429 slice 1 (#1493).**
-  - The bookings list shows no table for any booking, and a past booking's kept table name
-    (`bookings.table_label`) is stored but shown nowhere.
-  - A walk-up counter sale delivered to a table in a table-service zone may become a table tab
-    whose payment sends nothing to the kitchen (unverified, read only): `createOpenOrder`
-    (`apps/server/src/working-order.ts`, from #297) replaces the order's zone with the delivery
-    table's. Whether the till can offer such a table was not checked.
-  - Nothing at boot level tests that the till API receives the table-removal seats (each enabled
-    module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
-    API's wiring.
-  - Small floor-plan refusals still missing: `dining_tables.plan_table_id` has no unique index (no
-    writer makes two live tables follow one master table today); the delivery-release trigger
-    accepts an empty label.
+  The bookings list shows no table for any booking, and a past booking's kept table name
+  (`bookings.table_label`) is stored but shown nowhere.
+  [Detail](backlog/till.md#loose-ends-left-by-a429-slice-1-1493)
 
 - **A phone's Chrome drew a white page for the box (2026-10-08; watch, not a job yet).** Quitting
   and reopening Chrome fixed it; what to capture if it recurs is in the detail.
@@ -2590,18 +2581,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a436--a-kitchen-display-with-someone-signed-in-logged-out-only-after-a-long-idle-time)
 
 - **Loose ends left by A366 slice 5 Part A (#1479).**
-  - Duplicating a till or handheld profile whose station list holds only switched-off stations is
-    refused with the general `device_profile.access_invalid` message. The copy drops switched-off
-    stations and the server refuses the emptied list; keeping them would need the create route to
-    know it is making a copy.
-  - Two device choices can lose a switched-off entry. A returning device accepted in Pair starts
-    without its switched-off stations and zones; and in Devices → edit a kitchen screen kind the
-    profile no longer shows is dropped from the draft, so it is lost if the choice is changed and
-    saved.
-  - A profile's explicit station and zone lists for its kitchen screens hold only the saving
-    location's ids, so saving the profile at one location empties another location's lists and,
-    now that a narrowing is allowed, narrows that location's devices. The flat station list these
-    lists replace was saved the same way, from W97 (#1311).
+  Two device choices can lose a switched-off entry.
+  [Detail](backlog/till.md#loose-ends-left-by-a366-slice-5-part-a-1479)
 
 - `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
   party).
