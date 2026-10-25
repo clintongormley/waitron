@@ -182,6 +182,17 @@ export {
   type StartAgainSummary,
 } from "./first-setup-start-again-confirmation.js";
 export {
+  START_AGAIN_MARKER_FILE,
+  assertNoStartAgainDeletion,
+  deleteMarkedAttempt,
+  finishStartAgainDeletion,
+  markerSize,
+  readStartAgainMarker,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
+  type StartAgainMarker,
+} from "./first-setup-start-again-deletion.js";
+export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,
