@@ -71,7 +71,7 @@ export async function readPayPeriodClosures(
 ): Promise<PayPeriodClosure[]> {
   validatePeriod(input.period);
   if (typeof input.locationId !== "string" || !input.locationId) invalidPeriod("location");
-  return readClosures(tx, input);
+  return readClosures(tx, { locationId: input.locationId, period: input.period });
 }
 export async function closePayPeriod(
   tx: Transaction,
@@ -86,7 +86,7 @@ export async function closePayPeriod(
   },
 ): Promise<PayPeriodClosure> {
   validatePeriod(input.period);
-  const existing = await readClosures(tx, input);
+  const existing = await readClosures(tx, { locationId: input.locationId, period: input.period });
   const replay = existing.find(
     (row) => row.period.start === input.period.start && row.period.end === input.period.end,
   );
