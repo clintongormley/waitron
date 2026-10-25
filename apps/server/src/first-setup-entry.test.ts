@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, tenants, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -16,6 +16,7 @@ import { writeValidated, validateDatabaseEntries } from "./restore.js";
 import { runStagedRestore } from "./restore-request.js";
 import { runStagedReset } from "./reset-request.js";
 import { freePorts } from "./testing/free-ports.js";
+import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 
@@ -457,4 +458,33 @@ it("folders reached through a symbolic link still finish an interrupted Start ag
   await gone(join(f.stateDir, "first-setup.json"));
   await gone(join(f.venueDir, "first-setup-claim.json"));
   await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
+});
+
+const listing = async (dir: string) =>
+  (await readdir(dir, { recursive: true })).filter((name) => name !== "venue.lock").sort();
+
+it("a finishable Start again while another connection holds the venue lock keeps today's answer", async () => {
+  const f = await markedDeletion();
+  const holder = await holdVenueElsewhere(f.venueDir);
+  try {
+    const before = { state: await listing(f.stateDir), venue: await listing(f.venueDir) };
+    const entry = await resolveFirstSetupEntry(f, {});
+    if (entry.kind === "resolution") await entry.dispose();
+    expect(entry.kind).toBe("resolution");
+    expect({ state: await listing(f.stateDir), venue: await listing(f.venueDir) }).toEqual(before);
+  } finally {
+    await holder.stop();
+  }
+});
+
+it("folders that cannot be put in canonical form fall through to today's path", async () => {
+  const f = await markedDeletion();
+  const linked = join(f.root, "venue-link");
+  await symlink(f.venueDir, linked);
+  const entry = await resolveFirstSetupEntry({ venueDir: linked, stateDir: f.stateDir }, {});
+  expect(entry.kind).toBe("normal");
+  expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
+  expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+    '{"synthetic":"attempt"}',
+  );
 });
