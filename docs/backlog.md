@@ -1380,8 +1380,14 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table
   without signing out**, and a send's refusal can open the window after the waiter has left the
   table; Kitchen agreed then answers "table.error" (`#sendDraft`, `apps/till/src/till-app.ts`). Close
-  both when the table changes, and open the refusal's window only on the table that sent. Read in
-  the code, not run. Left open by A789 slice 4.
+  both when the table changes, and open the refusal's window only on the table that sent.
+  Reproduced in a browser test by the slice 4 review (#2057). Left open by A789 slice 4.
+
+- **A1095. The till's refusal "A dish's period has ended." names no next step**
+  (`menu_period.ended`, `apps/till/src/i18n/codes.ts`). The till shows it when the box refuses a
+  late dish the till cannot match to any dish it sent, so no late-send window opens; sending again
+  meets the same refusal. Word what the waiter can do (for example, remove the dish or reopen the
+  table so the till marks it). Left open by A789 slice 4, #2057; the wording came with slice 3.
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
