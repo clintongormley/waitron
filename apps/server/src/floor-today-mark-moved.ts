@@ -154,7 +154,9 @@ export async function leaveHere(
       id: floorResetTables.id,
       tableId: floorResetTables.tableId,
       label: floorResetTables.label,
+      shortName: floorResetTables.shortName,
       tableLabel: diningTables.label,
+      tableShortName: diningTables.shortName,
     })
     .from(floorResetTables)
     .leftJoin(diningTables, eq(diningTables.id, floorResetTables.tableId))
@@ -163,7 +165,7 @@ export async function leaveHere(
     const state =
       row.tableId === null
         ? { pending: false, readyToMove: false }
-        : row.label === row.tableLabel
+        : row.label === row.tableLabel && row.shortName === row.tableShortName
           ? { pending: false, readyToMove: false, placed: true }
           : { placed: true, readyToMove: false };
     await tx.update(floorResetTables).set(state).where(eq(floorResetTables.id, row.id));

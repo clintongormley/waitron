@@ -70,6 +70,7 @@ export async function roomPrints(
       zoneId: diningTables.zoneId,
       id: diningTables.id,
       label: diningTables.label,
+      shortName: diningTables.shortName,
       seats: floorTodayTables.seats,
       fixed: floorTodayTables.fixed,
       x: floorTodayTables.x,

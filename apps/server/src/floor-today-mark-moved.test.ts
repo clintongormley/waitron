@@ -910,6 +910,79 @@ describe("Leave it here", () => {
     expect(await rowStateOf(table.a!)).toEqual(ended);
   });
 
+  /**
+   * A table seated in a zone whose plan then gives it `to` as its short name, its label unchanged
+   * and its place moved, so it needs moving. With `from`, the table holds that short name first.
+   */
+  async function shortNameChangeWaiting(to: string, from?: string) {
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [{ key: "a", place: { x: 0, y: 0 } }],
+      NOW,
+    );
+    const save = async (shortName: string, x: number, at: number) =>
+      inTx(v, async (tx) => {
+        const layout = await defaultLayout(tx, v.cfg, zoneId);
+        const plan = await readLayout(tx, v.cfg, layout);
+        const saved = plan.tables.find((t) => t.id === master.a)!;
+        const next = await saveLayout(
+          tx,
+          v.cfg,
+          REMOVALS,
+          layout,
+          {
+            revision: at,
+            tables: [
+              {
+                id: saved.id,
+                key: "a",
+                label: saved.label,
+                shortName,
+                seats: saved.seats,
+                fixed: saved.fixed,
+                placement: { ...saved.placement!, x },
+                partKeys: [],
+              },
+            ],
+          },
+          NOW,
+        );
+        await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+        return next.revision;
+      });
+    let at = revision;
+    if (from !== undefined) {
+      at = await save(from, 0, at);
+      expect((await tableRow(v, table.a!)).shortName).toBe(from);
+    }
+    const partyId = await seatAt(table.a!);
+    await save(to, 40, at);
+    await finish(partyId);
+    expect(await needsMoving(table.a!)).toBe(true);
+    return { zoneId, tableId: table.a! };
+  }
+
+  it("Leave it here keeps a row waiting whose table has its new label but not its new short name", async () => {
+    const { zoneId, tableId } = await shortNameChangeWaiting("Lh1");
+    const label = (await tableRow(v, tableId)).label;
+
+    await expectRevision(v, leaveHere(tableId), zoneId);
+
+    expect(await tableRow(v, tableId)).toMatchObject({ label, shortName: "Lh1" });
+    expect(await todayRow(tableId)).toMatchObject({ x: 0 });
+    expect(await rowStateOf(tableId)).toEqual(ended);
+  });
+
+  it("Leave it here keeps waiting for a case-only change", async () => {
+    const { zoneId, tableId } = await shortNameChangeWaiting("SN1", "Sn1");
+
+    await expectRevision(v, leaveHere(tableId), zoneId);
+
+    expect((await tableRow(v, tableId)).shortName).toBe("SN1");
+    expect(await todayRow(tableId)).toMatchObject({ x: 0 });
+    expect(await rowStateOf(tableId)).toEqual(ended);
+  });
+
   it("keeps its place and old name while a rename to a name another zone holds waits", async () => {
     const elsewhere = await plannedZone(v, [{ key: "b", place: { x: 0, y: 0 } }], NOW);
     const heldName = (await tableRow(v, elsewhere.table.b!)).label;

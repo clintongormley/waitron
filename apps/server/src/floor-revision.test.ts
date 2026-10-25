@@ -177,6 +177,23 @@ describe("the room's revision", () => {
     expect(await zoneRevisionOf(v, zoneId)).toBe(revision + 1);
   });
 
+  it("a catch-up that changes only a short name moves the revision by one", async () => {
+    const { zoneId, table, master } = await LONG_TABLE();
+    const { partyId } = await seat(v, table.bar!);
+    await resave(zoneId, (tables) =>
+      tables.map((t) => (t.id === master.bar ? { ...t, shortName: "Rv1" } : t)),
+    );
+    await resetToSaved(zoneId);
+    expect((await tableRow(v, table.bar!)).shortName).not.toBe("Rv1");
+    const revision = (await zoneRevisionOf(v, zoneId))!;
+    await finish(partyId);
+
+    await readFloor();
+
+    expect((await tableRow(v, table.bar!)).shortName).toBe("Rv1");
+    expect(await zoneRevisionOf(v, zoneId)).toBe(revision + 1);
+  });
+
   it("one floor read catching up two rooms moves only the room its catch-up changed, by one", async () => {
     const held = await LONG_TABLE();
     await seat(v, held.table.bar!);
