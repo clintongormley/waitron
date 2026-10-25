@@ -3119,6 +3119,62 @@ describe("each served menu's structure and Device Home Page", () => {
     });
   });
 
+  it("names no ended period for a menu the running period also offers", async () => {
+    await seedUnitTenant();
+    const locationId = brandLocationId(await seedLocation("Venue"));
+    const cfg = { locationId };
+    const zoneId = await seedZone(locationId, "Dining room");
+    const { lunchMenu, drinksMenu } = await scoped(async (tx) => {
+      const restaurant = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        orderStart: "table",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: restaurant.id });
+      const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
+      const afternoonMenu = (await createCatalogue(tx, { name: "Afternoon menu" })).id;
+      const drinksMenu = (await createCatalogue(tx, { name: "Drinks" })).id;
+      for (const menuId of [lunchMenu, afternoonMenu, drinksMenu]) await publish(tx, menuId);
+      const lunch = await saveMenuPeriod(tx, cfg, restaurant.id, {
+        name: "Lunch",
+        menuId: lunchMenu,
+        staffMenuIds: [drinksMenu],
+      });
+      const afternoon = await saveMenuPeriod(tx, cfg, restaurant.id, {
+        name: "Afternoon",
+        menuId: afternoonMenu,
+        staffMenuIds: [drinksMenu],
+      });
+      await replaceMenuWeek(
+        tx,
+        cfg,
+        restaurant.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            { periodId: lunch.id, startsAt: "12:00", endsAt: "14:00" },
+            { periodId: afternoon.id, startsAt: "14:00", endsAt: "19:00" },
+          ],
+        })),
+        new Date("2026-10-02T10:00:00Z"),
+        0,
+      );
+      return { lunchMenu, drinksMenu };
+    });
+    // 14:05 in Madrid on Wednesday 7 October 2026, during Afternoon.
+    const at = new Date("2026-10-07T12:05:00Z");
+    await scoped(async (tx) => {
+      const offers = await listZoneOffers(tx, cfg, zoneId, { at });
+      expect(offers.service.periodName).toBe("Afternoon");
+      const offered = (id: string) => offers.menus.find((menu) => menu.id === id);
+      expect(offered(drinksMenu)).toMatchObject({ orderable: true, endedPeriodName: null });
+      expect(offered(lunchMenu)).toMatchObject({ orderable: false, endedPeriodName: "Lunch" });
+      const state = await menuState(tx, cfg, zoneId, at);
+      const polled = (id: string) => state.menus.find((menu) => menu.menuId === id);
+      expect(polled(drinksMenu)).toMatchObject({ orderable: true, endedPeriodName: null });
+      expect(polled(lunchMenu)).toMatchObject({ orderable: false, endedPeriodName: "Lunch" });
+    });
+  });
+
   it("leaves out of the structure an offer whose product is Inactive, keeping its section in place (D5)", async () => {
     const venue = await seedDinnerHome();
     await scoped(async (tx) => {

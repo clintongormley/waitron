@@ -847,6 +847,55 @@ describe("period service at the counter", () => {
     ]);
   });
 
+  it("reads the offers again when a poll changes only which period ended", async () => {
+    const service = {
+      open: false,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    };
+    const endedAs = (name: string | null) => (menuId: string) =>
+      menuId === "desayunos" ? name : null;
+    const catalogue = (ended: (menuId: string) => string | null) => ({
+      ...BARRA,
+      service,
+      defaultMenuId: null,
+      menus: BARRA.menus.map((menu) => ({
+        ...menu,
+        isDefault: false,
+        orderable: false,
+        endedPeriodName: ended(menu.id),
+      })),
+    });
+    const polled = (ended: (menuId: string) => string | null) => ({
+      ...state([DESAYUNOS, ALMUERZO]),
+      service,
+      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
+        ...menu,
+        orderable: false,
+        endedPeriodName: ended(menu.menuId),
+      })),
+    });
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () => catalogue(endedAs("Breakfast"))),
+      listZoneOffers: vi.fn(async () => catalogue(endedAs("Breakfast"))),
+      menuState: vi.fn(async () => polled(endedAs("Breakfast"))),
+    });
+    await signIn(el);
+    await flush(el);
+    const reads = () =>
+      api.listDefaultZoneOffers.mock.calls.length + api.listZoneOffers.mock.calls.length;
+    const before = reads();
+    await poll(el);
+    expect(reads()).toBe(before);
+    api.listZoneOffers.mockResolvedValue(catalogue(endedAs(null)));
+    api.menuState.mockResolvedValue(polled(endedAs(null)));
+    await poll(el);
+    expect(reads()).toBe(before + 1);
+  });
+
   it("refreshes unchanged versions on a period change, chooses the running menu and keeps every basket line", async () => {
     const breakfast = {
       ...BARRA,
