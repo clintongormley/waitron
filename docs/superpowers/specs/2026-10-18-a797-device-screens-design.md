@@ -483,7 +483,9 @@ Each point is (read); the plan confirms it before relying on it.
   refusal can say "Terrace 1 already uses T1"), beside `table.label_taken`
   (`apps/server/src/errors.ts:377`): the domain is the table, as its siblings' is. It joins the HTTP status maps (`till-api.ts:551`,
   `management-api.ts:270`) and both apps' code catalogues (`apps/dashboard/src/i18n/codes.ts:578`,
-  `apps/till/src/i18n/codes.ts:189`). **Migration**, a schema change on a pre-live database: no
+  `apps/till/src/i18n/codes.ts:189`). (2026-10-25, slice 1: only the management status map and
+  the dashboard's catalogue carry it, because no till route can refuse with it; see the build
+  plan's slice 1, D11.) **Migration**, a schema change on a pre-live database: no
   backfill code, a venue reset is acceptable, said in the PR's first line. The plan must not let
   drizzle rebuild `dining_tables` (CLAUDE.md §3: a rebuild runs with foreign keys on); a nullable
   column that the save always fills is the expected shape. **Every table gets one:** the
