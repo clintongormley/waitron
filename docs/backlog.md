@@ -2000,35 +2000,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   someone who can give refunds (`evaluateCancel`, `packages/adjustments/src/policy.ts`). Stricter
   than design D12. Decide whether Discard should ask the question too.
 
-- **A910. A reason's item limit errs toward asking (left open by A758-1).** Each share is rounded
-  up to a whole basis point (`shareBp`, `packages/adjustments/src/record.ts`). What the reason's
-  discounts on the whole bill took off each row is not recorded, so `judgeComp`
-  (`apps/server/src/adjustments-apply.ts`) counts their total on each row of the item (the row asked
-  about, and its dish or its extras), capped at what that row is now below its list value less what
-  comps and discounts of any reason recorded on that row on this bill alone took (`readWholeLineReductions`: the
-  whole line, nothing split off, at the row's present quantity and list value); the item counts the
-  largest of those. A row no bill discount reached, such as one added after them, counts nothing for
-  them unless something else left in its cap reduced it. Left in the cap, and so counted up to the
-  reason's total: other reasons' discounts on the whole bill, a comp or discount of a dish that
-  priced its extras too, a comp or discount that carved the row off another, one taken on another bill before the line
-  moved here, and anything taken off a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
-  that was not tested. Revisit if a venue meets an approval it did not expect. The other way: an
-  item's count starts again on another bill, because the reason's earlier comps are read from the
-  item's present bill only. A finish-branch probe on 2026-10-20 took 40% off a bill with that
-  reason, split the Burger onto a new bill with `splitBill`, and a further 50% off it went through
-  with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
-  an item's count should follow it to another bill.
+- **A910. A reason's item limit errs toward asking (left open by A758-1).**
+  Revisit if a venue meets an approval it did not expect. Decide whether an item's count should
+  follow it to another bill. [Detail](backlog/till.md#a910-a-reasons-item-limit-errs-toward-asking-left-open-by-a758-1)
 
-- **A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).** Free always
-  counts, even after an earlier comp took part of the price, so it prints «Descuento 100%» beside
-  what was left, as a 100% percentage already does. An amount counts only when it took the item's
-  whole list price; one that takes what an earlier comp left prints «Descuento» and its amount, and
-  the report reads "Comp €6.00". One rule (`packages/adjustments/src/full-comp.ts`) decides the
-  ticket, the till's ticket and the report; a full invoice names a dish's row by its one own comp,
-  unless a bill comp also stands and the dish's discounts fall at more than one VAT rate, and
-  otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
-  (`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
-  Owner to confirm both halves.
+- **A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).**
+  Free always counts, even after an earlier comp took part of the price, so it prints «Descuento 100%»
+  beside what was left, as a 100% percentage already does. Owner to confirm both halves.
+  [Detail](backlog/till.md#a911-what-counts-as-a-full-comp-left-open-by-a758-1-a758-3-and-a758-4)
 
 - **A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left
   open by A758-1).** The voids-and-comps form's limit fields use `adjustments.no_limit` as the
