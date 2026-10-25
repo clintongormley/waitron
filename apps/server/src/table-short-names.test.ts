@@ -50,6 +50,15 @@ describe("resolveShortNames", () => {
     expect(resolveShortNames([{ label: "Table 1" }, kept], none)).toEqual([null, "T1"]);
   });
 
+  it("gives a kept short name that clashes none, rather than refusing the save", () => {
+    const keptT1 = (label: string): ShortNameEntry => ({
+      label,
+      stored: { label, shortName: "T1" },
+    });
+    expect(resolveShortNames([keptT1("Terrace 1")], new Map([["t1", "Table 1"]]))).toEqual([null]);
+    expect(resolveShortNames([keptT1("Terrace 1"), keptT1("Table 1")], none)).toEqual(["T1", null]);
+  });
+
   it("refuses a sent short name another zone's table holds, ignoring case, naming that table", () => {
     const taken = new Map([["t1", "Terrace 1"]]);
     expect(
@@ -95,14 +104,17 @@ describe("resolveShortNames", () => {
     expect(resolveShortNames(entries, none)).toEqual(["B1", "A1"]);
   });
 
-  it.each(["", "   ", "ABCDEF", "é".repeat(6)])("refuses %j as tables.0.shortName", (shortName) => {
-    expect(refusal(() => resolveShortNames([{ label: "Terrace 1", shortName }], none))).toEqual({
-      code: "floor_plan.invalid",
-      params: { field: "tables.0.shortName" },
-    });
-  });
+  it.each(["", "   ", "ABCDEF", "e\u0301".repeat(6)])(
+    "refuses %j as tables.0.shortName",
+    (shortName) => {
+      expect(refusal(() => resolveShortNames([{ label: "Terrace 1", shortName }], none))).toEqual({
+        code: "floor_plan.invalid",
+        params: { field: "tables.0.shortName" },
+      });
+    },
+  );
 
-  it.each(["ABCDE", "é".repeat(5)])("keeps %j, five characters", (shortName) => {
+  it.each(["ABCDE", "e\u0301".repeat(5)])("keeps %j, five characters", (shortName) => {
     expect(resolveShortNames([{ label: "Terrace 1", shortName }], none)).toEqual([shortName]);
   });
 });
