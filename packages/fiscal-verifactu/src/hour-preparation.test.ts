@@ -524,6 +524,7 @@ it("the hosted adapter keeps the host scope separate from clock metadata", async
       },
       contextKey: f.facts.contextKey,
       localHistory: f.facts.history[0],
+      floors: [],
     }),
   };
   const preparation = createHostedHourPreparation(host, {

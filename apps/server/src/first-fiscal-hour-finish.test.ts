@@ -273,7 +273,7 @@ it("empty never-activated hour restart retains originals and burns the entire ho
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   const before = await f.host.resolution.captureFirstSetupOriginals();
   expect(before.inspection.emptyDatabase).toBe(true);
-  const journal = await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8");
+  await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8");
   const actions = createFirstSetupResolutionActions({
     stateDir: f.stateDir,
     venueDir: f.venueDir,
@@ -321,7 +321,9 @@ it("empty never-activated hour restart retains originals and burns the entire ho
       original.bytes,
     );
   }
-  expect(await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8")).toBe(journal);
+  await expect(
+    readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
+  ).rejects.toMatchObject({ code: "ENOENT" });
   await expect(f.host.owner.status(f.owner())).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });

@@ -32,6 +32,8 @@ import { readFirstSetupRetirements } from "./first-setup-workspace.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import { createFirstSetupRecoveryDelivery } from "./first-setup-recovery-delivery.js";
 import { createFirstSetupCommandDelivery } from "./first-setup-command-document.js";
+import { boxFolders } from "./box-folders.js";
+import { readStartAgainNote, startAgainFloorSources } from "./first-setup-start-again-note.js";
 import "./errors.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
@@ -242,6 +244,11 @@ export function createFirstSetupRuntime(options: {
           ...continuationContext.slice(1),
         ]),
         localHistory,
+        floors: startAgainFloorSources(
+          await readStartAgainNote(
+            (await boxFolders({ stateDir: options.stateDir, venueDir: options.venueDir })).stateDir,
+          ),
+        ),
       });
     },
     coordinator,

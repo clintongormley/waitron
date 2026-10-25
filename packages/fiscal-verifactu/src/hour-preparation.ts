@@ -170,7 +170,7 @@ export function createHostedHourPreparation(
         bases: facts.context.bases,
         contextKey: facts.contextKey,
         ...(facts.continuationKey === undefined ? {} : { waitKey: facts.continuationKey }),
-        history: [facts.localHistory as HourHistorySource],
+        history: [facts.localHistory, ...facts.floors] as HourHistorySource[],
         clock: clock.clock,
       };
     },

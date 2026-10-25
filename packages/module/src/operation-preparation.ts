@@ -32,6 +32,7 @@ export interface ModuleOperationHost {
     /** Pending work survives ownership recovery; selected material keeps the owner-scoped key. */
     readonly continuationKey?: string;
     readonly localHistory: unknown;
+    readonly floors: readonly unknown[];
   }>;
   withPreparationState?<T>(
     binding: OperationBinding,

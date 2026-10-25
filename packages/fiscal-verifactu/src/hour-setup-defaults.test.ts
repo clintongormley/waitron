@@ -73,6 +73,7 @@ function fixture() {
     readSetupFacts: async () => ({
       contextKey: key,
       localHistory: { reference: "venue", complete: true, records: [] },
+      floors: [],
       context: {
         attemptId: "owned-attempt",
         binding,

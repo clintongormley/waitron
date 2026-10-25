@@ -11,13 +11,20 @@ import {
   resolveFirstSetupWorkspace,
   readFirstSetupRetirementArchives,
   selectFirstSetupWorkspace,
+  firstSetupModuleContext,
+  raiseStartAgainNote,
+  readModulePreparationHistory,
+  readFirstSetupRecoveryDeliverySnapshot,
   type RegisterAnswer,
   type WorkspaceBinding,
   type FirstSetupState,
 } from "@waitron/provisioning";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { lockVenueDatabase } from "@waitron/db";
+import { initialSetupFor, type WaitronModule } from "@waitron/module";
+import { readFirstFiscalEvidenceSnapshot } from "./first-fiscal-evidence.js";
+import { readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
@@ -48,6 +55,45 @@ function unused(state: FirstSetupState) {
         ["claim", "resume", "recover", "candidates", "checked", "abandoned"].includes(event.kind),
       ),
   );
+}
+/** Outside evidence refuses Start again, so only the attempt's own public evidence is read here. */
+async function recordStartAgainFloor(
+  roots: FirstSetupRoots,
+  anchor: FirstSetupRoots,
+  state: FirstSetupState,
+  originals: readonly { name: string; bytes: Uint8Array | null }[],
+  modules: readonly WaitronModule[] | undefined,
+) {
+  const attempts = [state, ...state.previous];
+  const names = [
+    ...new Set(attempts.flatMap((attempt) => attempt.frozen.modules.map(({ module }) => module))),
+  ];
+  if (names.length === 0) return;
+  if (modules === undefined) unavailable();
+  let latest: { floorMs: number; lastName: string; module: string } | null = null;
+  for (const module of names) {
+    const seat = initialSetupFor(modules, module)?.startAgainFloor;
+    if (seat === undefined) continue;
+    const publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
+    const recovery = readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
+    const document =
+      recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(module, state, originals));
+    if (document !== undefined) publicEvidence.push(document);
+    const floor = seat({
+      attempts: attempts
+        .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === module))
+        .map((attempt) => ({
+          context: firstSetupModuleContext(attempt, module),
+          input: attempt.inputs[module],
+        })),
+      preparations: await readModulePreparationHistory(roots, module),
+      publicEvidence,
+    });
+    if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
+      latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
+  }
+  if (latest !== null) await raiseStartAgainNote(anchor.stateDir, latest);
+  await rm(join(anchor.stateDir, "module-preparation-state.json"), { force: true });
 }
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
@@ -316,6 +362,13 @@ export function createFirstSetupResolutionActions(
             stateDir: join(base, "state"),
             selectionGeneration: (current.binding?.selectionGeneration ?? 0) + 1,
           };
+          await recordStartAgainFloor(
+            { stateDir: options.stateDir, venueDir: options.venueDir },
+            anchor,
+            state,
+            snapshot.originals,
+            host.modules,
+          );
           const records = createFirstSetupResolutionStore({
             ...anchor,
             coordinator: createFirstSetupCoordinator(),
