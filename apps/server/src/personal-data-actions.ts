@@ -56,6 +56,8 @@ export function actionsPersonalData(
   options: { chunk?: number } = {},
 ): PersonalDataPart[] {
   const chunk = options.chunk ?? SALE_LOOKUP_CHUNK;
+  if (!Number.isInteger(chunk) || chunk < 1)
+    throw new Error(`personal-data actions chunk must be a positive whole number, not ${chunk}`);
   return [
     {
       owner: "server",
