@@ -18,7 +18,7 @@ const suite = useVenueDb({
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PATH = "/management-api/me/personal-data/export";
 
-// Leaves `now` unset, so the route's own clock and its server-parts default are both exercised.
+// Leaves `now` unset, so the route's own clock is exercised.
 function mounted(
   modules: string[],
   patch: { venueLocale?: string; privacyNoticeUrl?: string } = {},
@@ -95,7 +95,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
         personId: row!.id,
         offsetMinutes: 60,
         origin: jobOrigin("dashboard"),
-        at: "2026-01-02T09:00:00.000Z",
+        at: "2026-01-02T23:30:00.000Z",
       }),
     );
     const session = await withTransaction(suite.db, (tx) =>
@@ -108,7 +108,13 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
     expect(response.status).toBe(200);
     const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
     expect(Object.hasOwn(files, "time-record.csv")).toBe(true);
-    expect(strFromU8(files["time-record.csv"]!)).toContain("2026-01-02");
+    // 23:30Z at +60 is 00:30 on the next local day: a UTC reading would print 2026-01-02.
+    const csv = strFromU8(files["time-record.csv"]!);
+    expect([
+      csv.includes('"document","from","2026-01-03"'),
+      csv.includes('"2026-01-03T00:30:00+01:00"'),
+      csv.includes("2026-01-02"),
+    ]).toEqual([true, true, false]);
   });
 
   it("passes the venue's language and the privacy notice's address to the README", async () => {

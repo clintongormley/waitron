@@ -23,7 +23,7 @@ export interface PersonalDataExportDeps {
   nodeId: string;
   modules: readonly WaitronModule[];
   /** Parts the server adds itself. */
-  serverParts?: readonly PersonalDataPart[];
+  serverParts: readonly PersonalDataPart[];
   venueLocale: string;
   privacyNoticeUrl?: string;
   now?: () => Date;
@@ -59,7 +59,7 @@ export async function sendPersonalData(
   authorize: PersonalDataAuthorize,
 ): Promise<Response> {
   const at = (deps.now ?? (() => new Date()))();
-  const parts = [...personalDataParts(deps.modules), ...(deps.serverParts ?? [])];
+  const parts = [...personalDataParts(deps.modules), ...deps.serverParts];
   // Write-lock turns, not `withTransaction`: its closing change-log drain is a write a full disk
   // refuses even though this route changes nothing. A stated exception to one `withTransaction` per
   // route.
