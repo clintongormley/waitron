@@ -13,9 +13,9 @@ export interface LateSendDish {
 }
 
 /**
- * Asks the waiter to check with the kitchen before sending dishes whose period has ended. It changes
- * nothing itself: the app removes the dishes on `wt-late-send-removed`, resends with the kitchen's
- * agreement on `wt-late-send-agreed`, and keeps the order as it was on `wt-late-send-cancelled`.
+ * Lists dishes whose period has ended and changes nothing itself: Remove them sends
+ * `wt-late-send-removed`, Kitchen agreed sends `wt-late-send-agreed`, and dismissing it sends
+ * `wt-late-send-cancelled`.
  */
 @customElement("till-late-send-dialog")
 export class TillLateSendDialog extends LitElement {
@@ -39,8 +39,8 @@ export class TillLateSendDialog extends LitElement {
 
   @property({ attribute: false }) dishes: readonly LateSendDish[] = [];
 
-  /** One or more, in the order they first appear among the dishes. */
-  @property({ attribute: false }) periodNames: readonly string[] = [];
+  /** In the order they first appear among the dishes. */
+  @property({ attribute: false }) periodNames: readonly [string, ...string[]] = [""];
 
   /** `save`: a Park, which stores the order without sending it to the kitchen. */
   @property() purpose: "send" | "save" = "send";
@@ -51,7 +51,7 @@ export class TillLateSendDialog extends LitElement {
 
   #heading(): string {
     if (this.periodNames.length === 1)
-      return t("late_send.heading").replace("{period}", () => this.periodNames[0]!);
+      return t("late_send.heading").replace("{period}", () => this.periodNames[0]);
     const periods = new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(
       this.periodNames,
     );

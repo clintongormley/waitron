@@ -34,10 +34,15 @@ const button = (el: TillLateSendDialog, name: "remove" | "agreed") =>
 
 function captured(host: HTMLElement) {
   const seen = { removed: 0, agreed: 0, cancelled: 0 };
-  host.addEventListener("wt-late-send-removed", () => seen.removed++);
-  host.addEventListener("wt-late-send-agreed", () => seen.agreed++);
-  host.addEventListener("wt-late-send-cancelled", () => seen.cancelled++);
-  return seen;
+  const shapes: { type: string; bubbles: boolean; composed: boolean }[] = [];
+  const count = (key: keyof typeof seen) => (event: Event) => {
+    seen[key]++;
+    shapes.push({ type: event.type, bubbles: event.bubbles, composed: event.composed });
+  };
+  host.addEventListener("wt-late-send-removed", count("removed"));
+  host.addEventListener("wt-late-send-agreed", count("agreed"));
+  host.addEventListener("wt-late-send-cancelled", count("cancelled"));
+  return { seen, shapes };
 }
 
 describe("till-late-send-dialog", () => {
@@ -92,18 +97,22 @@ describe("till-late-send-dialog", () => {
     expect(rows(el)).toEqual(["0.32 kg× Ham"]);
   });
 
-  it("sends each button's event once, bubbling out of its shadow root", async () => {
+  it("sends each button's event once, as a bubbling, composed event", async () => {
     const { el, host } = await mount({ dishes, periodNames: ["Lunch"], purpose: "send" });
-    const seen = captured(host);
+    const { seen, shapes } = captured(host);
     button(el, "remove").click();
     expect(seen).toEqual({ removed: 1, agreed: 0, cancelled: 0 });
     button(el, "agreed").click();
     expect(seen).toEqual({ removed: 1, agreed: 1, cancelled: 0 });
+    expect(shapes).toEqual([
+      { type: "wt-late-send-removed", bubbles: true, composed: true },
+      { type: "wt-late-send-agreed", bubbles: true, composed: true },
+    ]);
   });
 
   it("cancels on Escape and keeps the dialog's own close event inside", async () => {
     const { el, host } = await mount({ dishes, periodNames: ["Lunch"], purpose: "send" });
-    const seen = captured(host);
+    const { seen, shapes } = captured(host);
     const leaked = vi.fn();
     host.addEventListener("wt-close", leaked);
     const closed = new Promise((resolve) =>
@@ -113,6 +122,7 @@ describe("till-late-send-dialog", () => {
     await closed;
     await vi.waitFor(() => expect(seen.cancelled).toBe(1));
     expect(seen).toEqual({ removed: 0, agreed: 0, cancelled: 1 });
+    expect(shapes).toEqual([{ type: "wt-late-send-cancelled", bubbles: true, composed: true }]);
     expect(leaked).not.toHaveBeenCalled();
   });
 });
