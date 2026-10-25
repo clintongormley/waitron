@@ -384,6 +384,8 @@ declare module "@waitron/shared" {
      * asked for.
      */
     "table.label_taken": { label: string; field?: "name" };
+    /** A floor-plan save sent a short name another table holds; `takenBy` is that table's full name. */
+    "table.short_name_taken": { shortName: string; takenBy: string; field: "shortName" };
     "table.inactive": { tableId: string };
     /** A change to today's plan named a table with no today's row, or a spare where it needs a place. */
     "table.not_on_today_plan": { tableId: string };
