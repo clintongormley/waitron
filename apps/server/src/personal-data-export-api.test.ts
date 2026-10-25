@@ -179,7 +179,9 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(files["README.txt"]!.split("\n")[0]).toBe(
       PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"),
     );
-    expect(subjects.map((s) => s.language)).toEqual(["es"]);
+    expect(subjects).toEqual([
+      { personId: martaId, language: "es", at: NOW, timeZone: "Europe/Madrid", locationId },
+    ]);
   });
 
   it("holds none of a colleague's data, and refuses a query naming someone else", async () => {
