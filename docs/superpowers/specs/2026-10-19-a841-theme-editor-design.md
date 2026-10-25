@@ -2714,6 +2714,14 @@ permission-gated write (CLAUDE.md's risk triggers).
   a name that does not fit its square with "…" and can be pinched, so the 130% cases hold every
   name's box inside its square at both widths and every name whole only on a 1280 × 800 till; on a
   390 px phone the map already cuts names at 100%.
+- **Slice 9 in two pull requests** (lane A ruling 2026-10-25, slice 9 plan D1): 9a prints the
+  theme's logo on receipts, A4 invoices, the till's ticket view and a department's Receipts preview;
+  9b adds the Look card's "How it prints", whose guide paragraph links to 9a's section. Not taken:
+  one pull request of sixteen tasks.
+- **A department whose settings cannot be trusted keeps its readable fields** (lane A ruling
+  2026-10-25, slice 9 plan D2): when the stored `logo` key holds no usable name, the receipt still
+  prints the department's phone and texts, and prints no logo at all, not even the venue's. Not
+  taken: the empty receipt, which would drop fields that were never in doubt.
 
 ## 17. Risks
 
