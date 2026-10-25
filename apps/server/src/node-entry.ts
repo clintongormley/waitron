@@ -415,7 +415,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
-  const selected = admission.roots.binding === null && !moved ? deps : rooted;
+  const selected = !moved ? deps : rooted;
   return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }
 

@@ -5,7 +5,7 @@ import {
   createFirstSetupResolutionStore,
   createFirstSetupStore,
   inspectFirstSetupWorkspaceSelection,
-  assertFirstSetupBootTarget,
+  assertNoLegacyFirstSetupWorkspace,
   selectFirstSetupWorkspace,
   firstSetupModuleContext,
   raiseStartAgainNote,
@@ -307,7 +307,7 @@ export function createFirstSetupResolutionActions(
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {
           exactKeys(request, ["inspectionId", "revision", "ownerGeneration", "owner"]);
-          await assertFirstSetupBootTarget(options);
+          await assertNoLegacyFirstSetupWorkspace(options);
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
           if (inspection.database !== "missing") unavailable();
@@ -337,7 +337,7 @@ export function createFirstSetupResolutionActions(
             "register",
             "confirmMissingDatabase",
           ]);
-          await assertFirstSetupBootTarget(options);
+          await assertNoLegacyFirstSetupWorkspace(options);
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
           const retained = await host.store.readForRepair();

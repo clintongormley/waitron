@@ -95,11 +95,7 @@ export async function startServerOrFirstSetupResolution(
       return listen(new Hono(), { ...options, bootstrapOnly: true });
     if (admission.kind === "normal")
       return admission.run(async () => {
-        if (
-          admission.roots.binding === null &&
-          admission.roots.stateDir === stateDir &&
-          admission.roots.venueDir === venueDir
-        )
+        if (admission.roots.stateDir === stateDir && admission.roots.venueDir === venueDir)
           return (seams.startServer ?? startServer)(env, base);
         const selectedBase = {
           ...env,

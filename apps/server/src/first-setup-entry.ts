@@ -3,15 +3,11 @@ import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
 import { withFirstSetupPublication } from "./first-setup-publication.js";
 import { Hono } from "hono";
-import { isDeepStrictEqual } from "node:util";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import {
-  assertFirstSetupBootTarget,
+  assertNoLegacyFirstSetupWorkspace,
   canonicalFirstSetupDirectory,
-  firstSetupAnchorFor,
-  resolveFirstSetupWorkspace,
-  type FirstSetupBootTarget,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -91,13 +87,12 @@ async function resolveLegacyFirstSetupEntry(
   } catch {
     return {
       kind: "normal" as const,
-      roots: { ...roots, binding: null },
+      roots,
       run: <T>(body: (venueHeld: boolean) => Promise<T>) => body(false),
     };
   }
-  let target: FirstSetupBootTarget;
   try {
-    target = await resolveFirstSetupWorkspace(roots);
+    await assertNoLegacyFirstSetupWorkspace(roots);
   } catch {
     return {
       kind: "resolution" as const,
@@ -105,7 +100,7 @@ async function resolveLegacyFirstSetupEntry(
       roots,
     };
   }
-  const host = createFirstSetupModuleHost({ ...target, environment, modules: ALL_MODULES });
+  const host = createFirstSetupModuleHost({ ...roots, environment, modules: ALL_MODULES });
   let claimed = false;
   try {
     const admission = await needsResolution(host);
@@ -113,36 +108,29 @@ async function resolveLegacyFirstSetupEntry(
     if (admission.unresolved)
       return {
         kind: "resolution" as const,
-        ...(await resolutionApp(target, environment, requestRestart, log)),
-        roots: target,
+        ...(await resolutionApp(roots, environment, requestRestart, log)),
+        roots,
       };
   } catch {
     return {
       kind: "resolution" as const,
-      ...(await resolutionApp(target, environment, requestRestart, log)),
-      roots: target,
+      ...(await resolutionApp(roots, environment, requestRestart, log)),
+      roots,
     };
   }
   return {
     kind: "normal" as const,
-    roots: target,
-    /** `body` learns whether this process holds the target's venue folder for the whole call. */
+    roots,
+    /** `body` learns whether this process holds the venue folder for the whole call. */
     async run<T>(body: (venueHeld: boolean) => Promise<T>): Promise<T> {
-      if (!claimed && target.binding === null) return body(false);
-      const anchor = await firstSetupAnchorFor(target);
-      const hold = await lockVenueDatabase(anchor.venueDir);
-      let selected: Awaited<ReturnType<typeof lockVenueDatabase>> | undefined;
+      if (!claimed) return body(false);
+      const hold = await lockVenueDatabase(roots.venueDir);
       try {
-        if (anchor.venueDir !== target.venueDir)
-          selected = await lockVenueDatabase(target.venueDir);
-        const current = await resolveFirstSetupWorkspace(roots);
-        if (!isDeepStrictEqual(current, target)) throw new AppError("setup.attempt_uncertain", {});
-        await assertFirstSetupBootTarget(target);
+        await assertNoLegacyFirstSetupWorkspace(roots);
         if ((await needsResolution(host)).unresolved)
           throw new AppError("setup.attempt_uncertain", {});
         return await body(true);
       } finally {
-        selected?.release();
         hold.release();
       }
     },

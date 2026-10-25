@@ -6,8 +6,8 @@ import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import {
   assertOtherFirstSetupAllowed,
-  assertFirstSetupBootTarget,
   assertFirstSetupBackupBootTarget,
+  assertNoLegacyFirstSetupWorkspace,
   readTenantIdentities,
 } from "@waitron/provisioning";
 import {
@@ -880,7 +880,7 @@ async function bootServer(
   }
 
   await assertFirstSetupBackupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
-  await assertFirstSetupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
+  await assertNoLegacyFirstSetupWorkspace({ venueDir: config.venueDir, stateDir: config.stateDir });
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({
