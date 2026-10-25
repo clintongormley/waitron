@@ -411,4 +411,61 @@ describe("the clock watch over the real seat", () => {
     expect(checks().map((row) => row.id)).toEqual([opened!.id]);
     expect(count("clock_confirmations")).toBe(0);
   });
+
+  // The sale at 08:00 was dated right. A look at 08:02 reads the clock 150 s slow, at 07:59:30:
+  // within a minute of that sale, so no longer stopped, and the check waits.
+  it.each([
+    ["before the look reads the clock", "look"],
+    ["while AEAT is asked", "ask"],
+  ])(
+    "closes a waiting check on the reading AEAT agreed with, listing nothing, when the clock is put right %s",
+    async (_when, correctedAt) => {
+      const at = await steppedBack();
+      let correct = false;
+      const w = watch(at, () => {
+        if (!correct) return null;
+        if (correctedAt === "ask") at.clocks.skew = 0;
+        return truth(at);
+      });
+      await w.look(T);
+      const [opened] = checks();
+      at.clocks.skew = correctedAt === "look" ? 0 : -150 * S;
+      correct = true;
+      await w.look(T0 + 2 * M);
+      await w.stop();
+      const rows = closings();
+      expect(rows).toEqual([
+        { id: expect.any(String), source: "authority", check_id: opened!.id, unconfirmed: false },
+      ]);
+      const [row] = suite.db.all<{ confirmed_at: string }>(
+        sql`select confirmed_at from clock_confirmations`,
+      );
+      expect(row!.confirmed_at).toBe(new Date(T0 + 2 * M).toISOString());
+      const listed = await withTransaction(venue.db, (tx) =>
+        venue.backend.misdatedRecords!(tx, rows[0]!.id),
+      );
+      expect(listed).toEqual({ known: true, records: [] });
+    },
+  );
+
+  it("closes nothing on two agreeing devices and keeps the same check open when the clock steps back again while AEAT is asked", async () => {
+    const at = await steppedBack();
+    let ask = false;
+    const w = watch(at, () => {
+      if (ask) at.clocks.skew = -10 * M;
+      return null;
+    });
+    await w.look(T);
+    const [opened] = checks();
+    at.clocks.skew = 0;
+    at.clocks.real = T0 + 2 * M;
+    noteTwoDevices(at.store, at);
+    ask = true;
+    await w.look(T0 + 2 * M);
+    expect(count("clock_confirmations")).toBe(0);
+    await w.look(T0 + 2 * M + 15 * S);
+    await w.stop();
+    expect(checks().map((row) => row.id)).toEqual([opened!.id]);
+    expect(count("clock_confirmations")).toBe(0);
+  });
 });

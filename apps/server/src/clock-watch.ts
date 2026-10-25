@@ -178,25 +178,26 @@ export function startClockWatch(deps: {
     if (sample !== null) deps.store.noteAuthority(sample);
   }
 
-  /** AEAT is asked before the closing, so an answer it gives on this check can close the check. */
-  async function closeWaiting(
-    reading: Pick<Reading, "instant" | "offsetMinutes">,
-    bootAt: BootReading,
-  ): Promise<void> {
+  /** AEAT is asked before the closing, so an answer it gives on this check can close the check;
+   * the closing takes the witnesses, the clock reading and the boot reading together, inside its
+   * transaction, so the reading it stores is the one those witnesses were taken against. */
+  async function closeWaiting(reading: Pick<Reading, "instant" | "offsetMinutes">): Promise<void> {
     const { waitingClockCheck, closeClockCheckByItself } = deps.backend;
     if (waitingClockCheck === undefined || closeClockCheckByItself === undefined) return;
     const waiting = await deps.read((tx) => deps.backend.waitingClockCheck!(tx, reading));
     if (waiting === null || stopped) return;
     await askAuthority();
     if (stopped) return;
-    const { confirmation } = await deps.transaction((tx) =>
-      deps.backend.closeClockCheckByItself!(tx, {
-        reading,
-        boot: bootAt,
-        witnesses: deps.store.witnesses(),
+    const { confirmation } = await deps.transaction(async (tx) => {
+      const witnesses = deps.store.witnesses();
+      const now = deps.clock.now();
+      return deps.backend.closeClockCheckByItself!(tx, {
+        reading: { instant: now.instant, offsetMinutes: now.offsetMinutes },
+        boot: boot.readBoot(),
+        witnesses,
         nodeId: deps.nodeId,
-      }),
-    );
+      });
+    });
     if (confirmation === null) return;
     deps.store.clear();
     deps.log("info", "clock_watch.check_closed", {
@@ -257,10 +258,7 @@ export function startClockWatch(deps: {
       if (reading === undefined || recordable(reading)) deps.store.endStop();
       if (reading !== undefined) {
         try {
-          await closeWaiting(
-            { instant: reading.instant, offsetMinutes: reading.offsetMinutes },
-            bootAt!,
-          );
+          await closeWaiting({ instant: reading.instant, offsetMinutes: reading.offsetMinutes });
         } catch (error) {
           deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
         }
