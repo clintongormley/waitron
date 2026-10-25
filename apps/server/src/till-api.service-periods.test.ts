@@ -7,9 +7,11 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  invoiceSeries,
   locations,
   parties,
   printJobs,
+  sales,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -18,6 +20,7 @@ import {
 } from "@waitron/db";
 import { loginWithPin, persons, registerModulePermissions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { payments } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProductToMenu,
@@ -1443,6 +1446,86 @@ describe("a dish whose period ended earlier today", () => {
           body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
         });
         expect(await orderRows(id)).toEqual([]);
+      },
+    );
+
+    const managerCounterVenue = async () => {
+      const v = await counterVenue();
+      await withTransaction(suite.db, (tx) =>
+        updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true }),
+      );
+      const [manager] = await suite.db
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.displayName, "Administradora"));
+      return { v, manager: manager!.id };
+    };
+    const routes = [
+      ["/api/sales", cashSale],
+      ["/api/pay", cardSale],
+    ] as const;
+    const footprint = async () => ({
+      orders: (await suite.db.select().from(workingOrders)).length,
+      sales: (await suite.db.select().from(sales)).length,
+      payments: (await suite.db.select().from(payments)).length,
+      nextInvoiceNumbers: await suite.db
+        .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
+        .from(invoiceSeries)
+        .orderBy(invoiceSeries.id),
+      records: await filingRows(),
+    });
+
+    it.each(routes)(
+      "refuses %s with a wrong manager PIN and writes nothing",
+      async (_path, sent) => {
+        const { v, manager } = await managerCounterVenue();
+        const before = await footprint();
+        expect(
+          await sent(v, randomUUID(), {
+            lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "9999" } },
+          }),
+        ).toMatchObject({ status: 401, body: { error: { code: "pin.invalid" } } });
+        expect(await footprint()).toEqual(before);
+      },
+    );
+
+    it.each(routes)(
+      "refuses %s confirming another ended menu, even with the manager's PIN, and writes nothing",
+      async (_path, sent) => {
+        const { v, manager } = await managerCounterVenue();
+        const before = await footprint();
+        expect(
+          await sent(v, randomUUID(), {
+            lateSend: { menuIds: [v.menus.Bebidas], override: { personId: manager, pin: "1234" } },
+          }),
+        ).toMatchObject({
+          status: 409,
+          body: {
+            error: {
+              code: "menu_period.ended",
+              params: { menus: [{ menuId: v.menus.Almuerzo, periodName: "Lunch" }] },
+            },
+          },
+        });
+        expect(await footprint()).toEqual(before);
+      },
+    );
+
+    it.each(routes)(
+      "replays a confirmed %s sent again without lateSend, writing nothing more",
+      async (_path, sent) => {
+        const { v, manager } = await managerCounterVenue();
+        const id = randomUUID();
+        const before = await footprint();
+        const first = await sent(v, id, {
+          lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "1234" } },
+        });
+        expect(first.status).toBe(200);
+        const taken = await footprint();
+        expect(taken.sales).toBe(before.sales + 1);
+        expect(taken.records).toBeGreaterThan(before.records);
+        expect(await sent(v, id, {})).toEqual(first);
+        expect(await footprint()).toEqual(taken);
       },
     );
   });

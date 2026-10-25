@@ -45,8 +45,9 @@ export function parseLateSend(value: unknown): ParsedLateSend | undefined {
 
 /**
  * Runs `run` with the request's confirmation. A manager's PIN in it is checked before `run` opens
- * its write transaction, in turn with other override attempts for the same person on this device.
- * A wrong PIN that no confirmation went on to verify is still counted against the wrong-PIN limit,
+ * its write transaction, in turn with other override attempts for the same person on this device;
+ * if that check fails, `authorize` derives the key inside the transaction, as `withPinCheckAhead`
+ * allows. A wrong PIN that no confirmation went on to verify is still counted against the wrong-PIN limit,
  * so a send that needs no manager cannot be used to have the box check PINs without limit.
  */
 export async function withLateSendCheck<T>(
