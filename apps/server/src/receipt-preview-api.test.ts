@@ -1081,11 +1081,25 @@ describe("the receipt preview's top block", () => {
         const control = await rendered({});
         expect(sizes(control)).toEqual([[16, 1]]);
         let result: ReceiptPreviewResponse;
-        if (name === "the read throws") {
-          result = await hidingReceiptsAfterRead(() => rendered({}));
-        } else {
-          await untrusted.apply(suite.db, at());
-          result = await rendered({});
+        const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          if (name === "the read throws") {
+            result = await hidingReceiptsAfterRead(() => rendered({}));
+            expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
+              operation: "readPrintedDepartmentReceipt",
+              departmentId,
+              code: "receipt.read_failed",
+            });
+          } else {
+            await untrusted.apply(suite.db, at());
+            result = await rendered({});
+            expect(warning).not.toHaveBeenCalledWith(
+              "receipt.optional_read_failed",
+              expect.anything(),
+            );
+          }
+        } finally {
+          warning.mockRestore();
         }
         expect([sizes(result), result.marks.logo]).toEqual([[], null]);
         expect(printedLines(result)).toContain(legal());

@@ -373,10 +373,12 @@ export function mountReceiptPreviewApi(
         const taxpayer = (await readTenant(tx))!;
         let savedLogo: MonoRaster | null = null;
         let venueLogo: MonoRaster | null = null;
+        const diagnostic = (event: { operation: string; code: string; departmentId?: string }) =>
+          console.warn("receipt.optional_read_failed", event);
         if (receipt.logo === undefined) {
           const stored = await VENUE_SERVICE.readPrintedDepartmentReceipt(
             tx,
-            checked.scope,
+            { ...checked.scope, receiptDiagnostic: diagnostic },
             id,
             printer.paperWidth,
           );
@@ -387,12 +389,7 @@ export function mountReceiptPreviewApi(
               ...(stored.unreadable ? { unreadable: true } : {}),
             })
           ) {
-            venueLogo =
-              (
-                await readVenueLogo(tx, printer.paperWidth, (event) =>
-                  console.warn("receipt.optional_read_failed", event),
-                )
-              )?.picture ?? null;
+            venueLogo = (await readVenueLogo(tx, printer.paperWidth, diagnostic))?.picture ?? null;
           }
         } else {
           const stored = await VENUE_SERVICE.readDepartmentReceipt(tx, checked.scope, id);
