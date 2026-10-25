@@ -189,8 +189,34 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     entry.lastActiveMono = performance.now();
     entry.lastActiveAt = new Date().toISOString();
   };
+  // A Cloud wait holds no session; its lease is final once lapsed, sealed or ended, and no call
+  // renews it after that (owner decision 1, A1042).
+  let cloudWait:
+    | {
+        startedAt: string;
+        lastActiveAt: string;
+        lastActiveMono: number;
+        sealed?: { at: string };
+        ended?: true;
+      }
+    | undefined;
+  const cloudLeased = () =>
+    !disposed &&
+    cloudWait !== undefined &&
+    cloudWait.sealed === undefined &&
+    cloudWait.ended === undefined &&
+    performance.now() - cloudWait.lastActiveMono <= LEASE_MS;
+  const holdCloud = (journal: boolean) => {
+    if (cloudWait === undefined) {
+      if (!journal) cloudWait = lease();
+    } else if (cloudLeased()) {
+      cloudWait.lastActiveMono = performance.now();
+      cloudWait.lastActiveAt = new Date().toISOString();
+    }
+  };
   const fail = (entry: Entry) => {
     entry.failed ??= { at: new Date().toISOString() };
+    if (cloudWait !== undefined) cloudWait.ended = true;
   };
   const live = (entry: Entry | undefined): entry is Entry =>
     entry !== undefined &&
@@ -223,7 +249,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     if (step.entry.failed === undefined) refresh(step.entry);
   };
   const runningInMemory = () =>
-    openings.size > 0 || steps.size > 0 || (active !== undefined && leased(active));
+    openings.size > 0 ||
+    steps.size > 0 ||
+    (active !== undefined && leased(active)) ||
+    cloudLeased();
   let pendingCloudId: string | undefined;
   const cloudScratch: string[] = [];
   const clouds = new Map<
@@ -628,7 +657,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           });
         }
         generation++;
-        return (await cloudFor(pendingCloudId)).client.start();
+        const cloud = await cloudFor(pendingCloudId);
+        holdCloud(record !== undefined);
+        return cloud.client.start();
       });
     },
     cloudStatus() {
@@ -638,7 +669,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         const record = (await liveRecords()).at(-1);
         pendingCloudId ??= record?.target.recoveryId;
         if (pendingCloudId === undefined) conflict();
-        return (await cloudFor(pendingCloudId)).client.status();
+        const cloud = await cloudFor(pendingCloudId);
+        holdCloud(record !== undefined);
+        return cloud.client.status();
       });
     },
     cloudStartAgain() {
@@ -657,7 +690,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         )
           conflict();
         generation++;
-        return (await cloudFor(pendingCloudId)).client.startAgain();
+        const cloud = await cloudFor(pendingCloudId);
+        holdCloud(record !== undefined);
+        return cloud.client.startAgain();
       });
     },
     async open(
@@ -1343,9 +1378,19 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         ownerRequired();
       refresh(entry);
     },
+    cloudRenew(): void {
+      if (pendingCloudId === undefined || !cloudLeased()) ownerRequired();
+      holdCloud(false);
+    },
+    cloudRelease(): void {
+      if (cloudWait !== undefined) cloudWait.ended = true;
+    },
     sealLapsed(): void {
+      if (openings.size > 0) return;
+      if (cloudWait !== undefined && !cloudLeased())
+        cloudWait.sealed ??= { at: new Date().toISOString() };
       const entry = active;
-      if (openings.size > 0 || entry === undefined || inFlight(entry) || leased(entry)) return;
+      if (entry === undefined || inFlight(entry) || leased(entry)) return;
       // drop() deletes the selected copy, which an open or a step in flight would still be reading.
       entry.sealed = { at: new Date().toISOString() };
       void drop().catch(() => {});
@@ -1357,8 +1402,8 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         const opened = [...openings.values()][0];
         return {
           state: "running",
-          startedAt: entry?.startedAt ?? opened!,
-          lastActiveAt: entry?.lastActiveAt ?? opened!,
+          startedAt: entry?.startedAt ?? opened ?? cloudWait!.startedAt,
+          lastActiveAt: entry?.lastActiveAt ?? opened ?? cloudWait!.lastActiveAt,
         };
       }
       let records: BackupRepairRecord[];

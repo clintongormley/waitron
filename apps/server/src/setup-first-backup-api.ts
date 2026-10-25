@@ -264,6 +264,25 @@ export function mountFirstSetupBackupApi(
     await service.close(text(body.sessionId, "sessionId", 256));
     return c.json({ closed: true });
   });
+  app.get(`${root}/activity`, (c) => {
+    c.header("Cache-Control", "no-store");
+    return boundary(c, log, async () => c.json({ activity: await service.liveness() }));
+  });
+  route("renew", async (c) => {
+    const body = exact(await json(c), ["sessionId"]);
+    service.renew(text(body.sessionId, "sessionId", 256));
+    return c.json({ renewed: true });
+  });
+  route("cloud/renew", async (c) => {
+    exact(await json(c), []);
+    service.cloudRenew();
+    return c.json({ renewed: true });
+  });
+  route("cloud/release", async (c) => {
+    exact(await json(c), []);
+    service.cloudRelease();
+    return c.json({ released: true });
+  });
   for (const [path, action] of [
     ["start", () => service.cloudStart()],
     ["status", () => service.cloudStatus()],

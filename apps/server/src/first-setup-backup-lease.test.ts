@@ -18,7 +18,10 @@ import {
   fixture,
   selectedRepair,
 } from "../test/first-setup-backup-recovery-fixture.js";
-import { selectedRepair as cloudSelectedRepair } from "../test/first-setup-backup-cloud-fixture.js";
+import {
+  fixture as cloudFixture,
+  selectedRepair as cloudSelectedRepair,
+} from "../test/first-setup-backup-cloud-fixture.js";
 import { PASSWORD } from "../test/first-fiscal.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 
@@ -479,4 +482,106 @@ it("leaves a fresh lease when a step ends after a long hold", async () => {
   expect(await f.service.liveness()).toMatchObject({ state: "running" });
   clock.advance(60_000 + 1);
   expect(await f.service.liveness()).toMatchObject({ state: "stopped" });
+});
+
+const refused = expect.objectContaining({ code: "setup.owner_required" });
+
+it("keeps a Cloud wait renewed every 30 s running for 6 minutes, and its release stops it at once", async () => {
+  const f = await cloudFixture();
+  for (let elapsed = 0; elapsed < 6 * 60_000; elapsed += 30_000) {
+    clock.advance(30_000);
+    f.service.cloudRenew();
+    expect(f.service.runningInMemory()).toBe(true);
+  }
+  expect(await f.service.liveness()).toMatchObject({ state: "running" });
+  f.service.cloudRelease();
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(await f.service.liveness()).toBeNull();
+  expect(() => f.service.cloudRenew()).toThrow(refused);
+});
+
+it("refuses to renew a Cloud wait that lapsed and was then sealed", async () => {
+  const f = await cloudFixture();
+  clock.advance(LEASE + 1);
+  f.service.sealLapsed();
+  expect(() => f.service.cloudRenew()).toThrow(refused);
+  expect(f.service.runningInMemory()).toBe(false);
+});
+
+async function closedCloudSession() {
+  const f = await cloudFixture();
+  const session = await f.service.open(f.request, client);
+  await f.service.prepare(session.sessionId, { action: "clock-challenge" }, client);
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("prepared");
+  await f.service.close(session.sessionId);
+  expect(await f.service.liveness()).toMatchObject({ state: "running" });
+  return { ...f, session };
+}
+
+it("answers Check and Start again on a sealed Cloud wait without renewing it", async () => {
+  const f = await closedCloudSession();
+  clock.advance(LEASE + 1);
+  f.service.sealLapsed();
+  expect((await f.service.cloudStatus()).state).toBe("approved");
+  expect(await f.service.liveness()).toMatchObject({ state: "stopped" });
+  f.control.expired = true;
+  expect((await f.service.cloudStartAgain()).state).toBe("awaiting_owner");
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(await f.service.liveness()).toMatchObject({ state: "stopped", cloud: true });
+});
+
+it("renews nothing when Check is pressed on a lapsed Cloud wait that nothing has sealed", async () => {
+  const f = await closedCloudSession();
+  clock.advance(LEASE + 1);
+  expect((await f.service.cloudStatus()).state).toBe("approved");
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(await f.service.liveness()).toMatchObject({ state: "stopped" });
+  expect(() => f.service.cloudRenew()).toThrow(refused);
+});
+
+it("starts no Cloud lease after a restart for a journal that already exists", async () => {
+  const f = await closedCloudSession();
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  expect((await restarted.cloudStatus()).state).toBe("approved");
+  expect(restarted.runningInMemory()).toBe(false);
+  expect(await restarted.liveness()).toMatchObject({
+    state: "stopped",
+    lastActiveSource: "saved-step",
+  });
+  expect(() => restarted.cloudRenew()).toThrow(refused);
+});
+
+it("ends a Cloud wait when the session it led to fails, so the failure reads stopped at once", async () => {
+  const f = await heldCloudCommit();
+  f.outcome.fail = true;
+  f.gate.resolve();
+  await f.commit.then(
+    () => expect.unreachable(),
+    () => {},
+  );
+  expect(f.service.runningInMemory()).toBe(false);
+  expect(await f.service.liveness()).toMatchObject({ state: "stopped", failed: true });
+  expect(() => f.service.cloudRenew()).toThrow(refused);
+});
+
+it("leaves a lapsed Cloud wait unsealed while an open runs, and it still renews nothing after", async () => {
+  const f = await cloudFixture();
+  const gate = barrier();
+  const real = vi.mocked(sources.openFirstSetupBackupSource).getMockImplementation()!;
+  vi.mocked(sources.openFirstSetupBackupSource).mockImplementationOnce(async (...args) => {
+    await gate.promise;
+    return real(...args);
+  });
+  const opening = f.service.open(f.request, client);
+  opening.catch(() => {});
+  clock.advance(LEASE + 1);
+  f.service.sealLapsed();
+  expect(await f.service.liveness()).toMatchObject({ state: "running" });
+  gate.resolve();
+  const session = await opening;
+  f.service.renew(session.sessionId);
+  expect(() => f.service.cloudRenew()).toThrow(refused);
+  await f.service.close(session.sessionId);
+  expect(f.service.runningInMemory()).toBe(false);
 });

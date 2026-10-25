@@ -841,3 +841,64 @@ it.each([
     expect(f.restart).not.toHaveBeenCalled();
   },
 );
+
+it.each(["renew", "cloud/renew", "cloud/release"])(
+  "%s requires a real encrypted socket",
+  async (path) => {
+    const f = await fixture();
+    const response = await f.app.request(`https://localhost${prefix}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },
+      body: "{}",
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+  },
+);
+it.each<[string, unknown]>([
+  ["renew", { sessionId: "a", extra: true }],
+  ["renew", {}],
+  ["cloud/renew", { extra: true }],
+  ["cloud/release", { extra: true }],
+])("%s refuses the body %j", async (path, body) => {
+  const f = await fixture();
+  const response = await f.post(path, body);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "setup.request_invalid" } });
+});
+it("reads activity with no sign-in, renews a live session, and refuses an unknown one", async () => {
+  const f = await fixture();
+  const read = async () => {
+    const response = await f.app.request(`http://localhost${prefix}/activity`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    return response.json();
+  };
+  expect(await read()).toEqual({ activity: null });
+  const opened = await f.app.request(
+    `https://localhost${prefix}/open`,
+    { method: "POST", body: f.upload() },
+    tls(),
+  );
+  const session = await opened.json();
+  expect(await read()).toEqual({
+    activity: { state: "running", startedAt: expect.any(String), lastActiveAt: expect.any(String) },
+  });
+  const renewed = await f.post("renew", { sessionId: session.sessionId });
+  expect(renewed.status).toBe(200);
+  expect(await renewed.json()).toEqual({ renewed: true });
+  const unknown = await f.post("renew", { sessionId: "unknown session" });
+  expect(unknown.status).toBe(403);
+  expect(await unknown.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+});
+it("refuses a Cloud renewal with no wait, and answers a release", async () => {
+  const f = await fixture();
+  expect((await f.post("cloud/start", {})).status).toBe(503);
+  const renewed = await f.post("cloud/renew", {});
+  expect(renewed.status).toBe(403);
+  expect(await renewed.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+  const released = await f.post("cloud/release", {});
+  expect(released.status).toBe(200);
+  expect(await released.json()).toEqual({ released: true });
+});

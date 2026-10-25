@@ -132,3 +132,15 @@ export interface BackupRepairStatus {
   recoveryId?: string;
   proofRequired: true;
 }
+export type BackupRepairActivity =
+  | { state: "running"; startedAt: string; lastActiveAt: string }
+  | {
+      state: "stopped";
+      startedAt: string;
+      lastActiveSource: "memory" | "saved-step";
+      lastActiveAt: string;
+      phase: Exclude<BackupRepairStatus["phase"], "unstarted" | "uncertain">;
+      recoveryId: string;
+      failed: boolean;
+      cloud: boolean;
+    };
