@@ -983,7 +983,12 @@ today's plan or whose department has a floor plan set (the zone list's `hasPlan`
 table, Taken off today and "Reset to {set} plan", naming the set today's plan was last made from
 (`layoutSetName`; with none, that item is not shown). On a phone (`PHONE_WIDTH`) the List/Map
 toggle is the menu's first item, above a muted "Today's plan · {zone}" heading; a menu holding
-only that item is named "Floor view" (`apps/till/src/widgets/floor-zone-menu.ts`). Each change
+only that item is named "Floor view" (`apps/till/src/widgets/floor-zone-menu.ts`). List/Map is
+remembered per zone on the device (`apps/till/src/state/floor-view-memory.ts`); a zone never
+switched shows Map when it has a table on the map, else List. On a handheld (the `handheld`
+property) a Ready bar fixed at the foot of the Floor, `position: sticky` under the floor's
+`isolation: isolate`, replaces the per-station summary, listing the shown zones' tables with food
+ready; a till keeps the summary, titled "Ready" (`#readyBar`, `#stationSummary`). Each change
 opens a `wt-dialog`; the two lists name their tables by the names they show today, in number order (2, 9, 10),
 each list says so in one line when it is empty, and Reset asks before it resets.
 

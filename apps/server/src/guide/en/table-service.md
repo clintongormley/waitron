@@ -134,6 +134,22 @@ A cleared step comes back when the moment it starts from happens again, such as 
 being served. A step that repeats every few minutes after the last order comes back with each
 repeat: **Done** clears the one on show, and another order starts the count again.
 
+## See which tables have food ready {#ready-bar}
+
+When the kitchen has dishes ready, you want to know which tables to take them to without going to
+look. On a phone or tablet, a bar at the foot of the **Floor** lists each table with food ready and
+how many dishes are waiting, such as **Ready · Mesa 2 · 3**. Tap a table to open it, or tap
+**Open ›** to open the first table listed. The bar lists only the tables in the zones this device
+shows, and it goes away once nothing is ready. A till shows the same food in a **Ready** list above
+the tables instead, one line for each station.
+
+## Show a zone as a map or a list {#floor-view}
+
+Tap **List** or **Map** to switch how the zone on screen draws its tables. On a phone the switch is
+in the zone's ⋮ menu. The device keeps your choice for each zone, so the zone opens the same way
+next time, and switching one zone leaves the others as they were. A zone you have not switched
+opens as a map when it has tables placed on its plan, and as a list when it has none.
+
 ## Choose the zones this device shows {#device-zones}
 
 A device shows every zone its profile allows. If you only work the terrace, the other zones get in

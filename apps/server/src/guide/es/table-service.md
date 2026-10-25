@@ -138,6 +138,23 @@ Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como c
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
+## Ver qué mesas tienen comida lista {#ready-bar}
+
+Cuando la cocina tiene platos listos, quieres saber a qué mesas llevarlos sin tener que ir a mirar.
+En un móvil o una tableta, una barra al pie de **Sala** muestra cada mesa con comida lista y cuántos
+platos esperan, por ejemplo **Listo · Mesa 2 · 3**. Toca una mesa para abrirla, o toca **Abrir ›**
+para abrir la primera de la lista. La barra muestra solo las mesas de las zonas que enseña este
+dispositivo, y desaparece cuando no queda nada listo. Una caja muestra lo mismo en una lista
+**Listo** encima de las mesas, con una línea por cada estación.
+
+## Ver una zona como mapa o lista {#floor-view}
+
+Toca **Lista** o **Mapa** para cambiar cómo muestra sus mesas la zona que tienes en pantalla. En un
+móvil, el cambio está en el menú ⋮ de la zona. El dispositivo guarda tu elección para cada zona, así
+que la zona se abre igual la próxima vez, y cambiar una zona no cambia las demás. Una zona que no
+has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
+tiene ninguna.
+
 ## Elegir las zonas que muestra este dispositivo {#device-zones}
 
 Un dispositivo muestra todas las zonas que permite su perfil. Si solo atiendes la terraza, las demás
