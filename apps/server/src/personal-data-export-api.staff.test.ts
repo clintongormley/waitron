@@ -3,7 +3,8 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { ADJUSTMENTS_MIGRATIONS, recordAdjustment } from "@waitron/adjustments";
+import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -18,7 +19,7 @@ import {
 } from "@waitron/identity";
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { decimal, locationId as brandLocationId } from "@waitron/shared";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
 import {
@@ -26,7 +27,9 @@ import {
   type PersonalDataExportDeps,
 } from "./personal-data-export-api.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, ADJUSTMENTS_MIGRATIONS],
+});
 const NOW = new Date("2026-10-04T22:30:00Z");
 const UNKNOWN_ID = "0f6b2c1e-7d4a-4e9b-8c3f-5a1d2e3f4a5b";
 const MALFORMED_ID = "not-a-uuid";
@@ -41,9 +44,10 @@ const MARTA = {
   pinHash: hashPin("2468"),
 };
 
-const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
+const exportModules = ALL_MODULES.filter((m) => m.name === "identity" || m.name === "adjustments");
 const logger = vi.fn();
 let nodeId: string;
+let venueLocationId: string;
 let ids: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff" | "marta", string>;
 let tokens: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff", string>;
 let martaToken: string;
@@ -70,7 +74,7 @@ function mounted(patch: Partial<PersonalDataExportDeps> = {}) {
   const deps: PersonalDataExportDeps = {
     db: suite.db,
     nodeId,
-    modules: identityModules,
+    modules: exportModules,
     serverParts: [stubPart],
     venueLocale: "en-GB",
     now: () => NOW,
@@ -127,6 +131,7 @@ beforeEach(async () => {
       timeZone: "Europe/Madrid",
     })
     .returning();
+  venueLocationId = location!.id;
   nodeId = await seedNode(suite.db, brandLocationId(location!.id));
   const rows = await suite.db
     .insert(persons)
@@ -360,5 +365,75 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
     expect(text).not.toContain(hashSessionToken(martaToken));
     expect(text).not.toContain(MARTA.pinHash);
     expect(text).not.toContain(hashSessionToken(tokens.admin));
+  });
+
+  it("gives an admin her adjustments.json, listed in her README in Spanish", async () => {
+    const [order] = await suite.db
+      .insert(workingOrders)
+      .values({ source: "dashboard", deviceId: null, locationId: venueLocationId, orderNumber: 43 })
+      .returning({ id: workingOrders.id });
+    await withTransaction(suite.db, (tx) =>
+      recordAdjustment(tx, {
+        workingOrderId: order!.id,
+        line: {
+          id: "50000000-0000-4000-8000-000000000002",
+          name: "Lemon tart",
+          quantity: "1",
+          listUnitPriceGross: decimal("6.85"),
+          creditedTo: null,
+          stage: "fired",
+        },
+        quantity: "1",
+        reason: {
+          id: "60000000-0000-4000-8000-000000000002",
+          name: "Long wait",
+          policy: {
+            kind: "comp",
+            actions: ["comp"],
+            maxPercentBp: null,
+            maxAmount: null,
+            applyRoles: [],
+            approverRoles: [],
+            noteRequired: false,
+          },
+        },
+        action: "comp",
+        percentBp: null,
+        beforeAmount: decimal("6.85"),
+        afterAmount: decimal("0.00"),
+        reduction: decimal("6.85"),
+        nominalValue: decimal("6.85"),
+        requestedBy: ids.marta,
+        approvedBy: ids.admin,
+        note: "note for the tart",
+        chargeKept: false,
+        preparationStarted: false,
+      }),
+    );
+    const response = await ask(staffPath(ids.marta), tokens.admin);
+    expect(response.status).toBe(200);
+    const files = await unzipped(response);
+    expect(JSON.parse(files["adjustments.json"]!)).toEqual({
+      counts: { cancel: 0, comp: 1, discount_percent: 0, discount_amount: 0 },
+      entries: [
+        {
+          action: "comp",
+          at: expect.any(String),
+          order: 43,
+          item: "Lemon tart",
+          quantity: "1.000",
+          percent: null,
+          takenOff: "6.85",
+          listValue: "6.85",
+          reason: "Long wait",
+          stage: "fired",
+          chargeKept: false,
+          preparationStarted: false,
+          yourPart: ["requested"],
+        },
+      ],
+    });
+    const words = PERSONAL_DATA_README_WORDS.es.files["adjustments.json"]!;
+    expect(files["README.txt"]).toContain(`- adjustments.json: ${words.holds} ${words.use}`);
   });
 });

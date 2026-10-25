@@ -9,19 +9,27 @@ import {
   sales,
   saleVoids,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { ADJUSTMENTS_MIGRATIONS, recordAdjustment } from "@waitron/adjustments";
+import { decimal, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { mountMeApi } from "./me-api.js";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    WORKFORCE_MIGRATIONS,
+    WORKFORCE_ES_MIGRATIONS,
+    ADJUSTMENTS_MIGRATIONS,
+  ],
 });
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PATH = "/management-api/me/personal-data/export";
@@ -50,12 +58,14 @@ function mounted(
 async function download(
   modules: string[],
   patch: { venueLocale?: string; privacyNoticeUrl?: string } = {},
+  beforeRequest?: (personId: string) => Promise<void>,
 ): Promise<Record<string, string>> {
   await seedTenant(suite.db);
   const [row] = await suite.db
     .insert(persons)
     .values({ displayName: "Marta Canary", role: "staff" })
     .returning({ id: persons.id });
+  await beforeRequest?.(row!.id);
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: row!.id }),
   );
@@ -201,5 +211,94 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
     const readme = files["README.txt"]!.trimEnd().split("\n");
     expect(readme[0]).toBe(PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"));
     expect(readme.at(-1)!.endsWith(url)).toBe(true);
+  });
+
+  describe("a person with one comp she asked for", () => {
+    async function compAskedFor(personId: string): Promise<void> {
+      const [location] = await suite.db
+        .insert(locations)
+        .values({ name: "Dining room", invoiceLocales: ["en"], operationDescription: "Meals" })
+        .returning({ id: locations.id });
+      const [order] = await suite.db
+        .insert(workingOrders)
+        .values({ source: "dashboard", deviceId: null, locationId: location!.id, orderNumber: 41 })
+        .returning({ id: workingOrders.id });
+      await withTransaction(suite.db, (tx) =>
+        recordAdjustment(tx, {
+          workingOrderId: order!.id,
+          line: {
+            id: "50000000-0000-4000-8000-000000000001",
+            name: "Grilled squid",
+            quantity: "2",
+            listUnitPriceGross: decimal("12.35"),
+            creditedTo: null,
+            stage: "served",
+          },
+          quantity: "1",
+          reason: {
+            id: "60000000-0000-4000-8000-000000000001",
+            name: "Cold dish",
+            policy: {
+              kind: "comp",
+              actions: ["comp"],
+              maxPercentBp: null,
+              maxAmount: null,
+              applyRoles: [],
+              approverRoles: [],
+              noteRequired: false,
+            },
+          },
+          action: "comp",
+          percentBp: null,
+          beforeAmount: decimal("24.70"),
+          afterAmount: decimal("12.35"),
+          reduction: decimal("12.35"),
+          nominalValue: decimal("12.35"),
+          requestedBy: personId,
+          approvedBy: null,
+          note: "note for the squid",
+          chargeKept: false,
+          preparationStarted: true,
+        }),
+      );
+    }
+
+    it("gets her adjustments.json after sign-in.json, listed in the README", async () => {
+      const files = await download(["core", "identity", "adjustments"], {}, compAskedFor);
+      expect(Object.keys(files)).toEqual([
+        "README.txt",
+        "profile.json",
+        "sign-in.json",
+        "adjustments.json",
+      ]);
+      expect(JSON.parse(files["adjustments.json"]!)).toEqual({
+        counts: { cancel: 0, comp: 1, discount_percent: 0, discount_amount: 0 },
+        entries: [
+          {
+            action: "comp",
+            at: expect.any(String),
+            order: 41,
+            item: "Grilled squid",
+            quantity: "1.000",
+            percent: null,
+            takenOff: "12.35",
+            listValue: "12.35",
+            reason: "Cold dish",
+            stage: "served",
+            chargeKept: false,
+            preparationStarted: true,
+            yourPart: ["requested"],
+          },
+        ],
+      });
+      const words = PERSONAL_DATA_README_WORDS.en.files["adjustments.json"]!;
+      expect(files["README.txt"]).toContain(`- adjustments.json: ${words.holds} ${words.use}`);
+    });
+
+    it("gets no adjustments.json when the adjustments module is not enabled", async () => {
+      const files = await download(["core", "identity"], {}, compAskedFor);
+      expect(Object.keys(files)).toEqual(["README.txt", "profile.json", "sign-in.json"]);
+      expect(files["README.txt"]).not.toContain("adjustments.json");
+    });
   });
 });
