@@ -121,7 +121,11 @@ the refusals that were about the offset.
   A venue can require a manager's PIN for this instead, with a setting in the dashboard's service
   settings beside "Allow changes to items already sent to the kitchen"; it is off by default.
   (2026-10-24: it is a department setting, under Courses and the kitchen on the department's Service
-  tab; plan D18.)
+  tab; plan D18.) 2026-10-25 (plan D37, D38, D42): "Remove them" is an ordinary edit of the order —
+  a table's draft saves it as any removal, a counter basket with the order. With the department's
+  setting on, the till sends the confirmation and, when the server answers that a manager is needed,
+  asks for a manager's PIN with its usual manager-approval window, then sends again. At the counter,
+  Park's button reads "Kitchen agreed — save".
 - **A dish the running period also sells** — a caña taken from Lunch's menu, which Sobremesa also
   sells — is not marked and needs no check: the kitchen or bar is still making it. It is sent at the
   price it was taken at (Lunch's). This is new: today the caña is held with the tortilla (§2).
@@ -158,7 +162,8 @@ sell; only dishes already on an order before 14:00 can still go, with the kitche
 4. **A draft left overnight.** A Dinner dish saved on a draft at 23:20 and not sent before the
    business day's changeover (06:00) is refused the next morning, as today: the window is for dishes
    from a period that ended earlier the **same** business day. The till marks it "Dinner ended" and
-   its only choice is Remove.
+   its only choice is Remove. 2026-10-25 (plan D35): the till marks it "Last orders have ended", not
+   "Dinner ended": the menus' read names only periods that ended earlier the same business day.
 5. **A held course fired after Lunch.** Desserts sent to the kitchen on hold at 13:40 and fired at
    14:20 go as today, with no window: the kitchen already had them.
 
@@ -318,6 +323,8 @@ answer.
   under Courses and the kitchen (plan D18).
 - **The per-menu `sendable` flag stays on the wire until slice 4**, set from the one window, so it
   always equals `orderable`; slice 4 removes it with the till's handling of an ended dish.
+  **2026-10-25 (slice 4 planning):** each menu names the period that ended instead
+  (`endedPeriodName`, plan D34).
 - **No clash check still refuses anything with every offset at 0**, so the checks §7 says are "kept,
   renamed" are none, and the clash checks go whole. The evidence is in the plan's "The offset-at-0
   evidence — design §7".

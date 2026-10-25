@@ -1362,7 +1362,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
   retired) landed in #2047; slice 3 (a confirmed late send accepted and marked; the
   manager's-PIN setting is per department) landed in #2051;
-  slice 4 (the till's window) next.
+  slice 4 (the till's window) in progress on `feat/a789-4-till-late-send-window`.
   [Detail](backlog/service-periods.md#a789--last-orders-without-an-offset-a-period-is-when-its-menu-can-be-ordered)
 
 - **The start-time part of the business-day check's `transition_strip` reason never decides it**
