@@ -1104,6 +1104,9 @@ describe("exchangeIpp", () => {
     expect(await exchangeIpp("127.0.0.1", printer.port, "/ipp/print", EMPTY_REQUEST, 50)).toEqual({
       kind: "no_answer",
     });
+    // The printer can read the request on a later turn of the event loop than the deadline fires
+    // on, so a busy runner can end the exchange before the request is counted.
+    await until(() => printer.arrived() > 0);
     expect(printer.arrived()).toBe(1);
   });
 
