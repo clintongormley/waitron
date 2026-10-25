@@ -158,6 +158,7 @@ it.each(GUIDE_LANGUAGES)(
       "account-access",
       "own-account",
       "own-data",
+      "person-data",
       "delete-staff-role",
     ]);
   },

@@ -33,9 +33,21 @@ Open **Account settings** from the account menu and, on **Your details**, press 
 beside **Copy of your data**. You get a ZIP file with your profile and sign-in details as `.json`
 files. If the venue plans staff or records working time in Waitron, the download can also hold
 your employment details, rota, absences, staff roles and attendance questions as `.json` files,
-and your working-time record as a PDF and a `.csv` spreadsheet. A `README.txt` explains each file,
-who else receives the data, how long it is kept and your rights. The download never holds a
-secret such as your PIN or password. For anything else about your data, ask the venue.
+and your working-time record as a PDF and a `.csv` spreadsheet. It also holds `actions.json`, when
+there are any: the whole sales already recorded whose void you authorised, the refunds you asked
+for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised. A
+`README.txt` explains each file, who else receives the data, how long it is kept and your rights.
+The download never holds a secret such as your PIN or password. For anything else about your
+data, ask the venue.
+
+## Download another person's data {#person-data}
+
+As an admin, you can download what the box holds about another person, for example when someone
+who has left asks for their data. On **Users**, set **Status** to **All statuses** if the person
+is disabled, open their row menu and choose **Download their data**. You get the same files the
+person gets from **Copy of your data**, with its `README.txt` in the language the person chose,
+or the venue's language if they have not chosen one. Managers do not see this action. Waitron
+keeps no list of these requests, so note the request and your answer in the venue's own records.
 
 ## Delete a staff role {#delete-staff-role}
 
