@@ -42,7 +42,7 @@ interface Menu {
   name: string;
   products: string[];
 }
-/** Breakfast's menu; its Coffee is also sold by Lunch, as a running menu sells a drink. */
+/** Breakfast's menu; Lunch also sells its Coffee, so a Coffee taken from it is never marked. */
 const BREAKFAST_MENU: Menu = {
   id: "breakfast-menu",
   name: "Breakfast menu",
