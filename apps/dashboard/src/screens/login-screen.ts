@@ -1125,7 +1125,18 @@ export class LoginScreen extends LitElement {
   }
 
   #methodActions(primary: TemplateResult, message: string) {
-    return html`${formMessage(message)}${primary}${this.#otherWays()}`;
+    return html`${
+      (this.step === "passkey" || this.step === "email") &&
+      this.errorKey === "passkey.verification_failed"
+        ? html`<p class="alternative-hint" data-test="passkey-recovery-choices">
+            ${
+              this.step === "email"
+                ? t("login.passkey_email_recovery_choices")
+                : t("login.passkey_recovery_choices")
+            }
+          </p>`
+        : nothing
+    }${formMessage(message)}${primary}${this.#otherWays()}`;
   }
 
   #privacyLink() {

@@ -3804,10 +3804,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 ### Users, sign-in and the dashboard shell
 
-- **A1089: rework the passkey refusal without an administrator referral (#2054).** Offer usable
-  sign-in/recovery choices without disclosing account status. Exercise the offered way out; record
-  any substantial missing account-access recovery workflow separately. Check profile registration,
-  which shares the message.
+- **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
+  The passkey refusal offers retry, password entry and an emailed password reset. These do not
+  reactivate a disabled account or replace unavailable email delivery. Design a recovery choice
+  that offers any required administrator sign-in at the refusal, preserves account privacy and
+  explains its effect before changing access.
   [Correction](backlog/self-service-refusals.md#sign-in).
 
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
