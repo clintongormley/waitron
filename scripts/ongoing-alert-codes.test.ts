@@ -14,6 +14,7 @@ const ONGOING_CODE_SOURCES = [
   "packages/fiscal-verifactu/src/submission-alerts.ts",
   "packages/fiscal-verifactu/src/certificate-alerts.ts",
   "packages/fiscal-verifactu/src/clock-behind-alerts.ts",
+  "apps/server/src/clock-disagrees-alert.ts",
 ];
 
 const CODE_RE = /code: "([a-z0-9_]+\.[a-z0-9_]+)"/g;

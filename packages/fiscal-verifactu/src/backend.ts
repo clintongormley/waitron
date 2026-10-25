@@ -6,17 +6,27 @@ import type { Database, Transaction } from "@waitron/db";
 import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
+  AuthorityTimeSample,
   ClockBehindLatestRecord,
+  ClockCheckCloseRequest,
+  ClockCheckOpenRequest,
+  ClockConfirmation,
+  ClockConfirmRequest,
+  ClockProvedWrong,
+  ClockStopState,
+  ClockWitness,
   Counterparty,
   FiscalBackend,
   FiledReceipt,
   FiscalRecordRef,
   IntegrityReport,
+  MisdatedRecords,
   NodeRegistration,
   ReceiptQrText,
   SaleForFiscalRecord,
   TrustedClock,
   VatBreakdownLine,
+  WaitingClockCheck,
 } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
 import { buildQrPayload } from "@waitron/verifactu";
@@ -43,6 +53,10 @@ import {
   clockBehindChain,
   refuseWhileClockBehind as refuseWhileClockBehindChain,
 } from "./clock-behind.js";
+import { closeClockCheckByItself, openClockCheck, waitingClockCheck } from "./clock-checks.js";
+import { clockStopState, confirmClockStop, noteClockProvedWrong } from "./clock-confirmation.js";
+import { misdatedRecords } from "./clock-misdated.js";
+import { readAuthorityTime } from "./authority-time.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { SOFTWARE_IDENTITY, producerFields, softwareVersion } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
@@ -173,6 +187,54 @@ export class VerifactuBackend implements FiscalBackend {
     reading: { instant: Date; offsetMinutes: number },
   ): Promise<void> {
     return refuseWhileClockBehindChain(tx, reading);
+  }
+
+  clockStopState(
+    tx: Transaction,
+    reading: { instant: Date; offsetMinutes: number },
+    witnesses: readonly ClockWitness[],
+  ): Promise<ClockStopState | null> {
+    return clockStopState(tx, reading, witnesses);
+  }
+
+  confirmClockStop(
+    tx: Transaction,
+    input: ClockConfirmRequest,
+  ): Promise<{ confirmation: ClockConfirmation | null }> {
+    return confirmClockStop(tx, input);
+  }
+
+  openClockCheck(tx: Transaction, input: ClockCheckOpenRequest): Promise<{ id: string } | null> {
+    return openClockCheck(tx, input);
+  }
+
+  closeClockCheckByItself(
+    tx: Transaction,
+    input: ClockCheckCloseRequest,
+  ): Promise<{ confirmation: ClockConfirmation | null }> {
+    return closeClockCheckByItself(tx, input);
+  }
+
+  waitingClockCheck(
+    tx: Transaction,
+    reading: { instant: Date; offsetMinutes: number },
+  ): Promise<WaitingClockCheck | null> {
+    return waitingClockCheck(tx, reading);
+  }
+
+  misdatedRecords(tx: Transaction, confirmationId: string): Promise<MisdatedRecords | null> {
+    return misdatedRecords(tx, confirmationId);
+  }
+
+  noteClockProvedWrong(
+    tx: Transaction,
+    input: ClockProvedWrong,
+  ): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
+    return noteClockProvedWrong(tx, input);
+  }
+
+  readAuthorityTime(): Promise<AuthorityTimeSample | null> {
+    return readAuthorityTime(this.deploymentEnvironment);
   }
 
   /**

@@ -1743,11 +1743,86 @@ export interface BoxHealth {
     lowSince: string | null;
     reclaimable: { bytes: number; backupRunning: boolean };
   };
+  clockStop: ClockStopView | null;
+  /** Since the waiting check's opening reading; null when no check waits. */
+  clockCheckWaiting: { since: string } | null;
+  misdatedOpen: MisdatedOpenView[];
+}
+
+/** LOCAL copy of the server's `MisdatedOpen` (`apps/server/src/box-health.ts`). */
+export interface MisdatedOpenView {
+  confirmationId: string;
+  count: number;
+  from: string;
+  fromOffsetMinutes: number;
+  to?: string;
+  toOffsetMinutes?: number;
+  partial: boolean;
+  unconfirmed: boolean;
+}
+
+/** LOCAL copy of `GET /api/box/clock-misdated`'s answer (`apps/server/src/box-health-api.ts`);
+ * a closing that cannot tell which sales it covers has no list here. */
+export interface ClockMisdatedView {
+  lists: {
+    confirmationId: string;
+    records: {
+      recordId: string;
+      series: string;
+      /** Null when the recorded invoice number has no whole number after its last slash. */
+      number: number | null;
+      at: string;
+      offsetMinutes: number;
+    }[];
+  }[];
 }
 
 /** LOCAL copy of the Retry now route's answer (`packages/fiscal-verifactu/src/routes.ts`). */
 export interface FiscalRetryView {
   waiting: number;
+}
+
+/** LOCAL copy of the server's `ClockWitness` (`packages/fiscal/src/clock-witnesses.ts`). */
+export interface ClockWitnessView {
+  kind: "authority" | "device";
+  id: string;
+  boxAt: string;
+  witnessAt: string;
+  uncertaintyMs: number;
+}
+
+/** LOCAL copy of the server's `ClockStopView` (`apps/server/src/box-health.ts`). */
+export interface ClockStopView {
+  clockAt: string;
+  offsetMinutes: number;
+  lastRecordAt: string;
+  lastRecordOffsetMinutes: number;
+  recordId: string;
+  gapMs: number;
+  proof: "none" | "contrary" | "ready" | "confirmed";
+  agreeing: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
+  contrary: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
+  confirmation: {
+    id: string;
+    source: "authority" | "devices" | "admin" | "elapsed";
+    personName: string | null;
+    confirmedAt: string;
+  } | null;
+}
+
+export type ClockStopDeviceView = ClockWitnessView & { label: string | null };
+
+/** LOCAL copy of `POST /api/box/clock-challenge`'s answer (`apps/server/src/box-health-api.ts`). */
+export interface ClockChallengeView {
+  challengeId: string;
+  boxAt: string;
+}
+
+/** LOCAL copy of `POST /api/box/clock-confirm`'s answer (`apps/server/src/box-health-api.ts`). */
+export interface ClockConfirmView {
+  confirmationId: string;
+  source: "admin";
+  confirmedAt: string;
 }
 
 /** LOCAL copy of the server's `FreedSpace` (`apps/server/src/free-space-now.ts`). */
@@ -4177,6 +4252,19 @@ export class DashboardApi {
 
   getBoxHealth(): Promise<BoxHealth> {
     return this.#request<BoxHealth>("/api/box/health", "GET");
+  }
+
+  clockMisdated(): Promise<ClockMisdatedView> {
+    return this.#request<ClockMisdatedView>("/api/box/clock-misdated", "GET");
+  }
+
+  clockChallenge(): Promise<ClockChallengeView> {
+    return this.#request<ClockChallengeView>("/api/box/clock-challenge", "POST", {});
+  }
+
+  /** `deviceAt` is this device's clock in milliseconds since the epoch. */
+  clockConfirm(input: { challengeId: string; deviceAt: number }): Promise<ClockConfirmView> {
+    return this.#request<ClockConfirmView>("/api/box/clock-confirm", "POST", input);
   }
 
   freeBoxSpace(): Promise<FreedSpaceView> {

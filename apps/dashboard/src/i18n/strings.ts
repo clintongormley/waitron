@@ -3260,12 +3260,43 @@ export const en = {
   "box_status.readers.none": "No card readers set up",
   "box_status.no_problems": "No problems reported",
   "box_status.clock.ok": "Correct",
+  "box_status.clock.unconfirmed": "Not confirmed since the payment stop",
   "box_status.clock.unknown": "Not yet compared with the tax agency",
   "box_status.clock.compared": "Compared with the tax agency at {time} · {seconds} s apart",
+  "box_status.clock.compared_ahead":
+    "Compared with the tax agency at {time} · the box was {seconds} s ahead",
+  "box_status.clock.compared_behind":
+    "Compared with the tax agency at {time} · the box was {seconds} s behind",
+  "box_status.clock.proof.authority": "Tax agency: matches (checked {time})",
+  "box_status.clock.proof.devices": "Devices: {count} read {time}",
+  "box_status.clock.proof.device_one": "Devices: 1 read {time}",
+  "box_status.clock.stop.none":
+    "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), or two tills or handhelds.",
+  "box_status.clock.stop.contrary": "Other clocks say the box's clock is wrong.",
+  "box_status.clock.contrary.authority": "Tax agency: does not match (checked {time})",
+  "box_status.clock.contrary.device": "{name}: does not match (read {time})",
+  "box_status.clock.contrary.unnamed_device": "A device",
+  "box_status.clock.stop.ready": "Proof found: payments restart within a few seconds.",
+  "box_status.clock.stop.confirmed": "Payments restarted at {time}, confirmed by {who}.",
+  "box_status.clock.check_waiting":
+    "The payment stop that began at {time} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.",
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.behind_chain_fix":
     "Connect the box to the internet so it can correct its clock, or call whoever installed it.",
+  "box_status.clock.admin.open": "Check with this device's time",
+  "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
+  "box_status.clock.admin.agree": "They agree. Confirm that the box's clock is right?",
+  "box_status.clock.admin.differ":
+    "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
+  "box_status.clock.admin.refused.same_machine":
+    "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
+  "box_status.clock.admin.refused.not_stopped":
+    "There is nothing left to confirm. See the Clock row.",
+  "box_status.clock_check_help_label": "What this check does",
+  "box_status.clock_check_help":
+    "Compares the box's clock with this device's. If they are within a minute of each other, you can confirm that the box's clock is right, and payments restart if they are stopped. Check that this device shows the right time first. It does not work on the box's own screen.",
+  "box_status.clock_check_help_guide": "More about checking the clock",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
   "box_status.disk.database": "Database {size}",
@@ -3288,6 +3319,13 @@ export const en = {
   "box_status.other_alerts": "{count} other alerts",
   "box_status.other_alerts_one": "1 other alert",
   "box_status.read_error": "The box's status could not be read.",
+  "box_status.misdated.title": "Sales dated wrongly",
+  "box_status.misdated.table_range": "Sales dated wrongly from {from} to {to}",
+  "box_status.misdated.line":
+    "Go through these with your tax adviser, then mark the alert as handled in the bell.",
+  "box_status.misdated.col_invoice": "Invoice",
+  "box_status.misdated.col_at": "Time recorded",
+  "box_status.misdated.read_error": "The list of sales dated wrongly could not be read.",
   "box_status.alerts_unavailable":
     "The alerts could not be read, so a part may look fine when it is not.",
 } as const;
@@ -6600,12 +6638,43 @@ export const es: Record<StringKey, string> = {
   "box_status.readers.none": "No hay lectores configurados",
   "box_status.no_problems": "Sin problemas",
   "box_status.clock.ok": "Correcto",
+  "box_status.clock.unconfirmed": "Sin confirmar desde la parada de cobros",
   "box_status.clock.unknown": "Aún no se ha comparado con Hacienda",
   "box_status.clock.compared": "Comparado con Hacienda el {time} · diferencia {seconds} s",
+  "box_status.clock.compared_ahead":
+    "Comparado con Hacienda el {time} · el equipo iba {seconds} s adelantado",
+  "box_status.clock.compared_behind":
+    "Comparado con Hacienda el {time} · el equipo iba {seconds} s atrasado",
+  "box_status.clock.proof.authority": "Hacienda: coincide (comprobado {time})",
+  "box_status.clock.proof.devices": "Dispositivos: {count} marcan {time}",
+  "box_status.clock.proof.device_one": "Dispositivos: 1 marca {time}",
+  "box_status.clock.stop.none":
+    "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.",
+  "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del equipo está mal.",
+  "box_status.clock.contrary.authority": "Hacienda: no coincide (comprobado {time})",
+  "box_status.clock.contrary.device": "{name}: no coincide (marcó {time})",
+  "box_status.clock.contrary.unnamed_device": "Un dispositivo",
+  "box_status.clock.stop.ready": "Hay prueba: los cobros se reanudan en unos segundos.",
+  "box_status.clock.stop.confirmed": "Cobros reanudados el {time}, confirmado por {who}.",
+  "box_status.clock.check_waiting":
+    "La parada de cobros que empezó el {time} ha terminado, pero nada ha confirmado aún la hora del equipo. El equipo pregunta la hora a Hacienda cada minuto cuando le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un administrador.",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.behind_chain_fix":
     "Conecta el equipo a internet para que corrija la hora, o llama a quien lo instaló.",
+  "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
+  "box_status.clock.admin.times":
+    "El reloj del equipo marca {box}. Este dispositivo marca {device}.",
+  "box_status.clock.admin.agree": "Coinciden. ¿Confirmas que la hora del equipo es correcta?",
+  "box_status.clock.admin.differ":
+    "El equipo no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el equipo a internet para que corrija la hora.",
+  "box_status.clock.admin.refused.same_machine":
+    "Esta pantalla es el propio equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.",
+  "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
+  "box_status.clock_check_help_label": "Qué hace esta comprobación",
+  "box_status.clock_check_help":
+    "Compara la hora del equipo con la de este dispositivo. Si están a menos de un minuto, puedes confirmar que la hora del equipo es correcta, y los cobros se reanudan si estaban parados. Comprueba antes que este dispositivo tiene la hora bien. No funciona en la pantalla del propio equipo.",
+  "box_status.clock_check_help_guide": "Más sobre comprobar la hora",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El equipo no puede medir su disco",
   "box_status.disk.database": "Base de datos {size}",
@@ -6630,6 +6699,12 @@ export const es: Record<StringKey, string> = {
   "box_status.other_alerts": "{count} avisos más",
   "box_status.other_alerts_one": "1 aviso más",
   "box_status.read_error": "No se ha podido leer el estado del equipo.",
+  "box_status.misdated.title": "Ventas con fecha incorrecta",
+  "box_status.misdated.table_range": "Ventas con fecha incorrecta de {from} a {to}",
+  "box_status.misdated.line": "Revísalas con tu asesor y después marca el aviso como resuelto.",
+  "box_status.misdated.col_invoice": "Factura",
+  "box_status.misdated.col_at": "Hora registrada",
+  "box_status.misdated.read_error": "No se ha podido leer la lista de ventas con fecha incorrecta.",
   "box_status.alerts_unavailable":
     "No se han podido leer los avisos, así que puede parecer que una parte está bien cuando no lo está.",
 };

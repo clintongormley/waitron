@@ -3,6 +3,7 @@ import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/sha
 import type { Transaction } from "@waitron/db";
 import type { VatBreakdownLine } from "./vat-breakdown.js";
 import type { TrustedReading } from "./clock.js";
+import type { ClockWitness } from "./clock-witnesses.js";
 
 export type { VatBreakdownLine };
 
@@ -173,6 +174,116 @@ export interface ClockBehindLatestRecord {
   readonly lastRecordOffsetMinutes: number;
 }
 
+/** What the witnesses say about a stop: nothing either way, against the box, enough to confirm
+ * it, or a confirmation already covers the reading. */
+export type ClockStopProof = "none" | "contrary" | "ready" | "confirmed";
+
+export type ClockConfirmationSource = "authority" | "devices" | "admin" | "elapsed";
+
+/** A clock reading more than a minute earlier than the latest record, what the witnesses say about
+ * it, and the confirmation that covers it if one does. */
+export interface ClockStopState {
+  clockAt: string;
+  offsetMinutes: number;
+  lastRecordAt: string;
+  lastRecordOffsetMinutes: number;
+  recordId: string;
+  gapMs: number;
+  proof: ClockStopProof;
+  agreeing: { authority: ClockWitness | null; devices: ClockWitness[] };
+  contrary: { authority: ClockWitness | null; devices: ClockWitness[] };
+  confirmation: {
+    id: string;
+    source: ClockConfirmationSource;
+    personId: string | null;
+    confirmedAt: string;
+  } | null;
+}
+
+/** The box's boot-time clock: milliseconds since boot, and the boot's id when the milliseconds
+ * come from a source that has one. */
+export interface BootReading {
+  ms: number;
+  id: string | null;
+}
+
+export interface ClockConfirmRequest {
+  reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  boot: BootReading;
+  witnesses: readonly ClockWitness[];
+  nodeId: string;
+  admin?: ClockAdminConfirm;
+}
+
+/** An administrator's device's time against the box's: `boxAt` the box's time at the midpoint of
+ * the round trip in which the device read its clock, not the request's `reading`; `uncertaintyMs`
+ * how far either way it may be off. */
+export interface ClockAdminReading {
+  boxAt: string;
+  witnessAt: string;
+  uncertaintyMs: number;
+}
+
+export interface ClockAdminConfirm {
+  personId: string;
+  personName: string;
+  reading: ClockAdminReading;
+}
+
+export interface ClockConfirmation {
+  id: string;
+  seq: number;
+  source: ClockConfirmationSource;
+  personId: string | null;
+  confirmedAt: string;
+  checkId: string | null;
+  recordId: string | null;
+}
+
+export interface ClockCheckOpenRequest {
+  reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  boot: BootReading;
+  nodeId: string;
+}
+
+export interface ClockCheckCloseRequest {
+  reading: Pick<TrustedReading, "instant" | "offsetMinutes">;
+  boot: BootReading;
+  witnesses: readonly ClockWitness[];
+  nodeId: string;
+}
+
+/** A check whose stop ended by itself, waiting for a witness taken after it ended. */
+export interface WaitingClockCheck {
+  checkId: string;
+  openedAt: string;
+}
+
+export interface MisdatedRecord {
+  recordId: string;
+  /** The invoice's series and number, as recorded. */
+  invoiceNumber: string;
+  generatedAt: string;
+  offsetMinutes: number;
+}
+
+/** What a closing found: the wrongly dated records, or that the box cannot tell which they are. */
+export type MisdatedRecords = { known: true; records: MisdatedRecord[] } | { known: false };
+
+export interface ClockProvedWrong {
+  trustedUntil: Date;
+  observedAt: Date;
+  reason: "jump" | "authority";
+}
+
+/** One reading of the tax authority's time, against the box's wall clock (`Date.now()`) and steady
+ * clock (`performance.now()`) read together at the comparison's midpoint. */
+export interface AuthorityTimeSample {
+  readonly authorityMs: number;
+  readonly uncertaintyMs: number;
+  readonly at: { readonly wallMs: number; readonly monoMs: number };
+}
+
 /**
  * The sale-path boundary between the POS and a fiscal regime. It names no regime mechanism; the
  * guard is ./no-regime-vocabulary.test.ts. The submission pass (`drain`) is not on it: that runs
@@ -217,6 +328,55 @@ export interface FiscalBackend {
     tx: Transaction,
     reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
   ): Promise<void>;
+
+  /** What the clock row shows while the reading is behind the latest record; null when it is not.
+   * Absent when the regime never stops a clock. */
+  clockStopState?(
+    tx: Transaction,
+    reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
+    witnesses: readonly ClockWitness[],
+  ): Promise<ClockStopState | null>;
+
+  /** Confirms the clock during a stop, which lifts it: automatically when the witnesses are ready
+   * (null, and nothing written, otherwise), or on `admin`'s device. With `admin`, an unusable
+   * reading is refused first, and the confirmation may then be refused with this regime's
+   * refusal. With `admin` and no stop, closes a check that waits instead. */
+  confirmClockStop?(
+    tx: Transaction,
+    input: ClockConfirmRequest,
+  ): Promise<{ confirmation: ClockConfirmation | null }>;
+
+  /** Records when a stop began: opens a check while the stop holds and none is open, and answers
+   * the open one; null, and nothing written, while there is no stop. */
+  openClockCheck?(tx: Transaction, input: ClockCheckOpenRequest): Promise<{ id: string } | null>;
+
+  /** Closes a check that waits on a witness taken after its stop ended; with none, writes nothing. */
+  closeClockCheckByItself?(
+    tx: Transaction,
+    input: ClockCheckCloseRequest,
+  ): Promise<{ confirmation: ClockConfirmation | null }>;
+
+  /** The check whose stop ended by itself and that no confirmation has closed; null when none. */
+  waitingClockCheck?(
+    tx: Transaction,
+    reading: Pick<TrustedReading, "instant" | "offsetMinutes">,
+  ): Promise<WaitingClockCheck | null>;
+
+  /** The records the confirmation `confirmationId` found wrongly dated, from stored values only;
+   * null when no confirmation has the id. */
+  misdatedRecords?(tx: Transaction, confirmationId: string): Promise<MisdatedRecords | null>;
+
+  /** The clock was proved wrong after `trustedUntil`, noticed at `observedAt`; answers the
+   * confirmation ids it recorded, those with nothing written under them, and those another open
+   * issue holds. */
+  noteClockProvedWrong?(
+    tx: Transaction,
+    input: ClockProvedWrong,
+  ): Promise<{ recorded: string[]; unused: string[]; held: string[] }>;
+
+  /** One reading of the tax authority's time; null when it could not be read. Absent when the
+   * regime has no authority whose time it can read. */
+  readAuthorityTime?(): Promise<AuthorityTimeSample | null>;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 

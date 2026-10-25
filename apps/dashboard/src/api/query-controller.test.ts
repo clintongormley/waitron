@@ -51,4 +51,17 @@ describe("DashboardQueries", () => {
       sentHost.disconnect();
     });
   }
+
+  it("sends even the first read of a passive watch through the background client", async () => {
+    const background = { getVenueTheme: vi.fn().mockResolvedValue(theme) };
+    const api = { ...sharedApi(), getVenueTheme: vi.fn(), background } as unknown as DashboardApi;
+    const queriesHost = host();
+    const queries = new DashboardQueries(queriesHost, () => api, vi.fn());
+    const apply = vi.fn();
+    await queries.watch("getVenueTheme", [], apply, { passive: true });
+    expect(apply).toHaveBeenLastCalledWith(theme);
+    expect(background.getVenueTheme).toHaveBeenCalledTimes(1);
+    expect(api.getVenueTheme).not.toHaveBeenCalled();
+    queriesHost.disconnect();
+  });
 });

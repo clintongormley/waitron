@@ -1196,6 +1196,16 @@ backup settings (they cannot be read, or a reload could not open the database). 
 user guide's "never touches … your backups" (`box-status.md#free-space`, English and Spanish) does
 not hold for such a folder. A fix could refuse such a folder when the settings are saved.
 
+## AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply
+
+Whether a certificate-authenticated `consultar` reply carries a `Date` header is not measured. The
+`verifactu` repository's live workflow can measure it without filing: a manual run in its
+`consult` mode sends one `consultar` (`scripts/live-aeat.mjs:2567-2578` at `754f633`), and one
+added line in its `certificateFetch` wrapper (`:195-223`) writing the raw reply's
+`response.headers.date` to its output would print it. The wrapper hands back a new `Response`
+built without the reply's headers, so reading `date` from what it returns would print nothing.
+The production QR host was not tried either. Left open by A798-B slice 9 (#2025).
+
 ## Backup data verification and Cloud release
 
 The A850 interface checks a private restored copy without running ordinary restore hooks or
@@ -1224,3 +1234,14 @@ signature requiring an absent reviewed root remains unsupported. External vault-
 also needs its separately versioned archive contract. Full-history work under the configured
 resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
 See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).
+
+## The Box status page reads the wrongly-dated-sales alerts' params through a cast
+
+`readMisdatedOpen` (`apps/server/src/box-health.ts`) finds the open `clock.records_misdated` alerts
+by their code name and reads each alert's params as `MisdatedOpen` behind an `as unknown as` cast,
+so the server keeps its own copy of a shape the Veri\*Factu module writes. The compiler does not
+check the two agree; only the field checks in `apps/server/src/clock-confirm.route.test.ts`, where
+the real module writes the alert, do. A fiscal seat method (for example `openMisdated(tx)`)
+answering the typed list would remove the copy. Naming a code as a string in `apps/server` is house
+practice (`apps/server/src/payments-api.ts`'s status map), so the code name alone is not the
+problem.

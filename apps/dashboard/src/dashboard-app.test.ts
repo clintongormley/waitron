@@ -6786,6 +6786,26 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(location.pathname).toMatch(/^\/manage\/box-status(\/|$)/);
   });
 
+  it.each([false, true])(
+    "lets Box status confirm the box's clock only for an administrator (%s)",
+    async (admin) => {
+      history.replaceState(null, "", "/manage/box-status");
+      const api = Object.assign(faceApi(), {
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          permissions: ["system.manage", ...(admin ? ["person.admin"] : [])],
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      const face = el.shadowRoot!.querySelector("dashboard-box-status-screen")!;
+      expect(face.canConfirmClock).toBe(admin);
+    },
+  );
+
   it("follows a Go to from the Box status page, keeping the event inside the shell", async () => {
     history.replaceState(null, "", "/manage/box-status");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {

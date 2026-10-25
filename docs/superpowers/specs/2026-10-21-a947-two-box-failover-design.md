@@ -924,7 +924,10 @@ taken until one of them is put right — and the box cannot tell which one is wr
   approved «…o corrige la que esté mal» asked for a correction nobody can make on the box — there
   is no set-the-clock action, §13 — and connecting the box to the internet does not clear a
   disagreement either: a wrong device still disagrees, and a wrong box disagrees with the internet
-  too. An FYI to the owner.)
+  too. An FYI to the owner.) _2026-10-24: A798's design revision 7 (§4.9) adds a way for the box to
+  set its own clock — from AEAT's time, two agreeing devices or an administrator's own device, never
+  a typed time — in A798-B slice 9b, not built yet; until it lands there is still no set-the-clock
+  action._
 - **The main box's clock drifting goes unseen.** If the main box runs 20 seconds fast and the spare
   31 seconds fast, they differ by 11 seconds, no spare-against-main alert fires, and a switch checked
   against a right till is refused. And a main box out by more than 30 seconds blocks its own

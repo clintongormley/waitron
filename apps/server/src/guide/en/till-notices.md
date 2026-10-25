@@ -30,11 +30,11 @@ refuses payments and refunds. A manager needs to fix the clock.
 
 **Payments stopped: the box's clock reads earlier than its last sale · Tell a manager** is red. The
 box's clock reads more than a minute earlier than the last sale it recorded. Until it reads no more
-than a minute earlier, the box refuses payments, refunds and anything else that would record a sale
-or settle money: payments in cash or by card, at the counter or at a table, refunds and retried
-refunds, a table leaving without paying, cancelling an order that already has an invoice, and a
-change or a kitchen send that would finish paying a bill already paid in part. On the dashboard,
-managers cannot sort out stuck or held payments and refunds either.
+than a minute earlier, or the box's clock is confirmed, the box refuses payments, refunds and
+anything else that would record a sale or settle money: payments in cash or by card, at the counter
+or at a table, refunds and retried refunds, a table leaving without paying, cancelling an order that
+already has an invoice, and a change or a kitchen send that would finish paying a bill already paid
+in part. On the dashboard, managers cannot sort out stuck or held payments and refunds either.
 
 Other work carries on. For example, you can seat tables, take orders, send them to the kitchen,
 clock in and out, reprint a receipt and print an invoice that was already made. A refused payment
@@ -54,7 +54,10 @@ card was taken:
 - **From the bill's payment options (Whole bill, Pay items, Contribute or Split equally):** the
   payment stays waiting, and the box records it by itself once payments are back.
 
-A manager fixes this from the [Box status page](box-status.md#clock-behind).
+A manager fixes this from the [Box status page](box-status.md#clock-behind). If the box's clock is
+right and it was the last sale that carried a wrong time, payments restart by themselves once the
+tax agency or two tills or handhelds confirm the clock, or an administrator confirms it there with
+their own phone or computer, never from the box's own screen.
 
 **The box is nearly out of space · Tell a manager** is amber. Work is still saved, but space is
 running out. A manager should free space before it runs out, on the

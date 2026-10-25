@@ -6,9 +6,11 @@
 
 **2026-10-18, A793 (tips):** [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31) gained an open part (d) on suggested tip percentages and a default service charge; [Q49](#q49-card-tips-in-the-venues-books--income-or-money-owed-to-staff-added-2026-10-18) (how card tips are booked) and [Q50](#q50-a-fixed-service-charge-on-the-bill--allowed-by-consumer-law-added-2026-10-18) (a fixed "service" charge under consumer law) were added after Q13. The research behind them is [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md). None is in the shortened list or the Word copies yet, and no enquiry has been sent.
 
-**2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21) (a chain whose record times step back once, when a manager restarts payments) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
+**2026-10-21, A798-B (a clock behind the last sale):** [Q51](#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24) (a chain whose record times step back once, when the box's clock is confirmed) and [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) (what to do about sales recorded under a restart whose clock later proved wrong) were added after Q47, as the [A798 design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md) §10 asks. Neither behaviour is built yet. Neither is in the shortened list or the Word copies, and no enquiry has been sent.
 
 **2026-10-22, A980 (data protection):** [Q54 to Q58](#data-protection-questions-for-a-privacy-specialist-added-2026-10-22) were added for a privacy specialist, not the asesor fiscal, from the [A980 design](../superpowers/specs/2026-10-22-a980-data-protection-design.md) §9. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) still carries the Article 9 basis for allergy notes. [Q59](#q59-a-privacy-line-on-receipts-and-full-invoices-added-2026-10-24) (a privacy line on receipts and full invoices) joined them on 2026-10-24, from the design's §4.1.1. None is in the shortened list or the Word copies, and no enquiry has been sent.
+
+**2026-10-24, A798-B slice 9 revised (the box's clock confirmed):** [Q51](#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24) was revised for the owner's answers of 2026-10-24: payments restart by themselves once AEAT, two devices or an administrator's own device confirms the box's clock, with no 24-hour cap and no manager's button. [Q52](#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21) gained a pointer. [Q60](#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24) (sales a clock running ahead dated later than the real time, which the box now lists) was added after Q52. None is in the shortened list or the Word copies, and no enquiry has been sent.
 
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
@@ -3637,7 +3639,7 @@ Sources: [W41s-1 receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-preventi
 
 This records a question; no enquiry has been sent.
 
-### Q51. A chain whose record times step back once, under a manager's restart (added 2026-10-21)
+### Q51. A chain whose record times step back once, when the box's clock is confirmed (added 2026-10-21; revised 2026-10-24)
 
 **Why it matters.** Each record's `FechaHoraHusoGenRegistro` (the moment it was generated) comes from
 the box's clock, and the same reading dates the invoice. The owner has decided (2026-10-19) that while
@@ -3645,16 +3647,23 @@ the box's clock reads more than a minute earlier than the latest generation time
 database, the box takes no payment and writes no record. That case has two causes the box cannot tell
 apart by its own clock: the clock is wrong now (a power cut reset it), or the clock is right now and
 the last record was stamped by a clock that ran ahead (someone set the date a day wrong). For the
-second, the owner chose (2026-10-20) to let a manager restart payments, but only with fresh proof
-that the clock is right now (AEAT's time, or at least two tills or handhelds that reported in the
-last five minutes, each within a minute of the box) and only when the box is at most 24 hours
-behind the last record
-([design §4.8 b](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#b-who-can-fix-it-and-how)).
-The next record in the chain then carries a generation time earlier than the record before it, by up
-to 24 hours, and the records after it do too until real time passes the last one. Nothing already
-recorded is changed. Separately, inside the one-minute margin the box keeps selling with no restart,
-so a record can already carry a time up to a minute earlier than the one before it, as after an
-automatic time correction.
+second, the owner first chose (2026-10-20) a manager's restart with fresh proof and at most 24 hours
+behind; on 2026-10-24 the owner replaced it: payments restart by themselves, whatever the gap, as
+soon as the box's clock is confirmed
+([design §4.9 e](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#e-payments-restart-by-themselves-whatever-the-gap)).
+What confirms it, in order: AEAT's time agreeing with the box within a minute; at least two
+enrolled tills or handhelds, from two different network addresses, that reported their time in the
+last five minutes, each within a minute of the box; or an administrator's own phone or computer,
+never the box's own screen. Nobody types a time on the screen: the device's browser sends its own,
+though a scripted request could send any time. AEAT's time outranks the devices: when AEAT
+disagrees, neither the devices nor an administrator can confirm for the rest of that stop, unless
+the box's server restarts, which forgets the disagreement. The next record in the chain then carries a generation time earlier than the
+record before it, with no limit on how much earlier; each later record carries a time no more than a
+minute earlier than the box's clock read at the confirmation, nor than the latest time written since.
+If the clock steps back again, payments stop again until a fresh confirmation. Nothing already
+recorded is changed. Separately, inside the one-minute margin the box keeps selling with no
+confirmation, so a record can already carry a time up to a minute earlier than the one before it, as
+after an automatic time correction.
 
 Our own reading is that a chain runs in the order records are generated
 ([findings](verifactu-findings.md), "Chain position is unrelated to invoice number"), and the house
@@ -3672,16 +3681,24 @@ preproduction environment.
 > de un minuto anterior a la fecha y hora de generación (`FechaHoraHusoGenRegistro`) del último
 > registro que conserva. Puede ocurrir que la hora actual sea la correcta y que el último registro se
 > generase con un reloj adelantado (por ejemplo, con la fecha puesta un día por delante por error). En
-> ese caso, una persona responsable puede reanudar los cobros, pero solo si hay una prueba reciente de
-> que la hora actual es correcta (la hora de la AEAT, o la de al menos dos dispositivos de venta que
-> hayan comunicado su hora en los últimos cinco minutos, cada uno con menos de un minuto de
-> diferencia) y si la diferencia con el último registro no supera las 24 horas.
+> ese caso, el sistema reanuda los cobros por sí solo, sea cual sea la diferencia con el último
+> registro, en cuanto confirma que la hora actual es correcta. La confirmación viene, por este orden,
+> de la hora de la AEAT, si coincide con la del equipo con menos de un minuto de diferencia; de la de
+> al menos dos dispositivos de venta dados de alta, conectados desde dos direcciones de red
+> distintas, que hayan comunicado su hora en los últimos cinco minutos, cada uno con menos de un
+> minuto de diferencia; o de la de un teléfono u ordenador propio de un administrador, nunca la
+> pantalla del propio equipo. En la pantalla nadie teclea una hora: la envía el navegador del
+> dispositivo, aunque una petición programada podría enviar cualquier hora. Si la hora de la AEAT no
+> coincide, ni los dispositivos ni el administrador pueden confirmarla mientras dure esa parada,
+> salvo que se reinicie el servidor del equipo, que olvida esa discrepancia.
 > Desde ese momento, el siguiente registro de la cadena lleva una fecha y hora de generación anterior a
-> la del registro que le precede (hasta 24 horas antes), y los siguientes también, hasta que la hora
-> real alcance la del último registro. No se modifica ningún registro ya generado, ni su huella ni su
-> encadenamiento. Además, dentro del margen de un minuto el sistema sigue facturando sin reanudación,
-> de modo que un registro puede llevar una hora hasta un minuto anterior a la del registro anterior,
-> por ejemplo tras una corrección automática de la hora.
+> la del registro que le precede (sin límite), y cada registro posterior lleva una hora que, como
+> mucho, es un minuto anterior a la que marcaba el reloj del equipo al confirmarse y a la más reciente
+> generada desde entonces. Si la hora vuelve a retroceder, los cobros se detienen de nuevo hasta una
+> nueva confirmación. No se modifica ningún registro ya generado, ni su huella ni su encadenamiento.
+> Además, dentro del margen de un minuto el sistema sigue facturando sin confirmación, de modo que un
+> registro puede llevar una hora hasta un minuto anterior a la del registro anterior, por ejemplo tras
+> una corrección automática de la hora.
 >
 > **(a)** ¿Admite la normativa (RD 1007/2023 y Orden HAC/1177/2024), y acepta la AEAT, una cadena en
 > la que la fecha y hora de generación de un registro es anterior a la del registro que le precede?
@@ -3692,25 +3709,31 @@ preproduction environment.
 > del último registro, o de otra forma?
 >
 > **(c)** ¿Cambia la respuesta cuando la diferencia es de segundos o de un minuto (un ajuste de hora)
-> y no de horas?
+> y no de horas o días?
 
-**Proposed interim treatment (owner, 2026-10-19 and 2026-10-20):** as described above: stop at more
-than a minute behind; restart only with fresh proof, at most 24 hours behind, by someone holding the
-`system.manage` permission, from the dashboard; every restart kept in an append-only table with who,
-when, both times, the record it names and the proof
-([design §4.8](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#48-a-clock-behind-the-last-sale-payments-stop-question-3-pictures-8-and-9),
-question 4 in §9). Not built: it is slices 8 and 9 of the A798-B build.
+**Proposed interim treatment (owner, 2026-10-19, 2026-10-20 and 2026-10-24):** as described above:
+stop at more than a minute behind; restart by itself, with no cap on the gap, once AEAT, two devices
+from two addresses, or an administrator (the `person.admin` permission) from their own device
+confirms the clock, AEAT first; every confirmation kept in an append-only table,
+`clock_confirmations`, with its source, the administrator where there is one, the proof, both times
+and the record it names; the managers told by the bell and by email
+([design §4.9](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#49-revision-7-checking-and-correcting-the-boxs-clock-the-owners-answers-2026-10-24)).
+The stop was built by A798-B slice 8 (#2012); the confirmation by slice 9 (#2025), revised
+2026-10-24 and parked for the owner. One step back per confirmation; later records are held to the
+minute. Until slice 9b (not built) the box cannot set its own clock, so a confirmation only lifts
+the stop. Sales that a clock running ahead stamped later than the real time are listed for the owner
+(Q60).
 
 This records a question; no enquiry has been sent.
 
 ### Q52. Sales recorded under a restart whose clock later proved wrong (added 2026-10-21)
 
-**Why it matters.** After a manager restarts payments as Q51 describes, the box keeps checking its
-clock: against AEAT's time on the next send, and for a jump forward of more than a minute beyond the
-time that has passed (the wall clock against the server process's own steady clock, so only while the
-server keeps running). Either can prove that the clock the restart accepted was wrong. The records
-generated in between then carry a wrong generation time, and their invoices a wrong issue date,
-because one clock reading dates both
+**Why it matters.** After payments restart on a confirmation of the clock, as Q51 describes, the box keeps checking its
+clock: against AEAT's time on the next send and, while the clock still reads more than a minute
+behind the latest record, once a minute from AEAT's QR validation site; and for a jump forward of
+more than a minute beyond the time that has passed (compared only while the server keeps running).
+Any of these can prove that the clock the restart accepted was wrong. The records generated in between then carry a wrong generation time,
+and their invoices a wrong issue date, because one clock reading dates both
 ([design §2.5](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#25-the-clock)). The
 design's default changes nothing: the managers get an alert, "Sales recorded between {from} and {to}
 were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.", and the
@@ -3719,15 +3742,17 @@ records, the chain and the box's clock stay as they are
 `clock.behind_chain_disproved`). Whether anything more is required is what this asks.
 
 > Tras una reanudación como la de la pregunta anterior (Q51), el sistema sigue comprobando la hora:
-> con la hora de la AEAT en el siguiente envío, y vigilando si el reloj del equipo salta hacia delante
-> más de un minuto respecto al tiempo realmente transcurrido. Si así se demuestra que la hora aceptada
-> al reanudar era incorrecta, los registros generados desde la reanudación hasta ese momento llevan
-> una fecha y hora de generación errónea y, en sus facturas, una fecha de expedición errónea, porque
-> ambas salen de la misma lectura del reloj. Hoy el sistema no modifica nada: avisa a los
-> responsables («Las ventas registradas entre {desde} y {hasta} se fecharon con un reloj que resultó
-> estar mal. Quedan como se registraron; consúltalo con tu asesor.») y los registros, la cadena y la
-> hora del equipo quedan como están. Queda constancia de quién reanudó, cuándo, con qué prueba y entre
-> qué horas.
+> con la hora de la AEAT en el siguiente envío y, mientras la hora del equipo siga siendo más de un
+> minuto anterior a la del último registro, cada minuto con la del sitio de cotejo de códigos QR de
+> la AEAT; y vigilando si el reloj del equipo salta hacia delante más de un minuto respecto al
+> tiempo realmente transcurrido. Si así se demuestra que la hora aceptada al reanudar era
+> incorrecta, los registros generados desde la reanudación hasta ese momento llevan una fecha y hora
+> de generación errónea y, en sus facturas, una fecha de expedición errónea, porque ambas salen de
+> la misma lectura del reloj. Hoy el sistema no modifica nada: avisa a los responsables («Las ventas
+> registradas entre {desde} y {hasta} se fecharon con un reloj que resultó estar mal. Quedan como se
+> registraron; consúltalo con tu asesor.») y los registros, la cadena y la hora del equipo quedan
+> como están. Queda constancia de qué confirmó la hora (y, si fue un administrador, quién), cuándo,
+> con qué prueba y entre qué horas.
 >
 > **(a)** ¿Debe hacerse algo con esos registros o facturas (subsanación, anulación y nueva
 > expedición, factura rectificativa, comunicación a la AEAT), o basta con conservar la constancia de
@@ -3739,8 +3764,70 @@ records, the chain and the box's clock stay as they are
 > la AEAT los aceptó con errores por la hora (código 2004)?
 
 **Proposed interim treatment (design default, A798 revision 5 decision 13):** raise the alert and
-change nothing else; the restart and its proof stay in the append-only table Q51 describes. Not
-built: it is slice 9 of the A798-B build.
+change nothing else; the restart and its proof stay in the append-only table Q51 describes.
+
+**2026-10-24:** A confirmation whose clock later proves wrong still raises the alert above,
+`clock.behind_chain_disproved`, for the sales written under it, and the proof is kept in
+`clock_confirmations`. The sales a clock running ahead dated before the stop are
+[Q60](#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
+
+This records a question; no enquiry has been sent.
+
+### Q60. Sales dated later than the real time by a clock that ran ahead (added 2026-10-24)
+
+**Why it matters.** When the box's clock runs ahead and is then put right, the sales recorded in
+between carry a `FechaHoraHusoGenRegistro` later than the real time, and their invoices an issue
+date that can be later too, because one clock reading dates both
+([design §2.5](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#25-the-clock)). Once
+the clock is put right more than a minute behind the latest record, payments stop (Q51). When that
+stop's check closes on a confirmation of the clock, the box works out the real time at the start of
+the stop — the time at the confirmation less the time elapsed since the stop began, by a clock that
+counts from the machine's start — and lists every record written before the stop and stamped more than a minute
+after that time: invoice number and recorded time, on the Box status page. The managers get an
+alert, by the bell and by email, which stays open until someone marks it handled: "{count} sales
+were recorded with a time later than the real time (from {from} to {to}). They stay as recorded. Go
+through them with your tax adviser; the list is on the Box status page." If the machine restarted
+during the stop, the list may be short, and the alert says so. If the stop ended by itself and the
+next witness disagreed with the box, nothing is listed and the alert says the box cannot tell which
+sales were dated wrongly
+([design §4.9 f](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md#f-wrongly-dated-records-go-to-the-owner)).
+Nothing is rewritten: `registros_facturacion` is append-only, and records already sent to AEAT stay
+as sent. Today only records dated later than the real time are listed; the design plans (slice 9c,
+not built) to list records after a change of the clock in either direction. Whether anything more is
+required is what this asks.
+
+> Cuando el reloj del equipo se adelanta y después se corrige, las ventas registradas entretanto
+> llevan una fecha y hora de generación (`FechaHoraHusoGenRegistro`) posterior a la real y, en sus
+> facturas, una fecha de expedición que también puede ser posterior, porque ambas salen de la misma
+> lectura del reloj. Si al corregirse la hora el equipo queda más de un minuto por detrás del último
+> registro, deja de cobrar (pregunta Q51). Cuando se confirma la hora, el sistema calcula la hora real
+> al comienzo de la parada (la hora de la confirmación menos el tiempo transcurrido desde que empezó,
+> medido por un reloj que cuenta desde el arranque del equipo) y lista los registros generados antes
+> de la parada con una hora más de un minuto posterior a esa hora real: número de factura y hora
+> registrada. La lista se muestra en la página «Estado del equipo» del panel de gestión, y el sistema
+> avisa a los responsables en el panel y por correo electrónico; el aviso queda abierto hasta que
+> alguien lo marca como resuelto. Si el
+> equipo se reinició durante la parada, la lista puede estar incompleta, y el aviso lo dice; si la
+> parada terminó sola y la siguiente comprobación contradijo la hora del equipo, no se lista nada y el
+> aviso dice que no se puede saber qué ventas se fecharon mal. No se modifica ningún registro: ni su
+> contenido, ni su huella, ni su encadenamiento, y los ya remitidos a la AEAT quedan como se
+> remitieron. Hoy solo se listan registros con hora posterior a la real; más adelante el sistema podrá
+> listar también los de hora anterior, tras un cambio de hora.
+>
+> **(a)** ¿Qué debe hacer el obligado tributario con esos registros y facturas: basta con conservar la
+> lista y la constancia de lo ocurrido; debe comunicarse a la AEAT (¿por qué vía?); deben emitirse
+> facturas rectificativas; o deben anularse y expedirse de nuevo?
+>
+> **(b)** ¿Cambia la respuesta si la hora errónea cambia también la fecha de expedición (por ejemplo,
+> ventas de las 23:30 registradas como del día siguiente) y, con ella, el periodo de IVA?
+>
+> **(c)** ¿Cambia la respuesta si la hora de generación es anterior a la real en lugar de posterior?
+>
+> **(d)** ¿Cambia la respuesta si los registros ya se remitieron a la AEAT y fueron aceptados,
+> aceptados con errores por la hora (código 2004) o rechazados?
+
+**Proposed interim treatment (owner, 2026-10-24, 04:00):** list the records and raise the alert;
+change nothing else. Built by A798-B slice 9 (#2025), revised 2026-10-24; parked for the owner.
 
 This records a question; no enquiry has been sent.
 

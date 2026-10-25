@@ -1,7 +1,9 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { alertMessage } from "../i18n/alerts.js";
+import { formatIsoMinute } from "../date-utils.js";
+import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { AlertView, AlertsResponse, DashboardApi } from "../api/client.js";
 import "./alerts-screen.js";
@@ -84,6 +86,119 @@ describe("dashboard-alerts-screen", () => {
       "A card payment of €12.50 taken while offline",
     );
     expect(location.pathname).toBe("/manage/alerts/view/open");
+  });
+
+  it("never breaks a written time across two lines", async () => {
+    const misdated = (n: number): AlertView => ({
+      key: `incident:m${n}`,
+      kind: "event",
+      code: "clock.records_misdated",
+      params: {
+        confirmationId: `c${n}`,
+        count: "9".repeat(n),
+        from: "2026-10-19T23:41:00.000Z",
+        fromOffsetMinutes: 120,
+        to: "2026-10-20T00:05:00.000Z",
+        toOffsetMinutes: 120,
+        partial: false,
+        unconfirmed: false,
+      },
+      severity: "error",
+      since: "2026-10-20T00:06:00.000Z",
+      area: "box",
+    });
+    const listAlerts = vi.fn().mockResolvedValue({
+      visible: true,
+      alerts: Array.from({ length: 40 }, (_, n) => misdated(n + 1)),
+    } satisfies AlertsResponse);
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+      api: stubApi({ listAlerts }),
+    });
+    await flush(el);
+    const { checked, broken } = timesAcrossLines(
+      [...rows(el, "open-alerts-table")].map((row) => row.querySelector("td")!),
+    );
+    // Forty count lengths slide the two times along the whole line.
+    expect(checked).toBe(80);
+    expect(broken).toEqual([]);
+  });
+
+  it("words a restart of payments, a list of misdated sales and an unconfirmed stop", async () => {
+    const restarted: AlertView = {
+      key: "incident:c1",
+      kind: "event",
+      code: "clock.behind_chain_restarted",
+      params: {
+        confirmationId: "c1",
+        confirmedBy: "admin",
+        person: "Ana",
+        clockAt: "2026-10-19T09:14:00.000Z",
+        lastRecordAt: "2026-10-19T23:40:00.000Z",
+      },
+      severity: "warning",
+      since: "2026-10-19T09:16:00.000Z",
+      area: "box",
+    };
+    const listed: AlertView = {
+      ...restarted,
+      key: "incident:c2",
+      code: "clock.records_misdated",
+      params: {
+        confirmationId: "c2",
+        count: 2,
+        from: "2026-10-19T23:41:00.000Z",
+        fromOffsetMinutes: 120,
+        to: "2026-10-20T00:05:00.000Z",
+        toOffsetMinutes: 120,
+        partial: true,
+        unconfirmed: false,
+      },
+      severity: "error",
+    };
+    const unconfirmed: AlertView = {
+      ...listed,
+      key: "incident:c3",
+      params: {
+        confirmationId: "c3",
+        count: 0,
+        from: "2026-10-19T23:41:00.000Z",
+        fromOffsetMinutes: 120,
+        partial: false,
+        unconfirmed: true,
+      },
+    };
+    const alerts = [restarted, listed, unconfirmed];
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValue({ visible: true, alerts } satisfies AlertsResponse);
+    const at = (iso: string) => formatIsoMinute(iso);
+    for (const locale of ["en-GB", "es-ES"]) {
+      setLocale(locale);
+      const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+        api: stubApi({ listAlerts }),
+      });
+      await flush(el);
+      // The message alone: the cell's text up to its first line break.
+      const shown = [...rows(el, "open-alerts-table")].map((row) => {
+        const nodes = [...row.querySelector("[part=alert-message]")!.childNodes];
+        const end = nodes.findIndex((node) => node.nodeName === "BR");
+        return nodes
+          .slice(0, end)
+          .filter((node) => node.nodeType !== Node.COMMENT_NODE)
+          .map((node) => node.textContent)
+          .join("");
+      });
+      const expected =
+        locale === "en-GB"
+          ? [
+              `Payments restarted on the box's clock (${at("2026-10-19T09:14:00.000Z")}), earlier than the last sale (${at("2026-10-19T23:40:00.000Z")}), once an administrator confirmed it.`,
+              `2 sales were recorded with a time later than the real time (from ${at("2026-10-19T23:41:00.000Z")} to ${at("2026-10-20T00:05:00.000Z")}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page. The box restarted during the stop, so the list may be short.`,
+              `The payment stop that began at ${at("2026-10-19T23:41:00.000Z")} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.`,
+            ]
+          : alerts.map((alert) => alertMessage(alert.code, alert.params, "es"));
+      expect(shown, locale).toEqual(expected);
+      cleanupWidgets();
+    }
   });
 
   it("names the device an alert came from, or its source when no device raised it", async () => {

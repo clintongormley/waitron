@@ -18,5 +18,14 @@ declare module "@waitron/shared" {
      * (`@waitron/provisioning`). `territory` is the operator-supplied `fiscal_territory`, echoed
      * so the refusal can be acted on. */
     "fiscal.regime_not_implemented": { territory: string };
+    /** An administrator's confirmation of the box's clock was not accepted: there is no stop and
+     * no check waits, a witness disagrees with the box, the administrator's device disagrees with
+     * it, or the request came from the box itself. */
+    "clock.confirm_refused": {
+      reason: "not_stopped" | "contrary_proof" | "differs" | "same_machine";
+    };
+    /** The clock check a confirmation names is not one this box holds for the session: unknown,
+     * another session's, already used, or older than its time limit. */
+    "clock.check_expired": Record<string, never>;
   }
 }

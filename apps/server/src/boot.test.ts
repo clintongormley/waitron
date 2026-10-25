@@ -93,7 +93,7 @@ import type { TillConfig } from "./till-config.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createHourTestClock } from "./testing/hour-test-clock.js";
-import { DEV_DEVICE_HEADER } from "./device-session.js";
+import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
@@ -219,6 +219,20 @@ vi.mock("./backup-turns.js", async (importOriginal) => {
           return body();
         });
       };
+    },
+  };
+});
+
+/** Every clock witness store a boot creates, so a test can read what the server noted in it. */
+const witnessStores = vi.hoisted(() => [] as import("./clock-witnesses.js").ClockWitnessStore[]);
+vi.mock("./clock-witnesses.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./clock-witnesses.js")>();
+  return {
+    ...actual,
+    createClockWitnessStore: (...args: Parameters<typeof actual.createClockWitnessStore>) => {
+      const store = actual.createClockWitnessStore(...args);
+      witnessStores.push(store);
+      return store;
     },
   };
 });
@@ -2956,6 +2970,75 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
         const body = (await res.json()) as { notices: unknown; noticesUnavailable: unknown };
         expect(Array.isArray(body.notices)).toBe(true);
         expect(body.noticesUnavailable).toEqual([]);
+      } finally {
+        await server.close();
+      }
+    });
+  }, 60_000);
+
+  it("notes no clock from an equipment read made on the box itself, in the store boot created", async () => {
+    await withCapturedStdout(async () => {
+      const port = await freePort();
+      witnessStores.length = 0;
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_HOST: "0.0.0.0",
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "dev",
+        WAITRON_MIN_TICK_MS: "50",
+        WAITRON_MAX_TICK_MS: "200",
+        WAITRON_SKIP_RETRY_MS: "100",
+      });
+      try {
+        const deviceMs = Date.now();
+        const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+          headers: { [DEV_DEVICE_HEADER]: deviceId1, [DEVICE_CLOCK_HEADER]: String(deviceMs) },
+        });
+        expect(res.status).toBe(200);
+        expect(witnessStores).toHaveLength(1);
+        expect(witnessStores[0]!.witnesses()).toEqual([]);
+      } finally {
+        await server.close();
+      }
+    });
+  }, 60_000);
+
+  it("keeps, with its address, the clock of an equipment read from another machine, in the store boot created", async () => {
+    await withCapturedStdout(async () => {
+      const port = await freePort();
+      witnessStores.length = 0;
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "dev",
+          WAITRON_MIN_TICK_MS: "50",
+          WAITRON_MAX_TICK_MS: "200",
+          WAITRON_SKIP_RETRY_MS: "100",
+        },
+        {},
+        { requestFromBox: () => false },
+      );
+      try {
+        const deviceMs = Date.now();
+        const res = await fetch(`http://127.0.0.1:${port}/api/device/equipment`, {
+          headers: { [DEV_DEVICE_HEADER]: deviceId1, [DEVICE_CLOCK_HEADER]: String(deviceMs) },
+        });
+        expect(res.status).toBe(200);
+        expect(witnessStores).toHaveLength(1);
+        expect(witnessStores[0]!.witnesses()).toEqual([
+          expect.objectContaining({
+            kind: "device",
+            id: deviceId1,
+            address: "127.0.0.1",
+            witnessAt: new Date(deviceMs).toISOString(),
+          }),
+        ]);
       } finally {
         await server.close();
       }

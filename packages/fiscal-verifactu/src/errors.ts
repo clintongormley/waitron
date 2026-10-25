@@ -373,5 +373,46 @@ declare module "@waitron/shared" {
       lastRecordAt: string;
       lastRecordOffsetMinutes: number;
     };
+
+    /**
+     * Recorded, never thrown, by `recordRestarted` (./clock-stop-incidents.ts) for each confirmation
+     * that lifts a payment stop. `confirmedBy` is the confirmation's source; `person` is the
+     * administrator's display name when their device confirmed, else null; `clockAt` and
+     * `lastRecordAt` are ISO 8601 instants.
+     */
+    "clock.behind_chain_restarted": {
+      confirmationId: string;
+      confirmedBy: "authority" | "devices" | "admin";
+      person: string | null;
+      clockAt: string;
+      lastRecordAt: string;
+    };
+
+    /**
+     * Recorded, never thrown, by `recordDisproofs` (./clock-stop-incidents.ts) once per lift whose
+     * clock later proved wrong; `confirmationId` is the lifting confirmation's id. `from` and `to` are
+     * the earliest and latest generation times, ISO 8601, among the records written under it.
+     */
+    "clock.behind_chain_disproved": { confirmationId: string; from: string; to: string };
+
+    /**
+     * Recorded, never thrown, by `recordMisdated` (./clock-stop-incidents.ts) for each closing of a
+     * clock check that finds wrongly dated records, or cannot tell which they are (`unconfirmed`).
+     * With a list, `count` records from `from` to `to`, the earliest and latest generation times
+     * (ISO 8601), each with its record's offset. When it cannot tell, `count` is 0, `from` is when
+     * the check opened, with the offset the box read then (the closing's when the check stored
+     * none), and there is no `to`. `partial` is
+     * the closing's: the stop's start was not known, so the list may be short.
+     */
+    "clock.records_misdated": {
+      confirmationId: string;
+      count: number;
+      from: string;
+      fromOffsetMinutes: number;
+      to?: string;
+      toOffsetMinutes?: number;
+      partial: boolean;
+      unconfirmed: boolean;
+    };
   }
 }

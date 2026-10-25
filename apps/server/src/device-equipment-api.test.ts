@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, type networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -44,6 +44,7 @@ import {
   documentPrintersOf,
 } from "./box-staff-notices.js";
 import { prepareCardReaderDelete } from "./card-reader-delete.js";
+import type { ClockWitnessStore } from "./clock-witnesses.js";
 import { mountDeviceApi, type DeviceApiDeps } from "./device-api.js";
 import { createDiskFullState } from "./disk-full-state.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
@@ -53,6 +54,7 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { deletePrinter } from "./printer-delete.js";
+import { requestFromBox } from "./request-from-box.js";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
@@ -1737,5 +1739,167 @@ describe("GET /api/device/equipment's notices", () => {
       { key: "storage.disk_full", owner: "box" },
       { key: "m-error", owner: "m" },
     ]);
+  });
+});
+
+describe("the device's clock on the equipment read", () => {
+  type Noted = Parameters<ClockWitnessStore["noteDevice"]>;
+
+  function clockApp(requestFromBox: DeviceApiDeps["requestFromBox"] = () => false) {
+    const noted: Noted[] = [];
+    let wall = 1_792_000_000_000;
+    let mono = 5_000;
+    const app = new Hono();
+    mountDeviceApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        pairingMode: createPairingMode(),
+        clockWitnesses: { noteDevice: (...args) => void noted.push(args) },
+        clock: { wall: () => (wall += 1_000), monotonic: () => (mono += 7) },
+        requestFromBox,
+      },
+      quiet,
+    );
+    return { app, noted };
+  }
+
+  const read = (app: Hono, headers: Record<string, string>, remoteAddress?: string) =>
+    app.request(
+      "/api/device/equipment",
+      { headers },
+      remoteAddress === undefined ? undefined : { incoming: { socket: { remoteAddress } } },
+    );
+
+  it("notes the device's id, its address, its clock and the box's first readings when the request arrived", async () => {
+    const { app, noted } = clockApp();
+    const res = await read(
+      app,
+      { cookie: venue.cookie, "x-waitron-device-clock": "1792000060000" },
+      "192.168.10.31",
+    );
+    expect(res.status).toBe(200);
+    expect(noted).toEqual([
+      [a, "192.168.10.31", 1_792_000_060_000, { wallMs: 1_792_000_001_000, monoMs: 5_007 }],
+    ]);
+  });
+
+  it("notes nothing from a till or browser on the box itself, and still answers the equipment", async () => {
+    const { app, noted } = clockApp(() => true);
+    const res = await read(
+      app,
+      { cookie: venue.cookie, "x-waitron-device-clock": "1792000060000" },
+      "192.168.10.31",
+    );
+    expect(res.status).toBe(200);
+    expect(noted).toEqual([]);
+  });
+
+  describe("through the box's real check of where a request came from", () => {
+    const interfaces = (() => ({
+      eth0: [{ address: "192.168.10.20", family: "IPv4", internal: false }],
+      lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }],
+    })) as unknown as typeof networkInterfaces;
+    const realCheck = (c: Context) => requestFromBox(c, { interfaces });
+    const headers = () => ({ cookie: venue.cookie, "x-waitron-device-clock": "1792000060000" });
+
+    it("notes nothing from the box's own address", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers(), "192.168.10.20")).status).toBe(200);
+      expect(noted).toEqual([]);
+    });
+
+    it("notes nothing from a request with no connection to read", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers())).status).toBe(200);
+      expect(noted).toEqual([]);
+    });
+
+    it("notes once, with its address, a device elsewhere on the network", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers(), "192.168.10.31")).status).toBe(200);
+      expect(noted).toEqual([[a, "192.168.10.31", 1_792_000_060_000, expect.anything()]]);
+    });
+
+    it("notes an IPv4-mapped or scoped address in the plain form the box's own check compares", async () => {
+      const { app, noted } = clockApp(realCheck);
+      expect((await read(app, headers(), "::ffff:192.168.10.31")).status).toBe(200);
+      expect((await read(app, headers(), "192.168.10.31")).status).toBe(200);
+      expect((await read(app, headers(), "fe80::2%eth0")).status).toBe(200);
+      expect(noted.map(([, address]) => address)).toEqual([
+        "192.168.10.31",
+        "192.168.10.31",
+        "fe80::2",
+      ]);
+      expect((await read(app, headers(), "::ffff:192.168.10.20")).status).toBe(200);
+      expect(noted).toHaveLength(3);
+    });
+  });
+
+  it("reads the box's clocks before waiting for the write lock the device's sighting needs", async () => {
+    await suite.db.update(devices).set({ lastSeenAt: null }).where(eq(devices.id, a));
+    const noted: Noted[] = [];
+    let wallCalls = 0;
+    let locked = true;
+    const app = new Hono();
+    mountDeviceApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        pairingMode: createPairingMode(),
+        clockWitnesses: { noteDevice: (...args) => void noted.push(args) },
+        clock: {
+          wall: () => (wallCalls++, locked ? 1_792_000_000_000 : 1_792_000_090_000),
+          monotonic: () => 5_000,
+        },
+        requestFromBox: () => false,
+      },
+      quiet,
+    );
+    let release!: () => void;
+    const held = suite.db.withWriteLock(() => new Promise<void>((r) => (release = r)));
+    const answer = read(app, { cookie: venue.cookie, "x-waitron-device-clock": "1792000060000" });
+    try {
+      await vi.waitFor(() => expect(wallCalls).toBe(1));
+    } finally {
+      locked = false;
+      release();
+    }
+    await held;
+    expect((await answer).status).toBe(200);
+    expect(noted).toEqual([
+      [a, undefined, 1_792_000_060_000, { wallMs: 1_792_000_000_000, monoMs: 5_000 }],
+    ]);
+  });
+
+  it.each([
+    ["no header", undefined],
+    ["letters", "abc"],
+    ["an empty value", ""],
+    ["a fraction", "1792000060000.5"],
+    ["a sign", "-1792000060000"],
+    ["a number past a safe integer", "9007199254740993"],
+  ])("notes nothing for %s, and still answers the equipment", async (_, value) => {
+    const { app, noted } = clockApp();
+    const res = await read(app, {
+      cookie: venue.cookie,
+      ...(value === undefined ? {} : { "x-waitron-device-clock": value }),
+    });
+    expect(res.status).toBe(200);
+    expect(noted).toEqual([]);
+  });
+
+  it("refuses an unpaired request as before and notes nothing", async () => {
+    const { app, noted } = clockApp();
+    const res = await read(app, { "x-waitron-device-clock": "1792000060000" });
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      "device.unauthorized",
+    );
+    expect(noted).toEqual([]);
   });
 });

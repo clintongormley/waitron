@@ -1,6 +1,6 @@
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
-import { DEV_DEVICE_HEADER } from "./device-session.js";
+import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
 
 /**
  * CORS for the venue's own origins only (#257). `origin` returning null makes
@@ -14,7 +14,7 @@ export function corsForVenue(allow: (origin: string) => Promise<boolean>): Middl
   const middleware = cors({
     origin: async (origin) => ((await allow(origin)) ? origin : null),
     credentials: true,
-    allowHeaders: ["content-type", DEV_DEVICE_HEADER],
+    allowHeaders: ["content-type", DEV_DEVICE_HEADER, DEVICE_CLOCK_HEADER],
     allowMethods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     maxAge: 600,
   });

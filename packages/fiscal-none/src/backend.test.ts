@@ -69,6 +69,18 @@ describe("NoneBackend records nothing", () => {
     }
   });
 
+  it("offers no clock-stop method, having no stop", () => {
+    const backend = make();
+    expect(backend.clockStopState).toBeUndefined();
+    expect("restartAfterClockStop" in backend).toBe(false);
+    expect(backend.confirmClockStop).toBeUndefined();
+    expect(backend.openClockCheck).toBeUndefined();
+    expect(backend.closeClockCheckByItself).toBeUndefined();
+    expect(backend.waitingClockCheck).toBeUndefined();
+    expect(backend.misdatedRecords).toBeUndefined();
+    expect(backend.noteClockProvedWrong).toBeUndefined();
+  });
+
   it("recordSale writes nothing and returns a recorded ref carrying the sale's own instants", async () => {
     const sale = sampleSale();
     const ref = await make().recordSale(tx, sale);

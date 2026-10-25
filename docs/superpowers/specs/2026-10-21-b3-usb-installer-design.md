@@ -104,7 +104,7 @@ wizard.
 | Box files | `/opt/waitron/compose.yml`, `.env`, the print agent's AppArmor profile, a Bluetooth drop-in | `deploy/waitron.sh:184-319` |
 | Starting after a power cut | Docker's `restart: unless-stopped`; no Waitron service | `deploy/compose.yml:12`, `deploy/README.md:165-166` |
 | Clock | Nothing sets up time synchronisation | `deploy/waitron.sh` (grep `timesyncd\|timedatectl\|chrony\|ntp`: none) |
-| Disk layout | Whatever the preparer chose; "The Docker volumes live on the same disk as Docker's images" | `docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md:331-332` |
+| Disk layout | Whatever the preparer chose; "The Docker volumes live on the same disk as Docker's images" | `docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md` §2.6 |
 | Disk encryption | None designed; an older design pointed at "full-disk encryption, TPM-sealed auto-unlock" in a spec since deleted | `docs/superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md:60` |
 | Network | Assumed wired; nothing configures it | `deploy/waitron.sh` (grep `nmcli\|netplan`: none) |
 | First setup | Unauthenticated; Demo and Prepare go to whoever is first, Live to the first claim | `apps/server/src/setup-api.ts:613`, `:806`; `packages/provisioning/src/first-setup-state.ts:507-515` |
@@ -796,12 +796,18 @@ named beside it (the box's own settings sit under `system.manage` today, which m
 **No hand-set clock.** The owner's answer recorded "also the clock" as a setting
 (§18 Q2 follow-up, as the watcher wrote it down). A798, whose design the owner approved, decided the
 opposite: "**No 'set the clock' action anywhere in Waitron**: a clock a page can set is a way to date
-sales at will" (`docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md:1148-1150`).
+sales at will" (`docs/superpowers/specs/2026-10-19-a798-degraded-trading-design.md` §6, "Decisions
+revision 5 makes", decision 10).
 **My call: A798's decision stands**, and the page shows the clock without setting it. Every install
 now sets the clock from network time (§5.4), and the battery clock keeps it through a power cut, so
 the case A798 left to "whoever installed the box … from the operating system"
-(`:725-727`) no longer needs a terminal. If the owner wants a hand-set clock after all, it is A798's
+(that design's §4.8 b) no longer needs a terminal. If the owner wants a hand-set clock after all, it is A798's
 decision to reopen, not this page's; the approval question names it (§18).
+
+_2026-10-24: the owner reopened it for A798 (design revision 7, §4.9). The box now sets its own
+clock from AEAT's time, two agreeing tills, or an administrator's own phone or computer — never a
+typed time — through this design's host service (§8), whose first requests A798-B slice 9b builds.
+«Hora» still offers no typed time._
 
 **No hotspot after setup.** The owner's hotspot answer was about the install — "At that stage we're
 not protecting anything" (§18 Q5) — and the installer's hotspot (§5.3) never leads to the setup
@@ -1078,7 +1084,8 @@ file, outside the repository):
    installed box after 15 seconds rather than stopping (guard 3); the 60-second wait before erasing
    another system (§5.2), and never erasing a disk it cannot classify without a key; the installer's
    open hotspot (§5.3), and **no hotspot at all once a box holds a venue** (§10); no hand-set clock,
-   keeping A798's decision (§10); the till signed out when «Panel» opens the dashboard (§9);
+   keeping A798's decision (§10; _2026-10-24: reopened for A798, see §10's pointer — still no typed
+   time_); the till signed out when «Panel» opens the dashboard (§9);
    maintenance for admins only, at the box's own console (§11); the setup code, made by the
    installer, on the stick and asked on every setup request (§12); the installer refusing a box with
    Secure Boot off (§7.7); and the update to Microsoft's newer certificate needing a person present

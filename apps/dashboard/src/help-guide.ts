@@ -7,6 +7,7 @@ export const GUIDE_LINKS = {
   "staff.own-data": { page: "staff", section: "own-data" },
   "box-status.free-space": { page: "box-status", section: "free-space" },
   "box-status.retry-now": { page: "box-status", section: "retry-now" },
+  "box-status.clock-behind": { page: "box-status", section: "clock-behind" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;

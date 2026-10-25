@@ -174,9 +174,17 @@ import {
 import { mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
-import { BOX_EMAIL_CHECK_MS, readBoxEmailContext, startBoxEmailDuty } from "./box-alert-email.js";
+import {
+  BOX_EMAIL_CHECK_MS,
+  readBoxEmailContext,
+  readOpenClockIncidents,
+  startBoxEmailDuty,
+} from "./box-alert-email.js";
 import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
+import { createClockWitnessStore } from "./clock-witnesses.js";
+import { bootReader } from "./boot-reader.js";
+import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
@@ -282,7 +290,8 @@ import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
-import { collectBoxHealth } from "./box-health.js";
+import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
+import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
@@ -1560,7 +1569,9 @@ async function bootServer(
   // Shared by reference between the fiscal pass that WRITES it and the box-status read that surfaces
   // it: a node without a `fiscal.aeat` cert sells and chains locally, and its drain skips filing.
   const awaitingFiscalCert = { current: false };
-  const authorityClock = createAuthorityClockStatus();
+  const clockWitnesses = createClockWitnessStore();
+  const boxBoot = bootReader();
+  const authorityClock = createAuthorityClockStatus({ onSample: clockWitnesses.noteAuthority });
   const isMirror = holders.mode.current === "mirror";
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
@@ -1924,6 +1935,8 @@ async function bootServer(
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
         },
+        clockWitnesses,
+        requestFromBox: seams.requestFromBox,
       },
       log,
     );
@@ -2275,6 +2288,7 @@ async function bootServer(
       reading.settle(read.unavailable);
       return read;
     },
+    clockIncidents: () => readOpenClockIncidents(db),
     context: () =>
       readBoxEmailContext(db, {
         ring,
@@ -2288,6 +2302,20 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());
+  const clockWatch = startClockWatch({
+    backend: tillBackend,
+    store: clockWitnesses,
+    clock: tillClock,
+    boot: boxBoot,
+    nodeId: till.nodeId,
+    read: (fn) => db.withWriteLock(() => fn(db)),
+    transaction: (fn) => withTransaction(db, fn),
+    filesRecords,
+    isPrimary: () => holders.singletonRole.current === "primary",
+    intervalMs: CLOCK_WATCH_MS,
+    log,
+  });
+  undoOnFailure.push(() => clockWatch.stop());
   const serverAlertSources: AlertSource[] = [
     backupSource,
     storageAlertSource({ space: freeSpace, disk: diskFull }),
@@ -2303,6 +2331,7 @@ async function bootServer(
           offsetMinutes: tillClock.now().offsetMinutes,
         })) !== null,
     ),
+    clockDisagreesAlertSource(clockWitnesses),
     printingAlertSource(),
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
@@ -2418,6 +2447,12 @@ async function bootServer(
           leftovers: () => surveyLeftovers(leftoverDeps),
           paymentsEnabled,
           canFree: () => !isReadOnly(),
+          clockStop: clockStopReader({
+            backend: tillBackend,
+            witnesses: () => clockWitnesses.witnesses(),
+            clock: tillClock,
+          }),
+          clockCheckWaiting: clockCheckWaitingReader({ backend: tillBackend, clock: tillClock }),
         }),
       freeSpace: createSpaceFreer({
         ...leftoverDeps,
@@ -2427,6 +2462,17 @@ async function bootServer(
         // A deletion changes what the disk holds, so the next read walks it afresh.
         onFreed: () => diskUsageCache.clear(),
       }),
+      clockConfirm: {
+        backend: tillBackend,
+        witnesses: () => clockWitnesses.witnesses(),
+        clearWitnesses: () => clockWitnesses.clear(),
+        clock: tillClock,
+        nodeId: till.nodeId,
+        steady: () => performance.now(),
+        readBoot: boxBoot.readBoot,
+        requestFromBox: seams.requestFromBox,
+        devMode: config.devMode,
+      },
     },
     log,
   );
@@ -2966,6 +3012,7 @@ async function bootServer(
           () => tunnelWorker?.catch(() => {}),
           () => backupSupervisor.stop(),
           () => demoPrinterLoop?.stop(),
+          () => clockWatch.stop(),
           // Litestream writes venue.db, so its stop is awaited before the store closes.
           () => streamHost.stop(),
         ]);

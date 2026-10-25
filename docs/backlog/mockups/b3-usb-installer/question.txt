@@ -42,6 +42,9 @@ The calls you might want to overturn (all mine, all in the design):
   - NO hand-set clock: your answer listed "the clock" as a setting, but A798 (approved) says "No set
     the clock action anywhere in Waitron". Every install now sets the clock from the internet, so I
     kept A798. Say if you want it reopened;
+    (2026-10-24: you reopened it for A798. The box is to set its own clock from AEAT's time, two
+    agreeing tills or an administrator's own phone or computer, never a typed time: A798-B slice
+    9b, not built yet. See the B3 design's §10.)
   - «Panel» in the till's menu signs the till's person out first, and «Volver a la caja» signs the
     dashboard out, so a manager never comes back to the till as the waiter;
   - maintenance access for admins only, shown once, used only at the box's own screen (no SSH);

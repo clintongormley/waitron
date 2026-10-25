@@ -12,6 +12,7 @@ import {
   withPassiveManagementRead,
   type PersonRoleValue,
 } from "@waitron/identity";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -19,6 +20,8 @@ import { collectBoxHealth, type BoxHealth, type BoxHealthReaders } from "./box-h
 import { mountBoxHealthApi } from "./box-health-api.js";
 import type { FreedSpace } from "./free-space-now.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
+import { systemClock } from "./till-backend.js";
+import { writeRefusingDb } from "./testing/write-refusing-db.js";
 import "./errors.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -64,6 +67,16 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     db,
     readHealth: vi.fn(readHealth),
     freeSpace: vi.fn<(personId: string) => Promise<FreedSpace>>(async () => FREED),
+    clockConfirm: {
+      backend: new FakeFiscalBackend(db),
+      witnesses: () => [],
+      clearWitnesses: () => {},
+      clock: systemClock(),
+      nodeId: "node-1",
+      steady: () => 0,
+      readBoot: () => ({ ms: 0, id: null }),
+      devMode: false,
+    },
   };
   const app = new Hono();
   app.use("*", async (c, next) => {
@@ -116,28 +129,6 @@ function lockRefusingDb(error: Error): Database {
         return async () => {
           throw error;
         };
-      }
-      const value = Reflect.get(target, prop, target) as unknown;
-      return typeof value === "function"
-        ? (value as (...args: unknown[]) => unknown).bind(target)
-        : value;
-    },
-  });
-}
-
-/** A full disk that refuses any write turn which changed a row; a turn that only reads commits. */
-function writeRefusingDb(): Database {
-  const changes = () => suite.db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
-  return new Proxy(suite.db, {
-    get(target, prop) {
-      if (prop === "withWriteLock") {
-        return <T>(body: () => Promise<T>) =>
-          target.withWriteLock(async () => {
-            const before = changes();
-            const value = await body();
-            if (changes() !== before) throw new AppError("storage.disk_full", {});
-            return value;
-          });
       }
       const value = Reflect.get(target, prop, target) as unknown;
       return typeof value === "function"
@@ -292,14 +283,14 @@ describe("on a full disk with a change waiting to be delivered", () => {
   const waiting = () => suite.db.all<{ id: string }>(sql`select id from change_log`).length;
 
   it("the stand-in refuses the change-log delivery a transaction ends with", async () => {
-    await expect(withTransaction(writeRefusingDb(), async () => {})).rejects.toMatchObject({
+    await expect(withTransaction(writeRefusingDb(suite.db), async () => {})).rejects.toMatchObject({
       code: "storage.disk_full",
     });
     expect(waiting()).toBe(1);
   });
 
   it("answers the box's real health read, passive or not, and leaves the change waiting", async () => {
-    const db = writeRefusingDb();
+    const db = writeRefusingDb(suite.db);
     const { app } = mount(db, () => collectBoxHealth(db, readers()));
     for (const passive of [false, true]) {
       const seeded = new Date(Date.now() - 60_000);

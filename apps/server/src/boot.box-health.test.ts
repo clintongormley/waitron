@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,6 +16,7 @@ import type { StartedServer } from "./boot.js";
 import type { BackupSupervisorDeps } from "./backup-supervisor.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import type { BoxHealth } from "./box-health.js";
+import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { awaitListening } from "./testing/boot-harness.js";
@@ -136,6 +138,28 @@ const exists = (path: string) =>
   );
 
 describe("the running server's Box status read and free-space deletion", () => {
+  it("says payments are stopped for the clock while the latest record is a day ahead of it", async () => {
+    const box = await start(async (venue) => {
+      const [sif] = suite.db.all<{ id: string }>(
+        sql`select id from registro_sif where node_id = ${venue.cfg.nodeId}`,
+      );
+      const ids = {
+        locationId: venue.cfg.locationId,
+        nodeId: venue.cfg.nodeId,
+        seriesId: venue.seriesId,
+        saleId: randomUUID(),
+        sifId: sif!.id,
+      };
+      await insertFiscalSale(suite.db, ids);
+      await insertFiscalRegistro(suite.db, ids, {
+        entorno: "preproduction",
+        generatedAt: new Date(Date.now() + 24 * 60 * 60_000),
+      });
+    });
+
+    expect((await box.get()).clockStop).toMatchObject({ proof: "none", confirmation: null });
+  });
+
   it("reads the box, frees its rotated logs, and shares one staging turn with its backups", async () => {
     const box = await start();
 

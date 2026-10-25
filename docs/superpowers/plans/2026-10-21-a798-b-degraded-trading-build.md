@@ -78,7 +78,9 @@ to green and parked for the owner; everything else lands itself.
 | 7 | `feat/a798-7-box-status-page` | Box status page and Liberar | auth (`system.manage`) | FULL | no | **lands itself** | 4, 5 |
 | 7b | `feat/a798-7b-retry-now` | Reintentar ahora | fiscal invariants (nudging the drain) | FULL | no | **parked** | 7 |
 | 8 | `feat/a798-8-clock-behind-stop` | The clock-behind stop (§4.8 a, d, e) | fiscal invariants, cross-package contract, migrations | FULL | **yes — the build's one** | **parked** | 4, 6, 7 |
-| 9 | `feat/a798-9-clock-restart` | Devices report their clock, `clock.disagrees`, the minimum-date checks, the restart, and the clock-behind email (moved from 10 by slice 8's plan, revision 2) | fiscal invariants (lifts the stop), auth | FULL | no | **parked** | 7, 8, 10 |
+| 9 | `feat/a798-9-clock-restart` | Devices report their clock, `clock.disagrees`, the minimum-date checks, the clock-behind email; revised 2026-10-24 (plan revisions 4 to 8): payments restart by themselves once AEAT, two devices or an administrator's own device confirm the clock, no cap; when each stop began is recorded and wrongly dated records listed for the owner, also when a stop ends by itself | fiscal invariants (lifts the stop), auth (`person.admin`), migrations | FULL | **yes — `clock_checks` and `clock_confirmations` (revision 4)** | **parked** | 7, 8, 10 |
+| 9b | `feat/a798-9b-box-sets-clock` | The box sets its own clock through a host service, and watches its time service (`clock.sync_off`) — [outline](2026-10-24-a798-9b-box-sets-its-clock.md); full plan and review when taken | fiscal invariants (the clock that dates records), auth, cross-package contract (server ↔ host) | FULL | no | **parked** | 9 |
+| 9c | `feat/a798-9c-clock-check` | A clock check at every start and after every change; selling stops while it waits (`clock.behind_chain` with a new reason) — [outline](2026-10-24-a798-9c-clock-check-at-start-and-change.md); full plan and review when taken | fiscal invariants (stops every record), concurrency (the start), cross-package contract | FULL | no | **parked** | 9, 9b |
 | 10 | `feat/a798-10-emails-and-install` | Emails (all but the clock-behind one, which is 9's), `reader.offline`, the printer notice, `waitron.sh` | none | LIGHT | no | **lands itself** | 5, 6 |
 
 Why each lands itself or is parked, against the owner's four categories:
@@ -112,6 +114,9 @@ Why each lands itself or is parked, against the owner's four categories:
 9. **Parked.** Its restart lifts the stop and lets a record be written with a generation time
    earlier than the one before it (design §4.8 b) — the chain — and it makes a read-only query to
    AEAT with the filing certificate.
+   _Revision of 2026-10-24 (design revision 7, §4.9): the lift is automatic, with no cap, and two
+   more parked slices follow — 9b (the box sets its own clock, which dates every record) and 9c (a
+   check at every start and after every change, which stops every record while it waits)._
 10. **Lands itself.** Emails, an alert, a notice and the install script; nothing fiscal.
 
 Order: the lane builds them one at a time in the table's order, except that 10 is built before 9.
@@ -124,8 +129,8 @@ slice does not block a later slice that does not depend on it: 4 to 7 can land w
 10 while 8 and 9 wait for the owner.
 
 **Two asesor questions** were added with this plan, as design §10 asks:
-[Q51](../../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-under-a-managers-restart-added-2026-10-21)
-(a chain whose record times step back once under a manager's restart) and
+[Q51](../../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24)
+(a chain whose record times step back once, when the box's clock is confirmed) and
 [Q52](../../compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21)
 (sales recorded under a restart whose clock later proved wrong). Slices 8 and 9 build the
 behaviour they ask about.

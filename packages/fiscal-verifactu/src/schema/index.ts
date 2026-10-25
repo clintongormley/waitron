@@ -3,6 +3,8 @@
 // core already created). `schema-ownership.test.ts` enforces it.
 export { acks } from "./acks.js";
 export { cadenas } from "./cadenas.js";
+export { clockChecks } from "./clock-checks.js";
+export { clockConfirmations } from "./clock-confirmations.js";
 export { clockStopRestarts } from "./clock-stop-restarts.js";
 export { fiscalCertificateInstalls } from "./certificate-installs.js";
 export { fiscalCertificateReminders } from "./certificate-reminders.js";

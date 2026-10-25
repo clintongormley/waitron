@@ -29,6 +29,7 @@ import { requireManagementSession } from "@waitron/server-kit";
 import {
   assertDeviceStillProven,
   assertProfileAction,
+  DEVICE_CLOCK_HEADER,
   parseDeviceCookie,
   readDeviceCookie,
   requireDevice,
@@ -90,6 +91,8 @@ import { moveDishesToStation } from "./station-move.js";
 import { listStationsToday } from "./kitchen.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
 import type { DiskFullState } from "./disk-full-state.js";
+import type { ClockWitnessStore } from "./clock-witnesses.js";
+import { requestAddress, requestFromBox } from "./request-from-box.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   createStaffNoticeLog,
@@ -137,9 +140,22 @@ export interface DeviceApiDeps {
     clock: Pick<TrustedClock, "now">;
     filing: () => { enabled: boolean };
   };
+  /** Where the equipment read's `x-waitron-device-clock` is kept. Absent, the header is ignored. */
+  clockWitnesses?: Pick<ClockWitnessStore, "noteDevice">;
+  /** The box's wall and steady clocks for that header; tests inject both. */
+  clock?: { wall: () => number; monotonic: () => number };
+  /** Whether a request came from the box itself, whose clock is no witness to its own. */
+  requestFromBox?: (c: Context) => boolean;
 }
 
 const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
+
+/** Milliseconds since the epoch, written as digits only; anything else is not a reading. */
+function deviceClockOf(value: string | undefined): number | undefined {
+  if (value === undefined || !/^\d+$/.test(value)) return undefined;
+  const ms = Number(value);
+  return Number.isSafeInteger(ms) ? ms : undefined;
+}
 
 /**
  * CLIENT faults only: a code absent here takes the boundary's 400 default. A code this surface does
@@ -220,6 +236,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // Built ONCE here, so it is one bucket for the whole mounted API.
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
   const noticeLog = createStaffNoticeLog(log);
+  const wall = deps.clock?.wall ?? (() => Date.now());
+  const monotonic = deps.clock?.monotonic ?? (() => performance.now());
 
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
@@ -396,7 +414,13 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   // ── The device's equipment (DEVICE-GUARDED read, SESSION-GUARDED choice) ────────────────────────
   app.get("/api/device/equipment", (c) =>
     run(c, log, async () => {
+      // Read before `requireDevice`, so a wait behind the write lock is not counted as the device's
+      // clock difference.
+      const arrived = { wallMs: wall(), monoMs: monotonic() };
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const deviceMs = deviceClockOf(c.req.header(DEVICE_CLOCK_HEADER));
+      if (deviceMs !== undefined && !(deps.requestFromBox ?? requestFromBox)(c))
+        deps.clockWitnesses?.noteDevice(device.deviceId, requestAddress(c), deviceMs, arrived);
       // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses
       // even when this read changed nothing.
       const equipment = await deps.db.withWriteLock(() =>

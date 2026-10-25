@@ -5,8 +5,10 @@ import {
   startBoxEmailDuty,
   type BoxEmailCode,
   type BoxEmailContext,
+  type ClockIncident,
 } from "./box-alert-email.js";
 import type { EmailDelivery } from "./email-delivery.js";
+import { BOX_EMAIL_WORDS } from "./i18n/box-emails.js";
 import type { FreeSpaceReading } from "./free-space-watch.js";
 import type { Logger } from "./logger.js";
 import type { ManagerEmailRecipient } from "./manager-email-recipients.js";
@@ -35,6 +37,7 @@ function duty() {
     recipients: [ANA, BEN] as readonly ManagerEmailRecipient[],
     delivery: { mode: "smtp", smtp: SMTP } as EmailDelivery,
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
+    incidents: [] as readonly ClockIncident[],
     primary: true,
   };
   const context = vi.fn(async (): Promise<BoxEmailContext> => ({
@@ -43,6 +46,7 @@ function duty() {
     delivery: state.delivery,
   }));
   const moduleNotices = vi.fn(async (): Promise<StaffNoticesRead> => state.notices);
+  const clockIncidents = vi.fn(async (): Promise<readonly ClockIncident[]> => state.incidents);
   const send = vi.fn<TextEmailSender>(async () => "sent");
   const handle = startBoxEmailDuty({
     disk: { since: () => state.diskSince },
@@ -53,6 +57,7 @@ function duty() {
           : { freeBytes: 1, readAt: state.lowSince, lowSince: state.lowSince },
     },
     moduleNotices,
+    clockIncidents,
     context,
     send,
     isPrimary: () => state.primary,
@@ -75,11 +80,70 @@ function duty() {
       subject: message.subject,
       text: message.text,
     }));
-  return { handle, armed, state, context, moduleNotices, send, sent, tick, lines, events };
+  return {
+    handle,
+    armed,
+    state,
+    context,
+    moduleNotices,
+    clockIncidents,
+    send,
+    sent,
+    tick,
+    lines,
+    events,
+  };
 }
 
 function notice(code: string): OwnedStaffNotice {
   return { owner: "fiscal-verifactu", key: code, code, severity: "error", params: {} };
+}
+
+const STOP = {
+  clockAt: "2025-03-14T08:12:00.000Z",
+  offsetMinutes: 60,
+  lastRecordAt: "2026-10-18T21:40:00.000Z",
+  lastRecordOffsetMinutes: 120,
+};
+
+const SPANISH_STOP = BOX_EMAIL_WORDS["clock.behind_chain"].es;
+
+function clockStop(params: typeof STOP): OwnedStaffNotice {
+  return { ...notice("clock.behind_chain"), params };
+}
+
+const RESTART: ClockIncident = {
+  id: "i-restart",
+  code: "clock.behind_chain_restarted",
+  params: {
+    confirmationId: "c-1",
+    confirmedBy: "admin",
+    person: "Ana",
+    clockAt: "2025-03-14T08:12:00.000Z",
+    lastRecordAt: "2026-10-18T21:40:00.000Z",
+  },
+};
+
+const MISDATED: ClockIncident = {
+  id: "i-misdated",
+  code: "clock.records_misdated",
+  params: {
+    confirmationId: "c-1",
+    count: 3,
+    from: "2026-10-18T19:05:00.000Z",
+    fromOffsetMinutes: 120,
+    to: "2026-10-26T09:30:00.000Z",
+    toOffsetMinutes: 60,
+    partial: false,
+    unconfirmed: false,
+  },
+};
+
+function clockEmail(incident: ClockIncident, recipient: ManagerEmailRecipient) {
+  return {
+    recipient: recipient.email,
+    ...boxEmailMessage(incident.code, recipient.language, VENUE, incident.params),
+  };
 }
 
 const turn = () => new Promise((resolve) => setImmediate(resolve));
@@ -382,11 +446,151 @@ describe("startBoxEmailDuty", () => {
   it("emails no module notice without email words", async () => {
     const d = duty();
     d.state.notices = {
-      notices: [notice("fiscal.records_unsent"), notice("clock.behind_chain")],
+      notices: [notice("fiscal.records_unsent"), notice("printer.jobs_waiting")],
       unavailable: [],
     };
     await d.tick();
     await d.tick();
+    expect(d.context).not.toHaveBeenCalled();
+    expect(d.send).not.toHaveBeenCalled();
+  });
+
+  it("emails each manager once per clock stop, with the stop's two times", async () => {
+    const d = duty();
+    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([
+      {
+        recipient: ANA.email,
+        subject: SPANISH_STOP.subject.replaceAll("{venue}", VENUE),
+        text: SPANISH_STOP.text
+          .replaceAll("{clockAt}", "14/03/2025 09:12")
+          .replaceAll("{lastRecordAt}", "18/10/2026 23:40"),
+      },
+      {
+        recipient: BEN.email,
+        subject:
+          "Payments stopped at Corner Bistro: the box's clock reads earlier than its last sale",
+        text: expect.stringContaining(
+          "(14/03/2025 09:12) reads earlier than its last recorded sale (18/10/2026 23:40)",
+        ),
+      },
+    ]);
+  });
+
+  it("a clock stop keeps its first notice's times when a later read differs", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
+    await d.tick();
+    d.state.notices = {
+      notices: [clockStop({ ...STOP, clockAt: "2025-03-14T08:13:00.000Z" })],
+      unavailable: [],
+    };
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toHaveLength(2);
+    expect(d.sent()[1]!.text).toContain("(14/03/2025 09:12)");
+    expect(d.sent()[1]!.text).not.toContain("09:13");
+  });
+
+  it("a clock stop that goes and comes back emails again, with the new stop's times", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.state.notices = { notices: [clockStop(STOP)], unavailable: [] };
+    await d.tick();
+    d.state.notices = { notices: [], unavailable: [] };
+    await d.tick();
+    d.state.notices = {
+      notices: [clockStop({ ...STOP, clockAt: "2025-03-14T08:13:00.000Z" })],
+      unavailable: [],
+    };
+    await d.tick();
+    expect(d.sent()).toHaveLength(2);
+    expect(d.sent()[0]!.text).toContain("(14/03/2025 09:12)");
+    expect(d.sent()[1]!.text).toContain("(14/03/2025 09:13)");
+  });
+
+  it("emails each manager once per open restart or wrongly dated alert, in their own language", async () => {
+    const d = duty();
+    d.state.incidents = [RESTART, MISDATED];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([
+      clockEmail(RESTART, ANA),
+      clockEmail(RESTART, BEN),
+      clockEmail(MISDATED, ANA),
+      clockEmail(MISDATED, BEN),
+    ]);
+    expect(d.sent()[1]!.text).toContain("confirmed by an administrator");
+    expect(d.sent()[3]!.text).toContain("from 18/10/2026 21:05 to 26/10/2026 10:30");
+    expect(d.events("box_email.sent")).toContainEqual([
+      "info",
+      "box_email.sent",
+      { code: "clock.records_misdated" },
+    ]);
+  });
+
+  it("emails each alert of one code on its own, once", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    const second = { ...MISDATED, id: "i-misdated-2", params: { ...MISDATED.params, count: 4 } };
+    d.state.incidents = [MISDATED];
+    await d.tick();
+    d.state.incidents = [MISDATED, second];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(MISDATED, BEN), clockEmail(second, BEN)]);
+  });
+
+  it("emails nothing for an alert handled before it was read, nor retries one handled after a failed send", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.state.incidents = [RESTART];
+    await d.tick();
+    d.state.incidents = [];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(RESTART, BEN)]);
+    expect(d.context).toHaveBeenCalledTimes(1);
+  });
+
+  it("tries a failed alert email again while the alert stays open", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.state.incidents = [MISDATED];
+    await d.tick();
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(MISDATED, BEN), clockEmail(MISDATED, BEN)]);
+  });
+
+  it("keeps an alert's episode while the alert read fails, and sends nothing more", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.state.incidents = [RESTART];
+    await d.tick();
+    d.clockIncidents.mockRejectedValueOnce(new Error("busy"));
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(RESTART, BEN)]);
+    expect(d.events("box_email.check_failed")).toHaveLength(1);
+  });
+
+  it("stop during the alert read sends nothing", async () => {
+    const d = duty();
+    const read = held<readonly ClockIncident[]>();
+    d.clockIncidents.mockImplementationOnce(() => read.promise);
+    d.armed[0]!.fn();
+    await vi.waitFor(() => expect(d.clockIncidents).toHaveBeenCalled());
+    const stopping = d.handle.stop();
+    read.release([RESTART]);
+    await stopping;
+    await turn();
     expect(d.context).not.toHaveBeenCalled();
     expect(d.send).not.toHaveBeenCalled();
   });
@@ -400,6 +604,7 @@ describe("startBoxEmailDuty", () => {
     expect(d.armed).toHaveLength(3);
     expect(d.context).not.toHaveBeenCalled();
     expect(d.moduleNotices).not.toHaveBeenCalled();
+    expect(d.clockIncidents).not.toHaveBeenCalled();
     expect(d.send).not.toHaveBeenCalled();
   });
 

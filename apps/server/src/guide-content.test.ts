@@ -74,6 +74,7 @@ describe("the user guides", () => {
       "free-space",
       "out-of-space",
       "clock-behind",
+      "clock-witnesses",
       "emails",
     ]);
   });

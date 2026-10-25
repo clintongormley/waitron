@@ -88,6 +88,8 @@
       "fiscal_allocations",
       "fiscal_reservations",
       "clock_stop_restarts",
+      "clock_checks",
+      "clock_confirmations",
       "fiscal_certificate_installs"
     ]
   },

@@ -3,6 +3,7 @@ import { formatBytes } from "@waitron/dashboard-kit";
 import type { AlertView, BoxHealth } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
+import { ALERT_WORDS } from "../i18n/alert-messages.js";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { boxStatusRows, partOfAlert, partsOfNotice, type PartRow } from "./box-status-rows.js";
@@ -49,6 +50,9 @@ function quietHealth(overrides: Partial<BoxHealth> = {}): BoxHealth {
       lowSince: null,
       reclaimable: { bytes: 45_000_000, backupRunning: false },
     },
+    clockStop: null,
+    clockCheckWaiting: null,
+    misdatedOpen: [],
     ...overrides,
   };
 }
@@ -532,7 +536,10 @@ describe("boxStatusRows", () => {
       state: "attention",
       line: alertMessage("fiscal.clock_drift", { seconds: 3600 }, "en"),
       details: [
-        fill("box_status.clock.compared", { time: formatIsoMinute(MEASURED), seconds: "3600" }),
+        fill("box_status.clock.compared_behind", {
+          time: formatIsoMinute(MEASURED),
+          seconds: "3600",
+        }),
       ],
       alerts: [],
     });
@@ -630,5 +637,411 @@ describe("payments stopped while the box's clock reads behind its last sale", ()
     const { rows } = boxStatusRows(quietHealth({ notices: [CLOCK_BEHIND] }), []);
     expect(row(rows, "sales").line).toBe(es["box_status.notice.clock_behind_chain"]);
     expect(row(rows, "clock").details).toContain(es["box_status.clock.behind_chain_fix"]);
+  });
+});
+
+describe("the Clock row while payments are stopped for the clock", () => {
+  const CLOCK_BEHIND = notice("clock.behind_chain", "error", {
+    clockAt: "2025-03-14T09:12:00.000Z",
+    offsetMinutes: 60,
+    lastRecordAt: "2026-10-22T19:43:00.000Z",
+    lastRecordOffsetMinutes: 120,
+  });
+  const CHECKED = "2026-10-22T19:40:00.000Z";
+  const DEVICE_READ = "2026-10-22T19:41:00.000Z";
+  const CONFIRMED = "2026-10-22T19:44:00.000Z";
+  const STOP_BEGAN = "2026-10-22T18:02:00.000Z";
+  type ClockStop = NonNullable<BoxHealth["clockStop"]>;
+
+  const AUTHORITY = {
+    kind: "authority" as const,
+    id: "authority",
+    boxAt: CHECKED,
+    witnessAt: CHECKED,
+    uncertaintyMs: 500,
+  };
+
+  function device(id: string, at: string, label: string | null) {
+    return { kind: "device" as const, id, boxAt: at, witnessAt: at, uncertaintyMs: 500, label };
+  }
+
+  function clockStop(overrides: Partial<ClockStop> = {}): ClockStop {
+    return {
+      clockAt: "2025-03-14T09:12:00.000Z",
+      offsetMinutes: 60,
+      lastRecordAt: "2026-10-22T19:43:00.000Z",
+      lastRecordOffsetMinutes: 120,
+      recordId: "rec-1",
+      gapMs: 50_000_000_000,
+      proof: "ready",
+      agreeing: {
+        authority: AUTHORITY,
+        devices: [
+          device("d1", "2026-10-22T19:39:00.000Z", "Bar till"),
+          device("d2", DEVICE_READ, null),
+          device("d3", "2026-10-22T19:40:00.000Z", "Kitchen"),
+        ],
+      },
+      contrary: { authority: null, devices: [] },
+      confirmation: null,
+      ...overrides,
+    };
+  }
+
+  const NO_WITNESS = { authority: null, devices: [] };
+
+  function confirmedStop(source: "authority" | "devices" | "admin" | "elapsed"): ClockStop {
+    return clockStop({
+      proof: "confirmed",
+      confirmation: { id: "c-1", source, personName: "Ana", confirmedAt: CONFIRMED },
+    });
+  }
+
+  function clockRow(health: Partial<BoxHealth>): PartRow {
+    return row(boxStatusRows(quietHealth(health), []).rows, "clock");
+  }
+
+  const compared = () =>
+    fill("box_status.clock.compared", {
+      time: formatIsoMinute(MEASURED),
+      seconds: "2",
+    });
+  const authorityProof = () =>
+    fill("box_status.clock.proof.authority", {
+      time: formatIsoMinute(CHECKED),
+    });
+  const devicesProof = () =>
+    fill("box_status.clock.proof.devices", {
+      count: "3",
+      time: formatIsoMinute(DEVICE_READ),
+    });
+  const who = (source: string, language: "en" | "es" = "en") => {
+    const list = ALERT_WORDS["clock_confirmed_by"]!;
+    return (Object.hasOwn(list.words, source) ? list.words[source]! : list.otherwise)[language];
+  };
+  const waiting = () =>
+    fill("box_status.clock.check_waiting", { time: formatIsoMinute(STOP_BEGAN) });
+
+  it("says which way the clock is off past a minute, and only how far apart within one", () => {
+    const detail = (driftSeconds: number) =>
+      clockRow({
+        clock: {
+          authority: { state: "warning", driftSeconds, measuredAt: MEASURED },
+          sync: { synced: false, source: "unavailable", warn: false },
+        },
+      }).details[0];
+    const time = formatIsoMinute(MEASURED);
+    expect(detail(90)).toBe(fill("box_status.clock.compared_ahead", { time, seconds: "90" }));
+    expect(detail(-90)).toBe(fill("box_status.clock.compared_behind", { time, seconds: "90" }));
+    expect(detail(61)).toBe(fill("box_status.clock.compared_ahead", { time, seconds: "61" }));
+    expect(detail(-60)).toBe(fill("box_status.clock.compared", { time, seconds: "60" }));
+    expect(detail(60)).toBe(fill("box_status.clock.compared", { time, seconds: "60" }));
+    expect(detail(-61)).toBe(fill("box_status.clock.compared_behind", { time, seconds: "61" }));
+    expect(detail(2)).toBe(fill("box_status.clock.compared", { time, seconds: "2" }));
+    expect(detail(-2)).toBe(fill("box_status.clock.compared", { time, seconds: "2" }));
+  });
+
+  it("says proof is found, with the proof the box has, while payments are still stopped", () => {
+    const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop() });
+    expect(clock.state).toBe("stopped");
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      authorityProof(),
+      devicesProof(),
+      "Proof found: payments restart within a few seconds.",
+    ]);
+  });
+
+  it("names only the proof there is", () => {
+    const authorityOnly = clockStop({ agreeing: { authority: AUTHORITY, devices: [] } });
+    expect(clockRow({ notices: [CLOCK_BEHIND], clockStop: authorityOnly }).details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      authorityProof(),
+      t("box_status.clock.stop.ready"),
+    ]);
+    const devicesOnly = clockStop({
+      agreeing: { authority: null, devices: clockStop().agreeing.devices },
+    });
+    expect(clockRow({ notices: [CLOCK_BEHIND], clockStop: devicesOnly }).details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      devicesProof(),
+      t("box_status.clock.stop.ready"),
+    ]);
+  });
+
+  it("says the box waits for proof while there is none", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS }),
+    });
+    expect(clock.state).toBe("stopped");
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      "Waiting for proof that the clock is right: the tax agency's time (when the box sends it records), or two tills or handhelds.",
+    ]);
+  });
+
+  it("names each clock that disagrees while the proof is against the box", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: NO_WITNESS,
+        contrary: {
+          authority: AUTHORITY,
+          devices: [device("d4", DEVICE_READ, "Terrace"), device("d5", CHECKED, null)],
+        },
+      }),
+    });
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      `Tax agency: does not match (checked ${formatIsoMinute(CHECKED)})`,
+      `Terrace: does not match (read ${formatIsoMinute(DEVICE_READ)})`,
+      `A device: does not match (read ${formatIsoMinute(CHECKED)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+    setLocale("es");
+    const spanish = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: NO_WITNESS,
+        contrary: { authority: AUTHORITY, devices: [device("d5", CHECKED, null)] },
+      }),
+    });
+    expect(spanish.details.slice(2, 4)).toEqual([
+      es["box_status.clock.contrary.authority"].replace("{time}", formatIsoMinute(CHECKED)),
+      es["box_status.clock.contrary.device"]
+        .replace("{name}", es["box_status.clock.contrary.unnamed_device"])
+        .replace("{time}", formatIsoMinute(CHECKED)),
+    ]);
+  });
+
+  it("names each clock once, by its latest answer, while the proof is against the box", () => {
+    const LATER = "2026-10-22T19:42:00.000Z";
+    const laterAuthority = { ...AUTHORITY, boxAt: LATER, witnessAt: LATER };
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: {
+          authority: AUTHORITY,
+          devices: [device("d1", CHECKED, "Bar till"), device("d2", CHECKED, "Kitchen")],
+        },
+        contrary: { authority: laterAuthority, devices: [device("d1", LATER, "Bar till")] },
+      }),
+    });
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      fill("box_status.clock.proof.device_one", { time: formatIsoMinute(CHECKED) }),
+      `Tax agency: does not match (checked ${formatIsoMinute(LATER)})`,
+      `Bar till: does not match (read ${formatIsoMinute(LATER)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+    const agreedLater = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: { authority: laterAuthority, devices: [] },
+        contrary: { authority: AUTHORITY, devices: [device("d3", CHECKED, "Terrace")] },
+      }),
+    });
+    expect(agreedLater.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      fill("box_status.clock.proof.authority", { time: formatIsoMinute(LATER) }),
+      `Terrace: does not match (read ${formatIsoMinute(CHECKED)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+  });
+
+  it("takes a clock's latest answer by the box's time, not by the time the clock reported", () => {
+    const LATER = "2026-10-22T19:42:00.000Z";
+    const REPORTED = "2026-10-22T18:30:00.000Z";
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: {
+          authority: AUTHORITY,
+          devices: [device("d1", CHECKED, "Bar till"), device("d2", CHECKED, "Kitchen")],
+        },
+        contrary: {
+          authority: { ...AUTHORITY, boxAt: LATER, witnessAt: REPORTED },
+          devices: [{ ...device("d1", LATER, "Bar till"), witnessAt: REPORTED }],
+        },
+      }),
+    });
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      fill("box_status.clock.proof.device_one", { time: formatIsoMinute(CHECKED) }),
+      `Tax agency: does not match (checked ${formatIsoMinute(LATER)})`,
+      `Bar till: does not match (read ${formatIsoMinute(REPORTED)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+    const tie = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({
+        proof: "contrary",
+        agreeing: { authority: AUTHORITY, devices: [] },
+        contrary: { authority: { ...AUTHORITY, witnessAt: REPORTED }, devices: [] },
+      }),
+    });
+    expect(tie.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      `Tax agency: does not match (checked ${formatIsoMinute(CHECKED)})`,
+      "Other clocks say the box's clock is wrong.",
+    ]);
+  });
+
+  it("names no disagreeing clock once the proof is no longer against the box", () => {
+    const contrary = { authority: AUTHORITY, devices: [device("d4", DEVICE_READ, "Terrace")] };
+    const clock = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop({ contrary }) });
+    expect(clock.details.join(" ")).not.toContain("does not match");
+  });
+
+  it("says other clocks disagree while the proof is against the box", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "contrary", agreeing: NO_WITNESS }),
+    });
+    expect(clock.state).toBe("stopped");
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      "Other clocks say the box's clock is wrong.",
+    ]);
+  });
+
+  it("draws a confirmed stop amber, not red, with when payments restarted and what confirmed it", () => {
+    const { rows } = boxStatusRows(quietHealth({ clockStop: confirmedStop("devices") }), []);
+    expect(row(rows, "clock").state).toBe("attention");
+    expect(row(rows, "sales").state).toBe("ok");
+    expect(row(rows, "clock").details).toEqual([
+      compared(),
+      authorityProof(),
+      devicesProof(),
+      `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by two tills or handhelds.`,
+    ]);
+  });
+
+  it("names what confirmed the clock with the bell's words for each source", () => {
+    for (const source of ["authority", "devices", "admin", "elapsed"] as const) {
+      expect(clockRow({ clockStop: confirmedStop(source) }).details.at(-1)).toBe(
+        fill("box_status.clock.stop.confirmed", {
+          time: formatIsoMinute(CONFIRMED),
+          who: who(source),
+        }),
+      );
+    }
+    expect(clockRow({ clockStop: confirmedStop("elapsed") }).details.at(-1)).toBe(
+      `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by a check recorded on the box.`,
+    );
+  });
+
+  it("says a check waits, amber, once a stop has ended with nothing confirming the clock", () => {
+    const clock = clockRow({ clockCheckWaiting: { since: STOP_BEGAN } });
+    expect(clock.state).toBe("attention");
+    expect(clock.details).toEqual([
+      compared(),
+      `The payment stop that began at ${formatIsoMinute(STOP_BEGAN)} has ended, but nothing has confirmed the box's clock yet. The box asks the tax agency once a minute when it sends it records; two tills or handhelds, or an administrator's own device, can confirm it too.`,
+    ]);
+  });
+
+  it("does not call the clock correct while a check waits, in each language", () => {
+    expect(clockRow({ clockCheckWaiting: { since: STOP_BEGAN } }).line).toBe(
+      "Not confirmed since the payment stop",
+    );
+    expect(
+      clockRow({ clockStop: confirmedStop("admin"), clockCheckWaiting: { since: STOP_BEGAN } })
+        .line,
+    ).toBe("Not confirmed since the payment stop");
+    setLocale("es");
+    expect(clockRow({ clockCheckWaiting: { since: STOP_BEGAN } }).line).toBe(
+      es["box_status.clock.unconfirmed"],
+    );
+  });
+
+  it("still calls a confirmed clock correct when no check waits", () => {
+    expect(clockRow({ clockStop: confirmedStop("devices") }).line).toBe("Correct");
+  });
+
+  it("shows the waiting check alone in place of a confirmed stop's line", () => {
+    const clock = clockRow({
+      clockStop: confirmedStop("admin"),
+      clockCheckWaiting: { since: STOP_BEGAN },
+    });
+    expect(clock.details).toEqual([compared(), authorityProof(), devicesProof(), waiting()]);
+  });
+
+  it("shows a waiting check after a stop's own line when the stop is not confirmed", () => {
+    const clock = clockRow({
+      notices: [CLOCK_BEHIND],
+      clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS }),
+      clockCheckWaiting: { since: STOP_BEGAN },
+    });
+    expect(clock.details).toEqual([
+      compared(),
+      t("box_status.clock.behind_chain_fix"),
+      t("box_status.clock.stop.none"),
+      waiting(),
+    ]);
+  });
+
+  it("adds nothing to the Clock row while payments are not stopped and no check waits", () => {
+    const { rows } = boxStatusRows(quietHealth(), []);
+    expect(row(rows, "clock").state).toBe("ok");
+    expect(row(rows, "clock").details).toEqual([compared()]);
+  });
+
+  it("reads the proof, every state and the waiting check in Spanish", () => {
+    setLocale("es");
+    const ready = clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop() });
+    expect(ready.details).toContain(
+      es["box_status.clock.proof.authority"].replace("{time}", formatIsoMinute(CHECKED)),
+    );
+    expect(ready.details).toContain(
+      es["box_status.clock.proof.devices"]
+        .replace("{count}", "3")
+        .replace("{time}", formatIsoMinute(DEVICE_READ)),
+    );
+    expect(ready.details).toContain(es["box_status.clock.stop.ready"]);
+    for (const proof of ["none", "contrary"] as const) {
+      expect(
+        clockRow({ notices: [CLOCK_BEHIND], clockStop: clockStop({ proof }) }).details,
+      ).toContain(es[`box_status.clock.stop.${proof}`]);
+    }
+    expect(clockRow({ clockStop: confirmedStop("authority") }).details).toContain(
+      es["box_status.clock.stop.confirmed"]
+        .replace("{time}", formatIsoMinute(CONFIRMED))
+        .replace("{who}", who("authority", "es")),
+    );
+    expect(clockRow({ clockStop: confirmedStop("elapsed") }).details).toContain(
+      es["box_status.clock.stop.confirmed"]
+        .replace("{time}", formatIsoMinute(CONFIRMED))
+        .replace("{who}", who("elapsed", "es")),
+    );
+    expect(clockRow({ clockCheckWaiting: { since: STOP_BEGAN } }).details).toContain(
+      es["box_status.clock.check_waiting"].replace("{time}", formatIsoMinute(STOP_BEGAN)),
+    );
+    const behind = clockRow({
+      clock: {
+        authority: { state: "warning", driftSeconds: -90, measuredAt: MEASURED },
+        sync: { synced: false, source: "unavailable", warn: false },
+      },
+    });
+    expect(behind.details[0]).toBe(
+      es["box_status.clock.compared_behind"]
+        .replace("{time}", formatIsoMinute(MEASURED))
+        .replace("{seconds}", "90"),
+    );
   });
 });

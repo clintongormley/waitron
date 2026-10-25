@@ -29,7 +29,8 @@ const suite = useVenueDb({
               ...set,
               migrationsFolder: directory,
               appendOnlyTables: set.appendOnlyTables?.filter(
-                (table) => table !== "clock_stop_restarts",
+                (table) =>
+                  !["clock_stop_restarts", "clock_checks", "clock_confirmations"].includes(table),
               ),
             }
           : set,

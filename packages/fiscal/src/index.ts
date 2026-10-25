@@ -8,6 +8,12 @@ export type {
   TrustedTimeAnchor,
   TrustedTimeSource,
 } from "./clock.js";
+export {
+  agreeingDeviceGroup,
+  CLOCK_WITNESS_MARGIN_MS,
+  judgeClockWitnesses,
+} from "./clock-witnesses.js";
+export type { ClockWitness, ClockWitnessVerdict } from "./clock-witnesses.js";
 export type {
   FiscalBackendDeps,
   FiscalCertificateAnswer,
@@ -19,7 +25,19 @@ export type {
 export { emptyDrainResult } from "./backend.js";
 export type {
   AckState,
+  AuthorityTimeSample,
+  BootReading,
+  ClockAdminConfirm,
+  ClockAdminReading,
   ClockBehindLatestRecord,
+  ClockConfirmation,
+  ClockConfirmationSource,
+  ClockCheckCloseRequest,
+  ClockCheckOpenRequest,
+  ClockConfirmRequest,
+  ClockProvedWrong,
+  ClockStopProof,
+  ClockStopState,
   Counterparty,
   DrainResult,
   FiscalBackend,
@@ -28,12 +46,15 @@ export type {
   FiscalState,
   IntegrityIssue,
   IntegrityReport,
+  MisdatedRecord,
+  MisdatedRecords,
   NodeRegistration,
   ReceiptQrText,
   ReconcileMismatch,
   ReconcileResult,
   SaleForFiscalRecord,
   VatBreakdownLine,
+  WaitingClockCheck,
 } from "./backend.js";
 // The fake backend is deliberately not re-exported: it is a test double.
 export type { FiscalOutboxSeat, FiscalOutboxState } from "./contribution.js";

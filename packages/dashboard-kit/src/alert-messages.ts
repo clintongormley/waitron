@@ -8,19 +8,25 @@ import { GENERIC_ALERT } from "./strings.js";
  * that calendar day, the way the alert's language writes it; `{name:bytes}` writes a number of
  * bytes as gigabytes or megabytes, the way the alert's language writes them; `{name:minute}` writes
  * an instant in `toISOString`'s shape as `YYYY-MM-DD HH:MM` in the browser's zone, in either
- * language; `{name:list}` writes the words a registered word list gives the param's value. */
-export type AlertMessageTable = Readonly<
-  Record<string, { readonly en: string; readonly es: string }>
->;
+ * language; `{name:list}` writes the words a registered word list gives the param's value.
+ * A variant is chosen by its param being `true`: a `replace` variant's words stand instead of the
+ * message, and otherwise each `append` variant's words follow it. `one` words stand instead of the
+ * message's own when the param they name is the number 1; variants apply over them as usual. */
+export type AlertMessageTable = Readonly<Record<string, AlertMessageEntry>>;
 
 type Words = { readonly en: string; readonly es: string };
+
+export type AlertMessageEntry = Words & {
+  readonly one?: Words & { readonly param: string };
+  readonly variants?: Readonly<Record<string, Words & { readonly mode: "replace" | "append" }>>;
+};
 
 /** Words for each value a param can take, and `otherwise` for any value the list does not name. */
 export type AlertWordLists = Readonly<
   Record<string, { readonly words: Readonly<Record<string, Words>>; readonly otherwise: Words }>
 >;
 
-const messages: Record<string, { en: string; es: string }> = {};
+const messages: Record<string, AlertMessageEntry> = {};
 const wordLists: Record<string, AlertWordLists[string]> = {};
 
 export function registerAlertMessages(table: AlertMessageTable): void {
@@ -85,12 +91,28 @@ function formatParam(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function chooseTemplate(
+  entry: AlertMessageEntry,
+  params: Readonly<Record<string, unknown>>,
+  l: string,
+): string {
+  const chosen = Object.entries(entry.variants ?? {}).filter(([name]) => params[name] === true);
+  const replacing = chosen.find(([, variant]) => variant.mode === "replace");
+  if (replacing) return pickLocale(replacing[1], l);
+  const base = entry.one && params[entry.one.param] === 1 ? entry.one : entry;
+  return [base, ...chosen.map(([, variant]) => variant)].map((w) => pickLocale(w, l)).join(" ");
+}
+
 export function alertMessage(
   code: string,
   params: Readonly<Record<string, unknown>>,
   l: string = currentLocale(),
 ): string {
-  const template = pickLocale(hasAlertMessage(code) ? messages[code]! : GENERIC_ALERT, l);
+  const template = chooseTemplate(
+    hasAlertMessage(code) ? messages[code]! : GENERIC_ALERT,
+    params,
+    l,
+  );
   return template.replace(
     /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
     (_match, name: string, kind: string | undefined) => {

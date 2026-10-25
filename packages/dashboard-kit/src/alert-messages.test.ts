@@ -202,3 +202,68 @@ describe("a minute placeholder", () => {
     }
   });
 });
+
+registerAlertMessages({
+  "test.variants": {
+    en: "Found {count}.",
+    es: "ES found {count}.",
+    variants: {
+      unknown: { mode: "replace", en: "Could not count since {when:minute}.", es: "ES unknown." },
+      short: { mode: "append", en: "The count may be short.", es: "ES short." },
+      late: { mode: "append", en: "It came late.", es: "ES late." },
+    },
+    one: { param: "count", en: "Found one.", es: "ES found one." },
+  },
+});
+
+describe("a message with variants chosen by a true param", () => {
+  it("writes the plain message when no variant's param is true", () => {
+    for (const params of [{ count: 3 }, { count: 3, short: false, unknown: false }]) {
+      expect(alertMessage("test.variants", params, "en")).toBe("Found 3.");
+    }
+    expect(alertMessage("test.variants", { count: 3 }, "es")).toBe("ES found 3.");
+  });
+
+  it("only a boolean true chooses a variant, never a truthy string or number", () => {
+    for (const short of ["true", 1, "yes"]) {
+      expect(alertMessage("test.variants", { count: 3, short }, "en")).toBe("Found 3.");
+    }
+  });
+
+  it("appends each appending variant's sentence after the message, in the alert's language", () => {
+    expect(alertMessage("test.variants", { count: 3, short: true }, "en")).toBe(
+      "Found 3. The count may be short.",
+    );
+    expect(alertMessage("test.variants", { count: 3, short: true, late: true }, "es")).toBe(
+      "ES found 3. ES short. ES late.",
+    );
+  });
+
+  it("writes a replacing variant's sentence instead, filled from the params, with nothing appended", () => {
+    const when = "2025-03-14T09:12:40.000Z";
+    expect(
+      alertMessage("test.variants", { count: 0, unknown: true, short: true, when }, "en"),
+    ).toBe(`Could not count since ${formatIsoMinute(when)}.`);
+    expect(alertMessage("test.variants", { count: 0, unknown: true }, "es")).toBe("ES unknown.");
+  });
+});
+
+describe("a message with its own words for one", () => {
+  it("writes the words for one when the named param is exactly 1, in the alert's language", () => {
+    expect(alertMessage("test.variants", { count: 1 }, "en")).toBe("Found one.");
+    expect(alertMessage("test.variants", { count: 1 }, "es")).toBe("ES found one.");
+  });
+
+  it("keeps the message's own words for any other count, or a 1 that is not a number", () => {
+    for (const count of [0, 2, "1", true]) {
+      expect(alertMessage("test.variants", { count }, "en")).toBe(`Found ${String(count)}.`);
+    }
+  });
+
+  it("appends a variant after the words for one, and a replacing variant still stands alone", () => {
+    expect(alertMessage("test.variants", { count: 1, short: true }, "en")).toBe(
+      "Found one. The count may be short.",
+    );
+    expect(alertMessage("test.variants", { count: 1, unknown: true }, "es")).toBe("ES unknown.");
+  });
+});

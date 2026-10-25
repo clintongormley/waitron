@@ -17,6 +17,9 @@ function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
     notices: [],
     noticesUnavailable: [],
     filing: true,
+    clockStop: null,
+    clockCheckWaiting: null,
+    misdatedOpen: [],
     outbox: { lastAcceptedAt: ACCEPTED, waiting: 0, awaitingCertificate: false },
     stream: { state: "off" },
     clock: {

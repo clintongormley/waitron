@@ -3,8 +3,8 @@ import { id, json, newId, nodes, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
- * One row per manager's restart of payments while the box's clock read earlier than its latest
- * record. Declared `appendOnly()` in `../classification.ts`. Nothing writes it yet.
+ * Written by nothing: kept for the go-live migration squash (A760) to drop. Declared `appendOnly()`
+ * in `../classification.ts`.
  */
 export const clockStopRestarts = table(
   "clock_stop_restarts",
