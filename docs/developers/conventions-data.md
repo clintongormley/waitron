@@ -3864,7 +3864,11 @@ one when a second closing that cannot tell opened at the same reading",
 cannot tell, whatever sale each names", `apps/server/src/clock-confirm.route.test.ts`). A list
 still folds into an open list whose earliest record is the same sale; `GET /api/box/clock-misdated`
 gives a list only for a confirmation an open alert names (`readMisdatedOpen`,
-`apps/server/src/box-health.ts`), so the later list is then not shown. Every closing stays in
+`apps/server/src/box-health.ts`), and `GET /api/box/clock-misdated/handled` only for one a handled
+alert names (`readMisdatedHandled`), so the later list is then not shown by either. The download,
+`GET /api/box/clock-misdated/:incidentId/download` (`apps/server/src/box-health-api.ts`), serves
+the list of the alert it names, open or handled, and answers `alert.not_found` for one that cannot
+tell. Every closing stays in
 `clock_confirmations`. The managers' email duty emails each open `clock.behind_chain_restarted` and
 `clock.records_misdated` once (`CLOCK_INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
 

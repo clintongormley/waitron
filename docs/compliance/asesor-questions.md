@@ -3829,6 +3829,11 @@ required is what this asks.
 **Proposed interim treatment (owner, 2026-10-24, 04:00):** list the records and raise the alert;
 change nothing else. Built by A798-B slice 9 (#2025), revised 2026-10-24; parked for the owner.
 
+**2026-10-25 (A1088):** the list now stays on the Box status page after the alert is handled, with
+who handled it and an optional note, and each list downloads as a CSV for the adviser (series and
+number, invoice date, time recorded, real time unknown, amount, and whether the invoice date may
+differ from the day the sale was made).
+
 This records a question; no enquiry has been sent.
 
 ---

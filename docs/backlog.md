@@ -4783,6 +4783,35 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   and no cloud primary; one that exists needs its own rule (design §4.9 h, point 3). Left open by
   A798-B slice 9 (#2025).
 
+- **Correct the sales dated wrongly once the tax adviser answers Q60.** What the correction is
+  waits on [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24);
+  A1088 built only the list, the handled lists, the note and the download. Left open by A1088.
+
+- **Some sales dated wrongly are in no list**: those of a clock put right from little more than a
+  minute ahead, and those of a stop the box "cannot tell" about, which has no list and no download.
+  Left open by A1088 (design §4.9 f).
+  [Detail](backlog/box.md#some-sales-dated-wrongly-are-in-no-list)
+
+- **The real time of a sale dated wrongly is unknown**: the adviser's file says "Unknown" on every
+  row and gives a time each sale was made before instead (A1088 decision 8). Slice 9c's clock
+  checks are the first place a real time could be worked out. Left open by A1088.
+
+- **The adviser's file writes invoice dates that follow the server's own time zone until A696 is
+  built**: the file writes the stored issue date, which follows the process zone today (A1088
+  decision 7). Left open by A1088. [A696](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone)
+
+- **The bell's and the Alerts screen's Mark handled take no note**, and the Alerts screen's Handled
+  tab shows no notes; only the Box status page writes and shows them (A1088 decision 4). Left open
+  by A1088.
+
+- **The Box status page's Handled lists fold reads every handled list when opened, with no
+  limit** (A1088 decision 1); page it if a venue gathers many. Left open by A1088.
+
+- **The adviser's file is comma-separated in both languages, and a spreadsheet set to expect
+  semicolons may open the Spanish file in one column.** Excel in Spain is untested; whether `es`
+  should use `;` is the owner's decision. Left open by A1088.
+  [Detail](backlog/box.md#the-advisers-file-is-comma-separated-in-both-languages)
+
 - **The bell's printer check reads every print job.** `EXPLAIN QUERY PLAN` shows `SCAN
   print_jobs`: 0.25 ms with no printed jobs, 3.7 ms with 50 000 (slice 10 plan P4). A redundant
   status condition did not change the plan; why SQLite scans is not established. The bell pays it
