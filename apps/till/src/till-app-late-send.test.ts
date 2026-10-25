@@ -7,6 +7,7 @@ import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import type {
@@ -15,6 +16,7 @@ import type {
   RecalledDraftLine,
   TillApi,
   TillMenuOffer,
+  TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
@@ -998,5 +1000,348 @@ describe("an allergy party's send that needs a manager's PIN", () => {
       menuIds: ["lunch"],
       override: { personId: MARTA.personId, pin: "0123" },
     });
+  });
+});
+
+const saleResult: TillSaleResult = {
+  receiptTrim: {},
+  venueAddress: [],
+  receiptSettings: { printAddress: false },
+  orderLabel: null,
+  orderNumber: 1,
+  invoiceNumber: "F-0001",
+  issuedAt: "2026-10-12T13:00:00.000Z",
+  total: "6.00",
+  vatBreakdown: [{ rate: "10", base: "5.45", tax: "0.55" }],
+  lines: [{ descriptions: { en: "Omelette" }, quantity: "1", gross: "3.00" }],
+  tender: { method: "cash", change: "4.00" },
+  qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=12-10-2026&total=6.00",
+};
+const CASH = { method: "cash", amount: "10" };
+const BREAKFAST_CONFIRMED = { menuIds: [DESAYUNOS.id] };
+
+/** The counter's menus, which a counter case moves from Breakfast to Lunch. */
+let counterMenus: ZoneOfferCatalogue;
+const counterScreen = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+const counterNames = (el: TillApp) =>
+  counterScreen(el).store.lines.map((line) => line.product.name);
+const lastArgument = (fn: ReturnType<typeof vi.fn>, call: number) => fn.mock.calls[call]!.at(-1);
+
+/** An order held earlier with one Omelette of Desayunos already stored on it. */
+const heldOmelette = {
+  kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
+  id: "wo-1",
+  orderNumber: 5,
+  label: null,
+  revision: 3,
+  lines: [
+    {
+      menuItemId: offerId(DESAYUNOS, "Omelette"),
+      quantity: "1.000",
+      workingOrderLineId: "wol-omelette",
+    },
+  ],
+};
+
+/** Signs in at the counter under Breakfast; `held` retrieves `heldOmelette` first. Then adds
+ * `products` from Desayunos; nothing is marked yet. */
+async function counterBasket(
+  overrides: Record<string, unknown> = {},
+  { products = ["Omelette", "Coffee"], held = false } = {},
+): Promise<TillApp> {
+  current = catalogue("breakfast");
+  counterMenus = catalogue("breakfast", "zone-barra", "prepay");
+  const { el } = await mountApp({
+    listDefaultZoneOffers: vi.fn(async () => counterMenus),
+    listZoneOffers: vi.fn(async (zoneId: string) =>
+      zoneId === "zone-comedor" ? current : counterMenus,
+    ),
+    menuState: vi.fn(async (zoneId: string) =>
+      polled(zoneId === "zone-comedor" ? current : counterMenus),
+    ),
+    recordSale: vi.fn().mockResolvedValue(saleResult),
+    retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOmelette),
+    updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 4 }),
+    ...overrides,
+  });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+  await flush(el);
+  if (held) {
+    emit(counterScreen(el), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+  }
+  for (const product of products)
+    counterScreen(el).store.addProduct(
+      menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"),
+      "1",
+    );
+  await flush(el);
+  return el;
+}
+
+/** As `counterBasket`, then lets Lunch start at the counter: the new Omelette is marked. */
+async function lateCounter(
+  overrides: Record<string, unknown> = {},
+  options: { products?: string[]; held?: boolean } = {},
+): Promise<TillApp> {
+  const el = await counterBasket(overrides, options);
+  counterMenus = catalogue("lunch", "zone-barra", "prepay");
+  await poll(el);
+  expect(
+    counterScreen(el)
+      .store.lines.filter((line) => line.endedPeriod !== undefined)
+      .map((line) => line.endedPeriod),
+  ).toEqual([{ menuId: DESAYUNOS.id, periodName: "Breakfast" }]);
+  return el;
+}
+
+const integratedCard = () => ({
+  getTill: vi.fn().mockResolvedValue({
+    ...till,
+    cardProvider: "simulator",
+    capabilities: [...till.capabilities, "integrated-card-payment"] as CapabilityFlag[],
+  }),
+  pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
+});
+
+describe("counter pay", () => {
+  it("asks about the marked dish before cash Pay records anything", async () => {
+    const el = await lateCounter();
+
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("records the sale once with the ended menu once the kitchen agreed, and does not ask again", async () => {
+    const el = await lateCounter();
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("takes the marked dish out of the basket on Remove them and records nothing", async () => {
+    const el = await lateCounter();
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    await choose(el, "data-late-remove");
+
+    expect(counterNames(el)).toEqual(["Coffee"]);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("keeps the confirmation on the pay it repeats after the dead-ends question", async () => {
+    const el = await lateCounter(
+      {
+        updateWorkingOrder: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "route.station_inactive", status: 409 })
+          .mockResolvedValue({ revision: 4 }),
+        askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [], stations: [] }),
+      },
+      { products: ["Omelette"], held: true },
+    );
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
+    expect(api.updateWorkingOrder!.mock.calls.map(([, request]) => request.lateSend)).toEqual([
+      BREAKFAST_CONFIRMED,
+      BREAKFAST_CONFIRMED,
+    ]);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("keeps the confirmation on the card payment it repeats after the dead-ends question", async () => {
+    const el = await lateCounter(
+      {
+        ...integratedCard(),
+        updateWorkingOrder: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "route.station_inactive", status: 409 })
+          .mockResolvedValue({ revision: 4 }),
+        askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [], stations: [] }),
+      },
+      { products: ["Omelette"], held: true },
+    );
+    emit(counterScreen(el), "collect-card", {});
+    await flush(el, 6);
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
+    expect(api.updateWorkingOrder!.mock.calls.map(([, request]) => request.lateSend)).toEqual([
+      BREAKFAST_CONFIRMED,
+      BREAKFAST_CONFIRMED,
+    ]);
+    expect(api.pay).toHaveBeenCalledOnce();
+    expect(api.pay!.mock.calls[0]![0].lateSend).toEqual(BREAKFAST_CONFIRMED);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  const VERSION_CHANGED = {
+    code: "menu.version_changed",
+    status: 409,
+    menus: [{ menuId: LUNCH.id, liveVersionId: "v1" }],
+  };
+
+  it("keeps the confirmation on the cash pay it repeats after a menu version change", async () => {
+    const recordSale = vi.fn().mockRejectedValueOnce(VERSION_CHANGED).mockResolvedValue(saleResult);
+    const el = await lateCounter({ recordSale });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(recordSale.mock.calls.map((call) => call.at(-1))).toEqual([
+      BREAKFAST_CONFIRMED,
+      BREAKFAST_CONFIRMED,
+    ]);
+  });
+
+  it("keeps the confirmation on the card payment it repeats after a menu version change", async () => {
+    const pay = vi
+      .fn()
+      .mockRejectedValueOnce(VERSION_CHANGED)
+      .mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const el = await lateCounter({ ...integratedCard(), pay });
+    emit(counterScreen(el), "collect-card", {});
+    await flush(el, 6);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(pay.mock.calls.map(([request]) => request.lateSend)).toEqual([
+      BREAKFAST_CONFIRMED,
+      BREAKFAST_CONFIRMED,
+    ]);
+  });
+
+  it("asks before the card reader takes a payment, and pays with the ended menu once agreed", async () => {
+    const el = await lateCounter(integratedCard());
+    emit(counterScreen(el), "collect-card", {});
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(api.pay).not.toHaveBeenCalled();
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.pay).toHaveBeenCalledOnce();
+    expect(api.pay!.mock.calls[0]![0].lateSend).toEqual(BREAKFAST_CONFIRMED);
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("opens the window from the card reader's refusal of a dish the till had not marked", async () => {
+    const pay = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const el = await counterBasket({ ...integratedCard(), pay });
+    emit(counterScreen(el), "collect-card", {});
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+
+    await choose(el, "data-late-agreed");
+
+    expect(pay).toHaveBeenCalledTimes(2);
+    expect(pay.mock.calls[1]![0].lateSend).toEqual(BREAKFAST_CONFIRMED);
+  });
+
+  it("opens the window from cash Pay's refusal of a dish the till had not marked", async () => {
+    const recordSale = vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED).mockResolvedValue(saleResult);
+    const el = await counterBasket({ recordSale });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(recordSale.mock.calls[0]![9]).toBeUndefined();
+
+    await choose(el, "data-late-agreed");
+
+    expect(recordSale).toHaveBeenCalledTimes(2);
+    expect(lastArgument(recordSale, 1)).toEqual(BREAKFAST_CONFIRMED);
+  });
+
+  it("saves a retrieved order and records its sale with the confirmation, listing only the new dish", async () => {
+    const el = await lateCounter({}, { products: ["Omelette"], held: true });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(api.updateWorkingOrder!.mock.calls[0]![1].lateSend).toEqual(BREAKFAST_CONFIRMED);
+    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+  });
+
+  it("keeps a retrieved order's stored dish on Remove them", async () => {
+    const el = await lateCounter({}, { products: ["Omelette"], held: true });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    await choose(el, "data-late-remove");
+
+    expect(
+      counterScreen(el).store.lines.map((line) => [line.product.name, line.workingOrderLineId]),
+    ).toEqual([["Omelette", "wol-omelette"]]);
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+  });
+
+  it("lists only the new dish from a refusal of a retrieved order's save", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockResolvedValue({ revision: 4 });
+    const el = await counterBasket({ updateWorkingOrder }, { products: ["Omelette"], held: true });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(api.recordSale).not.toHaveBeenCalled();
+
+    await choose(el, "data-late-remove");
+
+    expect(counterScreen(el).store.lines.map((line) => line.workingOrderLineId)).toEqual([
+      "wol-omelette",
+    ]);
+  });
+
+  it("asks nothing and carries no confirmation when a stored dish's quantity is raised after its period", async () => {
+    const el = await counterBasket({}, { products: [], held: true });
+    counterMenus = catalogue("lunch", "zone-barra", "prepay");
+    await poll(el);
+    counterScreen(el).store.setLineQuantity(0, "2");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(".error")!.textContent!.trim()).toBe(
+      t("menu.last_orders_ended"),
+    );
+    expect(counterScreen(el).store.lines.map((line) => line.quantity)).toEqual(["1"]);
+
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    expect(windowOf(el)).toBeNull();
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(api.recordSale!.mock.calls[0]![9]).toBeUndefined();
   });
 });

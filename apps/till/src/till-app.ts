@@ -6170,13 +6170,15 @@ export class TillApp extends LitElement {
    * kitchen without payment. The ticket's lines come from the server result, so a rejection leaves
    * the basket untouched on the counter.
    */
-  async #onConfirmPayment(event: Event, retried = false): Promise<void> {
+  async #onConfirmPayment(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
     if (this.#store.lines.some((line) => line.blocked === "period_ended")) {
       this.errorKey = "menu.last_orders_ended";
       return;
     }
+    const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     if (this.#askInvoiceRecipientForLargeBill()) return;
     this.submitting = true;
     this.#counterSends++;
@@ -6187,6 +6189,7 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
+    const basketLines = [...this.#store.lines];
     const label = this.#store.label;
     const payload = this.#basketPayload();
     const sendsToKitchen = this.#paySendsToKitchen();
@@ -6201,7 +6204,7 @@ export class TillApp extends LitElement {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
       if (
-        !(await this.#syncIfDirty(id, lines, label)) ||
+        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -6219,6 +6222,7 @@ export class TillApp extends LitElement {
         this.#store.kitchenNote ?? undefined,
         guests,
         null,
+        ...(lateSend === undefined ? [] : ([lateSend] as const)),
       );
       if (session !== this.#operatorSession) return;
       this.result = result;
@@ -6230,7 +6234,9 @@ export class TillApp extends LitElement {
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed.
       if (session !== this.#operatorSession) return;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry);
+      else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6259,14 +6265,30 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#onConfirmPayment(event, true),
+        this.#onConfirmPayment(event, true, lateSend),
       );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#onConfirmPayment(event, true);
+      await this.#onConfirmPayment(event, true, lateSend);
+  }
+
+  /** The late-send window over the counter basket's marked lines; answers whether it opened. */
+  #askLateSendAtCounter(
+    lateSend: LateSend | undefined,
+    retry: (lateSend: LateSend) => Promise<void>,
+  ): boolean {
+    return this.#openLateSendFromMarks(this.#store.lines, lateSend, "send", retry, (listed) =>
+      this.#removeDraftLines(this.#store, listed),
+    );
+  }
+
+  #openCounterLateSend(asked: LateSendAsked, retry: (lateSend: LateSend) => Promise<void>): void {
+    this.#openLateSend(asked.listed, asked.periods, "send", retry, (listed) =>
+      this.#removeDraftLines(this.#store, listed),
+    );
   }
 
   /** Another till took a payment on the basket's order first: the held orders are read again, so
@@ -6284,12 +6306,12 @@ export class TillApp extends LitElement {
     ];
   }
 
-  async #onCollectCard(event: Event): Promise<void> {
+  async #onCollectCard(event: Event, lateSend?: LateSend): Promise<void> {
     // A tap ignored here is not counted and moves nothing.
     if (this.submitting) return;
     this.#cardAttemptsRunning++;
     try {
-      await this.#collectCard(event, false);
+      await this.#collectCard(event, false, lateSend);
     } finally {
       if (--this.#cardAttemptsRunning === 0) this.cardAttemptsOver++;
     }
@@ -6300,8 +6322,10 @@ export class TillApp extends LitElement {
    * `network_unavailable` comes back as data, not a throw: nothing was filed, so it is recorded in
    * {@link cardOutcome} and the basket stays, with no error banner.
    */
-  async #collectCard(event: Event, retried: boolean): Promise<void> {
+  async #collectCard(event: Event, retried: boolean, lateSend?: LateSend): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
+    const retry = (confirmed: LateSend) => this.#onCollectCard(event, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     if (this.#askInvoiceRecipientForLargeBill()) return;
     this.submitting = true;
     this.#counterSends++;
@@ -6317,6 +6341,7 @@ export class TillApp extends LitElement {
       : undefined;
     if (demoAttemptId !== undefined) this.#demoAttempt = { orderId: id, attemptId: demoAttemptId };
     const lines = this.#currentSaleLines();
+    const basketLines = [...this.#store.lines];
     const label = this.#store.label;
     const payload = this.#basketPayload();
     const sendsToKitchen = this.#paySendsToKitchen();
@@ -6330,7 +6355,7 @@ export class TillApp extends LitElement {
     let paid = false;
     try {
       if (
-        !(await this.#syncIfDirty(id, lines, label)) ||
+        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -6357,6 +6382,7 @@ export class TillApp extends LitElement {
             // Omitted, the server uses the paying device's chosen reader, else its profile's default.
             ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
             ...(demoAttemptId === undefined ? {} : { demoAttemptId }),
+            ...(lateSend === undefined ? {} : { lateSend }),
           }),
         id,
       );
@@ -6381,7 +6407,9 @@ export class TillApp extends LitElement {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
       if (session !== this.#operatorSession) return;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry);
+      else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6416,13 +6444,15 @@ export class TillApp extends LitElement {
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
-      await this.#afterVersionRefusal(refreshed, retried, () => this.#collectCard(event, true));
+      await this.#afterVersionRefusal(refreshed, retried, () =>
+        this.#collectCard(event, true, lateSend),
+      );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#collectCard(event, true);
+      await this.#collectCard(event, true, lateSend);
   }
 
   #demoAttempt?: { orderId: string; attemptId: string };
@@ -7086,7 +7116,12 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
+  async #syncIfDirty(
+    id: string,
+    lines: SaleLine[],
+    label: string | undefined,
+    lateSend?: LateSend,
+  ): Promise<boolean> {
     if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     const session = this.#operatorSession;
@@ -7097,6 +7132,7 @@ export class TillApp extends LitElement {
         lines,
         label,
         revision: this.#store.revision,
+        ...(lateSend === undefined ? {} : { lateSend }),
       });
       if (session !== this.#operatorSession) return false;
       this.#store.markSaved(saved.revision);
