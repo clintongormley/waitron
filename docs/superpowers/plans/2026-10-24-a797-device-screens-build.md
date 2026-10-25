@@ -1669,17 +1669,17 @@ The writers, from `grep -rnE "insert\((diningTables|floorPlanTables|floorResetTa
 | `floor-plan.ts:535-543` | steps renamed plan tables aside under spare labels before the unique `(zone_id, label)` key | none needed: `floor_plan_tables` gets no short-name index (D1) |
 | `floor-plan.ts:521-531` | clears `plan_table_id` on deleted masters' live tables and reset rows | none |
 | `apps/server/src/floor-today-store.ts:255-271` `resetZoneFor` | copies the layout into `floor_reset_tables` (`targetRow`, `:94-101`) | copies `short_name` (D6) |
-| `floor-today-store.ts:665-680` `catchUpPass` | steps renamed live tables aside (`spareLabels`, `:840-853`; `setLabel`, `:855-857`) | also steps short names aside (D6) |
+| `floor-today-store.ts:665-680` `catchUpPass` | steps renamed live tables aside (`spareLabels`, `:840-853`; `setLabel`, `:855-857`) | short names step aside by being set to `null` first (D6); `spareLabels` unchanged |
 | `floor-today-store.ts:682-697` | **the only product insert into `dining_tables`**: a table the reset makes | writes `short_name` and `short_name_key` (D6) |
 | `floor-today-store.ts:698-700` | gives a live table its target's label | and its short name, together (D6) |
 | `floor-today-store.ts:640`, `:651`, `:751`; `floor-today-mark-moved.ts:169`; `floor-today-merges.ts:306` | reset rows' `ready_to_move`, `pending`, `placed`, `table_id` | none; `leaveHere`'s "already has the row's name" test (`floor-today-mark-moved.ts:164-168`) compares the short name too (D6) |
 | `apps/server/src/table-removal.ts:96-107` | deletes a reset row and puts it back (`.returning()`, every column) when the table's delete is refused | carries `short_name` with no change (read: it re-inserts the returned row) |
 | `floor-delete.ts:201`, `:214` | `plan_table_id` only | none |
 | `parties.ts:699`, `:811`; `floor-today-split-group.ts:152`; `floor-today-parts.ts:112`; `floor-today-reset-table.ts:128` | `needs_clearing_since` only | none |
-| `floor-today-name.ts:21-71` `nameToday` | today's name (`floor_today_tables.name`, `floor_today_joins.name`), refused against labels and today's names (`refuseInUse`, `:79-114`, case ignored by `sameName`, `:16-18`) | none (D9) |
+| `floor-today-name.ts:21-71` `nameToday` | today's name (`floor_today_tables.name`, `floor_today_joins.name`), refused against labels and today's names (`refuseInUse`, `:78-113`, case ignored by `sameName`, `:16-18`) | none (D9) |
 | `floor-today-merges.ts` (today's joins), `floor-today-split*.ts` | today's rows only | none (D8, D9) |
 | `apps/server/scripts/demo-seed/seed-floor.ts:246-260` | the demo's tables, through `saveLayout` with no short name; its names are already short ("1"–"8", "T1"–"T5", "B1"–"B3", design §5) | the save proposes each (D4): the same as the label, each ≤ 4 characters |
-| `packages/db/src/configuration-transfer.ts:58-67` + `packages/provisioning/src/configuration-transfer.ts:700-760` | an import inserts every column a file carries, then runs each module's `afterImport` (`:771-774`) | carries `short_name`; `short_name_key` omitted and set after import (D10) |
+| `packages/db/src/configuration-transfer.ts:58-67` + `packages/provisioning/src/configuration-transfer.ts:614-775` (`importConfigurationTables`) | an import inserts every column a file carries, then runs each module's `afterImport` (`:771-774`) | carries `short_name`; `short_name_key` omitted and set after import (D10) |
 | `apps/server/src/testing/live-table.ts:12-28` `createTable`, `testing/party-venue.ts:192-200` `tableAt`, `packages/reporting/test/fixtures.ts:504`, `:553`, and raw inserts in tests (`working-order.test.ts`, `packages/bookings/src/*.test.ts`, `scripts/behavioural-triggers.test.ts`, `packages/db/src/schema/dining-tables.test.ts`; ran `grep -rniE "into \"?(dining_tables|floor_plan_tables|floor_reset_tables)"`) | test tables | none unless a case asks (D12) |
 
 Provisioning makes no tables: no file under `packages/provisioning/src` names `diningTables`,
@@ -1687,10 +1687,10 @@ Provisioning makes no tables: no file under `packages/provisioning/src` names `d
 none there), so design §5's "I believe" holds.
 
 The readers this slice changes: the till's floor read `listTablesWithState`
-(`apps/server/src/working-order.ts:8232-8389`, served by `GET /api/tables/state`,
+(`apps/server/src/working-order.ts:8232-8412`, served by `GET /api/tables/state`,
 `apps/server/src/till-api.ts:2762-2774`), the plan read `readLayout`/`planTables`
 (`floor-plan.ts:193-244`, served by `GET /management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan`,
-`management-api.ts:1515`), the room fingerprint `roomPrints` (`apps/server/src/floor-revision.ts:63-110`,
+`management-api.ts:1515`), the room fingerprint `roomPrints` (`apps/server/src/floor-revision.ts:63-107`,
 which decides whether a catch-up moves a room's revision), and the till's `readyTables`
 (`apps/till/src/state/table-signals.ts:62-85`). `GET /api/tables` (`listTables`,
 `apps/server/src/tables.ts:27-53`) is not changed: no tight place reads it.
@@ -1766,7 +1766,7 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
      trimmed ("-- --" → "--").
   "Characters" are code points of the NFC form (`Array.from`), so «é» typed either way counts
   once. Upper-casing is JavaScript's `toUpperCase` (locale-free: "ß" becomes "SS", two
-  characters, counted after). The probe ran a draft of this function over these inputs (ran:
+  characters, counted after: "ß ß ß 7" → "SSSS7", ran on the draft). The probe ran a draft of this function over these inputs (ran:
   `node try.mts` in the probe); every output above is what it printed, after the `trim` of step 3
   ("-- --" printed `"-- "` before it). "Terrace 1A" gives "T1" (its last word's initial is "1"):
   a typed short name, slice 2's, sorts that one out.
@@ -1780,32 +1780,54 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   `shortNameColumns(shortName: string | null): { shortName: string | null; shortNameKey: string | null }`,
   the one way a live table's two columns are written, as `nameColumns` is for products
   (`packages/catalogue/src/product-names.ts:11-13`).
-- **D4. A save fills a short name it was not sent, and checks one it was.** A save entry gains
-  `shortName?: string` (`ZonePlanSave`, `floor-plan.ts:54-67`; parsed in `parseZonePlanSave`,
-  `management-api.ts:424-458`: a string, or absent; `null` is read as absent, as that parser reads
-  a null `id`, because the plan read sends `shortName: null` for a table with none (D7) and a
-  client may send the read's value back; anything else → `management.request_invalid`
-  `{ field: "tables.<i>.shortName" }`). Resolved in `checkSave` (`:348-394`), after the labels'
-  check (`:378-384`), by a pure function `resolveShortNames` (new, `apps/server/src/table-short-names.ts`):
-  - **taken** = the short names of the venue's plan tables in other zones and of its live tables in
-    other zones, by key, each with its table's full name — the same scope as the labels'
-    `namesTaken` (`:313-324`), for the same reason: this zone's live tables follow the save at
-    its next reset. Plan tables first, so `takenBy` names the plan's table when both hold it.
-  - **Sent short names first, in save order:** trimmed; blank, or longer than `SHORT_NAME_MAX`
-    characters → `floor_plan.invalid` `{ field: "tables.<i>.shortName" }` (the shape `checkEntries`
-    gives every field, `:273-290`); a key already taken, or sent by an earlier entry →
-    **`table.short_name_taken` `{ shortName, takenBy, field: "shortName" }`**, `shortName` as
-    sent (trimmed), `takenBy` the other table's full name (design §5: "Terrace 1 already uses T1").
-  - **Then each entry sent none, in save order:** `proposeShortName(label)` when its key is free,
-    else **none** (`null`). A sender that never chose a short name is never refused over one,
-    and nothing picks another one (design §3.7: "nothing picks another one silently").
-  **Why the split:** today no sender sends one — the dashboard's `saveFromDraft` lists its fields
-  (`apps/dashboard/src/screens/floor-plan-draft.ts:73-86`, read) and slice 2 adds the field — and
-  the senders that never will (the demo seed, `testing/floor-today-venue.ts`, the test suites)
-  name tables freely: `floor-plan.test.ts` shares one database across its cases
-  (`resetPerTest: false`, `:43-50`) and names tables `fresh(label)` = `"Counter 3-ab12cd"`
-  (`:89-91`), which all propose "C3". Refusing a proposal would refuse saves that never mentioned
-  a short name; probe 2 (below) ran the suites with this rule and none failed on it. **After
+- **D4. A save checks a short name it is sent, keeps the stored one of a table it did not rename,
+  and proposes one otherwise.** A save entry gains `shortName?: string` (`ZonePlanSave`,
+  `floor-plan.ts:54-67`; parsed in `parseZonePlanSave`, `management-api.ts:424-458`, Task 4b: a
+  string, or absent; `null` is read as absent, as that parser reads a null `id`, because the plan
+  read sends `shortName: null` for a table with none (D5) and a client may send the read's value
+  back; anything else → `management.request_invalid` `{ field: "tables.<i>.shortName" }`).
+  Resolved in `checkSave` (`:348-394`), after the labels' check (`:378-384`), by a pure function
+  `resolveShortNames` (new, `apps/server/src/table-short-names.ts`). Each entry is in one of three
+  classes:
+  - **sent**: the entry carries `shortName`;
+  - **kept**: it carries none, has an `id`, and its trimmed label equals its stored plan table's
+    label — it keeps its stored short name; when that is `null` it is **proposed** instead;
+  - **proposed**: it carries none and is new, or renamed (its trimmed label differs from the stored
+    one) — `proposeShortName(label)`. A rename with none sent is proposed again from the new name,
+    as design §3.7 fills it "when the table is made or renamed".
+
+  **taken** maps a key to the full name of the table holding it: the venue's plan tables in other
+  zones and its live tables in other zones, by their short names, plan tables first, so `takenBy`
+  names the plan's table when both hold it — the same scope as the labels' `namesTaken`
+  (`:313-324`), for the same reason: this zone's live tables follow the save at its next reset.
+  **It also holds, folded the same way, the full name of every such table whose short name is
+  `null`**: that table is shown by its full name (D7), so another table's short name equal to it
+  (zone B's "Terrace 1" proposing "T1" while zone A's table labelled "T1" has none) would show
+  two tables as "T1" on the Ready bar; `takenBy` is then that table's full name. Resolution, in
+  this order:
+  1. **Kept values, in save order, are claimed first**: they are the stored state, so a sent value
+     cannot take one (design §3.7: "Saving a short name another table already uses is refused").
+     A kept value that clashes with **taken** or an earlier kept value — possible only with data
+     written before this slice or by a racing save — gives that entry none.
+  2. **Sent values, in save order:** trimmed; blank, or longer than `SHORT_NAME_MAX` characters →
+     `floor_plan.invalid` `{ field: "tables.<i>.shortName" }` (the shape `checkEntries` gives
+     every field, `:273-290`); a key in **taken**, claimed by a kept value, or sent by an earlier
+     entry → **`table.short_name_taken` `{ shortName, takenBy, field: "shortName" }`**,
+     `shortName` as sent (trimmed), `takenBy` the other table's full name (design §5: "Terrace 1
+     already uses T1").
+  3. **Proposals, in save order:** taken when the key is free, else **none** (`null`). A sender
+     that never chose a short name is never refused over one, and nothing picks another one
+     (design §3.7: "nothing picks another one silently").
+
+  **Why the classes:** today no sender sends one — the dashboard's `saveFromDraft` lists its
+  fields (`apps/dashboard/src/screens/floor-plan-draft.ts:73-86`, read) and slice 2 adds the
+  field. Without the kept class every save that sends none (today's dashboard, the seed, the
+  tests) would re-propose every table's short name, replacing a stored one (once slice 2 lets a
+  person type "Tb1") and letting a new table in the same save take an untouched table's. And the
+  senders that never send one name tables freely: `floor-plan.test.ts` shares one database across
+  its cases (`resetPerTest: false`, `:44`) and names tables `fresh(label)` = `"Counter 3-ab12cd"`
+  (`:106-108`), which all propose "C3"; refusing a proposal would refuse saves that never mentioned
+  a short name (probe 2, below, ran proposals as a lenient pass and none failed on it). **After
   slice 2** the dashboard always sends one (picture 09 marks the field required), so the refusal
   is what a person meets. **Alternative, for the owner:** refuse a clashing proposal too; the cost
   is that until slice 2 lands, a venue whose two tables propose the same short name (for example
@@ -1822,23 +1844,35 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   which also gives a removal target the live table's own short name). In `planReset`
   (`floor-reset-plan.ts:70-149`) a `Target` and a `LiveTable` gain `shortName: string | null`
   and the input gains `shortNameKeysElsewhere: ReadonlySet<string>` (the keys of the venue's live
-  tables in other zones, built beside `takenElsewhere`, `floor-today-store.ts:443-445`); every
-  place that marks a label in use (`fixedInUse.add`, `:82`, `:90`, `:94`, `:107`, `:111`) marks the
-  table's short-name key too, and a renaming wants its new names (`:125-140`) only while **both**
-  its target's label and its target's short-name key are free. So a table whose new short name
+  tables in other zones, built beside `takenElsewhere`, `floor-today-store.ts:443-445`). Short-name
+  keys live in **their own sets**, never in `fixedInUse` or `inUse`, so a label "12" never blocks
+  a short name "12": every place that marks a label in use (`fixedInUse.add`, `:82`, `:90`, `:94`,
+  `:107`, `:111`) marks the table's short-name key in a `fixedShortInUse` set; a `Renaming`
+  (`:64-68`) gains `currentShortKey`; the fixed-point loop's `inUse.add(entry.current)` (`:128`)
+  gains its twin, adding the `currentShortKey` of every entry no longer wanting its new names to
+  a `shortInUse` set; and a renaming wants its new names (`:130-139`) only while its target's
+  label is free of `inUse` and `claimed` **and** its target's short-name key is free of
+  `shortInUse` and of the short keys claimed this pass. So a table that waits for its label keeps
+  its current short name in use, and another target wanting that short name waits too, rather
+  than reaching the unique index in the store. So a table whose new short name
   another table still holds keeps both its names and waits, as a table whose new label is taken
   does today ("places a table whose new name is taken in another zone, keeping its old name",
   `floor-today-store.test.ts:618`). `apply`'s shape is unchanged: `label` not null means "take the
   target's names". The catch-up (`floor-today-store.ts:665-700`): after the labels' spare step,
-  every applied table whose short-name key changes steps aside under a spare short name
-  (`spareLabels` gains an optional `keyOf`, so spares are compared by key), so a swap ("T1" ↔
-  "T2") never meets the unique index halfway; then each applied table takes its target's short
-  name and key (`shortNameColumns`, D3), and a created table is inserted with both (`:682-697`).
+  every applied table whose short-name key changes has **both its short-name columns set to
+  `null` first** — NULLs never clash under the unique index (D1's measurement), so this needs no
+  spare short names and no change to `spareLabels` (`:840-853`), and a swap ("T1" ↔ "T2") never
+  meets the index halfway; then each applied table takes its target's short name and key
+  (`shortNameColumns`, D3), and a created table is inserted with both (`:682-697`). It is all one
+  transaction, so no reader sees the nulls. Labels keep their spare step: their column is NOT
+  NULL.
   A target with no short name gives the live table none. `roomPrints`
   (`apps/server/src/floor-revision.ts:68-90`) gains `shortName`, so a catch-up that changes only a
   short name moves the room's revision and a till's next read sees it. Mark moved's
-  `leaveHere` ends a group row only when its table already has the row's label **and** short
-  name (key), else leaves it waiting for its names (`floor-today-mark-moved.ts:164-168`), as
+  `leaveHere` ends a group row only when its table already has the row's label **and** exactly
+  its short name (`===` on the stored values, not the key, so a case-only change "Sn1" → "SN1"
+  still waits and is applied), else leaves it waiting for its names
+  (`floor-today-mark-moved.ts:164-168`), as
   conventions-data.md's floor-plan section says of a row that renames its table. A short name
   saved on the dashboard reaches the till's tables at the next reset, as a rename does today
   (conventions-data.md, "A zone's floor plan").
@@ -1847,7 +1881,9 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   `:8262`, mapped at `:8366-8368` as `r.short_name ?? r.label`); the till's `TableState` the same
   (`apps/till/src/api/client.ts:2204`). A table has none when it was made before this slice, or
   when its save found its proposal taken (D4); a tight place then shows the full name, as it does
-  today. **Why on the server:** one fallback instead of one per reader (slices 3, 5, 8b and 12b
+  today. So that full name never doubles another table's short name, D4's **taken** holds, folded,
+  the full names of other zones' tables that have none. One gap stays, inside one zone's save:
+  a table there left with none is not compared with the save's own short names (Review focus 11). **Why on the server:** one fallback instead of one per reader (slices 3, 5, 8b and 12b
   read it), and the full name, unlike a proposal made on the fly, is unique (`dining_tables_location_label_key`).
   `TableToday` gains nothing: there is no today's short name (D8).
 - **D8. Design §9 settled: a tight place shows the saved short name for a table renamed today, and
@@ -1858,7 +1894,7 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   `:70-72`): with `today.joinId` set, `mergeLabel` over the short names of the tables in `tables`
   with that `joinId`; else `table.shortName`. **Why:** a tight place is where a runner finds the
   physical table; a today's name is free text of up to 40 characters (`normalisePartyName`,
-  `packages/shared/src/party-name.ts:4`, `:36-43`, used by `nameToday`) and not short, and the
+  `packages/shared/src/party-name.ts:4`, `:31-38`, used by `nameToday`) and not short, and the
   members' short names are unique and already on the tables. A saved joined table (one the plan
   makes, `floor_plan_table_parts`) is its own live table with its own short name, like any other.
   The Ready bar uses `tightName` in place of `shownUnder` (`table-signals.ts:72`), the swap slice
@@ -1868,7 +1904,7 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   today's name when it has one.
 - **D9. Today's names neither check nor change short names.** `nameToday` and today's joins
   (`floor-today-name.ts`, `floor-today-merges.ts`) are unchanged: today's names are checked against
-  saved labels and other today's names (`refuseInUse`, `:79-114`), and a short name is a separate,
+  saved labels and other today's names (`refuseInUse`, `:78-113`), and a short name is a separate,
   saved name (D8). So a table may be named "T1" for today while another table's short name is
   "T1": the two are never shown in the same place (a tight place shows short names, D8; the map
   and headers show today's names). Owner FYI, not a question.
@@ -1876,7 +1912,10 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   entry (`packages/db/src/configuration-transfer.ts:58-62`) gains `"short_name_key"` in `omit`, and
   `CORE_CONFIGURATION_TRANSFER` gains `afterImport: storeTableShortNameKeys` (in
   `packages/db/src/table-short-names.ts`), which sets every `dining_tables` row's key from its
-  short name — the catalogue's precedent, `products.name_key` omitted and set by
+  short name, one `update … where id = ?` per row that has one (`packages/db` has no batching
+  helper — `batches` is `@waitron/catalogue`'s, `packages/catalogue/src/batches.ts:5` — and a
+  venue's tables number in the tens or hundreds, two bound values a statement, in the import's
+  one transaction) — the catalogue's precedent, `products.name_key` omitted and set by
   `storeProductNameKeys` (`packages/catalogue/src/product-names.ts:16-33`, declared at
   `packages/catalogue/src/configuration-transfer.ts:180`). A file that supplies the key is already
   refused (`setup.request_invalid` `{ field: "dining_tables.short_name_key" }`) by the import's
@@ -1887,8 +1926,10 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   `floor_plan_tables.short_name`) for a short name that is neither null nor absent nor a non-blank
   string of at most five characters, and for two rows of either table whose short names clash
   ignoring case (both tables: an import is into a new venue, so the file's rows are the venue's
-  rows; `floor_plan_tables` has no index to catch it later). A file made before this slice, with
-  no short names, imports with none. `floor_reset_tables` is not transferred (read: not in the
+  rows; `floor_plan_tables` has no index to catch it later). A file with no short names, at this
+  version, imports with none; a file exported before this slice is refused anyway, by version
+  (`packages/provisioning/src/configuration-transfer.ts:596-599` compares each module's applied
+  migration count with the importing box's). `floor_reset_tables` is not transferred (read: not in the
   list) and gains nothing here. The composition spreads the core transfer, `afterImport` included
   (`packages/composition/src/modules.ts:118-124`, read).
 - **D11. `table.short_name_taken` is a management refusal only.** Declared beside
@@ -1940,8 +1981,10 @@ and the till's `TableState` gaining `shortName: string`. Then:
   `configuration`, `tablesState` or `floor_plan_tables`; ran the `grep -rlE` and `pnpm exec vitest
   run <those>` in `apps/server`) → `Test Files 1 failed | 141 passed (142)`,
   `Tests 1 failed | 6369 passed (6370)`. The one:
-  - `apps/server/src/floor-plan.test.ts` "does not read a save entry's liveTableId" (`:1247`): the
-    read's table gains `shortName`. Reason: D5. (Probe 2 gives its value.)
+  - `apps/server/src/floor-plan.test.ts` "does not read a save entry's liveTableId" (`:1225`, its
+    `toEqual` at `:1247`): the read's table gains `shortName`. Reason: D5. Task 4a makes the case
+    send a fresh short name and pins it exactly (probe 2 shows why an unsent one cannot be
+    pinned).
   No server case pins the floor read's whole `TableState`: none failed on the new key.
 - `pnpm --filter @waitron/till typecheck` → **82 errors in 71 files**, all tests or `apps/till/test/` fixtures, every one "Property
   'shortName' is missing" in a `TableState` a test builds (ran; the list is
@@ -1956,9 +1999,13 @@ was probe 1's: "does not read a save entry's liveTableId" printed `"shortName": 
 proposal of that case's label `fresh("New")` (`"New-"` and six random hex characters, ending in
 a digit that run). So its value depends on the random suffix, and in a database the file's cases
 share (`resetPerTest: false`) it can also be `null` when an earlier case's table holds it (D4).
-The changed check therefore expects `shortName` to be `null` or `proposeShortName(label)`,
-never a literal (Task 4 says how). Reason: D5. No reset suite failed with D6's copy, wait,
-spare step and create in place: their masters are written straight into `floor_plan_tables`
+So the changed check makes the case send a fresh short name and pins it exactly (Task 4a). Probe
+2 ran the proposals as a lenient pass over every entry; it did not run D4's kept class or the
+full names in **taken** (the plan review added both), which only turn a proposal into a kept
+value or `null`, never into a refusal for an entry that sent none. Reason: D5. No reset suite failed with D6's copy, wait,
+spare step and create in place (the probe stepped short names aside under spare names; the plan
+now sets them to `null` instead, D6, which Task 5c's swap case pins and the probe did not run):
+their masters are written straight into `floor_plan_tables`
 with no short name (`insertMaster`, `floor-today-store.test.ts:111-133`), so every target's is
 null, which the copy carries as it is. `floor-reset-plan.test.ts` ran but failed to typecheck on
 five sites (ran: `pnpm --filter @waitron/server typecheck`): its builders `t` and `l`
@@ -1997,7 +2044,7 @@ Any other failure, in any suite a task names, is a STOP.
 ### Review focus (inputs the spec implies and today's tests may not pin)
 
 1. **A clash that differs only in case**: a sent "t1" where another zone's table has "T1" →
-   refused, `takenBy` that table's full name (Task 4); two live tables with keys "t1" refused by
+   refused, `takenBy` that table's full name (Task 4a); two live tables with keys "t1" refused by
    the database whatever their `short_name` says (Task 2); a file holding "T1" and "t1" refused on
    import (Task 6).
 2. **Accented names**: "é" composed (`"\u00e9"`) and decomposed (`"e\u0301"`) are one key and
@@ -2009,24 +2056,33 @@ Any other failure, in any suite a task names, is a STOP.
    typed six-character short name refused `floor_plan.invalid` (Tasks 1, 4).
 4. **A name that is only digits** ("12" kept, "123456" → "23456"), and only symbols (Task 1).
 5. **A swap of two tables' short names in one save, and then at the reset** — the save has no
-   index to meet; the reset steps one aside (Tasks 4, 5b).
+   index to meet; the reset sets both tables' short names to `null` before applying them (Tasks 3,
+   5a, 5c).
 6. **A rename that keeps the short name**: a sent short name unchanged across a label change
-   stays; a rename with none sent gets the new label's proposal (Task 4).
+   stays; a rename with none sent gets the new label's proposal (Tasks 3, 4a).
 7. **A table whose new short name another zone's live table still holds**: the reset keeps both
-   its old names and waits, and applies them once the other table gives it up (Task 5b).
+   its old names and waits, and applies them once the other table gives it up (Tasks 5a, 5c).
 8. **"Terrace 1" and "Table 1"** (design's own example): both propose "T1"; the second save with
    none sent saves "Table 1" with no short name (D4), and with "T1" sent is refused "Terrace 1
-   already uses T1" in `params` (Task 4).
+   already uses T1" in `params` (Tasks 3, 4a).
 9. **A joined table today and a table renamed today** on the Ready bar: "T4+T5" and the saved
    short name (Task 8).
 10. **An import of a file whose short names clash** (Task 6), and of one with none (Task 6).
+11. **A full name equal to another table's short name.** Across zones D4's **taken** holds the
+    full names of tables with no short name (Task 4a case 6). Inside one zone's save it does not:
+    a table there left with none (its proposal taken) is not compared with the save's own short
+    names, so "T1" beside a table labelled "T1" with no short name in the same zone can show two
+    "T1"s. Accepted: it needs a table named exactly like another's short name, and slice 2's
+    required field gives every table one.
+12. **A save that sends no short name for a table it did not rename** keeps the stored one, and a
+    sent short name cannot take it (Tasks 3, 4a; D4's kept class).
 
 ---
 
 **Task order and why.** The rule first (Task 1, pure); the migration and the one write helper
 (Task 2); the refusal and the pure resolution (Task 3); the save and the plan read on top of them
-(Task 4); the reset in three parts — the pure planner (5a), the store's copy, spare step and
-writes (5b), Mark moved and the room fingerprint (5c); the configuration file (Task 6); the floor
+(Task 4a), the request's field (4b); the reset in four parts — the pure planner (5a), the
+store's copy and writes (5b), swaps and waits (5c), Mark moved and the room fingerprint (5d); the configuration file (Task 6); the floor
 read on the server (7a), the till's type and its fixtures (7b); the Ready bar's names (Task 8);
 docs (Task 9); the LOOK (Task 10). Each leaves the tree green and is sized well under 100 tool
 calls.
@@ -2047,7 +2103,8 @@ calls.
 - [ ] **Step 1: Failing tests** in `table-short-name.test.ts`:
   1. `it.each` "proposes %s for %s" over every example in D2's steps 1–5 (inputs and outputs
      exactly as listed there, plus `"  terrace   7 "` → `"T7"`, `"T1"` → `"T1"`, `"t1"` → `"t1"`,
-     `"Straße 4"` → `"S4"`, `"éclair 2"` → `"É2"`), each output also checked
+     `"ß ß ß 7"` → `"SSSS7"` (each "ß" upper-cases to "SS", so the initials are six characters and
+     are cut to four to fit the number; ran on the draft), `"éclair 2"` → `"É2"`), each output also checked
      `shortNameLength(output) <= SHORT_NAME_MAX`.
   2. "keeps a name of four characters or fewer exactly, and shortens one of five" — `"Bar 2"`
      (five) → `"B2"`, `"Bar2"` (four) → `"Bar2"`: the boundary.
@@ -2131,116 +2188,166 @@ calls.
 - Modify: `apps/server/src/errors.ts` (beside `table.label_taken`, `:381-386`: the code and a
   one-line doc), `apps/server/src/management-api.ts` (status map, `:268`: `409`),
   `apps/dashboard/src/i18n/codes.ts` (beside `:578`, D11's two sentences)
-- Create: `apps/server/src/table-short-names.ts`, `apps/server/src/table-short-names.test.ts`
+- Create: `apps/server/src/table-short-names.ts` — it throws codes, so it carries
+  `import "./errors.js";`, as every server file that throws one does (CLAUDE.md §3: "Every file
+  that throws a code imports its registry"; e.g. `apps/server/src/tables.ts:1-3`) — and
+  `apps/server/src/table-short-names.test.ts`
 - Test: `apps/server/src/errors.test.ts` (one case beside "constructs zone.name_taken…", `:17`),
   `apps/dashboard/src/i18n/codes.test.ts` (one case: English and Spanish copy, not the generic)
 
 **Interfaces:**
 - Produces:
   ```ts
-  export interface ShortNameEntry { label: string; shortName?: string }
-  /** taken: key → the full name of the table holding it. Answers each entry's short name, or
-   * null; throws floor_plan.invalid or table.short_name_taken (D4). */
+  export interface ShortNameEntry {
+    label: string;
+    shortName?: string;
+    /** The stored plan table's label and short name, for an entry with an id. */
+    stored?: { label: string; shortName: string | null };
+  }
+  /** taken: key → the full name of the table holding it (D4). Answers each entry's short name,
+   * or null; throws floor_plan.invalid or table.short_name_taken. */
   export function resolveShortNames(
     entries: readonly ShortNameEntry[],
     taken: ReadonlyMap<string, string>,
   ): (string | null)[];
   ```
-  Consumed by Task 4.
+  Consumed by Task 4a.
 
 - [ ] **Step 1: Failing tests** in `table-short-names.test.ts` (pure; no database):
-  1. "proposes a short name for an entry sent none" — `[{ label: "Terrace 1" }]`, nothing taken →
-     `["T1"]`.
+  1. "proposes a short name for a new entry sent none" — `[{ label: "Terrace 1" }]`, nothing
+     taken → `["T1"]`.
   2. "keeps a sent short name, trimmed" — `{ label: "Terrace 1", shortName: " Tb1 " }` → `"Tb1"`.
-  3. "refuses a sent short name another zone's table holds, ignoring case, naming that table" —
+  3. "keeps a stored short name when the save sends none and the name is unchanged" —
+     `{ label: "Terrace 1", stored: { label: "Terrace 1", shortName: "Tb1" } }` → `"Tb1"` (the
+     proposal would be "T1"); with `stored.shortName: null` → `"T1"`.
+  4. "proposes again for a renamed table sent none" — `{ label: "Terrace 9", stored: { label:
+     "Terrace 1", shortName: "Tb1" } }` → `"T9"` (D4: a rename is proposed from the new name).
+  5. "a sent short name does not take an untouched table's stored one" — `[{ label: "Terrace 1",
+     stored: { label: "Terrace 1", shortName: "T1" } }, { label: "Table 1", shortName: "t1" }]`
+     → `table.short_name_taken` `{ shortName: "t1", takenBy: "Terrace 1", field: "shortName" }`.
+     And a new entry proposing "T1" beside that kept one gets `null`, the kept one `"T1"`.
+  6. "refuses a sent short name another zone's table holds, ignoring case, naming that table" —
      taken `t1 → "Terrace 1"`, sent `"T1"` → `table.short_name_taken`
      `{ shortName: "T1", takenBy: "Terrace 1", field: "shortName" }` (Review focus 1, 8).
-  4. "refuses the second of two entries sending one short name" — `"T1"` and `"t1"` → refused on
+  7. "refuses the second of two entries sending one short name" — `"T1"` and `"t1"` → refused on
      the second, `takenBy` the first's label.
-  5. "a sent short name wins over a proposal, and the proposal's table gets none" — `[{ label:
-     "Terrace 1" }, { label: "Table 1", shortName: "T1" }]` → `[null, "T1"]` (the sent one is
-     resolved first, D4).
-  6. "gives none, never another, when the proposal is taken" — taken `t1`, `[{ label: "Table 1" }]`
+  8. "a sent short name wins over a proposal, and the proposal's table gets none" — `[{ label:
+     "Terrace 1" }, { label: "Table 1", shortName: "T1" }]` → `[null, "T1"]` (sent values are
+     resolved before proposals, D4).
+  9. "gives none, never another, when the proposal is taken" — taken `t1`, `[{ label: "Table 1" }]`
      → `[null]`; and two entries proposing "W1" (`"Window 1"`, `"Wall 1"`) → `["W1", null]`.
-  7. "lets two entries swap short names" — `[{label:"A 1", shortName:"B1"}, {label:"B 1",
-     shortName:"A1"}]` → `["B1","A1"]` (Review focus 5).
-  8. `it.each` "refuses %j as tables.0.shortName" — `""`, `"   "`, `"ABCDEF"` (six), and
-     `"e\u0301"` six times (six characters, twelve code units before
-     NFC) → `floor_plan.invalid` `{ field: "tables.0.shortName" }`; and `"ABCDE"` and
-     `"e\u0301"` five times (five) are kept (Review focus 3).
+  10. "lets two entries swap short names" — `[{ label: "A 1", shortName: "B1", stored: { label:
+      "A 1", shortName: "A1" } }, { label: "B 1", shortName: "A1", stored: { label: "B 1",
+      shortName: "B1" } }]` → `["B1", "A1"]`: sent entries are not kept, so their stored values
+      claim nothing (Review focus 5).
+  11. `it.each` "refuses %j as tables.0.shortName" — `""`, `"   "`, `"ABCDEF"` (six), and
+      `"e\u0301"` six times (six characters, twelve code units before NFC) →
+      `floor_plan.invalid` `{ field: "tables.0.shortName" }`; and `"ABCDE"` and `"e\u0301"` five
+      times (five) are kept (Review focus 3).
   Assert the domain code and params on every refusal (CLAUDE.md §4), never `toThrow()` alone.
   `errors.test.ts`: "constructs table.short_name_taken with the short name, the table holding it
   and its field". `codes.test.ts`: the code resolves to D11's sentences in `en` and `es`.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/table-short-names.test.ts src/errors.test.ts` and
   `pnpm --filter @waitron/dashboard exec vitest run src/i18n/codes.test.ts`.
-- [ ] **Step 3: Implement** D4's resolution and D11's registration. No till change (D11).
+- [ ] **Step 3: Implement** D4's three classes in D4's order, and D11's registration. No till
+  change (D11).
 - [ ] **Step 4: Run; expect PASS** (read the counts).
 - [ ] **Step 5:** typecheck server and dashboard; eslint; `pnpm format:check`; ledger;
-  `git commit -s -m "A797-1: a save's short names are proposed, or checked and refused when taken"`
+  `git commit -s -m "A797-1: a save's short names are kept, proposed, or checked and refused when taken"`
 
-### Task 4: The floor-plan save fills and checks short names; the plan read carries them
+### Task 4a: The floor-plan save fills and checks short names; the plan read carries them
 
 **Files:**
 - Modify: `apps/server/src/floor-plan.ts` (`PlanTable` `:26-37` and `planTables` `:205-214`;
-  `ZonePlanSave` entry `:57-66`; `checkSave` `:348-394` — a `shortNamesTaken` beside
-  `namesTaken` `:313-324` and `resolveShortNames` after the labels' check; `CheckedZonePlanSave`
-  `:327-334` carries the resolved values; `masterColumns` `:396-398`; `writeSave`'s create and
-  update `:546-561`; `changedShared` `:602-626`), `apps/server/src/management-api.ts`
-  (`parseZonePlanSave` `:424-458`, D4's parse)
-- Test: `apps/server/src/floor-plan.test.ts` (new `describe("short names")`; one changed check),
-  `apps/server/src/management-api.test.ts` (the route's parse cases, beside the two
-  `tables.0.partKeys` refusals at `:3321`, `:3331`; ran `grep -n "management.request_invalid"`)
+  `ZonePlanSave` entry `:57-66` gains `shortName?: string`; `checkSave` `:348-394` — a
+  `shortNamesTaken` beside `namesTaken` `:313-324`, and `resolveShortNames` after the labels'
+  check, each entry with an `id` given `stored` from `masters`; `CheckedZonePlanSave` `:327-334`
+  carries the resolved values; `masterColumns` `:396-398`; `writeSave`'s create and update
+  `:546-561`; `changedShared` `:602-626`)
+- Test: `apps/server/src/floor-plan.test.ts` (new `describe("short names")`; one changed check)
 
 - [ ] **Step 1: Failing tests** (the file's `zone()`, `planned()`, `fresh()`, `liveTable`,
-  `masterOf`, `check` and `refusal` helpers, `:80-300`). The file's cases share one database
-  (`resetPerTest: false`), so every short name a case sends or expects must be its own: build it
-  from random characters, at most five (`` `S${randomUUID().slice(0, 4)}` ``), and a case about
-  a proposal uses a label whose proposal is built the same way (`` `Q ${digits}` `` →
+  `masterOf`, `check` and `refusal` helpers, `:59-300`). The file's cases share one database
+  (`resetPerTest: false`, `:44`), so every short name a case sends or expects must be its own:
+  build it from random characters, at most five (`` `S${randomUUID().slice(0, 4)}` ``), and a
+  case about a proposal uses a label whose proposal is built the same way (`` `Q ${digits}` `` →
   `` `Q${digits}` ``, four random digits).
-  1. "fills a table's short name from its name when the save sends none" — label `` `Q ${digits}` ``:
-     `readLayout` shows `` shortName: `Q${digits}` ``.
-  2. "keeps a sent short name and reads it back" — sent `" Sab1 "` → read `"Sab1"`.
-  3. "refuses a short name another zone's plan table or live table uses, ignoring case" — another
+  1. "fills a new table's short name from its name when the save sends none" — label
+     `` `Q ${digits}` ``: `readLayout` shows `` shortName: `Q${digits}` ``.
+  2. "keeps a sent short name and reads it back" — sent `" Sab1 "`-style (spaces around a fresh
+     value) → read trimmed.
+  3. "keeps a stored short name when the save sends none and the name is unchanged" — save with a
+     sent `S…`, then a second save of the same zone that sends none and changes only the seats:
+     still `S…` (D4's kept class; before it, the proposal replaced it).
+  4. "a sent short name does not take an untouched table's stored one" — the zone holds table A
+     with `S…`; one save adds table B sending `S…` and sends A with none: refused
+     `table.short_name_taken` with `takenBy` A's label.
+  5. "refuses a short name another zone's plan table or live table uses, ignoring case" — another
      zone's master with short name `S…`, and (second half) another zone's live table with one
-     (`liveTable` + an update through `shortNameColumns`): sending the upper-cased value is refused
-     `table.short_name_taken` with `takenBy` that table's full name (Review focus 1).
-  4. "allows this zone's own live table's short name" — the zone's unlinked live table holds `S…`;
+     (`liveTable`, then an update through `shortNameColumns`): sending the upper-cased value is
+     refused `table.short_name_taken` with `takenBy` that table's full name (Review focus 1).
+  6. "counts another zone's table with no short name by its full name" — another zone's live
+     table labelled `` `Q${digits}` `` with no short name: a new table labelled `` `Q ${digits}` ``
+     sent none gets `null` (its proposal equals that full name), and one sending
+     `` `q${digits}` `` is refused with `takenBy` that label (D4's taken, D7; Review focus 11).
+  7. "allows this zone's own live table's short name" — the zone's unlinked live table holds `S…`;
      a save of this zone sending `S…` passes (labels behave so, "allows this zone's unlinked live
      name…", `:1264`).
-  5. "a rename with none sent takes the new name's proposal; one with its short name sent keeps
+  8. "a rename with none sent takes the new name's proposal; one with its short name sent keeps
      it" (Review focus 6).
-  6. "a short-name change alone moves the revision of the zone's other layouts" — two sets
+  9. "a short-name change alone moves the revision of the zone's other layouts" — two sets
      (`floor-plan-layouts.test.ts` shows the set-up; `changedShared`): change only `shortName`;
      the other set's layout revision moves.
-  7. "saves a table with none when its proposal is taken" (Review focus 8): another zone's master
-     holds the proposal; the save passes and `readLayout` shows `shortName: null`.
-  8. Route: `PUT …/floor-plan` with `shortName: 5` → `400 management.request_invalid`
-     `{ field: "tables.0.shortName" }`; with `shortName: null` → `200`, as absent.
-  Changed check (probe 1, 2): "does not read a save entry's liveTableId" (`:1247-1258`) — the
-  whole-table `toEqual` compares the table without its `shortName` (destructure it out), and one
-  more line checks `expect([null, proposeShortName(label)]).toContain(shortName)` (probe 2: the
-  value depends on `fresh()`'s random suffix and on what earlier cases hold). Ledger.
-- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/floor-plan.test.ts` (and the route file).
+  10. "saves a table with none when its proposal is taken" (Review focus 8): another zone's master
+      holds the proposal; the save passes and `readLayout` shows `shortName: null`.
+  Changed check (probe 1, 2): "does not read a save entry's liveTableId" (`:1225`; its `toEqual`
+  at `:1247`): the case's input entry sends `shortName` = a fresh `` `S${randomUUID().slice(0, 4)}` ``
+  (lower-case hex after an upper-case S, five characters, its own key in the shared database), and
+  the whole-object `toEqual` gains `shortName: <that value>` exactly. Without a sent value the read
+  is the proposal of the random label or `null` (probe 2), so it cannot be pinned. The sent field
+  is a fixture change made so the one changed check stays exact. Ledger.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/floor-plan.test.ts`.
 - [ ] **Step 3: Implement** D4 and D5. `shortNamesTaken` reads the venue's other zones' masters and
-  live tables (plan tables first) into Task 3's `taken` map.
+  live tables (plan tables first) into Task 3's `taken` map: each non-null short name by its key,
+  and each null one's full name folded by `shortNameKey`.
 - [ ] **Step 4: Run; expect PASS**, then every floor-plan and seed suite:
   `pnpm --filter @waitron/server exec vitest run src/floor-plan src/floor-today src/management-api src/service-delete src/demo-seed scripts/demo-seed/seed-floor`
-  (Vitest matches by name; read the count: no file may report 0 tests run). Probe 2 ran D4 across
-  these with one failure, the changed check above. Any other failure is a STOP.
-- [ ] **Step 5:** typecheck server; eslint; format check; ledger; `git commit -s -m "A797-1: the floor-plan save fills, checks and stores each table's short name"`
+  (Vitest matches by name; read the count: no file may report 0 tests run). Probe 2 ran a lenient
+  proposal pass across these with one failure, the changed check above; it ran neither the kept
+  class nor the full names in **taken**, which turn more proposals into a kept value or `null`,
+  never into a refusal. Any other failure is a STOP.
+- [ ] **Step 5:** typecheck server; eslint; format check; ledger; `git commit -s -m "A797-1: the floor-plan save keeps, fills and checks each table's short name"`
+
+### Task 4b: The save's request reads `shortName`
+
+**Files:**
+- Modify: `apps/server/src/management-api.ts` (`parseZonePlanSave` `:424-458`, D4's parse)
+- Test: `apps/server/src/management-api.test.ts` (beside the two `tables.0.partKeys` refusals at
+  `:3321`, `:3331`; ran `grep -n "management.request_invalid"`)
+
+- [ ] **Step 1: Failing tests:** `PUT …/floor-plan` with `shortName: 5` → `400
+  management.request_invalid` `{ field: "tables.0.shortName" }`; with `shortName: null` → `200`,
+  saved as if absent (the read then shows the proposal or the kept value); with `shortName:
+  "Sx1"`-style fresh value → `200`, and the read shows it (the parser passes it through; before
+  the change it drops it).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/management-api.test.ts`.
+- [ ] **Step 3: Implement** the parse.
+- [ ] **Step 4: Run; expect PASS.**
+- [ ] **Step 5:** typecheck server; eslint; format check; ledger; `git commit -s -m "A797-1: the floor-plan request carries a table's short name"`
 
 ### Task 5a: The reset planner gives a table both its names, or waits
 
 **Files:**
 - Modify: `apps/server/src/floor-reset-plan.ts` (`Target` `:15-24`, `LiveTable` `:26-47`,
-  `planReset`'s input and its in-use sets `:70-149`, `targetsFromMaster` `:195-247`)
+  `Renaming` `:64-68` gains `currentShortKey`, `planReset`'s input, its fixed in-use sets and its
+  fixed-point loop `:70-149` with separate short-key sets, `targetsFromMaster` `:195-247`)
 - Test: `apps/server/src/floor-reset-plan.test.ts` (new cases; builders `t` and `l`, `:11-33`,
   and the inputs at `:294`, `:317`, `:332` gain `shortName: null` — Fixture-only, probe 2)
 
 **Interfaces:**
 - Produces: `Target.shortName`, `LiveTable.shortName` (`string | null`);
   `planReset({ …, shortNameKeysElsewhere: ReadonlySet<string> })` (required); `apply`'s shape
-  unchanged (D6). Consumed by Task 5b.
+  unchanged (D6). Consumed by Tasks 5b and 5c.
 
 - [ ] **Step 1: Failing tests:**
   1. "waits, keeping both names, while another zone's table holds the target's short name" —
@@ -2253,15 +2360,22 @@ calls.
      both applied (Review focus 5).
   4. "a table that waits keeps its short name in use" — a held table `l("b", "B", { held: true,
      shortName: "T1" })` and another target wanting `T1` → the second waits.
-  5. "a removal frees neither name this pass" — as the label case does for a removal (`:107`).
-  6. `targetsFromMaster` "copies the master's short name, and gives a removal its live table's" —
+  5. "a table that waits for its label keeps its short name in use, so another target wanting it
+     waits" — table a, short "T1", wants label "X" which another zone holds (`takenElsewhere`
+     `{"X"}`); table b wants short "T1" with a free label → a waits (label taken), and so does b
+     (a keeps "T1"). Before the loop's short twin, b is applied and the store's unique index
+     refuses it (D6).
+  6. "a label and a short name never block each other" — table a's label "12", table b's target
+     short name "12" → b applied (separate sets).
+  7. "a removal frees neither name this pass" — as the label case does for a removal (`:107`).
+  8. `targetsFromMaster` "copies the master's short name, and gives a removal its live table's" —
      extend its existing case's inputs and expectations by `shortName`.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/floor-reset-plan.test.ts`.
 - [ ] **Step 3: Implement** D6's planner part (fold with `shortNameKey`).
 - [ ] **Step 3b: The store's read side, so the tree compiles.** In `catchUpPass`
   (`floor-today-store.ts`): `venueTables` (`:431-440`) selects `shortName`;
   `shortNameKeysElsewhere` is built beside `takenElsewhere` (`:443-445`) from other zones'
-  tables; each `LiveTable` (`:541-555`) and each reset-row `Target` (`:418-428`) carries its
+  tables; each `LiveTable` (`:544-556`) and each reset-row `Target` (`:418-428`) carries its
   `shortName`; `zoneTables` (`:330-339`) selects it for `targetsFromMaster`. Nothing writes a
   short name yet (reset rows hold none until Task 5b), so no behaviour changes.
 - [ ] **Step 4: Run; expect PASS**, then `pnpm --filter @waitron/server typecheck` and
@@ -2273,8 +2387,8 @@ calls.
 
 **Files:**
 - Modify: `apps/server/src/floor-today-store.ts` (`targetRow` `:94-101`; `resetZoneFor`'s master
-  map `:234-245`; the spare step after `:680`, the create `:682-697`, the apply `:698-700`;
-  `spareLabels` `:840-853` gains `keyOf`), `apps/server/src/testing/live-table.ts` (D12)
+  map `:233-245`; the create `:682-697`; the apply `:698-700`), `apps/server/src/testing/live-table.ts`
+  (`createTable` gains `shortName?: string`, D12)
 - Test: `apps/server/src/floor-today-store.test.ts` (new `describe("short names at a reset")`;
   `MasterTable` and `insertMaster`, `:111-133`, gain an optional `shortName`)
 
@@ -2283,47 +2397,73 @@ calls.
   1. "copies each master's short name onto its live table, with its folded key" — master
      `{ label: "Sn 1", shortName: "Sn1", live: t1 }` → `tableRow(t1)` has `shortName: "Sn1"`,
      `shortNameKey: "sn1"`.
-  2. "makes a new table with its master's short name" — a master no live table follows →
-     the created row has both columns.
-  3. "swaps two tables' short names" — as "swaps two tables' names" (`:461-478`), on short names:
-     both end swapped, no unique failure (Review focus 5).
-  4. "keeps both old names while another zone's table holds the new short name, and takes them
-     once it is free" — another zone's live table with short `Sx1` (`createTable` with
-     `shortName`, D12); this zone's master wants `Sx1`: after the reset the table keeps its label
-     and short name and its row is pending (`pendingRows`); change the other table's short name;
-     catch up (`catchUpZone`, or the next `reset`): both new names applied (Review focus 7).
-  5. "a master with no short name leaves its live table with none" — and a live table that had
+  2. "makes a new table with its master's short name" — a master no live table follows → the
+     created row has both columns.
+  3. "a master with no short name leaves its live table with none" — and a live table that had
      one loses it (D6).
-  6. "changes only a case: no wait" — master `"SN1"` over live `"Sn1"` → applied at once.
+  4. "changes only a case: no wait" — master `"SN1"` over live `"Sn1"` → applied at once, key
+     unchanged.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/server exec vitest run src/floor-today-store.test.ts`.
-- [ ] **Step 3: Implement** D6's store part; `createTable` (`testing/live-table.ts:12-28`) gains
-  `shortName?: string` written with `shortNameColumns` (D12).
+- [ ] **Step 3: Implement** the copy (`targetRow`, the master map), the create and the apply with
+  `shortNameColumns`, and `createTable`'s input.
 - [ ] **Step 4: Run; expect PASS**, then every reset and today's-plan suite:
   `pnpm --filter @waitron/server exec vitest run src/floor-today src/floor-reset src/floor-plan src/table-removal src/floor-delete src/zone`
   (read the counts). Probe 2 ran this copy across them green; a failure is a STOP.
 - [ ] **Step 5:** typecheck server; eslint; format check; ledger; `git commit -s -m "A797-1: a reset copies each table's short name onto today's tables"`
 
-### Task 5c: Mark moved and the room's revision see a short name
+### Task 5c: A reset swaps short names, and waits while another table holds one
 
 **Files:**
-- Modify: `apps/server/src/floor-today-mark-moved.ts` (`leaveHere`, `:152-168`),
-  `apps/server/src/floor-revision.ts` (`roomPrints`, `:68-90`)
-- Test: `apps/server/src/floor-today-mark-moved.test.ts` (beside "keeps a rename the dashboard gave it, and its place", `:868`),
-  `apps/server/src/floor-revision.test.ts` (beside "a catch-up that only hides a table moves the
-  revision by one", `:165`; the one suite naming `roomPrints`, ran `grep -ln roomPrints apps/server/src/*.test.ts`)
+- Modify: `apps/server/src/floor-today-store.ts` (after the labels' spare step, `:672-680`: set
+  both short-name columns to `null` on every applied table whose short-name key changes, D6)
+- Test: `apps/server/src/floor-today-store.test.ts` (in Task 5b's `describe`)
+
+- [ ] **Step 1: Failing tests:**
+  1. "swaps two tables' short names" — as "swaps two tables' names" (`:461-478`), on short names:
+     both end swapped. Before the null step the second apply meets the unique index (the case
+     fails with the engine's `UNIQUE constraint failed: dining_tables.location_id,
+     dining_tables.short_name_key`; record it in the ledger) (Review focus 5).
+  2. "keeps both old names while another zone's table holds the new short name, and takes them
+     once it is free" — another zone's live table with short `Sx1` (`createTable`, D12); this
+     zone's master wants `Sx1`: after the reset the table keeps its label and short name and its
+     row is pending (`pendingRows`); change the other table's short name (through
+     `shortNameColumns`); the next catch-up (`catchUpZone`) applies both new names (Review focus 7).
+  3. "a table waiting for its label keeps its short name, and the table wanting that short name
+     waits too" — the store-level twin of Task 5a's case 5: table A (short `Sy1`) whose master
+     renames it to a label another zone's table holds, and table B whose master gives it `Sy1`:
+     after the reset both are pending, A still `Sy1`, B its old short name, and no unique error.
+     Free the label; catch up: A takes its label and new short name, then B takes `Sy1` (one or
+     two catch-ups; assert the end state).
+- [ ] **Step 2: Run; expect FAIL** on case 1 (cases 2 and 3 pass if Task 5a's planner is right;
+  they pin the store against it).
+- [ ] **Step 3: Implement** the null step.
+- [ ] **Step 4: Run; expect PASS**, then Task 5b's Step 4 command.
+- [ ] **Step 5:** typecheck server; eslint; format check; ledger; `git commit -s -m "A797-1: a reset swaps tables' short names without meeting the unique index"`
+
+### Task 5d: Mark moved and the room's revision see a short name
+
+**Files:**
+- Modify: `apps/server/src/floor-today-mark-moved.ts` (`leaveHere`, `:136-170`; the group read
+  `:152-161` selects both short names; the comparison `:166`), `apps/server/src/floor-revision.ts`
+  (`roomPrints`, `:68-90`)
+- Test: `apps/server/src/floor-today-mark-moved.test.ts` (beside "keeps a rename the dashboard gave
+  it, and its place", `:868`), `apps/server/src/floor-revision.test.ts` (beside "a catch-up that
+  only hides a table moves the revision by one", `:165`; the one suite naming `roomPrints`, ran
+  `grep -ln roomPrints apps/server/src/*.test.ts`)
 
 - [ ] **Step 1: Failing tests:**
   1. "Leave it here keeps a row waiting whose table has its new label but not its new short name"
-     — set up as "keeps a rename the dashboard gave it, and its place" (`:868`) does, with the
-     master changing only the short name: after `leaveHere` the row is still pending and placed, and the next
-     catch-up gives the table its short name. Before the change the row is ended (labels equal)
-     and the short name never arrives.
-  2. "a catch-up that changes only a short name moves the revision by one" — as the case at `:165`
+     — set up as `:868` does, with the master changing only the short name: after `leaveHere` the
+     row is still pending and placed, and the next catch-up gives the table its short name. Before
+     the change the row is ended (labels equal) and the short name never arrives.
+  2. "Leave it here keeps waiting for a case-only change" — the same with `"Sn1"` → `"SN1"`: the
+     row waits and the catch-up stores `"SN1"` (the comparison is `===` on stored values, D6).
+  3. "a catch-up that changes only a short name moves the revision by one" — as the case at `:165`
      does for hiding a table: a master whose only change is its short name, a floor read, the
      revision moves by one. Before the change the fingerprint (`floor-revision.ts:68-90`) holds no
      short name, so it stays.
-- [ ] **Step 2: Run; expect FAIL** on both.
-- [ ] **Step 3: Implement** D6's two lines.
+- [ ] **Step 2: Run; expect FAIL** on all three.
+- [ ] **Step 3: Implement** D6's two changes.
 - [ ] **Step 4: Run; expect PASS**, then Task 5b's Step 4 command.
 - [ ] **Step 5:** typecheck; eslint; format check; ledger; `git commit -s -m "A797-1: Leave it here and the room's revision see a table's short name"`
 
@@ -2332,8 +2472,9 @@ calls.
 **Files:**
 - Modify: `packages/db/src/configuration-transfer.ts` (`dining_tables`'s `omit`, `:58-62`;
   `validateCoreConfiguration`, `:10-38`; `afterImport`), `packages/db/src/table-short-names.ts`
-  (`storeTableShortNameKeys(tx)`, after `storeProductNameKeys`'s shape: read every row's id and
-  short name, fold in JavaScript, write in batches)
+  (`storeTableShortNameKeys(tx)`: read every row's id and short name, fold in JavaScript, and
+  update row by row, one `update … where id = ?` per row that has one — D10 says why no batching
+  helper)
 - Test: `packages/db/src/configuration-transfer.test.ts` (validate cases; "CORE_CONFIGURATION_TRANSFER"
   `describe`, `:203`, gains the omit and the hook), `apps/server/src/configuration-transfer.test.ts`
   (one round-trip case beside the products' key case, `:3640-3684`),
@@ -2352,8 +2493,9 @@ calls.
      target venue, the live table has `short_name: "Rt1"`, `short_name_key: "rt1"`; a bundle
      supplying `short_name_key` is refused `setup.request_invalid`
      `{ field: "dining_tables.short_name_key" }` (already, by the omit).
-  4. "imports a file with no short names with none" — the bundle's rows with `short_name`
-     deleted → the imported tables have both columns null.
+  4. "imports a file with no short names, at this version, with none" — the bundle's rows with
+     `short_name` deleted → the imported tables have both columns null (D10: a file from before
+     this slice is refused by version instead).
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/db exec vitest run src/configuration-transfer.test.ts`,
   `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts` and
   `pnpm --filter @waitron/composition exec vitest run`.
@@ -2388,7 +2530,7 @@ calls.
 **Files:**
 - Modify: `apps/till/src/api/client.ts` (`TableState`, `:2204`: `shortName: string`, its doc as
   D7's), and the test files `pnpm --filter @waitron/till typecheck` then lists (probe: 82 sites in
-  71 files)
+  71 files: 69 test files and the two `apps/till/test/` fixtures)
 
 - [ ] **Step 1:** add the field; run `pnpm --filter @waitron/till typecheck 2>&1 | grep "error TS" > <scratch outside the worktree>/till-tsc.txt`;
   expect only "Property 'shortName' is missing" errors in test files and `apps/till/test/*`
@@ -2404,10 +2546,13 @@ calls.
   confirm).
 - [ ] **Step 3: Run** `pnpm --filter @waitron/till typecheck` → 0 errors; then, memory first
   (`memory_pressure | grep free`), exactly the files Step 2 edited, and read the count:
-  `pnpm --filter @waitron/till exec vitest run $(cut -d'(' -f1 <scratch>/till-tsc.txt | sort -u | tr '\n' ' ')`
-  (in zsh the unquoted `$(…)` is split on spaces here because `tr` joins the names with them;
-  check the printed `Test Files` count equals the list's length). Expected: all pass, unchanged.
-  CI runs the till's whole suite.
+  the test files in the error list (`cut -d'(' -f1 <scratch>/till-tsc.txt | sort -u | grep '\.test\.ts$'`)
+  **plus** every test file importing the two fixtures the list names, `test/allergy-app-fixture.ts`
+  and `test/bill-pay-app.ts` (`grep -rlE 'test/(allergy-app-fixture|bill-pay-app)(\.js)?"' apps/till/src`).
+  Put the names in a zsh array (`files=(${(f)"$(sort -u <a> <b>)"})`, not an unquoted string,
+  which zsh does not split) and run `pnpm --filter @waitron/till exec vitest run $files`. At
+  `6c101a642` that was 69 + 13 files, none in both (ran), so expect `Test Files 82 passed (82)`;
+  recount if the lists differ. Expected: all pass, unchanged. CI runs the till's whole suite.
 - [ ] **Step 4:** eslint the changed files; format check; ledger (the Fixture-only list, by file);
   `git commit -s -m "A797-1: the till's floor read type carries the short name"`
 
@@ -2473,7 +2618,8 @@ slice 2) a refusal. So the guides change only where they show the bar's example.
   tables' folded copy `short_name_key` is unique per venue (`dining_tables_location_short_name_key_uq`)
   and written only through `shortNameColumns` (`packages/db/src/table-short-names.ts`) — **nothing
   in the database ties the copy to the short name** (a writer that skips the helper is not
-  refused; Task 2's third case); the save proposes one it is not sent, and checks a sent one
+  refused; Task 2's third case); the save keeps the stored one of a table it did not rename, proposes one otherwise when it is
+  not sent, and checks a sent one
   across the venue's other zones (`resolveShortNames`, `apps/server/src/table-short-names.ts`); a
   reset gives a table its new label and short name together, or waits for both; a configuration
   file carries `short_name` and the import sets the key. Also, in the same section's sentence on
@@ -2505,8 +2651,9 @@ slice 2) a refusal. So the guides change only where they show the bar's example.
 - [ ] **Step 3: Look** with the workspace's Playwright Chromium (script kept in
   `/Users/clintongormley/waitron-campaign-c/a797-1-scripts/`), a handheld at 390 px, light and
   dark, English and Spanish: seat Window 1 and another table, send a dish to each, mark them
-  ready; the bar reads "Ready · W1 · 1 · …"; join two tables for today on the till and make food
-  ready there: one entry "T1+T2". The table's own header still shows "Window 1".
+  ready; the bar reads "Ready · W1 · 1 · …"; join two tables for today on the till and **give the join a
+  today's name, "Birthday"**, then make food ready there: the bar reads one entry "T1+T2" (before
+  this slice it read "Birthday", so the look tells old from new; D8). The table's own header still shows "Window 1".
 - [ ] **Step 4: Save** the PNGs under `/Users/clintongormley/waitron-campaign-c/a797-1-shots/`,
   open each, describe them in the ledger and the PR body.
 - [ ] **Step 5: Stop** what you started: the script by its recorded process id, then
@@ -2523,12 +2670,14 @@ slice 2) a refusal. So the guides change only where they show the bar's example.
   quoted, and the measured reason for nullable); **Contract change** (`TableState.shortName` on
   the floor read and in the till's type; `PlanTable.shortName` on the plan read; the save's
   optional `shortName`; the refusal `table.short_name_taken`); **Changed test checks** (from the
-  ledger: Task 2's two, Task 4's one, Task 8's two); **Fixture-only** (Task 5a's builders, Task
-  7b's till builders by file); **Decisions** D1–D13 in one line each; **What a person sees**: the
+  ledger: Task 2's two, Task 4a's one, Task 8's two); **Fixture-only** (Task 4a's sent short name
+  in "does not read a save entry's liveTableId", Task 5a's builders, Task 7b's till builders by
+  file); **Decisions** D1–D13 in one line each; **What a person sees**: the
   Ready bar's short names (the guides' example changed), nothing on the dashboard until slice 2;
   **LOOK**.
 - **Owner FYI** (one line each in the PR and the lane's questions file, not questions): D4 (a
-  clashing proposal gives none rather than refusing a save that sent none), D8 (a today's join
+  save that sends none keeps an unrenamed table's short name, and a clashing proposal gives none
+  rather than refusing a save that sent none), Review focus 11 (the one-zone gap), D8 (a today's join
   shows its tables' short names, not its today's name), D9, D11 (the till gets no copy for a
   refusal it cannot receive), D13.
 - After merge: delete the branch local and remote and check the remote one is gone; update the
