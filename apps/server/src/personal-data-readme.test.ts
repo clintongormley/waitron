@@ -430,7 +430,7 @@ ${ASK}
 What each file holds
 ${PROFILE_LINE}
 ${SIGN_IN_LINE}
-- adjustments.json: the voids, comps and discounts on a bill that you made giving a reason, or approved for someone else: how many of each kind (cancel for a void, comp for an item given free, discount_percent and discount_amount); for each one, when it happened, the order number, the item and how much of it (none for a discount on the whole bill), the percentage of a percentage discount, the amount it took off the bill, the item's value at its list price, the reason chosen, how far the item had got (unsent, held, fired or served), whether the charge was kept, whether preparation had started, and your part in it. Kept to account for what is taken off the venue's bills, and who decided it.
+- adjustments.json: the voids, comps and discounts on a bill that you made giving a reason, or approved for someone else: how many of each kind (cancel for a void, comp for an item given free, discount_percent and discount_amount); for each one, when it happened, the order number, the item and how much of it (none for a discount on the whole bill), the percentage of a percentage discount, the amount it took off the bill, the list value of what it applied to (the item, or the whole bill), the reason chosen, how far the item had got (unsent, held, fired or served), whether the charge was kept, whether preparation had started, and your part in it. Kept to account for what is taken off the venue's bills, and who decided it.
 ${MACHINE}
 
 ${ORIGIN}

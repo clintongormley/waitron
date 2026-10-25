@@ -127,7 +127,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "adjustments.json": {
         holds:
-          "the voids, comps and discounts on a bill that you made giving a reason, or approved for someone else: how many of each kind (cancel for a void, comp for an item given free, discount_percent and discount_amount); for each one, when it happened, the order number, the item and how much of it (none for a discount on the whole bill), the percentage of a percentage discount, the amount it took off the bill, the item's value at its list price, the reason chosen, how far the item had got (unsent, held, fired or served), whether the charge was kept, whether preparation had started, and your part in it.",
+          "the voids, comps and discounts on a bill that you made giving a reason, or approved for someone else: how many of each kind (cancel for a void, comp for an item given free, discount_percent and discount_amount); for each one, when it happened, the order number, the item and how much of it (none for a discount on the whole bill), the percentage of a percentage discount, the amount it took off the bill, the list value of what it applied to (the item, or the whole bill), the reason chosen, how far the item had got (unsent, held, fired or served), whether the charge was kept, whether preparation had started, and your part in it.",
         use: "Kept to account for what is taken off the venue's bills, and who decided it.",
         kept: [
           "Nothing in the box deletes or changes a void, comp or discount once it is recorded.",
@@ -254,7 +254,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "adjustments.json": {
         holds:
-          "las cancelaciones y los descuentos de una cuenta que hiciste indicando un motivo, o que autorizaste para otra persona: cuántos hay de cada tipo (cancel, una cancelación; comp, un artículo gratis; discount_percent, un descuento de un porcentaje; discount_amount, un descuento de un importe); de cada uno, cuándo ocurrió, el número de pedido, el artículo y qué cantidad (nada en un descuento sobre toda la cuenta), el porcentaje de un descuento en porcentaje, el importe descontado de la cuenta, el valor de carta del artículo, el motivo elegido, en qué punto estaba el artículo (unsent, sin marchar; held, en espera; fired, marchado; served, servido), si se mantuvo el cobro, si se había empezado a preparar y qué parte tuviste tú.",
+          "las cancelaciones y los descuentos de una cuenta que hiciste indicando un motivo, o que autorizaste para otra persona: cuántos hay de cada tipo (cancel, una cancelación; comp, un artículo gratis; discount_percent, un descuento de un porcentaje; discount_amount, un descuento de un importe); de cada uno, cuándo ocurrió, el número de pedido, el artículo y qué cantidad (nada en un descuento sobre toda la cuenta), el porcentaje de un descuento en porcentaje, el importe descontado de la cuenta, el valor de carta de aquello a lo que se aplicó (el artículo o toda la cuenta), el motivo elegido, en qué punto estaba el artículo (unsent, sin marchar; held, en espera; fired, marchado; served, servido), si se mantuvo el cobro, si se había empezado a preparar y qué parte tuviste tú.",
         use: "Se guarda para dar cuenta de lo que se descuenta de las cuentas del local y de quién lo decidió.",
         kept: [
           "Nada en el servidor Waitron del local borra ni cambia una cancelación o un descuento ya registrados.",
