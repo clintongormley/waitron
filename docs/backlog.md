@@ -5787,6 +5787,12 @@ _Formerly parts of B9 and Track C._ Open work and security-upgrade receipts:
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
+- **The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
+  (`packages/db/src/schema/drawer-opens.ts:50-51`), but a cash refund's opening sets it too:
+  `enqueueTenderRefundDrawer` takes a required `authorizedBy` and writes it into the row
+  (`apps/server/src/receipt-print.ts:622`, `:645-653`). Found by A980 S2c's review (#2073); the
+  lines predate that branch. Correct the comment to name every reason that sets it.
+
 - **Go-live day steps.** On go-live day, replace the pre-production migration rule in
   `CLAUDE.md` with the owner's live-data policy, then delete and gitignore `docs/superpowers/`
   and `docs/handoffs/` after the final operator-procedure sweep. These are future actions;

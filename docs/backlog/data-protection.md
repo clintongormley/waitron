@@ -85,7 +85,8 @@ by the answers):
   whose void they authorised, the refunds they asked for, authorised or recorded the outcome of,
   and the cash-drawer openings they made or authorised, with how many of each, the invoice number
   and amount where there is one, when, and their part in each refund and opening
-  (`apps/server/src/personal-data-actions.ts`). No product path records a whole-sale void yet, so
+  (`apps/server/src/personal-data-actions.ts`); the README inside the download lists every field
+  (`apps/server/src/i18n/personal-data-readme.ts`). No product path records a whole-sale void yet, so
   the voids list is empty on every box until one does (S2c decision 3). An admin downloads another
   person's data, a disabled person's included, from **Download their data** in the person's row
   menu on **Users** (`GET /management-api/staff/:id/personal-data/export`), with the README in that
