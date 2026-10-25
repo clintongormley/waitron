@@ -36,7 +36,7 @@ referrals, not completed recovery experiments.
 | [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and explicit/autofill refusal views explain password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
 | [Public connection](#tls-repair), #2055 | Replace the installer referral with a connection-repair choice the reader can complete. Include installer-supplied certificates and managed-device installation restrictions, which also refer to another person. Retain the separate linked-layout recovery gap and public-page privacy. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
-| [Backup key](#backup-key), #2058 | Replace the administrator referral with a way to inspect and correct effective configuration. Explain what each key choice does and keep both key records until their use is established. |
+| [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
 | [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. Recheck lane A's A1042 S7l after landing; this lane does not change it. |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
@@ -751,6 +751,10 @@ the earlier wording.
 **Reopened after the 14:02 owner correction:** replace the administrator referral with inspection
 and correction of the effective backup configuration, offering any needed sign-in there. Keep the
 key-use uncertainty explicit and a safe Stop for a change that could lose access to a backup.
+
+Later on 2026-10-25, the [wording rework](#backup-key-self-service-rework-2026-10-25) removes the
+referral and qualifies retaining the displayed downloads and leaving without another submission.
+The effective-key diagnosis and correction workflow remains open.
 
 ### restore-start
 
