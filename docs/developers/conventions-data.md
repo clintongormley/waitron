@@ -3820,7 +3820,8 @@ ready; otherwise none.
 refused `409 clock.confirm_refused` with `reason: "same_machine"` when the request comes from the box
 (`requestFromBox`), unless the server runs in development mode. A challenge belongs to the
 management session that asked for it, is taken once, and holds for 5 000 ms on the steady clock
-(`CHALLENGE_MS`, `apps/server/src/clock-challenges.ts`); otherwise `challenge`. The box's time is
+(`CHALLENGE_MS`, `apps/server/src/clock-challenges.ts`); otherwise the confirm is refused
+`400 clock.check_expired`, with no params (owner, 2026-10-25). The box's time is
 taken at the round trip's midpoint, counted back on the steady clock from the reading the
 confirmation lifts rather than from the challenge's time, so a step of the box's clock during the
 round trip counts as a difference. Half the round trip is its uncertainty, and the device

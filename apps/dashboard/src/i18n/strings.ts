@@ -3291,7 +3291,6 @@ export const en = {
     "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
   "box_status.clock.admin.refused.same_machine":
     "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
-  "box_status.clock.admin.refused.challenge": "The check took too long. Try again.",
   "box_status.clock.admin.refused.not_stopped":
     "There is nothing left to confirm. See the Clock row.",
   "box_status.clock_check_help_label": "What this check does",
@@ -6671,8 +6670,6 @@ export const es: Record<StringKey, string> = {
     "El equipo no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el equipo a internet para que corrija la hora.",
   "box_status.clock.admin.refused.same_machine":
     "Esta pantalla es el propio equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.",
-  "box_status.clock.admin.refused.challenge":
-    "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
   "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
   "box_status.clock_check_help_label": "Qué hace esta comprobación",
   "box_status.clock_check_help":

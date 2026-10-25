@@ -740,6 +740,13 @@ it("explains each manager refusal for a post-invoice refund in both languages", 
   }
 });
 
+it("words a missing or expired clock check in both languages", () => {
+  expect(codeMessage("clock.check_expired", "en")).toBe("The check took too long. Try again.");
+  expect(codeMessage("clock.check_expired", "es")).toBe(
+    "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
+  );
+});
+
 it("words a refused confirmation of the clock in both languages", () => {
   expect(codeMessage("clock.confirm_refused", "en")).toBe(
     "The clock could not be confirmed. Look at the Box status page.",

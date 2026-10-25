@@ -39,7 +39,6 @@ const CONFIRM_REFUSALS = {
   same_machine: "box_status.clock.admin.refused.same_machine",
   contrary_proof: "box_status.clock.stop.contrary",
   differs: "box_status.clock.admin.differ",
-  challenge: "box_status.clock.admin.refused.challenge",
   not_stopped: "box_status.clock.admin.refused.not_stopped",
 } as const satisfies Record<string, StringKey>;
 

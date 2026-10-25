@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { BootReading, ClockWitness, FiscalBackend, TrustedClock } from "@waitron/fiscal";
-// The registry of `clock.confirm_refused`, which this file throws.
+// The registry of `clock.confirm_refused` and `clock.check_expired`, which this file throws.
 import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import {
@@ -44,6 +44,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "clock.confirm_refused": 409,
+  "clock.check_expired": 400,
   "clock.unusable": 409,
   "management.request_invalid": 400,
 };
@@ -176,8 +177,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
         const { instant, offsetMinutes } = clockConfirm.clock.now();
         // Taken at the reading, so the round trip ends there on the steady clock.
         const challenge = challenges.take(sessionId, challengeId);
-        if (challenge === null)
-          throw new AppError("clock.confirm_refused", { reason: "challenge" });
+        if (challenge === null) throw new AppError("clock.check_expired", {});
         const personName = await requiredNameOf(tx, authorizedBy);
         // The device read its clock somewhere in the round trip: the box's time is taken at its
         // midpoint, give or take half of it, counted back from this reading rather than from the

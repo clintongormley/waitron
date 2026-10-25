@@ -397,6 +397,7 @@ function confirmationRow(id: string) {
 }
 
 const refusal = (reason: string) => ({ code: "clock.confirm_refused", params: { reason } });
+const CHECK_EXPIRED = { code: "clock.check_expired", params: {} };
 
 it("lets only an administrator with a management session ask and confirm", async () => {
   const stop = await stoppedBox(10 * MINUTE);
@@ -499,23 +500,23 @@ it("refuses a challenge answered late, answered twice, someone else's or unknown
     challengeId: late.json.challengeId,
     deviceAt: boxTime(stop),
   });
-  expect(lateAnswer.status).toBe(409);
-  expect(lateAnswer.json).toEqual(refusal("challenge"));
+  expect(lateAnswer.status).toBe(400);
+  expect(lateAnswer.json).toEqual(CHECK_EXPIRED);
 
   const unknown = await answerChallenge(stop, mario.cookie, {
     challengeId: randomUUID(),
     deviceAt: boxTime(stop),
   });
-  expect(unknown.status).toBe(409);
-  expect(unknown.json).toEqual(refusal("challenge"));
+  expect(unknown.status).toBe(400);
+  expect(unknown.json).toEqual(CHECK_EXPIRED);
 
   const bertas = await ask(stop, berta.cookie);
   const notMine = await answerChallenge(stop, mario.cookie, {
     challengeId: bertas.json.challengeId,
     deviceAt: boxTime(stop),
   });
-  expect(notMine.status).toBe(409);
-  expect(notMine.json).toEqual(refusal("challenge"));
+  expect(notMine.status).toBe(400);
+  expect(notMine.json).toEqual(CHECK_EXPIRED);
   expect(written()).toEqual(before);
 
   // Control: answered at exactly 5 000 ms.
@@ -532,8 +533,8 @@ it("refuses a challenge answered late, answered twice, someone else's or unknown
     challengeId: inTime.json.challengeId,
     deviceAt: boxTime(stop),
   });
-  expect(twice.status).toBe(409);
-  expect(twice.json).toEqual(refusal("challenge"));
+  expect(twice.status).toBe(400);
+  expect(twice.json).toEqual(CHECK_EXPIRED);
   expect(written()).toMatchObject({ confirmations: before.confirmations + 1 });
 });
 

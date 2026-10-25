@@ -1011,22 +1011,21 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     },
   );
 
-  it.each([["challenge", "box_status.clock.admin.refused.challenge"]] as const)(
-    "words a %s refusal",
-    async (reason, key) => {
-      deviceNow("2026-10-22T18:10:20.000Z");
-      const el = await mountClock(
-        clockApi(
-          { clockStop: STOPPED },
-          { clockConfirm: vi.fn().mockRejectedValue(REFUSED(reason)) },
-        ),
-      );
-      await open(el);
-      await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
-      await flush(el);
-      expect(footerMessage(el)).toBe(t(key));
-    },
-  );
+  it("words a check that is missing or took too long", async () => {
+    deviceNow("2026-10-22T18:10:20.000Z");
+    const el = await mountClock(
+      clockApi(
+        { clockStop: STOPPED },
+        {
+          clockConfirm: vi.fn().mockRejectedValue({ code: "clock.check_expired", params: {} }),
+        },
+      ),
+    );
+    await open(el);
+    await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
+    await flush(el);
+    expect(footerMessage(el)).toBe("The check took too long. Try again.");
+  });
 
   it("words any other refusal by its code", async () => {
     deviceNow("2026-10-22T18:10:20.000Z");

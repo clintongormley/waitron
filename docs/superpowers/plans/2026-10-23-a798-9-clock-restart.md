@@ -343,7 +343,8 @@ R4. **When an administrator may confirm**: `person.admin`; not on the box (refus
     once, kept per management session as `createSetupHourClock` keeps its challenges); the device's
     time agrees (`|deviceAt − boxAtMidpoint| + elapsed/2 ≤ 60 000`), else `differs`. Refusals are
     `clock.confirm_refused { reason }`, HTTP 409, except a missing permission (403
-    `authorization.not_permitted`). The admin's reading goes into `proof.admin` as `{ boxAt,
+    `authorization.not_permitted`) and a challenge that is missing or expired (400
+    `clock.check_expired`, no params; owner, 2026-10-25, replacing the `challenge` reason). The admin's reading goes into `proof.admin` as `{ boxAt,
     witnessAt, uncertaintyMs }`.
 R5. **The confirmation row** (both paths): `seq`, the node, `box_clock_at = confirmed_at =` the one
     reading, `step_ms 0`, the source, `person_id` for `admin` only, `reason` the open check's (always
@@ -889,7 +890,8 @@ reading per device id), its test.
 **Files:** `git mv packages/fiscal-verifactu/src/clock-stop-restart.ts
 packages/fiscal-verifactu/src/clock-confirmation.ts` and its test to `clock-confirmation.test.ts`;
 `packages/fiscal-verifactu/src/errors.ts` (`clock.confirm_refused { reason: "not_stopped" |
-"contrary_proof" | "differs" | "same_machine" | "challenge" }`; `clock.restart_refused` deleted —
+"contrary_proof" | "differs" | "same_machine" }`, its `challenge` reason now its own code,
+`clock.check_expired`, in `packages/fiscal/src/errors.ts` — owner, 2026-10-25; `clock.restart_refused` deleted —
 pre-live, CLAUDE.md §3). Witness fixtures gain `address` (built by Task R6a, which runs before this
 task).
 
@@ -1128,7 +1130,7 @@ with the connection's address from `getConnInfo`), `apps/server/src/device-equip
 
 **Files:** `apps/server/src/box-health-api.ts` (delete the restart route; add `POST
 /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both `person.admin`; `STATUS` gains
-`"clock.confirm_refused": 409`; deps `requestFromBox`, `devMode`, a challenge keeper, the steady
+`"clock.confirm_refused": 409` and `"clock.check_expired": 400` (owner, 2026-10-25); deps `requestFromBox`, `devMode`, a challenge keeper, the steady
 clock, and the boot reader, passed to `confirmClockStop` so the administrator's closing stores
 `proof.closing` too — round 3, I2), create `apps/server/src/clock-challenges.ts` (+ test) and
 **`apps/server/src/boot-reader.ts`** (+ `boot-reader.test.ts`; created here because this task is
@@ -1150,7 +1152,8 @@ the `partial` fallback.
      refused `clock.confirm_refused { reason: "same_machine" }`; a confirm with a challenge obtained
      off the box but sent from the box → refused the same; nothing written. Controls: off the box →
      200 and a row; on the box with `devMode` true → 200;
-  3. a challenge answered after 5 001 ms (injected steady clock), twice, or unknown → `challenge`;
+  3. a challenge answered after 5 001 ms (injected steady clock), twice, or unknown → 400
+     `clock.check_expired` (owner, 2026-10-25; it was 409 `challenge`);
   4. a device 61 s off → `differs`; AEAT disagreeing noted → `contrary_proof`; not stopped →
      `not_stopped`; a body that is not `{ challengeId: string, deviceAt: safe integer }` → 400
      `management.request_invalid`;

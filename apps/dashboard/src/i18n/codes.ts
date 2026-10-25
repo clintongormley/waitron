@@ -1288,6 +1288,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The clock could not be confirmed. Look at the Box status page.",
     es: "No se ha podido confirmar la hora. Mira Estado del equipo.",
   },
+  "clock.check_expired": {
+    en: "The check took too long. Try again.",
+    es: "La comprobación ha tardado demasiado. Vuelve a intentarlo.",
+  },
   "theme.name_taken": {
     en: "A theme with this name already exists.",
     es: "Ya existe un tema con este nombre.",
