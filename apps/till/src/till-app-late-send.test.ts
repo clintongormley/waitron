@@ -794,7 +794,7 @@ describe("an allergy party's send refused for an ended period", () => {
 describe("an allergy party's rerun reads the party again", () => {
   beforeEach(() => resetAllergyFixture());
 
-  it("asks nothing and sends the party's latest revision when the party needs no question", async () => {
+  it("previews the party's allergy question again on Kitchen agreed, and sends without asking when it needs none", async () => {
     const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
     const submitDraft = vi
       .fn<TillApi["submitDraft"]>()
