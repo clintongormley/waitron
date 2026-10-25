@@ -274,6 +274,45 @@ describe("staff-screen: download their data", () => {
     expect(api.listStaff).toHaveBeenCalledTimes(2);
   });
 
+  it("does not say the list was reloaded when the reload failed", async () => {
+    const api = stubApi(() => Promise.reject({ code: "person.not_found" }));
+    const { el } = await mount(api);
+    vi.mocked(api.listStaff).mockRejectedValueOnce({ code: "connection.failed" });
+    await press(el, "p2");
+
+    expect(api.listStaff).toHaveBeenCalledTimes(2);
+    expect(alertText(el)).toBe(
+      "Mar$&ta is on this list, but the box has no record of them. That is a fault in Waitron.",
+    );
+    const readFailure = [...el.shadowRoot!.querySelectorAll<HTMLElement>("p.error[role=alert]")];
+    expect(readFailure.map((line) => line.textContent!.trim())).toEqual([
+      codeMessage("connection.failed"),
+    ]);
+  });
+
+  it("does not say the list was reloaded when the reload failed, in Spanish", async () => {
+    const english = t("staff.data_copy_not_found_unreloaded");
+    await inLocale("es-ES", async () => {
+      const api = stubApi(() => Promise.reject({ code: "person.not_found" }));
+      const { el } = await mount(api);
+      vi.mocked(api.listStaff).mockRejectedValueOnce({ code: "connection.failed" });
+      await press(el, "p2");
+      expect(alertText(el)).toBe(named("staff.data_copy_not_found_unreloaded", "Mar$&ta"));
+      expect(t("staff.data_copy_not_found_unreloaded")).not.toBe(english);
+    });
+  });
+
+  it("keeps the list's download event from reaching anything above the screen", async () => {
+    const api = stubApi();
+    const { el, host } = await mount(api);
+    spyOnSaving();
+    const reached: Event[] = [];
+    host.addEventListener("download-person-data", (event) => reached.push(event));
+    await press(el, "p1");
+    expect(api.downloadPersonalData).toHaveBeenCalledTimes(1);
+    expect(reached).toEqual([]);
+  });
+
   it("shows any other refusal in its shared words, and the next press clears it", async () => {
     const api = stubApi(() => Promise.reject({ code: "connection.failed" }));
     const { el } = await mount(api);

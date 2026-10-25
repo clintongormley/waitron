@@ -1180,6 +1180,8 @@ export const en = {
     "Only an administrator can download another person's data, and this account can no longer do it. Sign in as an administrator to download {name}'s data: this signs you out here first.",
   "staff.data_copy_not_found":
     "{name} is on this list, but the box has no record of them. That is a fault in Waitron. The list has been reloaded.",
+  "staff.data_copy_not_found_unreloaded":
+    "{name} is on this list, but the box has no record of them. That is a fault in Waitron.",
   "staff.sign_in_as_admin": "Sign in as an administrator",
   "catalogue.title": "Products",
   "units.title": "Units",
@@ -4560,6 +4562,8 @@ export const es: Record<StringKey, string> = {
     "Solo un administrador puede descargar los datos de otra persona, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para descargar los datos de {name}: antes se cierra tu sesión aquí.",
   "staff.data_copy_not_found":
     "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.",
+  "staff.data_copy_not_found_unreloaded":
+    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron.",
   "staff.sign_in_as_admin": "Iniciar sesión como administrador",
   "catalogue.title": "Productos",
   "units.title": "Unidades",

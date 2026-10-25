@@ -112,7 +112,7 @@ export class StaffScreen extends LitElement {
 
   @state() private downloadingPerson: PersonSummary | null = null;
   /** Kept apart from `errorKey`, which the edit and create dialogs' feet read. */
-  @state() private downloadFailure: { code: string; name: string } | null = null;
+  @state() private downloadFailure: { code: string; name: string; reloaded: boolean } | null = null;
   #download = 0;
 
   async #onDownloadPersonData(event: CustomEvent<{ personId: string }>): Promise<void> {
@@ -135,8 +135,9 @@ export class StaffScreen extends LitElement {
     } catch (error) {
       if (this.#download !== download) return;
       const code = codeOf(error);
-      this.downloadFailure = { code, name: person.displayName };
-      if (code === "person.not_found") await this.#load();
+      this.downloadFailure = { code, name: person.displayName, reloaded: false };
+      if (code === "person.not_found" && (await this.#load()) && this.#download === download)
+        this.downloadFailure = { ...this.downloadFailure, reloaded: true };
     } finally {
       if (this.#download === download) this.downloadingPerson = null;
     }
@@ -153,7 +154,12 @@ export class StaffScreen extends LitElement {
       failure.code === "authorization.not_permitted"
         ? fill("staff.data_copy_not_permitted", { name: failure.name })
         : failure.code === "person.not_found"
-          ? fill("staff.data_copy_not_found", { name: failure.name })
+          ? fill(
+              failure.reloaded
+                ? "staff.data_copy_not_found"
+                : "staff.data_copy_not_found_unreloaded",
+              { name: failure.name },
+            )
           : codeMessage(failure.code);
     return html`<div class="error download-error" role="alert" data-test="download-data-error">
       <p data-test="download-data-error-text">${text}</p>
@@ -255,14 +261,17 @@ export class StaffScreen extends LitElement {
     super.disconnectedCallback();
   }
 
-  async #load(): Promise<void> {
+  /** Resolves whether the list was read. */
+  async #load(): Promise<boolean> {
     if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStaff", [], (value) => {
         this.people = value;
       });
+      return true;
     } catch (error) {
       this.#showReadError(error);
+      return false;
     }
   }
 
