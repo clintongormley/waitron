@@ -1118,30 +1118,34 @@ describe("POST /api/parties/:id/drafts/:did/submit uses its saved bill", () => {
 
 describe("a draft named on another party", () => {
   it("is refused 404 draft.not_found by the save, the take-over and the submit, as is an id that is not one", async () => {
-    const mesa4 = await seated();
-    const mesa5 = await seated();
-    const anas = await newDraft(ana, mesa4.partyId, [dish("Caña")]);
+    const firstParty = await seated();
+    const secondParty = await seated();
+    const anas = await newDraft(ana, firstParty.partyId, [dish("Caña")]);
     const before = await snapshot();
 
     const answers = [
-      await ana("PUT", `/api/parties/${mesa5.partyId}/drafts`, {
-        billId: await mainBillOf(mesa5.partyId),
+      await ana("PUT", `/api/parties/${secondParty.partyId}/drafts`, {
+        billId: await mainBillOf(secondParty.partyId),
         draftId: anas.id,
         revision: anas.revision,
         lines: [],
       }),
-      await admin("POST", `/api/parties/${mesa5.partyId}/drafts/${anas.id}/take-over`, {
+      await admin("POST", `/api/parties/${secondParty.partyId}/drafts/${anas.id}/take-over`, {
         revision: anas.revision,
       }),
       await ana(
         "POST",
-        `/api/parties/${mesa5.partyId}/drafts/${anas.id}/submit`,
-        await submitBody(mesa5.partyId, anas),
+        `/api/parties/${secondParty.partyId}/drafts/${anas.id}/submit`,
+        await submitBody(secondParty.partyId, anas),
       ),
     ];
-    const notAnId = await admin("POST", `/api/parties/${mesa4.partyId}/drafts/draft-1/take-over`, {
-      revision: 0,
-    });
+    const notAnId = await admin(
+      "POST",
+      `/api/parties/${firstParty.partyId}/drafts/draft-1/take-over`,
+      {
+        revision: 0,
+      },
+    );
 
     for (const answer of answers) {
       expect(answer.status).toBe(404);

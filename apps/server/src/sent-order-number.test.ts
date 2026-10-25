@@ -41,19 +41,19 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    const [cana] = await db
+    const [drinkProduct] = await db
       .select({ catalogueId: products.catalogueId })
       .from(products)
       .where(eq(products.id, v.productId("Caña")));
     const { listId, productIds } = await inTx(v, (tx) =>
-      addExtras(tx, v.cfg, cana!.catalogueId, v.productId("Caña"), [
+      addExtras(tx, v.cfg, drinkProduct!.catalogueId, v.productId("Caña"), [
         { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO", maxQuantity: 2 },
       ]),
     );
     cheese = { listId, productId: productIds[0]! };
     // At a station of its own, the Cheese has a kitchen item of its own rather than riding on the
     // Caña's.
-    const quesos = await inTx(v, async (tx) => {
+    const cheeseStation = await inTx(v, async (tx) => {
       const { id: stationId } = await createStation(tx, v.cfg, { name: "Quesos" });
       await setRoutingCell(
         tx,
@@ -64,14 +64,14 @@ useVenueDb({
       return stationId;
     });
     await inTx(v, async (tx) => {
-      const { id: barra } = await createStation(tx, v.cfg, { name: "Barra" });
+      const { id: barStation } = await createStation(tx, v.cfg, { name: "Barra" });
       await setRoutingCell(
         tx,
         v.cfg,
         { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
-        { kind: "station", stationId: barra },
+        { kind: "station", stationId: barStation },
       );
-      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [barra, quesos]);
+      await setMadeHereStations(tx, v.cfg, v.cfg.origin.deviceId, [barStation, cheeseStation]);
     });
     madeHereCfg = { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId };
     offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));
@@ -369,8 +369,8 @@ describe("the order number a moved dish was sent under", () => {
   });
 
   it("is recorded as the counter order's number when a sent counter order merges into a table's bill", async () => {
-    const mesa = await v.table("Mesa sent 9");
-    const { partyId, tabId } = await seat(v, mesa);
+    const movedTable = await v.table("Mesa sent 9");
+    const { partyId, tabId } = await seat(v, movedTable);
     await send(partyId, tabId, [{ name: "Paella" }], "fire");
     const counter = await counterOrder(v, "Burger");
     await inTx(v, async (tx) =>
@@ -399,7 +399,7 @@ describe("the order number a moved dish was sent under", () => {
         tx,
         v.cfg,
         counter,
-        { tableId: mesa },
+        { tableId: movedTable },
         {
           bills: "merge",
           operatorId: OPERATOR,
