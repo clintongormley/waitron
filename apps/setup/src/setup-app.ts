@@ -2,8 +2,10 @@ import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { draftScopeFor } from "@waitron/ui";
 import { FirstSetupSession } from "./first-setup-session.js";
 import type {
+  BackupRepairStatus,
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
+  StartAgainSummary,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
 import "./screens/first-setup-backup-screen.js";
@@ -492,6 +494,12 @@ export class SetupApp extends LitElement {
         }
       }
 
+      .missing-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
       .logo svg {
         display: block;
         width: calc(var(--wt-space-6) * 5);
@@ -586,6 +594,8 @@ export class SetupApp extends LitElement {
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
     this.firstRestarting = false;
+    this.firstMissingSummary = undefined;
+    this.firstBackupPhase = undefined;
     this.#firstPasswordScope?.dispose();
     this.#firstPasswordScope = undefined;
     ++this.#cloudRecoveryAttempt;
@@ -1020,6 +1030,9 @@ export class SetupApp extends LitElement {
   @state() private firstRestartConfirm = false;
   @state() private firstRetireConfirmed = false;
   @state() private firstRestarting = false;
+  /** What the missing-database ask displayed; Start again sends exactly this back. */
+  @state() private firstMissingSummary?: StartAgainSummary;
+  @state() private firstBackupPhase?: BackupRepairStatus["phase"];
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
   #firstReplacing = false;
@@ -1136,6 +1149,8 @@ export class SetupApp extends LitElement {
     this.#firstPasswordScope?.commit("");
     this.firstOwnerBusy = true;
     this.firstOwnerError = undefined;
+    this.firstMissingSummary = undefined;
+    this.firstBackupPhase = undefined;
     const generation = ++this.#firstGeneration;
     const current = () => this.isConnected && generation === this.#firstGeneration;
     try {
@@ -1155,6 +1170,28 @@ export class SetupApp extends LitElement {
       } else await session.resume(password);
       if (!current()) return;
       this.#acceptFirstIdentity();
+      if (this.firstInspection?.database === "missing" && session.state!.status !== "complete") {
+        this.screen = "first-owner";
+        const summary = await session.missingDatabaseSummary();
+        if (!current()) return;
+        const backup = await this.api.firstSetupBackupStatus();
+        if (!current()) return;
+        if (
+          backup?.proofRequired !== true ||
+          ![
+            "unstarted",
+            "prepared",
+            "placement-started",
+            "restored",
+            "selected",
+            "uncertain",
+          ].includes(backup.phase)
+        )
+          throw { code: "setup.attempt_invalid" };
+        this.firstMissingSummary = summary;
+        this.firstBackupPhase = backup.phase;
+        return;
+      }
       if (
         this.firstInspection?.database === "missing" ||
         !["claimed", "consumption-intent"].includes(session.state!.status)
@@ -1190,9 +1227,11 @@ export class SetupApp extends LitElement {
   }
   async #startAgainFirstSetup(): Promise<void> {
     const missing = this.firstInspection?.database === "missing";
+    const shown = this.firstMissingSummary;
     if (
       this.firstOwnerBusy ||
       !this.firstRetireConfirmed ||
+      (missing && shown === undefined) ||
       (!missing && !this.firstInspection?.emptyDatabase)
     )
       return;
@@ -1201,7 +1240,7 @@ export class SetupApp extends LitElement {
     this.firstOwnerBusy = true;
     this.firstOwnerError = undefined;
     try {
-      if (missing) await this.#firstSession!.retireMissingDatabase();
+      if (missing) await this.#firstSession!.retireMissingDatabase(shown!);
       else await this.api.startAgainFirstSetup(this.#firstResolutionSnapshot());
       if (!current()) return;
       this.firstRestarting = true;
@@ -1214,6 +1253,8 @@ export class SetupApp extends LitElement {
         if (missing) {
           this.firstRestartConfirm = false;
           this.firstRetireConfirmed = false;
+          this.firstMissingSummary = undefined;
+          this.firstBackupPhase = undefined;
         }
         this.firstOwnerError = this.#describeFirstError(error);
       }
@@ -1233,6 +1274,8 @@ export class SetupApp extends LitElement {
       this.firstRestartConfirm = false;
       this.firstRetireConfirmed = false;
       this.firstRestarting = false;
+      this.firstMissingSummary = undefined;
+      this.firstBackupPhase = undefined;
       await this.#openFirstSession();
       const session = this.#firstSession!;
       let inspect = false;
@@ -2052,9 +2095,12 @@ export class SetupApp extends LitElement {
       missing &&
       state !== undefined &&
       !this.#firstSession?.recoveryRequired &&
-      ["claimed", "consumption-intent", "abandoned"].includes(state.status);
+      state.status !== "complete";
+    const ask = authenticatedMissing ? this.firstMissingSummary : undefined;
+    // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
+    const recoveryStarted = this.firstBackupPhase !== "unstarted";
     const canRestart =
-      authenticatedMissing ||
+      (ask !== undefined && !recoveryStarted) ||
       (inspection?.emptyDatabase === true &&
         state === undefined &&
         inspection.password === "checkable" &&
@@ -2079,6 +2125,58 @@ export class SetupApp extends LitElement {
       state?.status === "activation-started" ||
       state?.status === "committed" ||
       state?.status === "publication";
+    const startAgain = html`<wt-button
+      data-test="start-again"
+      variant="secondary"
+      ?disabled=${this.firstOwnerBusy || !canRestart}
+      @click=${() => {
+        this.firstRestartConfirm = true;
+      }}
+      >${t.startAgain}</wt-button
+    >`;
+    const recoverBackup = html`<wt-button
+      data-test="recover-backup"
+      variant="secondary"
+      ?disabled=${this.firstOwnerBusy}
+      @click=${(event: Event) =>
+        dispatchSetupGoto(event.currentTarget as HTMLElement, "first-backup")}
+      >${t.recoverBackup}</wt-button
+    >`;
+    const startAgainConfirm = this.firstRestartConfirm
+      ? html` <p>${t.startAgainHelp}</p>
+          <label
+            ><input
+              data-test="retire-confirmed"
+              name=${missing ? "missing-database-confirmed" : "retire-empty-setup"}
+              type="checkbox"
+              .checked=${this.firstRetireConfirmed}
+              ?disabled=${this.firstOwnerBusy}
+              @change=${(event: Event) => {
+                this.firstRetireConfirmed = (event.currentTarget as HTMLInputElement).checked;
+              }}
+            />${missing ? t.missingConfirm : t.retireConfirmed}</label
+          >
+          <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}>
+            <wt-button
+              slot="cancel"
+              data-test="cancel-start-again"
+              variant="secondary"
+              ?disabled=${this.firstOwnerBusy}
+              @click=${() => {
+                this.firstRestartConfirm = false;
+                this.firstRetireConfirmed = false;
+              }}
+              >${t.cancel}</wt-button
+            >
+            <wt-button
+              data-test="confirm-start-again"
+              variant=${this.firstRetireConfirmed || this.firstOwnerBusy ? "danger" : "secondary"}
+              ?disabled=${!this.firstRetireConfirmed || this.firstOwnerBusy}
+              @click=${() => void this.#startAgainFirstSetup()}
+              >${t.startAgain}</wt-button
+            >
+          </wt-form-actions>`
+      : nothing;
     return html`<section data-test="screen-first-owner">
       <h1>${inspection ? t.interrupted : t.heading}</h1>
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
@@ -2121,60 +2219,43 @@ export class SetupApp extends LitElement {
       }
       ${
         inspection && !this.firstRestarting
-          ? html`
-              <wt-button
-                data-test="start-again"
-                variant="secondary"
-                ?disabled=${this.firstOwnerBusy || !canRestart}
-                @click=${() => {
-                  this.firstRestartConfirm = true;
-                }}
-                >${t.startAgain}</wt-button
-              >
-              ${!canRestart ? html`<p>${t.startUnavailable}</p>` : nothing}
+          ? ask
+            ? html`<p>${t.missingAsk}</p>
+                <ul data-test="missing-reached">
+                  <li>
+                    ${
+                      ask.lastName === null
+                        ? t.reachedNoName
+                        : t.reachedName.replace("{name}", ask.lastName)
+                    }
+                  </li>
+                  ${
+                    ask.reached === "fiscal-started"
+                      ? html`<li>${t.reachedFiscalStarted}</li>`
+                      : ask.reached === "fiscal-finished"
+                        ? html`<li>${t.reachedFiscalFinished}</li>`
+                        : nothing
+                  }
+                </ul>
+                <p>${t.missingBackup}</p>
+                <div class="missing-actions" data-test="missing-actions">
+                  ${recoverBackup}${recoveryStarted ? nothing : startAgain}
+                </div>
+                ${
+                  recoveryStarted
+                    ? nothing
+                    : html`<p data-test="recover-backup-note">${t.recoverBackupNote}</p>
+                        ${startAgainConfirm}`
+                }`
+            : html`${startAgain} ${!canRestart ? html`<p>${t.startUnavailable}</p>` : nothing}
+              ${startAgainConfirm} ${recoverBackup}
               ${
-                this.firstRestartConfirm
-                  ? html` <p>${t.startAgainHelp}</p>
-                      <label
-                        ><input
-                          data-test="retire-confirmed"
-                          name="retire-empty-setup"
-                          type="checkbox"
-                          .checked=${this.firstRetireConfirmed}
-                          ?disabled=${this.firstOwnerBusy}
-                          @change=${(event: Event) => {
-                            this.firstRetireConfirmed = (
-                              event.currentTarget as HTMLInputElement
-                            ).checked;
-                          }}
-                        />${t.retireConfirmed}</label
-                      >
-                      <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}>
-                        <wt-button
-                          slot="cancel"
-                          data-test="cancel-start-again"
-                          variant="secondary"
-                          ?disabled=${this.firstOwnerBusy}
-                          @click=${() => {
-                            this.firstRestartConfirm = false;
-                            this.firstRetireConfirmed = false;
-                          }}
-                          >${t.cancel}</wt-button
-                        >
-                        <wt-button
-                          data-test="confirm-start-again"
-                          variant=${this.firstRetireConfirmed || this.firstOwnerBusy ? "danger" : "secondary"}
-                          ?disabled=${!this.firstRetireConfirmed || this.firstOwnerBusy}
-                          @click=${() => void this.#startAgainFirstSetup()}
-                          >${t.startAgain}</wt-button
-                        >
-                      </wt-form-actions>`
+                authenticatedMissing && !this.firstOwnerBusy && this.firstOwnerError
+                  ? html`<wt-form-actions .error=${this.firstOwnerError()}></wt-form-actions>`
                   : nothing
-              }
-            `
+              }`
           : nothing
       }
-      ${inspection && !this.firstRestarting ? html`<wt-button data-test="recover-backup" variant="secondary" ?disabled=${this.firstOwnerBusy} @click=${(event: Event) => dispatchSetupGoto(event.currentTarget as HTMLElement, "first-backup")}>${t.recoverBackup}</wt-button>` : nothing}
       ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
       ${!missing && state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
       ${!missing && state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}

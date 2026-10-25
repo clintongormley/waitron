@@ -8,8 +8,16 @@ export const initialOwnerStrings = {
     required: "Enter your password.",
     resumeHelp: "Enter the administrator password you chose during setup.",
     interrupted: "First setup was interrupted",
-    missingDatabase:
-      "The setup database is missing. Check your backups before starting again. Missing data cannot be recovered by starting again.",
+    missingDatabase: "The setup database is missing.",
+    missingAsk:
+      "This box cannot check whether this setup filed anything to AEAT or made a sale. Its record says it:",
+    reachedName: "chose the invoice series name {name}",
+    reachedNoName: "chose no invoice series name",
+    reachedFiscalStarted: "started activation, with no record that it finished",
+    reachedFiscalFinished: "finished activation",
+    missingBackup: "If you have a backup, recover from it.",
+    recoverBackupNote: "After you start a recovery, Start again is no longer offered.",
+    missingConfirm: "Nothing was filed to AEAT and nothing was sold.",
     uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
     finish: "Finish setup",
     finishReview: "Check the saved details.",
@@ -43,8 +51,16 @@ export const initialOwnerStrings = {
     required: "Introduce tu contraseña.",
     resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
     interrupted: "La configuración inicial se interrumpió",
-    missingDatabase:
-      "Falta la base de datos de configuración. Revisa tus copias antes de empezar de nuevo. Empezar de nuevo no recupera los datos perdidos.",
+    missingDatabase: "Falta la base de datos de configuración.",
+    missingAsk:
+      "Este equipo no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que:",
+    reachedName: "eligió el nombre de serie de facturas {name}",
+    reachedNoName: "no eligió ningún nombre de serie de facturas",
+    reachedFiscalStarted: "empezó la activación, sin constancia de que terminara",
+    reachedFiscalFinished: "terminó la activación",
+    missingBackup: "Si tienes una copia, recupera desde ella.",
+    recoverBackupNote: "Si empiezas una recuperación, ya no podrás empezar de nuevo.",
+    missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
     uncheckable:
       "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",
     finish: "Finalizar configuración",

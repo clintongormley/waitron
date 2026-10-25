@@ -122,6 +122,11 @@ export interface BackupRepairSession {
   binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
   input?: unknown;
 }
+export interface StartAgainSummary {
+  reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
+  lastName: string | null;
+  recoveryRecordDamaged?: true;
+}
 export interface BackupRepairStatus {
   phase: "unstarted" | "prepared" | "placement-started" | "restored" | "selected" | "uncertain";
   recoveryId?: string;

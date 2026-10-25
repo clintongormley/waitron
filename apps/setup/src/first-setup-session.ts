@@ -5,6 +5,7 @@ import type {
   FirstSetupProvisionBody,
   FirstSetupState,
   FirstSetupResolutionSnapshot,
+  StartAgainSummary,
 } from "./api/first-setup-types.js";
 
 export const FIRST_SETUP_SESSION_KEY = "waitron:first-setup:v1";
@@ -59,6 +60,26 @@ function publicState(value: unknown): value is FirstSetupState {
       value.modules.length
   );
 }
+const SUMMARY_REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"];
+function summaryOf(value: unknown): StartAgainSummary {
+  const summary = value as Partial<Record<keyof StartAgainSummary, unknown>> | null;
+  if (
+    summary === null ||
+    typeof summary !== "object" ||
+    Object.keys(summary).some(
+      (key) => !["reached", "lastName", "recoveryRecordDamaged"].includes(key),
+    ) ||
+    !SUMMARY_REACHED.includes(summary.reached as string) ||
+    !(summary.lastName === null || (typeof summary.lastName === "string" && summary.lastName)) ||
+    !(summary.recoveryRecordDamaged === undefined || summary.recoveryRecordDamaged === true)
+  )
+    failure("setup.attempt_invalid");
+  return summary as StartAgainSummary;
+}
+const sameSummary = (a: StartAgainSummary, b: StartAgainSummary) =>
+  a.reached === b.reached &&
+  a.lastName === b.lastName &&
+  a.recoveryRecordDamaged === b.recoveryRecordDamaged;
 function failure(
   code:
     | "setup.owner_required"
@@ -534,35 +555,55 @@ export class FirstSetupSession {
       return result;
     });
   }
-  retireMissingDatabase() {
+  #missingDatabaseOwner(): FirstSetupOwner {
+    if (this.recoveryRequired) failure("setup.owner_required");
+    const owner = this.#owner(false);
+    // D3a: with the database missing, every status but complete may be asked about.
+    if (!this.#state || this.#state.status === "complete") failure("setup.attempt_conflict");
+    return owner;
+  }
+  async #missingDatabaseSnapshot(
+    owner: FirstSetupOwner,
+    current: () => void,
+  ): Promise<FirstSetupResolutionSnapshot> {
+    const inspection = await this.#api.inspectFirstSetupResolution();
+    current();
+    if (
+      inspection.pair !== "valid" ||
+      inspection.database !== "missing" ||
+      inspection.password !== "checkable" ||
+      !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
+      inspection.revision !== owner.revision ||
+      inspection.ownerGeneration !== owner.ownerGeneration
+    )
+      failure("setup.attempt_conflict");
+    return {
+      inspectionId: inspection.inspectionId,
+      revision: owner.revision,
+      ownerGeneration: owner.ownerGeneration,
+    };
+  }
+  missingDatabaseSummary(): Promise<StartAgainSummary> {
     return this.#run(async (current) => {
-      if (this.recoveryRequired) failure("setup.owner_required");
-      const owner = this.#owner(false);
-      if (
-        !this.#state ||
-        !["claimed", "consumption-intent", "abandoned"].includes(this.#state.status)
-      )
-        failure("setup.attempt_conflict");
+      const owner = this.#missingDatabaseOwner();
+      const snapshot = await this.#missingDatabaseSnapshot(owner, current);
+      const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
+      current();
+      return summary;
+    });
+  }
+  retireMissingDatabase(shown: StartAgainSummary) {
+    return this.#run(async (current) => {
+      const owner = this.#missingDatabaseOwner();
       try {
-        const inspection = await this.#api.inspectFirstSetupResolution();
+        const snapshot = await this.#missingDatabaseSnapshot(owner, current);
+        const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
         current();
-        if (
-          inspection.pair !== "valid" ||
-          inspection.database !== "missing" ||
-          inspection.password !== "checkable" ||
-          !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
-          inspection.revision !== owner.revision ||
-          inspection.ownerGeneration !== owner.ownerGeneration
-        )
-          failure("setup.attempt_conflict");
-        const result = await this.#api.startAgainFirstSetup(
-          {
-            inspectionId: inspection.inspectionId,
-            revision: owner.revision,
-            ownerGeneration: owner.ownerGeneration,
-          },
-          owner,
-        );
+        if (!sameSummary(summary, shown)) failure("setup.attempt_conflict");
+        const result = await this.#api.startAgainFirstSetup(snapshot, owner, {
+          nothingFiledOrSold: true,
+          shown,
+        });
         current();
         if (result.restarting !== true) failure("setup.attempt_conflict");
         return result;

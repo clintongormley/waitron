@@ -4,7 +4,13 @@ import type { WtButton, WtInput } from "@waitron/ui";
 import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "../src/first-setup-session.js";
-import type { FirstSetupInspection, FirstSetupState } from "../src/api/first-setup-types.js";
+import type {
+  BackupRepairStatus,
+  FirstSetupInspection,
+  FirstSetupState,
+  StartAgainSummary,
+} from "../src/api/first-setup-types.js";
+import { initialOwnerStrings } from "../src/screens/initial-owner-strings.js";
 import { initial, venue, wizardApi } from "./first-setup-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 
@@ -13,10 +19,13 @@ export const q = <T extends Element>(app: SetupApp, name: string) =>
 export async function click(app: SetupApp, name: string) {
   await userEvent.click(q<WtButton>(app, name)!.shadowRoot!.querySelector("button")!);
 }
+export const namedSummary: StartAgainSummary = { reached: "named", lastName: "0CNQT" };
 export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
     recoveredStatus?: FirstSetupState["status"];
+    summary?: StartAgainSummary;
+    backupPhase?: BackupRepairStatus["phase"];
     sameTab?: boolean;
     theme?: "light" | "dark";
     locale?: "en-GB" | "es-ES";
@@ -57,6 +66,13 @@ export async function missingDatabaseFixture(
           ownerGeneration: 2,
         });
       }
+      if (path.endsWith("/start-again/summary"))
+        return Response.json(options.summary ?? namedSummary);
+      if (path.endsWith("/backup/status"))
+        return Response.json({
+          phase: options.backupPhase ?? "unstarted",
+          proofRequired: true,
+        } satisfies BackupRepairStatus);
       if (path.endsWith("/start-again")) return Response.json({ restarting: true });
     },
   });
@@ -95,5 +111,12 @@ export async function recoverMissing(app: SetupApp) {
   await expect
     .poll(() => JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner?.ownerGeneration)
     .toBe(2);
+  await expect
+    .poll(() =>
+      [initialOwnerStrings.en.waiting, initialOwnerStrings.es.waiting].some((text) =>
+        app.shadowRoot!.textContent!.includes(text),
+      ),
+    )
+    .toBe(false);
   await app.updateComplete;
 }

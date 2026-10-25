@@ -13,6 +13,7 @@ import type {
   FirstSetupProvisionBody,
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
+  StartAgainSummary,
 } from "./first-setup-types.js";
 
 // Local copies of the server's JSON shapes: a runtime import of `@waitron/provisioning` would pull
@@ -603,14 +604,27 @@ export class SetupApi {
     });
   }
 
+  startAgainSummary(
+    snapshot: FirstSetupResolutionSnapshot,
+    owner: FirstSetupOwner,
+  ): Promise<StartAgainSummary> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/start-again/summary",
+      "POST",
+      snapshot,
+      firstSetupHeaders(owner),
+    );
+  }
+
   startAgainFirstSetup(
     snapshot: FirstSetupResolutionSnapshot,
     owner?: FirstSetupOwner,
+    confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary },
   ): Promise<{ restarting: true }> {
     return this.#request(
       "/setup-api/first-setup/resolution/start-again",
       "POST",
-      snapshot,
+      confirmMissingDatabase === undefined ? snapshot : { ...snapshot, confirmMissingDatabase },
       owner === undefined ? undefined : firstSetupHeaders(owner),
     );
   }

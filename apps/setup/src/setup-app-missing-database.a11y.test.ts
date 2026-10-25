@@ -21,7 +21,7 @@ afterEach(async () => {
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      for (const state of ["password", "recovered", "confirmation", "refusal"] as const)
+      for (const state of ["password", "recovered", "finished", "confirmation", "refusal"] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible missing-database repair`, async () => {
           const previous = [innerWidth, innerHeight];
           try {
@@ -29,6 +29,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
             const { app, host, requests } = await missingDatabaseFixture({
               locale,
               theme,
+              ...(state === "finished"
+                ? {
+                    recoveredStatus: "committed",
+                    summary: { reached: "fiscal-finished", lastName: "0CNQT" },
+                  }
+                : {}),
               intercept(path) {
                 if (state === "refusal" && path.endsWith("/start-again"))
                   return Response.json(
@@ -56,7 +62,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               app,
               state === "confirmation"
                 ? "confirm-start-again"
-                : state === "recovered"
+                : state === "recovered" || state === "finished"
                   ? "start-again"
                   : "resume",
             )!;
