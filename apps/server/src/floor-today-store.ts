@@ -690,6 +690,27 @@ async function catchUpPass(
     ]),
   );
   for (const [tableId, label] of spare) await setLabel(tx, tableId, label);
+  // Short names step aside as null, which the unique (location, short name key) index never
+  // matches, so a swap never meets it halfway.
+  const shortKeyOf = new Map(
+    inZone.map((table) => [
+      table.id,
+      table.shortName === null ? null : shortNameKey(table.shortName),
+    ]),
+  );
+  const shortRenamed = plan.apply.flatMap(({ target, label }) =>
+    label !== null &&
+    (target.shortName === null ? null : shortNameKey(target.shortName)) !==
+      shortKeyOf.get(target.tableId!)
+      ? [target.tableId!]
+      : [],
+  );
+  if (shortRenamed.length > 0) {
+    await tx
+      .update(diningTables)
+      .set(shortNameColumns(null))
+      .where(inArray(diningTables.id, shortRenamed));
+  }
   const createdIds = new Map<Target, string>();
   for (const target of plan.create) {
     const [created] = await tx
