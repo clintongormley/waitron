@@ -47,6 +47,7 @@ export function firstSetupBackupRecoveryFor(
       read: async () => (await workspace()).read(),
       append: async (record) => (await workspace()).append(record),
       select: async (record) => (await workspace()).select(record),
+      abandon: async (id) => (await workspace()).abandon(id),
     },
     sources: {
       stateDir: roots.stateDir,

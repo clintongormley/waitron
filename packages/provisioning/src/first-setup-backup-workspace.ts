@@ -24,7 +24,8 @@ export interface BackupRepairObservation {
   ownerGeneration: number | null;
   originalsDigest: string;
 }
-export type BackupRepairPhase = "prepared" | "placement-started" | "restored" | "selected";
+export type BackupRepairPhase =
+  "prepared" | "placement-started" | "restored" | "selected" | "abandoned";
 export interface BackupRepairRecord {
   version: 2;
   sequence: number;
@@ -58,7 +59,14 @@ interface Original {
 const NAMESPACE = join("first-setup-resolutions", "backup-recovery");
 const LIMIT = 131072;
 const HASH = /^[a-f0-9]{64}$/;
-const PHASES: BackupRepairPhase[] = ["prepared", "placement-started", "restored", "selected"];
+const PHASES: BackupRepairPhase[] = [
+  "prepared",
+  "placement-started",
+  "restored",
+  "selected",
+  "abandoned",
+];
+const ABANDONABLE: BackupRepairPhase[] = ["prepared", "placement-started", "restored"];
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const missing = (error: unknown) =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
@@ -181,7 +189,7 @@ function inputValid(value: unknown): asserts value is RecordInput {
     invalid();
   publicJson(value.input);
   if (Buffer.byteLength(JSON.stringify(value)) > LIMIT) invalid();
-  if (value.phase !== "prepared" && value.input === null) invalid();
+  if (!["prepared", "abandoned"].includes(value.phase as string) && value.input === null) invalid();
 }
 function recordInput(record: BackupRepairRecord): RecordInput {
   return Object.fromEntries(
@@ -210,6 +218,12 @@ function transition(previous: BackupRepairRecord | undefined, next: RecordInput)
   }
   const old = recordInput(previous);
   if (!isDeepStrictEqual({ ...old, phase: next.phase, input: next.input }, next)) conflict();
+  if (next.phase === "abandoned") {
+    if (!ABANDONABLE.includes(previous.phase) || !isDeepStrictEqual(previous.input, next.input))
+      conflict();
+    return;
+  }
+  if (previous.phase === "abandoned") conflict();
   const before = PHASES.indexOf(previous.phase),
     after = PHASES.indexOf(next.phase);
   if (after !== before + 1 && !(before === 0 && after === 0)) conflict();
@@ -472,6 +486,8 @@ async function checkedRecords(
     records.push(record);
   }
   if (digest(records[0]) !== selection.initialRecordDigest) uncertain();
+  // An abandoned recovery is a tombstone; the attempt it was taken against may be deleted.
+  if (records.at(-1)!.phase === "abandoned") return records;
   const manifest = await read(join(path, "originals.json"));
   if (
     !exact(manifest, ["version", "entries"]) ||
@@ -627,6 +643,16 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
           return structuredClone(restored.target);
         })
         .catch(writeFailure),
+    abandon: (id: string) =>
+      turn
+        .run(async () => {
+          const records = await readRecords(),
+            last = records.at(-1);
+          if (last === undefined || last.target.recoveryId !== id) conflict();
+          if (last.phase === "abandoned") return last;
+          return append({ ...recordInput(last), phase: "abandoned" });
+        })
+        .catch(writeFailure),
   };
 }
 export function insideBackupRepairTarget(dir: string): boolean {
@@ -663,6 +689,7 @@ export async function resolveFirstSetupBackupWorkspace(
     if (selected === null) return { kind: "absent" };
     const records = await checkedRecords(anchor, selected),
       last = records.at(-1)!;
+    if (last.phase === "abandoned") return { kind: "absent" };
     let paired = true;
     for (const path of [...currentPaths(anchor), ...backlinkPaths(selected.target)])
       paired &&= isDeepStrictEqual(await read(path), selected);

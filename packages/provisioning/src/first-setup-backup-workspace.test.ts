@@ -602,3 +602,107 @@ it("refuses orphan state roots paired with an ordinary venue", async () => {
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
 });
+
+const placementInput = { checked: true };
+async function journalAt(phase: "prepared" | "placement-started" | "restored") {
+  const f = await fixture(),
+    input = await f.input();
+  await f.store.append(input);
+  for (const next of ["placement-started", "restored"] as const) {
+    if (phase === "prepared") break;
+    await f.store.append({ ...input, input: placementInput, phase: next });
+    if (next === phase) break;
+  }
+  return { f, input };
+}
+it.each(["prepared", "placement-started", "restored"] as const)(
+  "abandons a %s recovery, which then reads as no recovery",
+  async (phase) => {
+    const { f } = await journalAt(phase);
+    const last = (await f.store.read()).at(-1)!;
+    const abandoned = await f.store.abandon(recoveryId);
+    expect(abandoned).toMatchObject({
+      phase: "abandoned",
+      sequence: last.sequence + 1,
+      input: last.input,
+    });
+    expect((await f.store.read()).at(-1)).toEqual(abandoned);
+    expect(await provision.resolveFirstSetupBackupWorkspace(f.anchor)).toEqual({ kind: "absent" });
+    await provision.assertFirstSetupBackupBootTarget(f.anchor);
+  },
+);
+it("refuses to abandon a selected recovery", async () => {
+  const { f } = await journalAt("restored");
+  await f.store.select((await f.store.read()).at(-1)!);
+  await expect(f.store.abandon(recoveryId)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect((await f.store.read()).at(-1)!.phase).toBe("selected");
+  expect(await provision.resolveFirstSetupBackupWorkspace(f.anchor)).toEqual({
+    kind: "selected",
+    target: f.target,
+  });
+});
+it("refuses to abandon a recovery it does not hold, or when there is none", async () => {
+  const f = await fixture();
+  await expect(f.store.abandon(recoveryId)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  await f.store.append(await f.input());
+  await expect(f.store.abandon("d6dcdd66-4eba-49f2-9cb8-cf8c65a8a9ae")).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect((await f.store.read()).at(-1)!.phase).toBe("prepared");
+});
+it("lets nothing follow an abandoned record", async () => {
+  const { f, input } = await journalAt("restored");
+  const restored = (await f.store.read()).at(-1)!;
+  await f.store.abandon(recoveryId);
+  for (const phase of ["prepared", "placement-started", "restored"] as const)
+    await expect(f.store.append({ ...input, input: placementInput, phase })).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+  await expect(f.store.select(restored)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect((await f.store.read()).map((record) => record.phase)).toEqual([
+    "prepared",
+    "placement-started",
+    "restored",
+    "abandoned",
+  ]);
+});
+it("refuses an abandoned record whose input differs from the record before it", async () => {
+  const { f, input } = await journalAt("placement-started");
+  await expect(
+    f.store.append({ ...input, input: { checked: false }, phase: "abandoned" }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect((await f.store.read()).at(-1)!.phase).toBe("placement-started");
+});
+it.each([true, false])(
+  "keeps an abandoned journal readable once the attempt is deleted (abandoned: %s)",
+  async (abandon) => {
+    const { f } = await journalAt("restored");
+    if (abandon) await f.store.abandon(recoveryId);
+    await rm(join(f.anchor.stateDir, "first-setup.json"));
+    if (abandon) {
+      expect((await f.store.read()).at(-1)!.phase).toBe("abandoned");
+      expect(await provision.resolveFirstSetupBackupWorkspace(f.anchor)).toEqual({
+        kind: "absent",
+      });
+    } else
+      await expect(provision.resolveFirstSetupBackupWorkspace(f.anchor)).rejects.toMatchObject({
+        code: "setup.attempt_uncertain",
+      });
+  },
+);
+it("returns the same record when abandoned twice, writing nothing the second time", async () => {
+  const { f } = await journalAt("placement-started");
+  const first = await f.store.abandon(recoveryId);
+  const path = join(f.base, `${String(first.sequence).padStart(6, "0")}.json`);
+  const bytes = await readFile(path);
+  await rm(join(f.anchor.stateDir, "first-setup.json"));
+  await expect(f.store.abandon(recoveryId)).resolves.toEqual(first);
+  expect(await readFile(path)).toEqual(bytes);
+  expect(await f.store.read()).toHaveLength(first.sequence);
+});

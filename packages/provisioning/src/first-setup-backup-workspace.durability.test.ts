@@ -411,3 +411,68 @@ it("does not acknowledge an exact selection retry while the renamed record's fol
   await expect(f.store().select(restored)).resolves.toEqual(f.target);
   expect(await fs.readFile(join(f.base, "000004.json"))).toEqual(retained);
 });
+it.each(boundaries)(
+  "leaves the old record or the abandoned one when abandoning fails at its %s",
+  async (boundary) => {
+    const f = await fixture();
+    for (const phase of ["prepared", "placement-started", "restored"] as const)
+      await f.store().append({ ...f.input, phase });
+    const path = join(f.base, "000004.json");
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    const actualWrite = (await vi.importActual<typeof durable>("./durable-host-json.js"))
+      .writeDurableHostJson;
+    let active = false,
+      faults = 0;
+    const fail = () => {
+      faults++;
+      throw new Error("injected interrupted durable write");
+    };
+    vi.mocked(durable.writeDurableHostJson).mockImplementation(async (destination, ...args) => {
+      active = destination === path;
+      try {
+        await actualWrite(destination, ...args);
+      } finally {
+        active = false;
+      }
+    });
+    vi.mocked(fs.open).mockImplementation(async (...args) => {
+      const handle = await actual.open(...args);
+      if (active) {
+        const directory = String(args[0]) === dirname(path);
+        if (!directory && boundary === "write")
+          vi.spyOn(handle, "writeFile").mockImplementation(fail);
+        if (
+          (!directory && boundary === "file-sync") ||
+          (directory && boundary === "directory-sync")
+        )
+          vi.spyOn(handle, "sync").mockImplementation(fail);
+      }
+      return handle;
+    });
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (active && String(to) === path && boundary === "rename") fail();
+      await actual.rename(from, to);
+    });
+    await expect(f.store().abandon(f.target.recoveryId)).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
+    expect(faults).toBe(1);
+    vi.restoreAllMocks();
+    vi.mocked(fs.open).mockImplementation(actual.open);
+    vi.mocked(fs.rename).mockImplementation(actual.rename);
+    vi.mocked(durable.writeDurableHostJson).mockImplementation(actualWrite);
+    const phases = (await f.store().read()).map((record) => record.phase);
+    const written = boundary === "directory-sync";
+    expect(phases).toEqual(
+      written
+        ? ["prepared", "placement-started", "restored", "abandoned"]
+        : ["prepared", "placement-started", "restored"],
+    );
+    expect(await resolveFirstSetupBackupWorkspace(f.anchor)).toEqual(
+      written ? { kind: "absent" } : { kind: "repair", target: f.target },
+    );
+    const abandoned = await f.store().abandon(f.target.recoveryId);
+    expect(abandoned).toMatchObject({ phase: "abandoned", sequence: 4 });
+    expect(await resolveFirstSetupBackupWorkspace(f.anchor)).toEqual({ kind: "absent" });
+  },
+);
