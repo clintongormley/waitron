@@ -2722,3 +2722,118 @@ describe("station move attribution", () => {
     },
   );
 });
+
+describe("till-station-queue — a dish sent after its period", () => {
+  const starters = { id: "co-start", name: "Starters", displayOrder: 1 };
+  const mains = { id: "co-main", name: "Mains", displayOrder: 2 };
+  const line = (
+    id: string,
+    course: StationQueueItem["course"],
+    afterPeriod?: string,
+  ): StationQueueItem => ({
+    ...groupA.items[0]!,
+    id,
+    workingOrderLineId: `wl-${id}`,
+    name: id,
+    course,
+    ...(afterPeriod === undefined ? {} : { afterPeriod }),
+  });
+  const lateOrder = (items: StationQueueItem[]): StationQueueGroup => ({ ...groupA, items });
+  // Each section's lines in order: a mark row reads as its words, a dish as its id.
+  const rows = (el: TillStationQueue) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>(".course")].map((section) =>
+      [...section.querySelectorAll<HTMLElement>("[data-after-period], [data-item]")].map(
+        (row) => row.dataset.item ?? row.textContent!.trim(),
+      ),
+    );
+  const mount = async (items: StationQueueItem[], extra: Partial<TillStationQueue> = {}) =>
+    (
+      await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [lateOrder(items)],
+        view: "rail",
+        stationId: "st-1",
+        ...extra,
+      })
+    ).el;
+
+  it("puts one mark above two consecutive dishes marked with the same period under one head", async () => {
+    const el = await mount([
+      line("tortilla", starters, "Lunch"),
+      line("entrecot", starters, "Lunch"),
+    ]);
+    expect(rows(el)).toEqual([["After Lunch — agreed", "tortilla", "entrecot"]]);
+  });
+
+  it("marks again after an unmarked dish between two marked ones", async () => {
+    const el = await mount([
+      line("tortilla", starters, "Lunch"),
+      line("bread", starters),
+      line("entrecot", starters, "Lunch"),
+    ]);
+    expect(rows(el)).toEqual([
+      ["After Lunch — agreed", "tortilla", "bread", "After Lunch — agreed", "entrecot"],
+    ]);
+  });
+
+  it("marks under each course head, never one row across two heads", async () => {
+    const el = await mount([line("tortilla", starters, "Lunch"), line("entrecot", mains, "Lunch")]);
+    expect(rows(el)).toEqual([
+      ["After Lunch — agreed", "tortilla"],
+      ["After Lunch — agreed", "entrecot"],
+    ]);
+  });
+
+  it("marks under each of a seated party's sent groups", async () => {
+    const sent = (id: string, position: number) => ({
+      id,
+      position,
+      displayNumber: position,
+      numberPartyId: "v-4",
+      state: "fired" as const,
+    });
+    const el = (
+      await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [
+          {
+            ...lateOrder([
+              { ...line("tortilla", starters, "Lunch"), group: sent("g-1", 1) },
+              { ...line("entrecot", starters, "Lunch"), group: sent("g-2", 2) },
+            ]),
+            party: { id: "v-4", revision: 1 },
+          },
+        ],
+        view: "rail",
+        stationId: "st-1",
+      })
+    ).el;
+    expect(rows(el)).toEqual([
+      ["After Lunch — agreed", "tortilla"],
+      ["After Lunch — agreed", "entrecot"],
+    ]);
+  });
+
+  it("gives each period its own mark", async () => {
+    const el = await mount([line("tortilla", starters, "Lunch"), line("cava", starters, "Brunch")]);
+    expect(rows(el)).toEqual([
+      ["After Lunch — agreed", "tortilla", "After Brunch — agreed", "cava"],
+    ]);
+  });
+
+  it("draws no mark when no dish is marked", async () => {
+    const el = await mount([line("tortilla", starters), line("entrecot", mains)]);
+    expect(el.shadowRoot!.querySelector("[data-after-period]")).toBeNull();
+  });
+
+  it("words the mark in Spanish", async () => {
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const el = await mount([line("tortilla", starters, "Lunch $&")]);
+      const expected = t("station.after_period").replace("{period}", () => "Lunch $&");
+      expect(expected).not.toContain("After");
+      expect(rows(el)).toEqual([[expected, "tortilla"]]);
+    } finally {
+      setLocale(previous);
+    }
+  });
+});

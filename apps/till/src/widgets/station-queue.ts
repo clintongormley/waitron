@@ -495,6 +495,15 @@ export class TillStationQueue extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .after-period {
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .print-problems {
         display: block;
         margin: 0 0 var(--wt-space-2);
@@ -922,9 +931,24 @@ export class TillStationQueue extends LitElement {
     return html`<div class="course" data-course=${section.course?.id ?? "none"}>
       ${section.course ? html`<div class="course-head">${section.course.name}</div>` : nothing}
       <ul class="lines">
-        ${section.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
+        ${this.#sectionLines(group, section.items)}
       </ul>
     </div>`;
+  }
+
+  /** A mark row goes above each run of consecutive lines agreed after the same period, within one head. */
+  #sectionLines(group: StationQueueGroup, items: StationQueueItem[]): TemplateResult[] {
+    return items.map((item, index) => {
+      const period = item.afterPeriod;
+      const mark =
+        period !== undefined && items[index - 1]?.afterPeriod !== period
+          ? html`<li class="after-period" data-after-period>
+              ${t("station.after_period").replace("{period}", () => period)}
+            </li>`
+          : nothing;
+      return html`${mark}
+        <li>${this.#line(group, item)}</li>`;
+    });
   }
 
   #groupSection(group: StationQueueGroup, section: GroupSection): TemplateResult {
@@ -944,7 +968,7 @@ export class TillStationQueue extends LitElement {
             </div>`
       }
       <ul class="lines">
-        ${section.items.map((item) => html`<li>${this.#line(group, item)}</li>`)}
+        ${this.#sectionLines(group, section.items)}
       </ul>
     </div>`;
   }
