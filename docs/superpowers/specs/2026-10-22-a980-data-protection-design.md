@@ -428,6 +428,10 @@ marta-lopez-2026-10-05.zip
 language, else their browser's, else the venue's; the S2a2 plan's decision 1); the button is
 **Download** beside **Copy of your data** on Account settings → Your details.
 
+2026-10-25: S2b writes the work files as JSON (`employment.json`, `rota.json`, `absences.json`)
+and adds `attendance.json` (workforce) and `staff-roles.json` (staffing); the working-time record
+is only this node's location's (the S2b plan's decisions 2 and 6).
+
 `time-record` reuses the existing export (`apps/server/src/attendance-export-api.ts:77-80`).
 `actions.csv` lists sale numbers and amounts, never another person's data. The JSON files are the
 Article 20 copy. Waitron keeps no list of requests (O7); the venue notes the request and its
@@ -645,6 +649,9 @@ updates its guide page in English and Spanish (CLAUDE.md §3).
 | **S9** Booking and allergy erasure on request | §4.3(c) | no (build plan, S9) | no | `personal_data.export`, unless the permission review names one for erasure | each field cleared; allergy text moved before notes are cleared; allergy evidence kept | **G3** |
 | **S10** Log check | probe whether any logged error detail carries a name or email: an email-server refusal, and error parameters such as `person.email_taken` and `person.display_name_taken` (`packages/identity/src/staff.ts:53-66`); mask it if so | no | no | none | a failing probe first | none |
 | **S11** Former employee's email | O1 (c): store the date a person is deactivated; clear the email a year later and keep the name; `suspendPerson` (`staff.ts:567-577`, unrouted, used only by tests) is deleted by S4 or made to set the date too | yes: `persons` has no deactivation date (`packages/identity/src/schema/persons.ts:31-67`) | no | none: it runs on its own a year later | the date set by both routes; cleared only after the year; name kept | **G2, G3** |
+
+2026-10-25: S2b added workforce migration 0010, three indexes for the own download's by-person
+reads; no table is rebuilt.
 
 **What a bug report may carry (O9 (a)).** Automatic reports carry only the error, the Waitron
 version and log lines with personal details masked; anything a person typed travels only in a

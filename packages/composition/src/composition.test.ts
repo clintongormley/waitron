@@ -47,10 +47,11 @@ import {
   STAFFING_CONFIGURATION_TRANSFER,
   STAFFING_MIGRATIONS,
   STAFFING_PERMISSIONS,
+  STAFFING_PERSONAL_DATA,
   STAFFING_ROUTES,
   describeShifts,
 } from "@waitron/staffing";
-import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, WORKFORCE_PERSONAL_DATA } from "@waitron/workforce";
 import {
   WORKFORCE_ES_MIGRATIONS,
   WORKFORCE_ES_VOCABULARY,
@@ -350,9 +351,20 @@ describe("ALL_MODULES personal-data seat", () => {
     );
   });
 
+  it("workforce and staffing carry their parts, by reference", () => {
+    expect(ALL_MODULES.find((m) => m.name === "workforce")?.personalData).toBe(
+      WORKFORCE_PERSONAL_DATA,
+    );
+    expect(ALL_MODULES.find((m) => m.name === "staffing")?.personalData).toBe(
+      STAFFING_PERSONAL_DATA,
+    );
+  });
+
   it("no other module carries the seat", () => {
     expect(ALL_MODULES.filter((m) => m.personalData !== undefined).map((m) => m.name)).toEqual([
       "identity",
+      "workforce",
+      "staffing",
     ]);
   });
 

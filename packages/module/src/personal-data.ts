@@ -5,6 +5,8 @@ import "./errors.js";
 
 export interface PersonalDataSubject {
   readonly personId: string;
+  /** The README's language; a part that writes text uses it. */
+  readonly language: "en" | "es";
   /** The moment of the request, from the box's clock. */
   readonly at: Date;
   /** The venue's IANA time zone, or "UTC" when it cannot be read. */
@@ -17,6 +19,10 @@ export interface PersonalDataFile {
   readonly name: string;
   readonly content: string | Uint8Array;
 }
+export const jsonFile = (name: string, value: unknown): PersonalDataFile => ({
+  name,
+  content: `${JSON.stringify(value, null, 2)}\n`,
+});
 export interface ModulePersonalData {
   /** Every file name this part may add; unique across all parts. */
   readonly files: readonly string[];

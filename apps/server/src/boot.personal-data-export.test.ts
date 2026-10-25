@@ -33,6 +33,12 @@ describe("the own personal-data download in a real start", () => {
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: venue.personId }),
     );
+    const clockedIn = await venue.app.request("/api/clock/in", {
+      method: "POST",
+      headers: { cookie: venue.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedEntryId: null }),
+    });
+    expect(clockedIn.status).toBe(200);
     await stampDeployment(suite.db, "preproduction");
     const scratch = await mkdtemp(join(tmpdir(), "waitron-personal-data-boot-"));
     let server: StartedServer | undefined;
@@ -67,6 +73,11 @@ describe("the own personal-data download in a real start", () => {
       const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
       expect([profile.id, profile.displayName]).toEqual([venue.personId, "Ana"]);
       expect(strFromU8(files["README.txt"]!).split("\n")[0]).toContain("Clock venue SL");
+      expect([
+        Object.hasOwn(files, "time-record.csv"),
+        Object.hasOwn(files, "time-record.pdf"),
+        Object.hasOwn(files, "staff-roles.json"),
+      ]).toEqual([true, true, false]);
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });

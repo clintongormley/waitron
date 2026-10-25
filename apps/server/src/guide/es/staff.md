@@ -28,8 +28,11 @@ dos pasos.
 
 Abre **Configuración de la cuenta** desde el menú de cuenta y, en **Tus datos**, pulsa
 **Descargar** junto a **Copia de tus datos**. Recibes un archivo ZIP con tus datos de perfil y de
-acceso en archivos `.json`, y un `README.txt` que explica cada archivo, quién más recibe los
-datos, cuánto tiempo se guardan y tus derechos. Nunca contiene secretos como tu PIN o tu
+acceso en archivos `.json`. Si el local planifica el personal o registra la jornada en Waitron,
+la copia también puede contener tus datos de contrato, tus turnos, tus ausencias, tus roles de
+personal y las preguntas sobre tus fichajes en archivos `.json`, y tu registro de jornada en PDF y
+en una hoja de cálculo `.csv`. Un `README.txt` explica cada archivo, quién más recibe los datos,
+cuánto tiempo se guardan y tus derechos. La copia nunca contiene secretos como tu PIN o tu
 contraseña. Para cualquier otra cosa sobre tus datos, pregunta al local.
 
 ## Eliminar un rol de personal {#delete-staff-role}

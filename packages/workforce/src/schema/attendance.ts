@@ -120,6 +120,7 @@ export const attendanceOperationFacts = table(
     uniqueIndex("attendance_operation_facts_source_uq").on(t.source, t.key),
     index("attendance_operation_facts_day_idx").on(t.locationId, t.businessDay, t.personId, t.at),
     index("attendance_operation_facts_pending_idx").on(t.outcome, t.sequence),
+    index("attendance_operation_facts_person_idx").on(t.personId, t.at, t.sequence),
     check("attendance_operation_facts_source_ck", enumCheck(t.source)),
     check("attendance_operation_facts_kind_ck", enumCheck(t.kind)),
     check("attendance_operation_facts_outcome_ck", enumCheck(t.outcome)),

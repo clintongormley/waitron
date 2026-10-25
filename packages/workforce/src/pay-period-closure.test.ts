@@ -439,6 +439,17 @@ it("reads overlapping closures and verifies successive months on the same chain"
     }),
   ).toEqual([]);
 });
+it("reads and replays every person's frozen history when the caller's object also names a person", async () => {
+  await automatic();
+  await automatic(other);
+  const first = await close();
+  expect(first.snapshot.summaries.map((s) => s.personId).sort()).toEqual([other, worker].sort());
+  const withPerson = { locationId, period, personId: worker };
+  expect(await api.readPayPeriodClosures(suite.db, withPerson)).toEqual([first]);
+  expect(
+    await close({ personId: worker } as Partial<Parameters<typeof api.closePayPeriod>[1]>),
+  ).toEqual(first);
+});
 it("filters counted automatic ids and frozen histories to the queried worker", async () => {
   const own = await automatic();
   const foreign = await automatic(other);

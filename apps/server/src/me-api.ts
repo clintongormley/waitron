@@ -53,6 +53,7 @@ import type { OnboardingIntent } from "./trading-config.js";
 import type { AccountEmailSender } from "./account-email.js";
 import { modulesNamed } from "./modules.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
+import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
 export interface MeApiDeps {
   db: Database;
@@ -115,12 +116,14 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return fn(tx);
     });
 
+  const modules = modulesNamed(deps.modules);
   mountPersonalDataExportApi(
     app,
     {
       db: deps.db,
       nodeId: deps.cfg.nodeId,
-      modules: modulesNamed(deps.modules),
+      modules,
+      serverParts: timeRecordPersonalData(modules),
       venueLocale: deps.venueLocale,
       privacyNoticeUrl: deps.privacyNoticeUrl,
       now: deps.now,

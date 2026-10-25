@@ -98,6 +98,7 @@ export async function insertRosterVersion(
   return row!.id;
 }
 
+/** `createdAt` behaves as on {@link insertAbsence}. */
 export async function insertDraftShift(
   db: Database | Transaction,
   params: {
@@ -108,6 +109,7 @@ export async function insertDraftShift(
     endsAt?: string;
     endsOffsetMinutes?: number;
     rosterVersionId?: string | null;
+    createdAt?: string;
   },
 ): Promise<string> {
   const [row] = await db
@@ -120,6 +122,7 @@ export async function insertDraftShift(
       endsAt: params.endsAt ?? "2026-01-05T17:00:00Z",
       endsOffsetMinutes: params.endsOffsetMinutes ?? 0,
       rosterVersionId: params.rosterVersionId ?? null,
+      ...(params.createdAt === undefined ? {} : { createdAt: params.createdAt }),
     })
     .returning({ id: shifts.id });
   return row!.id;

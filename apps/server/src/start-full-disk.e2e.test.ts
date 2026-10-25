@@ -17,9 +17,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
+import { unzipSync } from "fflate";
 import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { devices, locations, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
+import {
+  devices,
+  locations,
+  nodes,
+  openVenueDatabase,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import {
@@ -32,8 +40,9 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
+import { WorkforceBackend } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { loadKeyRing } from "@waitron/credentials";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -60,6 +69,7 @@ import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
+import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { escapeHtml } from "./recovery-surface.js";
 import {
   createStaffNoticeLog,
@@ -209,8 +219,9 @@ describe("the Box status read and free-space deletion on a real full disk", () =
   let db: Database;
   let diskState: DiskFullState;
   let logDir: string;
-  let manager: { token: string; cookie: string };
-  let supervisor: { token: string; cookie: string };
+  let manager: { personId: string; token: string; cookie: string };
+  let supervisor: { personId: string; token: string; cookie: string };
+  let nodeId: string;
 
   async function seedPerson(role: PersonRoleValue, name: string) {
     return withTransaction(db, async (tx) => {
@@ -219,7 +230,11 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         .values({ displayName: name, pinHash: hashPin("1234"), role })
         .returning({ id: persons.id });
       const session = await startManagementSession(tx, { personId: p!.id });
-      return { token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+      return {
+        personId: p!.id,
+        token: session.token,
+        cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+      };
     });
   }
 
@@ -235,11 +250,29 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     store = await openVenueDatabase(venueDir);
     db = store.venue;
     await seedTenant(db);
-    await db
+    const [main] = await db
       .insert(locations)
-      .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" });
+      .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
+      .returning({ id: locations.id });
     manager = await seedPerson("manager", "Marta");
     supervisor = await seedPerson("supervisor", "Sergio");
+    const [node] = await db
+      .insert(nodes)
+      .values({ locationId: main!.id, name: "Box" })
+      .returning({ id: nodes.id });
+    nodeId = node!.id;
+    // Here, not in the case: a clock-in's `withTransaction` drain would deliver the change the
+    // case leaves waiting.
+    await withTransaction(db, (tx) =>
+      new WorkforceBackend().clockIn(tx, {
+        nodeId,
+        locationId: main!.id,
+        personId: manager.personId,
+        offsetMinutes: 60,
+        origin: jobOrigin("dashboard"),
+        at: new Date(Date.now() - 3_600_000).toISOString(),
+      }),
+    );
 
     const now = () => new Date();
     diskState = createDiskFullState({ dir: venueDir, now, log: () => {} });
@@ -317,7 +350,13 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     );
     mountPersonalDataExportApi(
       app,
-      { db, nodeId: "no-node", modules: ALL_MODULES, venueLocale: "en-GB" },
+      {
+        db,
+        nodeId,
+        modules: ALL_MODULES,
+        serverParts: timeRecordPersonalData(ALL_MODULES),
+        venueLocale: "en-GB",
+      },
       () => {},
     );
   });
@@ -407,6 +446,9 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/zip");
+    expect(
+      Object.hasOwn(unzipSync(new Uint8Array(await res.arrayBuffer())), "time-record.csv"),
+    ).toBe(true);
     expect(lastSeen()).toBe(before);
     expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs3'`)).toEqual([
       { id: "bs3" },

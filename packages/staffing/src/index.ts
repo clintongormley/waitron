@@ -38,3 +38,4 @@ export {
   changeRotaWeek,
 } from "./rota.js";
 export { STAFFING_BACKUP_VERIFICATION } from "./backup-verification.js";
+export { STAFFING_PERSONAL_DATA } from "./personal-data.js";

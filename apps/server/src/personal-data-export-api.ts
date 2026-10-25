@@ -23,7 +23,7 @@ export interface PersonalDataExportDeps {
   nodeId: string;
   modules: readonly WaitronModule[];
   /** Parts the server adds itself. */
-  serverParts?: readonly PersonalDataPart[];
+  serverParts: readonly PersonalDataPart[];
   venueLocale: string;
   privacyNoticeUrl?: string;
   now?: () => Date;
@@ -59,7 +59,7 @@ export async function sendPersonalData(
   authorize: PersonalDataAuthorize,
 ): Promise<Response> {
   const at = (deps.now ?? (() => new Date()))();
-  const parts = [...personalDataParts(deps.modules), ...(deps.serverParts ?? [])];
+  const parts = [...personalDataParts(deps.modules), ...deps.serverParts];
   // Write-lock turns, not `withTransaction`: its closing change-log drain is a write a full disk
   // refuses even though this route changes nothing. A stated exception to one `withTransaction` per
   // route.
@@ -68,7 +68,12 @@ export async function sendPersonalData(
     const who = await authorize(tx);
     const place = await venuePlace(tx, deps.nodeId);
     const tenant = await readTenant(tx);
-    const build = await preparePersonalData(tx, parts, { personId: who.personId, at, ...place });
+    const build = await preparePersonalData(tx, parts, {
+      personId: who.personId,
+      language: who.language,
+      at,
+      ...place,
+    });
     return { who, place, tenant, build };
   });
   // Building outlives the snapshot turn, so authority is checked again before any bytes go.

@@ -1,18 +1,24 @@
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { jobOrigin } from "@waitron/shared";
+import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
+import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { mountMeApi } from "./me-api.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
+});
+const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PATH = "/management-api/me/personal-data/export";
 
-// Leaves `now` unset, so the route's own clock and its server-parts default are both exercised.
+// Leaves `now` unset, so the route's own clock is exercised.
 function mounted(
   modules: string[],
   patch: { venueLocale?: string; privacyNoticeUrl?: string } = {},
@@ -22,7 +28,7 @@ function mounted(
     app,
     {
       db: suite.db,
-      cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
+      cfg: { nodeId: NODE_ID },
       venueLocale: "en-GB",
       modules,
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },
@@ -64,6 +70,51 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
   it("reads only the enabled modules, not every module", async () => {
     const files = await download(["core"]);
     expect(files).toEqual({ "README.txt": expect.any(String) });
+  });
+
+  it("adds the working-time record when workforce and an exporter are enabled", async () => {
+    await seedTenant(suite.db);
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Venue",
+        invoiceLocales: ["es"],
+        operationDescription: "Sale on premises",
+        timeZone: "Europe/Madrid",
+      })
+      .returning({ id: locations.id });
+    await suite.db.insert(nodes).values({ id: NODE_ID, locationId: location!.id, name: "Box" });
+    const [row] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Marta Canary", role: "staff" })
+      .returning({ id: persons.id });
+    await withTransaction(suite.db, (tx) =>
+      new WorkforceBackend().clockIn(tx, {
+        nodeId: NODE_ID,
+        locationId: location!.id,
+        personId: row!.id,
+        offsetMinutes: 60,
+        origin: jobOrigin("dashboard"),
+        at: "2026-01-02T23:30:00.000Z",
+      }),
+    );
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: row!.id }),
+    );
+    const response = await mounted(["core", "identity", "workforce", "workforce-es"]).request(
+      PATH,
+      { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
+    );
+    expect(response.status).toBe(200);
+    const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(Object.hasOwn(files, "time-record.csv")).toBe(true);
+    // 23:30Z at +60 is 00:30 on the next local day: a UTC reading would print 2026-01-02.
+    const csv = strFromU8(files["time-record.csv"]!);
+    expect([
+      csv.includes('"document","from","2026-01-03"'),
+      csv.includes('"2026-01-03T00:30:00+01:00"'),
+      csv.includes("2026-01-02"),
+    ]).toEqual([true, true, false]);
   });
 
   it("passes the venue's language and the privacy notice's address to the README", async () => {

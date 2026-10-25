@@ -408,6 +408,8 @@ exactly as shown; the text ends with one `\n`.
 | `notice` | `Its privacy notice: {url}` |
 | `unnamedVenue` | `the venue` |
 
+2026-10-25: S2b changed two of these sentences in both languages: `kept[2]` now says "a Google sign-in or link" (3117de2a3), and `origin` names a supervisor, manager or admin. `apps/server/src/i18n/personal-data-readme.ts` holds the current words.
+
 **The words, Spanish:**
 
 | Key | Text |
