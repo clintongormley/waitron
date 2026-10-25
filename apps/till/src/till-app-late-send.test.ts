@@ -417,12 +417,15 @@ describe("a table's send from the marks", () => {
     expect(windowOf(el)).toBeNull();
     expect(names()).toEqual(["Coffee"]);
     expect(api.submitDraft).not.toHaveBeenCalled();
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
-    await flush(el);
-    const saves = api.saveDraft!.mock.calls;
-    expect(
-      (saves.at(-1)![1] as { lines: { menuItemId: string }[] }).lines.map((l) => l.menuItemId),
-    ).toEqual([offerId(DESAYUNOS, "Coffee")]);
+    const saves = api.saveDraft!.mock.calls.length;
+    await vi.waitFor(
+      () => {
+        expect(api.saveDraft!.mock.calls.length).toBeGreaterThan(saves);
+        const saved = api.saveDraft!.mock.calls.at(-1)![1] as { lines: { menuItemId: string }[] };
+        expect(saved.lines.map((line) => line.menuItemId)).toEqual([offerId(DESAYUNOS, "Coffee")]);
+      },
+      { timeout: DRAFT_SAVE_DELAY_MS * 5 },
+    );
   });
 
   it("keeps the dish when the draft can no longer be edited, and closes the window", async () => {
@@ -434,6 +437,53 @@ describe("a table's send from the marks", () => {
 
     expect(windowOf(el)).toBeNull();
     expect(names()).toEqual(["Omelette", "Coffee"]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("asks again when a dish it sends was marked for a menu the confirmation does not name", async () => {
+    const el = await lateTable();
+    await act(el, "send-all");
+    store.setEndedPeriods(
+      [
+        { menuId: DESAYUNOS.id, periodName: "Breakfast" },
+        { menuId: "brunch", periodName: "Brunch" },
+      ],
+      false,
+    );
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    // The window lists the dishes in the order they are sent, the Coffee first.
+    expect(windowDishes(el)).toEqual(["1× Coffee", "1× Omelette"]);
+    expect(windowOf(el)!.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+      "Brunch and Breakfast have ended",
+    );
+    await choose(el, "data-late-agreed");
+    expect(submissions().map((each) => each.lateSend)).toEqual([
+      { menuIds: ["brunch", DESAYUNOS.id] },
+    ]);
+  });
+
+  it("closes on sign-out, and leaves nothing to send in the next session", async () => {
+    const el = await lateTable();
+    await act(el, "send-all");
+    const order = el.shadowRoot!.querySelector("till-table-order-screen")!;
+
+    emit(order, "logout");
+    await flush(el, 6);
+
+    expect(windowOf(el)).toBeNull();
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el, 6);
+    expect(windowOf(el)).toBeNull();
     expect(api.submitDraft).not.toHaveBeenCalled();
   });
 

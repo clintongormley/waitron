@@ -11578,27 +11578,25 @@ export class TillApp extends LitElement {
     remove: (listed: readonly OrderLine[]) => void,
   ): boolean {
     const marked = lines.filter((line) => line.endedPeriod !== undefined);
+    const [head, ...tail] = marked.map((line) => line.endedPeriod!);
     const confirmed = new Set(carried?.menuIds);
-    if (marked.every((line) => confirmed.has(line.endedPeriod!.menuId))) return false;
-    this.#openLateSend(
-      marked,
-      marked.map((line) => line.endedPeriod!),
-      purpose,
-      retry,
-      remove,
-    );
+    if (head === undefined || [head, ...tail].every((period) => confirmed.has(period.menuId)))
+      return false;
+    this.#openLateSend(marked, [head, ...tail], purpose, retry, remove);
     return true;
   }
 
   /** `periods` in the order they apply to `listed`; the window names each once. */
   #openLateSend(
     listed: readonly OrderLine[],
-    periods: readonly EndedPeriod[],
+    periods: readonly [EndedPeriod, ...EndedPeriod[]],
     purpose: "send" | "save",
     retry: (lateSend: LateSend) => Promise<void>,
     remove: (listed: readonly OrderLine[]) => void,
   ): void {
-    const [first, ...rest] = [...new Set(periods.map((period) => period.periodName))];
+    const first = periods[0].periodName;
+    const rest = new Set(periods.map((period) => period.periodName));
+    rest.delete(first);
     this.lateSendWindow = {
       dishes: listed.map((line) => ({
         quantity: line.quantity,
@@ -11606,7 +11604,7 @@ export class TillApp extends LitElement {
         unitName: productUnit(line.product).name,
         soldInEach: soldByTheUnit(line.product),
       })),
-      periodNames: [first!, ...rest],
+      periodNames: [first, ...rest],
       menuIds: [...new Set(periods.map((period) => period.menuId))],
       purpose,
       retry,
@@ -16413,6 +16411,7 @@ export class TillApp extends LitElement {
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
+    this.lateSendWindow = null;
     this.reprintAsking = null;
     this.receiptLanguageAsking = null;
     this.#closeAdjust();
