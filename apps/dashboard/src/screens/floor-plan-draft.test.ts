@@ -7,12 +7,14 @@ import {
   checkDraft,
   deleteTable,
   draftFromPlan,
+  followName,
   freeTables,
   joinedTableOf,
   madeOfText,
   patchTable,
   placeTable,
   rekeyDraft,
+  renameTable,
   restoreTable,
   sameDraft,
   saveFromDraft,
@@ -178,6 +180,82 @@ describe("short names", () => {
       counter("new"),
     );
     expect([proposed.tables[0]!.shortName, given.tables[0]!.shortName]).toEqual(["TF12", "Up12"]);
+  });
+  it("a short name follows its name while it is the name's proposal", () => {
+    expect(followName("T1", "Terrace 1", "Terrace 2")).toBe("T2");
+    expect(followName("Tb1", "Table 1", "Table 2")).toBe("Tb1");
+    let label = "";
+    let shortName = "";
+    for (const next of ["W", "Wi", "Win", "Wind", "Windo", "Window", "Window ", "Window 1"]) {
+      shortName = followName(shortName, label, next);
+      label = next;
+    }
+    expect(shortName).toBe("W1");
+  });
+
+  it("renameTable changes the name and a following short name in one change", () => {
+    const d = draftFromPlan({
+      ...shortNamePlan(),
+      tables: shortNamePlan().tables.map((t) => (t.id === "a" ? { ...t, shortName: "T1" } : t)),
+    });
+    const renamed = renameTable(d, "a", "Terrace 2");
+    expect(table(renamed, "a")).toMatchObject({ label: "Terrace 2", shortName: "T2" });
+    expect(table(renamed, "b")).toBe(table(d, "b"));
+    const typed = renameTable(draftFromPlan(shortNamePlan()), "a", "Terrace 2");
+    expect(table(typed, "a")).toMatchObject({ label: "Terrace 2", shortName: "Tb1" });
+  });
+
+  it("a changed short name is a changed draft", () => {
+    const d = draftFromPlan(shortNamePlan());
+    const changed = patchTable(d, "b", { shortName: "Tb1" });
+    expect(sameDraft(d, changed)).toBe(false);
+    expect(sameDraft(d, patchTable(changed, "b", { shortName: "Win" }))).toBe(true);
+  });
+
+  it.each([
+    ["blank", "", "short_name_missing"],
+    ["only spaces", "   ", "short_name_missing"],
+    ["six letters", "ABCDEF", "short_name_too_long"],
+    ["six decomposed accents", "e\u0301".repeat(6), "short_name_too_long"],
+    ["five letters", "ABCDE", null],
+    ["five decomposed accents", "e\u0301".repeat(5), null],
+  ])("checkDraft marks a short name that is %s", (_, shortName, problem) => {
+    const d = patchTable(draftFromPlan(shortNamePlan()), "b", { shortName });
+    expect(checkDraft(d)).toEqual(problem === null ? null : { key: "b", problem });
+  });
+
+  it("checkDraft marks the later of two tables sharing a short name, ignoring case", () => {
+    const d = draftFromPlan({
+      ...plan,
+      tables: [
+        { ...shortNamePlan().tables[0]!, id: "a", label: "Terrace 1", shortName: "T1" },
+        { ...shortNamePlan().tables[1]!, id: "b", label: "Table 1", shortName: "t1" },
+      ],
+    });
+    expect(checkDraft(d)).toEqual({
+      key: "b",
+      problem: "short_name_repeated",
+      takenBy: "Terrace 1",
+      shortName: "t1",
+    });
+  });
+
+  it("checkDraft reports a missing name before a missing short name, and a short name before too few parts", () => {
+    const d = draftFromPlan(shortNamePlan());
+    expect(checkDraft(patchTable(d, "b", { label: " ", shortName: "" }))).toEqual({
+      key: "b",
+      problem: "label_missing",
+    });
+    const joined = addJoinedTable(
+      d,
+      { label: "Long", shortName: "", seats: null, parts: ["a"] },
+      counter("new"),
+    );
+    expect(checkDraft(joined)).toEqual({ key: "new:1", problem: "short_name_missing" });
+    expect(checkDraft(patchTable(joined, "new:1", { shortName: "L" }))).toEqual({
+      key: "new:1",
+      problem: "parts_too_few",
+    });
   });
 });
 

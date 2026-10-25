@@ -1,4 +1,10 @@
-import { createLabelComparator, proposeShortName } from "@waitron/shared";
+import {
+  SHORT_NAME_MAX,
+  createLabelComparator,
+  proposeShortName,
+  shortNameKey,
+  shortNameLength,
+} from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
@@ -134,6 +140,7 @@ function sameTable(a: DraftTable, b: DraftTable): boolean {
     a.id !== b.id ||
     a.liveTableId !== b.liveTableId ||
     a.label !== b.label ||
+    a.shortName !== b.shortName ||
     a.seats !== b.seats ||
     a.fixed !== b.fixed ||
     !sameParts(a.parts, b.parts)
@@ -164,18 +171,51 @@ export function sameDraft(a: FloorPlanDraft, b: FloorPlanDraft): boolean {
   return true;
 }
 
-export type DraftProblem = "label_missing" | "label_repeated" | "parts_too_few";
+export type DraftProblem =
+  | "label_missing"
+  | "label_repeated"
+  | "short_name_missing"
+  | "short_name_too_long"
+  | "short_name_repeated"
+  | "parts_too_few";
 
-export function checkDraft(draft: FloorPlanDraft): { key: string; problem: DraftProblem } | null {
+export interface DraftCheck {
+  key: string;
+  problem: DraftProblem;
+  /** short_name_repeated: the earlier table's name and the short name the two share. */
+  takenBy?: string;
+  shortName?: string;
+}
+
+export function checkDraft(draft: FloorPlanDraft): DraftCheck | null {
   const seen = new Set<string>();
+  const shortNames = new Map<string, DraftTable>();
   for (const t of draft.tables) {
     const label = t.label.trim();
     if (label === "") return { key: t.key, problem: "label_missing" };
     if (seen.has(label)) return { key: t.key, problem: "label_repeated" };
     seen.add(label);
+    const shortName = t.shortName.trim();
+    if (shortName === "") return { key: t.key, problem: "short_name_missing" };
+    if (shortNameLength(shortName) > SHORT_NAME_MAX)
+      return { key: t.key, problem: "short_name_too_long" };
+    const earlier = shortNames.get(shortNameKey(shortName));
+    if (earlier !== undefined)
+      return {
+        key: t.key,
+        problem: "short_name_repeated",
+        takenBy: tableName(earlier),
+        shortName,
+      };
+    shortNames.set(shortNameKey(shortName), t);
     if (t.parts !== null && t.parts.length < 2) return { key: t.key, problem: "parts_too_few" };
   }
   return null;
+}
+
+/** The short name a rename leaves: the new name's proposal while it was the old one's. */
+export function followName(shortName: string, oldLabel: string, newLabel: string): string {
+  return shortName === proposeShortName(oldLabel) ? proposeShortName(newLabel) : shortName;
 }
 
 function mapTable(
@@ -193,6 +233,14 @@ export function patchTable(draft: FloorPlanDraft, key: string, patch: TablePatch
       ? patch
       : { ...patch, placement: { ...patch.placement } };
   return mapTable(draft, key, (t) => ({ ...t, ...copied }));
+}
+
+export function renameTable(draft: FloorPlanDraft, key: string, label: string): FloorPlanDraft {
+  return mapTable(draft, key, (t) => ({
+    ...t,
+    label,
+    shortName: followName(t.shortName, t.label, label),
+  }));
 }
 
 export function changePlacement(

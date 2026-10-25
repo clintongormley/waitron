@@ -887,6 +887,7 @@ async function setAddField(el: FloorPlanEditor, name: string, value: string): Pr
 async function addViaDialog(el: FloorPlanEditor, count: number): Promise<void> {
   await openAddTables(el);
   await setAddField(el, "table-count", String(count));
+  await setAddField(el, "prefix", "Window");
   addModal(el).querySelector<HTMLElement>("wt-button[data-action=add-confirm]")!.click();
   await el.updateComplete;
 }
@@ -941,7 +942,7 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
     {
       id: "m5",
       liveTableId: "l5",
-      label: "Terrace 1",
+      label: "Window 1",
       shortName: null,
       seats: 4,
       fixed: false,
@@ -952,7 +953,7 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
     {
       id: "m6",
       liveTableId: "l6",
-      label: "Terrace 2",
+      label: "Window 2",
       shortName: null,
       seats: 4,
       fixed: false,
