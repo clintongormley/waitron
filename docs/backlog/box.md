@@ -514,6 +514,41 @@ A987's design does not change the route
   - The list of tests that need versitygw is kept in three places in `.github/workflows/ci.yml`,
     so each new such test edits all three; derive them from one list.
 
+## A backup destination that fails to build leaves archives reported as on.
+
+- **A backup destination that fails to build leaves archives reported as on.** In
+  `BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
+  before `buildBackupBackend` runs for each destination, so a throw there leaves `current().enabled`
+  true with no sweep running. Reported by A538-4's second Codex review; the driver read the order
+  but did not reproduce the throw. Build the backends before adopting the handle, or undo on failure.
+
+## The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.
+
+- **The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.**
+  `GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
+  `server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
+  `credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
+  error and no form, although the bucket copy's Save would replace the record. Treat all four the
+  way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
+  by its review.
+
+## Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.
+
+- **Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.**
+  `apps/dashboard/src/i18n/alert-messages.ts` gives `backup.staging_space_low` and
+  `recovery.state_incomplete` their own sentence on the `backup.run_stopped` alert; a renamed code
+  would quietly fall back to "Contact support.". The printer word list has such a check
+  (`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
+
+## No test covers the supervisor ignoring results from a backup run a reload replaced.
+
+- **No test covers the supervisor ignoring results from a backup run a reload replaced.**
+  `backup-supervisor.ts` drops `onUploaded`/`onDestinationResult` reports once that run's
+  controller is aborted; removing both checks left the supervisor suites green in A538-3's review,
+  because a reload starts a fresh record only after the old run has finished. The checks matter for
+  a status read that began before the reload, or one made after `stop()`; a test needs one of those
+  shapes. Left open by A538-3.
+
 ## Decisions and deliberate limits
 
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh

@@ -4571,32 +4571,17 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   database with the old box's secrets. Predates A538-5.
   [Detail](backlog/box.md#a-restore-that-fails-while-writing-the-secrets-has-already-replaced-the-venue-database)
 
-- **A backup destination that fails to build leaves archives reported as on.** In
-  `BackupSupervisor.reload()` (`apps/server/src/backup-supervisor.ts`) the venue handle is assigned
-  before `buildBackupBackend` runs for each destination, so a throw there leaves `current().enabled`
-  true with no sweep running. Reported by A538-4's second Codex review; the driver read the order
-  but did not reproduce the throw. Build the backends before adopting the handle, or undo on failure.
+- **A backup destination that fails to build leaves archives reported as on.**
+  [Detail](backlog/box.md#a-backup-destination-that-fails-to-build-leaves-archives-reported-as-on)
 
 - **The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.**
-  `GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
-  `server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
-  `credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
-  error and no form, although the bucket copy's Save would replace the record. Treat all four the
-  way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
-  by its review.
+  [Detail](backlog/box.md#the-bucket-copys-settings-screen-cannot-repair-a-stored-record-that-cannot-be-decrypted)
 
 - **Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.**
-  `apps/dashboard/src/i18n/alert-messages.ts` gives `backup.staging_space_low` and
-  `recovery.state_incomplete` their own sentence on the `backup.run_stopped` alert; a renamed code
-  would quietly fall back to "Contact support.". The printer word list has such a check
-  (`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
+  [Detail](backlog/box.md#nothing-checks-that-the-error-codes-in-the-dashboards-backup_stop-word-list-are-still-real)
 
 - **No test covers the supervisor ignoring results from a backup run a reload replaced.**
-  `backup-supervisor.ts` drops `onUploaded`/`onDestinationResult` reports once that run's
-  controller is aborted; removing both checks left the supervisor suites green in A538-3's review,
-  because a reload starts a fresh record only after the old run has finished. The checks matter for
-  a status read that began before the reload, or one made after `stop()`; a test needs one of those
-  shapes. Left open by A538-3.
+  [Detail](backlog/box.md#no-test-covers-the-supervisor-ignoring-results-from-a-backup-run-a-reload-replaced)
 
 - **Every backup status read builds a new client per destination**, a new S3 client for a bucket,
   and closes it once its listing settles, even while the running sweep holds live ones. This predates A538-3, which added
