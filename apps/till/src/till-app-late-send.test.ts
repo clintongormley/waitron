@@ -1931,6 +1931,7 @@ describe("counter pay of a partly paid order", () => {
     expect(payRest.disabled).toBe(true);
 
     await userEvent.click(payRest);
+    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
     await flush(el, 6);
     expect(windowOf(el)).toBeNull();
 
