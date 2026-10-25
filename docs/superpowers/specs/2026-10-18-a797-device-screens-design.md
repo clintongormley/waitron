@@ -498,6 +498,9 @@ Each point is (read); the plan confirms it before relying on it.
   name (plan line 96), and its plan leaves only the handheld's short names to A797 (lines 19, 50, 311);
   this design proposes that A797 adds it to the pass read after A773-2 lands (slice 12b), and asks
   lane G to confirm. Each is a change to what a server read sends the till, so FULL.
+  (2026-10-25, slice 1: a save keeps a table's stored short name when it leaves the name
+  unchanged, and a proposal that is taken leaves the table with none rather than refusing the
+  save; see the [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4.)
 - **Whose unsent dishes** (slice 3). The floor read gives each party's unsent New orders with the
   owner's name only (`UnsentDraft`, `apps/server/src/order-drafts.ts:343-348`); the bar needs the
   owner's id and the draft's last-saved time (`order_drafts.owner_id`, `.updated_at`,
@@ -666,7 +669,8 @@ edits the same files)
   (§3.7): later choices for the owner, not built here.
 - What a tight place shows for a group joined today on the till (A504's today's joins), and for a
   table renamed for today: proposed, the members' short names joined ("T4+T5") and the saved short
-  name; the plan of slice 1 settles it.
+  name; the plan of slice 1 settles it. (2026-10-25: settled as the saved short name, and the
+  members' short names joined for a today's join; see the build plan's slice 1, D8.)
 - A larger text size for kitchen screens read from a distance; a "My tables" filter on the handheld
   floor; whether a dish leaves a station's Ready column on its own; the venue's bump mode once a dish
   tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order).

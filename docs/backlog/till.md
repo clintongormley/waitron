@@ -1052,9 +1052,10 @@ the bill-specific draft handles that race.
   was answered 2026-10-24: all recommended, with the Ready bar's warning time set in each prep
   station's editor, so nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041, built from the
   [build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), as is slice 5 (the
-  Ready bar on a handheld's Floor and List/Map kept per zone on the device), landed in #2063; slices
-  1–3 are next, now that #2037 has landed. Build slices (design §8), in the owner's order: (1)
-  table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
+  Ready bar on a handheld's Floor and List/Map kept per zone on the device), landed in #2063.
+  Slice 1 (table short names, data) is in review, built from the same plan; slice 2 (the
+  dashboard's short-name field) is next, then slice 3. Build slices (design §8), in the owner's
+  order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
   the work). Slices 10–11 wait for A803's slice 3; slices 12 and 12b follow A773-2; the rest build

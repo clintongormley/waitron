@@ -122,8 +122,9 @@ come after the list above:
   The handheld, kitchen screen and pass are **A797**: the owner answered Q42 on 2026-10-18 and
   Q51 on 2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so
   nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready
-  bar and List/Map kept per zone on the device) in #2063; slices 1–3 are next, now that #2037 has
-  landed. A773-2 builds the pass's part, and the phone's order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
+  bar and List/Map kept per zone on the device) in #2063; slice 1 (table short names, data) is in
+  review, built from the build plan; slice 2 (the dashboard's short-name field) is next, then
+  slice 3. A773-2 builds the pass's part, and the phone's order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
@@ -2776,13 +2777,27 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Q42 answer; Q51 was answered 2026-10-24 (all recommended; the Ready warning time in each prep
   station's editor), so nothing waits for it. 10–11 wait for A803's slice 3 and 12–12b follow
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
-  List/Map kept per zone on the device) in #2063. Build order: slices 1–3 next (#2037 has landed):
+  List/Map kept per zone on the device) in #2063. Slice 1 (table short names, data) is in review,
+  built from the build plan; slice 2 (the dashboard's short-name field) is next, then slice 3:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
   durable post-invoice payment-refund path. The screen designer was
   retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
+
+- **A1101. Short names on the floor map where a full name does not fit, and on printed kitchen
+  tickets.** A797's design proposes both (§3.7, §9) as later choices for the owner; A797 builds
+  neither. Today the map hides a name on a table drawn under 28 px (`NAME_MIN_PX`,
+  `packages/ui/src/floor-plan-geometry.ts`) and the kitchen ticket prints the full name
+  (`tableLabel`, `apps/server/src/kitchen-ticket.ts`). Ask the owner first.
+
+- **A1102. The till's tests name tables in Spanish.** `apps/till/src/till-app.test.ts`'s counter
+  move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa …" labels
+  (`git grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md
+  §3).
+  The till's share of the test data the [English-only audit](backlog/english-only-audit.md) counts;
+  A976 covers the server's. Low priority.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
