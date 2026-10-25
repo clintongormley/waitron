@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { Agent } from "undici";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -176,6 +176,8 @@ it("binds HTTPS password recovery to a fresh server inspection and exact request
   }
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 it("throttles failed passwords on unfinished-setup ownership recovery, then refuses the right one", async () => {
   const f = await firstFiscalFixture();
   let server: StartedServer | undefined;
@@ -216,6 +218,7 @@ it("throttles failed passwords on unfinished-setup ownership recovery, then refu
           password,
         }),
       } as RequestInit);
+    vi.spyOn(performance, "now").mockReturnValue(0);
     let throttled = false;
     for (let attempt = 0; attempt < 12; attempt++) {
       const response = await post("wrong");
