@@ -68,6 +68,7 @@ interface Renaming {
   target: Target;
   current: string | undefined;
   currentShortKey: string | undefined;
+  targetShortKey: string | undefined;
   wantsNew: boolean;
 }
 
@@ -85,14 +86,14 @@ export function planReset(input: {
   const fixedInUse = new Set(input.takenElsewhere);
   // Short-name keys are kept apart from labels, so a label "12" never blocks a short name "12".
   const fixedShortInUse = new Set(input.shortNameKeysElsewhere);
-  const holdShort = (name: string | null) => {
-    if (name !== null) fixedShortInUse.add(shortNameKey(name));
+  const hold = (label: string, shortName: string | null) => {
+    fixedInUse.add(label);
+    if (shortName !== null) fixedShortInUse.add(shortNameKey(shortName));
   };
   const targeted = new Set(input.targets.map((target) => target.tableId));
   for (const table of input.live) {
     if (!targeted.has(table.id)) {
-      fixedInUse.add(table.label);
-      holdShort(table.shortName);
+      hold(table.label, table.shortName);
     }
   }
   const renamings: Renaming[] = [];
@@ -101,13 +102,11 @@ export function planReset(input: {
     const table = target.tableId === null ? undefined : live.get(target.tableId);
     if (target.tableId === null && input.waitingToCreate?.has(target)) {
       plan.pending.push(target);
-      fixedInUse.add(target.label);
-      holdShort(target.shortName);
+      hold(target.label, target.shortName);
     } else if (target.tableId !== null && !table) {
       // The table's state is unknown, so nothing is done to it and no other table takes its target name.
       plan.pending.push(target);
-      fixedInUse.add(target.label);
-      holdShort(target.shortName);
+      hold(target.label, target.shortName);
     } else if (
       table &&
       (table.held ||
@@ -120,13 +119,11 @@ export function planReset(input: {
     ) {
       plan.pending.push(target);
       if ((table.held || table.clearing) && !table.hasToday) plan.seed.push(target);
-      fixedInUse.add(table.label);
-      holdShort(table.shortName);
+      hold(table.label, table.shortName);
     } else if (target.remove) {
       if (!table) continue;
       // A removal frees its names only once it has succeeded, so they stay taken this pass.
-      fixedInUse.add(table.label);
-      holdShort(table.shortName);
+      hold(table.label, table.shortName);
       if (table.tied) {
         plan.hide.push(table.id);
         plan.pending.push(target);
@@ -139,6 +136,7 @@ export function planReset(input: {
         current: table?.label,
         currentShortKey:
           table && table.shortName !== null ? shortNameKey(table.shortName) : undefined,
+        targetShortKey: target.shortName === null ? undefined : shortNameKey(target.shortName),
         wantsNew: true,
       });
     }
@@ -158,8 +156,8 @@ export function planReset(input: {
     const shortClaimed = new Set<string>();
     for (const entry of renamings) {
       if (!entry.wantsNew) continue;
-      const { label, shortName } = entry.target;
-      const shortKey = shortName === null ? undefined : shortNameKey(shortName);
+      const { label } = entry.target;
+      const shortKey = entry.targetShortKey;
       if (
         inUse.has(label) ||
         claimed.has(label) ||
