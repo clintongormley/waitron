@@ -82,30 +82,30 @@ async function routed() {
   const zone = async (name: string) =>
     (await db.insert(floorZones).values({ locationId, name }).returning({ id: floorZones.id }))[0]!
       .id;
-  const barra = await zone("Barra");
-  const mostrador = await zone("Mostrador deli");
+  const barZone = await zone("Barra");
+  const counterZone = await zone("Mostrador deli");
   const made = await scoped(async (tx) => {
     await ensureDefaultSeasons(tx, cfg);
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
     const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: barra, departmentId: restaurant });
-    await configureZone(tx, cfg, { zoneId: mostrador, departmentId: deli });
+    await configureZone(tx, cfg, { zoneId: barZone, departmentId: restaurant });
+    await configureZone(tx, cfg, { zoneId: counterZone, departmentId: deli });
     const menu = async (name: string) => {
       const id = (await createCatalogue(tx, { name })).id;
       const { document } = await buildMenuDocument(tx, id);
       await publishMenu(tx, id, menuDocumentHash(document), "person-1");
       return id;
     };
-    const desayunos = await menu("Desayunos");
-    const almuerzo = await menu("Almuerzo");
-    const cafe = await menu("Café");
-    const deliParaLlevar = await menu("Deli para llevar");
-    const mananas = (
+    const breakfastMenu = await menu("Desayunos");
+    const lunchMenu = await menu("Almuerzo");
+    const coffeeMenu = await menu("Café");
+    const takeawayMenu = await menu("Deli para llevar");
+    const morningPeriod = (
       await saveMenuPeriod(tx, cfg, restaurant, {
         name: "Mañanas",
-        menuId: desayunos,
+        menuId: breakfastMenu,
         staffMenuIds: [],
       })
     ).id;
@@ -134,11 +134,11 @@ async function routed() {
     return {
       restaurant,
       deli,
-      desayunos,
-      almuerzo,
-      cafe,
-      deliParaLlevar,
-      mananas,
+      breakfastMenu,
+      lunchMenu,
+      coffeeMenu,
+      takeawayMenu,
+      morningPeriod,
       christmas,
       manager: await person("manager"),
       supervisor: await person("supervisor"),
@@ -180,7 +180,7 @@ async function routed() {
     });
   const model = () => scoped((tx) => readOpeningHoursModel(tx, cfg, new Date()));
   season = (await model()).currentSeasonId!;
-  return { ...made, cfg, barra, mostrador, app, send, model, season };
+  return { ...made, cfg, barZone, counterZone, app, send, model, season };
 }
 
 type Routed = Awaited<ReturnType<typeof routed>>;
@@ -202,10 +202,10 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: "Afternoons", menuId: r.cafe, staffMenuIds: [], endOffsetMinutes: 0 },
+        { name: "Afternoons", menuId: r.coffeeMenu, staffMenuIds: [], endOffsetMinutes: 0 },
       ],
-      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Afternoons", endOffsetMinutes: 0 }],
-      ["PATCH", `/menu-periods/${r.mananas}`, { endOffsetMinutes: 0 }],
+      ["PATCH", `/menu-periods/${r.morningPeriod}`, { name: "Afternoons", endOffsetMinutes: 0 }],
+      ["PATCH", `/menu-periods/${r.morningPeriod}`, { endOffsetMinutes: 0 }],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {
         code: "management.request_invalid",
@@ -229,26 +229,26 @@ describe("the opening-hours routes", () => {
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       staffMenuIds: [],
       name: "Mediodía",
-      menuId: r.almuerzo,
+      menuId: r.lunchMenu,
     });
     expect(created.status).toBe(201);
-    const mediodia = (await created.json()) as { id: string };
-    expect(mediodia).toEqual({ id: expect.any(String) });
+    const middayPeriod = (await created.json()) as { id: string };
+    expect(middayPeriod).toEqual({ id: expect.any(String) });
     expect(
-      restaurantOf(await r.model(), r).periods.find((period) => period.id === mediodia.id),
-    ).toMatchObject({ name: "Mediodía", menuId: r.almuerzo });
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === middayPeriod.id),
+    ).toMatchObject({ name: "Mediodía", menuId: r.lunchMenu });
 
-    const renamed = await r.send("PATCH", `/menu-periods/${mediodia.id}`, r.manager, {
+    const renamed = await r.send("PATCH", `/menu-periods/${middayPeriod.id}`, r.manager, {
       name: "Comidas",
-      menuId: r.cafe,
+      menuId: r.coffeeMenu,
     });
     expect(renamed.status).toBe(204);
     expect(await renamed.text()).toBe("");
     expect(
-      restaurantOf(await r.model(), r).periods.find((period) => period.id === mediodia.id),
-    ).toMatchObject({ name: "Comidas", menuId: r.cafe });
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === middayPeriod.id),
+    ).toMatchObject({ name: "Comidas", menuId: r.coffeeMenu });
 
-    const monday = [{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }];
+    const monday = [{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }];
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
         days: week(monday),
@@ -256,8 +256,8 @@ describe("the opening-hours routes", () => {
       204,
     );
     await answers(
-      await r.send("PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, r.manager, {
-        menuId: r.cafe,
+      await r.send("PUT", `/zones/${r.barZone}/period-menus/${r.morningPeriod}`, r.manager, {
+        menuId: r.coffeeMenu,
       }),
       404,
     );
@@ -271,53 +271,56 @@ describe("the opening-hours routes", () => {
     ).toEqual(monday);
 
     await answers(
-      await r.send("PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, r.manager, {
+      await r.send("PUT", `/zones/${r.barZone}/period-menus/${r.morningPeriod}`, r.manager, {
         menuId: null,
       }),
       404,
     );
     await answers(
-      await r.send("POST", `/menu-periods/${mediodia.id}/delete`, r.manager, {
+      await r.send("POST", `/menu-periods/${middayPeriod.id}/delete`, r.manager, {
         replacementPeriodId: null,
         expectedClockRevision: 0,
       }),
       204,
     );
     model = await r.model();
-    expect(restaurantOf(model, r).periods.map((period) => period.id)).toEqual([r.mananas]);
+    expect(restaurantOf(model, r).periods.map((period) => period.id)).toEqual([r.morningPeriod]);
   });
 
   it("change only what a period update sends, keeping a rename made in the meantime", async () => {
     const r = await routed();
     await answers(
-      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
+      await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
         name: "Desayunos tempranos",
-        menuId: r.desayunos,
+        menuId: r.breakfastMenu,
       }),
       204,
     );
-    const pointed = await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
-      menuId: r.cafe,
+    const pointed = await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
+      menuId: r.coffeeMenu,
     });
     expect(pointed.status).toBe(204);
     expect(await pointed.text()).toBe("");
     expect(
-      restaurantOf(await r.model(), r).periods.find((period) => period.id === r.mananas),
-    ).toMatchObject({ name: "Desayunos tempranos", menuId: r.cafe });
-    const renamed = await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === r.morningPeriod),
+    ).toMatchObject({ name: "Desayunos tempranos", menuId: r.coffeeMenu });
+    const renamed = await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
       name: "Mañanas",
     });
     expect(renamed.status).toBe(204);
     expect(await renamed.text()).toBe("");
     expect(
-      restaurantOf(await r.model(), r).periods.find((period) => period.id === r.mananas),
-    ).toMatchObject({ name: "Mañanas", menuId: r.cafe });
-    await answers(await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {}), 400, {
+      restaurantOf(await r.model(), r).periods.find((period) => period.id === r.morningPeriod),
+    ).toMatchObject({ name: "Mañanas", menuId: r.coffeeMenu });
+    await answers(await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {}), 400, {
       code: "management.request_invalid",
       params: { field: "body" },
     });
     await answers(
-      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { menuId: r.cafe, name: 7 }),
+      await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
+        menuId: r.coffeeMenu,
+        name: 7,
+      }),
       400,
       { code: "management.request_invalid", params: { field: "name" } },
     );
@@ -326,9 +329,9 @@ describe("the opening-hours routes", () => {
   it("update a period only by PATCH: a PUT to its address finds no route and changes nothing", async () => {
     const r = await routed();
     const before = await r.model();
-    const put = await r.send("PUT", `/menu-periods/${r.mananas}`, r.manager, {
+    const put = await r.send("PUT", `/menu-periods/${r.morningPeriod}`, r.manager, {
       name: "Desayunos tempranos",
-      menuId: r.cafe,
+      menuId: r.coffeeMenu,
     });
     expect(put.status).toBe(404);
     expect(await r.model()).toEqual(before);
@@ -339,11 +342,11 @@ describe("the opening-hours routes", () => {
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       staffMenuIds: [],
       name: "Tardes",
-      menuId: r.cafe,
+      menuId: r.coffeeMenu,
     });
-    const tardes = ((await created.json()) as { id: string }).id;
+    const afternoonPeriod = ((await created.json()) as { id: string }).id;
     await answers(
-      await r.send("PATCH", `/menu-periods/${tardes}`, r.manager, { name: " Mañanas " }),
+      await r.send("PATCH", `/menu-periods/${afternoonPeriod}`, r.manager, { name: " Mañanas " }),
       409,
       { code: "menu_period.name_taken", params: { departmentId: r.restaurant, name: "Mañanas" } },
     );
@@ -351,7 +354,7 @@ describe("the opening-hours routes", () => {
       await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
         staffMenuIds: [],
         name: "  ",
-        menuId: r.cafe,
+        menuId: r.coffeeMenu,
       }),
       400,
       { code: "menu_timetable.invalid", params: { field: "name" } },
@@ -369,12 +372,16 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: "Tardes", menuId: r.cafe, staffMenuIds: [] },
+        { name: "Tardes", menuId: r.coffeeMenu, staffMenuIds: [] },
       ],
-      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Tardes", menuId: r.cafe, staffMenuIds: [] }],
+      [
+        "PATCH",
+        `/menu-periods/${r.morningPeriod}`,
+        { name: "Tardes", menuId: r.coffeeMenu, staffMenuIds: [] },
+      ],
       [
         "POST",
-        `/menu-periods/${r.mananas}/delete`,
+        `/menu-periods/${r.morningPeriod}/delete`,
         { replacementPeriodId: null, expectedClockRevision: 0 },
       ],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: week([]) }],
@@ -405,42 +412,47 @@ describe("the opening-hours routes", () => {
       await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
         staffMenuIds: [],
         name: "Mañanas",
-        menuId: r.cafe,
+        menuId: r.coffeeMenu,
       }),
       409,
       { code: "menu_period.name_taken", params: { departmentId: r.restaurant, name: "Mañanas" } },
     );
     await answers(
-      await r.send("PATCH", `/menu-periods/${unknown}`, r.manager, { name: "X", menuId: r.cafe }),
+      await r.send("PATCH", `/menu-periods/${unknown}`, r.manager, {
+        name: "X",
+        menuId: r.coffeeMenu,
+      }),
       404,
       { code: "menu_period.not_found", params: { periodId: unknown } },
     );
     await answers(
-      await r.send("PUT", `/zones/${r.barra}/period-menus/${unknown}`, r.manager, { menuId: null }),
+      await r.send("PUT", `/zones/${r.barZone}/period-menus/${unknown}`, r.manager, {
+        menuId: null,
+      }),
       404,
     );
     await answers(
-      await r.send("PUT", `/zones/${r.mostrador}/period-menus/${r.mananas}`, r.manager, {
-        menuId: r.deliParaLlevar,
+      await r.send("PUT", `/zones/${r.counterZone}/period-menus/${r.morningPeriod}`, r.manager, {
+        menuId: r.takeawayMenu,
       }),
       404,
     );
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "09:00" }]),
+        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "09:00" }]),
       }),
       400,
       { code: "menu_timetable.invalid", params: { field: "days.1.slots", reason: "empty" } },
     );
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }]),
+        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
       }),
       204,
     );
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menus`, r.manager, {
-        menuIds: [r.almuerzo, r.cafe],
+        menuIds: [r.lunchMenu, r.coffeeMenu],
       }),
       404,
     );
@@ -453,10 +465,14 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: "Afternoons", menuId: r.cafe, staffMenuIds: [], expectedClockRevision: 0 },
+        { name: "Afternoons", menuId: r.coffeeMenu, staffMenuIds: [], expectedClockRevision: 0 },
       ],
-      ["PATCH", `/menu-periods/${r.mananas}`, { name: "Afternoons", expectedClockRevision: 0 }],
-      ["PATCH", `/menu-periods/${r.mananas}`, { expectedClockRevision: 0 }],
+      [
+        "PATCH",
+        `/menu-periods/${r.morningPeriod}`,
+        { name: "Afternoons", expectedClockRevision: 0 },
+      ],
+      ["PATCH", `/menu-periods/${r.morningPeriod}`, { expectedClockRevision: 0 }],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {
         code: "management.request_invalid",
@@ -471,17 +487,17 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: 7, menuId: r.cafe, staffMenuIds: [] },
+        { name: 7, menuId: r.coffeeMenu, staffMenuIds: [] },
         "name",
       ],
       ["POST", `/departments/${r.restaurant}/menu-periods`, { name: "X", menuId: "x" }, "menuId"],
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: "X", menuId: r.cafe, departmentId: r.deli },
+        { name: "X", menuId: r.coffeeMenu, departmentId: r.deli },
         "departmentId",
       ],
-      ["PATCH", `/menu-periods/${r.mananas}`, { name: "X", menuId: "x" }, "menuId"],
+      ["PATCH", `/menu-periods/${r.morningPeriod}`, { name: "X", menuId: "x" }, "menuId"],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: [], extra: 1 }, "extra"],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {
@@ -517,9 +533,9 @@ describe("the opening-hours period API", () => {
     expect(model.departments.find((department) => department.id === r.restaurant)!.periods).toEqual(
       [
         {
-          id: r.mananas,
+          id: r.morningPeriod,
           name: "Mañanas",
-          menuId: r.desayunos,
+          menuId: r.breakfastMenu,
           colour: "red",
           staffMenuIds: [],
           floorPlanSetId: null,
@@ -536,8 +552,8 @@ describe("the opening-hours period API", () => {
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Lunch",
       colour: "blue",
-      menuId: r.almuerzo,
-      staffMenuIds: [r.cafe, r.deliParaLlevar],
+      menuId: r.lunchMenu,
+      staffMenuIds: [r.coffeeMenu, r.takeawayMenu],
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
@@ -549,8 +565,8 @@ describe("the opening-hours period API", () => {
       id,
       name: "Lunch",
       colour: "blue",
-      menuId: r.almuerzo,
-      staffMenuIds: [r.cafe, r.deliParaLlevar],
+      menuId: r.lunchMenu,
+      staffMenuIds: [r.coffeeMenu, r.takeawayMenu],
       floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
@@ -563,15 +579,15 @@ describe("the opening-hours period API", () => {
       id,
       name: "Lunch",
       colour: "green",
-      menuId: r.almuerzo,
-      staffMenuIds: [r.cafe, r.deliParaLlevar],
+      menuId: r.lunchMenu,
+      staffMenuIds: [r.coffeeMenu, r.takeawayMenu],
       floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
     });
     await answers(
       await r.send("PATCH", `/menu-periods/${id}`, r.manager, {
-        staffMenuIds: [r.deliParaLlevar, r.cafe],
+        staffMenuIds: [r.takeawayMenu, r.coffeeMenu],
       }),
       204,
     );
@@ -579,8 +595,8 @@ describe("the opening-hours period API", () => {
       id,
       name: "Lunch",
       colour: "green",
-      menuId: r.almuerzo,
-      staffMenuIds: [r.deliParaLlevar, r.cafe],
+      menuId: r.lunchMenu,
+      staffMenuIds: [r.takeawayMenu, r.coffeeMenu],
       floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
@@ -596,7 +612,7 @@ describe("the opening-hours period API", () => {
     const r = await routed();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Lunch",
-      menuId: r.almuerzo,
+      menuId: r.lunchMenu,
       staffMenuIds: [],
     });
     expect(created.status).toBe(201);
@@ -614,7 +630,7 @@ describe("the opening-hours period API", () => {
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Lunch",
       colour: "indigo",
-      menuId: r.almuerzo,
+      menuId: r.lunchMenu,
       staffMenuIds: [],
     });
     expect(created.status).toBe(201);
@@ -647,11 +663,11 @@ describe("the opening-hours period API", () => {
         const path =
           method === "POST"
             ? `/departments/${r.restaurant}/menu-periods`
-            : `/menu-periods/${r.mananas}`;
+            : `/menu-periods/${r.morningPeriod}`;
         await answers(
           await r.send(method, path, r.manager, {
             name: "Lunch",
-            menuId: r.almuerzo,
+            menuId: r.lunchMenu,
             staffMenuIds: [],
             [field]: value,
           }),
@@ -668,7 +684,7 @@ describe("the opening-hours period API", () => {
     await answers(
       await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
         name: "Lunch",
-        menuId: r.almuerzo,
+        menuId: r.lunchMenu,
       }),
       400,
       { code: "management.request_invalid", params: { field: "staffMenuIds" } },
@@ -681,12 +697,12 @@ describe("the opening-hours period API", () => {
       const path =
         method === "POST"
           ? `/departments/${r.restaurant}/menu-periods`
-          : `/menu-periods/${r.mananas}`;
-      for (const staffMenuIds of [[r.almuerzo], [r.cafe, r.cafe]]) {
+          : `/menu-periods/${r.morningPeriod}`;
+      for (const staffMenuIds of [[r.lunchMenu], [r.coffeeMenu, r.coffeeMenu]]) {
         await answers(
           await r.send(method, path, r.manager, {
             name: "Lunch",
-            menuId: r.almuerzo,
+            menuId: r.lunchMenu,
             staffMenuIds,
           }),
           400,
@@ -703,10 +719,10 @@ describe("retired menu timetable routes", () => {
     const before = await r.model();
     for (const [method, path, body] of [
       ["GET", "/menu-timetable", undefined],
-      ["PUT", `/departments/${r.restaurant}/menus`, { menuIds: [r.cafe] }],
-      ["PUT", `/departments/${r.restaurant}/all-day-menu`, { menuId: r.cafe }],
-      ["PUT", `/zones/${r.barra}/all-day-menu`, { menuId: r.cafe }],
-      ["PUT", `/zones/${r.barra}/period-menus/${r.mananas}`, { menuId: r.cafe }],
+      ["PUT", `/departments/${r.restaurant}/menus`, { menuIds: [r.coffeeMenu] }],
+      ["PUT", `/departments/${r.restaurant}/all-day-menu`, { menuId: r.coffeeMenu }],
+      ["PUT", `/zones/${r.barZone}/all-day-menu`, { menuId: r.coffeeMenu }],
+      ["PUT", `/zones/${r.barZone}/period-menus/${r.morningPeriod}`, { menuId: r.coffeeMenu }],
     ] as const) {
       await answers(await r.send(method, path, r.manager, body), 404);
       expect(await r.model()).toEqual(before);
@@ -717,14 +733,14 @@ describe("retired menu timetable routes", () => {
     const r = await routed();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Lunch",
-      menuId: r.deliParaLlevar,
+      menuId: r.takeawayMenu,
       staffMenuIds: [],
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
     expect(
       restaurantOf(await r.model(), r).periods.find((period) => period.id === id)!.menuId,
-    ).toBe(r.deliParaLlevar);
+    ).toBe(r.takeawayMenu);
   });
 });
 
@@ -733,7 +749,7 @@ it("answers the unmatched-route 404 to the retired dated timetable and zone clos
   const before = await r.model();
   for (const [path, sent] of [
     [`/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`, { slots: [] }],
-    [`/special-dates/${r.christmas}/zone-closed-times/${r.barra}`, { ranges: [] }],
+    [`/special-dates/${r.christmas}/zone-closed-times/${r.barZone}`, { ranges: [] }],
   ] as const) {
     const response = await r.send("PUT", path, r.manager, sent);
     expect({ path, status: response.status, body: await response.text() }).toEqual({
@@ -750,7 +766,7 @@ describe("zone closed-time routes", () => {
     const r = await routed();
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }]),
+        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
       }),
       204,
     );
@@ -759,10 +775,19 @@ describe("zone closed-time routes", () => {
       weekday,
       ranges: weekday === 1 ? [{ startsAt: "11:00", endsAt: "13:00" }] : [],
     }));
-    await answers(await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, { days }), 400, {
-      code: "zone_closed_time.invalid",
-      params: { field: "days.1.ranges.0", reason: "outside_hours", zoneId: r.barra, weekday: 1 },
-    });
+    await answers(
+      await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, { days }),
+      400,
+      {
+        code: "zone_closed_time.invalid",
+        params: {
+          field: "days.1.ranges.0",
+          reason: "outside_hours",
+          zoneId: r.barZone,
+          weekday: 1,
+        },
+      },
+    );
     expect(await r.model()).toEqual(before);
   });
 
@@ -770,7 +795,7 @@ describe("zone closed-time routes", () => {
     const r = await routed();
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }]),
+        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
       }),
       204,
     );
@@ -779,13 +804,13 @@ describe("zone closed-time routes", () => {
       weekday,
       ranges: weekday === 1 ? ranges : [],
     }));
-    await answers(await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, { days }), 204);
+    await answers(await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, { days }), 204);
     const response = await r.send("GET", "/opening-hours", r.supervisor);
     expect(response.status).toBe(200);
     const saved = (await response.json()) as OpeningHoursModel;
     expect(restaurantOf(saved, r).zones).toEqual([
       {
-        id: r.barra,
+        id: r.barZone,
         name: "Barra",
         seasonWeeks: saved.seasons.map((season) => ({
           seasonId: season.id,
@@ -793,9 +818,9 @@ describe("zone closed-time routes", () => {
         })),
       },
     ]);
-    await answers(await r.send("PUT", `/zones/${r.barra}/closed-week`, r.staff, { days }), 403);
+    await answers(await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.staff, { days }), 403);
     await answers(
-      await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, {
+      await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, {
         days: [
           ...days.slice(0, 6),
           { weekday: 6, ranges: [{ startsAt: "12:10", endsAt: "14:00" }] },
@@ -831,13 +856,13 @@ it("accepts a fitting week, refuses a clashing one and a stale one while a chang
     });
   });
   const path = `/departments/${r.restaurant}/menu-week`;
-  const days = week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "14:00" }]);
+  const days = week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "14:00" }]);
   const stale = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 0 });
   await answers(stale, 409, { code: "hours.clock_changed", params: {} });
   const fits = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 });
   await answers(fits, 204);
   const kept = (await r.model()).departments;
-  const clash = week([{ periodId: r.mananas, startsAt: "06:00", endsAt: "08:00" }]);
+  const clash = week([{ periodId: r.morningPeriod, startsAt: "06:00", endsAt: "08:00" }]);
   const refused = await r.send("PUT", path, r.manager, { days: clash, expectedClockRevision: 1 });
   await answers(refused, 409, {
     code: "hours.clock_change_conflict",
@@ -850,7 +875,7 @@ it("accepts a fitting week, refuses a clashing one and a stale one while a chang
         {
           departmentId: r.restaurant,
           departmentName: "Restaurant",
-          periodId: r.mananas,
+          periodId: r.morningPeriod,
           periodName: "Mañanas",
           seasonId: r.season,
           seasonName: "Autumn",
@@ -875,7 +900,7 @@ describe("week routes name one season", () => {
   it("a department week writes the season it names and no other", async () => {
     const r = await routed();
     const named = otherSeason(await r.model(), r);
-    const monday = [{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }];
+    const monday = [{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }];
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
         days: week(monday),
@@ -898,14 +923,14 @@ describe("week routes name one season", () => {
     const named = otherSeason(await r.model(), r);
     await answers(
       await r.send("PUT", `/departments/${r.restaurant}/menu-week`, r.manager, {
-        days: week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }]),
+        days: week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
         seasonId: named,
       }),
       204,
     );
     const ranges = [{ startsAt: "10:00", endsAt: "11:00" }];
     await answers(
-      await r.send("PUT", `/zones/${r.barra}/closed-week`, r.manager, {
+      await r.send("PUT", `/zones/${r.barZone}/closed-week`, r.manager, {
         days: closedWeek(ranges),
         seasonId: named,
       }),
@@ -924,9 +949,9 @@ describe("week routes name one season", () => {
     [
       [
         `/departments/${r.restaurant}/menu-week`,
-        week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }]),
+        week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }]),
       ],
-      [`/zones/${r.barra}/closed-week`, closedWeek([{ startsAt: "10:00", endsAt: "11:00" }])],
+      [`/zones/${r.barZone}/closed-week`, closedWeek([{ startsAt: "10:00", endsAt: "11:00" }])],
     ] as const;
 
   it("refuses a week write naming no season, or a malformed one, changing nothing", async () => {
@@ -986,11 +1011,11 @@ describe("the season weeks route", () => {
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: weekday === 1 ? ranges : [] }));
   const otherSeason = (model: OpeningHoursModel, r: Routed) =>
     model.seasons.find((season) => season.id !== r.season)!.id;
-  const monday = (r: Routed) => [{ periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" }];
+  const monday = (r: Routed) => [{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" }];
   const closed = [{ startsAt: "10:00", endsAt: "11:00" }];
   const body = (r: Routed) => ({
     departments: [{ departmentId: r.restaurant, days: week(monday(r)) }],
-    zones: [{ zoneId: r.barra, days: closedWeek(closed) }],
+    zones: [{ zoneId: r.barZone, days: closedWeek(closed) }],
   });
 
   it("saves a department week and a zone week in the season it names and no other", async () => {
@@ -1020,7 +1045,7 @@ describe("the season weeks route", () => {
         departments: [{ departmentId: r.restaurant, days: week(monday(r)) }],
         zones: [
           {
-            zoneId: r.barra,
+            zoneId: r.barZone,
             days: closedWeek([
               { startsAt: "10:00", endsAt: "11:00" },
               { startsAt: "11:30", endsAt: "13:00" },
@@ -1034,7 +1059,7 @@ describe("the season weeks route", () => {
         params: {
           field: "zones.0.days.1.ranges.1",
           reason: "outside_hours",
-          zoneId: r.barra,
+          zoneId: r.barZone,
           weekday: 1,
         },
       },
@@ -1049,8 +1074,8 @@ describe("the season weeks route", () => {
       await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
         ...body(r),
         zones: [
-          { zoneId: r.barra, days: closedWeek(closed) },
-          { zoneId: r.mostrador, days: closedWeek(closed) },
+          { zoneId: r.barZone, days: closedWeek(closed) },
+          { zoneId: r.counterZone, days: closedWeek(closed) },
         ],
       }),
       400,
@@ -1059,7 +1084,7 @@ describe("the season weeks route", () => {
         params: {
           field: "zones.1.days.1.ranges.0",
           reason: "outside_hours",
-          zoneId: r.mostrador,
+          zoneId: r.counterZone,
           weekday: 1,
         },
       },
@@ -1084,7 +1109,7 @@ describe("the season weeks route", () => {
     const r = await routed();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Dinner",
-      menuId: r.almuerzo,
+      menuId: r.lunchMenu,
       staffMenuIds: [],
     });
     expect(created.status).toBe(201);
@@ -1096,12 +1121,12 @@ describe("the season weeks route", () => {
           {
             departmentId: r.restaurant,
             days: week([
-              { periodId: r.mananas, startsAt: "13:00", endsAt: "16:00" },
+              { periodId: r.morningPeriod, startsAt: "13:00", endsAt: "16:00" },
               { periodId: dinner, startsAt: "16:00", endsAt: "23:00" },
             ]),
           },
         ],
-        zones: [{ zoneId: r.barra, days: closedWeek(across) }],
+        zones: [{ zoneId: r.barZone, days: closedWeek(across) }],
       }),
       204,
     );
@@ -1145,7 +1170,7 @@ describe("the season weeks route", () => {
         { departments: [{ departmentId: r.restaurant, days, seasonId: r.season }] },
         "departments.0.seasonId",
       ],
-      [{ zones: [{ zoneId: r.barra, days: zoneDays, kind: "closed" }] }, "zones.0.kind"],
+      [{ zones: [{ zoneId: r.barZone, days: zoneDays, kind: "closed" }] }, "zones.0.kind"],
       [
         {
           departments: [
@@ -1158,8 +1183,8 @@ describe("the season weeks route", () => {
       [
         {
           zones: [
-            { zoneId: r.barra, days: zoneDays },
-            { zoneId: r.barra, days: zoneDays },
+            { zoneId: r.barZone, days: zoneDays },
+            { zoneId: r.barZone, days: zoneDays },
           ],
         },
         "zones.1.zoneId",
@@ -1177,8 +1202,8 @@ describe("the season weeks route", () => {
     const r = await routed();
     const before = await r.model();
     const overlapping = [
-      { periodId: r.mananas, startsAt: "09:00", endsAt: "12:00" },
-      { periodId: r.mananas, startsAt: "11:00", endsAt: "13:00" },
+      { periodId: r.morningPeriod, startsAt: "09:00", endsAt: "12:00" },
+      { periodId: r.morningPeriod, startsAt: "11:00", endsAt: "13:00" },
     ];
     await answers(
       await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
@@ -1195,7 +1220,7 @@ describe("the season weeks route", () => {
         departments: [{ departmentId: r.restaurant, days: week(monday(r)) }],
         zones: [
           {
-            zoneId: r.barra,
+            zoneId: r.barZone,
             days: closedWeek([
               { startsAt: "16:00", endsAt: "18:00" },
               { startsAt: "17:00", endsAt: "19:00" },
@@ -1224,7 +1249,7 @@ describe("the season weeks route", () => {
     );
     await answers(
       await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
-        zones: [{ zoneId: r.barra }],
+        zones: [{ zoneId: r.barZone }],
       }),
       400,
       { code: "zone_closed_time.invalid", params: { field: "zones.0.days" } },
@@ -1307,7 +1332,7 @@ describe("a period's Floor plan field", () => {
     const r = await withSets();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Dinner",
-      menuId: r.almuerzo,
+      menuId: r.lunchMenu,
       staffMenuIds: [],
       floorPlanSetId: r.dinner,
     });
@@ -1330,10 +1355,10 @@ describe("a period's Floor plan field", () => {
 
   it("leaves the field empty on a create that does not send it", async () => {
     const r = await withSets();
-    expect(await r.stored(r.mananas)).toBeNull();
+    expect(await r.stored(r.morningPeriod)).toBeNull();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
       name: "Dinner",
-      menuId: r.almuerzo,
+      menuId: r.lunchMenu,
       staffMenuIds: [],
     });
     expect(await r.stored(((await created.json()) as { id: string }).id)).toBeNull();
@@ -1345,7 +1370,7 @@ describe("a period's Floor plan field", () => {
     await answers(
       await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
         name: "Dinner",
-        menuId: r.almuerzo,
+        menuId: r.lunchMenu,
         staffMenuIds: [],
         floorPlanSetId: r.deliSet,
       }),
@@ -1353,14 +1378,14 @@ describe("a period's Floor plan field", () => {
       { code: "menu_period.invalid", params: { field: "floorPlanSetId" } },
     );
     await answers(
-      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
+      await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
         floorPlanSetId: r.deliSet,
       }),
       400,
       { code: "menu_period.invalid", params: { field: "floorPlanSetId" } },
     );
     await answers(
-      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
+      await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
         floorPlanSetId: randomUUID(),
       }),
       400,
@@ -1373,24 +1398,28 @@ describe("a period's Floor plan field", () => {
     const r = await withSets();
     for (const floorPlanSetId of [7, "", "x", false, [r.dinner]])
       await answers(
-        await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { floorPlanSetId }),
+        await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, { floorPlanSetId }),
         400,
         { code: "management.request_invalid", params: { field: "floorPlanSetId" } },
       );
-    expect(await r.stored(r.mananas)).toBeNull();
+    expect(await r.stored(r.morningPeriod)).toBeNull();
   });
 
   it("cannot move a period that names a set into another department", async () => {
     const r = await withSets();
     await answers(
-      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { floorPlanSetId: r.dinner }),
+      await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
+        floorPlanSetId: r.dinner,
+      }),
       204,
     );
     await answers(
-      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { departmentId: r.deli }),
+      await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, {
+        departmentId: r.deli,
+      }),
       400,
       { code: "management.request_invalid", params: { field: "departmentId" } },
     );
-    expect(await r.stored(r.mananas)).toBe(r.dinner);
+    expect(await r.stored(r.morningPeriod)).toBe(r.dinner);
   });
 });

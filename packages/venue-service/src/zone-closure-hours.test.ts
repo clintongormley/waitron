@@ -54,14 +54,14 @@ async function venue() {
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Barra" })
     .returning({ id: floorZones.id });
-  const barra = zone!.id;
+  const barZone = zone!.id;
   return withTransaction(db, async (tx) => {
     const seasonId = (await ensureDefaultSeasons(tx, cfg))[0]!.id;
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
     const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    await configureZone(tx, cfg, { zoneId: barra, departmentId: restaurant });
+    await configureZone(tx, cfg, { zoneId: barZone, departmentId: restaurant });
     const menuId = (await createCatalogue(tx, { name: "Carta" })).id;
     for (const [departmentId, startsAt, endsAt] of [
       [restaurant, "09:00", "12:00"],
@@ -83,7 +83,7 @@ async function venue() {
         { seasonId },
       );
     }
-    return { cfg, seasonId, barra, deli, restaurant, menuId };
+    return { cfg, seasonId, barZone, deli, restaurant, menuId };
   });
 }
 
@@ -107,7 +107,7 @@ describe("assertSeasonClosuresInHours", () => {
         v.seasonId,
         [
           {
-            zoneId: v.barra,
+            zoneId: v.barZone,
             field: "",
             days: closedMonday([{ startsAt: "10:00", endsAt: "12:00" }]),
           },
@@ -128,7 +128,7 @@ describe("assertSeasonClosuresInHours", () => {
             v.seasonId,
             [
               {
-                zoneId: v.barra,
+                zoneId: v.barZone,
                 field: "zones.3.",
                 days: closedMonday([
                   { startsAt: "09:00", endsAt: "10:00" },
@@ -145,7 +145,7 @@ describe("assertSeasonClosuresInHours", () => {
       params: {
         field: "zones.3.days.1.ranges.1",
         reason: "outside_hours",
-        zoneId: v.barra,
+        zoneId: v.barZone,
         weekday: 1,
       },
     });
@@ -165,21 +165,21 @@ describe("assertSeasonClosuresInHours", () => {
             tx,
             v.cfg,
             v.seasonId,
-            [{ zoneId: v.barra, field: "", days }],
+            [{ zoneId: v.barZone, field: "", days }],
             at,
           ),
         ),
       ),
     ).toEqual({
       code: "zone_closed_time.invalid",
-      params: { field: "days.5.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 5 },
+      params: { field: "days.5.ranges.0", reason: "outside_hours", zoneId: v.barZone, weekday: 5 },
     });
   });
 
   it("reads the hours of the department the zone serves now", async () => {
     const v = await venue();
     await withTransaction(db, (tx) =>
-      configureZone(tx, v.cfg, { zoneId: v.barra, departmentId: v.deli }),
+      configureZone(tx, v.cfg, { zoneId: v.barZone, departmentId: v.deli }),
     );
     await withTransaction(db, (tx) =>
       assertSeasonClosuresInHours(
@@ -188,7 +188,7 @@ describe("assertSeasonClosuresInHours", () => {
         v.seasonId,
         [
           {
-            zoneId: v.barra,
+            zoneId: v.barZone,
             field: "",
             days: closedMonday([{ startsAt: "15:00", endsAt: "16:00" }]),
           },
@@ -205,7 +205,7 @@ describe("assertSeasonClosuresInHours", () => {
             v.seasonId,
             [
               {
-                zoneId: v.barra,
+                zoneId: v.barZone,
                 field: "",
                 days: closedMonday([{ startsAt: "10:00", endsAt: "11:00" }]),
               },
@@ -216,7 +216,7 @@ describe("assertSeasonClosuresInHours", () => {
       ),
     ).toEqual({
       code: "zone_closed_time.invalid",
-      params: { field: "days.1.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 1 },
+      params: { field: "days.1.ranges.0", reason: "outside_hours", zoneId: v.barZone, weekday: 1 },
     });
   });
 
@@ -230,14 +230,14 @@ describe("assertSeasonClosuresInHours", () => {
             tx,
             v.cfg,
             v.seasonId,
-            [{ zoneId: v.barra, field: "", days }],
+            [{ zoneId: v.barZone, field: "", days }],
             at,
           ),
         ),
       ),
     ).toEqual({
       code: "zone_closed_time.invalid",
-      params: { field: "days.5.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 1 },
+      params: { field: "days.5.ranges.0", reason: "outside_hours", zoneId: v.barZone, weekday: 1 },
     });
   });
 
@@ -282,14 +282,14 @@ describe("assertSeasonClosuresInHours", () => {
           tx,
           v.cfg,
           v.seasonId,
-          [{ zoneId: v.barra, field: "", days: closedMonday([{ startsAt, endsAt }]) }],
+          [{ zoneId: v.barZone, field: "", days: closedMonday([{ startsAt, endsAt }]) }],
           at,
         ),
       );
     await closure("05:30", "06:00");
     expect(await refusal(() => closure("06:00", "07:00"))).toEqual({
       code: "zone_closed_time.invalid",
-      params: { field: "days.1.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 1 },
+      params: { field: "days.1.ranges.0", reason: "outside_hours", zoneId: v.barZone, weekday: 1 },
     });
   });
 
@@ -332,7 +332,7 @@ describe("assertDatedClosuresInHours", () => {
             new Set(),
             {
               clock: await readLocationClock(tx, v.cfg.locationId),
-              departmentOf: new Map([[v.barra, v.deli]]),
+              departmentOf: new Map([[v.barZone, v.deli]]),
             },
           ),
         ),
