@@ -862,6 +862,17 @@ export class BoxStatusScreen extends LitElement {
     >`;
   }
 
+  #noteSummary(entry: MisdatedOpenView): string {
+    if (entry.unconfirmed) return alertMessage(MISDATED, { ...entry }, currentLocale());
+    const from = wallMinute(entry.from, entry.fromOffsetMinutes);
+    if (entry.count === 1) return fill("box_status.misdated.summary_one", { from });
+    return fill("box_status.misdated.summary", {
+      count: String(entry.count),
+      from,
+      to: wallMinute(entry.to ?? entry.from, entry.toOffsetMinutes ?? entry.fromOffsetMinutes),
+    });
+  }
+
   #renderNoteDialog(): TemplateResult {
     const target = this.noteTarget;
     return html`<dashboard-misdated-note-dialog
@@ -869,7 +880,7 @@ export class BoxStatusScreen extends LitElement {
       .open=${this.noteOpen}
       .mode=${target?.mode ?? "handle"}
       .incidentId=${target?.entry.incidentId ?? ""}
-      .summary=${target === null ? "" : alertMessage(MISDATED, { ...target.entry }, currentLocale())}
+      .summary=${target === null ? "" : this.#noteSummary(target.entry)}
       @saved=${() => this.api.liveData.refresh()}
       @note-close=${() => (this.noteOpen = false)}
     ></dashboard-misdated-note-dialog>`;

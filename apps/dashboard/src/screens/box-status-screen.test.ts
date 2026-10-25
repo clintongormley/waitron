@@ -1194,7 +1194,12 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     expect(text(q(el, "[data-test=misdated-sentence]"))).toBe(sentence);
     expect(q(el, "[data-test=misdated-table]")).toBeNull();
     expect(text(section(el))).toBe(
-      [t("box_status.misdated.title"), t("box_status.misdated.line"), sentence].join(" "),
+      [
+        t("box_status.misdated.title"),
+        t("box_status.misdated.line"),
+        sentence,
+        t("alerts.mark_handled"),
+      ].join(" "),
     );
     expect(api.clockMisdated).not.toHaveBeenCalled();
   });
@@ -1858,7 +1863,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       await flush(el);
     }
 
-    it("Mark handled on an open entry opens the dialog to mark that entry's alert handled, with the alert's sentence", async () => {
+    it("Mark handled on an open entry opens the dialog to mark that entry's alert handled, with its sales' count and times", async () => {
       const { el } = await mount(withNotes([OPEN, UNCONFIRMED]));
       const [listed, cannotTell] = qa(el, "[data-test=misdated-entry]");
       const mark = markIn(listed!)!;
@@ -1873,8 +1878,13 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       expect(dialog.open).toBe(true);
       expect(dialog.mode).toBe("handle");
       expect(dialog.incidentId).toBe("i1");
+      // The times are the entry's stored offset (+120), not the browser's UTC.
       expect(dialog.summary).toBe(
-        alertMessage("clock.records_misdated", { ...OPEN }, currentLocale()),
+        fill("box_status.misdated.summary", {
+          count: "2",
+          from: "2026-10-22 21:00",
+          to: "2026-10-22 21:05",
+        }),
       );
     });
 
@@ -1905,7 +1915,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       expect(dialog.mode).toBe("note");
       expect(dialog.incidentId).toBe("h5");
       expect(dialog.summary).toBe(
-        alertMessage("clock.records_misdated", { ...NO_NOTE }, currentLocale()),
+        fill("box_status.misdated.summary_one", { from: "2026-10-19 12:00" }),
       );
     });
 
