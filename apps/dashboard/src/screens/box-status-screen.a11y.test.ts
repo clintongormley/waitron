@@ -291,6 +291,36 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it.each([
+    ["ready", () => new Promise<Blob>(() => {}), false, "misdated-download"],
+    ["while its file is asked for", () => new Promise<Blob>(() => {}), true, "misdated-download"],
+    [
+      "after a refused download",
+      () => Promise.reject({ code: "alert.not_found" }),
+      true,
+      "misdated-download-error",
+    ],
+  ] as const)(
+    "renders an open list's download button accessibly %s",
+    async (name, answer, press, drawn) => {
+      const api = { ...withMisdated(LIST), downloadMisdatedSales: vi.fn(answer) };
+      const { el, host } = await mountWidget<BoxStatusScreen>(
+        "dashboard-box-status-screen",
+        { api: api as unknown as DashboardApi, canOpen: () => true },
+        theme,
+      );
+      await flush(el);
+      const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=misdated-download]")!;
+      if (press) {
+        await userEvent.click(button);
+        await flush(el);
+      }
+      expect(button.hasAttribute("loading")).toBe(name === "while its file is asked for");
+      expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
+
   describe("the check of the box's clock with this device", () => {
     const STOPPED = health({ clockStop: { ...PROOF_READY.clockStop!, proof: "none" } });
 

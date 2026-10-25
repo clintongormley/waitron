@@ -205,6 +205,12 @@ export class BoxStatusScreen extends LitElement {
         gap: var(--wt-space-2);
         margin: 0 0 var(--wt-space-3);
       }
+      .misdated-entry > wt-button {
+        justify-self: start;
+      }
+      .misdated-entry > .error {
+        margin: 0;
+      }
     `,
   ];
 
@@ -240,6 +246,9 @@ export class BoxStatusScreen extends LitElement {
   /** The handled episodes, newest first as the box sends them; null until read. */
   @state() private handledEpisodes: HandledEpisode[] | null = null;
   @state() private handledFailed = false;
+  /** Incident ids whose file is being asked for, and the refusal last shown under each entry. */
+  @state() private downloading: ReadonlySet<string> = new Set();
+  @state() private downloadRefusals: ReadonlyMap<string, string> = new Map();
   @state() private clockCheckOpen = false;
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
@@ -825,7 +834,51 @@ export class BoxStatusScreen extends LitElement {
             .columns=${this.#misdatedColumns()}
             .rowKey=${(record: MisdatedRecordView) => record.recordId}
           ></wt-data-table>`
-    }`;
+    }
+    ${open.unconfirmed ? nothing : this.#downloadButton(open)}`;
+  }
+
+  #downloadButton(open: MisdatedOpenView): TemplateResult {
+    const refusal = this.downloadRefusals.get(open.incidentId);
+    return html`<wt-button
+        size="sm"
+        variant="secondary"
+        data-test="misdated-download"
+        ?loading=${this.downloading.has(open.incidentId)}
+        @click=${() => void this.#download(open)}
+        >${t("box_status.misdated.download")}</wt-button
+      >${
+        refusal === undefined
+          ? nothing
+          : html`<p class="error" role="alert" data-test="misdated-download-error">
+              ${codeMessage(refusal)}
+            </p>`
+      }`;
+  }
+
+  async #download(open: MisdatedOpenView): Promise<void> {
+    const id = open.incidentId;
+    if (this.downloading.has(id)) return;
+    this.downloading = new Set([...this.downloading, id]);
+    const refusals = new Map(this.downloadRefusals);
+    refusals.delete(id);
+    this.downloadRefusals = refusals;
+    try {
+      const file = await this.api.downloadMisdatedSales(id);
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      // The server's own name for the file: the first sale's date as the box's clock read it.
+      link.download = `misdated-sales-${wallClock(open.from, open.fromOffsetMinutes).date}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.downloadRefusals = new Map([...this.downloadRefusals, [id, codeOf(error)]]);
+    } finally {
+      const asked = new Set(this.downloading);
+      asked.delete(id);
+      this.downloading = asked;
+    }
   }
 
   #renderHandled(health: BoxHealth, severalTables: boolean): TemplateResult | typeof nothing {

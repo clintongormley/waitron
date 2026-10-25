@@ -3332,6 +3332,7 @@ export const en = {
   "box_status.misdated.handled_by_unknown": "Marked handled on {time}.",
   "box_status.misdated.note": "Note: {note}",
   "box_status.misdated.handled_read_error": "The handled lists could not be read.",
+  "box_status.misdated.download": "Download for your adviser",
   "box_status.alerts_unavailable":
     "The alerts could not be read, so a part may look fine when it is not.",
 } as const;
@@ -6718,6 +6719,7 @@ export const es: Record<StringKey, string> = {
   "box_status.misdated.handled_by_unknown": "Marcada como resuelta el {time}.",
   "box_status.misdated.note": "Nota: {note}",
   "box_status.misdated.handled_read_error": "No se han podido leer las listas resueltas.",
+  "box_status.misdated.download": "Descargar para tu asesor",
   "box_status.alerts_unavailable":
     "No se han podido leer los avisos, así que puede parecer que una parte está bien cuando no lo está.",
 };

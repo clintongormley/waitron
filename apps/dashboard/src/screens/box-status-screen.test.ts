@@ -1618,4 +1618,180 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       );
     });
   });
+
+  describe("Download for your adviser", () => {
+    type Episode = ClockMisdatedHandledView["episodes"][number];
+    // Under the browser tests' UTC, a browser-zone date would read 2026-10-24.
+    const NEAR_MIDNIGHT: MisdatedOpenView = {
+      ...OPEN,
+      incidentId: "i9",
+      confirmationId: "c9",
+      count: 1,
+      from: "2026-10-24T22:30:00.000Z",
+      to: "2026-10-24T22:30:00.000Z",
+    };
+    const BOTH_LISTS: ClockMisdatedView = {
+      lists: [
+        ...LISTS.lists,
+        {
+          confirmationId: "c9",
+          records: [
+            {
+              recordId: "r9",
+              series: "T3",
+              number: 1,
+              at: NEAR_MIDNIGHT.from,
+              offsetMinutes: 120,
+            },
+          ],
+        },
+      ],
+    };
+    const HANDLED: Episode = {
+      ...OPEN,
+      incidentId: "h7",
+      confirmationId: "hc7",
+      count: 1,
+      from: "2026-10-19T10:00:00.000Z",
+      to: "2026-10-19T10:00:00.000Z",
+      handledAt: "2026-10-20T09:00:00.000Z",
+      handledBy: { kind: "box" },
+      note: null,
+      records: [
+        {
+          recordId: "hr7",
+          series: "T4",
+          number: 2,
+          at: "2026-10-19T10:00:00.000Z",
+          offsetMinutes: 120,
+        },
+      ],
+    };
+    const HANDLED_UNCONFIRMED: Episode = {
+      ...UNCONFIRMED,
+      incidentId: "h8",
+      confirmationId: "hc8",
+      handledAt: "2026-10-18T09:00:00.000Z",
+      handledBy: { kind: "box" },
+      note: null,
+      records: null,
+    };
+
+    let downloads: string[] = [];
+    beforeEach(() => {
+      downloads = [];
+      const spy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+        this: HTMLAnchorElement,
+      ) {
+        downloads.push(this.download);
+      });
+      onTestFinished(() => spy.mockRestore());
+    });
+
+    function withDownload(
+      download: unknown,
+      open: MisdatedOpenView[],
+      handled: Episode[] = [],
+    ): DashboardApi {
+      return stubApi(
+        {
+          clockMisdated: vi.fn().mockResolvedValue(BOTH_LISTS),
+          clockMisdatedHandled: vi.fn().mockResolvedValue({ episodes: handled }),
+          downloadMisdatedSales: download,
+        },
+        { ...health(), misdatedOpen: open, misdatedHandledCount: handled.length },
+      );
+    }
+    const openEntries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-entry]");
+    const handledEntries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-handled-entry]");
+    const buttonIn = (entry: Element) =>
+      entry.querySelector("[data-test=misdated-download]") as
+        (HTMLElement & { loading: boolean; disabled: boolean }) | null;
+    const errorIn = (entry: Element) => entry.querySelector("[data-test=misdated-download-error]");
+    async function openFold(el: BoxStatusScreen) {
+      const fold = q(el, "[data-test=misdated-handled]") as HTMLElement;
+      (fold.shadowRoot!.querySelector("button.header") as HTMLElement).click();
+      await flush(el);
+    }
+
+    it("asks for the entry's list and saves it named by its first sale's date at its own offset", async () => {
+      const api = withDownload(vi.fn().mockResolvedValue(new Blob(["a,b"])), [NEAR_MIDNIGHT]);
+      const { el } = await mount(api);
+      const [entry] = openEntries(el);
+      const button = buttonIn(entry!)!;
+      expect(text(button)).toBe(t("box_status.misdated.download"));
+      expect(button.getAttribute("variant")).toBe("secondary");
+      expect(button.disabled).toBe(false);
+      await userEvent.click(button);
+      await flush(el);
+      expect(api.downloadMisdatedSales).toHaveBeenCalledWith("i9");
+      expect(downloads).toEqual(["misdated-sales-2026-10-25.csv"]);
+      expect(errorIn(entry!)).toBeNull();
+    });
+
+    it("offers it on a handled list too, and never for an entry that cannot tell, open or handled", async () => {
+      const api = withDownload(
+        vi.fn().mockResolvedValue(new Blob(["a,b"])),
+        [UNCONFIRMED],
+        [HANDLED, HANDLED_UNCONFIRMED],
+      );
+      const { el } = await mount(api);
+      expect(qa(el, "[data-test=misdated-download]")).toHaveLength(0);
+      await openFold(el);
+      const [handled, handledUnconfirmed] = handledEntries(el);
+      expect(buttonIn(handledUnconfirmed!)).toBeNull();
+      expect(qa(el, "[data-test=misdated-download]")).toHaveLength(1);
+      await userEvent.click(buttonIn(handled!)!);
+      await flush(el);
+      expect(api.downloadMisdatedSales).toHaveBeenCalledWith("h7");
+      expect(downloads).toEqual(["misdated-sales-2026-10-19.csv"]);
+    });
+
+    it("shows loading only on the asked entry's button while its file is asked for", async () => {
+      const sent = deferred<Blob>();
+      const api = withDownload(vi.fn().mockReturnValue(sent.promise), [OPEN, NEAR_MIDNIGHT]);
+      const { el } = await mount(api);
+      const [first, second] = openEntries(el);
+      await userEvent.click(buttonIn(second!)!);
+      await el.updateComplete;
+      expect(buttonIn(second!)!.loading).toBe(true);
+      expect(buttonIn(first!)!.loading).toBe(false);
+      expect(buttonIn(first!)!.disabled).toBe(false);
+      buttonIn(second!)!.click();
+      await el.updateComplete;
+      expect(api.downloadMisdatedSales).toHaveBeenCalledTimes(1);
+      sent.resolve(new Blob(["a,b"]));
+      await flush(el);
+      expect(buttonIn(second!)!.loading).toBe(false);
+      expect(downloads).toEqual(["misdated-sales-2026-10-25.csv"]);
+    });
+
+    it("says a refused download under that entry only, until its button is pressed again", async () => {
+      const again = deferred<Blob>();
+      const download = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "alert.not_found" })
+        .mockReturnValueOnce(again.promise);
+      const { el } = await mount(withDownload(download, [OPEN, NEAR_MIDNIGHT]));
+      const [first, second] = openEntries(el);
+      await userEvent.click(buttonIn(first!)!);
+      await flush(el);
+      expect(text(errorIn(first!))).toBe(codeMessage("alert.not_found"));
+      expect(errorIn(second!)).toBeNull();
+      expect(downloads).toEqual([]);
+      await userEvent.click(buttonIn(first!)!);
+      await el.updateComplete;
+      expect(errorIn(first!)).toBeNull();
+      again.resolve(new Blob(["a,b"]));
+      await flush(el);
+      expect(errorIn(first!)).toBeNull();
+      expect(downloads).toEqual(["misdated-sales-2026-10-22.csv"]);
+    });
+
+    it("words its button in Spanish from the strings tables", async () => {
+      setLocale("es");
+      const { el } = await mount(withDownload(vi.fn(), [OPEN]));
+      expect(text(buttonIn(openEntries(el)[0]!))).toBe(es["box_status.misdated.download"]);
+    });
+  });
 });
