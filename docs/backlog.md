@@ -2846,6 +2846,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Terrace tables lie beyond the visible canvas, so none shows without scrolling; at 390 the Tables
   panel leaves a large blank space between Add tables / Add joined table and the list.
 
+- **A1110. A short name with a "+" in it can read like one of today's joins on the Ready bar.**
+  Found by the A797 slice 1 review (2026-10-25): a save may give "Window" the short name "T1+T2"
+  beside "Terrace 1" (T1) and "Terrace 2" (T2); once the two terrace tables are joined today, the
+  Ready bar lists both the join and Window as "T1+T2". The entries stay separate (one per party),
+  but staff cannot tell them apart. The proposal rule keeps a name of four characters or fewer
+  whole, so a table named "1+2" is proposed "1+2". Decide in slice 2 (the dashboard's short-name
+  field) whether a short name may contain "+", or whether the bar adds the full name when two
+  entries read alike.
+
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
     the cookie names a disabled device, so the response time hints that an id is a disabled device;
