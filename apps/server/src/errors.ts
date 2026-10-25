@@ -381,9 +381,11 @@ declare module "@waitron/shared" {
     /**
      * The name is already in use in this venue: a table's saved label, or, sent with
      * `field: "name"` from a till, also a table's or group's name for today. `label` is the name
-     * asked for.
+     * asked for. With `takenBy`, a floor-plan save added or renamed a table that is left with no
+     * short name, and another zone's table, named by `takenBy`, shows that name as its own short
+     * name.
      */
-    "table.label_taken": { label: string; field?: "name" };
+    "table.label_taken": { label: string; field?: "name"; takenBy?: string };
     /** A floor-plan save sent a short name another table holds; `takenBy` is that table's full name. */
     "table.short_name_taken": { shortName: string; takenBy: string; field: "shortName" };
     "table.inactive": { tableId: string };

@@ -156,6 +156,22 @@ it("a taken name selects its table and shows the generic sentence", async () => 
   expect(button(el, "save").disabled).toBe(false);
 });
 
+it("a name another table uses as its short name says which table, in English and Spanish", async () => {
+  const shown = { code: "table.label_taken", params: { label: "P1", takenBy: "Terrace 1" } };
+  const el = await open(refusing(shown));
+  await change(el, renamed(opened(), "m2", "P1"));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("m2");
+  expect(el.fieldError).toEqual({
+    key: "m2",
+    field: "label",
+    message: "Terrace 1 already uses that as its short name",
+  });
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(el.fieldError?.message).toBe("Terrace 1 ya lo usa como nombre corto");
+});
+
 it("a taken name no draft table carries shows the code's own sentence and selects nothing", async () => {
   const el = await open(refusing({ code: "table.label_taken", params: { label: "Bar 3" } }));
   await change(el, renamed(opened(), "m2", "Patio 1"));

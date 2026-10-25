@@ -1508,4 +1508,88 @@ describe("short names", () => {
     const { ids } = await save(z, { revision: 0, tables: [entry("a", `Q ${d}`)] });
     expect((await shortNamesOf(z)).get(ids.a!)).toBeNull();
   });
+
+  describe("a new name another zone's table shows as its short name", () => {
+    // Four characters, so the name proposes itself as its short name.
+    let next = 0;
+    const tight = () => `Z${String(next++).padStart(3, "0")}`;
+
+    /** Zone B, saved with Terrace holding `shortName`. */
+    async function terraceHolding(shortName: string) {
+      const zoneB = await zone();
+      const terrace = fresh("Terrace");
+      const { ids } = await save(zoneB, {
+        revision: 0,
+        tables: [entry("t", terrace, { shortName })],
+      });
+      return { zoneB, terrace, terraceId: ids.t! };
+    }
+
+    it("refuses adding it, naming the holder, and writes nothing", async () => {
+      const s = tight();
+      const { terrace } = await terraceHolding(s);
+      const zoneA = await zone();
+      const error = await refusal(save(zoneA, { revision: 0, tables: [entry("a", s)] }));
+      expect(error.code).toBe("table.label_taken");
+      expect(error.params).toEqual({ label: s, takenBy: terrace });
+      const plan = await readDefault(zoneA);
+      expect(plan.revision).toBe(0);
+      expect(plan.tables).toEqual([]);
+    });
+
+    it("refuses adding a name another zone's table with no short name shows, ignoring case", async () => {
+      const s = tight();
+      const takenBy = await liveHolding(null, s.toLowerCase());
+      const error = await refusal(check(await zone(), { revision: 0, tables: [entry("a", s)] }));
+      expect(error.code).toBe("table.label_taken");
+      expect(error.params).toEqual({ label: s, takenBy });
+    });
+
+    it("refuses renaming a table to it", async () => {
+      const s = tight();
+      const { terrace } = await terraceHolding(s);
+      const zoneA = await zone();
+      const label = fresh("Window");
+      const { ids } = await save(zoneA, { revision: 0, tables: [entry("a", label)] });
+      const before = await readDefault(zoneA);
+      const error = await refusal(
+        save(zoneA, { revision: 1, tables: [entry("a", ` ${s} `, { id: ids.a! })] }),
+      );
+      expect(error.code).toBe("table.label_taken");
+      expect(error.params).toEqual({ label: s, takenBy: terrace });
+      expect(await readDefault(zoneA)).toEqual(before);
+    });
+
+    it("does not refuse a table already stored under it that the save leaves as it is", async () => {
+      const s = tight();
+      const zoneA = await zone();
+      const [id] = await masterOf(zoneA, [{ label: s }]);
+      await masterHolding(s);
+      const { ids } = await save(zoneA, {
+        revision: 1,
+        tables: [entry("a", s, { id: id!, seats: 6 })],
+      });
+      expect(ids.a).toBe(id);
+      expect((await shortNamesOf(zoneA)).get(id!)).toBeNull();
+    });
+
+    it("accepts adding it when no other table holds it, and gives it as the short name", async () => {
+      const s = tight();
+      const zoneA = await zone();
+      const { ids } = await save(zoneA, { revision: 0, tables: [entry("a", s)] });
+      expect((await shortNamesOf(zoneA)).get(ids.a!)).toBe(s);
+    });
+
+    it("leaves the holder's short name in place for its own zone's next save", async () => {
+      const s = tight();
+      const { zoneB, terrace, terraceId } = await terraceHolding(s);
+      const error = await refusal(save(await zone(), { revision: 0, tables: [entry("a", s)] }));
+      expect(error.code).toBe("table.label_taken");
+      await save(zoneB, {
+        revision: 1,
+        tables: [entry("t", terrace, { id: terraceId, seats: 6 })],
+      });
+      expect((await shortNamesOf(zoneB)).get(terraceId)).toBe(s);
+    });
+  });
 });

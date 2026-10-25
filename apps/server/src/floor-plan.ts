@@ -423,6 +423,16 @@ async function checkSave(
     }),
     taken.shortNames,
   );
+  // A table left with no short name is shown by its full name, so one this save adds or renames
+  // may not read as another zone's table. A table it leaves as stored is never refused.
+  tables.forEach((table, index) => {
+    if (shortNames[index] !== null) return;
+    const label = table.label.trim();
+    const master = table.id === undefined ? undefined : masterById.get(table.id);
+    if (master !== undefined && master.label === label) return;
+    const takenBy = taken.shortNames.get(shortNameKey(label));
+    if (takenBy !== undefined) throw new AppError("table.label_taken", { label, takenBy });
+  });
 
   const kept = new Set(tables.map((t) => t.id));
   const liveIds = masters.flatMap((m) => (kept.has(m.id) ? [] : (followers.get(m.id) ?? [])));
