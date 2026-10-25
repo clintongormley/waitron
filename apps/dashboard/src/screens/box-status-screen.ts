@@ -5,12 +5,14 @@ import { baseStyles, visuallyHiddenStyles, type DataTableColumn } from "@waitron
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   AlertView,
   BoxHealth,
+  ClockMisdatedHandledView,
   ClockMisdatedView,
   DashboardApi,
   FiscalRetryView,
@@ -49,6 +51,7 @@ interface ClockReading {
 }
 
 type MisdatedRecordView = ClockMisdatedView["lists"][number]["records"][number];
+type HandledEpisode = ClockMisdatedHandledView["episodes"][number];
 
 type ReadName = "getBoxHealth" | "listAlerts";
 
@@ -232,6 +235,11 @@ export class BoxStatusScreen extends LitElement {
   @state() private misdatedLists: ReadonlyMap<string, MisdatedRecordView[]> | null = null;
   @state() private misdatedFailed = false;
   #watchingMisdated = false;
+  /** Whether the Handled lists fold is open; its episodes are read only while it is. */
+  @state() private handledOpen = false;
+  /** The handled episodes, newest first as the box sends them; null until read. */
+  @state() private handledEpisodes: HandledEpisode[] | null = null;
+  @state() private handledFailed = false;
   @state() private clockCheckOpen = false;
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
@@ -262,6 +270,11 @@ export class BoxStatusScreen extends LitElement {
     () => this.api,
     () => (this.misdatedFailed = true),
   );
+  readonly #handledQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => (this.handledFailed = true),
+  );
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -285,6 +298,32 @@ export class BoxStatusScreen extends LitElement {
         this.#readSucceeded("listAlerts");
       })
       .catch(() => undefined);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#closeHandled();
+  }
+
+  #toggleHandled(open: boolean): void {
+    if (!open) {
+      this.#closeHandled();
+      return;
+    }
+    this.handledOpen = true;
+    void this.#handledQueries
+      .watch("clockMisdatedHandled", [], (answer) => {
+        this.handledEpisodes = answer.episodes;
+        this.handledFailed = false;
+      })
+      .catch(() => undefined);
+  }
+
+  #closeHandled(): void {
+    this.#handledQueries.release("clockMisdatedHandled");
+    this.handledOpen = false;
+    this.handledEpisodes = null;
+    this.handledFailed = false;
   }
 
   /** Reads the lists only while an open alert has one; a closing that cannot tell lists none. */
@@ -719,40 +758,114 @@ export class BoxStatusScreen extends LitElement {
     )
       return null;
     return html`<div class="misdated-entry" data-test="misdated-entry">
-      ${
-        sentence === null
-          ? nothing
-          : html`<p class="detail" data-test="misdated-sentence">${wholeTimes(sentence)}</p>`
-      }
-      ${
-        records === undefined
-          ? nothing
-          : html`<wt-data-table
-              data-test="misdated-table"
-              aria-label=${
-                severalTables && open.to !== undefined
-                  ? fill("box_status.misdated.table_range", {
-                      from: wallMinute(open.from, open.fromOffsetMinutes),
-                      to: wallMinute(open.to, open.toOffsetMinutes!),
-                    })
-                  : t("box_status.misdated.title")
-              }
-              .rows=${records}
-              .columns=${this.#misdatedColumns()}
-              .rowKey=${(record: MisdatedRecordView) => record.recordId}
-            ></wt-data-table>`
-      }
+      ${this.#misdatedBody(open, sentence, records, severalTables)}
     </div>`;
   }
 
+  #handledLine(episode: HandledEpisode): string {
+    const time = formatIsoMinute(episode.handledAt);
+    if (episode.handledBy.kind === "box")
+      return fill("box_status.misdated.handled_by_box", { time });
+    const name = episode.handledBy.name;
+    return name === null
+      ? fill("box_status.misdated.handled_by_unknown", { time })
+      : fill("box_status.misdated.handled_by_person", { name, time });
+  }
+
+  #renderHandledEntry(episode: HandledEpisode, severalTables: boolean): TemplateResult {
+    return html`<div
+      class="misdated-entry"
+      data-test="misdated-handled-entry"
+      data-incident=${episode.incidentId}
+    >
+      <p class="detail" data-test="misdated-handled-by">
+        ${wholeTimes(this.#handledLine(episode))}
+      </p>
+      ${
+        episode.note === null
+          ? nothing
+          : html`<p class="detail" data-test="misdated-note">
+              ${fill("box_status.misdated.note", { note: episode.note })}
+            </p>`
+      }
+      ${this.#misdatedBody(
+        episode,
+        this.#misdatedSentence(episode),
+        episode.records ?? undefined,
+        severalTables,
+      )}
+    </div>`;
+  }
+
+  #misdatedBody(
+    open: MisdatedOpenView,
+    sentence: string | null,
+    records: MisdatedRecordView[] | undefined,
+    severalTables: boolean,
+  ): TemplateResult {
+    return html`${
+      sentence === null
+        ? nothing
+        : html`<p class="detail" data-test="misdated-sentence">${wholeTimes(sentence)}</p>`
+    }
+    ${
+      records === undefined
+        ? nothing
+        : html`<wt-data-table
+            data-test="misdated-table"
+            aria-label=${
+              severalTables && open.to !== undefined
+                ? fill("box_status.misdated.table_range", {
+                    from: wallMinute(open.from, open.fromOffsetMinutes),
+                    to: wallMinute(open.to, open.toOffsetMinutes!),
+                  })
+                : t("box_status.misdated.title")
+            }
+            .rows=${records}
+            .columns=${this.#misdatedColumns()}
+            .rowKey=${(record: MisdatedRecordView) => record.recordId}
+          ></wt-data-table>`
+    }`;
+  }
+
+  #renderHandled(health: BoxHealth, severalTables: boolean): TemplateResult | typeof nothing {
+    if (health.misdatedHandledCount === 0) return nothing;
+    return html`<wt-disclosure
+      data-test="misdated-handled"
+      heading=${fill("box_status.misdated.handled_heading", {
+        count: String(health.misdatedHandledCount),
+      })}
+      ?open=${this.handledOpen}
+      @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => this.#toggleHandled(event.detail.open)}
+      >${
+        this.handledOpen
+          ? html`${(this.handledEpisodes ?? []).map((episode) =>
+              this.#renderHandledEntry(episode, severalTables),
+            )}${
+              this.handledFailed
+                ? html`<p class="note" data-test="misdated-handled-unavailable">
+                    ${t("box_status.misdated.handled_read_error")}
+                  </p>`
+                : nothing
+            }`
+          : nothing
+      }</wt-disclosure
+    >`;
+  }
+
   #renderMisdated(health: BoxHealth): TemplateResult | typeof nothing {
-    const tables = health.misdatedOpen.filter(
-      (open) => !open.unconfirmed && this.misdatedLists?.has(open.confirmationId) === true,
-    ).length;
+    const handledTables = this.handledOpen
+      ? (this.handledEpisodes ?? []).filter((episode) => episode.records !== null).length
+      : 0;
+    const tables =
+      health.misdatedOpen.filter(
+        (open) => !open.unconfirmed && this.misdatedLists?.has(open.confirmationId) === true,
+      ).length + handledTables;
     const entries = health.misdatedOpen
       .map((open) => this.#renderMisdatedEntry(open, tables > 1))
       .filter((entry) => entry !== null);
-    if (entries.length === 0 && !this.misdatedFailed) return nothing;
+    if (entries.length === 0 && !this.misdatedFailed && health.misdatedHandledCount === 0)
+      return nothing;
     return html`<section class="misdated" data-test="misdated">
       <h2>${t("box_status.misdated.title")}</h2>
       <p class="note" data-test="misdated-line">${t("box_status.misdated.line")}</p>
@@ -764,6 +877,7 @@ export class BoxStatusScreen extends LitElement {
             </p>`
           : nothing
       }
+      ${this.#renderHandled(health, tables > 1)}
     </section>`;
   }
 

@@ -3322,10 +3322,16 @@ export const en = {
   "box_status.misdated.title": "Sales dated wrongly",
   "box_status.misdated.table_range": "Sales dated wrongly from {from} to {to}",
   "box_status.misdated.line":
-    "Go through these with your tax adviser, then mark the alert as handled in the bell.",
+    "Download each list for your tax adviser and go through it with them, then mark it handled here with a note of what was done.",
   "box_status.misdated.col_invoice": "Invoice",
   "box_status.misdated.col_at": "Time recorded",
   "box_status.misdated.read_error": "The list of sales dated wrongly could not be read.",
+  "box_status.misdated.handled_heading": "Handled lists ({count})",
+  "box_status.misdated.handled_by_person": "Marked handled by {name} on {time}.",
+  "box_status.misdated.handled_by_box": "Marked handled by the box on {time}.",
+  "box_status.misdated.handled_by_unknown": "Marked handled on {time}.",
+  "box_status.misdated.note": "Note: {note}",
+  "box_status.misdated.handled_read_error": "The handled lists could not be read.",
   "box_status.alerts_unavailable":
     "The alerts could not be read, so a part may look fine when it is not.",
 } as const;
@@ -6701,10 +6707,17 @@ export const es: Record<StringKey, string> = {
   "box_status.read_error": "No se ha podido leer el estado del equipo.",
   "box_status.misdated.title": "Ventas con fecha incorrecta",
   "box_status.misdated.table_range": "Ventas con fecha incorrecta de {from} a {to}",
-  "box_status.misdated.line": "Revísalas con tu asesor y después marca el aviso como resuelto.",
+  "box_status.misdated.line":
+    "Descarga cada lista para tu asesor, revísala con él y después marca el aviso como resuelto aquí con una nota de lo que se hizo.",
   "box_status.misdated.col_invoice": "Factura",
   "box_status.misdated.col_at": "Hora registrada",
   "box_status.misdated.read_error": "No se ha podido leer la lista de ventas con fecha incorrecta.",
+  "box_status.misdated.handled_heading": "Listas resueltas ({count})",
+  "box_status.misdated.handled_by_person": "Marcada como resuelta por {name} el {time}.",
+  "box_status.misdated.handled_by_box": "Marcada como resuelta por el equipo el {time}.",
+  "box_status.misdated.handled_by_unknown": "Marcada como resuelta el {time}.",
+  "box_status.misdated.note": "Nota: {note}",
+  "box_status.misdated.handled_read_error": "No se han podido leer las listas resueltas.",
   "box_status.alerts_unavailable":
     "No se han podido leer los avisos, así que puede parecer que una parte está bien cuando no lo está.",
 };

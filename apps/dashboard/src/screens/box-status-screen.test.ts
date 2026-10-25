@@ -6,6 +6,7 @@ import type {
   AlertView,
   AlertsResponse,
   BoxHealth,
+  ClockMisdatedHandledView,
   ClockMisdatedView,
   DashboardApi,
   FreedSpaceView,
@@ -1408,5 +1409,213 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       t("box_status.misdated.read_error"),
     );
     expect(q(el, "[data-test=misdated-entry]")).toBeNull();
+  });
+
+  describe("Handled lists", () => {
+    type Episode = ClockMisdatedHandledView["episodes"][number];
+    const NOTED: Episode = {
+      ...OPEN,
+      incidentId: "h1",
+      confirmationId: "hc1",
+      count: 1,
+      from: "2026-10-20T10:00:00.000Z",
+      to: "2026-10-20T10:00:00.000Z",
+      handledAt: "2026-10-21T09:15:00.000Z",
+      handledBy: { kind: "person", name: "Harriet Quill" },
+      note: "The adviser filed a correction",
+      records: [
+        {
+          recordId: "hr1",
+          series: "T2",
+          number: 3,
+          at: "2026-10-20T10:00:00.000Z",
+          offsetMinutes: 120,
+        },
+      ],
+    };
+    const BY_BOX: Episode = {
+      ...UNCONFIRMED,
+      incidentId: "h2",
+      confirmationId: "hc2",
+      from: "2026-10-18T08:00:00.000Z",
+      handledAt: "2026-10-19T07:40:00.000Z",
+      handledBy: { kind: "box" },
+      note: null,
+      records: null,
+    };
+    const NAMELESS: Episode = {
+      ...NOTED,
+      incidentId: "h3",
+      confirmationId: "hc3",
+      handledAt: "2026-10-17T12:00:00.000Z",
+      handledBy: { kind: "person", name: null },
+      note: null,
+    };
+
+    function withHandled(
+      count: number,
+      answer: ClockMisdatedHandledView | Error,
+      open: MisdatedOpenView[] = [],
+    ) {
+      return stubApi(
+        {
+          clockMisdated: vi.fn().mockResolvedValue(LISTS),
+          clockMisdatedHandled:
+            answer instanceof Error
+              ? vi.fn().mockRejectedValue(answer)
+              : vi.fn().mockResolvedValue(answer),
+        },
+        { ...health(), misdatedOpen: open, misdatedHandledCount: count },
+      );
+    }
+
+    const fold = (el: BoxStatusScreen) =>
+      q(el, "[data-test=misdated-handled]") as
+        (HTMLElement & { heading: string; open: boolean }) | null;
+    async function toggle(el: BoxStatusScreen) {
+      (fold(el)!.shadowRoot!.querySelector("button.header") as HTMLElement).click();
+      await flush(el);
+    }
+    const entries = (el: BoxStatusScreen) => qa(el, "[data-test=misdated-handled-entry]");
+    const lineOf = (entry: Element, name: string) =>
+      text(entry.querySelector(`[data-test=${name}]`));
+    const entryCells = (entry: Element) =>
+      [
+        ...(entry
+          .querySelector("[data-test=misdated-table]")
+          ?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
+      ].map((row) => [...row.querySelectorAll("td")].map((cell) => text(cell)));
+
+    it("shows the count, closed, and reads nothing until it is opened", async () => {
+      const api = withHandled(2, { episodes: [NOTED, BY_BOX] }, [OPEN]);
+      const { el } = await mount(api);
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+      expect(fold(el)!.open).toBe(false);
+      expect(entries(el)).toHaveLength(0);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).not.toHaveBeenCalled();
+    });
+
+    it("opened, shows a handled list's table with who handled it, when, and its note", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      await toggle(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(1);
+      const [entry] = entries(el);
+      expect(lineOf(entry!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_person", {
+          name: "Harriet Quill",
+          time: formatIsoMinute(NOTED.handledAt),
+        }),
+      );
+      expect(lineOf(entry!, "misdated-note")).toBe(
+        fill("box_status.misdated.note", { note: "The adviser filed a correction" }),
+      );
+      expect(entryCells(entry!)).toEqual([["T2/3", "2026-10-20 12:00"]]);
+    });
+
+    it("draws the episodes newest first, as the answer gives them, and the box's own line", async () => {
+      const { el } = await mount(withHandled(3, { episodes: [NOTED, BY_BOX, NAMELESS] }));
+      await toggle(el);
+      const drawn = entries(el);
+      expect(drawn.map((entry) => entry.getAttribute("data-incident"))).toEqual(["h1", "h2", "h3"]);
+      expect(lineOf(drawn[1]!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_box", { time: formatIsoMinute(BY_BOX.handledAt) }),
+      );
+      expect(lineOf(drawn[1]!, "misdated-sentence")).toBe(
+        alertMessage("clock.records_misdated", { ...BY_BOX }),
+      );
+      expect(drawn[1]!.querySelector("[data-test=misdated-note]")).toBeNull();
+      expect(drawn[1]!.querySelector("[data-test=misdated-table]")).toBeNull();
+      expect(lineOf(drawn[2]!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_unknown", {
+          time: formatIsoMinute(NAMELESS.handledAt),
+        }),
+      );
+    });
+
+    it("draws the section when only handled lists exist, and reads no open list", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      expect(text(q(el, "[data-test=misdated] h2"))).toBe(t("box_status.misdated.title"));
+      expect(text(q(el, "[data-test=misdated-line]"))).toBe(t("box_status.misdated.line"));
+      expect(fold(el)).not.toBeNull();
+      expect(q(el, "[data-test=misdated-entry]")).toBeNull();
+      expect(api.clockMisdated).not.toHaveBeenCalled();
+    });
+
+    it("draws no fold when nothing has been handled", async () => {
+      const { el } = await mount(withHandled(0, { episodes: [] }, [OPEN]));
+      expect(fold(el)).toBeNull();
+    });
+
+    it("stops reading when it is closed", async () => {
+      const api = withHandled(1, { episodes: [NOTED] });
+      const { el } = await mount(api);
+      await toggle(el);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+      await toggle(el);
+      expect(entries(el)).toHaveLength(0);
+      api.liveData.refresh();
+      await flush(el);
+      expect(api.clockMisdatedHandled).toHaveBeenCalledTimes(2);
+    });
+
+    it("says the handled lists could not be read, inside the fold", async () => {
+      const { el } = await mount(withHandled(1, new Error("down"), [OPEN]));
+      await toggle(el);
+      const failed = q(el, "[data-test=misdated-handled] [data-test=misdated-handled-unavailable]");
+      expect(text(failed)).toBe(t("box_status.misdated.handled_read_error"));
+      expect(q(el, "[data-test=misdated-unavailable]")).toBeNull();
+      expect(cells(el)).toHaveLength(2);
+    });
+
+    it("labels every drawn table by its times once a handled one joins an open one", async () => {
+      const { el } = await mount(withHandled(1, { episodes: [NOTED] }, [OPEN]));
+      const labels = () =>
+        qa(el, "[data-test=misdated-table]").map((table) => table.getAttribute("aria-label"));
+      expect(labels()).toEqual([t("box_status.misdated.title")]);
+      await toggle(el);
+      expect(labels()).toEqual([
+        fill("box_status.misdated.table_range", {
+          from: "2026-10-22 21:00",
+          to: "2026-10-22 21:05",
+        }),
+        fill("box_status.misdated.table_range", {
+          from: "2026-10-20 12:00",
+          to: "2026-10-20 12:00",
+        }),
+      ]);
+    });
+
+    it("draws its words in Spanish from the strings tables", async () => {
+      setLocale("es");
+      const { el } = await mount(withHandled(2, { episodes: [NOTED, BY_BOX] }));
+      expect(fold(el)!.heading).toBe(fill("box_status.misdated.handled_heading", { count: "2" }));
+      // The refusal of a note on an already-handled alert sends the reader to this fold by name.
+      expect(codeMessage("alert.already_handled")).toContain(
+        t("box_status.misdated.handled_heading").replace(" ({count})", ""),
+      );
+      await toggle(el);
+      const [noted, byBox] = entries(el);
+      expect(lineOf(noted!, "misdated-handled-by")).toBe(
+        fill("box_status.misdated.handled_by_person", {
+          name: "Harriet Quill",
+          time: formatIsoMinute(NOTED.handledAt),
+        }),
+      );
+      expect(lineOf(noted!, "misdated-note")).toBe(
+        es["box_status.misdated.note"].replace("{note}", NOTED.note!),
+      );
+      expect(lineOf(byBox!, "misdated-handled-by")).toBe(
+        es["box_status.misdated.handled_by_box"].replace(
+          "{time}",
+          formatIsoMinute(BY_BOX.handledAt),
+        ),
+      );
+    });
   });
 });
