@@ -1,10 +1,10 @@
 # A980 slice S2c: the actions file, and an admin's download of another person's data
 
-**Status: plan, 2026-10-25, round 1 review folded. Nothing was built when this was written.**
-Round 1's review, claim check and the driver's rulings are in
+**Status: plan, 2026-10-25, rounds 1 and 3 of review folded. Nothing was built when this was
+written.** The reviews, the claim check and the driver's rulings are in
 `/Users/clintongormley/waitron-campaign-b/a980-s2c-plan-review/` (`round1-review.md`,
-`round1-claims.md`, `round1-rulings.md`); the fold report beside them (`round1-fold.md`) says where
-each finding landed. Design:
+`round1-claims.md`, `round1-rulings.md`, `round3-review.md`, `round3-rulings.md`); the fold report
+beside them (`round1-fold.md`, with a "Round 3" section) says where each finding landed. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4.2 (the
 download, its two worked examples and "`actions.csv` lists sale numbers and amounts, never another
 person's data"), §2.1 row s12 ("Who did what"), §5.3 row S2 (its tests), §8 owner answer O5
@@ -16,7 +16,7 @@ adds), [S2a2](2026-10-25-a980-s2a2-own-download-ui.md) (the README, the Profile 
 section) and [S2b](2026-10-25-a980-s2b-own-download-workforce.md) (the work files, server parts,
 the README's language on the subject). Branch `feat/a980-s2c-actions-admin-download`, from `main`
 at `c87b4a0e0`. **No migration** (decision 4: the actions part reads in short write-lock turns of
-its own, and Tasks 3a and 3b measure every turn with a stop rule). **FULL review**: a new
+its own, and Task 3 measures every turn with a stop rule). **FULL review**: a new
 permission, a by-id read of another person's data, and personal data, all risk triggers. Per-task
 reviews run, then `/finish-branch`.
 
@@ -94,7 +94,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
   mounted beside the own route (decision 9).
 - **An in-place administrator sign-in** that keeps the current session: none exists in the
   dashboard (decision 12), so the refusal offers sign-out and sign-in instead.
-- **An index on `drawer_opens`' person columns** is not added (no migration); Task 3b measures what
+- **An index on `drawer_opens`' person columns** is not added (no migration); Task 3 measures what
   one would buy, for the "measure on a box" backlog point.
 
 ## Decisions this plan makes that the design does not
@@ -115,10 +115,11 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    - **`@waitron/core` itself** (`@waitron/core` is not mutation-tested: `ls packages/*/stryker.config.json`
      lists only `db`, `fiscal`, `shared`, `ui-core` and `ui`): the core descriptor would have to take
      a seat value from it through composition, the same new dependency.
-   - And, decisive since decision 4: **a seat value is handed only a `Transaction`**
-     (`personal-data.ts:32-35`), whose type has no `withWriteLock`
-     (`packages/db/src/client.ts:36-46`), so it has no handle with which to take turns of its own.
-     A server part is built where the `Database` is held.
+   - And, decisive since decision 4: **a seat value is handed a `Transaction`**
+     (`personal-data.ts:32-35`), whose type offers no `withWriteLock`. At runtime it is the same
+     handle (`const tx = deps.db`, `personal-data-export-api.ts:66`); the type is what says a body
+     must not take the lock with it (`packages/db/src/client.ts:36-46`). A server part is built
+     where the `Database` is held, so it takes its turns through a handle whose type allows them.
 
    The server already reads these tables and formats sale numbers
    (`apps/server/src/orders-list.ts:4`, `:458`), already adds a server part the same way
@@ -184,7 +185,8 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    **Voids** (`apps/dashboard/src/i18n/strings.ts:2181`, `:2218`). The Spanish words collide the
    same way: a voided line reaches the kitchen as «Anulado» (`station.notice.void`,
    `apps/till/src/i18n/strings.ts:2430`) and the adjustments report calls a cancelled line's value
-   «Valor de carta de lo anulado» (`packages/adjustments/src/dashboard/strings.ts:295`, `:307`),
+   «Valor de carta de lo anulado» and «Valor de carta anulado»
+   (`packages/adjustments/src/dashboard/strings.ts:295`, `:307`),
    while the dashboard calls sale annulments «Anulaciones» (`apps/dashboard/src/i18n/strings.ts:5568`,
    `:5604`); the till's own line item reads «Cancelar…» (`apps/till/src/i18n/strings.ts:2839`).
    Line cancellations, comps and discounts are recorded by the adjustments module
@@ -192,18 +194,35 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    and `discount_amount` at `packages/adjustments/src/policy.ts:6-11`, with `requested_by` and
    `approved_by`), and a line cancel also writes core's `line_service_cancellations.actor_id`
    (`apps/server/src/line-cancel.ts:426-430`; the reason it takes is of kind `"void"`, `:261`).
-   Default: those stay out of this slice and are named first in the "rest of who did what" backlog
-   point. **Every text this slice writes** (README lines, Profile help, the guide's own-data and
-   admin sections, both languages) names exactly what `actions.json` holds, in words that cannot
-   be read as the till's line **Void…**: "whole sales voided after they were recorded" / «ventas
-   completas anuladas después de registrarse», refunds, cash-drawer openings. No text promises a
-   later addition. **Open decision for the owner** (FYI in the pull request, built with this
-   default): should line voids, comps and discounts join `actions.json`? Worked example: Marta, a
-   cashier, cancelled three lines on table 4's bill with the till's **Void…** and voided one whole
-   sale, A/1532, from the dashboard. Her `actions.json` lists A/1532 and none of the three lines;
-   her Profile help says "whole sales voided after they were recorded", so she is not told the
-   lines are there. Adding them is one more task: a module part in `@waitron/adjustments`, its
-   README words and its column guard.
+   **No till screen or server route records a whole-sale void yet.** The only insert into
+   `sale_voids` is `packages/core/src/record-void.ts:86`, and the only caller of `recordVoid`
+   outside `packages/core` is the test harness `apps/server/src/testing/order-venue.ts:221`
+   (`git grep -n "recordVoid" -- 'apps/*/src/**' 'packages/*/src/**' ':!*.test.ts'` on
+   2026-10-25, less the fiscal backends' own `recordVoid` that core calls and the payments
+   packages' unrelated provider void; a failing answer would have been any other caller);
+   `docs/backlog.md:289-290` says "No till screen or server route calls `recordVoid` yet." So on
+   every real box today the file's `voids` list is empty, and the till's line **Void…** is the only
+   void staff do. Default: the voided-sales list is kept, so it fills the day a void route lands;
+   line voids, comps and discounts (the adjustments module's seat and core's
+   `line_service_cancellations.actor_id`) become the **next slice, S2d**, named in the overview's
+   slice table and as the first point of the "rest of who did what" backlog entry (Task 12). The
+   pull request says the voids half is reached only by tests today. **Every text this slice
+   writes** (README lines, Profile help, the guide's own-data and admin sections, both languages)
+   names exactly what `actions.json` holds and the person's part in each, in words that cannot be
+   read as the till's line **Void…**, and with the same roles the README's `holds` names (Task 5):
+   "whole sales voided after they were recorded that you authorised" / «ventas completas anuladas
+   después de registrarse que autorizaste» (`voided_by` is the authoriser, decision 2), refunds you
+   asked for or authorised, cash-drawer openings you made or authorised. "Took part in" is not used:
+   a cashier who rang a sale a manager later voided took part in it, and who rang a sale
+   (`sales.operator_id`) is not in the file. "When there are any" keeps each text true while the
+   voids list is empty. No text promises a later addition. **Open decision for the owner** (FYI
+   in the pull request, built with this default): line voids, comps and discounts are S2d, queued
+   next; should they instead join this slice? Worked example from what the product records today:
+   Marta, a cashier, cancelled three lines on table 4's bill with the till's **Void…**, asked for
+   one cash refund that a supervisor authorised, and rang two cash sales, each of which opened the
+   drawer. Her `actions.json` lists the refund (`yourPart` `["requested"]`) and the two openings
+   (`["opened"]`), `counts.voids` is 0, and the three lines are not there; her Profile help names
+   only what the file holds, so she is not told the lines are there.
 
 4. **The actions part reads in short write-lock turns of its own during the build, not in the
    snapshot turn. No index, no migration.** Why:
@@ -232,7 +251,9 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    - The build takes, each awaited before the next and never `Promise.all`:
      1. **Row turn 1**, one `db.withWriteLock`: the person's `sale_voids`, `tender_refunds` and
         `bill_payment_refunds` rows, each table's own columns only (Task 2a's and 2b's column
-        table), **no join**, each ordered by its `at` then `id`.
+        table), **no join**. The tender refunds and bill-payment refunds are then merged into one
+        `refunds` list by `at`, then `id`, outside the turn (two sorted reads alone would give every
+        tender refund before every bill-payment refund).
      2. **Row turn 2**, one `db.withWriteLock`: the person's `drawer_opens` rows, its own columns,
         **no join**, ordered by `opened_at`, `id`.
      3. **Sale-number turns**: the distinct `sale_id`s the rows name (voids, tender refunds, drawer
@@ -242,8 +263,12 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
         drawer opening whose `bill_payment_id` is set, whatever its reason), 500 a turn, each one
         read of `bill_payments` by primary key (its `method`), left-joined to `sales` on
         `sales.working_order_id` (unique, `sales.ts:141`, so the join uses that key's index) and to
-        `invoice_series`. No sale-number turn grows with the person's history; the row turns grow
-        with the person's own rows but carry no join.
+        `invoice_series`. No sale-number turn grows with the person's history. **The two row turns
+        do grow**: none of the nine person columns has an index (the bullet above), so each row
+        turn scans its whole tables, and its cost grows with the venue's whole history, not only
+        the person's rows (the review's 64–71 ms scan at 1,000,000 drawer openings). Task 3 times
+        them at that size, and the "measure on a box" backlog line names them (Task 12). No index
+        in this slice.
      4. Shaping and `jsonFile`, outside any turn.
    - Each turn is `db.withWriteLock` with no `withTransaction` around it, so no change-log drain
      and nothing written, for the reason `sendPersonalData`'s own comment gives
@@ -278,14 +303,18 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      `personal-data-export-api.test.ts:270-278` ends the session during a stub part's build, the
      same position as the actions turns, and expects 401 and no file. New case for the admin route:
      Task 7b's re-check case.
-   - **Measured before it ships** (Tasks 3a and 3b): the snapshot turn with every other part at
-     S2b's Task 6a fixture size, with and without the actions part (to show this slice did not
-     lengthen it), and each actions turn with 1,000,000 drawer openings and 20,000 voids, at least
-     ten runs each, with an indexed control. **Stop rule**: any turn's median over 250 ms on this
-     Mac stops the slice (Task 3a and 3b). Either way the box measurement joins the existing
+   - **The snapshot turn gains nothing, by construction, and a test holds it.** The part's
+     `prepare` reads nothing, so the snapshot turn is S2b's, last measured at 213.8 ms median
+     (`docs/backlog/data-protection.md:105-111`). That is not re-timed in this slice: S2b's Task 6a
+     fixture holds no sales, voids, refunds or drawer openings (round 3 review, experiment 6, a grep
+     of its saved recipe), so a timing with and without the part could not tell them apart. What
+     carries the claim is Task 2a's case, which fails if `prepare` reads anything.
+   - **Measured before it ships** (Task 3): each actions turn with 1,000,000 drawer openings and
+     20,000 voids, at least ten runs each, with an indexed control. **Stop rule**: any turn's median
+     over 250 ms on this Mac stops the slice. Either way the box measurement joins the existing
      "Measure … on a box" backlog point, with the actions turns added.
    - The file can be large: the claim check measured that person's drawer list alone, pretty
-     printed, at 5.49 MB. No cap in this slice; Task 3b records the whole file's size for the pull
+     printed, at 5.49 MB. No cap in this slice; Task 3 records the whole file's size for the pull
      request.
 
 5. **The file is JSON, `actions.json`, not the design's `actions.csv`.** S2b chose JSON for the
@@ -340,8 +369,9 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      authorised the same refund, who rang the voided sale), provider references, row ids, and the
      columns that run a refund's sending. Task 4's guard holds each of the four tables' columns to
      the lists in Tasks 2a and 2b.
-   - **Order**, so the output is the same on every run: each list by `at`, then row id, sorted in
-     the row turn's query.
+   - **Order**, so the output is the same on every run: each list by `at`, then row id. `voids` and
+     `drawerOpenings` are sorted in their row turn's query; `refunds` is merged from the two refund
+     tables by `at`, then `id`, after the turn (decision 4).
    - **No row, no file** (S2b decision 3): with no sale void, refund or drawer opening the part
      builds nothing, and the README lists only built files (S2a2 decision 2). This also leaves every
      existing whole-ZIP assertion unchanged unless its fixture already holds an action row.
@@ -411,10 +441,13 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    `git grep -l import -- 'packages/*/src' 'apps/*/src' | wc -l` printed 0, and with `/**` 5973.)
    A regular expression cannot see a table named through `sql.identifier`, and one such delete
    exists: first setup's configuration import removes every non-admin person
-   (`packages/provisioning/src/configuration-transfer.ts:695-699`, `delete from
-   ${sql.identifier(declaration.name)} where role <> 'admin'` when the table is `persons`, called
-   through `importConfigurationTables` from `first-setup-command-deployment.ts:329`). That runs
-   during setup, before anyone can open **Users**. So from the dashboard `person.not_found` follows
+   (`packages/provisioning/src/configuration-transfer.ts:696-700`, `delete from
+   ${sql.identifier(declaration.name)} where role <> 'admin'` when the table is `persons`, inside
+   `importConfigurationTables`). Its two callers outside tests (`git grep -n importConfigurationTables
+   -- 'apps/*/src/**' 'packages/*/src/**' ':!*.test.ts'` on 2026-10-25) are first setup's command
+   (`packages/provisioning/src/first-setup-command-deployment.ts:329`) and setup mode's
+   `provisionVenue` `beforeCommit` (`apps/server/src/boot.ts:1374`, in the setup route that throws
+   `setup.attempt_conflict`, `:1361`). Both run during setup, before anyone can open **Users**. So from the dashboard `person.not_found` follows
    only a stale list or a fault (decision 12 words it as a fault).
 
    **The re-check repeats the permission**: an admin demoted to manager while the files are built
@@ -529,9 +562,14 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
       found" (`codes.ts:394-397`) does not say it is a fault. Decision 8 shows the dashboard can
       reach it only through a stale list or a fault. Default, for this action only: the alert reads
       "{name} is on this list, but the box has no record of them. That is a fault in Waitron. The
-      list has been reloaded." / «{name} aparece en esta lista, pero el servidor Waitron del local
-      no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.», and
-      the screen reloads its list with its own `#load()` (`staff-screen.ts:180-189`; the screen
+      list has been reloaded." / «{name} aparece en esta lista, pero la caja no tiene ningún
+      registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.» The Spanish says «la
+      caja» because the dashboard's own Spanish strings say it for the box («la caja no ha podido
+      cargar los ajustes nuevos», «En esta caja», «Fuera de la caja»,
+      `apps/dashboard/src/i18n/strings.ts:5062-5065`); the README and the guide keep their own term,
+      «el servidor Waitron del local». The same file also uses «la caja» for the till that sells
+      (`:4162-4170`), so the word carries that meaning in the dashboard already; this line follows
+      the dashboard rather than resolving it. And the screen reloads its list with its own `#load()` (`staff-screen.ts:180-189`; the screen
       already reloads this way after its other actions, `:139`, `:244`, `:316`).
     - Every other failure shows `codeMessage(code)` as the Profile page does.
     - The in-place sign-in that would keep the session becomes a backlog point (Task 12), listed in
@@ -549,7 +587,10 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 ## Open decisions for the owner (FYI, built with the default)
 
 - **What `actions.json` holds** (decision 3): whole sales voided after they were recorded, refunds
-  and cash-drawer openings; line voids, comps and discounts not yet. With its worked example.
+  and cash-drawer openings. On a real box today the till's line **Void…** is the only void staff
+  do, and this slice's file does not hold it: nothing in the product records a whole-sale void yet,
+  so the voids list is empty everywhere. Line voids, comps and discounts are S2d, queued next.
+  Default: S2d as planned. With its worked example.
 - **The admin route on a mirror** (decision 9): it answers. With its worked example.
 
 ## Global constraints
@@ -621,10 +662,13 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
   Task 7a.
 - **The actions turns** (decision 4): `prepare` reads nothing; the build's turns run after the
   snapshot turn closes and before the re-check; no turn joins; chunks of 500; the departure from
-  the seat's doc comment, stated at the part's site and in one shared line; Tasks 3a and 3b's
-  numbers, the indexed control and the stop rule; no index, no migration.
+  the seat's doc comment, stated at the part's site and in one shared line; Task 2a's case that
+  `prepare` reads nothing (the snapshot turn gains nothing, not re-timed); Task 3's numbers, the
+  indexed control and the stop rule; the row turns scan whole tables; no index, no migration.
 - **What `actions.json` holds, and the words that say so** (decision 3): whole sales voided after
-  they were recorded, never the till's line **Void…**, in both languages.
+  they were recorded, never the till's line **Void…**, with the person's role in each, in both
+  languages; the voids list is empty on every box until a void route lands, and line voids are
+  S2d, next.
 - **Free text left out** (decision 6): reasons and notes, though the person typed some.
 - **Rows always included** (decision 6) rather than counts alone, and the file's size.
 - **The README language for someone else** (decision 10): the person's saved language, else the
@@ -707,16 +751,25 @@ review, not silently.
      `amount` the voided sale's `total`, `yourPart` as decision 2 says (`["requested"]` on the
      refund Luis authorised, `["requested", "authorized"]` on the one she did both).
    - **No row, no file.** A person with no action gets `[]`.
-   - **It reads nothing in the snapshot turn.** A `vi.spyOn(suite.db, "withWriteLock")` installed
-     inside the snapshot turn, just before `prepare`, records no call until `prepare` has returned;
-     the build makes its calls after the snapshot turn has returned.
+   - **It reads nothing in the snapshot turn** (this case carries decision 4's "the snapshot turn
+     gains nothing"). Hand `prepare` a `tx` that throws on any property access (a `Proxy`) and
+     assert that `prepare` resolves. Because at runtime the route's `tx` is the same object as the
+     part's `db` (`personal-data-export-api.ts:66`), also spy on `suite.db`'s `select`, `all`,
+     `get`, `run` and `execute` from just before `prepare` until it returns, and assert zero calls,
+     which catches a read through the part's own `db`. Keep the `vi.spyOn(suite.db,
+     "withWriteLock")` for the second half: no call until `prepare` has returned, and the build's
+     calls only after the snapshot turn has returned. (Round 3's probe,
+     `/tmp/a980-s2c-r3/prepare-probe/prepare.test.ts`, showed the `withWriteLock` spy alone lets a
+     read in `prepare` pass, `calls during prepare = 0`, and the throwing `tx` catch it,
+     `prepare touched tx.all`.)
    Run `pnpm --filter @waitron/server exec vitest run src/personal-data-actions.test.ts`; watch it
    fail.
 2. Write the part for these two tables.
 3. Omission controls, each run and reverted, the failing line recorded for the pull request: drop
    the `voided_by` condition → the exact file fails (Luis's void appears); sort by row id only →
    the exact file fails; move the voids read into `prepare` on `tx` → the snapshot-turn case
-   fails.
+   fails on the throwing `tx`; move it into `prepare` on the part's own `db` → the same case fails
+   on the read spies. Record both failing lines.
 4. Run `pnpm --filter @waitron/server typecheck`. Read each count.
 
 ## Task 2b — the actions part: bill-payment refunds, drawer openings, and the person checks
@@ -735,7 +788,9 @@ openings, and the bill-payment sale-number turns (decision 4, step 3).
    seeded in the bill-refund suites; drawer openings must satisfy `drawer_opens_target_ck`,
    `drawer-opens.ts:58-71`):
    - **The fixture grows.** Marta also has: one bill-payment refund she attested, on a bill that
-     has been invoiced, and one she requested on a bill not yet invoiced; drawer openings she made
+     has been invoiced, dated between her two tender refunds of Task 2a (so the `refunds` list must
+     be merged by time, not concatenated), and one she requested on a bill not yet invoiced; drawer
+     openings she made
      for a cash sale, for a bill payment, for a tender refund, a `card_slip` written for a bill
      payment (`bill_payment_id` set, no `sale_id`), one manual she authorised for Luis with
      `via_override` true, and one calibration. Luis also has one drawer opening of his own, naming
@@ -765,33 +820,13 @@ openings, and the bill-payment sale-number turns (decision 4, step 3).
    bill-payment turn → the exact file fails on the invoiced bill-payment refund; key the drawer
    opening's sale on `reason in ('bill_payment', 'bill_refund')` instead of `bill_payment_id` → the
    exact file fails on the `card_slip`; ignore `chunk` (one turn for all ids) → "bounded turns"
-   fails.
+   fails; append the bill-payment refunds after the tender refunds instead of merging → the exact
+   file fails on the refund dated between the two.
 4. Run `pnpm --filter @waitron/server typecheck`. Read each count.
 
-## Task 3a — time the snapshot turn, with and without the actions part
+## Task 3 — time each actions turn at 1,000,000 drawer openings, with an indexed control
 
-Files: none committed. A throwaway `apps/server/src/zz-s2c-snapshot-turn.test.ts`, deleted at the
-end (`git status --short` shows nothing of it).
-
-1. The fixture is S2b Task 6a's: one location and node, 30 staff, four years of shifts each (about
-   20 a month), 48 monthly pay-period closes. Its recipe is saved at
-   `/Users/clintongormley/waitron-campaign-b/a980-s2b-locked-read/fixture-recipe.zz-s2b-locked-read.test.ts.txt`
-   (it built in about 80 s on this Mac, `vitest-full.log` beside it); reuse it, every set migrated.
-2. Time, inside `db.withWriteLock`, `preparePersonalData(db, parts, subject)` for the long-serving
-   person, as `sendPersonalData` does at `personal-data-export-api.ts:67-78` (its `authorize`, place
-   and tenant reads are left out and the report says so), in two arms, interleaved run by run:
-   **without** the actions part (`parts` = `personalDataParts(ALL_MODULES)` plus
-   `timeRecordPersonalData(ALL_MODULES)`) and **with** it (plus `actionsPersonalData(db)`). At least
-   ten runs per arm; record median and range of each.
-3. Before running, write down what a failure prints: either arm's median over 250 ms, or the
-   "with" arm's median above the "without" arm's by more than the two arms' ranges overlap. The
-   expected answer is equal arms, because the actions part's `prepare` reads nothing; the control
-   that the measurement can see a difference is the "with" arm run once with the part's voids read
-   moved back into `prepare` (reverted after), which should show the part's read in the turn.
-4. **Stop rule.** Either arm's median over 250 ms on this Mac: stop, commit nothing, and report the
-   numbers to the coordinator. No migration in this slice either way.
-
-## Task 3b — time each actions turn at 1,000,000 drawer openings, with an indexed control
+The snapshot turn is not re-timed: decision 4 says why, and Task 2a's case carries it.
 
 Files: none committed. A throwaway `apps/server/src/zz-s2c-actions-turns.test.ts`, deleted at the
 end (`git status --short` shows nothing of it).
@@ -802,9 +837,11 @@ end (`git status --short` shows nothing of it).
    reads scan something, 10,000 tender refunds and 2,000 bill-payment refunds across the 30 people
    (raw multi-row inserts that satisfy each table's checks; foreign keys may be switched off for the
    load with `pragma foreign_keys = off` outside any transaction, then back on: inside a `begin`
-   the pragma stays on, the claim check's `fk.mjs`, claim #138). If a refund check cannot be met
-   within the task, leave that table empty and say so. The claim check's loader
-   (`/tmp/a980-claims/realload.mjs`, if still present) is a starting point.
+   the pragma stays on, the claim check's `fk.mjs`, claim #138, copied beside the loader). If a refund check cannot be met
+   within the task, leave that table empty and say so. The claim check's scripts are a starting
+   point, copied to `/Users/clintongormley/waitron-campaign-b/a980-s2c-plan-review/loader/`
+   (`real.mjs` migrates, `realload.mjs` loads, `realq.mjs` queries, `fk.mjs` is the pragma check);
+   they write and read `/tmp/a980-claims/real.db`, so change that path before running them.
 2. Before running, write down what a failure prints: any turn's median over 250 ms.
 3. For the long-serving person, with `actionsPersonalData(db)`, time each turn on its own, at least
    ten runs each: row turn 1, row turn 2, one sale-number turn of 500 ids, one bill-payment turn of
@@ -927,7 +964,9 @@ after the time record in the ZIP: files come out in parts order, `personal-data.
 4. Run unedited: `pnpm --filter @waitron/server exec vitest run src/personal-data-export-api.test.ts src/personal-data-export-api.readme.test.ts src/personal-data-export-api.workforce.test.ts src/boot.personal-data-export.test.ts`
    and `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts -t "personal-data"`
    (on macOS it makes its own small disk with `hdiutil`). The full-disk own case now also runs the
-   actions part's row turns on the full disk (they run even when they find no row). Read each
+   actions part's row turns on the full disk (they run even when they find no row), but no
+   sale-number turn, because its person has no action row; Task 8's second full-disk case runs one.
+   Read each
    count. If one fails only because its fixture holds an action row, its whole-list assertion gains
    `actions.json`, named in the pull request (Global constraints).
 
@@ -1027,12 +1066,23 @@ Files: `apps/server/src/personal-data-export-api.workforce.test.ts`,
      (`seedPerson("admin", "Ana")`, `:257-258`); a new case beside the own route's (`:438-456`): on
      the full disk with a change waiting, the admin route for Marta answers 200 with a ZIP, the
      admin session's `last_seen_at` is unchanged, and the waiting change is still there.
+   - In the same file, **a second new case** (no existing case is edited): `beforeAll` also seeds a
+     third staff person with one recorded sale and one `cash_sale` drawer opening on it that names
+     them, written before any case fills the disk (read the file's `seedPerson` and its existing
+     inserts for the shape; if any existing case counts sales or drawer rows, say so in the pull
+     request rather than editing it). On the full disk with a change waiting, the admin route for
+     that person answers 200 with a ZIP whose `actions.json` lists the opening with the sale's
+     number, so at least one sale-number turn ran on the full disk; the waiting change is still
+     there. Until this case, the full-disk cases' people hold no action rows, so their builds run
+     only the row turns (round 3 review, finding M5).
    Run `pnpm --filter @waitron/server exec vitest run src/personal-data-export-api.workforce.test.ts`
    and `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts -t "personal-data"`.
    Both should pass at once (Tasks 6, 7a and 7b built what they read); the proof is step 2.
 2. Omission controls, each run and reverted: drop the actions part from the `mountMeApi` mount →
    the entry list fails; give the colleague's sale void Marta's person id → the colleague check
-   fails.
+   fails; wrap the sale-number turn in `withTransaction` (whose change-log drain is a write) → the
+   second full-disk case fails with the full disk's refusal, so the case can see a turn that
+   writes.
 3. Run `pnpm --filter @waitron/server typecheck`. Name the changed entry list in the pull request.
 
 ## Task 8b — the admin route in a real start, and on a mirror
@@ -1040,7 +1090,7 @@ Files: `apps/server/src/personal-data-export-api.workforce.test.ts`,
 Files: `apps/server/src/boot.personal-data-export.test.ts`, `apps/server/src/boot.mirror.test.ts`.
 
 1. Tests first:
-   - In `boot.personal-data-export.test.ts` (its real start, `:29-90`, read and followed): seed an
+   - In `boot.personal-data-export.test.ts` (its real start, `:29-86` of an 87-line file, read and followed): seed an
      admin and a manager beside the venue's person; in the same start, the admin's cookie gets 200
      and a ZIP from the admin route for that person, and the manager's gets 403
      `authorization.not_permitted`. The review found no route or middleware in boot that would
@@ -1155,9 +1205,10 @@ addition.
 
 The own-data section (`en/staff.md:30-38`, `es/staff.md:33-43`) gains, after the working-time
 sentence: "It also holds `actions.json`, when there are any: the whole sales voided after they were
-recorded, the refunds and the cash-drawer openings you took part in." / «También contiene
-`actions.json`, si las hay: las ventas completas anuladas después de registrarse, las devoluciones
-y las aperturas del cajón de efectivo en las que participaste.»
+recorded that you authorised, the refunds you asked for or authorised, and the cash-drawer openings
+you made or authorised." / «También contiene `actions.json`, si las hay: las ventas completas
+anuladas después de registrarse que autorizaste, las devoluciones que pediste o autorizaste y las
+aperturas del cajón de efectivo que hiciste o autorizaste.»
 
 That section ends "For anything else about your data, ask the venue." (`en/staff.md:38`,
 `es/staff.md:42`). **Leave it as written**: the venue is the data controller, so for data rights it
@@ -1186,11 +1237,13 @@ The new section, after it:
 > lista de estas solicitudes, así que anota la solicitud y tu respuesta en los registros del local.
 
 `profile.data_copy_help`: English `Your profile and sign-in details, your work records if the venue
-keeps them in Waitron, the whole sales voided after they were recorded, the refunds and the
-cash-drawer openings you took part in, and a README.txt that explains them and your rights.`;
+keeps them in Waitron, the whole sales voided after they were recorded that you authorised, the
+refunds you asked for or authorised, the cash-drawer openings you made or authorised, and a
+README.txt that explains them and your rights.`;
 Spanish `Tus datos de perfil y de acceso, tus datos de trabajo si el local los guarda en Waitron,
-las ventas completas anuladas después de registrarse, las devoluciones y las aperturas del cajón de
-efectivo en las que participaste, y un README.txt que los explica junto con tus derechos.`
+las ventas completas anuladas después de registrarse que autorizaste, las devoluciones que pediste
+o autorizaste, las aperturas del cajón de efectivo que hiciste o autorizaste, y un README.txt que
+los explica junto con tus derechos.`
 
 | Sentence | Source |
 | --- | --- |
@@ -1256,10 +1309,11 @@ Files: `docs/backlog/data-protection.md` (the A980 S2 point and its S2c sub-poin
    `personal_data.export` and that the download holds `actions.json` when there is an action (in
    decision 3's words); **delete the S2c sub-point** (`:83`; S2 is then finished except what the new
    points carry). Add as their own short points:
-   - **The rest of "who did what"**, with **line voids, comps and discounts named first** (the
-     till's **Void…** and the **Voids and comps** page: the adjustments module's `requested_by` and
-     `approved_by`, core's `line_service_cancellations.actor_id`; decision 3, with its worked
-     example and the owner's open decision), then the 28 core columns of Task 4's `NOT_YET` list by
+   - **The rest of "who did what"**, whose first point is **S2d, line voids, comps and discounts,
+     the next slice** (the till's **Void…** and the **Voids and comps** page: the adjustments
+     module's `requested_by` and `approved_by`, core's `line_service_cancellations.actor_id`;
+     decision 3, with its worked example, the fact that the till's line **Void…** is the only void
+     staff do today, and the owner's open decision), then the 28 core columns of Task 4's `NOT_YET` list by
      table (the three found by name, `working_order_lines.credited_to`, `order_drafts.owner_id` and
      `bill_edit_states.editor_id`, among them), and other modules' actor columns (the list in
      "Left for later").
@@ -1268,8 +1322,9 @@ Files: `docs/backlog/data-protection.md` (the A980 S2 point and its S2c sub-poin
      (`loginManagerById` → `authorizeManager` → `endManagementSession`,
      `apps/server/src/management-api.ts:1063-1078`).
    - The existing "Measure the working-time part on a box" point (`:105`) gains the actions turns:
-     Task 3a's snapshot-turn numbers and Task 3b's per-turn numbers on the Mac, what the indexed
-     control bought, and the file's size, to be measured on a box too.
+     Task 3's per-turn numbers on the Mac, naming the two row turns, which scan their whole tables
+     and so grow with the venue's history (decision 4), what the indexed control bought, and the
+     file's size, to be measured on a box too.
    The "Mount the own download from `boot.ts`" point gains: the admin route is mounted by the same
    function.
 3. In the overview's status paragraph, after the S2b sentence: "2026-10-25: S2c is built
@@ -1277,8 +1332,15 @@ Files: `docs/backlog/data-protection.md` (the A980 S2 point and its S2c sub-poin
    (counts and the sale numbers of the whole sales the person voided after they were recorded, and
    of their refunds and cash-drawer openings), read in short turns of its own after the snapshot,
    and an admin downloads another person's data under `personal_data.export`, with the README in
-   that person's language, else the venue's. Line voids, comps and the rest of who did what wait
-   (S2c decisions 2 and 3)."
+   that person's language, else the venue's. No product path records a whole-sale void yet, so
+   the voids list is empty on every box until one does. Line voids, comps and discounts are S2d,
+   next; the rest of who did what waits (S2c decisions 2 and 3)." In the same file's slice table,
+   add a row after S2c: `| **S2d** | Line voids, comps and discounts in the download: the
+   adjustments module's own part (its actor columns) and core's
+   `line_service_cancellations.actor_id`, with README words and a column guard. | Not yet read:
+   S2d's plan reads the tables' indexes. | FULL (personal data) | S2c | Yes, after S2c |`, and
+   add S2d after S2c in the order list (`:143`); the sentence "S2 is split in four (S2a1, S2a2,
+   S2b, S2c)" (`:41`) names S2d too.
 4. In the design's §4.2, after the S2b note: a dated note "2026-10-25: S2c writes `actions.json`,
    not `actions.csv`; it holds whole sales voided after they were recorded, refunds and cash-drawer
    openings, not line voids; the admin's action is **Download their data** in the person's row menu
