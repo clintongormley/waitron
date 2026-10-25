@@ -2560,6 +2560,9 @@ export class TillApp extends LitElement {
     error: string | null;
     lateSend: LateSend;
     busy: boolean;
+    /** Closed by the waiter while its send was in flight; the dialog cannot reopen, so the send's
+     * answer goes to the app's error line instead. */
+    dismissed: boolean;
     retry: (lateSend: LateSend) => Promise<void>;
   } | null = null;
   /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
@@ -11599,8 +11602,6 @@ export class TillApp extends LitElement {
     return open.retry({ menuIds: open.menuIds });
   }
 
-  /** A wrong or locked-out PIN keeps the open dialog with its error; otherwise the dialog opens over
-   * the people who may approve, or a failed read of them is shown as the action's error. */
   async #askLateSendApproval(
     lateSend: LateSend,
     pinError: string | undefined,
@@ -11608,7 +11609,14 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const open = this.lateSendApproval;
     if (pinError !== undefined && open !== null) {
-      this.lateSendApproval = { ...open, busy: false, error: pinError };
+      if (!open.dismissed) this.lateSendApproval = { ...open, busy: false, error: pinError };
+      else {
+        this.lateSendApproval = null;
+        this.errorKey =
+          pinError === "pin.invalid" || pinError === "pin.throttled"
+            ? pinError
+            : { code: pinError };
+      }
       return;
     }
     const session = this.#operatorSession;
@@ -11621,6 +11629,7 @@ export class TillApp extends LitElement {
         error: pinError ?? null,
         lateSend: { menuIds: lateSend.menuIds },
         busy: false,
+        dismissed: false,
         retry,
       };
     } catch (error) {
@@ -11864,7 +11873,10 @@ export class TillApp extends LitElement {
       if (!live()) return;
       const asked = lateSendAsked(error, sent);
       if (asked !== undefined) return { lateSend: asked };
-      if (lateSend !== undefined && isLateSendManagerRefusal(error)) return { approve: lateSend };
+      if (lateSend !== undefined && isLateSendManagerRefusal(error))
+        return lateSend.override === undefined
+          ? { approve: lateSend }
+          : { approve: lateSend, pinError: "authorization.not_permitted" };
       const pinRefused = asRefusal(error)?.refused;
       if (
         lateSend?.override !== undefined &&
@@ -18926,8 +18938,9 @@ export class TillApp extends LitElement {
                 }}
                 @override-cancel=${(event: Event) => {
                   event.stopPropagation();
-                  if (this.lateSendApproval === lateSendApproval && !lateSendApproval.busy)
-                    this.lateSendApproval = null;
+                  if (this.lateSendApproval !== lateSendApproval) return;
+                  if (lateSendApproval.busy) lateSendApproval.dismissed = true;
+                  else this.lateSendApproval = null;
                 }}
               ></till-supervisor-override-dialog>`
         }

@@ -5,6 +5,7 @@ import type { PropertyValues } from "lit";
 import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
 import type { PersonRole, StaffMember } from "../api/client.js";
@@ -15,8 +16,9 @@ export interface OverrideConfirmDetail {
 }
 
 /** It NEVER surfaces the raw code — a domain code is an internal contract, not UI copy. */
-function overrideErrorKey(code: string): StringKey {
-  return code === "pin.invalid" || code === "pin.throttled" ? code : "override.error";
+function overrideErrorText(code: string): string {
+  if (code === "pin.invalid" || code === "pin.throttled") return t(code);
+  return code === "authorization.not_permitted" ? codeMessage(code) : t("override.error");
 }
 
 /**
@@ -237,7 +239,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
       <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
       ${
         showError
-          ? html`<p class="error" role="alert">${t(overrideErrorKey(this.error!))}</p>`
+          ? html`<p class="error" role="alert">${overrideErrorText(this.error!)}</p>`
           : nothing
       }
       <till-numeric-pad

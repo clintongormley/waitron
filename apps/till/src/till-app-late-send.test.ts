@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, draftServer, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -888,7 +888,47 @@ describe("a manager's PIN", () => {
 
     expect(approval(el)).toBeNull();
     expect(api.serviceDayAuthorizers).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBeTruthy();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(t("table.error"));
+  });
+
+  it("keeps the dialog open with the lock-out sentence on a throttled PIN", async () => {
+    const el = await managerAsked({ code: "pin.throttled", status: 429 });
+    await authorize(el, "0123");
+
+    expect(approvalText(el, ".error")).toBe(t("pin.throttled"));
+    expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+    expect(submissions()).toHaveLength(2);
+  });
+
+  it("says in the dialog when the person who approved may not, and keeps it open", async () => {
+    const el = await managerAsked(MANAGER_NEEDED);
+    await authorize(el, "0123");
+
+    expect(approval(el)!.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+    expect(approvalText(el, ".error")).toBe(codeMessage("authorization.not_permitted"));
+    expect(api.serviceDayAuthorizers).toHaveBeenCalledTimes(1);
+    expect(submissions()).toHaveLength(2);
+  });
+
+  it("shows a wrong PIN on the app's line when the dialog was closed while it was sent, and asks afresh next time", async () => {
+    let answer!: (refused: unknown) => void;
+    const held = new Promise<never>((_, reject) => (answer = reject));
+    const el = await managerAsked();
+    api.submitDraft!.mockImplementationOnce(() => held).mockRejectedValueOnce(MANAGER_NEEDED);
+    await authorize(el, "0123");
+
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    answer(WRONG_PIN);
+    await flush(el, 6);
+
+    expect(approval(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(t("pin.invalid"));
+    await act(el, "send-all");
+    await choose(el, "data-late-agreed");
+    expect(approval(el)!.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(submissions()).toHaveLength(3);
   });
 });
 
