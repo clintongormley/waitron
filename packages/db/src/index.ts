@@ -90,6 +90,7 @@ export type {
   VerifiableAmendment,
 } from "./order-amendment-hash.js";
 export { diningTables } from "./schema/dining-tables.js";
+export { shortNameColumns } from "./table-short-names.js";
 export {
   floorPlanPlacements,
   floorPlanSets,

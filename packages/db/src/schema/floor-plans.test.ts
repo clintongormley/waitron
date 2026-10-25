@@ -305,7 +305,7 @@ describe("floor plan tables", () => {
     const masterId = await inTx(async (tx) => {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ ...GOOD_MASTER_TABLE, label: "T1", fixed: true })
+        .values({ ...GOOD_MASTER_TABLE, label: "T1", shortName: "T1", fixed: true })
         .returning({ id: floorPlanTables.id });
       return row!.id;
     });
@@ -314,9 +314,15 @@ describe("floor plan tables", () => {
         .update(diningTables)
         .set({ planTableId: masterId })
         .where(eq(diningTables.id, TABLE_1));
-      await tx
-        .insert(floorResetTables)
-        .values({ zoneId: ZONE, tableId: TABLE_1, label: "T1", seats: 4, fixed: true, ...PLACED });
+      await tx.insert(floorResetTables).values({
+        zoneId: ZONE,
+        tableId: TABLE_1,
+        label: "T1",
+        shortName: "T1",
+        seats: 4,
+        fixed: true,
+        ...PLACED,
+      });
       await tx
         .insert(floorResetTables)
         .values({ zoneId: ZONE, tableId: null, label: "T5", ...NO_PLACE, pending: true });
@@ -341,6 +347,7 @@ describe("floor plan tables", () => {
       id: masterId,
       zoneId: ZONE,
       label: "T1",
+      shortName: "T1",
       seats: 4,
       fixed: true,
     });
@@ -369,6 +376,7 @@ describe("floor plan tables", () => {
       expect.objectContaining({
         tableId: TABLE_1,
         label: "T1",
+        shortName: "T1",
         seats: 4,
         fixed: true,
         ...PLACED,
