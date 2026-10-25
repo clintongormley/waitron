@@ -1175,6 +1175,12 @@ export const en = {
   "staff.invitation_sent": "Invitation email sent.",
   "staff.invitation_not_sent":
     "The account was created, but the invitation could not be sent. Check email settings, then ask the user to reset their password.",
+  "staff.data_copy_busy": "Preparing a copy of {name}'s data…",
+  "staff.data_copy_not_permitted":
+    "Only an administrator can download another person's data, and this account can no longer do it. Sign in as an administrator to download {name}'s data: this signs you out here first.",
+  "staff.data_copy_not_found":
+    "{name} is on this list, but the box has no record of them. That is a fault in Waitron. The list has been reloaded.",
+  "staff.sign_in_as_admin": "Sign in as an administrator",
   "catalogue.title": "Products",
   "units.title": "Units",
   "units.description": "Define how product quantities are measured and displayed.",
@@ -4549,6 +4555,12 @@ export const es: Record<StringKey, string> = {
   "staff.invitation_sent": "Se ha enviado el correo de invitación.",
   "staff.invitation_not_sent":
     "La cuenta se ha creado, pero no se ha podido enviar la invitación. Revisa el correo y pide al usuario que restablezca su contraseña.",
+  "staff.data_copy_busy": "Preparando una copia de los datos de {name}…",
+  "staff.data_copy_not_permitted":
+    "Solo un administrador puede descargar los datos de otra persona, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para descargar los datos de {name}: antes se cierra tu sesión aquí.",
+  "staff.data_copy_not_found":
+    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.",
+  "staff.sign_in_as_admin": "Iniciar sesión como administrador",
   "catalogue.title": "Productos",
   "units.title": "Unidades",
   "units.description": "Define cómo se miden y muestran las cantidades de los productos.",
