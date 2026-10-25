@@ -27,6 +27,9 @@ plus one commit that changes only `docs/backlog.md` and `docs/backlog/box.md`). 
 reads only. FULL review** (personal data, including health data: sick leave; a cross-package
 contract change, decision 5; by-person reads): per-task reviews run, then `/finish-branch`.
 
+2026-10-25: the finish review's performance finding added workforce migration 0010, three indexes
+for the download's by-person reads (c7b15483d); no table is rebuilt.
+
 ## Words used here
 
 - A **seat** is a slot on a module's description (`WaitronModule`) that the module fills with its
@@ -853,6 +856,12 @@ both files together, so putting them on both would print each twice.
 | `…kept[1]` | `The record's "Keep until" date is the legal minimum, counted from the end of the period this copy covers.` |
 | `files["time-record.csv"].holds` | `the same working-time record as time-record.pdf, as a spreadsheet file.` |
 | `…use` | `Kept as the venue's record of the hours you worked.` |
+
+2026-10-25: the built words differ from this table: `staff-roles.json` `kept[0]` names "a manager
+or admin" (1a2db2149), and the attendance `holds`, the time record's `sentTo[0]` and `kept[1]`
+changed in review (45403411c and 3117de2a3). `apps/server/src/i18n/personal-data-readme.ts` holds
+the current words. The opening's "the staff-roles keeping sentence stays as it is" is about not
+naming the department or station cascade only.
 
 **Spanish** (the box is «el servidor Waitron del local» the first time in a line, as S2a2's words
 do; «turno», «cambio de turno», «ausencia», «cuadrante», «registro de jornada», «asiento» and «rol

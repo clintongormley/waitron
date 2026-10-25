@@ -15,7 +15,8 @@ employment, rota, absences, attendance and staff-role files and the working-time
 the README's language. The module files are JSON, not the design's `rota.csv` and
 `absences.csv` (S2b decision 2); the person's own absences, swaps and attendance answers name
 who decided them (S2b decision 11), and a swap's shift times wait for the owner (S2b
-decision 8). Design:
+decision 8). S2b also adds workforce migration 0010: three indexes for the download's
+by-person reads, with no table rebuilt. Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in

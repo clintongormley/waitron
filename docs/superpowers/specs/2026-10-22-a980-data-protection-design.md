@@ -650,6 +650,9 @@ updates its guide page in English and Spanish (CLAUDE.md §3).
 | **S10** Log check | probe whether any logged error detail carries a name or email: an email-server refusal, and error parameters such as `person.email_taken` and `person.display_name_taken` (`packages/identity/src/staff.ts:53-66`); mask it if so | no | no | none | a failing probe first | none |
 | **S11** Former employee's email | O1 (c): store the date a person is deactivated; clear the email a year later and keep the name; `suspendPerson` (`staff.ts:567-577`, unrouted, used only by tests) is deleted by S4 or made to set the date too | yes: `persons` has no deactivation date (`packages/identity/src/schema/persons.ts:31-67`) | no | none: it runs on its own a year later | the date set by both routes; cleared only after the year; name kept | **G2, G3** |
 
+2026-10-25: S2b added workforce migration 0010, three indexes for the own download's by-person
+reads; no table is rebuilt.
+
 **What a bug report may carry (O9 (a)).** Automatic reports carry only the error, the Waitron
 version and log lines with personal details masked; anything a person typed travels only in a
 report a manager has read and chosen to send. The bug-report work (backlog A9, and A982's plan for
