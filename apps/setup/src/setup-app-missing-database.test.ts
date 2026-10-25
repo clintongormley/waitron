@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtButton } from "@waitron/ui";
+import type { WtButton, WtInput } from "@waitron/ui";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, venue } from "../test/first-setup-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
@@ -361,4 +361,35 @@ it.each([
   await app.updateComplete;
   expect(requests).toHaveLength(asked);
   expect(requests.some((r) => r.path.endsWith("/start-again"))).toBe(false);
+});
+
+it("shows the before-password line only before the password step", async () => {
+  let answer!: (value: Response) => void;
+  const { app } = await missingDatabaseFixture({
+    intercept(path) {
+      if (!path.endsWith("/start-again/summary")) return undefined;
+      return new Promise<Response>((resolve) => {
+        answer = resolve;
+      });
+    },
+  });
+  const line = initialOwnerStrings.en.startUnavailable;
+  expect(app.shadowRoot!.textContent).toContain(line);
+  await userEvent.fill(
+    q<WtInput>(app, "resume-password")!.shadowRoot!.querySelector("input")!,
+    venue.admin.password,
+  );
+  await click(app, "resume");
+  await expect.poll(() => answer).toBeTypeOf("function");
+  await app.updateComplete;
+  expect(app.shadowRoot!.textContent).not.toContain(line);
+  answer(Response.json({ error: { code: "setup.attempt_conflict", params: {} } }, { status: 409 }));
+  await expect
+    .poll(
+      () =>
+        app.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")?.error,
+    )
+    .toBeTruthy();
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
+  expect(app.shadowRoot!.textContent).not.toContain(line);
 });

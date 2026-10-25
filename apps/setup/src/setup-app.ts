@@ -2247,7 +2247,8 @@ export class SetupApp extends LitElement {
                     : html`<p data-test="recover-backup-note">${t.recoverBackupNote}</p>
                         ${startAgainConfirm}`
                 }`
-            : html`${startAgain} ${!canRestart ? html`<p>${t.startUnavailable}</p>` : nothing}
+            : html`${startAgain}
+              ${!canRestart && !authenticatedMissing ? html`<p>${t.startUnavailable}</p>` : nothing}
               ${startAgainConfirm} ${recoverBackup}
               ${
                 authenticatedMissing && !this.firstOwnerBusy && this.firstOwnerError
