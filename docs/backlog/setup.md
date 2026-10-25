@@ -414,7 +414,7 @@ depends on this.
 ## Starting a backup recovery and giving it up blocks Start again for good
 
 Left open by A1042 (owner, 2026-10-25: point 5 answered B). Start again is refused while any
-backup-recovery journal from the repair page's Recover from backup (A731) exists; before a recovery starts, the page
+backup-recovery journal from the repair page's Recover from backup (A731) exists; with the venue database missing, the page
 warns of this under Recover from backup. The journal A731 writes when a backup is prepared
 (`first-setup-resolutions/backup-recovery/` in the box's folders) is never deleted; its restore target holds a
 `venue.lock`, which must never be unlinked (`packages/store/src/venue-lock.ts`); and A731 refuses
