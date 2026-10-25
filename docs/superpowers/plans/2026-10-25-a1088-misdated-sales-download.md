@@ -39,7 +39,7 @@
 >   time-zone write any more), M13 (a Spanish spreadsheet in the LOOK task), M14 (Tasks 4, 9 and 10
 >   split).
 
-**Status: plan, 2026-10-25, revision 2. Nothing was built when this was written.** Item A1088
+**Status: plan, 2026-10-25, revision 3. Nothing was built when this was written.** Item A1088
 (lane B's queue, `~/waitron-campaign-b/a1088-plan-review/item.md`, owner-approved scope). Builds on
 A798-B slice 9 (#2025, `3a242a11e`): design
 [§4.9 f](../specs/2026-10-19-a798-degraded-trading-design.md#f-wrongly-dated-records-go-to-the-owner),
