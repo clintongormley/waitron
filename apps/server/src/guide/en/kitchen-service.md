@@ -113,6 +113,17 @@ changed, under **Identical dishes on a kitchen ticket**, **Print held groups in 
 station, with no extra that went to a station of its own, can be recalled whatever the stations
 allow.
 
+## A dish sent after its period ended {#after-period}
+
+A dish sent after its period ended earlier the same business day, once the kitchen agreed, carries a mark
+with its period's name. On its kitchen ticket a line above it reads `** AFTER LUNCH — AGREED **`.
+On the kitchen screen, **Tickets** shows **After Lunch — agreed** on a row above it, and
+**Board** shows the same words on its card. The till cannot send such a dish yet.
+
+Each department sets whether sending such a dish needs a manager's PIN, with **Manager's PIN to
+send after a period ends** under **Courses and the kitchen** on its **Service** tab in the
+dashboard. Off, anyone who can send confirms with the kitchen.
+
 ## Request cooking from the till {#request-cooking}
 
 Request held food from the table's order screen. Station queues and the pass show held courses and groups

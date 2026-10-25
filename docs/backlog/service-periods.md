@@ -405,7 +405,7 @@ bar is which department (hover shows it; the All departments Month has none eith
 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by
 default); building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
 retired) landed in #2047; slice 3 (a confirmed late send accepted and marked; the manager's-PIN
-setting is per department) in progress on `feat/a789-3-confirmed-late-send`; slice 4 (the till's
+setting is per department) in review on `feat/a789-3-confirmed-late-send`; slice 4 (the till's
 window) next, plan
 [2026-10-21-a789-last-orders](../superpowers/plans/2026-10-21-a789-last-orders.md);
 [design](../superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
@@ -534,6 +534,23 @@ review.
   (`service-delete-copy.ts`), so a count of 1 reads wrongly — seen, 2026-10-24 (A789 slice 2's
   look), for `delete_item_floor_plan_sets`, `delete_item_staff_menus` and
   `delete_item_department_policy`. Fix: a singular wording for a count of 1.
+
+## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for
+
+A routing cell's line for Lunch does not apply to a Lunch dish confirmed after Lunch: it goes where
+the running period's line, or the cell's every-period target, sends it. A table's mojito on
+Almuerzo, with Cocktails routed Lunch → Downstairs bar and otherwise Upstairs bar, confirmed at
+14:05 is made Upstairs (`apps/server/src/till-api.service-periods.test.ts`, "makes a table's
+cocktail confirmed late at 14:05 at the Upstairs bar, not Lunch's Downstairs bar"). Routing it by
+the ended period is a module-contract change across the fire, hold and release paths: the router
+resolves one period per department per resolver (`routingAt`,
+`packages/venue-service/src/routing-store.ts`, filling `periods` from `runningPeriod`);
+`MakerResolver.makers` and `extraMakers` answer by product, not by line
+(`packages/module/src/module.ts`), so one fire holding a tortilla confirmed late and one picked now
+could not be routed apart; the resolver is asked for extras made at their own station, by
+`fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
+(`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
+its id. Left open by A789 slice 3 (plan D33).
 
 ## Decisions and deliberate limits
 
