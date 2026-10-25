@@ -34,6 +34,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { createTable } from "./testing/live-table.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import {
   catchUpZone,
@@ -79,6 +80,7 @@ const NONE: readonly TableRemoval[] = [];
 
 interface MasterTable {
   label: string;
+  shortName?: string;
   seats?: number;
   fixed?: boolean;
   place?: { x: number; y: number; width: number; height: number };
@@ -119,6 +121,7 @@ async function insertMaster(
     .values({
       zoneId,
       label: table.label,
+      shortName: table.shortName ?? null,
       seats: table.seats ?? null,
       fixed: table.fixed ?? false,
     })
@@ -167,7 +170,14 @@ async function planIdOf(zoneId: string): Promise<string> {
 /** Changes a master table; `x` and `y` move its place on the plan. */
 async function editMaster(
   masterId: string,
-  values: { label?: string; seats?: number; fixed?: boolean; x?: number; y?: number },
+  values: {
+    label?: string;
+    shortName?: string | null;
+    seats?: number;
+    fixed?: boolean;
+    x?: number;
+    y?: number;
+  },
 ) {
   const { x, y, ...table } = values;
   await inTx(v, async (tx) => {
@@ -867,6 +877,60 @@ describe("building today's plan from a zone's layout", () => {
     };
 
     await expect(reset(z, [broken])).rejects.toThrow("disk on fire");
+  });
+});
+
+describe("short names at a reset", () => {
+  const liveWithShort = (label: string, shortName: string, zoneId: string) =>
+    inTx(v, async (tx) => (await createTable(tx, v.cfg, { label, zoneId, shortName })).id);
+
+  it("copies each master's short name onto its live table, with its folded key", async () => {
+    const z = await zone();
+    const t1 = await v.table("Sn 1", z);
+    await masterOf(z, [{ label: "Sn 1", shortName: "Sn1", live: t1 }]);
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ shortName: "Sn1", shortNameKey: "sn1" });
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("makes a new table with its master's short name", async () => {
+    const z = await zone();
+    await masterOf(z, [{ label: "Sn new 1", shortName: "Snn1" }]);
+
+    await reset(z);
+
+    expect(await liveTablesOf(z)).toMatchObject([
+      { label: "Sn new 1", shortName: "Snn1", shortNameKey: "snn1" },
+    ]);
+  });
+
+  it("a master with no short name leaves its live table with none", async () => {
+    const z = await zone();
+    const t1 = await v.table("Sn none 1", z);
+    const t2 = await liveWithShort("Sn none 2", "Snx2", z);
+    await masterOf(z, [
+      { label: "Sn none 1", live: t1 },
+      { label: "Sn none 2", live: t2 },
+    ]);
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ shortName: null, shortNameKey: null });
+    expect(await tableRow(v, t2)).toMatchObject({ shortName: null, shortNameKey: null });
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("changes only a case: no wait", async () => {
+    const z = await zone();
+    const t1 = await liveWithShort("Sn case 1", "Snc1", z);
+    await masterOf(z, [{ label: "Sn case 1", shortName: "SNC1", live: t1 }]);
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ shortName: "SNC1", shortNameKey: "snc1" });
+    expect(await pendingRows(z)).toEqual([]);
   });
 });
 

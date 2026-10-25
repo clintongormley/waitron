@@ -30,6 +30,7 @@ import {
   joinedOutOfService,
   needsMoving,
   resetRowMoves,
+  shortNameColumns,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -94,6 +95,7 @@ export function placementColumns(placement: Placement | null): Placed {
 function targetRow(target: Target) {
   return {
     label: target.label,
+    shortName: target.shortName,
     seats: target.seats,
     fixed: target.fixed,
     ...placementColumns(target.placement),
@@ -696,6 +698,7 @@ async function catchUpPass(
         locationId: cfg.locationId,
         zoneId,
         label: target.label,
+        ...shortNameColumns(target.shortName),
         planTableId: target.planTableId,
       })
       .returning({ id: diningTables.id });
@@ -707,7 +710,7 @@ async function catchUpPass(
   const placedNow = new Set<Target>();
   for (const { target, label } of plan.apply) {
     const tableId = target.tableId!;
-    if (label !== null) await setLabel(tx, tableId, label);
+    if (label !== null) await setNames(tx, tableId, label, target.shortName);
     // Placed once per reset: a row waiting only for its name keeps the day's moves and merges.
     if (rowOf.get(target)!.placed) continue;
     placedNow.add(target);
@@ -864,6 +867,18 @@ export function spareLabels(
 
 async function setLabel(tx: Transaction, tableId: string, label: string): Promise<void> {
   await tx.update(diningTables).set({ label }).where(eq(diningTables.id, tableId));
+}
+
+async function setNames(
+  tx: Transaction,
+  tableId: string,
+  label: string,
+  shortName: string | null,
+): Promise<void> {
+  await tx
+    .update(diningTables)
+    .set({ label, ...shortNameColumns(shortName) })
+    .where(eq(diningTables.id, tableId));
 }
 
 /** Every member of each split group, a joined table and the parts split off it, of which some member is `busy`. */

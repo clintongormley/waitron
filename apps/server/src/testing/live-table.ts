@@ -3,6 +3,7 @@ import {
   diningTables,
   floorTodayTables,
   newId,
+  shortNameColumns,
   withTransaction,
   type Database,
   type Transaction,
@@ -12,7 +13,7 @@ import type { TillConfig } from "../till-config.js";
 export async function createTable(
   tx: Transaction,
   cfg: TillConfig,
-  input: { label: string; zoneId: string },
+  input: { label: string; zoneId: string; shortName?: string },
   options: { today?: boolean } = {},
 ): Promise<{ id: string }> {
   const [row] = await tx
@@ -22,6 +23,7 @@ export async function createTable(
       locationId: cfg.locationId,
       label: input.label,
       zoneId: input.zoneId,
+      ...shortNameColumns(input.shortName ?? null),
     })
     .returning({ id: diningTables.id });
   if (options.today !== false) await tx.insert(floorTodayTables).values({ tableId: row!.id });
