@@ -255,15 +255,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and how consent is withdrawn._
 
 - **Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
-  - A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
-    matches the cancellation's (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
-    `fiscal.duplicado_anulado`). The TEST-service retry in A985 returned `Correcto`, with a
-    subsequent lookup `Anulado` and the matching cancellation fingerprint. A real
-    `3000`/`Anulada` response and Waitron's handling of it remain unobserved in that run.
-    [Findings](compliance/verifactu-findings.md#19-cancellation-replay-zero-total-and-wrong-fingerprint-added-2026-10-22-a985).
-  - A voided sale whose lookup AEAT answers under the sale's own reference is not handled; not
-    shown to happen either way.
-  - An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
+  An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
+  [Detail](backlog/fiscal.md#loose-ends-left-by-a230-waitronverifactu-021-1099)
 
 - **No sale over €3,000 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3000-can-be-made-at-all)
 
@@ -356,15 +349,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a555-counter-full-invoice-delivery-through-payment--design-proposed-2026-10-21)
 
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
-  the bill.** The dashboard's order detail reaches a bill's invoice as the sale carrying that bill's
-  id; a replacing full invoice (an F3) is a separate sale, and whether it would carry the bill's id
-  was not checked (A231q's review, read, not run). Nothing issues an F3 today: no route calls
-  `recordSubstitution`.
-
-  **2026-10-22 source-reading addendum:** core substitution exists, but no public app caller
-  was found in the inspected main/product trees. The [A739 owner-flow revision](superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md#the-fiscal-dependency-is-visible-not-solved-by-moving-fields)
-  records the missing recipient/address, request recovery, bill/delivery and no-charge integration
-  here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is created.
+  the bill.** Nothing issues an F3 today: no route calls `recordSubstitution`.
+  [Detail](backlog/fiscal.md#a556-a-full-invoice-that-later-replaces-a-bills-simplified-one-would-not-be-delivered-through-the-bill)
 
 - **A557. A success reported after an attempt had ended is not shown.** The delivery status marks
   such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
