@@ -15,6 +15,7 @@ import type { BillEditExpected, BillUnsent, LateSend, Tender } from "./api/clien
 import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
   endedPeriodOf,
+  isLateSendManagerRefusal,
   lateSendAsked,
   type EndedPeriod,
   type LateSendAsked,
@@ -186,6 +187,7 @@ import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
 import "./widgets/supervisor-override-dialog.js";
+import type { OverrideConfirmDetail } from "./widgets/supervisor-override-dialog.js";
 import { CarriedApproval, type CarriedApprover } from "./state/carried-approval.js";
 import "./widgets/adjustment-dialog.js";
 import "./widgets/cancel-item-dialog.js";
@@ -526,6 +528,7 @@ type DraftFollowUp =
   | "recheck-dead-ends"
   | { landedOn: string }
   | { lateSend: LateSendAsked }
+  | { approve: LateSend; pinError?: string }
   | undefined;
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
@@ -2550,6 +2553,15 @@ export class TillApp extends LitElement {
     retry: (lateSend: LateSend) => Promise<void>;
     remove: () => void;
   } | null = null;
+  /** The manager's PIN a late send asks for when the department needs one: `retry` runs the action
+   * again carrying `lateSend` with the manager's override. */
+  @state() private lateSendApproval: {
+    authorizers: StaffMember[];
+    error: string | null;
+    lateSend: LateSend;
+    busy: boolean;
+    retry: (lateSend: LateSend) => Promise<void>;
+  } | null = null;
   /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
    * against a menu version staff have not yet reviewed. */
   @state() private basketHeld = false;
@@ -3842,6 +3854,7 @@ export class TillApp extends LitElement {
   async #writeTableAllergy<T>(
     prepared: PreparedTableAllergy,
     write: (command: AllergyCommand, signal: AbortSignal) => Promise<T>,
+    lateSend?: LateSend,
   ): Promise<{ value: T } | null> {
     let command: AllergyCommand = {
       submissionId: crypto.randomUUID(),
@@ -3872,7 +3885,9 @@ export class TillApp extends LitElement {
             (DRAFT_REFUSALS.has(refusal.refused) ||
               UNSELLABLE_LINE_REFUSALS.has(refusal.refused) ||
               refusal.refused === "station.no_replacement" ||
-              refusal.refused === "menu_period.ended"))
+              refusal.refused === "menu_period.ended" ||
+              isLateSendManagerRefusal(error) ||
+              (lateSend?.override !== undefined && APPROVER_REFUSALS.has(refusal.refused))))
         ) {
           this.#closeAllergyDialog(false, prepared.key);
           throw error;
@@ -11541,6 +11556,12 @@ export class TillApp extends LitElement {
       );
       return;
     }
+    if (typeof followUp === "object" && "approve" in followUp) {
+      await this.#askLateSendApproval(followUp.approve, followUp.pinError, (confirmed) =>
+        this.#sendDraft(detail, confirmed),
+      );
+      return;
+    }
     if (followUp === "mark-unsellable") {
       await this.#markUnsellable(store);
       return;
@@ -11576,6 +11597,48 @@ export class TillApp extends LitElement {
   #onLateSendAgreed(open: NonNullable<TillApp["lateSendWindow"]>): Promise<void> {
     this.lateSendWindow = null;
     return open.retry({ menuIds: open.menuIds });
+  }
+
+  /** A wrong or locked-out PIN keeps the open dialog with its error; otherwise the dialog opens over
+   * the people who may approve, or a failed read of them is shown as the action's error. */
+  async #askLateSendApproval(
+    lateSend: LateSend,
+    pinError: string | undefined,
+    retry: (lateSend: LateSend) => Promise<void>,
+  ): Promise<void> {
+    const open = this.lateSendApproval;
+    if (pinError !== undefined && open !== null) {
+      this.lateSendApproval = { ...open, busy: false, error: pinError };
+      return;
+    }
+    const session = this.#operatorSession;
+    const api = this.api;
+    try {
+      const authorizers = await api.serviceDayAuthorizers();
+      if (session !== this.#operatorSession || api !== this.api) return;
+      this.lateSendApproval = {
+        authorizers,
+        error: pinError ?? null,
+        lateSend: { menuIds: lateSend.menuIds },
+        busy: false,
+        retry,
+      };
+    } catch (error) {
+      if (session !== this.#operatorSession || api !== this.api) return;
+      this.lateSendApproval = null;
+      this.errorKey = { code: refusalOf(error, false).code };
+    }
+  }
+
+  async #onLateSendApproved(
+    open: NonNullable<TillApp["lateSendApproval"]>,
+    override: OverrideConfirmDetail,
+  ): Promise<void> {
+    if (this.lateSendApproval !== open || open.busy) return;
+    const sending = { ...open, busy: true, error: null };
+    this.lateSendApproval = sending;
+    await open.retry({ ...open.lateSend, override });
+    if (this.lateSendApproval === sending) this.lateSendApproval = null;
   }
 
   #onLateSendRemoved(open: NonNullable<TillApp["lateSendWindow"]>): void {
@@ -11789,8 +11852,11 @@ export class TillApp extends LitElement {
         ...(lateSend === undefined ? {} : { lateSend }),
       };
       const draftId = sync.draftId;
-      const written = await this.#writeTableAllergy(allergy, (packet, signal) =>
-        allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal }),
+      const written = await this.#writeTableAllergy(
+        allergy,
+        (packet, signal) =>
+          allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal }),
+        lateSend,
       );
       if (written === null) return;
       submitted = written.value;
@@ -11798,6 +11864,14 @@ export class TillApp extends LitElement {
       if (!live()) return;
       const asked = lateSendAsked(error, sent);
       if (asked !== undefined) return { lateSend: asked };
+      if (lateSend !== undefined && isLateSendManagerRefusal(error)) return { approve: lateSend };
+      const pinRefused = asRefusal(error)?.refused;
+      if (
+        lateSend?.override !== undefined &&
+        pinRefused !== undefined &&
+        APPROVER_REFUSALS.has(pinRefused)
+      )
+        return { approve: lateSend, pinError: pinRefused };
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
         if (!live()) return;
@@ -16431,6 +16505,7 @@ export class TillApp extends LitElement {
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
     this.lateSendWindow = null;
+    this.lateSendApproval = null;
     this.reprintAsking = null;
     this.receiptLanguageAsking = null;
     this.#closeAdjust();
@@ -18339,6 +18414,7 @@ export class TillApp extends LitElement {
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
     const lateSendWindow = this.lateSendWindow;
+    const lateSendApproval = this.lateSendApproval;
     const served = this.#currentServedCommand();
     const errorMessage = this.errorKey
       ? errorText(
@@ -18835,6 +18911,25 @@ export class TillApp extends LitElement {
                 @wt-late-send-removed=${() => this.#onLateSendRemoved(lateSendWindow)}
                 @wt-late-send-cancelled=${() => (this.lateSendWindow = null)}
               ></till-late-send-dialog>`
+        }
+        ${
+          lateSendApproval === null
+            ? nothing
+            : html`<till-supervisor-override-dialog
+                data-late-send-approval
+                .authorizers=${lateSendApproval.authorizers}
+                .approverRole=${"manager"}
+                .error=${lateSendApproval.error}
+                @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {
+                  event.stopPropagation();
+                  void this.#onLateSendApproved(lateSendApproval, event.detail);
+                }}
+                @override-cancel=${(event: Event) => {
+                  event.stopPropagation();
+                  if (this.lateSendApproval === lateSendApproval && !lateSendApproval.busy)
+                    this.lateSendApproval = null;
+                }}
+              ></till-supervisor-override-dialog>`
         }
         ${
           this.#inShell() && this.basketStale && this.basketRefresh === undefined

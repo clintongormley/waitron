@@ -756,3 +756,189 @@ describe("an allergy party's send refused for an ended period", () => {
     expect(heading(el)).toBe("Lunch has ended");
   });
 });
+
+const MANAGER_NEEDED = {
+  code: "authorization.not_permitted",
+  status: 403,
+  permission: "venue_service.manage",
+};
+const WRONG_PIN = { code: "pin.invalid", status: 401 };
+const MARTA = { personId: "p-marta", displayName: "Marta" };
+const approval = (el: TillApp) => el.shadowRoot!.querySelector("till-supervisor-override-dialog");
+const approvalText = (el: TillApp, selector: string) =>
+  approval(el)!.shadowRoot!.querySelector(selector)?.textContent?.trim();
+
+/** Picks Marta when the dialog still asks who approves, then types `digits` on the keypad. */
+async function typePin(el: TillApp, digits: string): Promise<void> {
+  const override = approval(el)!;
+  override.shadowRoot!.querySelector<HTMLElement>(`[data-person="${MARTA.personId}"]`)?.click();
+  await override.updateComplete;
+  for (const digit of digits) {
+    override
+      .shadowRoot!.querySelector("till-numeric-pad")!
+      .shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!
+      .click();
+    await override.updateComplete;
+  }
+}
+
+async function authorize(el: TillApp, digits: string): Promise<void> {
+  await typePin(el, digits);
+  approval(el)!.shadowRoot!.querySelector<HTMLElement>(".authorize")!.click();
+  await flush(el, 6);
+}
+
+/** A table whose Kitchen agreed was refused for want of a manager. */
+async function managerAsked(...answers: unknown[]): Promise<TillApp> {
+  const submitDraft = vi.fn(drafts.submitDraft).mockRejectedValueOnce(MANAGER_NEEDED);
+  for (const answer of answers) submitDraft.mockRejectedValueOnce(answer);
+  const el = await lateTable({
+    submitDraft,
+    serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+  });
+  await act(el, "send-all");
+  await choose(el, "data-late-agreed");
+  return el;
+}
+
+describe("a manager's PIN", () => {
+  it("asks for a manager when the department needs one, and sends again with their PIN", async () => {
+    const el = await managerAsked();
+
+    expect(api.serviceDayAuthorizers).toHaveBeenCalledTimes(1);
+    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(windowOf(el)).toBeNull();
+    await authorize(el, "0123");
+
+    expect(submissions().map((each) => each.lateSend)).toEqual([
+      { menuIds: [DESAYUNOS.id] },
+      { menuIds: [DESAYUNOS.id], override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("keeps the dialog open on a wrong PIN, and closes it once a right one sends", async () => {
+    const el = await managerAsked(WRONG_PIN);
+    await authorize(el, "0123");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+    await authorize(el, "4567");
+
+    expect(submissions().map((each) => each.lateSend?.override)).toEqual([
+      undefined,
+      { personId: MARTA.personId, pin: "0123" },
+      { personId: MARTA.personId, pin: "4567" },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("sends nothing more on Cancel", async () => {
+    const el = await managerAsked();
+
+    approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await flush(el, 6);
+
+    expect(approval(el)).toBeNull();
+    expect(submissions()).toHaveLength(1);
+    expect(names()).toEqual(["Omelette", "Coffee"]);
+  });
+
+  it("asks Keep or Discard on Escape once digits are typed", async () => {
+    const el = await managerAsked();
+    await typePin(el, "01");
+
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    expect(approval(el)).not.toBeNull();
+    expect(submissions()).toHaveLength(1);
+  });
+
+  it("shows the read's refusal and opens no dialog when the managers cannot be read", async () => {
+    const el = await lateTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(MANAGER_NEEDED),
+      serviceDayAuthorizers: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    await act(el, "send-all");
+    await choose(el, "data-late-agreed");
+
+    expect(approval(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(
+      codeMessage("connection.failed"),
+    );
+    expect(submissions()).toHaveLength(1);
+  });
+
+  it("opens no dialog for a refusal naming another permission", async () => {
+    const el = await lateTable({
+      submitDraft: vi
+        .fn(drafts.submitDraft)
+        .mockRejectedValueOnce({ ...MANAGER_NEEDED, permission: "sale.take_payment" }),
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    await act(el, "send-all");
+    await choose(el, "data-late-agreed");
+
+    expect(approval(el)).toBeNull();
+    expect(api.serviceDayAuthorizers).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBeTruthy();
+  });
+});
+
+describe("an allergy party's send that needs a manager's PIN", () => {
+  beforeEach(() => resetAllergyFixture());
+
+  it("closes the allergy dialog for the PIN, and shows a wrong PIN in the PIN's dialog", async () => {
+    const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(lunchEnded)
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockRejectedValueOnce(WRONG_PIN)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    const { el } = await mountAllergyApp({
+      submitDraft,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    await openAllergyTable(el);
+    await addSteak(el);
+    await userEvent.click(
+      allergyOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
+    await userEvent.click(
+      allergyDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!,
+    );
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+
+    await choose(el, "data-late-agreed");
+    // The refused send recorded no answer, so its rerun asks the allergy question again.
+    expect(allergyDialog(el)).not.toBeNull();
+    await userEvent.click(
+      allergyDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!,
+    );
+
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    expect(allergyDialog(el)).toBeNull();
+    expect(submitDraft.mock.calls[1]![2].lateSend).toEqual({ menuIds: ["lunch"] });
+    await authorize(el, "0123");
+    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
+    await userEvent.click(
+      allergyDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!,
+    );
+
+    await vi.waitFor(() => expect(approvalText(el, ".error")).toBe("Wrong PIN, try again"));
+    expect(allergyDialog(el)).toBeNull();
+    expect(submitDraft.mock.calls[2]![2].lateSend).toEqual({
+      menuIds: ["lunch"],
+      override: { personId: MARTA.personId, pin: "0123" },
+    });
+  });
+});
