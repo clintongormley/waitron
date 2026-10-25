@@ -85,7 +85,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "attendance.json": {
         holds:
-          "the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, where one was made, the answers you or a manager gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) it used to notice them.",
+          "the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, where one was made, the answers you or a supervisor, manager or admin gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) the box records to notice them.",
         use: "Used to keep your working-time record complete.",
         sentTo: [
           "Reminder emails are sent through the email service the venue set up, when it has one.",
@@ -93,7 +93,8 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         kept: ["Nothing in the box deletes these questions, emails, answers or activity records."],
       },
       "staff-roles.json": {
-        holds: "the staff roles you can fill, and the area and staff role of each of your shifts.",
+        holds:
+          "the staff roles you can fill, and the area and staff role of each of your shifts that has been given one.",
         use: "Used to plan who covers each area.",
         sentTo: [
           "A manager or admin can download a configuration export that holds the staff roles you can fill, including after you leave.",
@@ -107,11 +108,11 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "your working-time record at this venue: when you started and finished work, your breaks, every correction and decision, and the closed periods, as the working-time export shows it.",
         use: "Kept as the venue's record of the hours you worked.",
         sentTo: [
-          "Managers who may export reports can download the working-time record, yours included; the record names who has the right to see it.",
+          "A manager or admin can download the working-time record, yours included; the record names who has the right to see it.",
         ],
         kept: [
           "Nothing in the box deletes your working-time record, and the box refuses to change or delete an entry in it: a correction is added as a new entry.",
-          'The record\'s "Keep until" date is the legal minimum, counted from the end of the period this copy covers.',
+          "The record's \"Keep until\" date is the legal keeping time counted from the end of the period this copy covers, not from each entry's date.",
         ],
       },
       "time-record.csv": {
@@ -193,7 +194,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "attendance.json": {
         holds:
-          "las preguntas que te hizo el servidor Waitron del local sobre fichajes de entrada o de salida que faltaban o un fichaje de salida automático, el correo de aviso de una pregunta sobre fichajes que faltaban, si se hizo, las respuestas que diste tú o un gerente y quién las autorizó, y la actividad (inicios de sesión, comandas, cobros, descansos) con la que las detectó.",
+          "las preguntas que te hizo el servidor Waitron del local sobre fichajes de entrada o de salida que faltaban o un fichaje de salida automático, el correo de aviso de una pregunta sobre fichajes que faltaban, si se hizo, las respuestas que diste tú o un supervisor, un gerente o un administrador y quién las autorizó, y la actividad (inicios de sesión, comandas, cobros, descansos) que registra el servidor Waitron del local para detectarlas.",
         use: "Sirve para que tu registro de jornada esté completo.",
         sentTo: [
           "Los correos de aviso se envían a través del servicio de correo que configuró el local, si tiene uno.",
@@ -204,7 +205,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "staff-roles.json": {
         holds:
-          "los roles de personal que puedes cubrir y el área y el rol de personal de cada uno de tus turnos.",
+          "los roles de personal que puedes cubrir y el área y el rol de personal de cada uno de tus turnos que tenga uno asignado.",
         use: "Sirve para planificar quién cubre cada área.",
         sentTo: [
           "Un gerente o un administrador puede descargar una exportación de la configuración que contiene los roles de personal que puedes cubrir, también después de que te vayas.",
@@ -218,11 +219,11 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "tu registro de jornada en este local: cuándo empezaste y terminaste de trabajar, tus descansos, cada corrección y decisión y los períodos cerrados, tal como lo muestra la exportación del registro de jornada.",
         use: "Se guarda como el registro del local de las horas que trabajaste.",
         sentTo: [
-          "Los gerentes que pueden exportar informes pueden descargar el registro de jornada, incluido el tuyo; el propio registro indica quién tiene derecho a verlo.",
+          "Un gerente o un administrador puede descargar el registro de jornada, incluido el tuyo; el propio registro indica quién tiene derecho a verlo.",
         ],
         kept: [
           "Nada en el servidor Waitron del local borra tu registro de jornada, y el servidor no permite cambiar ni borrar un asiento: una corrección se añade como un asiento nuevo.",
-          "La fecha «Conservar hasta» del registro es el mínimo legal, contado desde el final del período que cubre esta copia.",
+          "La fecha «Conservar hasta» del registro es el plazo legal de conservación contado desde el final del período que cubre esta copia, no desde la fecha de cada asiento.",
         ],
       },
       "time-record.csv": {
