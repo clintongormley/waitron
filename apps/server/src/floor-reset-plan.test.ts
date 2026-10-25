@@ -422,6 +422,53 @@ describe("planReset", () => {
     ]);
   });
 
+  it("a joined table to create waits, keeping its short name taken, when its group waits", () => {
+    const long = t(null, "Long", { shortName: "L1" });
+    const plan = planReset({
+      targets: [long, t("b", "Bar", { shortName: "l1" })],
+      live: [l("b", "Bar")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+      waitingToCreate: new Set([long]),
+    });
+    expect(plan.create).toEqual([]);
+    expect(plan.apply).toEqual([{ target: t("b", "Bar", { shortName: "l1" }), label: null }]);
+    expect(plan.pending).toEqual([long, t("b", "Bar", { shortName: "l1" })]);
+  });
+
+  it("leaves a target whose table is not live pending, its short name kept from every other table", () => {
+    const plan = planReset({
+      targets: [t("gone", "G", { shortName: "T1" }), t("a", "A", { shortName: "T1" })],
+      live: [l("a", "A")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.apply).toEqual([{ target: t("a", "A", { shortName: "T1" }), label: null }]);
+    expect(plan.pending).toEqual([
+      t("gone", "G", { shortName: "T1" }),
+      t("a", "A", { shortName: "T1" }),
+    ]);
+  });
+
+  it("a short name a waiting table keeps never blocks another table's label", () => {
+    const plan = planReset({
+      targets: [t("h", "H"), t("w", "X", { shortName: "W1" }), t("a", "12"), t("b", "13")],
+      live: [
+        l("h", "H", { held: true, shortName: "12" }),
+        l("w", "W", { shortName: "13" }),
+        l("a", "A"),
+        l("b", "B"),
+      ],
+      takenElsewhere: new Set(["X"]),
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.apply).toEqual([
+      { target: t("w", "X", { shortName: "W1" }), label: null },
+      { target: t("a", "12"), label: "12" },
+      { target: t("b", "13"), label: "13" },
+    ]);
+  });
+
   it("a removal frees neither name this pass", () => {
     const plan = planReset({
       targets: [t("r", "R", { remove: true, shortName: "T1" }), t("a", "A", { shortName: "T1" })],
