@@ -98,6 +98,7 @@ export async function insertRosterVersion(
   return row!.id;
 }
 
+/** `createdAt` behaves as on {@link insertAbsence}. */
 export async function insertDraftShift(
   db: Database | Transaction,
   params: {

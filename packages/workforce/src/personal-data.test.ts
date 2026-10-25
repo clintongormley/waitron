@@ -1,10 +1,10 @@
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -1073,35 +1073,77 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
   });
 });
 
-// These reads run while the venue's write lock is held, and both tables grow with trading.
-describe("the reads of a person's growing tables search an index", () => {
-  const plan = async (statement: ReturnType<typeof sql>) =>
-    (await suite.db.execute<{ detail: string }>(sql`explain query plan ${statement}`)).rows.map(
-      (row) => row.detail,
-    );
+interface CompiledStatement {
+  sql: string;
+  params: unknown[];
+}
 
-  it("finds a person's activity by person and returns it in order", async () => {
-    expect(
-      await plan(
-        sql`select source from attendance_operation_facts where person_id = ${"p"} order by at, sequence`,
-      ),
-    ).toEqual([
-      "SEARCH attendance_operation_facts USING INDEX attendance_operation_facts_person_idx (person_id=?)",
-    ]);
+interface DrizzleSession {
+  prepareQuery(query: CompiledStatement, ...rest: unknown[]): { all(): unknown };
+}
+
+/**
+ * `tx` with every statement drizzle compiles on it recorded, each with its query plan read through
+ * the same session.
+ */
+function planningEveryStatement(tx: Transaction) {
+  const statements: { sql: string; plan: () => string[] }[] = [];
+  const recording = new Proxy(tx, {
+    get: (target, key, receiver) => {
+      const value: unknown = Reflect.get(target, key, receiver);
+      if (key !== "session") return value;
+      const session = value as DrizzleSession;
+      return new Proxy(session, {
+        get: (inner, innerKey, innerReceiver) =>
+          innerKey === "prepareQuery"
+            ? (query: CompiledStatement, ...rest: unknown[]) => {
+                statements.push({
+                  sql: query.sql,
+                  plan: () =>
+                    (
+                      inner
+                        .prepareQuery(
+                          { sql: `explain query plan ${query.sql}`, params: query.params },
+                          undefined,
+                          "all",
+                        )
+                        .all() as { detail: string }[]
+                    ).map((row) => row.detail),
+                });
+                return inner.prepareQuery(query, ...rest);
+              }
+            : Reflect.get(inner, innerKey, innerReceiver),
+      });
+    },
   });
+  return { recording, statements };
+}
 
-  it("finds the swaps a person asked for or was offered through one index each", async () => {
-    expect(
-      await plan(
-        sql`select id from shift_swaps where requested_by_person_id = ${"p"} or to_person_id = ${"p"} order by created_at, id`,
-      ),
-    ).toEqual([
-      "MULTI-INDEX OR",
-      "INDEX 1",
-      "SEARCH shift_swaps USING INDEX shift_swaps_requested_by_person_idx (requested_by_person_id=?)",
-      "INDEX 2",
-      "SEARCH shift_swaps USING INDEX shift_swaps_to_person_idx (to_person_id=?)",
-      "USE TEMP B-TREE FOR ORDER BY",
+// These reads run while the venue's write lock is held, and the person-keyed tables they read grow
+// with trading.
+describe("prepare's reads", () => {
+  it("find every row they read through an index, scanning no table", async () => {
+    const people = await seedAll(suite.db);
+    await seedRota(suite.db, people);
+    await seedAttendance(suite.db, people);
+    const plans = await withTransaction(suite.db, async (tx) => {
+      const { recording, statements } = planningEveryStatement(tx);
+      await WORKFORCE_PERSONAL_DATA.prepare(recording, subject(people.marta));
+      return statements.map((statement) => ({
+        from: /^select .*? from "(\w+)"/.exec(statement.sql)?.[1],
+        plan: statement.plan(),
+      }));
+    });
+    expect(plans.map((p) => p.from)).toEqual([
+      "employments",
+      "absences",
+      "shifts",
+      "availability",
+      "shift_swaps",
+      "attendance_questions",
+      "attendance_response_commands",
+      "attendance_operation_facts",
     ]);
+    expect(plans.flatMap((p) => p.plan.filter((line) => line.startsWith("SCAN")))).toEqual([]);
   });
 });
