@@ -297,6 +297,7 @@ async function seedSignInsWithNoPerson(db: Database): Promise<string[]> {
 
 const subject = (personId: string) => ({
   personId,
+  language: "en" as const,
   at: new Date("2026-10-24T10:00:00.000Z"),
   timeZone: "UTC",
   locationId: null,

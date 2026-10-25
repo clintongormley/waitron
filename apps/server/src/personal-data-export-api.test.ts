@@ -18,6 +18,7 @@ import {
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { locationId as brandLocationId } from "@waitron/shared";
+import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import {
   mountPersonalDataExportApi,
   sendPersonalData,
@@ -164,8 +165,21 @@ describe("GET /management-api/me/personal-data/export", () => {
     ]);
     expect(files["profile.json"]).toContain("marta@example.test");
     expect(subjects).toEqual([
-      { personId: martaId, at: NOW, timeZone: "Europe/Madrid", locationId },
+      { personId: martaId, language: "en", at: NOW, timeZone: "Europe/Madrid", locationId },
     ]);
+  });
+
+  it("gives the parts the README's language: her saved language over the browser's", async () => {
+    suite.db.run(sql`update persons set locale = 'es-ES' where id = ${martaId}`);
+    const response = await mounted().request(PATH, {
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}`, "accept-language": "en-GB" },
+    });
+    expect(response.status).toBe(200);
+    const files = await unzipped(response);
+    expect(files["README.txt"]!.split("\n")[0]).toBe(
+      PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"),
+    );
+    expect(subjects.map((s) => s.language)).toEqual(["es"]);
   });
 
   it("holds none of a colleague's data, and refuses a query naming someone else", async () => {
@@ -267,7 +281,9 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(response.headers.get("content-disposition")).toBe(
       'attachment; filename="marta-lopez-2026-10-04.zip"',
     );
-    expect(subjects).toEqual([{ personId: martaId, at: NOW, timeZone: "UTC", locationId: null }]);
+    expect(subjects).toEqual([
+      { personId: martaId, language: "en", at: NOW, timeZone: "UTC", locationId: null },
+    ]);
   });
 
   it("dates the file in UTC when the venue's stored zone is unknown", async () => {
@@ -281,7 +297,9 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(response.headers.get("content-disposition")).toBe(
       'attachment; filename="marta-lopez-2026-10-04.zip"',
     );
-    expect(subjects).toEqual([{ personId: martaId, at: NOW, timeZone: "UTC", locationId }]);
+    expect(subjects).toEqual([
+      { personId: martaId, language: "en", at: NOW, timeZone: "UTC", locationId },
+    ]);
   });
 
   it("names the file for the real date when the box's clock reads 1970", async () => {

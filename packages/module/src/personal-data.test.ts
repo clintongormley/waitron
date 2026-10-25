@@ -15,6 +15,7 @@ import {
 const tx = {} as Transaction;
 const subject: PersonalDataSubject = {
   personId: "person-1",
+  language: "en",
   at: new Date("2026-10-24T10:00:00Z"),
   timeZone: "Europe/Madrid",
   locationId: "location-1",

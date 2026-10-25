@@ -68,7 +68,12 @@ export async function sendPersonalData(
     const who = await authorize(tx);
     const place = await venuePlace(tx, deps.nodeId);
     const tenant = await readTenant(tx);
-    const build = await preparePersonalData(tx, parts, { personId: who.personId, at, ...place });
+    const build = await preparePersonalData(tx, parts, {
+      personId: who.personId,
+      language: who.language,
+      at,
+      ...place,
+    });
     return { who, place, tenant, build };
   });
   // Building outlives the snapshot turn, so authority is checked again before any bytes go.

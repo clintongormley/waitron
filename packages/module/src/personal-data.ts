@@ -5,6 +5,8 @@ import "./errors.js";
 
 export interface PersonalDataSubject {
   readonly personId: string;
+  /** The README's language; a part that writes text uses it. */
+  readonly language: "en" | "es";
   /** The moment of the request, from the box's clock. */
   readonly at: Date;
   /** The venue's IANA time zone, or "UTC" when it cannot be read. */
