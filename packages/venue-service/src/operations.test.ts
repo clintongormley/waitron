@@ -3691,6 +3691,26 @@ describe("products a zone's listed menus offer", () => {
     });
   });
 
+  it("leaves out a product the live version offers as not sold separately, and its variants", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      await updateProduct(tx, venue.lemonade, { ordering: "not_sold_separately" });
+      await publish(tx, venue.dinner);
+      await expect(
+        productsOfferedIn(
+          tx,
+          venue.diningZone,
+          [venue.dinner],
+          [
+            { productId: venue.lemonade, variantId: null },
+            { productId: venue.lemonade, variantId: venue.large },
+            { productId: venue.burger, variantId: null },
+          ],
+        ),
+      ).resolves.toEqual(new Set([offeredKey(venue.burger, null)]));
+    });
+  });
+
   it("reads as many statements for five items as for one, and none for an empty list", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {

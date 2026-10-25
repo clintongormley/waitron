@@ -1017,8 +1017,9 @@ export const offeredKey = (productId: string, variantId: string | null): string 
 
 /**
  * The {@link offeredKey} of each item that the live version of some listed menu of the zone
- * offers: a product as an offer, a variant as one its product's offer lists. A listed menu that is
- * not one of the zone's is left out.
+ * offers on its own: a product as an offer, a variant as one its product's offer lists. An offer
+ * marked not sold separately adds neither, and a listed menu that is not one of the zone's is left
+ * out.
  */
 export async function productsOfferedIn(
   tx: Transaction,
@@ -1037,6 +1038,7 @@ export async function productsOfferedIn(
   const offered = new Set<string>();
   for (const { document } of live)
     for (const offer of documentOffers(document)) {
+      if (offer.ordering === "not_sold_separately") continue;
       offered.add(offeredKey(offer.productId, null));
       for (const variant of offer.variants) offered.add(offeredKey(offer.productId, variant.id));
     }

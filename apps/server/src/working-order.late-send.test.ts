@@ -350,6 +350,32 @@ describe("a dish whose period ended earlier today", () => {
     });
   });
 
+  it("is refused menu_period.ended at 19:30 when the running menu offers it only as not sold separately, and writes nothing", async () => {
+    at("19:30");
+    const v = await mealVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await updateProduct(tx, v.toastId, { ordering: "not_sold_separately" });
+      // Only Desayunos is published again, so Almuerzo's live version still sells it on its own.
+      await publishWorkingMenu(tx, v.menus.desayunos);
+      await updateDepartment(tx, v.cfg, v.restaurant, { lateSendNeedsManager: true });
+    });
+    await expect(open(v, [{ menuItemId: v.toast.desayunos, quantity: "1" }])).rejects.toMatchObject(
+      { code: "product.not_sold_separately" },
+    );
+    const id = randomUUID();
+    await expect(
+      open(v, [{ menuItemId: v.toast.almuerzo, quantity: "1" }], id),
+    ).rejects.toMatchObject({
+      code: "menu_period.ended",
+      params: {
+        menus: [{ menuId: v.menus.almuerzo, periodName: "Lunch" }],
+        menuItemIds: [v.toast.almuerzo],
+        needsManager: true,
+      },
+    });
+    expect(await orderRows(id)).toEqual([]);
+  });
+
   it("is accepted at its taken price and marked when a confirmation covers its menu", async () => {
     at("14:05");
     const v = await mealVenue();
