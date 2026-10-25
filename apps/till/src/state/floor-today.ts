@@ -71,6 +71,14 @@ export function shownUnder(table: TableState): string {
   return table.today?.joinName ?? shownName(table);
 }
 
+/** The name a tight place shows: a table of today's join by the join's tables' short names, in
+ * number order, else its own saved short name; today's names never. */
+export function tightName(table: TableState, tables: readonly TableState[]): string {
+  return table.today?.joinId == null
+    ? table.shortName
+    : mergeLabel(mergeMembersOf(tables, table).map((each) => each.shortName));
+}
+
 export function withoutTodaysNames(table: TableState): TableState {
   return table.today === null
     ? table

@@ -95,27 +95,41 @@ describe("readyTables", () => {
     ]);
   });
 
-  it("names a party at joined tables by today's join name, once", () => {
-    const joined = party({ id: "v5", displayName: "Table 5+6", tableIds: ["t5", "t6"] });
+  it("names a party at one of today's joins by its tables' short names, once", () => {
+    const joined = party({ id: "v5", displayName: "Birthday", tableIds: ["t5", "t6"] });
     const signals = [ready(["kitchen", "Kitchen", 2])];
     const tables = [
       table({
         id: "t5",
         label: "Table 5",
+        shortName: "T5",
         party: joined,
         signals,
-        today: today({ joinName: "Table 5+6" }),
+        today: today({ joinId: "j1", joinName: "Birthday" }),
       }),
       table({
         id: "t6",
         label: "Table 6",
+        shortName: "T6",
         party: joined,
         signals,
-        today: today({ joinName: "Table 5+6" }),
+        today: today({ joinId: "j1", joinName: "Birthday" }),
       }),
     ];
     expect(readyTables(tables, shown)).toEqual([
-      { partyId: "v5", tableId: "t5", name: "Table 5+6", count: 2 },
+      { partyId: "v5", tableId: "t5", name: "T5+T6", count: 2 },
+    ]);
+  });
+
+  it("names a party at two separate tables by both short names", () => {
+    const apart = party({ id: "v5", displayName: "Table 5", tableIds: ["t5", "t6"] });
+    const signals = [ready(["kitchen", "Kitchen", 1])];
+    const tables = [
+      table({ id: "t5", label: "Table 5", shortName: "T5", party: apart, signals }),
+      table({ id: "t6", label: "Table 6", shortName: "T6", party: apart, signals }),
+    ];
+    expect(readyTables(tables, shown)).toEqual([
+      { partyId: "v5", tableId: "t5", name: "T5+T6", count: 1 },
     ]);
   });
 
@@ -148,16 +162,17 @@ describe("readyTables", () => {
     expect(readyTables(tables, shown)).toEqual([]);
   });
 
-  it("uses today's name, not the party's given name", () => {
+  it("uses the saved short name, not today's name or the party's", () => {
     const tables = [
       table({
-        party: party({ name: "Ana", displayName: "Ana" }),
-        today: today({ name: "Ventana" }),
+        shortName: "T2",
+        party: party({ name: "Alex", displayName: "Alex" }),
+        today: today({ name: "Window" }),
         signals: [ready(["bar", "Bar", 2])],
       }),
     ];
     expect(readyTables(tables, shown)).toEqual([
-      { partyId: "v2", tableId: "t2", name: "Ventana", count: 2 },
+      { partyId: "v2", tableId: "t2", name: "T2", count: 2 },
     ]);
   });
 });

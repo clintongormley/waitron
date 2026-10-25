@@ -24,6 +24,7 @@ import {
   spareSpot,
   sparesOf,
   takenOffOf,
+  tightName,
 } from "./floor-today.js";
 
 function place(x: number, y: number, over: Partial<TodayPlacement> = {}): TodayPlacement {
@@ -1073,6 +1074,24 @@ describe("today's names", () => {
   it("names a group's normal name from its tables' shown names, never its own name", () => {
     expect(normalGroupName([named(bar), named(window4)])).toBe("Bar+Window");
     expect(normalGroupName([c4, bar])).toBe("Bar+Counter 4");
+  });
+});
+
+describe("tightName", () => {
+  it("uses the saved short name, whatever today's name", () => {
+    const renamed = table("t2", "Table 2", { shortName: "T2", today: today({ name: "Window" }) });
+    expect(tightName(renamed, [renamed])).toBe("T2");
+  });
+
+  it("names a table of today's join by the join's tables' short names, in number order", () => {
+    const joined = today({ joinId: "j1", joinName: "Birthday" });
+    const t10 = table("t10", "Table 10", { shortName: "T10", today: joined });
+    const t9 = table("t9", "Table 9", { shortName: "T9", today: joined });
+    const t3 = table("t3", "Table 3", { shortName: "T3" });
+    const tables = [t10, t3, t9];
+    expect(tightName(t10, tables)).toBe("T9+T10");
+    expect(tightName(t9, tables)).toBe("T9+T10");
+    expect(tightName(t3, tables)).toBe("T3");
   });
 });
 
