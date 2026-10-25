@@ -475,6 +475,21 @@ A987's design does not change the route
     seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
     `backup.stream_request_failed`). The code does not say why they differ.
 
+## Loose ends left by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).
+
+- **Loose ends left by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).**
+  - From #608: the recovery level is read before `recovery.lock`, so the pre-boot count another
+    start writes can still push a server restarting at that moment onto the recovery page.
+  - From #573's review, the owner's call: only an unwrapped `provisioning.database_in_use` is
+    recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path
+    wraps them today).
+  - From #608, no behaviour change decided: the watchdog appends its line to `waitron.log` without
+    creating the log folder, so on a machine with no such folder that line is lost; only a store's
+    `close()` waits for the watchdog thread to end, not a bare `release()`.
+  - From #566's review: the migrator's lock and the venue lock use one technique in two copies,
+    and the test helper that holds the lock from another process is copied into several test
+    files.
+
 ## Decisions and deliberate limits
 
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
