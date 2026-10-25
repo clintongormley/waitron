@@ -36,3 +36,5 @@ export function renderAttendanceCsv(document: RecordExportDocument): Uint8Array 
     }
   return new TextEncoder().encode(`\uFEFF${lines.join("\r\n")}\r\n`);
 }
+
+export { cell as csvCell };
