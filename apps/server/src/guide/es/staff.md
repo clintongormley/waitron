@@ -37,17 +37,18 @@ Abre **Configuración de la cuenta** desde el menú de cuenta y, en **Tus datos*
 acceso en archivos `.json`. Si el local planifica el personal o registra la jornada en Waitron,
 la copia también puede contener tus datos de contrato, tus turnos, tus ausencias, tus roles de
 personal y las preguntas sobre tus fichajes en archivos `.json`, y tu registro de jornada en PDF y
-en una hoja de cálculo `.csv`. También contiene `actions.json`, si las hay: las ventas completas
-ya registradas cuya anulación autorizaste, las devoluciones que pediste, autorizaste o cuyo
-resultado registraste y las aperturas del cajón de efectivo que hiciste o autorizaste. Un
-`README.txt` explica cada archivo, quién más recibe los datos, cuánto tiempo se guardan y tus
+en una hoja de cálculo `.csv`. También puede contener `actions.json`: las ventas completas ya
+registradas cuya anulación autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado
+registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste.
+
+Un `README.txt` explica cada archivo, quién más recibe los datos, cuánto tiempo se guardan y tus
 derechos. La copia nunca contiene secretos como tu PIN o tu contraseña. Para cualquier otra cosa
 sobre tus datos, pregunta al local.
 
 ## Descargar los datos de otra persona {#person-data}
 
-Como administrador, puedes descargar lo que el servidor Waitron del local guarda sobre otra
-persona, por ejemplo cuando alguien que ya no trabaja en el local pide sus datos. En
+Como administrador, puedes descargar la copia de los datos de otra persona, por ejemplo cuando
+alguien que ya no trabaja en el local la pide. En
 **Usuarios**, elige **Todos los estados** en **Estado** si la persona está deshabilitada, abre el
 menú de su fila y elige **Descargar sus datos**. Recibes los mismos archivos que la persona
 obtiene con **Copia de tus datos**, con su `README.txt` en el idioma que eligió la persona o, si
