@@ -28,6 +28,7 @@ export function floorViewChoices(
       try {
         raw = storage?.getItem(key);
       } catch {
+        entries.set(key, null);
         return undefined;
       }
       if (raw == null) return undefined;

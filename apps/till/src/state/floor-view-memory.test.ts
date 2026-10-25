@@ -93,4 +93,24 @@ describe("floor view memory", () => {
     expect(choices.read("z1")).toBeUndefined();
     expect(reads).toBe(1);
   });
+
+  it("asks a store that refuses a read only once per zone, and a later choice still wins", () => {
+    let reads = 0;
+    const choices = floorViewChoices(
+      {
+        getItem: () => {
+          reads++;
+          return blocked();
+        },
+        setItem: blocked,
+        removeItem: blocked,
+      },
+      identity,
+    );
+    expect(choices.read("z1")).toBeUndefined();
+    expect(choices.read("z1")).toBeUndefined();
+    expect(reads).toBe(1);
+    choices.remember("z1", "map");
+    expect(choices.read("z1")).toBe("map");
+  });
 });
