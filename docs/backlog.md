@@ -2894,7 +2894,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
   and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
   image; every save that sets or changes its light image, and every library reframe or source
-  replacement of that image, draws its printed dots (`printedLogo`), which nothing prints until slice 9. A cash register's bar shows no logo until slice 14. Slice 8a
+  replacement of that image, draws its printed dots (`printedLogo`), which slice 9 prints. A cash register's bar shows no logo until slice 14. Slice 8a
   landed 2026-10-24 (#2035): the Look card's Logo field (a main image and an optional
   one for dark screens, picked from the image library), the preview's banner strip, the saved card's
   Logo row, Use Waitron's look removing the logo, and the image library naming the use "Logo of
@@ -2916,7 +2916,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   cases at 130% hold the counter, the floor, a kitchen queue, the dashboard's shell and the Look
   card. The Look card's preview hyphenates its sample name the same way. Names in a language
   Chromium does not hyphenate, English among them, still break inside a long word with no hyphen.
-  Next: 9, 11, 12 and 14.
+  Slice 9a landed 2026-10-25 (#2050): the logo of the theme in use prints on receipts and A4
+  invoices of every department with no receipt logo of its own and of a sale with no department, a
+  department's own logo still first; a department whose receipt settings cannot be trusted prints
+  no logo; the till's ticket view and a department's Receipts preview follow the same rule.
+  Next: 9b, 11, 12 and 14.
 
 - **The theme delete dialog does not say the tills' text changes size (A841 slice 10a's review,
   #2045).** Deleting the theme in use puts Waitron's theme, at 100%, on every screen; the switch
@@ -3222,6 +3226,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
+
+- **A department's Receipts preview shows the theme's logo, for a readable department whose draft names
+  no logo, with no words saying it is the venue's** (A841 slice 9, D7 of
+  [the plan](superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
+
+- **A department's Receipts preview does not redraw when the theme in use changes while it is open**
+  (A841 slice 9, [the plan](superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
 
 - **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
   the printer reappears, so the drawer can open long after the sale (`packages/printing/src/runtime.ts`).

@@ -237,7 +237,9 @@ carta publicada.
 Un logotipo de ticket guardado también mantiene en uso una fotografía. La biblioteca muestra ese uso
 como **Logotipo del recibo de <departamento>**, y su enlace abre la pestaña **Recibos** del
 departamento: elige **Quitar** junto al logotipo y guarda. Un departamento que ya no está activo
-aparece con **(Departamento eliminado)** tras su nombre y sin enlace.
+aparece con **(Departamento eliminado)** tras su nombre y sin enlace. Un departamento sin logotipo de ticket
+imprime en su lugar el logotipo del tema en uso, como explica
+[En los tickets y las facturas](appearance.md#logo-receipts).
 
 El logotipo de un tema también mantiene en uso una fotografía, esté o no en uso el tema. La
 biblioteca muestra ese uso como **Logotipo del tema <tema>**, tanto si la fotografía es el logotipo

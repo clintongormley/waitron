@@ -2687,6 +2687,7 @@ describe("optional receipt source failures within one transaction", () => {
           expect(department).toEqual({
             receipt: failDepartment ? {} : { headerSubtitle: { "es-ES": "Sala" } },
             logo: null,
+            ...(failDepartment ? { unreadable: true } : {}),
           });
           await tx.update(tenantReceipts).set({ updatedAt: "2026-10-10T02:00:00Z" });
         });

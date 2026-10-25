@@ -172,7 +172,47 @@ describe("department receipt storage", () => {
     await imported(f.id, value, "{bad json");
     expect(
       await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "58mm")),
-    ).toEqual({ receipt: {}, logo: null });
+    ).toEqual({ receipt: {}, logo: null, unreadable: true });
+  });
+  it.each([7, `${"a".repeat(300)}.png`, "../secret.png", "", null])(
+    "marks a stored logo it cannot keep as unreadable, keeping the other fields: %s",
+    async (value) => {
+      const f = await fixture();
+      await imported(
+        f.id,
+        JSON.stringify({ logo: value, phone: "+34911234567" }),
+        JSON.stringify(pair),
+      );
+      expect(
+        await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "58mm")),
+      ).toEqual({ receipt: { phone: "+34911234567" }, logo: null, unreadable: true });
+    },
+  );
+  it("marks a department not found in this location as unreadable", async () => {
+    const a = await fixture();
+    const b = await fixture();
+    for (const id of [a.id, randomUUID()]) {
+      expect(
+        await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, b.cfg, id, "80mm")),
+      ).toEqual({ receipt: {}, logo: null, unreadable: true });
+    }
+  });
+  it("a readable document without a logo key, or with a kept logo, is not unreadable", async () => {
+    const f = await fixture();
+    await imported(f.id, '{"phone":"+34911234567"}');
+    const plain = await scoped((tx) =>
+      receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "58mm"),
+    );
+    expect(plain).not.toHaveProperty("unreadable");
+    expect(plain.receipt).toEqual({ phone: "+34911234567" });
+    await scoped((tx) =>
+      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { logo: `${"a".repeat(64)}.png` }, pair),
+    );
+    const kept = await scoped((tx) =>
+      receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "58mm"),
+    );
+    expect(kept).not.toHaveProperty("unreadable");
+    expect(kept.logo?.bits).toEqual(new Uint8Array([128]));
   });
   it("preserves good fields while dropping bad shapes, keys, contacts and oversized entries", async () => {
     const f = await fixture();
@@ -261,6 +301,7 @@ describe("department receipt storage", () => {
       expect(await receipts.readPrintedDepartmentReceipt(suite.db, cfg, f.id, "58mm")).toEqual({
         receipt: {},
         logo: null,
+        unreadable: true,
       });
       expect(events).toEqual([
         {
@@ -384,7 +425,7 @@ describe("department receipt storage", () => {
           f.id,
           "80mm",
         ),
-      ).toEqual({ receipt: {}, logo: null });
+      ).toEqual({ receipt: {}, logo: null, unreadable: true });
     } finally {
       spy.mockRestore();
     }

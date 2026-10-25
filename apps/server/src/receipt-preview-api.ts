@@ -42,6 +42,7 @@ import { sampleSale } from "./sample-receipt.js";
 import type { TillConfig } from "./till-config.js";
 import { readReceiptAddress } from "./venue-address.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
+import { readVenueLogo, venueLogoMayPrint } from "./receipt-venue-logo.js";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 
 const run = createErrorBoundary(
@@ -225,6 +226,7 @@ interface ReceiptPreviewSnapshot {
   issuer: { venueName: string; nif: string };
   address: string[];
   savedLogo: MonoRaster | null;
+  venueLogo: MonoRaster | null;
 }
 async function renderDraftPreview(
   deps: { db: Database; cfg: TillConfig },
@@ -232,8 +234,17 @@ async function renderDraftPreview(
   logoCache: LogoCache,
   snapshot: ReceiptPreviewSnapshot,
 ): Promise<ReceiptPreviewResponse> {
-  const { receipt, printer, available, locale, receiptHeader, issuer, address, savedLogo } =
-    snapshot;
+  const {
+    receipt,
+    printer,
+    available,
+    locale,
+    receiptHeader,
+    issuer,
+    address,
+    savedLogo,
+    venueLogo,
+  } = snapshot;
   const filename = receipt.logo;
   const current =
     filename === undefined || savedLogo !== null
@@ -241,7 +252,7 @@ async function renderDraftPreview(
       : await readCurrentImageMetadata(deps.db, filename);
   const logo =
     filename === undefined
-      ? null
+      ? venueLogo
       : (savedLogo ??
         (current === null
           ? null
@@ -361,7 +372,26 @@ export function mountReceiptPreviewApi(
               });
         const taxpayer = (await readTenant(tx))!;
         let savedLogo: MonoRaster | null = null;
-        if (receipt.logo !== undefined) {
+        let venueLogo: MonoRaster | null = null;
+        const diagnostic = (event: { operation: string; code: string; departmentId?: string }) =>
+          console.warn("receipt.optional_read_failed", event);
+        if (receipt.logo === undefined) {
+          const stored = await VENUE_SERVICE.readPrintedDepartmentReceipt(
+            tx,
+            { ...checked.scope, receiptDiagnostic: diagnostic },
+            id,
+            printer.paperWidth,
+          );
+          if (
+            venueLogoMayPrint({
+              receipt: checked.input.receipt,
+              logo: null,
+              ...(stored.unreadable ? { unreadable: true } : {}),
+            })
+          ) {
+            venueLogo = (await readVenueLogo(tx, printer.paperWidth, diagnostic))?.picture ?? null;
+          }
+        } else {
           const stored = await VENUE_SERVICE.readDepartmentReceipt(tx, checked.scope, id);
           if (stored.logo === receipt.logo) {
             savedLogo = (
@@ -388,6 +418,7 @@ export function mountReceiptPreviewApi(
             printAddress: checked.input.receipt.printAddress === true,
           }),
           savedLogo,
+          venueLogo,
         };
       });
       return c.json(await renderDraftPreview(deps, sample, logoCache, snapshot));

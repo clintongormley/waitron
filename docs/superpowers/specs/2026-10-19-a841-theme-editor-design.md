@@ -1683,8 +1683,9 @@ nothing and left two holes):
 
   So the build makes "cannot be trusted" visible: `readPrintedDepartmentReceipt` also reads whether
   the receipt row exists, whether its document is valid JSON whose top level is an object, and
-  whether it has a `logo` key, and answers `unreadable: true` beside the empty receipt in cases 1
-  to 4 — a document with a `logo` key and no kept name is case 3. A department with no receipt row,
+  whether it has a `logo` key, and answers `unreadable: true` beside the empty receipt in cases 1,
+  2 and 4, and beside the readable fields in case 3 — a document with a `logo` key and no kept name
+  is case 3. A department with no receipt row,
   or with a readable document that has no `logo` key, is not unreadable, and takes the venue's logo.
   **The two that print** — the receipt (`apps/server/src/receipt-print.ts:199`) and the A4 invoice
   (`apps/server/src/invoice-document.ts:103`) — then take no logo at all, the sale still printing as
@@ -2714,6 +2715,14 @@ permission-gated write (CLAUDE.md's risk triggers).
   a name that does not fit its square with "…" and can be pinched, so the 130% cases hold every
   name's box inside its square at both widths and every name whole only on a 1280 × 800 till; on a
   390 px phone the map already cuts names at 100%.
+- **Slice 9 in two pull requests** (lane A ruling 2026-10-25, slice 9 plan D1): 9a prints the
+  theme's logo on receipts, A4 invoices, the till's ticket view and a department's Receipts preview;
+  9b adds the Look card's "How it prints", whose guide paragraph links to 9a's section. Not taken:
+  one pull request of sixteen tasks.
+- **A department whose settings cannot be trusted keeps its readable fields** (lane A ruling
+  2026-10-25, slice 9 plan D2): when the stored `logo` key holds no usable name, the receipt still
+  prints the department's phone and texts, and prints no logo at all, not even the venue's. Not
+  taken: the empty receipt, which would drop fields that were never in doubt.
 
 ## 17. Risks
 

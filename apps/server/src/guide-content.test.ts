@@ -87,6 +87,7 @@ describe("the user guides", () => {
       "text-size",
       "logo",
       "logo-screens",
+      "logo-receipts",
       "advanced",
       "hard-to-read",
       "save",

@@ -117,6 +117,13 @@ import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { venueModuleConfig } from "./provision.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
+  putThemeInUse,
+  saveThemeThroughRoute,
+  THEME_DOTS,
+  UNTRUSTED_CASES,
+} from "./testing/theme-logo.js";
+import { WAITRON_CHOICES } from "@waitron/ui-core/theme";
+import {
   inTx,
   join,
   nameParty,
@@ -413,6 +420,20 @@ async function registroCount(cfg: DeviceRequestConfig): Promise<number> {
     const rows = await tx.select().from(registrosFacturacion);
     return rows.length;
   });
+}
+
+/** A department's own logo pictures: bytes `[255, 255]` on 58 mm and `[255, 255, 255]` on 80 mm. */
+const OWN_PAIR = {
+  "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
+  "80mm": { widthDots: 24, heightDots: 1, data: "////" },
+};
+
+/** A receipt job's logo pictures: its `GS v 0` raster images after the QR. */
+function logos(payload: Uint8Array): number[][] {
+  return printedCommands(payload)
+    .filter((c) => c.name === "GS v 0" && c.text === undefined)
+    .slice(1)
+    .map((c) => [...c.bytes.subarray(8)]);
 }
 
 /** The one filed sale's id; the database is emptied after each test. */
@@ -2988,6 +3009,26 @@ describe("automatic F1 receipt delivery enrollment", () => {
     },
   );
 
+  it.each(["absent", "null"] as const)(
+    "a sale with no department prints the theme's logo: header %s",
+    async (kind) => {
+      const { cfg, saleId, ticket } = await issued("auto");
+      if (kind === "null")
+        await suite.db.insert(saleReceiptHeaders).values({
+          saleId,
+          departmentId: null,
+          tradingName: "Inconsistent brand",
+          printTradingName: true,
+        });
+      await putThemeInUse(suite.db);
+      await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
+      const jobs = await suite.db.select().from(printJobs);
+      expect(jobs).toHaveLength(1);
+      expect(logos(jobs[0]!.payload)).toEqual([[0xf0, 0x0f]]);
+      expect(await registroCount(cfg)).toBe(1);
+    },
+  );
+
   it.each(["auto", "on_request"] as const)(
     "enrolls the automatic original with its recorded issuer under %s policy",
     async (mode) => {
@@ -3413,14 +3454,10 @@ describe("department receipt presentation on thermal jobs", () => {
         "58mm": { widthDots: 8, heightDots: 1, data: "gQ==" },
         "80mm": { widthDots: 16, heightDots: 1, data: "gf8=" },
       };
-      const ownPair = {
-        "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
-        "80mm": { widthDots: 24, heightDots: 1, data: "////" },
-      };
       await suite.db
         .update(tenantReceipts)
         .set({ receipt: { logo: `${"a".repeat(64)}.png`, logoRasters: venuePair } });
-      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, ownPair);
+      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
       const ticket = await sell();
       const saleId = await onlySaleId(cfg);
       await suite.db
@@ -3428,12 +3465,7 @@ describe("department receipt presentation on thermal jobs", () => {
         .set({ receipt: {}, logoRasters: null })
         .where(eq(departmentReceipts.departmentId, departmentId));
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
-      const logoBytes = (await documents()).map((job) =>
-        printedCommands(job.payload)
-          .filter((c) => c.name === "GS v 0" && c.text === undefined)
-          .slice(1)
-          .map((c) => [...c.bytes.subarray(8)]),
-      );
+      const logoBytes = (await documents()).map((job) => logos(job.payload));
       expect(logoBytes).toEqual(
         paperWidth === "58mm" ? [[[255, 255]], []] : [[[255, 255, 255]], []],
       );
@@ -3441,7 +3473,7 @@ describe("department receipt presentation on thermal jobs", () => {
     },
   );
 
-  it("omits a corrupt explicit department picture without substituting the venue logo", async () => {
+  it("omits a corrupt explicit department picture without substituting the `tenant_receipts` logo", async () => {
     const { cfg, departmentId, sell, documents } = await setupReceipt();
     const pair = {
       "58mm": { widthDots: 8, heightDots: 1, data: "gQ==" },
@@ -3767,6 +3799,243 @@ describe("department receipt presentation on thermal jobs", () => {
       expect(await registroCount(cfg)).toBe(1);
     },
   );
+});
+
+describe("the theme's logo on thermal receipts", () => {
+  async function setupReceipt(paperWidth: "58mm" | "80mm" = "80mm") {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    await suite.db
+      .update(printers)
+      .set({ paperWidth })
+      .where(eq(printers.locationId, cfg.locationId));
+    const [{ departmentId }] = await suite.db
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    const sell = () =>
+      recordTillSale(
+        deps(),
+        cfg,
+        {
+          zoneId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          tender: { method: "cash" as const, amount: "1.50" },
+        },
+        OPERATOR,
+      );
+    const documents = async () =>
+      (await suite.db.select().from(printJobs)).filter(
+        (job) => job.saleId !== null && job.kind === "document",
+      );
+    const reprint = async (ticket: Awaited<ReturnType<typeof sell>>) => {
+      const saleId = await onlySaleId(cfg);
+      const before = new Set((await documents()).map((job) => job.id));
+      await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
+      const copies = (await documents()).filter((job) => !before.has(job.id));
+      expect(copies).toHaveLength(1);
+      return copies[0]!;
+    };
+    return { cfg, departmentId: departmentId!, sell, documents, reprint };
+  }
+
+  it.each(["58mm", "80mm"] as const)(
+    "a department with no receipt logo prints the theme's logo on %s",
+    async (paperWidth) => {
+      const { cfg, sell, documents } = await setupReceipt(paperWidth);
+      await putThemeInUse(suite.db);
+      await sell();
+      const [job] = await documents();
+      expect(logos(job!.payload)).toEqual(paperWidth === "58mm" ? [[0xf0]] : [[0xf0, 0x0f]]);
+      expect(await registroCount(cfg)).toBe(1);
+    },
+  );
+
+  it("a department with saved texts but no logo prints its subtitle and the theme's logo", async () => {
+    const { cfg, departmentId, sell, documents } = await setupReceipt();
+    await storeDepartmentReceipt(departmentId, {
+      headerSubtitle: { "es-ES": "Retained own text" },
+    });
+    await putThemeInUse(suite.db);
+    await sell();
+    const [job] = await documents();
+    expect(logos(job!.payload)).toEqual([[0xf0, 0x0f]]);
+    expect(decodeTicket(job!.payload)).toContain("Retained own text");
+    expect(await registroCount(cfg)).toBe(1);
+  });
+
+  it("a department's own receipt logo wins", async () => {
+    const { cfg, departmentId, sell, documents } = await setupReceipt();
+    await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
+    await putThemeInUse(suite.db);
+    await sell();
+    const [job] = await documents();
+    expect(logos(job!.payload)).toEqual([[255, 255, 255]]);
+    expect(await registroCount(cfg)).toBe(1);
+  });
+
+  it("a department naming a logo whose pictures are bad prints nothing, not the theme's", async () => {
+    const { cfg, departmentId, sell, documents } = await setupReceipt();
+    await storeDepartmentReceipt(departmentId, {
+      logo: `${"b".repeat(64)}.png`,
+      headerSubtitle: { "es-ES": "Retained own text" },
+    });
+    await suite.db.execute(
+      sql`update department_receipts set logo_rasters = ${JSON.stringify({ "58mm": { widthDots: 999999, heightDots: 1, data: "bad" }, "80mm": { widthDots: 8, heightDots: 1, data: "bad" } })} where department_id = ${departmentId}`,
+    );
+    await putThemeInUse(suite.db);
+    await sell();
+    const [job] = await documents();
+    expect(logos(job!.payload)).toEqual([]);
+    expect(decodeTicket(job!.payload)).toContain("Retained own text");
+    expect(await registroCount(cfg)).toBe(1);
+  });
+
+  it.each(["58mm", "80mm"] as const)(
+    "theme dots that cannot print on %s print no logo, and the sale prints",
+    async (paperWidth) => {
+      const { cfg, sell, documents } = await setupReceipt(paperWidth);
+      await putThemeInUse(suite.db, {
+        printedLogo: {
+          "58mm": THEME_DOTS["58mm"],
+          "80mm": { widthDots: 16, heightDots: 1, data: "x" },
+        },
+      });
+      await sell();
+      const [job] = await documents();
+      expect(logos(job!.payload)).toEqual(paperWidth === "58mm" ? [[0xf0]] : []);
+      const text = decodeTicket(job!.payload);
+      expect(text).toContain("Agua mineral");
+      expect(text).toContain("TOTAL");
+      expect(await registroCount(cfg)).toBe(1);
+    },
+  );
+
+  it.each(["Remove", "Use Waitron's look"] as const)(
+    "saving %s stops the logo printing",
+    async (action) => {
+      const { sell, documents, reprint } = await setupReceipt();
+      const themeId = await putThemeInUse(suite.db);
+      const ticket = await sell();
+      const [original] = await documents();
+      expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+      const response = await saveThemeThroughRoute(
+        suite.db,
+        themeId,
+        action === "Remove"
+          ? { ...WAITRON_CHOICES, brandColor: "#1e5b3a", logo: null }
+          : WAITRON_CHOICES,
+      );
+      expect(response.status).toBe(200);
+      expect(logos((await reprint(ticket)).payload)).toEqual([]);
+    },
+  );
+
+  it("the reprint follows the theme in use now", async () => {
+    const { sell, documents, reprint } = await setupReceipt();
+    await putThemeInUse(suite.db);
+    const ticket = await sell();
+    const [original] = await documents();
+    expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+    await putThemeInUse(suite.db, {
+      printedLogo: { ...THEME_DOTS, "80mm": { widthDots: 8, heightDots: 1, data: "/w==" } },
+    });
+    expect(logos((await reprint(ticket)).payload)).toEqual([[0xff]]);
+    await suite.db.execute(sql`update custom_themes set in_use = null where in_use = 1`);
+    expect(logos((await reprint(ticket)).payload)).toEqual([]);
+  });
+
+  async function untrustedAt(cfg: DeviceRequestConfig, departmentId: string) {
+    const [foreign] = await suite.db
+      .insert(locations)
+      .values({
+        name: randomUUID(),
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+      })
+      .returning({ id: locations.id });
+    return { departmentId, locationId: cfg.locationId, foreignLocationId: foreign!.id };
+  }
+
+  async function expectTextOnlyReprint(job: { payload: Uint8Array }, cfg: DeviceRequestConfig) {
+    expect(logos(job.payload)).toEqual([]);
+    expect(decodeTicket(job.payload)).toContain("Agua mineral");
+    const lines = printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " "));
+    expect(lines.find((line) => line.startsWith("TOTAL"))).toBe("TOTAL 1,50 €");
+    expect(await registroCount(cfg)).toBe(1);
+  }
+
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "prints no logo, not even the theme's, when the department's settings cannot be trusted: %s",
+    async (_name, untrusted) => {
+      const { cfg, departmentId, sell, documents, reprint } = await setupReceipt();
+      const at = await untrustedAt(cfg, departmentId);
+      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
+      await putThemeInUse(suite.db);
+      const ticket = await sell();
+      const [original] = await documents();
+      expect(logos(original!.payload)).toEqual([[255, 255, 255]]);
+      let applied = false;
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await untrusted.apply(suite.db, at);
+        applied = true;
+        await expectTextOnlyReprint(await reprint(ticket), cfg);
+        if (untrusted.name !== "the read throws") expect(warning).not.toHaveBeenCalled();
+      } finally {
+        warning.mockRestore();
+        if (applied) await untrusted.undo(suite.db, at);
+      }
+    },
+  );
+
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "a department with no logo of its own stops the theme's printing once it cannot be trusted: %s",
+    async (_name, untrusted) => {
+      const { cfg, departmentId, sell, documents, reprint } = await setupReceipt();
+      const at = await untrustedAt(cfg, departmentId);
+      await putThemeInUse(suite.db);
+      const ticket = await sell();
+      const [original] = await documents();
+      expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+      let applied = false;
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await untrusted.apply(suite.db, at);
+        applied = true;
+        await expectTextOnlyReprint(await reprint(ticket), cfg);
+        if (untrusted.name !== "the read throws") expect(warning).not.toHaveBeenCalled();
+      } finally {
+        warning.mockRestore();
+        if (applied) await untrusted.undo(suite.db, at);
+      }
+    },
+  );
+
+  it("a failed theme read prints the sale without a logo and reports it", async () => {
+    const { cfg, sell, documents, reprint } = await setupReceipt();
+    await putThemeInUse(suite.db);
+    const ticket = await sell();
+    const [original] = await documents();
+    expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+    let hidden = false;
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await suite.db.execute(sql`alter table custom_themes rename to test_hidden_custom_themes`);
+      hidden = true;
+      const copy = await reprint(ticket);
+      await expectTextOnlyReprint(copy, cfg);
+      expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
+        operation: "readPrintedThemeLogo",
+        code: "receipt.read_failed",
+      });
+    } finally {
+      warning.mockRestore();
+      if (hidden)
+        await suite.db.execute(sql`alter table test_hidden_custom_themes rename to custom_themes`);
+    }
+  });
 });
 
 it("keeps the original history after printer deletion and prints a marked copy on its replacement", async () => {

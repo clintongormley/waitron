@@ -20,9 +20,10 @@ import {
   saleReceiptHeaders,
 } from "@waitron/venue-service";
 import { readReceiptPresentation } from "./receipt-presentation.js";
-import { MEDIA_MIGRATIONS, uploadImage, saveImage } from "@waitron/media";
+import { MEDIA_MIGRATIONS, uploadImage, saveImage, readPresentations } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import * as media from "@waitron/media";
+import { putThemeInUse, UNTRUSTED_CASES, type UntrustedCase } from "./testing/theme-logo.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
@@ -260,6 +261,128 @@ describe("department-only on-screen receipt", () => {
           await suite.db.execute(sql`alter table test_hidden_receipts rename to tenant_receipts`);
         warning.mockRestore();
       }
+    },
+  );
+});
+
+describe("the theme's logo on the ticket view", () => {
+  let drawn = 0;
+  async function libraryImage(name: string): Promise<{ filename: string; display: string }> {
+    drawn += 1;
+    const source = await samplePreparedImage({ width: 800 + drawn, height: 200 });
+    const { image } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: source, names: { es: name, en: name } }),
+    );
+    const presentations = await withTransaction(suite.db, (tx) =>
+      readPresentations(tx, [image.filename]),
+    );
+    return { filename: image.filename, display: presentations[image.filename]!.display };
+  }
+
+  async function themeImages() {
+    const light = await libraryImage("Light");
+    const dark = await libraryImage("Dark");
+    expect(dark.filename).not.toBe(light.filename);
+    expect(dark.display).not.toBe(light.display);
+    await putThemeInUse(suite.db, { light: light.filename, dark: dark.filename });
+    return { light, dark };
+  }
+
+  it("a department with no receipt logo shows the theme's light image", async () => {
+    const f = await fixture();
+    const { light } = await themeImages();
+    const presentation = await f.read();
+    expect(presentation.receiptTrim).toEqual({ logo: light.filename, logoUrl: light.display });
+  });
+
+  it.each(["null", "absent"] as const)(
+    "a sale with no department shows it too (%s header)",
+    async (header) => {
+      const f = await fixture(header);
+      const { light } = await themeImages();
+      const presentation = await f.read();
+      expect(presentation.receiptTrim).toEqual({ logo: light.filename, logoUrl: light.display });
+    },
+  );
+
+  it("theme dots that cannot print still show the image on the ticket", async () => {
+    const f = await fixture();
+    const light = await libraryImage("Light");
+    await putThemeInUse(suite.db, {
+      light: light.filename,
+      printedLogo: { "80mm": { widthDots: 16, heightDots: 1, data: "x" } },
+    });
+    const presentation = await f.read();
+    expect(presentation.receiptTrim).toEqual({ logo: light.filename, logoUrl: light.display });
+  });
+
+  it("a department's own logo wins", async () => {
+    const f = await fixture();
+    await themeImages();
+    const own = await libraryImage("Own");
+    await f.authored({ logo: own.filename });
+    const presentation = await f.read();
+    expect(presentation.receiptTrim).toEqual({ logo: own.filename, logoUrl: own.display });
+  });
+
+  async function untrustedRead(untrusted: UntrustedCase, own: boolean) {
+    const f = await fixture();
+    const { light } = await themeImages();
+    const ownImage = own ? await libraryImage("Own") : null;
+    if (ownImage) await f.authored({ logo: ownImage.filename });
+    const [foreign] = await suite.db
+      .insert(locations)
+      .values({
+        name: randomUUID(),
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+      })
+      .returning({ id: locations.id });
+    const at = {
+      departmentId: f.departmentId,
+      locationId: f.cfg.locationId,
+      foreignLocationId: foreign!.id,
+    };
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const control = await f.read();
+      const expected = ownImage ?? light;
+      expect(control.receiptTrim).toEqual({ logo: expected.filename, logoUrl: expected.display });
+      await untrusted.apply(suite.db, at);
+      try {
+        const presentation = await f.read();
+        return { control, presentation, light, ownImage };
+      } finally {
+        await untrusted.undo(suite.db, at);
+      }
+    } finally {
+      warning.mockRestore();
+    }
+  }
+
+  function expectNoLogo(
+    untrusted: UntrustedCase,
+    presentation: Awaited<ReturnType<typeof untrustedRead>>["presentation"],
+  ) {
+    expect(presentation.receiptTrim.logo).toBeUndefined();
+    expect(presentation.receiptTrim.logoUrl).toBeUndefined();
+    if (untrusted.name === "a numeric logo")
+      expect(presentation.receiptTrim.phone).toBe("910111111");
+  }
+
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "shows no logo when the department cannot be trusted: %s",
+    async (_name, untrusted) => {
+      const { presentation } = await untrustedRead(untrusted, false);
+      expectNoLogo(untrusted, presentation);
+    },
+  );
+
+  it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
+    "a department's own logo shows until it cannot be trusted, then no logo shows: %s",
+    async (_name, untrusted) => {
+      const { presentation } = await untrustedRead(untrusted, true);
+      expectNoLogo(untrusted, presentation);
     },
   );
 });
