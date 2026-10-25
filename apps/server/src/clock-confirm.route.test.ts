@@ -1819,14 +1819,16 @@ it("names AEAT's time, and no person, in the header of a list from a closing AEA
   const answer = await download(stop.app, incidentId);
   expect(answer.status).toBe(200);
   const [[sentence]] = csvRows(new Uint8Array(await answer.arrayBuffer()));
-  const time = (iso: string) => receiptDateTimeNumeric(iso, "en-GB", 60);
+  const time = (iso: string, offset: number) => receiptDateTimeNumeric(iso, "en-GB", offset);
+  const headerOffset = detail.closing.startOffsetMinutes ?? open.fromOffsetMinutes;
   const bound = Math.ceil((Date.parse(detail.closing.correctedStart) + MINUTE) / MINUTE) * MINUTE;
   expect(detail.records.length).toBeGreaterThan(1);
   expect(sentence).toBe(
     `${venueName()}: ${detail.records.length} sales were recorded with a time later than the ` +
-      `real one, from ${time(open.from)} to ${time(open.to!)}. Each was made before ` +
-      `${time(new Date(bound).toISOString())}. The clock was confirmed by the tax agency's time ` +
-      `on ${time(detail.closing.confirmedAt)}.`,
+      `real one, from ${time(open.from, open.fromOffsetMinutes)} to ` +
+      `${time(open.to!, open.toOffsetMinutes!)}. Each was made before ` +
+      `${time(new Date(bound).toISOString(), headerOffset)}. The clock was confirmed by the tax ` +
+      `agency's time on ${time(detail.closing.confirmedAt, headerOffset)}.`,
   );
 });
 
