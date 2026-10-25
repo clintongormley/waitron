@@ -14,11 +14,19 @@ import {
   floorResetTables,
   floorTodayTables,
   floorTodayZones,
+  floorPlanSets,
   floorZones,
+  shortNameColumns,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
+import {
+  createDepartment,
+  createServiceZone,
+  linkFloorPlanSet,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import {
   checkLayoutSave,
   readLayout,
@@ -1227,6 +1235,7 @@ describe("floor plans without adoption", () => {
     const other = await zone();
     const live = await liveTable(other, fresh("Other"));
     const label = fresh("New");
+    const shortName = `S${randomUUID().slice(0, 4)}`;
     const input = {
       revision: 0,
       tables: [
@@ -1234,6 +1243,7 @@ describe("floor plans without adoption", () => {
           key: "a",
           liveTableId: live,
           label,
+          shortName,
           seats: 4,
           fixed: false,
           placement: PLACE,
@@ -1249,6 +1259,7 @@ describe("floor plans without adoption", () => {
         id: saved.ids.a,
         liveTableId: expect.any(String),
         label,
+        shortName,
         seats: 4,
         fixed: false,
         placement: PLACE,
@@ -1280,5 +1291,201 @@ describe("floor plans without adoption", () => {
       expect(error.code).toBe("table.label_taken");
       expect(error.params).toEqual({ label });
     }
+  });
+});
+
+describe("short names", () => {
+  const short = () => `S${randomUUID().slice(0, 4)}`;
+  const digits = () => String(1000 + Math.floor(Math.random() * 9000));
+
+  function entry(key: string, label: string, extra: Partial<SaveEntry> = {}): SaveEntry {
+    return { key, label, seats: 4, fixed: false, placement: PLACE, partKeys: [], ...extra };
+  }
+
+  async function save(zoneId: string, input: ZonePlanSave) {
+    const at = await layoutOf(zoneId);
+    return inTx(v, (tx) => saveLayout(tx, v.cfg, NONE, at, input, NOW));
+  }
+
+  async function shortNamesOf(zoneId: string): Promise<Map<string, string | null>> {
+    const plan = await readDefault(zoneId);
+    return new Map(plan.tables.map((t) => [t.id, t.shortName]));
+  }
+
+  async function masterHolding(shortName: string): Promise<string> {
+    const other = await zone();
+    const label = fresh("Holder");
+    const [id] = await masterOf(other, [{ label }]);
+    await inTx(v, (tx) =>
+      tx.update(floorPlanTables).set({ shortName }).where(eq(floorPlanTables.id, id!)),
+    );
+    return label;
+  }
+
+  async function liveHolding(shortName: string | null, label = fresh("Live")): Promise<string> {
+    const other = await zone();
+    const id = await liveTable(other, label);
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set(shortNameColumns(shortName)).where(eq(diningTables.id, id)),
+    );
+    return label;
+  }
+
+  it("fills a new table's short name from its name when the save sends none", async () => {
+    const z = await zone();
+    const d = digits();
+    const { ids } = await save(z, { revision: 0, tables: [entry("a", `Q ${d}`)] });
+    expect((await shortNamesOf(z)).get(ids.a!)).toBe(`Q${d}`);
+  });
+
+  it("keeps a sent short name and reads it back", async () => {
+    const z = await zone();
+    const s = short();
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [entry("a", fresh("Sent"), { shortName: ` ${s} ` })],
+    });
+    expect((await shortNamesOf(z)).get(ids.a!)).toBe(s);
+  });
+
+  it("keeps a stored short name when the save sends none and the name is unchanged", async () => {
+    const z = await zone();
+    const s = short();
+    const label = fresh("Kept");
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [entry("a", label, { shortName: s })],
+    });
+    await save(z, { revision: 1, tables: [entry("a", label, { id: ids.a!, seats: 6 })] });
+    expect((await shortNamesOf(z)).get(ids.a!)).toBe(s);
+  });
+
+  it("a sent short name does not take an untouched table's stored one", async () => {
+    const z = await zone();
+    const s = short();
+    const label = fresh("A");
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [entry("a", label, { shortName: s })],
+    });
+    const error = await refusal(
+      check(z, {
+        revision: 1,
+        tables: [entry("a", label, { id: ids.a! }), entry("b", fresh("B"), { shortName: s })],
+      }),
+    );
+    expect(error.code).toBe("table.short_name_taken");
+    expect(error.params).toEqual({ shortName: s, takenBy: label, field: "shortName" });
+  });
+
+  it("refuses a short name another zone's plan table or live table uses, ignoring case", async () => {
+    const z = await zone();
+    for (const holding of [masterHolding, liveHolding]) {
+      const s = short();
+      const takenBy = await holding(s);
+      const sent = s.toUpperCase();
+      const error = await refusal(
+        check(z, { revision: 0, tables: [entry("a", fresh("New"), { shortName: sent })] }),
+      );
+      expect(error.code).toBe("table.short_name_taken");
+      expect(error.params).toEqual({ shortName: sent, takenBy, field: "shortName" });
+    }
+  });
+
+  it("counts another zone's table with no short name by its full name", async () => {
+    const d = digits();
+    const takenBy = await liveHolding(null, `Q${d}`);
+    const z = await zone();
+    const { ids } = await save(z, { revision: 0, tables: [entry("a", `Q ${d}`)] });
+    expect((await shortNamesOf(z)).get(ids.a!)).toBeNull();
+    const error = await refusal(
+      check(await zone(), {
+        revision: 0,
+        tables: [entry("a", fresh("New"), { shortName: `q${d}` })],
+      }),
+    );
+    expect(error.code).toBe("table.short_name_taken");
+    expect(error.params).toEqual({ shortName: `q${d}`, takenBy, field: "shortName" });
+  });
+
+  it("allows this zone's own live table's short name", async () => {
+    const z = await zone();
+    const s = short();
+    const own = await liveTable(z, fresh("Own"));
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set(shortNameColumns(s)).where(eq(diningTables.id, own)),
+    );
+    await expect(
+      check(z, { revision: 0, tables: [entry("a", fresh("New"), { shortName: s })] }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("a rename with none sent takes the new name's proposal; one with its short name sent keeps it", async () => {
+    const z = await zone();
+    const [sa, sb] = [short(), short()];
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [
+        entry("a", fresh("A"), { shortName: sa }),
+        entry("b", fresh("B"), { shortName: sb }),
+      ],
+    });
+    const d = digits();
+    await save(z, {
+      revision: 1,
+      tables: [
+        entry("a", `Q ${d}`, { id: ids.a! }),
+        entry("b", fresh("Renamed"), { id: ids.b!, shortName: sb }),
+      ],
+    });
+    const names = await shortNamesOf(z);
+    expect(names.get(ids.a!)).toBe(`Q${d}`);
+    expect(names.get(ids.b!)).toBe(sb);
+  });
+
+  it("a short-name change alone moves the revision of the zone's other layouts", async () => {
+    const d = await inTx(v, async (tx) => {
+      const dept = await createDepartment(tx, v.cfg, { name: fresh("Dept"), orderStart: "table" });
+      const inside = await createServiceZone(tx, v.cfg, {
+        name: fresh("Inside"),
+        departmentId: dept.id,
+      });
+      const setIds: string[] = [];
+      for (const name of ["Standard", "Dinner"]) {
+        const [row] = await tx
+          .insert(floorPlanSets)
+          .values({ locationId: v.cfg.locationId })
+          .returning({ id: floorPlanSets.id });
+        await linkFloorPlanSet(tx, v.cfg, { setId: row!.id, departmentId: dept.id, name });
+        setIds.push(row!.id);
+      }
+      return { zoneId: inside.id, standard: setIds[0]!, dinner: setIds[1]! };
+    });
+    const saveIn = (input: ZonePlanSave) =>
+      inTx(v, (tx) =>
+        saveLayout(tx, v.cfg, NONE, { setId: d.standard, zoneId: d.zoneId }, input, NOW),
+      );
+    const dinnerRevision = async () =>
+      (await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId })))
+        .revision;
+    const label = fresh("Shared");
+    const { ids } = await saveIn({
+      revision: 0,
+      tables: [entry("a", label, { shortName: short() })],
+    });
+    const before = await dinnerRevision();
+    await saveIn({
+      revision: 1,
+      tables: [entry("a", label, { id: ids.a!, shortName: short() })],
+    });
+    expect(await dinnerRevision()).toBe(before + 1);
+  });
+
+  it("saves a table with none when its proposal is taken", async () => {
+    const d = digits();
+    await masterHolding(`Q${d}`);
+    const z = await zone();
+    const { ids } = await save(z, { revision: 0, tables: [entry("a", `Q ${d}`)] });
+    expect((await shortNamesOf(z)).get(ids.a!)).toBeNull();
   });
 });

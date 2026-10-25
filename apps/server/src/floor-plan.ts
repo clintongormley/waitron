@@ -14,12 +14,13 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { FloorPlanSetSummary, TableRemoval } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, shortNameKey } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 import { placedIdsAsRead } from "./floor-plan-sets.js";
 import { placementOf, resetZone, spareLabels } from "./floor-today-store.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { refusedByAModule } from "./table-removal.js";
+import { resolveShortNames } from "./table-short-names.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -27,6 +28,7 @@ export interface PlanTable {
   id: string;
   liveTableId: string | null;
   label: string;
+  shortName: string | null;
   seats: number | null;
   fixed: boolean;
   placement: Placement | null;
@@ -58,6 +60,7 @@ export interface ZonePlanSave {
     id?: string;
     key: string;
     label: string;
+    shortName?: string;
     seats: number | null;
     fixed: boolean;
     placement: Placement | null;
@@ -206,6 +209,7 @@ async function planTables(tx: Transaction, masters: LayoutTable[]): Promise<Plan
     id: master.id,
     liveTableId: followers.get(master.id) ?? null,
     label: master.label,
+    shortName: master.shortName,
     seats: master.seats,
     fixed: master.fixed,
     placement: master.placement,
@@ -323,12 +327,44 @@ async function namesTaken(tx: Transaction, cfg: TillConfig, zoneId: string): Pro
   return new Set([...masters.map((m) => m.label), ...live.map((t) => t.label)]);
 }
 
+/**
+ * The short names other zones' tables hold, by key, each mapped to its holder's full name; a table
+ * with none is shown by its full name, so that name is held too. Plan tables come first, so a name
+ * both hold is named by the plan's table.
+ */
+async function shortNamesTaken(
+  tx: Transaction,
+  cfg: TillConfig,
+  zoneId: string,
+): Promise<Map<string, string>> {
+  const masters = await tx
+    .select({ label: floorPlanTables.label, shortName: floorPlanTables.shortName })
+    .from(floorPlanTables)
+    .innerJoin(floorZones, eq(floorZones.id, floorPlanTables.zoneId))
+    .where(and(eq(floorZones.locationId, cfg.locationId), ne(floorPlanTables.zoneId, zoneId)));
+  const live = await tx
+    .select({ label: diningTables.label, shortName: diningTables.shortName })
+    .from(diningTables)
+    .where(and(eq(diningTables.locationId, cfg.locationId), ne(diningTables.zoneId, zoneId)));
+  const taken = new Map<string, string>();
+  for (const { label, shortName } of [...masters, ...live]) {
+    const key = shortNameKey(shortName ?? label);
+    if (!taken.has(key)) taken.set(key, label);
+  }
+  return taken;
+}
+
+type CheckedTable = Omit<ZonePlanSave["tables"][number], "shortName"> & {
+  shortName: string | null;
+};
+
 /** What a passed check read, for the save to reuse. */
 interface CheckedZonePlanSave {
   plan: Awaited<ReturnType<typeof planOf>>;
   /** The plan's tables, by label. */
   masters: LayoutTable[];
-  tables: ZonePlanSave["tables"];
+  /** The save's tables, each with its resolved short name. */
+  tables: CheckedTable[];
   /** The saved set's department. */
   departmentId: string;
 }
@@ -382,6 +418,20 @@ async function checkSave(
     if (seen.has(label) || taken.has(label)) throw new AppError("table.label_taken", { label });
     seen.add(label);
   }
+  const masterById = new Map(masters.map((m) => [m.id, m]));
+  const shortNames = resolveShortNames(
+    tables.map((table) => {
+      const master = table.id === undefined ? undefined : masterById.get(table.id);
+      return {
+        label: table.label,
+        ...(table.shortName === undefined ? {} : { shortName: table.shortName }),
+        ...(master === undefined
+          ? {}
+          : { stored: { label: master.label, shortName: master.shortName } }),
+      };
+    }),
+    await shortNamesTaken(tx, cfg, zoneId),
+  );
 
   const kept = new Set(tables.map((t) => t.id));
   const liveIds = masters.flatMap((m) => (kept.has(m.id) ? [] : (followers.get(m.id) ?? [])));
@@ -390,11 +440,16 @@ async function checkSave(
     const refusal = refusals.get(liveId);
     if (refusal !== undefined) throw refusal;
   }
-  return { plan, masters, tables, departmentId };
+  return {
+    plan,
+    masters,
+    tables: tables.map((table, index) => ({ ...table, shortName: shortNames[index]! })),
+    departmentId,
+  };
 }
 
-function masterColumns(table: ZonePlanSave["tables"][number]) {
-  return { seats: table.seats, fixed: table.fixed };
+function masterColumns(table: CheckedTable) {
+  return { shortName: table.shortName, seats: table.seats, fixed: table.fixed };
 }
 
 /** A zone's first save builds today's plan at once, from the layout due now. */
@@ -598,10 +653,13 @@ async function writeSave(
   return { revision, ids: Object.fromEntries(ids), shared: changedShared(masters, tables, ids) };
 }
 
-/** Whether the save added, deleted or renamed a table, or changed its seats, "Moveable" or parts. */
+/**
+ * Whether the save added, deleted or renamed a table, or changed its short name, seats,
+ * "Moveable" or parts.
+ */
 function changedShared(
   masters: LayoutTable[],
-  tables: ZonePlanSave["tables"],
+  tables: CheckedTable[],
   ids: Map<string, string>,
 ): boolean {
   if (tables.length !== masters.length || tables.some((t) => t.id === undefined)) return true;
@@ -610,6 +668,7 @@ function changedShared(
     const master = masterOf.get(table.id!)!;
     if (
       master.label !== table.label.trim() ||
+      master.shortName !== table.shortName ||
       master.seats !== table.seats ||
       master.fixed !== table.fixed
     ) {
