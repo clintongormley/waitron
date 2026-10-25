@@ -629,7 +629,7 @@ money outcome.
 
 ## Follow-up fixes
 
-The audit is complete as a source inventory. Product fixes below remain open. Keep each change
+The audit is complete as a source inventory. Undated product fixes below remain open. Keep each change
 within its screen or area, reproduce the affected mapping with a failing test, then change the
 smallest applicable message or recovery path. A missing substantial workflow stays a backlog item
 for an owner decision; it is not silently replaced by “try again”. Fiscal/setup/sign-in/money
@@ -653,7 +653,7 @@ changes take their required review and existing protected-writer approvals.
 
 ### sign-in
 
-**A repeated passkey refusal needs a neutral alternative.** Offer another available sign-in method or administrator help without revealing whether the account is active, pending or suspended.
+2026-10-25: the shared passkey refusal now asks your administrator to check your account, in English and Spanish. The login browser cases exercise the refusal followed by password sign-in in both languages. This wording applies to profile passkey registration too; it makes no claim about account status. The original audit above records the earlier wording. See [account access](../../apps/server/src/guide/en/staff.md#account-access).
 
 ### backup-settings
 

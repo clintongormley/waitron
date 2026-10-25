@@ -3775,9 +3775,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 ### Users, sign-in and the dashboard shell
 
-- **A1089: a repeated passkey refusal needs a neutral alternative.** Offer another available sign-in method or administrator help without revealing whether the account is active, pending or suspended.
-  [Audit](backlog/self-service-refusals.md#sign-in).
-
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The

@@ -17,6 +17,9 @@ chooses its replacement. Resetting a login clears their credentials and sends a 
 Disabling an account also deletes the person's PIN, password, passkeys, two-factor settings and
 Google link. Re-enabling it sends a new invitation. Managers do not see these actions.
 
+If Waitron cannot verify your passkey, ask your administrator to check your account. You can
+also choose **Use your password** on the sign-in page.
+
 ## Your own account {#own-account}
 
 Open **Account settings** from the account menu to change your own sign-in details. Your own

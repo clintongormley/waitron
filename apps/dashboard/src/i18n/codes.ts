@@ -356,8 +356,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta passkey ya no está registrada en Waitron",
   },
   "passkey.verification_failed": {
-    en: "Could not verify the passkey, try again",
-    es: "No se pudo verificar la passkey, inténtalo de nuevo",
+    en: "Could not verify the passkey. Ask your administrator to check your account.",
+    es: "No se pudo verificar la passkey. Pide al administrador que revise tu cuenta.",
   },
   "passkey.challenge_expired": {
     en: "The passkey request expired, try again",
