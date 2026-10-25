@@ -25,6 +25,14 @@ import {
   startAgainMarkerFor,
   writeStartAgainMarker,
 } from "./first-setup-start-again-deletion.js";
+import { hashPassword, hashPin } from "@waitron/identity";
+import {
+  assertVenueFirstSetupAllowed,
+  createFirstSetupCoordinator,
+  createFirstSetupStore,
+  type FirstSetupFrozen,
+} from "./first-setup-state.js";
+import { createFirstSetupResolutionStore } from "./first-setup-resolution.js";
 
 const dirs: string[] = [];
 async function stateDir() {
@@ -1051,4 +1059,159 @@ it("node.db is read wherever the venue folder is, even under a name holding # an
     ...notReady,
     reason: "node.db holds a table",
   });
+});
+
+const ownerVerifier = hashPassword("owner-password");
+const digestOf = (value: string) => createHash("sha256").update(value).digest("hex");
+function frozenAttempt(): FirstSetupFrozen {
+  const attemptId = randomUUID();
+  return {
+    attemptId,
+    nodeId: randomUUID(),
+    administratorId: randomUUID(),
+    sourceId: `first-setup:${attemptId}`,
+    environment: "production",
+    modules: [
+      {
+        module: "probe",
+        version: "0.1.0",
+        eventId: randomUUID(),
+        request: { bases: ["S000001-W1-A"], purposes: ["simplified"] },
+      },
+    ],
+    request: {
+      country: "ES",
+      taxId: "B12345678",
+      legalName: "Olivo SL",
+      taxpayerDomicile: "Calle Fiscal 1",
+      location: {
+        name: "Olivo",
+        fiscalTerritory: "ES-common",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurante",
+        addressLine1: "Calle Mayor 1",
+        addressLine2: null,
+        postalCode: "28001",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+      },
+      seriesCode: "A",
+      fullSeriesCode: "F",
+      rectificativeSeriesCode: "R",
+      admin: {
+        displayName: "Elena",
+        email: "elena@example.test",
+        pinHash: hashPin("4826"),
+        passwordHash: ownerVerifier,
+      },
+    },
+  };
+}
+
+async function pendingDeletion(abandon: boolean) {
+  const base = await stateDir();
+  const roots = { venueDir: join(base, "venue"), stateDir: join(base, "state") };
+  const coordinator = createFirstSetupCoordinator();
+  const store = createFirstSetupStore({ ...roots, coordinator });
+  const records = createFirstSetupResolutionStore({ ...roots, coordinator });
+  const claim = () =>
+    store.claim(frozenAttempt(), ownerVerifier, digestOf("capability"), digestOf("nonce"));
+  const claimed = await claim();
+  const input = {
+    resolutionId: randomUUID(),
+    attemptId: claimed.frozen.attemptId,
+    observedRevision: 1,
+    observedOwnerGeneration: 1,
+    database: "empty-preactivation" as const,
+    authority: "original-password" as const,
+    register: {
+      kind: "current-master" as const,
+      status: "Consumed" as const,
+      custodian: "Elena",
+      reference: "b".repeat(64),
+      consultedAt: "2026-10-16T02:00:00.000Z",
+    },
+    action: "retire" as const,
+    nextWorkspace: null,
+  };
+  const originals = [{ name: "venue.db", bytes: null }];
+  const prepared = await records.prepare(input, originals);
+  const current = abandon
+    ? await store.update(claimed.frozen.attemptId, 1, { kind: "abandoned" })
+    : claimed;
+  await writeStartAgainMarker(
+    roots,
+    await startAgainMarkerFor(roots, {
+      attemptId: claimed.frozen.attemptId,
+      frozenDigest: claimed.frozenDigest,
+    }),
+  );
+  return { roots, store, records, claim, current, input, originals, prepared };
+}
+
+it.each<[string, boolean, (f: Awaited<ReturnType<typeof pendingDeletion>>) => Promise<unknown>]>([
+  ["a claim", true, (f) => f.claim()],
+  [
+    "an abandon",
+    false,
+    (f) => f.store.update(f.current.frozen.attemptId, 1, { kind: "abandoned" }),
+  ],
+  [
+    "an ownership recovery",
+    false,
+    (f) =>
+      f.store.update(f.current.frozen.attemptId, f.current.revision, {
+        kind: "recover",
+        capabilityHash: digestOf("recovered"),
+        claimNonceHash: digestOf("recovered-nonce"),
+      }),
+  ],
+  [
+    "a record-store prepare",
+    false,
+    (f) => f.records.prepare({ ...f.input, resolutionId: randomUUID() }, f.originals),
+  ],
+  ["a record-store apply", false, (f) => f.records.apply(f.prepared)],
+  [
+    "the venue check restore, reset and provisioning call",
+    true,
+    (f) => assertVenueFirstSetupAllowed(f.roots.venueDir),
+  ],
+])(
+  "while a deletion is pending, %s is refused and the marked files are unchanged",
+  async (_name, abandon, act) => {
+    const f = await pendingDeletion(abandon);
+    const before = await snapshot(f.roots);
+    await expect(act(f)).rejects.toMatchObject(incomplete);
+    expect(await snapshot(f.roots)).toEqual(before);
+  },
+);
+
+it("while a deletion is pending, a marker repair is refused and the marked files are unchanged", async () => {
+  const base = await stateDir();
+  const roots = { venueDir: join(base, "venue"), stateDir: join(base, "state") };
+  const store = createFirstSetupStore({ ...roots, coordinator: createFirstSetupCoordinator() });
+  const claimed = await store.claim(
+    frozenAttempt(),
+    ownerVerifier,
+    digestOf("capability"),
+    digestOf("nonce"),
+  );
+  const claimPath = join(roots.venueDir, "first-setup-claim.json");
+  const claimMarker = JSON.parse(await readFile(claimPath, "utf8"));
+  await writeFile(claimPath, JSON.stringify({ ...claimMarker, status: "claiming" }));
+  const expected = (await store.readForRepair())!;
+  expect(expected.repairMarker).toBe("active");
+  await writeStartAgainMarker(
+    roots,
+    await startAgainMarkerFor(roots, {
+      attemptId: claimed.frozen.attemptId,
+      frozenDigest: claimed.frozenDigest,
+    }),
+  );
+  const before = await snapshot(roots);
+  await expect(store.repairMarker(expected, async () => {})).rejects.toMatchObject(incomplete);
+  expect(await snapshot(roots)).toEqual(before);
 });

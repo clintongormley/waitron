@@ -1,4 +1,8 @@
-import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
+import {
+  assertNoStartAgainDeletion,
+  assertVenueFirstSetupAllowed,
+  inspectFirstSetupMarker,
+} from "@waitron/provisioning";
 import { lockVenueDatabase } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -294,6 +298,7 @@ async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | 
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
   try {
+    await assertNoStartAgainDeletion(venueDir);
     if ((await inspectFirstSetupMarker(venueDir)) !== null) {
       const hold = await lockVenueDatabase(venueDir);
       try {

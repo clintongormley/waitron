@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import {
-  assertOtherSetupAllowed,
+  assertOtherFirstSetupAllowed,
   assertFirstSetupBootTarget,
   assertFirstSetupBackupBootTarget,
   readTenantIdentities,
@@ -1131,7 +1131,7 @@ async function bootServer(
     const firstSetupStore = firstSetupHost.store;
     const firstSetup = {
       coordinator: firstSetupCoordinator,
-      assertOtherAllowed: async () => assertOtherSetupAllowed(await firstSetupStore.read()),
+      assertOtherAllowed: () => assertOtherFirstSetupAllowed(config.venueDir, firstSetupStore),
     };
     const recoveryPreparation = createSetupRecoveryPreparation({
       testClock: seams.testClock,

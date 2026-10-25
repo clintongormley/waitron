@@ -1,5 +1,5 @@
 import { AppError } from "@waitron/shared";
-import { createFirstSetupCoordinator } from "@waitron/provisioning";
+import { assertNoStartAgainDeletion, createFirstSetupCoordinator } from "@waitron/provisioning";
 import type { WaitronModule } from "@waitron/module";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
@@ -49,6 +49,7 @@ export async function createRecoveryEntryRunner(options: {
   secret: unknown;
   context: RecoveryEntryContext;
 }): Promise<RestoreOperationRunner> {
+  await assertNoStartAgainDeletion(options.venueDir);
   const { operation, copy, context } = options;
   const preview = await readRecoveryCopyPreview(copy, context.selectedSourceId, options);
   const selected = { ...preview, activationSourceId: copy.sourceId };

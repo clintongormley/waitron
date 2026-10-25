@@ -10,6 +10,7 @@ import { AppError, isUuid } from "@waitron/shared";
 import type { DeploymentEnvironment } from "@waitron/db";
 import type { VenueRequest } from "./venue-plan.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import "./errors.js";
 
 export interface FirstSetupHold {
@@ -503,9 +504,18 @@ export async function inspectFirstSetupMarker(
   );
 }
 export async function assertVenueFirstSetupAllowed(venueDir: string): Promise<void> {
+  await assertNoStartAgainDeletion(venueDir);
   await assertFirstSetupVenueTarget(venueDir);
   const pair = await readPair(await canonicalDirectory(venueDir));
   assertOtherSetupAllowed(pair?.state ?? null);
+}
+/** The guard adopt and provision take before they write into the venue folder. */
+export async function assertOtherFirstSetupAllowed(
+  venueDir: string,
+  store: Pick<FirstSetupStore, "read">,
+): Promise<void> {
+  await assertNoStartAgainDeletion(venueDir);
+  assertOtherSetupAllowed(await store.read());
 }
 export function assertOtherSetupAllowed(state: FirstSetupState | null): void {
   if (
@@ -556,6 +566,7 @@ export function createFirstSetupStore(options: {
     status,
   });
   const persist = async (state: FirstSetupState) => {
+    await assertNoStartAgainDeletion(venueDir);
     parseState(state, venueDir, stateDir);
     await writeDurableHostJson(statePath, state, STATE_LIMIT);
     await writeDurableHostJson(markerPath, marker(state), MARKER_LIMIT);
@@ -620,6 +631,7 @@ export function createFirstSetupStore(options: {
           conflict();
         await assertUnused();
         if (!isDeepStrictEqual(await readForRepair(), current)) conflict();
+        await assertNoStartAgainDeletion(venueDir);
         await writeDurableHostJson(
           markerPath,
           { ...current.marker, status: current.repairMarker },
@@ -630,6 +642,8 @@ export function createFirstSetupStore(options: {
     },
     claim(frozen, ownerVerifier, capabilityHash, claimNonceHash, hold) {
       return inside(hold, async () => {
+        await bindRoots();
+        await assertNoStartAgainDeletion(venueDir);
         validateFrozen(frozen);
         if (
           ownerVerifier !== frozen.request.admin.passwordHash ||

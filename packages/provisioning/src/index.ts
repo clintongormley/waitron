@@ -38,6 +38,7 @@ export {
   createFirstSetupStore,
   parseState as parseFirstSetupState,
   assertOtherSetupAllowed,
+  assertOtherFirstSetupAllowed,
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "./first-setup-state.js";

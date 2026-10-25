@@ -6,6 +6,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type { FirstSetupCoordinator } from "./first-setup-state.js";
+import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import "./errors.js";
 
 export type RegisterAnswer =
@@ -519,6 +520,7 @@ export function createFirstSetupResolutionStore(options: {
     },
     prepare(input: unknown, originals: readonly FirstSetupOriginal[]): Promise<ResolutionRecord> {
       return options.coordinator.run(async () => {
+        await assertNoStartAgainDeletion((await roots()).venueDir);
         validateInput(input);
         const packed = pack(originals),
           path = await folder(input.resolutionId, true);
@@ -569,6 +571,7 @@ export function createFirstSetupResolutionStore(options: {
     },
     apply(prepared: ResolutionRecord): Promise<ResolutionRecord> {
       return options.coordinator.run(async () => {
+        await assertNoStartAgainDeletion((await roots()).venueDir);
         validateRecord(prepared);
         const records = await read(prepared.resolutionId);
         if (

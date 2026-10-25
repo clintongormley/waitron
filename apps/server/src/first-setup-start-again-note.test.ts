@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   access,
   lstat,
@@ -31,6 +31,8 @@ import {
   startAgainMarkerFor,
   writeStartAgainMarker,
   firstSetupFrozenDigest,
+  assertOtherFirstSetupAllowed,
+  createFirstSetupBackupWorkspace,
   type FirstSetupChange,
 } from "@waitron/provisioning";
 import {
@@ -50,6 +52,14 @@ import {
   mountSetupFirstFiscalApi,
 } from "./setup-first-fiscal-api.js";
 import { createLogger } from "./logger.js";
+import { writeValidated } from "./restore.js";
+import { runStagedRestore } from "./restore-request.js";
+import { runRestore } from "./restore-command.js";
+import { runStagedReset } from "./reset-request.js";
+import { mountSetup } from "./setup-api.js";
+import { createRecoveryEntryRunner } from "./recovery-entry.js";
+import { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
+import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
@@ -977,3 +987,239 @@ it("a marker over its limit refuses Start again before anything is written", asy
   expect(before.venue[START_AGAIN_MARKER_FILE]).toBeUndefined();
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
+
+async function pendingDeletion() {
+  const base = await abandonedAttempt();
+  const state = (await base.f.store.read())!;
+  await writeStartAgainMarker(
+    base.f,
+    await startAgainMarkerFor(base.f, {
+      attemptId: state.frozen.attemptId,
+      frozenDigest: firstSetupFrozenDigest(state),
+    }),
+  );
+  return base;
+}
+
+function backupRepair(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  const service = createFirstSetupBackupRecovery({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    host: f.host,
+    workspace: createFirstSetupBackupWorkspace({ stateDir: f.stateDir, venueDir: f.venueDir }),
+    modules: ALL_MODULES,
+    environment: "production",
+    sources: {} as never,
+    log: () => {},
+  });
+  const app = new Hono();
+  mountFirstSetupBackupApi(app, service, () => {});
+  return { service, app };
+}
+const repairProof = {
+  observation: { inspectionId: "inspection", revision: 1, ownerGeneration: 1 },
+  nodeRecoverySecret: "node-recovery-secret",
+  context: { oldBoxGone: true, soleRecovery: true },
+};
+const BACKUP = "https://box.test/setup-api/first-setup/resolution/backup";
+const incomplete = { code: "setup.start_again_incomplete" };
+
+type Pending = Awaited<ReturnType<typeof pendingDeletion>>;
+const restoreStaging = async ({ f }: Pending) => {
+  await writeFile(
+    join(f.stateDir, "restore-request.json"),
+    JSON.stringify({ version: 1, kind: "stream" }),
+  );
+  const restore = vi.fn(async () => {});
+  await expect(
+    runStagedRestore(
+      { stateDir: f.stateDir, venueDir: f.venueDir, migrationsRoot: null, log: () => {} },
+      restore,
+      restore,
+    ),
+  ).rejects.toMatchObject(incomplete);
+  expect(restore).not.toHaveBeenCalled();
+  await rm(join(f.stateDir, "restore-request.json"));
+};
+const restoreCommand = async ({ f }: Pending) => {
+  const source = join(f.stateDir, "..", "archive");
+  await writeFile(source, "unopened archive");
+  const out: string[] = [];
+  const restore = vi.fn(async () => {});
+  expect(
+    await runRestore({
+      argv: ["restore", source],
+      env: {
+        WAITRON_VENUE_DIR: f.venueDir,
+        WAITRON_STATE_DIR: f.stateDir,
+        WAITRON_BACKUP_RECOVERY_KEY: "synthetic",
+      },
+      out: (line) => out.push(line),
+      restore,
+    }),
+  ).toBe(1);
+  expect(restore).not.toHaveBeenCalled();
+  expect(out.join("\n")).toContain("setup.start_again_incomplete");
+};
+
+it.each<[string, (p: Pending) => Promise<void>]>([
+  [
+    "restore placement",
+    async ({ f }) => {
+      await expect(
+        writeValidated({} as never, {
+          venueDir: f.venueDir,
+          stateDir: f.stateDir,
+          stagingDir: join(f.stateDir, "staging"),
+          migrationsRoot: null,
+          environment: "production",
+          modules: [],
+          log: () => {},
+        }),
+      ).rejects.toMatchObject(incomplete);
+    },
+  ],
+  ["restore staging", restoreStaging],
+  ["the restore command", restoreCommand],
+  [
+    "reset",
+    async ({ f }) => {
+      await writeFile(join(f.stateDir, "reset-request.json"), "{}");
+      await expect(
+        runStagedReset({ stateDir: f.stateDir, venueDir: f.venueDir, log: () => {} }),
+      ).rejects.toMatchObject(incomplete);
+      await rm(join(f.stateDir, "reset-request.json"));
+    },
+  ],
+  [
+    "adopt",
+    async ({ f }) => {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "production",
+          firstSetup: {
+            coordinator: f.host.coordinator,
+            assertOtherAllowed: () => assertOtherFirstSetupAllowed(f.venueDir, f.store),
+          },
+          adopt: async () => {
+            throw new Error("adopt must not run");
+          },
+        },
+        () => {},
+      );
+      const response = await app.request("http://box.test/setup-api/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          primaryUrl: "https://primary.example",
+          credential: { personId: "88888888-8888-4888-8888-888888888888", password: "x" },
+        }),
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "setup.start_again_incomplete", params: {} },
+      });
+    },
+  ],
+  [
+    "the recovery entry",
+    async ({ f }) => {
+      await expect(
+        createRecoveryEntryRunner({
+          stateDir: f.stateDir,
+          venueDir: f.venueDir,
+          migrationsRoot: null,
+          modules: ALL_MODULES,
+          copy: {} as never,
+          operation: {} as never,
+          secret: null,
+          context: { selectedSourceId: "source", oldBoxGone: true, soleRecovery: true },
+        }),
+      ).rejects.toMatchObject(incomplete);
+    },
+  ],
+  [
+    "A731's repair open",
+    async ({ f }) => {
+      const { service } = backupRepair(f);
+      try {
+        await expect(
+          service.open(
+            {
+              ...repairProof,
+              source: {
+                kind: "archive",
+                artifact: new Uint8Array([1]),
+                recoveryKey: "key",
+                environment: "production",
+              },
+            },
+            { onBox: true },
+          ),
+        ).rejects.toMatchObject(incomplete);
+      } finally {
+        await service.dispose();
+      }
+    },
+  ],
+  [
+    "A731's resume",
+    async ({ f }) => {
+      const { service } = backupRepair(f);
+      try {
+        await expect(
+          service.resume({ ...repairProof, recoveryId: randomUUID() }, { onBox: true }),
+        ).rejects.toMatchObject(incomplete);
+      } finally {
+        await service.dispose();
+      }
+    },
+  ],
+])(
+  "while a deletion is pending, %s is refused setup.start_again_incomplete and the marked files are unchanged",
+  async (_name, act) => {
+    const pending = await pendingDeletion();
+    const before = await folderTrees(pending.f);
+    await act(pending);
+    expect(await folderTrees(pending.f)).toEqual(before);
+  },
+);
+
+it("A731's repair open while a deletion is pending answers 409", async () => {
+  const { f } = await pendingDeletion();
+  const { service, app } = backupRepair(f);
+  try {
+    const form = new FormData();
+    form.set(
+      "request",
+      JSON.stringify({
+        ...repairProof,
+        source: { kind: "archive", recoveryKey: "key", environment: "production" },
+      }),
+    );
+    form.set("artifact", new Blob([Uint8Array.from([1, 2, 3])]), "backup.wbk");
+    const response = await app.request(`${BACKUP}/open`, { method: "POST", body: form }, tls());
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.start_again_incomplete", params: {} },
+    });
+  } finally {
+    await service.dispose();
+  }
+});
+
+it.each([
+  ["restore staging", restoreStaging],
+  ["the restore command", restoreCommand],
+])(
+  "once the deletion has removed the claim file, %s is still refused and the remaining files are unchanged",
+  async (_name, act) => {
+    const pending = await pendingDeletion();
+    await rm(join(pending.f.venueDir, "first-setup-claim.json"));
+    const before = await folderTrees(pending.f);
+    await act(pending);
+    expect(await folderTrees(pending.f)).toEqual(before);
+  },
+);

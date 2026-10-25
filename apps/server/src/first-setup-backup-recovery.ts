@@ -15,6 +15,7 @@ import {
 } from "@waitron/db";
 import type { OperationBinding, OperationClient, WaitronModule } from "@waitron/module";
 import {
+  assertNoStartAgainDeletion,
   firstSetupAnchorFor,
   canonicalFirstSetupDirectory,
   resolveFirstSetupWorkspace,
@@ -575,6 +576,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           randomUUID();
         const before = await turn(async () => {
           if (disposed) ownerRequired();
+          await assertNoStartAgainDeletion(options.venueDir);
           if (!isDeepStrictEqual(await observation(), request.observation)) conflict();
           const records = await options.workspace.read();
           const record = records.at(-1);
@@ -772,6 +774,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         try {
           const before = await turn(async () => {
             if (disposed) ownerRequired();
+            await assertNoStartAgainDeletion(options.venueDir);
             const record = (await options.workspace.read()).at(-1);
             if (
               record === undefined ||
