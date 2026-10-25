@@ -5512,9 +5512,10 @@ alert list, and holds no staged input.
   `differs` when it cannot show the two agree; the dialog then shows the fresh times with that same
   sentence and Close alone, and nothing in its footer. Every other refusal shows in the dialog's
   footer, above its buttons, in its own sentence for `same_machine` ("This screen is the box
-  itself, …", refused before any times are shown, so with Close alone), `challenge` ("The check
-  took too long. Try again.") and `contrary_proof` ("Other clocks say the box's clock is wrong."),
-  each of those two keeping Cancel and Confirm, and `not_stopped` ("There is nothing left to
+  itself, …", refused before any times are shown, so with Close alone), `contrary_proof` ("Other
+  clocks say the box's clock is wrong."), which keeps Cancel and Confirm, a check the box no longer
+  holds (`clock.check_expired`, worded by its code: "The check took too long. Try again."), which
+  keeps them too, and `not_stopped` ("There is nothing left to
   confirm. See the Clock row."), after which the times and the question go and Close is alone; any
   other reason is worded by its code. Every refusal reads every open read again. A confirmation
   closes the dialog and reads every open read again. The button carries a `help-mode`

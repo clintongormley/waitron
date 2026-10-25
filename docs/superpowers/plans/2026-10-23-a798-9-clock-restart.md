@@ -619,7 +619,8 @@ check), each in the task named:
 - the restart route becomes the administrator's two confirmation routes (Task R8b; old lines
   `apps/server/src/clock-restart.route.test.ts` at `f2e971a42` → `clock-confirm.route.test.ts`
   after), every refusal now `clock.confirm_refused { reason }` where it was
-  `clock.restart_refused { reason }`, and every press of the restart button now a challenge and an
+  `clock.restart_refused { reason }` (a missing or expired challenge is `400 clock.check_expired`
+  since the owner's decision of 2026-10-25), and every press of the restart button now a challenge and an
   administrator's confirm (Mario, a manager before, is seeded as an administrator):
   `:312` "refuses a restart with no proof…" is deleted, because an administrator needs no proof
   (R4); its "payments stay stopped" sale moves to `:427` (refused on the box). `:326` two devices
@@ -889,9 +890,9 @@ reading per device id), its test.
 
 **Files:** `git mv packages/fiscal-verifactu/src/clock-stop-restart.ts
 packages/fiscal-verifactu/src/clock-confirmation.ts` and its test to `clock-confirmation.test.ts`;
-`packages/fiscal-verifactu/src/errors.ts` (`clock.confirm_refused { reason: "not_stopped" |
+`packages/fiscal/src/errors.ts` (`clock.confirm_refused { reason: "not_stopped" |
 "contrary_proof" | "differs" | "same_machine" }`, its `challenge` reason now its own code,
-`clock.check_expired`, in `packages/fiscal/src/errors.ts` — owner, 2026-10-25; `clock.restart_refused` deleted —
+`clock.check_expired`, beside it — owner, 2026-10-25; `clock.restart_refused` deleted —
 pre-live, CLAUDE.md §3). Witness fixtures gain `address` (built by Task R6a, which runs before this
 task).
 

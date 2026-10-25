@@ -4744,8 +4744,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, in the
   go-live migration squash (A760).** Slice 9 kept the shipped append-only table rather than
   rebuild or drop it; the backup check still checks its links to `nodes` and
-  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left
-  open by A798-B slice 9 (#2025).
+  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). First
+  move its latest-record query-plan case (`clock-stop-restarts.test.ts`, "reads the latest record
+  through the time index…") into `clock-behind.test.ts`, and update the pointer in
+  `docs/developers/conventions-data.md`. Left open by A798-B slice 9 (#2025).
 
 - **A future cloud or proxied primary sees every request as the box's own**, so no device would
   count as a clock witness and no administrator could confirm its clock. Today a venue has one node
