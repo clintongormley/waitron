@@ -36,7 +36,7 @@ referrals, not completed recovery experiments.
 | [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and explicit/autofill refusal views explain password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
 | [Public connection](#tls-repair), #2055 | Replace the installer referral with a connection-repair choice the reader can complete. Include installer-supplied certificates and managed-device installation restrictions, which also refer to another person. Retain the separate linked-layout recovery gap and public-page privacy. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
-| [Backup key](#backup-key), #2058 | Replace the administrator referral with a way to inspect and correct effective configuration. Explain what each key choice does and keep both key records until their use is established. |
+| [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
 | [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. Recheck lane A's A1042 S7l after landing; this lane does not change it. |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
@@ -752,6 +752,10 @@ the earlier wording.
 and correction of the effective backup configuration, offering any needed sign-in there. Keep the
 key-use uncertainty explicit and a safe Stop for a change that could lose access to a backup.
 
+Later on 2026-10-25, the [wording rework](#backup-key-self-service-rework-2026-10-25) removes the
+referral and qualifies retaining the displayed downloads and leaving without another submission.
+The effective-key diagnosis and correction workflow remains open.
+
 ### restore-start
 
 **A repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
@@ -844,3 +848,22 @@ them. Tests cover a changed inspection after Check again and both pending repair
 recovery wording and its actual actions. Give the person applicable restart, space, backup or
 reinstall choices, with any required authentication there and a safe Stop before destructive work.
 The earlier server-page inventory did not exercise those recovery procedures.
+
+### Backup-key self-service rework, 2026-10-25
+
+The `backup.effective_mismatch` refusal now says the saved key could not be confirmed, asks you
+to keep both key records and to stop changing keys, and states that this page cannot diagnose the
+conflicting settings or identify which key opens a backup. The original milestone and source audit
+above describe the earlier administrator referral.
+
+The browser cases exercise apply and rotation refusals in both languages. After refusal, the
+new key's download remains readable; on rotation, both distinct key downloads remain readable.
+Leaving the screen sends no further apply or rotation request in those cases. Existing retry
+cases still exercise a later successful submission; that is not evidence that retry corrects a
+persistent effective-key conflict.
+
+**Still open:** authenticated inspection and correction of saved versus effective backup-key
+configuration, with each choice explained and a safe Stop. Source inspection finds that `statusBody` in
+`apps/server/src/backup-api.ts` prefers the saved key's fingerprint; this change does not qualify
+a status reload as confirmation of the effective key. No repair of that conflict or opening of
+an existing encrypted backup was qualified by this wording change.

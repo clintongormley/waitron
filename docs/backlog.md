@@ -4498,9 +4498,11 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
   page offers retry, read-only Check again and Stop, but cannot complete these repairs.
   [Detail](backlog/box.md#authenticated-server-certificate-recovery).
 
-- **A1089: rework the backup-key refusal without an administrator referral (#2058).** Give a way
-  to inspect and correct effective configuration, with any needed sign-in there. Keep both key
-  records until their use is established and explain what each choice does.
+- **A1089: diagnose and correct conflicting backup keys in the app.** The refusal explains that
+  the saved key is unconfirmed and asks you to keep both key records and stop changing keys.
+  Add authenticated inspection of the saved and effective configuration, explain each correction
+  and offer a safe Stop before applying it. Establish which key opens each backup without
+  replacing either key record merely because a save was refused.
   [Correction](backlog/self-service-refusals.md#backup-key).
 
 - **A1089: boot recovery must offer choices instead of an installer referral.** Recheck each

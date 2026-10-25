@@ -1990,7 +1990,7 @@ describe("backup-screen fields", () => {
 describe("backup-key configuration refusal", () => {
   for (const locale of ["en-GB", "es-ES"] as const) {
     for (const operation of ["apply", "rotate"] as const) {
-      it(`${operation} names the administrator next step and keeps the key status after a mismatch in ${locale}`, async () => {
+      it(`${operation} explains key uncertainty and keeps the key status after a mismatch in ${locale}`, async () => {
         const before = currentLocale();
         setLocale(locale);
         try {
@@ -2019,7 +2019,7 @@ describe("backup-key configuration refusal", () => {
           await vi.waitFor(() => expect(alertText(el)?.trim()).toBe(codeMessage(refusal.code)));
           if (locale === "en-GB") {
             expect(alertText(el)).toContain(
-              "Ask the box's administrator to check its backup configuration before trying again.",
+              "Keep both the previous key and the key you just saved.",
             );
           }
           expect(write).toHaveBeenCalledTimes(1);
@@ -2036,6 +2036,66 @@ describe("backup-key configuration refusal", () => {
           await flush(el);
           expect(alertText(el)).toBeUndefined();
           expect(el.shadowRoot!.textContent).toContain(ENABLED.keyFingerprint);
+        } finally {
+          setLocale(before);
+        }
+      });
+    }
+  }
+});
+
+describe("keeping recovery keys after an unconfirmed change", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const operation of ["apply", "rotate"] as const) {
+      it(`${operation} retains key downloads and lets you leave without another write in ${locale}`, async () => {
+        const before = currentLocale();
+        setLocale(locale);
+        try {
+          const write = vi.fn().mockRejectedValue({ code: "backup.effective_mismatch" });
+          const api = stubApi(
+            operation === "apply" ? { applyBackup: write } : { rotateBackupKey: write },
+            operation === "apply" ? OFF : ENABLED,
+          );
+          const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+          await flush(el);
+          if (operation === "apply") {
+            setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+          } else {
+            q(el, "[data-test=show-old-key]")!.click();
+            await vi.waitFor(() =>
+              expect(q(el, "[data-test=old-key]")?.textContent).toBe("OLD-KEY-xyz789012345"),
+            );
+          }
+          tickCheckbox(el, "[data-test=saved-it]");
+          await el.updateComplete;
+          q(
+            el,
+            operation === "apply" ? "[data-test=apply]" : "[data-test=rotate-confirm]",
+          )!.click();
+          await vi.waitFor(() =>
+            expect(alertText(el)?.trim()).toBe(codeMessage("backup.effective_mismatch")),
+          );
+          if (locale === "en-GB") {
+            expect(alertText(el)).toContain(
+              "Keep both the previous key and the key you just saved.",
+            );
+            expect(alertText(el)).toContain("Stop changing keys here");
+            expect(alertText(el)).toContain("cannot diagnose the conflicting backup-key settings");
+            expect(alertText(el)).not.toMatch(/ask|administrator|try again/i);
+          }
+          const newDownload = q(el, "[data-test=download-key]") as HTMLAnchorElement;
+          expect(await (await fetch(newDownload.href)).text()).toContain("MINTED-KEY-abcdef012345");
+          expect(q(el, "[data-test=copy-key]")).not.toBeNull();
+          if (operation === "rotate") {
+            const oldDownload = q(el, "[data-test=download-old-key]") as HTMLAnchorElement;
+            expect(await (await fetch(oldDownload.href)).text()).toContain("OLD-KEY-xyz789012345");
+            expect(q(el, "[data-test=copy-old-key]")).not.toBeNull();
+            expect(oldDownload.download).not.toBe(newDownload.download);
+          }
+          expect(write).toHaveBeenCalledTimes(1);
+          el.remove();
+          await el.updateComplete;
+          expect(write).toHaveBeenCalledTimes(1);
         } finally {
           setLocale(before);
         }

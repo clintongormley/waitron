@@ -1013,8 +1013,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Revisa los ajustes de la copia de seguridad e inténtalo de nuevo",
   },
   "backup.effective_mismatch": {
-    en: "The saved key didn't take effect. Ask the box's administrator to check its backup configuration before trying again.",
-    es: "La clave guardada no se aplicó. Pide al administrador del equipo que revise su configuración de copias de seguridad antes de volver a intentarlo.",
+    en: "The saved key could not be confirmed. Keep both the previous key and the key you just saved. Stop changing keys here; this page cannot diagnose the conflicting backup-key settings or confirm which key opens a backup.",
+    es: "No se pudo confirmar la clave guardada. Conserva tanto la clave anterior como la que acabas de guardar. No sigas cambiando claves aquí; esta página no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia.",
   },
   "backup.recovery_key_exists": {
     en: "This box holds a different recovery key from the one this page sent. Reload the page and try again. To replace the key, use “Change the recovery key”, which appears while backups are on.",
