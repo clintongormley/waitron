@@ -68,6 +68,7 @@ import { ALL_ALERT_CLAIMS, ALL_MODULES, enabledAlertSources } from "./modules.js
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
+import { actionsPersonalData } from "./personal-data-actions.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { escapeHtml } from "./recovery-surface.js";
@@ -355,7 +356,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         db,
         nodeId,
         modules: ALL_MODULES,
-        serverParts: timeRecordPersonalData(ALL_MODULES),
+        serverParts: [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(db)],
         venueLocale: "en-GB",
       },
       () => {},
