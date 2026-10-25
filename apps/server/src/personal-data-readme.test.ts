@@ -386,7 +386,7 @@ ${ASK}
 What each file holds
 ${PROFILE_LINE}
 ${SIGN_IN_LINE}
-- actions.json: the whole sales already recorded whose void you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each; for each one, the invoice number where there is one, the amount where there is one and when it happened; and for each refund and opening, your part in it. Kept to account for the money the venue takes and gives back.
+- actions.json: the whole sales already recorded whose void you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each; for each one, the invoice number where there is one, the amount where there is one and when it happened; for each refund, the tip it gave back, whether it was cash or card and whether it went through, failed or is still waiting; for each opening, why the drawer opened and whether another person authorised it for the person who opened it; and for each refund and opening, your part in it. Kept to account for the money the venue takes and gives back.
 ${MACHINE}
 
 ${ORIGIN}
