@@ -1429,13 +1429,18 @@ function isVersionRefusal(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "menu.version_changed";
 }
 
-/** Whether menu membership, versions or selection eligibility differ from the loaded snapshot. */
+/** Whether menu membership, versions, selection eligibility or ended periods differ from the loaded
+ * snapshot. */
 function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"]): boolean {
   return (
     loaded.length !== polled.length ||
     polled.some((menu) => {
       const own = loaded.find((entry) => entry.id === menu.menuId);
-      return own?.versionId !== menu.versionId || own.orderable !== menu.orderable;
+      return (
+        own?.versionId !== menu.versionId ||
+        own.orderable !== menu.orderable ||
+        own.endedPeriodName !== menu.endedPeriodName
+      );
     })
   );
 }
@@ -5512,7 +5517,11 @@ export class TillApp extends LitElement {
       this.#pendingCounterMenus = catalogue.menus;
       this.menus = this.menus.map((menu) => {
         const live = catalogue.menus.find((entry) => entry.id === menu.id);
-        return { ...menu, orderable: live?.orderable ?? false };
+        return {
+          ...menu,
+          orderable: live?.orderable ?? false,
+          endedPeriodName: live?.endedPeriodName ?? null,
+        };
       });
       this.#counterMenuPending = true;
     } else {
@@ -5559,7 +5568,11 @@ export class TillApp extends LitElement {
       this.#pendingTableMenus = catalogue.menus;
       this.tableMenus = this.tableMenus.map((menu) => {
         const live = catalogue.menus.find((entry) => entry.id === menu.id);
-        return { ...menu, orderable: live?.orderable ?? false };
+        return {
+          ...menu,
+          orderable: live?.orderable ?? false,
+          endedPeriodName: live?.endedPeriodName ?? null,
+        };
       });
       this.#tableMenuPending = true;
     } else {

@@ -100,7 +100,7 @@ function catalogue(
         name: "Lunch",
         isDefault: true,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: version,
         structure: {
@@ -132,7 +132,7 @@ function state(version: string, liveFields = "lf-1"): MenuStateAnswer {
       keepOpen: null,
       zoneKeepOpen: null,
     },
-    menus: [{ menuId: "lunch", versionId: version, orderable: true, sendable: true }],
+    menus: [{ menuId: "lunch", versionId: version, orderable: true, endedPeriodName: null }],
     unavailable: { products: [], optionLabels: [] },
     defaultMenuId: "lunch",
     liveFields,
@@ -561,7 +561,7 @@ describe("A768 a held zone's menu follows the server", () => {
       defaultMenuId,
       menus: [
         ...base.menus,
-        { menuId: "dinner", versionId: "v1", orderable: true, sendable: true },
+        { menuId: "dinner", versionId: "v1", orderable: true, endedPeriodName: null },
       ],
     };
   }

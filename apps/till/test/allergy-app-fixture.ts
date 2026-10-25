@@ -89,7 +89,7 @@ export function catalogue(
         name: "Lunch",
         isDefault: true,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: version,
         structure: {

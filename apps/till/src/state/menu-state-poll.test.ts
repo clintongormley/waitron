@@ -12,7 +12,7 @@ function state(versionId: string): MenuState {
       keepOpen: null,
       zoneKeepOpen: null,
     },
-    menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
+    menus: [{ menuId: "lunch", versionId, orderable: true, endedPeriodName: null }],
     unavailable: { products: [], optionLabels: [] },
   };
 }

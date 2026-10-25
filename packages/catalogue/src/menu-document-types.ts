@@ -373,7 +373,9 @@ export interface ServedMenu {
   /** Whether this is the zone's default menu, which the till selects first. */
   isDefault: boolean;
   readonly orderable: boolean;
-  readonly sendable: boolean;
+  /** The period that ended earlier this business day whose menu this is, while no running
+   * period offers it; else null. */
+  readonly endedPeriodName: string | null;
   readonly audience: "customer" | "staff";
   versionId: string;
   /** The live document's `root`. */
@@ -404,6 +406,13 @@ export interface MenuState {
       running: boolean;
     } | null;
   };
-  menus: { menuId: string; versionId: string; orderable: boolean; sendable: boolean }[];
+  menus: {
+    menuId: string;
+    versionId: string;
+    orderable: boolean;
+    /** The period that ended earlier this business day whose menu this is, while no running
+     * period offers it; else null. */
+    readonly endedPeriodName: string | null;
+  }[];
   unavailable: MenuUnavailable;
 }

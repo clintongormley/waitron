@@ -39,7 +39,7 @@ const menu: TillZoneMenu = {
   versionId: "version",
   isDefault: true,
   orderable: true,
-  sendable: true,
+  endedPeriodName: null,
   audience: "customer",
   structure: { members: [{ kind: "product", productId: "dish", menuItemId: "offer" }] },
   home: {

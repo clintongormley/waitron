@@ -656,12 +656,12 @@ describe("service periods gate only added dishes and added stored quantities", (
   });
 
   it.each([
-    ["13:45", true, true, true],
-    ["14:00", false, false, false],
-    ["14:05", false, false, false],
+    ["13:45", true, true, null],
+    ["14:00", false, false, "Lunch"],
+    ["14:05", false, false, "Lunch"],
   ] as const)(
-    "polling reports one window for orderable and sendable at %s",
-    async (time, open, orderable, sendable) => {
+    "polling reports whether each menu can be ordered and which period ended at %s",
+    async (time, open, orderable, endedPeriodName) => {
       at(mondayAt("13:00"));
       const v = await mealVenue();
       at(mondayAt(time));
@@ -674,7 +674,7 @@ describe("service periods gate only added dishes and added stored quantities", (
             menuId: v.menus.Almuerzo,
             versionId: v.versions.Almuerzo,
             orderable,
-            sendable,
+            endedPeriodName,
           }),
         ]),
       });
@@ -682,7 +682,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       expect(offers.status).toBe(200);
       expect(offers.body).toMatchObject({
         menus: expect.arrayContaining([
-          expect.objectContaining({ id: v.menus.Almuerzo, orderable, sendable }),
+          expect.objectContaining({ id: v.menus.Almuerzo, orderable, endedPeriodName }),
         ]),
       });
     },
@@ -1828,7 +1828,12 @@ describe("menu-state follows department service periods", () => {
         defaultMenuId: v.menus[menu],
         service: { open: true, periodName },
         menus: expect.arrayContaining([
-          { menuId: v.menus[menu], versionId: v.versions[menu], orderable: true, sendable: true },
+          {
+            menuId: v.menus[menu],
+            versionId: v.versions[menu],
+            orderable: true,
+            endedPeriodName: null,
+          },
         ]),
         unavailable: { products: [], optionLabels: [] },
       });
@@ -1845,20 +1850,30 @@ describe("menu-state follows department service periods", () => {
       service: { open: false, zoneOpen: true, periodName: null, periodOccurrenceKey: null },
     });
     expect(answer.body.menus).toEqual([
-      { menuId: v.menus["Café"], versionId: v.versions["Café"], orderable: false, sendable: false },
+      {
+        menuId: v.menus["Café"],
+        versionId: v.versions["Café"],
+        orderable: false,
+        endedPeriodName: "Afternoon",
+      },
       {
         menuId: v.menus.Almuerzo,
         versionId: v.versions.Almuerzo,
         orderable: false,
-        sendable: false,
+        endedPeriodName: "Lunch",
       },
       {
         menuId: v.menus.Desayunos,
         versionId: v.versions.Desayunos,
         orderable: false,
-        sendable: false,
+        endedPeriodName: null,
       },
-      { menuId: v.menus.Bebidas, versionId: v.versions.Bebidas, orderable: false, sendable: false },
+      {
+        menuId: v.menus.Bebidas,
+        versionId: v.versions.Bebidas,
+        orderable: false,
+        endedPeriodName: "Lunch",
+      },
     ]);
   });
   it.each([

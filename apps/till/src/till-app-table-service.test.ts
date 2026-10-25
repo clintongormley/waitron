@@ -3043,7 +3043,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
           menuId: menu.id,
           versionId: menu.versionId,
           orderable: menu.orderable,
-          sendable: menu.sendable,
+          endedPeriodName: menu.endedPeriodName,
         })),
         unavailable: {
           products: ["cordero"],
@@ -3095,12 +3095,12 @@ describe("till-app table ordering: a menu published while a table is open", () =
         },
         menus:
           zoneId === floorZone.id
-            ? [{ menuId: "menu-dinner", versionId: "v2", orderable: true, sendable: true }]
+            ? [{ menuId: "menu-dinner", versionId: "v2", orderable: true, endedPeriodName: null }]
             : counterOffers.menus.map((menu) => ({
                 menuId: menu.id,
                 versionId: menu.versionId,
                 orderable: menu.orderable,
-                sendable: menu.sendable,
+                endedPeriodName: menu.endedPeriodName,
               })),
         unavailable: { products: [], optionLabels: [] },
       }));

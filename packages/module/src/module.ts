@@ -354,7 +354,9 @@ export interface ZoneMenu {
   readonly name: string;
   readonly isDefault: boolean;
   readonly orderable: boolean;
-  readonly sendable: boolean;
+  /** The period that ended earlier this business day whose menu this is, while no running
+   * period offers it; else null. */
+  readonly endedPeriodName: string | null;
   readonly audience: "customer" | "staff";
   readonly versionId: string;
   readonly structure: { readonly members: readonly ZoneMenuMember[] };
@@ -407,7 +409,9 @@ export interface ZoneMenuState {
     readonly menuId: string;
     readonly versionId: string;
     readonly orderable: boolean;
-    readonly sendable: boolean;
+    /** The period that ended earlier this business day whose menu this is, while no running
+     * period offers it; else null. */
+    readonly endedPeriodName: string | null;
   }[];
   readonly unavailable: ZoneUnavailable;
   /** Digest of the course and reporting category of the menus' dishes, variants and extras;

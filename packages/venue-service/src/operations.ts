@@ -943,7 +943,7 @@ export interface ServiceZoneOffers extends ZoneOffers {
   readonly menus: readonly (ServedMenu & {
     readonly audience: "customer" | "staff";
     readonly orderable: boolean;
-    readonly sendable: boolean;
+    readonly endedPeriodName: string | null;
   })[];
 }
 
@@ -982,6 +982,7 @@ export async function listZoneOffers(
           .filter((menuId) => service.orderableMenuIds.includes(menuId)),
       )
     : null;
+  const ended = new Map(service?.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
   const menus: ServiceZoneOffers["menus"] = published.map(({ menuId, versionId, document }) => ({
     id: menuId,
     name: document.menuName,
@@ -990,7 +991,7 @@ export async function listZoneOffers(
       (row) => row.menuId === menuId && row.periodId === service?.periodId,
     ) ?? membership.find((row) => row.menuId === menuId))!.audience,
     orderable: service === null || service.orderableMenuIds.includes(menuId),
-    sendable: service === null || service.orderableMenuIds.includes(menuId),
+    endedPeriodName: ended.get(menuId) ?? null,
     versionId,
     structure: document.root,
     home: document.home,
@@ -1086,6 +1087,7 @@ export async function menuState(
     at,
   );
   const published = await zoneLiveDocuments(tx, zoneId);
+  const ended = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
   const live = await readLiveState(
     tx,
     published.map((menu) => menu.document),
@@ -1103,7 +1105,7 @@ export async function menuState(
       menuId,
       versionId,
       orderable: service.orderableMenuIds.includes(menuId),
-      sendable: service.orderableMenuIds.includes(menuId),
+      endedPeriodName: ended.get(menuId) ?? null,
     })),
     ...live,
   };

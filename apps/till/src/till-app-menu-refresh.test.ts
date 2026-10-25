@@ -162,7 +162,7 @@ function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue
         name: "Lunch",
         isDefault: true,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: version,
         structure: {
@@ -197,7 +197,7 @@ function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}):
       keepOpen: null,
       zoneKeepOpen: null,
     },
-    menus: [{ menuId: "lunch", versionId: version, orderable: true, sendable: true }],
+    menus: [{ menuId: "lunch", versionId: version, orderable: true, endedPeriodName: null }],
     unavailable: { ...NOTHING, ...unavailable },
   };
 }
@@ -2128,7 +2128,7 @@ describe("the menu's Device Home Page", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: [{ menuId: "lunch", versionId: "v2", orderable: true, sendable: true }],
+      menus: [{ menuId: "lunch", versionId: "v2", orderable: true, endedPeriodName: null }],
       unavailable: NOTHING,
     } satisfies MenuState);
     await poll(el);

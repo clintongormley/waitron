@@ -654,7 +654,7 @@ class ModifierStoreApp extends ModifierLeaveApp {
     name: "Menu",
     isDefault: true,
     orderable: true,
-    sendable: true,
+    endedPeriodName: null,
     audience: "customer",
     versionId: "v1",
     structure: { members: [{ kind: "product", menuItemId: "offer-dish", productId: "dish" }] },

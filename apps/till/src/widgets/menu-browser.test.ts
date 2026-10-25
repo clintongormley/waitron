@@ -157,7 +157,7 @@ function lunch(overrides: Partial<TillZoneMenu> = {}): TillZoneMenu {
     name: "Lunch",
     isDefault: true,
     orderable: true,
-    sendable: true,
+    endedPeriodName: null,
     audience: "customer",
     versionId: "v1",
     structure: {
@@ -1077,7 +1077,7 @@ describe("till-menu-browser", () => {
         name: "Drinks",
         isDefault: false,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: "v-drinks",
         structure: {
@@ -1100,7 +1100,7 @@ describe("till-menu-browser", () => {
         name: "Brunch",
         isDefault: false,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: "v-brunch",
         structure: { members: [memberOn("brunch", "pancakes"), memberOn("brunch", "porridge")] },

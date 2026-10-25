@@ -101,7 +101,7 @@ function offers(
       name: menu.name,
       isDefault: menu.id === defaultMenuId,
       orderable: true,
-      sendable: true,
+      endedPeriodName: null,
       audience: "customer",
       versionId: "v1",
       structure: {
@@ -139,7 +139,7 @@ function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenu
       menuId: menu.id,
       versionId: "v1",
       orderable: true,
-      sendable: true,
+      endedPeriodName: null,
     })),
     unavailable: { products: [], optionLabels: [] },
     ...(defaultMenuId === undefined ? {} : { defaultMenuId }),
@@ -579,7 +579,7 @@ describe("device and zone period memory", () => {
           menuId: menu.id,
           versionId: menu.versionId,
           orderable: menu.orderable,
-          sendable: menu.sendable,
+          endedPeriodName: menu.endedPeriodName,
         })),
         unavailable: { products: unavailable, optionLabels: [] },
       })),
@@ -687,7 +687,7 @@ describe("period service at the counter", () => {
       menus: running.menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: false,
+        endedPeriodName: null,
         isDefault: false,
       })),
     };
@@ -698,7 +698,7 @@ describe("period service at the counter", () => {
       menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: false,
+        endedPeriodName: null,
       })),
     });
     await poll(el);
@@ -1292,7 +1292,7 @@ describe("an open table's order", () => {
               menuId: menu.id,
               versionId: menu.versionId,
               orderable: menu.orderable,
-              sendable: menu.sendable,
+              endedPeriodName: menu.endedPeriodName,
             })),
             unavailable: { products: [], optionLabels: [] },
           }
@@ -1587,7 +1587,7 @@ describe("an open table's order", () => {
       menus: COMEDOR.menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: false,
+        endedPeriodName: null,
         isDefault: false,
       })),
     };
@@ -1620,7 +1620,7 @@ describe("an open table's order", () => {
                 menuId: menu.id,
                 versionId: menu.versionId,
                 orderable: menu.orderable,
-                sendable: menu.sendable,
+                endedPeriodName: menu.endedPeriodName,
               })),
             }
           : state([DESAYUNOS, ALMUERZO], "desayunos"),

@@ -2960,7 +2960,7 @@ describe("a service period occurrence", () => {
       expect(offers.menus.find((menu) => menu.id === v.menus.Almuerzo)).toMatchObject({
         isDefault: true,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
       });
     }
     expect((await key(MONDAY, "16:00")).periodOccurrenceKey).toBeNull();
@@ -3025,7 +3025,7 @@ describe("a service period occurrence", () => {
     expect(pricing.offers.defaultMenuId).toBeNull();
     expect(pricing.offers.menus.find((menu) => menu.id === v.menus.Almuerzo)).toMatchObject({
       orderable: true,
-      sendable: true,
+      endedPeriodName: null,
     });
   });
 });

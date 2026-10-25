@@ -781,7 +781,7 @@ describe("TillApi", () => {
         ...menu,
         versionId: `version-${menu.id}`,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer" as const,
         structure: { members: [] },
         home: {

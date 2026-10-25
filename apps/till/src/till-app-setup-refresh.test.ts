@@ -104,7 +104,7 @@ function catalogue(
         name: "Lunch",
         isDefault: true,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: version,
         structure: {
@@ -136,7 +136,7 @@ function state(version: string, liveFields = "lf-1", setupRevision?: string): Me
       keepOpen: null,
       zoneKeepOpen: null,
     },
-    menus: [{ menuId: "lunch", versionId: version, orderable: true, sendable: true }],
+    menus: [{ menuId: "lunch", versionId: version, orderable: true, endedPeriodName: null }],
     unavailable: { products: [], optionLabels: [] },
     defaultMenuId: "lunch",
     liveFields,

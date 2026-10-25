@@ -92,7 +92,7 @@ it.each(cases)(
         name: "Carta",
         isDefault: true,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: "v1",
         structure: {
