@@ -239,7 +239,7 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-receipt-excerpts-moved-on-2026-10-23)
 
-- **A refusal a person can see names what they can do next on their own; "contact support" only for a state only a bug can produce, said at the site** (owner, 2026-10-25). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
+- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exception is a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use the shared UI contract in [design-system.md](docs/developers/design-system.md) → Forms.**
   Required fields visibly marked; an invalid submission explains itself beside every bad field and in
   one localized message at the bottom of the form, on its own line above the buttons, and the action

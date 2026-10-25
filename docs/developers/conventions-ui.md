@@ -7,19 +7,34 @@ the one-line version of each rule and points here for the rest.
 
 ## Refusals name a self-service next step
 
-Owner decision, 2026-10-25: “Almost anything except a product bug should be resolved without
-contacting support, because they aren't paying for support.” A visible refusal names what you can
-do yourself. Keep a support exception only when the code states why only a product bug can cause
-that state. No guard enforces this rule.
+Owner decision, 2026-10-25, sharpened at 14:02 CET: “Never send the user to talk to somebody else.
+Explain the situation, ask for an admin login (if appropriate) and let the user make the choice.”
+The owner also asked: “what if the person running setup is the previous person who installed
+waitron? What are they supposed to do?”
 
-The [A1089 source audit](../backlog/self-service-refusals.md) records the current EN/ES words,
+A refusal explains what happened and what each available choice does. If a choice needs more
+rights, offer administrator or owner sign-in there. Let the person choose, including a safe Stop
+before anything destructive. “Contact support”, “ask your administrator” and “ask whoever
+installed” do not provide a self-service remedy. The only exception is a state only a product bug
+can cause: establish that at its site and identify it as a fault in Waitron. No guard enforces this
+rule.
+
+The first A1089 wording fixes (#2054, #2055, #2056 and #2058) referred the person to an
+administrator or installer. Their passing tests exercised those messages and existing retries;
+they did not establish a self-service remedy for a persistent refusal. All four need separate
+reworks. A missing small action belongs in its fix; a substantial missing workflow gets its own
+backlog entry, explicitly identified in the message's PR. Do not disguise that gap with new words.
+
+The [A1089 source audit](../backlog/self-service-refusals.md) records the then-current EN/ES words,
 producer and available or missing route at `9c896b1aeb3455bd092c45a1be1e594df4e258d0`.
 For example, `setup.not_ready` can mean an absent Cloud recovery service
 (`apps/server/src/first-setup-backup-source.ts:40`), yet the shell says to wait. A backup's
 `backup.staging_space_low` comes from an explicit free-space comparison
 (`apps/server/src/backup-sweep.ts:108`), yet its alert substitution says to contact support.
 Those reads demonstrate why wording must follow the actual cause; they do not qualify a recovery
-procedure. The audit grants no bug-only exceptions and leaves its listed product fixes open.
+procedure. Its [14:02 correction](../backlog/self-service-refusals.md#owner-correction-2026-10-25)
+reopens the referrals and applies the sharpened rule to every area. The audit grants no bug-only
+exceptions and leaves its listed product fixes open.
 
 **Forms and the shared UI contract**
 
