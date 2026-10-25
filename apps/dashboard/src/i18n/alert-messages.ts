@@ -86,8 +86,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "No se está guardando ninguna copia de tus datos: no hay copias de seguridad programadas, y la copia en el bucket está desactivada o no está al día. Configura una en la página de Copias.",
   },
   "backup.archive_settings_unusable": {
-    en: "Scheduled backups are off: this box could not use their saved settings. Sales continue. Save the backup settings again on the Backups page; if this message stays, contact support.",
-    es: "Las copias de seguridad programadas están desactivadas: este equipo no ha podido usar sus ajustes guardados. Las ventas continúan. Vuelve a guardar los ajustes de copia en la página de Copias; si el mensaje sigue, contacta con soporte.",
+    en: "Scheduled backups are off because their saved settings could not be used. Open Backups to read the error and choose the settings again. Turn on backups replaces the saved choices; leave without applying to keep them. Sales continue.",
+    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Abre Copias de seguridad para leer el error y elegir los ajustes de nuevo. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
   },
   "backup.stream_behind": {
     en: "The bucket copy is {minutes} minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",

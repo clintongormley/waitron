@@ -46,6 +46,12 @@ refusal. Stop changing keys and leave the page without another submission. This 
 diagnose conflicting backup-key settings or confirm which key opens a particular backup; do not
 replace either key record on the strength of this message.
 
+Open **Backups** and read the error beside the backup status. Choose the destinations and schedule
+again. **Turn on backups** replaces the saved settings; leave without applying to keep them.
+If a folder is refused, correct it before applying again. A successful save can still report a
+loading error, so check the resulting status before relying on a new backup. This page cannot
+diagnose every persistent host or key failure; keep your recovery keys and existing backup files.
+
 ## Make the new series {#series}
 
 Use the recovery controls below the authenticated details. Enter the matching key again, confirm
