@@ -74,13 +74,10 @@ by the answers):
   person's own download exists (`GET /management-api/me/personal-data/export`, a ZIP of their
   profile and sign-in details with a `README.txt` first, in the person's own language, English or
   Spanish), the Profile page has a **Download** button beside **Copy of your data**, and the Users
-  guide has a "Download your data" section (`{#own-data}`) in English and Spanish. Left:
-  - **S2b** — the workforce and staffing files and the working-time export. It adds README words
-    for each file it adds (`apps/server/src/i18n/personal-data-readme.ts`), widens the guide
-    section's and the Profile help text's list of contents ("your profile and sign-in details"),
-    and adds its own "how long it is kept" and "who else receives it" sentences (for example the
-    four-year working-time floor, design §2.1 row s11, and the employment records and pay rate the
-    configuration export carries, design §2.4 r4).
+  guide has a "Download your data" section (`{#own-data}`) in English and Spanish. When those
+  modules are on, the download also holds the workforce and staffing files (`employment.json`,
+  `rota.json`, `absences.json`, `attendance.json`, `staff-roles.json`) and the working-time record
+  (`time-record.pdf`, `time-record.csv`). Left:
   - **S2c** — the counts of voids, refunds and drawer openings (`actions.csv`) and an admin's
     download of another person's data. Its `authorize` returns a README language too, and it adds
     README words for `actions.csv`. It also widens the guide section's and the Profile help text's
@@ -91,12 +88,36 @@ by the answers):
 
   A new section in the Users guide (`apps/server/src/guide/<language>/staff.md`) also goes into
   that page's section-id list in `apps/server/src/guide-content.test.ts`.
+- **A manager's own copy of what they decided about others** — the absences and swaps they
+  decided, the rotas they published and the attendance answers they authorised: the design's "who
+  did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer
+  openings (S2b decision 11).
+- **Owner question: the times of the shifts a swap names.** Today a swap in the download carries
+  no shift (S2b decision 8). Example: Ana offers Marta her Saturday 18:00–02:00 shift as a
+  give-away; Marta accepts and Luis approves. Approving moves no shift, so the shift stays Ana's
+  and Marta's copy shows the approved swap with no time. The alternative is to add the two shifts
+  the swap names as `fromShift` and `toShift`, which shows Marta the times of a shift that is Ana's.
+  Include them, yes or no?
+- **The working-time record of a box with more than one location** — only this node's location is
+  exported (S2b decision 6). Today provisioning refuses a second, different location.
+- **Measure the working-time part on a box.** On a Mac, the read inside the write lock took
+  669.7 ms with 48 closed pay periods × 30 staff (Task 6a); moving the person cut to read time,
+  with one copy of the export's logic, brought it to 213.8 ms median with an identical CSV
+  (Task 6c). The whole-history PDF for 4 years × about 20 shifts a month rendered in 2.6 s
+  (4.0 MB) on the Mac (Task 6a); the plan's 650 ms estimate was for 1,000 sessions. Measure both
+  on a box.
+- **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
+  badge sits over the last letter of "Copy of your data" / "Copia de tus datos". The placement
+  came from S2a2 (#2049), whose test in
+  `apps/dashboard/src/screens/profile-screen.personal-data.test.ts` puts the badge's centre on the
+  label's top trailing corner. Place it so it never covers the label.
 - **Mount the own download from `boot.ts`** — the route is mounted through `mountMeApi`, which
   gets module names and rebuilds the modules with `modulesNamed` (`apps/server/src/modules.ts`),
   and is not given boot's `now`, because #1990 was editing `boot.ts` while the route was built.
-  #1990 has since landed, so the next step is for `boot.ts` to pass its module list
-  (`setsToMigrate`) and `now`, as it does for the attendance export, and to delete `modulesNamed`
-  and `MeApiDeps.now`.
+  `mountMeApi` now also builds the working-time part from `modulesNamed`
+  (`apps/server/src/me-api.ts`). #1990 has since landed, so the next step is for `boot.ts` to pass
+  its module list (`setsToMigrate`) and `now`, as it does for the attendance export, and to delete
+  `modulesNamed` and `MeApiDeps.now`.
 - **S3** — an admin finds an invoice customer by tax number and downloads what the box holds.
 - **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
   checklist.
