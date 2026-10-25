@@ -179,6 +179,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                   menus: menus.map((menu) => ({
                     ...menu,
                     orderable: false,
+                    sendable: false,
                   })),
                 };
                 const { el, host } =

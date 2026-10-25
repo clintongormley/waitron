@@ -704,6 +704,7 @@ describe("period service at the counter", () => {
     await poll(el);
     const screen = counter(el);
     const grid = screen;
+    expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
     expect(screen.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim()).toBe(
       "Last orders have ended",
     );
@@ -1642,6 +1643,9 @@ describe("an open table's order", () => {
     current = ended;
     await poll(el);
     expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(
+      tableScreen(el).shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim(),
+    ).toBe("Last orders have ended");
     browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
     browser.store.setLineQuantity(0, "2");
     expect(browser.store.lines.map((line) => [line.product.productId, line.quantity])).toEqual([
