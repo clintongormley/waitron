@@ -64,9 +64,11 @@ export class MisdatedNoteDialog extends LitElement {
 
   @state() private note = "";
   @state() private busy = false;
-  /** A refusal's sentence for the field, kept until the note changes. */
-  @state() private refusal = "";
-  @state() private bottom = "";
+  /** A refusal's string key for the field, kept until the note changes; translated at render so a
+   *  language change while it shows follows. */
+  @state() private refusal: "" | "misdated_note.required" | "misdated_note.too_long" = "";
+  /** The error code of a refusal shown at the bottom, translated at render. */
+  @state() private bottom: string | null = null;
 
   #opened = false;
   #opening = 0;
@@ -85,7 +87,7 @@ export class MisdatedNoteDialog extends LitElement {
     this.note = "";
     this.busy = false;
     this.refusal = "";
-    this.bottom = "";
+    this.bottom = null;
     const { coordinator, scope } = draftScopeFor<string>(this, {
       id: {},
       current: () => this.note.trim(),
@@ -94,7 +96,7 @@ export class MisdatedNoteDialog extends LitElement {
       restore: (value) => {
         this.note = value;
         this.refusal = "";
-        this.bottom = "";
+        this.bottom = null;
       },
     });
     this.#leave = coordinator;
@@ -139,7 +141,7 @@ export class MisdatedNoteDialog extends LitElement {
     if (!this.#opened || this.busy) return;
     this.note = event.detail.value;
     this.refusal = "";
-    this.bottom = "";
+    this.bottom = null;
     this.#scope?.changed();
   }
 
@@ -149,7 +151,7 @@ export class MisdatedNoteDialog extends LitElement {
     if (this.mode === "note" && (saveActionState(this.#scope).unchanged || note === "")) return;
     const opening = this.#opening;
     this.refusal = "";
-    this.bottom = "";
+    this.bottom = null;
     this.busy = true;
     try {
       if (this.mode === "handle")
@@ -169,16 +171,19 @@ export class MisdatedNoteDialog extends LitElement {
           ? (error as { params?: { field?: unknown } }).params?.field
           : undefined;
       if (code === "management.request_invalid" && field === "note") {
-        this.refusal = t(note === "" ? "misdated_note.required" : "misdated_note.too_long");
+        this.refusal = note === "" ? "misdated_note.required" : "misdated_note.too_long";
         await this.updateComplete;
         await focusFirstInvalid(this.shadowRoot!);
-      } else this.bottom = codeMessage(code);
+      } else this.bottom = code;
     }
   }
 
   override render(): TemplateResult {
     const handle = this.mode === "handle";
-    const bottom = [this.bottom, this.refusal ? t("form.fix_fields") : ""]
+    const bottom = [
+      this.bottom === null ? "" : codeMessage(this.bottom),
+      this.refusal ? t("form.fix_fields") : "",
+    ]
       .filter(Boolean)
       .join(" ");
     const action = saveActionState(this.#scope, { savableAtOpen: handle });
@@ -204,7 +209,7 @@ export class MisdatedNoteDialog extends LitElement {
                 maxlength=${NOTE_LIMIT}
                 ?required=${!handle}
                 .value=${this.note}
-                .error=${this.refusal}
+                .error=${this.refusal ? t(this.refusal) : ""}
                 ?disabled=${this.busy}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(event)}
               ></wt-textarea>

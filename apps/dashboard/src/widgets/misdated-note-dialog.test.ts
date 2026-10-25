@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import type { WtButton, WtDialog, WtFormActions, WtTextarea } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
@@ -140,7 +141,7 @@ it("keeps both buttons disabled and the dialog undismissable while the request i
 });
 
 it.each([
-  ["a long note", "x".repeat(20), "Write a note of 500 characters or fewer."],
+  ["a non-empty note", "x".repeat(20), "Write a note of 500 characters or fewer."],
   ["an empty note", "", "Write a note."],
 ])(
   "a field refusal for %s sits under the field with the generic bottom message and focus on the field, until the note changes",
@@ -184,3 +185,47 @@ it("alert.note_exists shows its sentence at the bottom in note mode", async () =
   await expect.poll(() => actions(el).error).toBe(codeMessage("alert.note_exists"));
   expect(action(el).disabled).toBe(false);
 });
+
+it("a refusal already shown follows a change of the screen's language", async () => {
+  const api = stubApi();
+  api.markIncidentHandled.mockRejectedValueOnce({
+    code: "management.request_invalid",
+    params: { field: "note" },
+  });
+  api.markIncidentHandled.mockRejectedValueOnce({ code: "alert.already_handled" });
+  const { el } = await mount("handle", api);
+  await press(el);
+  await expect.poll(() => field(el).error).toBe(t("misdated_note.required"));
+  setLocale("es-ES");
+  const required = t("misdated_note.required");
+  expect(required).not.toBe("Write a note.");
+  await expect.poll(() => field(el).error).toBe(required);
+  setLocale("en-GB");
+  await type(el, "Done");
+  await press(el);
+  await expect.poll(() => actions(el).error).toBe(codeMessage("alert.already_handled"));
+  setLocale("es-ES");
+  const handled = codeMessage("alert.already_handled");
+  setLocale("en-GB");
+  expect(handled).not.toBe(codeMessage("alert.already_handled"));
+  setLocale("es-ES");
+  await expect.poll(() => actions(el).error).toBe(handled);
+});
+
+it.each(["cancel", "escape", "save"] as const)(
+  "sends note-close exactly once on %s",
+  async (how) => {
+    const { el, dialog } = await mount("handle");
+    const closes = vi.fn();
+    el.addEventListener("note-close", closes);
+    const closed = dialogClosed(dialog);
+    if (how === "cancel")
+      el.shadowRoot!.querySelector<WtButton>("wt-button[data-test=note-cancel]")!.click();
+    else if (how === "escape") await userEvent.keyboard("{Escape}");
+    else await press(el);
+    await closed;
+    await expect.poll(() => el.open).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(closes).toHaveBeenCalledTimes(1);
+  },
+);

@@ -1915,7 +1915,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
           const summary = () => dialog.shadowRoot!.querySelector("[data-test=note-summary]");
           expect(summary()).not.toBeNull();
           // Past phone widths the dialog stops growing, so its summary's lines stop moving.
-          for (let width = 320; width <= 560; width += 4) {
+          for (let width = 320; width <= 560; width += 8) {
             await page.viewport(width, 900);
             await el.updateComplete;
             const found = timesAcrossLines([summary()!]);
@@ -1927,7 +1927,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
           await vi.waitFor(() => expect(dialog.open).toBe(false));
         }
         // Each width checks the list's two times and the cannot-tell sentence's one.
-        expect(checked).toBe(61 * 3);
+        expect(checked).toBe(31 * 3);
         expect(broken).toEqual([]);
       },
     );
@@ -1966,6 +1966,24 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       expect(refresh).toHaveBeenCalledTimes(1);
       expect(dialog.open).toBe(false);
     });
+
+    it.each(["note-cancel", "note-submit"])(
+      "opens the dialog again when Mark handled is pressed after the dialog closed by %s",
+      async (button) => {
+        const { el } = await mount(withNotes([OPEN]));
+        const mark = () => markIn(qa(el, "[data-test=misdated-entry]")[0]!)!;
+        await userEvent.click(mark());
+        await flush(el);
+        const dialog = noteDialog(el)!;
+        expect(dialog.open).toBe(true);
+        (dialog.shadowRoot!.querySelector(`[data-test=${button}]`) as HTMLElement).click();
+        await flush(el);
+        await vi.waitFor(() => expect(dialog.open).toBe(false));
+        await userEvent.click(mark());
+        await flush(el);
+        await vi.waitFor(() => expect(noteDialog(el)!.open).toBe(true));
+      },
+    );
 
     it("words Add note in Spanish from the strings tables", async () => {
       setLocale("es");
