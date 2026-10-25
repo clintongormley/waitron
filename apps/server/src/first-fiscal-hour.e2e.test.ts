@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -13,23 +13,16 @@ import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { FRESH, writeRecoveryState } from "./recovery-state.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { resolveFirstSetupWorkspace } from "@waitron/provisioning";
+import { startAgainNoteName } from "../test/start-again-deleted.js";
 
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-it.each(
-  ["src/bin.ts", "src/node-entry.ts"].flatMap((script) =>
-    ["complete", "state-selection", "target-backlink"].map((selectionState) => ({
-      script,
-      selectionState,
-    })),
-  ),
-)(
-  "$script restarts into its password-authorised replacement after $selectionState and keeps the retired database absent",
-  async ({ script, selectionState }) => {
+it.each(["src/bin.ts", "src/node-entry.ts"])(
+  "%s refuses a password-authorised Start again while a restore or reset request waits, then deletes the attempt in place and starts fresh in the same folders",
+  async (script) => {
     const f = await fixture();
     const host = createFirstSetupModuleHost({ ...f, modules: ALL_MODULES, environment: f.env });
     await host.owner.claimFirstSetup(
@@ -75,11 +68,6 @@ it.each(
       await writeFile(join(f.stateDir, "restore-request.json"), "retired restore must not run");
       await writeFile(join(f.stateDir, "reset-request.json"), "retired reset must not run");
       const fresh = await (await get("/setup-api/first-setup/resolution")).json();
-      const originals = await Promise.all(
-        [join(f.stateDir, "first-setup.json"), join(f.venueDir, "first-setup-claim.json")].map(
-          (path) => readFile(path),
-        ),
-      );
       const ids = {
         inspectionId: fresh.inspectionId,
         revision: fresh.revision,
@@ -104,7 +92,7 @@ it.each(
         ownerHeaders,
       );
       expect(summary.status, await summary.clone().text()).toBe(200);
-      const selected = await post(
+      const waiting = await post(
         "/setup-api/first-setup/resolution/start-again",
         {
           ...ids,
@@ -112,96 +100,57 @@ it.each(
         },
         ownerHeaders,
       );
-      expect(selected.status).toBe(200);
-      const selection = await selected.json();
-      expect(selection).toEqual({
-        workspaceId: expect.any(String),
-        selectionGeneration: 1,
-        restarting: true,
-      });
-      await closeAgent();
-      await expectRestartExit(child);
-      const target = await resolveFirstSetupWorkspace(f);
-      expect(target.binding).toMatchObject({
-        workspaceId: selection.workspaceId,
-        selectionGeneration: 1,
-      });
-      expect(target.venueDir).not.toBe(f.venueDir);
-      expect(target.stateDir).not.toBe(f.stateDir);
-      if (selectionState !== "complete") {
-        await rm(
-          selectionState === "state-selection"
-            ? join(f.stateDir, "first-setup-selection.json")
-            : join(target.venueDir, "first-setup-workspace.json"),
-        );
-        agent = new Agent({ connect: { ca } });
-        agentClosed = false;
-        child = childProcess(script, f.env);
-        expect(await ready(child, origin, agent)).toEqual({ claimed: true, resolution: true });
-        await expect(stat(join(target.venueDir, "venue.db"))).rejects.toMatchObject({
-          code: "ENOENT",
-        });
-        const pending = await (await get("/setup-api/first-setup/resolution/selection")).json();
-        expect(pending).toMatchObject({
-          workspaceId: selection.workspaceId,
-          selectionGeneration: 1,
-        });
-        const wrongPassword = await post("/setup-api/first-setup/resolution/resume-selection", {
-          ...pending,
-          password: "wrong-password",
-        });
-        expect(wrongPassword.status).toBe(403);
-        expect(await wrongPassword.json()).toMatchObject({
-          error: { code: "setup.owner_required" },
-        });
-        const changedWorkspace = await post("/setup-api/first-setup/resolution/resume-selection", {
-          ...pending,
-          workspaceId: randomBytes(16).toString("hex"),
-          password: PASSWORD,
-        });
-        expect(changedWorkspace.status).toBe(409);
-        expect(await changedWorkspace.json()).toMatchObject({
-          error: { code: "setup.attempt_conflict" },
-        });
-        const resumed = await post("/setup-api/first-setup/resolution/resume-selection", {
-          ...pending,
-          password: PASSWORD,
-        });
-        expect(resumed.status).toBe(200);
-        expect(await resumed.json()).toEqual(selection);
-        await closeAgent();
-        await expectRestartExit(child);
-        expect(await resolveFirstSetupWorkspace(f)).toEqual(target);
-      }
-      child = childProcess(script, f.env);
-      await expect
-        .poll(() => readFile(join(target.stateDir, "tls", "ca.crt")), { timeout: 45_000 })
-        .toBeDefined();
-      const selectedCa = await readFile(join(target.stateDir, "tls", "ca.crt"));
-      agent = new Agent({ connect: { ca: selectedCa } });
-      agentClosed = false;
-      expect(await ready(child, origin, agent)).toEqual({ claimed: false });
-      expect((await stat(join(target.venueDir, "venue.db"))).size).toBeGreaterThan(0);
-      await child.stop();
-      child = childProcess(script, f.env);
-      expect(await ready(child, origin, agent)).toEqual({ claimed: false });
-      expect(await resolveFirstSetupWorkspace(f)).toEqual(target);
-      expect(await readFile(join(target.stateDir, "tls", "ca.crt"))).toEqual(selectedCa);
-      expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
-      expect(
-        await Promise.all(
-          [join(f.stateDir, "first-setup.json"), join(f.venueDir, "first-setup-claim.json")].map(
-            (path) => readFile(path),
-          ),
-        ),
-      ).toEqual(originals);
+      expect(waiting.status).toBe(503);
+      expect(await waiting.json()).toMatchObject({ error: { code: "setup.not_ready" } });
       expect(await readFile(join(f.stateDir, "restore-request.json"), "utf8")).toBe(
         "retired restore must not run",
       );
       expect(await readFile(join(f.stateDir, "reset-request.json"), "utf8")).toBe(
         "retired reset must not run",
       );
-      await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+      await rm(join(f.stateDir, "restore-request.json"));
+      await rm(join(f.stateDir, "reset-request.json"));
+      const cleared = await (await get("/setup-api/first-setup/resolution")).json();
+      const clearedIds = {
+        inspectionId: cleared.inspectionId,
+        revision: cleared.revision,
+        ownerGeneration: cleared.ownerGeneration,
+      };
+      const clearedSummary = await post(
+        "/setup-api/first-setup/resolution/start-again/summary",
+        clearedIds,
+        ownerHeaders,
+      );
+      expect(clearedSummary.status, await clearedSummary.clone().text()).toBe(200);
+      const shown = await clearedSummary.json();
+      const selected = await post(
+        "/setup-api/first-setup/resolution/start-again",
+        { ...clearedIds, confirmMissingDatabase: { nothingFiledOrSold: true, shown } },
+        ownerHeaders,
+      );
+      expect(selected.status, await selected.clone().text()).toBe(200);
+      expect(await selected.json()).toEqual({ restarting: true });
+      await closeAgent();
+      await expectRestartExit(child);
+      child = childProcess(script, f.env);
+      agent = new Agent({ connect: { ca } });
+      agentClosed = false;
+      expect(await ready(child, origin, agent)).toEqual({ claimed: false });
+      expect((await stat(join(f.venueDir, "venue.db"))).size).toBeGreaterThan(0);
+      await child.stop();
+      child = childProcess(script, f.env);
+      expect(await ready(child, origin, agent)).toEqual({ claimed: false });
+      expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
+      expect(await startAgainNoteName(f)).toEqual(expect.any(String));
+      expect(await readdir(join(f.stateDir, "first-setup-start-again-confirmations"))).toHaveLength(
+        1,
+      );
+      await expect(stat(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(stat(join(f.venueDir, "first-setup-claim.json"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
     } finally {
       await child.stop();
       await closeAgent();

@@ -128,6 +128,14 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
       expect(unconfirmed.status).toBe(503);
       expect(await unconfirmed.json()).toMatchObject({ error: { code: "setup.not_ready" } });
       expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(attemptFile);
+      expect(
+        await readdir(join(f.stateDir, "first-setup-start-again-confirmations")).catch(
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return [];
+            throw error;
+          },
+        ),
+      ).toEqual([]);
       const at = new Date().toISOString();
       const response = await post(
         "start-again",
@@ -151,16 +159,12 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         shown,
       });
       const selected = await response.json();
-      expect(selected).toEqual({
-        workspaceId: expect.any(String),
-        selectionGeneration: 1,
-        restarting: true,
-      });
+      expect(selected).toEqual({ restarting: true });
       expect(JSON.stringify(selected)).not.toContain(f.root);
       await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
-      const retained = JSON.parse(await readFile(join(f.stateDir, "first-setup.json"), "utf8"));
-      expect(retained.consumptionIntent).toBe(true);
-      expect(retained.frozen).toEqual(before.frozen);
+      await expect(stat(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(
         (await fetch(`${origin}/retry`, { dispatcher: agent, method: "POST" } as RequestInit))
