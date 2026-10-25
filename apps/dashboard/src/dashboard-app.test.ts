@@ -8695,3 +8695,45 @@ it.each([false, true])("passes admin authority to the staff screen (%s)", async 
   await flush(el);
   expect((staff(el) as HTMLElementTagNameMap["dashboard-staff-screen"]).canAdminister).toBe(admin);
 });
+
+it.each([false, true])(
+  "passes the personal-data export permission to the staff screen (%s)",
+  async (canExport) => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        permissions: ["person.manage", canExport ? "personal_data.export" : "person.admin"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navStaff(el)!.click();
+    await flush(el);
+    expect(
+      (staff(el) as HTMLElementTagNameMap["dashboard-staff-screen"]).canExportPersonalData,
+    ).toBe(canExport);
+  },
+);
+
+it("signs out through the leave coordinator when the staff screen asks for an administrator", async () => {
+  const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await flush(el);
+  navStaff(el)!.click();
+  await flush(el);
+  const coordinator = leaveCoordinatorFor(staff(el)!)!;
+  const request = vi.spyOn(coordinator, "request");
+
+  staff(el)!.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }));
+  await flush(el);
+
+  expect(request).toHaveBeenCalledOnce();
+  expect(request).toHaveBeenCalledWith({
+    scopes: "all",
+    reason: "signout",
+    proceed: expect.any(Function),
+  });
+  await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+  expect(login(el)).toBeTruthy();
+  expect(staff(el)).toBeNull();
+});

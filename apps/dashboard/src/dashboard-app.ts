@@ -2553,7 +2553,9 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-staff-screen
           .api=${this.api}
           .canAdminister=${this.#sessionPermissions.includes("person.admin")}
+          .canExportPersonalData=${this.#sessionPermissions.includes("personal_data.export")}
           .currentPersonId=${this.myPersonId}
+          @admin-sign-in=${() => void this.#onLogout()}
         ></dashboard-staff-screen>`;
       case "modifiers":
         return html`<dashboard-modifiers-screen .api=${this.api}></dashboard-modifiers-screen>`;
