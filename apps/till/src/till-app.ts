@@ -527,9 +527,12 @@ type DraftFollowUp =
   | "mark-unsellable"
   | "recheck-dead-ends"
   | { landedOn: string }
-  | { lateSend: LateSendAsked }
-  | { approval: LateSendApprovalAsked }
+  | { lateSend: LateSendAsked; answered?: AnsweredAllergy }
+  | { approval: LateSendApprovalAsked; answered?: AnsweredAllergy }
   | undefined;
+
+/** The allergy answer a refused submission carried, and the party revision it was given against. */
+type AnsweredAllergy = Omit<AllergyCommand, "submissionId">;
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
  * when its read failed. Undefined when the operator session it was opened in has ended. */
@@ -3810,10 +3813,13 @@ export class TillApp extends LitElement {
     this.allergyDialog = null;
   }
 
+  /** `answered` skips the question: a rerun of a refused submission sends the answer it carried, and
+   * the server refuses it as out of date if the party changed since. */
   async #prepareTableAllergy(
     partyId: string,
     target: AllergySendTarget,
     live: () => boolean,
+    answered?: AnsweredAllergy,
   ): Promise<PreparedTableAllergy | null> {
     if (this.allergyDialog !== null) return null;
     const generation = ++this.#allergyGeneration;
@@ -3830,6 +3836,14 @@ export class TillApp extends LitElement {
       visit === this.#orderVisit &&
       billId === this.activeTabId &&
       this.orderParty?.id === partyId;
+    if (answered !== undefined)
+      return {
+        ...(answered.allergy === undefined ? {} : { patch: answered.allergy }),
+        revision: answered.expectedPartyRevision,
+        key: crypto.randomUUID(),
+        current,
+        api,
+      };
     let preview: PartyAllergyRead | undefined;
     const previewApi = {
       previewPartyAllergy: async (id: string, candidate: AllergySendTarget) => {
@@ -3880,7 +3894,6 @@ export class TillApp extends LitElement {
   async #writeTableAllergy<T>(
     prepared: PreparedTableAllergy,
     write: (command: AllergyCommand, signal: AbortSignal) => Promise<T>,
-    lateSend?: LateSend,
   ): Promise<{ value: T } | null> {
     let command: AllergyCommand = {
       submissionId: crypto.randomUUID(),
@@ -3912,8 +3925,7 @@ export class TillApp extends LitElement {
               UNSELLABLE_LINE_REFUSALS.has(refusal.refused) ||
               refusal.refused === "station.no_replacement" ||
               refusal.refused === "menu_period.ended" ||
-              isLateSendManagerRefusal(error) ||
-              (lateSend?.override !== undefined && APPROVER_REFUSALS.has(refusal.refused))))
+              isLateSendManagerRefusal(error)))
         ) {
           this.#closeAllergyDialog(false, prepared.key);
           throw error;
@@ -11581,7 +11593,11 @@ export class TillApp extends LitElement {
     return this.#sendDraft((event as CustomEvent<Partial<SubmitDraftDetail>>).detail);
   }
 
-  async #sendDraft(detail: Partial<SubmitDraftDetail>, lateSend?: LateSend): Promise<void> {
+  async #sendDraft(
+    detail: Partial<SubmitDraftDetail>,
+    lateSend?: LateSend,
+    answered?: AnsweredAllergy,
+  ): Promise<void> {
     const { groups, joinGroupId, billId, store, sent, draft } = detail;
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
@@ -11643,25 +11659,27 @@ export class TillApp extends LitElement {
         live,
         false,
         lateSend,
+        answered,
       );
     } finally {
       store.sending = false;
     }
     if (followUp === undefined) return;
     if (typeof followUp === "object" && "lateSend" in followUp) {
+      const carried = followUp.answered;
       this.#openLateSend(
         followUp.lateSend.listed,
         followUp.lateSend.periods,
         "send",
-        (confirmed) => this.#sendDraft(detail, confirmed),
+        (confirmed) => this.#sendDraft(detail, confirmed, carried),
         (listed) => this.#removeDraftLines(store, listed),
       );
       return;
     }
     if (typeof followUp === "object" && "approval" in followUp) {
-      const { approval } = followUp;
+      const { approval, answered: carried } = followUp;
       await this.#askLateSendApproval(approval.lateSend, approval.pinError, (confirmed) =>
-        this.#sendDraft(detail, confirmed),
+        this.#sendDraft(detail, confirmed, carried),
       );
       return;
     }
@@ -11911,11 +11929,13 @@ export class TillApp extends LitElement {
     live: () => boolean,
     retried: boolean,
     lateSend?: LateSend,
+    answered?: AnsweredAllergy,
   ): Promise<DraftFollowUp> {
     const { groups, joinGroupId, billId } = submission;
     this.errorKey = undefined;
     const saving = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
+    let carried: AnsweredAllergy | undefined;
     try {
       const saved = await sync.flush(saving.signal);
       if (!live()) return;
@@ -11942,6 +11962,7 @@ export class TillApp extends LitElement {
         party.id,
         { kind: "draft", draftId: sync.draftId, lineIds: ids },
         live,
+        answered,
       );
       if (allergy === null) return;
       const command: DraftSubmission = {
@@ -11961,20 +11982,19 @@ export class TillApp extends LitElement {
         ...(lateSend === undefined ? {} : { lateSend }),
       };
       const draftId = sync.draftId;
-      const written = await this.#writeTableAllergy(
-        allergy,
-        (packet, signal) =>
-          allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal }),
-        lateSend,
-      );
+      const written = await this.#writeTableAllergy(allergy, (packet, signal) => {
+        carried = packet;
+        return allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal });
+      });
       if (written === null) return;
       submitted = written.value;
     } catch (error) {
       if (!live()) return;
       const asked = lateSendAsked(error, sent);
-      if (asked !== undefined) return { lateSend: asked };
+      const kept = carried === undefined ? {} : { answered: carried };
+      if (asked !== undefined) return { lateSend: asked, ...kept };
       const approval = lateSendApprovalAsked(error, lateSend);
-      if (approval !== undefined) return { approval };
+      if (approval !== undefined) return { approval, ...kept };
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
         if (!live()) return;

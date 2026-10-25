@@ -25,6 +25,7 @@ import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import {
   addDish as addSteak,
   dialog as allergyDialog,
+  draft as allergyDraft,
   mountApp as mountAllergyApp,
   openTable as openAllergyTable,
   resetAllergyFixture,
@@ -757,7 +758,57 @@ describe("an allergy party's send refused for an ended period", () => {
     expect(windowDishes(el)).toEqual(["1× Steak"]);
     expect(heading(el)).toBe("Lunch has ended");
   });
+
+  it("sends the allergy answer already given on Kitchen agreed, without asking again", async () => {
+    const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(lunchEnded)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    const { el } = await mountAllergyApp({ submitDraft });
+    await openAllergyTable(el);
+    await addSteak(el);
+    await sendWithAllergy(el, "Blue shirt");
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+
+    await choose(el, "data-late-agreed");
+
+    await vi.waitFor(() => expect(submitDraft).toHaveBeenCalledTimes(2));
+    await flush(el, 6);
+    expect(allergyDialog(el)).toBeNull();
+    expect(windowOf(el)).toBeNull();
+    const [first, rerun] = submitDraft.mock.calls.map((call) => call[2]);
+    expect(first!.allergy?.party?.guests).toEqual([
+      expect.objectContaining({ who: "Blue shirt", allergens: { milk: {} } }),
+    ]);
+    expect(rerun!.allergy).toEqual(first!.allergy);
+    expect(rerun!.expectedPartyRevision).toBe(first!.expectedPartyRevision);
+    expect(rerun!.lateSend).toEqual({ menuIds: ["lunch"] });
+  });
 });
+
+/** Sends, and answers the allergy question with one guest, `who`, allergic to milk. */
+async function sendWithAllergy(el: TillApp, who: string): Promise<void> {
+  await userEvent.click(
+    allergyOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+  );
+  await answerAllergy(el, who);
+}
+
+async function answerAllergy(el: TillApp, who: string): Promise<void> {
+  await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
+  const form = allergyDialog(el)!;
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-allergies]")!);
+  await userEvent.fill(
+    form
+      .shadowRoot!.querySelector('wt-input[name="guest-0-who"]')!
+      .shadowRoot!.querySelector("input")!,
+    who,
+  );
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLInputElement>('[data-code="milk"]')!);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+}
 
 const MANAGER_NEEDED = {
   code: "authorization.not_permitted",
@@ -955,7 +1006,7 @@ describe("a manager's PIN", () => {
 describe("an allergy party's send that needs a manager's PIN", () => {
   beforeEach(() => resetAllergyFixture());
 
-  it("closes the allergy dialog for the PIN, and shows a wrong PIN in the PIN's dialog", async () => {
+  it("closes the allergy dialog for the PIN, reruns with the answer already given, and shows a wrong PIN in the PIN's dialog", async () => {
     const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
     const submitDraft = vi
       .fn<TillApi["submitDraft"]>()
@@ -969,34 +1020,79 @@ describe("an allergy party's send that needs a manager's PIN", () => {
     });
     await openAllergyTable(el);
     await addSteak(el);
-    await userEvent.click(
-      allergyOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
-    );
-    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
-    await userEvent.click(
-      allergyDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!,
-    );
+    await sendWithAllergy(el, "Blue shirt");
     await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+    expect(allergyDialog(el)).toBeNull();
 
     await choose(el, "data-late-agreed");
-    // The refused send recorded no answer, so its rerun asks the allergy question again.
-    expect(allergyDialog(el)).not.toBeNull();
-    await userEvent.click(
-      allergyDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!,
-    );
 
     await vi.waitFor(() => expect(approval(el)).not.toBeNull());
     expect(allergyDialog(el)).toBeNull();
     expect(submitDraft.mock.calls[1]![2].lateSend).toEqual({ menuIds: ["lunch"] });
     await authorize(el, "0123");
-    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
-    await userEvent.click(
-      allergyDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!,
-    );
 
     await vi.waitFor(() => expect(approvalText(el, ".error")).toBe("Wrong PIN, try again"));
     expect(allergyDialog(el)).toBeNull();
     expect(submitDraft.mock.calls[2]![2].lateSend).toEqual({
+      menuIds: ["lunch"],
+      override: { personId: MARTA.personId, pin: "0123" },
+    });
+    await authorize(el, "4567");
+
+    await vi.waitFor(() => expect(submitDraft).toHaveBeenCalledTimes(4));
+    await flush(el, 6);
+    expect(approval(el)).toBeNull();
+    expect(allergyDialog(el)).toBeNull();
+    const packets = submitDraft.mock.calls.map((call) => call[2]);
+    expect(packets[0]!.allergy?.party?.guests).toEqual([
+      expect.objectContaining({ who: "Blue shirt", allergens: { milk: {} } }),
+    ]);
+    for (const rerun of packets.slice(1)) {
+      expect(rerun.allergy).toEqual(packets[0]!.allergy);
+      expect(rerun.expectedPartyRevision).toBe(packets[0]!.expectedPartyRevision);
+    }
+  });
+});
+
+describe("an allergy party's send the till marked, that needs a manager's PIN", () => {
+  beforeEach(() => resetAllergyFixture());
+
+  it("asks the allergy question after Kitchen agreed, then opens the PIN and reruns with the same answer", async () => {
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    const { el } = await mountAllergyApp({
+      submitDraft,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    await openAllergyTable(el);
+    await addSteak(el);
+    allergyDraft(el).setEndedPeriods([{ menuId: "lunch", periodName: "Lunch" }], false);
+    await userEvent.click(
+      allergyOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+    expect(allergyDialog(el)).toBeNull();
+
+    await choose(el, "data-late-agreed");
+    await answerAllergy(el, "Blue shirt");
+
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    expect(allergyDialog(el)).toBeNull();
+    expect(submitDraft.mock.calls[0]![2].lateSend).toEqual({ menuIds: ["lunch"] });
+    await authorize(el, "0123");
+
+    await vi.waitFor(() => expect(submitDraft).toHaveBeenCalledTimes(2));
+    await flush(el, 6);
+    expect(approval(el)).toBeNull();
+    expect(allergyDialog(el)).toBeNull();
+    const [first, rerun] = submitDraft.mock.calls.map((call) => call[2]);
+    expect(first!.allergy?.party?.guests).toEqual([
+      expect.objectContaining({ who: "Blue shirt", allergens: { milk: {} } }),
+    ]);
+    expect(rerun!.allergy).toEqual(first!.allergy);
+    expect(rerun!.lateSend).toEqual({
       menuIds: ["lunch"],
       override: { personId: MARTA.personId, pin: "0123" },
     });
