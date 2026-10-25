@@ -90,17 +90,18 @@ it.each(["restore", "reset"])(
     );
   },
 );
-it("a first-setup request on a box holding an earlier Waitron's selection answers 409 setup.workspace_unsupported", async () => {
+it("a first-setup request on a box whose earlier Waitron's selection appears after the start answers 409 setup.workspace_unsupported", async () => {
   const root = await mkdtemp(join(tmpdir(), "legacy-route-"));
   dirs.push(root);
   const venueDir = join(root, "venue"),
     stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
-  await writeFile(join(stateDir, "first-setup-selection.json"), '{"version":1}');
+  await writeFile(join(stateDir, "first-setup.json"), "uncheckable attempt");
   const entry = await resolveFirstSetupEntry({ venueDir, stateDir }, {});
   expect(entry.kind).toBe("resolution");
   if (entry.kind !== "resolution") return;
+  await writeFile(join(stateDir, "first-setup-selection.json"), '{"version":1}');
   const socket = new TLSSocket(new Socket());
   try {
     const response = await entry.app.request(
