@@ -20,6 +20,7 @@ function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
     clockStop: null,
     clockCheckWaiting: null,
     misdatedOpen: [],
+    misdatedHandledCount: 0,
     outbox: { lastAcceptedAt: ACCEPTED, waiting: 0, awaitingCertificate: false },
     stream: { state: "off" },
     clock: {

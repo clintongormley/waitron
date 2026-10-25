@@ -69,6 +69,7 @@ function health(overrides: Partial<BoxHealth> = {}, disk: Partial<BoxHealth["dis
     clockStop: null,
     clockCheckWaiting: null,
     misdatedOpen: [],
+    misdatedHandledCount: 0,
   } satisfies BoxHealth;
 }
 
@@ -1085,6 +1086,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
 
 describe("dashboard-box-status-screen's sales dated wrongly", () => {
   const OPEN: MisdatedOpenView = {
+    incidentId: "i1",
     confirmationId: "c1",
     count: 2,
     from: "2026-10-22T19:00:00.000Z",
@@ -1095,6 +1097,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
     unconfirmed: false,
   };
   const UNCONFIRMED: MisdatedOpenView = {
+    incidentId: "i2",
     confirmationId: "c2",
     count: 0,
     from: "2026-10-22T17:00:00.000Z",
@@ -1198,6 +1201,7 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
   it("labels each table by its times when two are drawn, and by the title when one is", async () => {
     const SECOND = {
       ...OPEN,
+      incidentId: "i3",
       confirmationId: "c3",
       from: "2026-10-22T20:00:00.000Z",
       to: "2026-10-22T20:10:00.000Z",

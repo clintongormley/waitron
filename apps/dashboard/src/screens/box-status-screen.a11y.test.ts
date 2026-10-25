@@ -39,6 +39,7 @@ function health(overrides: Partial<BoxHealth> = {}): BoxHealth {
     clockStop: null,
     clockCheckWaiting: null,
     misdatedOpen: [],
+    misdatedHandledCount: 0,
     ...overrides,
   };
 }
@@ -133,6 +134,7 @@ const MISDATED: BoxHealth = {
   ...health(),
   misdatedOpen: [
     {
+      incidentId: "i1",
       confirmationId: "c1",
       count: 2,
       from: "2026-10-22T19:00:00.000Z",
@@ -143,6 +145,7 @@ const MISDATED: BoxHealth = {
       unconfirmed: false,
     },
     {
+      incidentId: "i2",
       confirmationId: "c2",
       count: 0,
       from: "2026-10-22T17:00:00.000Z",

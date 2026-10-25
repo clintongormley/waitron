@@ -53,6 +53,7 @@ function quietHealth(overrides: Partial<BoxHealth> = {}): BoxHealth {
     clockStop: null,
     clockCheckWaiting: null,
     misdatedOpen: [],
+    misdatedHandledCount: 0,
     ...overrides,
   };
 }
