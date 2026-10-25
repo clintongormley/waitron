@@ -3005,7 +3005,7 @@ describe("each served menu's structure and Device Home Page", () => {
         isDefault: false,
         audience: "staff",
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         versionId: venue.dinnerVersionId,
         structure: {
           members: [
@@ -3032,9 +3032,146 @@ describe("each served menu's structure and Device Home Page", () => {
         },
       });
       expect((await menuState(tx, venue.cfg, venue.diningZone)).menus).toEqual([
-        { menuId: venue.menuId, versionId: venue.versionId, orderable: true, sendable: true },
-        { menuId: venue.dinner, versionId: venue.dinnerVersionId, orderable: true, sendable: true },
+        {
+          menuId: venue.menuId,
+          versionId: venue.versionId,
+          orderable: true,
+          endedPeriodName: null,
+        },
+        {
+          menuId: venue.dinner,
+          versionId: venue.dinnerVersionId,
+          orderable: true,
+          endedPeriodName: null,
+        },
       ]);
+    });
+  });
+
+  it("names the period that ended earlier today on both reads", async () => {
+    await seedUnitTenant();
+    const locationId = brandLocationId(await seedLocation("Venue"));
+    const cfg = { locationId };
+    const zoneId = await seedZone(locationId, "Dining room");
+    const { lunchMenu, dinnerMenu } = await scoped(async (tx) => {
+      const restaurant = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        orderStart: "table",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: restaurant.id });
+      const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
+      const dinnerMenu = (await createCatalogue(tx, { name: "Dinner menu" })).id;
+      await publish(tx, lunchMenu);
+      await publish(tx, dinnerMenu);
+      const lunch = await saveMenuPeriod(tx, cfg, restaurant.id, {
+        name: "Lunch",
+        menuId: lunchMenu,
+        staffMenuIds: [],
+      });
+      const dinner = await saveMenuPeriod(tx, cfg, restaurant.id, {
+        name: "Dinner",
+        menuId: dinnerMenu,
+        staffMenuIds: [],
+      });
+      await replaceMenuWeek(
+        tx,
+        cfg,
+        restaurant.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            { periodId: lunch.id, startsAt: "12:00", endsAt: "14:00" },
+            { periodId: dinner.id, startsAt: "20:00", endsAt: "23:00" },
+          ],
+        })),
+        new Date("2026-10-02T10:00:00Z"),
+        0,
+      );
+      return { lunchMenu, dinnerMenu };
+    });
+    // 14:05 in Madrid on Wednesday 7 October 2026.
+    const at = new Date("2026-10-07T12:05:00Z");
+    await scoped(async (tx) => {
+      const offers = await listZoneOffers(tx, cfg, zoneId, { at });
+      expect(offers.menus.map((menu) => [menu.id, menu.endedPeriodName])).toEqual(
+        expect.arrayContaining([
+          [lunchMenu, "Lunch"],
+          [dinnerMenu, null],
+        ]),
+      );
+      expect(offers.menus).toHaveLength(2);
+      const state = await menuState(tx, cfg, zoneId, at);
+      expect(state.menus.map((menu) => [menu.menuId, menu.endedPeriodName])).toEqual(
+        expect.arrayContaining([
+          [lunchMenu, "Lunch"],
+          [dinnerMenu, null],
+        ]),
+      );
+      expect(state.menus).toHaveLength(2);
+      const pricing = await listZoneOffers(tx, cfg, zoneId, { at, withDefault: false });
+      expect(pricing.menus.map((menu) => [menu.id, menu.endedPeriodName])).toEqual(
+        expect.arrayContaining([
+          [lunchMenu, null],
+          [dinnerMenu, null],
+        ]),
+      );
+      expect(pricing.menus).toHaveLength(2);
+    });
+  });
+
+  it("names no ended period for a menu the running period also offers", async () => {
+    await seedUnitTenant();
+    const locationId = brandLocationId(await seedLocation("Venue"));
+    const cfg = { locationId };
+    const zoneId = await seedZone(locationId, "Dining room");
+    const { lunchMenu, drinksMenu } = await scoped(async (tx) => {
+      const restaurant = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        orderStart: "table",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: restaurant.id });
+      const lunchMenu = (await createCatalogue(tx, { name: "Lunch menu" })).id;
+      const afternoonMenu = (await createCatalogue(tx, { name: "Afternoon menu" })).id;
+      const drinksMenu = (await createCatalogue(tx, { name: "Drinks" })).id;
+      for (const menuId of [lunchMenu, afternoonMenu, drinksMenu]) await publish(tx, menuId);
+      const lunch = await saveMenuPeriod(tx, cfg, restaurant.id, {
+        name: "Lunch",
+        menuId: lunchMenu,
+        staffMenuIds: [drinksMenu],
+      });
+      const afternoon = await saveMenuPeriod(tx, cfg, restaurant.id, {
+        name: "Afternoon",
+        menuId: afternoonMenu,
+        staffMenuIds: [drinksMenu],
+      });
+      await replaceMenuWeek(
+        tx,
+        cfg,
+        restaurant.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            { periodId: lunch.id, startsAt: "12:00", endsAt: "14:00" },
+            { periodId: afternoon.id, startsAt: "14:00", endsAt: "19:00" },
+          ],
+        })),
+        new Date("2026-10-02T10:00:00Z"),
+        0,
+      );
+      return { lunchMenu, drinksMenu };
+    });
+    // 14:05 in Madrid on Wednesday 7 October 2026, during Afternoon.
+    const at = new Date("2026-10-07T12:05:00Z");
+    await scoped(async (tx) => {
+      const offers = await listZoneOffers(tx, cfg, zoneId, { at });
+      expect(offers.service.periodName).toBe("Afternoon");
+      const offered = (id: string) => offers.menus.find((menu) => menu.id === id);
+      expect(offered(drinksMenu)).toMatchObject({ orderable: true, endedPeriodName: null });
+      expect(offered(lunchMenu)).toMatchObject({ orderable: false, endedPeriodName: "Lunch" });
+      const state = await menuState(tx, cfg, zoneId, at);
+      const polled = (id: string) => state.menus.find((menu) => menu.menuId === id);
+      expect(polled(drinksMenu)).toMatchObject({ orderable: true, endedPeriodName: null });
+      expect(polled(lunchMenu)).toMatchObject({ orderable: false, endedPeriodName: "Lunch" });
     });
   });
 

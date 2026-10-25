@@ -1075,7 +1075,7 @@ describe("GET /api/menu-state", () => {
           running: true,
         },
       },
-      menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
+      menus: [{ menuId: v.menuId, versionId: v1, orderable: true, endedPeriodName: null }],
       unavailable: nothing,
       defaultMenuId: v.menuId,
       liveFields: expect.any(String),
@@ -1099,7 +1099,7 @@ describe("GET /api/menu-state", () => {
           running: true,
         },
       },
-      menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
+      menus: [{ menuId: v.menuId, versionId: v1, orderable: true, endedPeriodName: null }],
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,
       liveFields: first.liveFields,
@@ -1133,7 +1133,7 @@ describe("GET /api/menu-state", () => {
     const v = await setupLunch();
     const v1 = await publish(v.menuId);
     expect((await state(v, "")).menus).toEqual([
-      { menuId: v.menuId, versionId: v1, orderable: true, sendable: true },
+      { menuId: v.menuId, versionId: v1, orderable: true, endedPeriodName: null },
     ]);
     const unknown = await send(v, "GET", `/api/menu-state?zoneId=${randomUUID()}`);
     expect(unknown.status).toBe(404);
@@ -1184,7 +1184,7 @@ describe("the Device Home Page each menu serves", () => {
       isDefault: true,
       audience: "customer",
       orderable: true,
-      sendable: true,
+      endedPeriodName: null,
       versionId,
       structure: {
         members: [
@@ -1213,7 +1213,7 @@ describe("the Device Home Page each menu serves", () => {
     for (const path of [zonePath, "/api/default-service-zone/offers"])
       expect((await served(v, path, v.sessionCookie)).menus).toEqual([lunch]);
     expect(await menuState(v)).toEqual([
-      { menuId: v.menuId, versionId, orderable: true, sendable: true },
+      { menuId: v.menuId, versionId, orderable: true, endedPeriodName: null },
     ]);
   });
 
@@ -1228,7 +1228,7 @@ describe("the Device Home Page each menu serves", () => {
       expect(menu).toMatchObject({ versionId: published, home: before });
     }
     expect(await menuState(v)).toEqual([
-      { menuId: v.menuId, versionId: published, orderable: true, sendable: true },
+      { menuId: v.menuId, versionId: published, orderable: true, endedPeriodName: null },
     ]);
     const republished = await publish(v.menuId);
     expect(republished).not.toBe(published);
@@ -1242,7 +1242,7 @@ describe("the Device Home Page each menu serves", () => {
       expect(menu).toMatchObject({ versionId: republished, home: after });
     }
     expect(await menuState(v)).toEqual([
-      { menuId: v.menuId, versionId: republished, orderable: true, sendable: true },
+      { menuId: v.menuId, versionId: republished, orderable: true, endedPeriodName: null },
     ]);
   });
 });

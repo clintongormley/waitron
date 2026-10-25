@@ -115,15 +115,27 @@ allow.
 
 ## A dish sent after its period ended {#after-period}
 
+On the till, an unsent dish whose period ended earlier the same business day shows a warning sign
+and **Lunch ended**. When you send it from a table, or pay for, send or park the order at the
+counter, the till first lists such dishes and asks you to check with the kitchen.
+**Kitchen agreed — send** sends them, and **Remove them** takes them off the order. On a park the
+button reads **Kitchen agreed — save**. The same window opens when the box finds such a dish before
+the till has marked it.
+
+A dish that the period now running also sells is not marked and is sent as usual. A dish left from
+an earlier business day shows **Last orders have ended** and cannot be sent: at a table, **Remove**
+takes it off and **Keep** leaves it in the order unsent, and at the counter you can take payment
+only once it is removed.
+
 A dish sent after its period ended earlier the same business day, once the kitchen agreed, carries a mark
 with its period's name. On its kitchen ticket a line above it reads `** AFTER LUNCH — AGREED **`.
 On the kitchen screen, **Tickets** shows **After Lunch — agreed** on a row above it, and
-**Board** shows the same words on its card. The till cannot send such a dish yet.
+**Board** shows the same words on its card.
 
 Each department sets whether sending such a dish needs a manager, or a manager's PIN, with
 **Manager's PIN to send after a period ends** under **Courses and the kitchen** on its **Service**
-tab in the dashboard. Off, anyone who can send confirms with the kitchen. The setting takes effect
-once the till can send such a dish.
+tab in the dashboard. Off, anyone who can send confirms with the kitchen. When it is on and the
+person sending is not a manager, the till asks for a manager's PIN after **Kitchen agreed**.
 
 ## Request cooking from the till {#request-cooking}
 

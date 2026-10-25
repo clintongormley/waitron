@@ -5407,6 +5407,31 @@ mark, within one course or group heading; in the Board view each marked dish's c
 above the dish. The pass and expo show no mark. The kitchen ticket prints the same words in
 capitals between `**` above each such run; correction and MOVED slips print none.
 
+### The till's late-send mark and window
+
+An unsent dish whose period ended earlier the same business day carries "⚠ {period} ended"
+(`basket.period_ended`, `periodEndedMarker` in `apps/till/src/widgets/basket.ts`): the "⚠" hidden
+from screen readers, then the words, bold, `--wt-font-size-sm`, in `--wt-color-warning` on the
+line's own background, and a `--wt-space-1` bar in `--wt-color-warning` on the line's leading edge
+(`.period-ended-entry`). Colour and a symbol, never colour alone. It is a warning, not a block: it
+holds neither Pay nor Send. On the counter's basket wider than a phone, a marked dish's name and
+mark take the whole row and its quantity, price and buttons move to the row below, because the name
+column is too narrow for the mark. A dish from a menu neither running nor ended earlier the same
+business day keeps the blocked chip "Last orders have ended" (`.not-offered`).
+
+The window is `till-late-send-dialog` (`apps/till/src/widgets/late-send-dialog.ts`), a `wt-dialog`
+carrying `trackDialog()`. Its heading is "{period} has ended", or "{periods} have ended" with the
+names joined by `Intl.ListFormat`; then "Check with the kitchen before sending:" and the dishes,
+one per line as `dishLine` spells them ("2× Tortilla"). The footer holds Remove them (secondary)
+then Kitchen agreed — send (primary); on a counter Park the primary reads Kitchen agreed — save,
+because a park stores the order without sending it. The window holds a choice, not staged input,
+so it takes no draft scope and has no `*.unsaved.test.ts`; Escape or closing it sends nothing and
+removes nothing. The app draws one at a time (`lateSendWindow` in `apps/till/src/till-app.ts`).
+
+When Kitchen agreed is refused for want of `venue_service.manage`, the manager's PIN step reuses
+`till-supervisor-override-dialog` with `approverRole` `manager` and the people from
+`GET /api/service-day/authorizers`; that dialog registers its own digits with the leave coordinator.
+
 ### The notice strip (till)
 
 `till-notice-strip` (`apps/till/src/widgets/notice-strip.ts`) shows the box's staff notices on a

@@ -15,7 +15,7 @@ const menu = (id: string, orderable = true): TillZoneMenu => ({
   name: id,
   isDefault: id === "lunch",
   orderable,
-  sendable: true,
+  endedPeriodName: null,
   audience: "customer",
   versionId: "v1",
   structure: { members: [] },

@@ -262,6 +262,10 @@ only while all of them are still in the same group.
 line with no open station to make it are marked in the list at once, with a warning colour **and** a
 symbol, never colour alone. The detail, and today's choices (keep or remove; pick where it is made),
 are in the line window (3.7). Neither kind is ever sent; both stay in the list.
+(2026-10-25, A789 slice 4: a dish whose period ended earlier the same business day is marked
+"{period} ended", and Send all or Fire first opens a window asking the waiter to check with the
+kitchen; it is sent once they choose Kitchen agreed, after a manager's PIN where the department
+asks for one. See the [A789 design](2026-10-18-a789-last-orders-design.md) §3.2.)
 
 **The "Check before sending" window goes.** Send all sends straight away. Its other jobs move:
 - the bill choice is replaced by section 4;

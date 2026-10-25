@@ -811,7 +811,7 @@ answers are reachable only after a credential was proved and stay: `totp.require
 dashboard's code step, after a right password), `google.second_factor_required` (after a valid
 Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote and
 `GET /management-api/membership` when the password and code are right but the person lacks the
-permission, and from the drawer, refund, unpaid-departure and cancel overrides (`authorize`,
+permission, and from the drawer, refund, unpaid-departure, cancel and late-send overrides (`authorize`,
 `packages/identity/src/authorize.ts`) and the manual-refund confirmer when the PIN is right but the
 person lacks the permission). The adjustment approver answers `adjustment.approval_required` for a
 right PIN that the approval does not admit (`apps/server/src/adjustments-apply.ts`). Guards: the one-answer cases in `packages/identity/src/manager-login.test.ts` and

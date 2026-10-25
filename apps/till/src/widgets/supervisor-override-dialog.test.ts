@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import {
   TillSupervisorOverrideDialog,
   type OverrideConfirmDetail,
@@ -161,7 +162,7 @@ describe("till-supervisor-override-dialog", () => {
     expect(root(el).querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("maps any non-pin error code to the generic override.error copy, never the raw code", async () => {
+  it("maps any other code to the generic override.error copy, never the raw code", async () => {
     const { el } = await mount();
     await pick(el, "sup-1");
     el.error = "server.internal";
@@ -169,6 +170,15 @@ describe("till-supervisor-override-dialog", () => {
     const alert = root(el).querySelector('[role="alert"]');
     expect(alert!.textContent).toContain(t("override.error"));
     expect(alert!.textContent).not.toContain("server.internal");
+  });
+
+  it("says the approver may not do it when the parent passes authorization.not_permitted", async () => {
+    const { el } = await mount();
+    await pick(el, "sup-1");
+    el.error = "authorization.not_permitted";
+    await el.updateComplete;
+    const alert = root(el).querySelector('[role="alert"]');
+    expect(alert!.textContent!.trim()).toBe(codeMessage("authorization.not_permitted"));
   });
 });
 

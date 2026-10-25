@@ -308,7 +308,7 @@ function servedAs(menuItemId: string, productId: string) {
   return {
     audience: "customer" as const,
     orderable: true,
-    sendable: true,
+    endedPeriodName: null,
     structure: { members: [{ kind: "product" as const, menuItemId, productId }] },
     home: {
       shortcuts: [],
@@ -7666,7 +7666,7 @@ describe("till-app", () => {
   it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
     const homeFields = {
       orderable: true,
-      sendable: true,
+      endedPeriodName: null,
       audience: "customer" as const,
       structure: { members: [] },
       home: {

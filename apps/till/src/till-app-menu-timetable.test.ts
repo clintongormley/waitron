@@ -101,7 +101,7 @@ function offers(
       name: menu.name,
       isDefault: menu.id === defaultMenuId,
       orderable: true,
-      sendable: true,
+      endedPeriodName: null,
       audience: "customer",
       versionId: "v1",
       structure: {
@@ -139,7 +139,7 @@ function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenu
       menuId: menu.id,
       versionId: "v1",
       orderable: true,
-      sendable: true,
+      endedPeriodName: null,
     })),
     unavailable: { products: [], optionLabels: [] },
     ...(defaultMenuId === undefined ? {} : { defaultMenuId }),
@@ -579,7 +579,7 @@ describe("device and zone period memory", () => {
           menuId: menu.id,
           versionId: menu.versionId,
           orderable: menu.orderable,
-          sendable: menu.sendable,
+          endedPeriodName: menu.endedPeriodName,
         })),
         unavailable: { products: unavailable, optionLabels: [] },
       })),
@@ -665,7 +665,7 @@ describe("device and zone period memory", () => {
 });
 
 describe("period service at the counter", () => {
-  it("end-offset poll closes selection with unchanged service and versions, then marks grace expiry", async () => {
+  it("a poll that stops the running menu blocks its dish and holds Pay", async () => {
     const running = {
       ...BARRA,
       service: {
@@ -681,38 +681,16 @@ describe("period service at the counter", () => {
     await signIn(el);
     add(el, DESAYUNOS);
     await flush(el);
-    const grace = {
+    const expired = {
       ...running,
       defaultMenuId: null,
       menus: running.menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: true,
+        endedPeriodName: null,
         isDefault: false,
       })),
     };
-    api.listZoneOffers.mockResolvedValue(grace);
-    api.menuState.mockResolvedValue({
-      ...state([DESAYUNOS, ALMUERZO]),
-      service: running.service,
-      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
-        ...menu,
-        orderable: false,
-        sendable: true,
-      })),
-    });
-    await poll(el);
-    expect(counter(el).menus.every((menu) => !menu.orderable && menu.sendable)).toBe(true);
-    const screen = counter(el);
-    const grid = screen;
-    expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
-    expect(screen.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim()).toBe(
-      "Last orders have ended",
-    );
-    expect(screen.store.lines[0]?.blocked).toBeUndefined();
-    screen.store.setLineQuantity(0, "2");
-    expect(screen.store.lines[0]?.quantity).toBe("1");
-    const expired = { ...grace, menus: grace.menus.map((menu) => ({ ...menu, sendable: false })) };
     api.listZoneOffers.mockResolvedValue(expired);
     api.menuState.mockResolvedValue({
       ...state([DESAYUNOS, ALMUERZO]),
@@ -720,10 +698,16 @@ describe("period service at the counter", () => {
       menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: false,
+        endedPeriodName: null,
       })),
     });
     await poll(el);
+    const screen = counter(el);
+    const grid = screen;
+    expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim()).toBe(
+      "Last orders have ended",
+    );
     expect(screen.store.lines[0]?.blocked).toBe("period_ended");
     const basket = grid.shadowRoot!.querySelector("till-basket")!;
     expect(basket.shadowRoot!.textContent).toContain("Last orders have ended");
@@ -861,6 +845,55 @@ describe("period service at the counter", () => {
     expect(counter(el).store.lines.map((line) => [line.product.productId, line.quantity])).toEqual([
       ["Tostada", "1"],
     ]);
+  });
+
+  it("reads the offers again when a poll changes only which period ended", async () => {
+    const service = {
+      open: false,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    };
+    const endedAs = (name: string | null) => (menuId: string) =>
+      menuId === "desayunos" ? name : null;
+    const catalogue = (ended: (menuId: string) => string | null) => ({
+      ...BARRA,
+      service,
+      defaultMenuId: null,
+      menus: BARRA.menus.map((menu) => ({
+        ...menu,
+        isDefault: false,
+        orderable: false,
+        endedPeriodName: ended(menu.id),
+      })),
+    });
+    const polled = (ended: (menuId: string) => string | null) => ({
+      ...state([DESAYUNOS, ALMUERZO]),
+      service,
+      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
+        ...menu,
+        orderable: false,
+        endedPeriodName: ended(menu.menuId),
+      })),
+    });
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () => catalogue(endedAs("Breakfast"))),
+      listZoneOffers: vi.fn(async () => catalogue(endedAs("Breakfast"))),
+      menuState: vi.fn(async () => polled(endedAs("Breakfast"))),
+    });
+    await signIn(el);
+    await flush(el);
+    const reads = () =>
+      api.listDefaultZoneOffers.mock.calls.length + api.listZoneOffers.mock.calls.length;
+    const before = reads();
+    await poll(el);
+    expect(reads()).toBe(before);
+    api.listZoneOffers.mockResolvedValue(catalogue(endedAs(null)));
+    api.menuState.mockResolvedValue(polled(endedAs(null)));
+    await poll(el);
+    expect(reads()).toBe(before + 1);
   });
 
   it("refreshes unchanged versions on a period change, chooses the running menu and keeps every basket line", async () => {
@@ -1308,7 +1341,7 @@ describe("an open table's order", () => {
               menuId: menu.id,
               versionId: menu.versionId,
               orderable: menu.orderable,
-              sendable: menu.sendable,
+              endedPeriodName: menu.endedPeriodName,
             })),
             unavailable: { products: [], optionLabels: [] },
           }
@@ -1584,7 +1617,7 @@ describe("an open table's order", () => {
     expect(selected(el)).toBe("desayunos");
   });
 
-  it("end-offset table poll hides selection and retains sendable grace before expiry", async () => {
+  it("a table poll that stops the running menu blocks its dish and leaves nothing to send", async () => {
     const breakfast = {
       ...COMEDOR,
       service: {
@@ -1597,13 +1630,13 @@ describe("an open table's order", () => {
       },
       menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
-    const lunch = {
+    const ended = {
       ...breakfast,
       defaultMenuId: null,
       menus: COMEDOR.menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: true,
+        endedPeriodName: null,
         isDefault: false,
       })),
     };
@@ -1636,7 +1669,7 @@ describe("an open table's order", () => {
                 menuId: menu.id,
                 versionId: menu.versionId,
                 orderable: menu.orderable,
-                sendable: menu.sendable,
+                endedPeriodName: menu.endedPeriodName,
               })),
             }
           : state([DESAYUNOS, ALMUERZO], "desayunos"),
@@ -1656,20 +1689,17 @@ describe("an open table's order", () => {
     >("till-menu-browser")!;
     browser.store.addProduct({ ...menuOfferToTillProduct(offer(DESAYUNOS), "v1") }, "1");
     await flush(el);
-    current = lunch;
+    current = ended;
     await poll(el);
     expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
     expect(
       tableScreen(el).shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim(),
     ).toBe("Last orders have ended");
-    expect(browser.store.lines[0]?.blocked).toBeUndefined();
     browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
     browser.store.setLineQuantity(0, "2");
     expect(browser.store.lines.map((line) => [line.product.productId, line.quantity])).toEqual([
       ["Tostada", "1"],
     ]);
-    current = { ...lunch, menus: lunch.menus.map((menu) => ({ ...menu, sendable: false })) };
-    await poll(el);
     expect(browser.store.lines[0]?.blocked).toBe("period_ended");
     const sendButtons = tableScreen(el).shadowRoot!.querySelectorAll<
       HTMLElement & { disabled: boolean; variant: string }
@@ -1721,5 +1751,280 @@ describe("an open table's order", () => {
     await poll(el);
     expect(api.menuState.mock.calls.map((call) => call[0])).toContain("zone-comedor");
     expect(tableScreen(el).selectedMenuId).toBe("desayunos");
+  });
+});
+
+describe("a dish whose period ended earlier today", () => {
+  const breakfastRunning = {
+    open: true,
+    zoneOpen: true,
+    periodName: "Breakfast",
+    periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
+    keepOpen: null,
+    zoneKeepOpen: null,
+  };
+  const lunchRunning = {
+    ...breakfastRunning,
+    periodName: "Lunch",
+    periodOccurrenceKey: '["department","2026-10-12","Lunch","12:00"]',
+  };
+  /** Breakfast running (Desayunos orderable alone), or Lunch running with Breakfast ended earlier
+   * today; `endedName` null leaves Desayunos neither orderable nor ended. */
+  function catalogue(
+    base: ZoneOfferCatalogue,
+    phase: "breakfast" | "lunch",
+    endedName: string | null = "Breakfast",
+  ): ZoneOfferCatalogue {
+    return {
+      ...base,
+      service: phase === "breakfast" ? breakfastRunning : lunchRunning,
+      defaultMenuId: phase === "breakfast" ? "desayunos" : "almuerzo",
+      menus: base.menus.map((menu) => ({
+        ...menu,
+        isDefault: menu.id === (phase === "breakfast" ? "desayunos" : "almuerzo"),
+        orderable: phase === "breakfast" ? menu.id === "desayunos" : menu.id === "almuerzo",
+        endedPeriodName: phase === "lunch" && menu.id === "desayunos" ? endedName : null,
+      })),
+    };
+  }
+  const polled = (current: ZoneOfferCatalogue) => ({
+    ...state([DESAYUNOS, ALMUERZO], current.defaultMenuId ?? undefined),
+    service: current.service,
+    menus: current.menus.map((menu) => ({
+      menuId: menu.id,
+      versionId: menu.versionId,
+      orderable: menu.orderable,
+      endedPeriodName: menu.endedPeriodName,
+    })),
+  });
+  /** Lunch also sells Desayunos' dish, as a running menu sells the caña. */
+  const sharedDish = (base: ZoneOfferCatalogue): ZoneOfferCatalogue => ({
+    ...base,
+    offers: [
+      ...base.offers,
+      { ...offer(ALMUERZO), id: "offer-almuerzo-toast", productId: DESAYUNOS.product },
+    ],
+  });
+
+  async function counterAt(base: ZoneOfferCatalogue, endedName: string | null = "Breakfast") {
+    let current = catalogue(base, "breakfast");
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () => current),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => polled(current)),
+    });
+    await signIn(el);
+    add(el, DESAYUNOS);
+    await flush(el);
+    current = catalogue(base, "lunch", endedName);
+    await poll(el);
+    return el;
+  }
+  const basketRoot = (el: TillApp) =>
+    counter(el).shadowRoot!.querySelector("till-basket")!.shadowRoot!;
+  const payHeld = (el: TillApp) =>
+    counter(el).shadowRoot!.querySelector<HTMLElement & { held: boolean }>("till-tender-pay")!.held;
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "is marked at the counter and does not hold Pay (%s)",
+    async (locale) => {
+      const previousLocale = currentLocale();
+      try {
+        const el = await counterAt(BARRA);
+        setLocale(locale);
+        counter(el).store.emit("changed");
+        await flush(el);
+        expect(counter(el).store.lines[0]?.blocked).toBeUndefined();
+        expect(
+          basketRoot(el)
+            .querySelector("[data-period-ended]")
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim(),
+        ).toBe(locale === "en-GB" ? "⚠ Breakfast ended" : "⚠ Ha terminado Breakfast");
+        expect(payHeld(el)).toBe(false);
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it("is not marked when the running menu also sells it", async () => {
+    const el = await counterAt(sharedDish(BARRA));
+    expect(counter(el).store.lines[0]?.blocked).toBeUndefined();
+    expect(basketRoot(el).querySelector("[data-period-ended]")).toBeNull();
+    expect(payHeld(el)).toBe(false);
+  });
+
+  it("from a menu neither running nor ended today stays blocked and holds Pay", async () => {
+    const el = await counterAt(BARRA, null);
+    expect(counter(el).store.lines[0]?.blocked).toBe("period_ended");
+    expect(basketRoot(el).querySelector("[data-period-ended]")).toBeNull();
+    expect(basketRoot(el).textContent).toContain("Last orders have ended");
+    expect(payHeld(el)).toBe(true);
+  });
+
+  describe("on a table", () => {
+    const table = {
+      id: "t2",
+      label: "2",
+      zoneId: "zone-comedor",
+      state: "open-tab",
+      hasOpenTab: true,
+      tabLineCount: 0,
+      tabTotal: "0.00",
+      pendingDeliveries: 0,
+      pendingToServe: 0,
+      readyToServe: 0,
+      timingBand: "fresh",
+      nextReservation: null,
+      today: null,
+      signals: [],
+      party: {
+        kitchenNote: { scope: { partyId: "party-a" }, note: null, revision: 0, ownerRevision: 1 },
+        id: "party-a",
+        revision: 1,
+        guestCount: 2,
+        state: "open" as const,
+        mainBillId: "wo-7",
+        outstanding: "0.00",
+        billCount: 1,
+        tableIds: ["t2"],
+        unsentDrafts: [],
+        reminder: null,
+      },
+    };
+    const COMEDOR = offers("zone-comedor", [DESAYUNOS, ALMUERZO], "desayunos", "table_tab");
+
+    /** Opens the table during Breakfast; `lunch` polls into Lunch with `endedName` as
+     * Desayunos' ended period. */
+    async function openTable() {
+      let current = catalogue(COMEDOR, "breakfast");
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
+        listZoneOffers: vi.fn(async (zoneId: string) =>
+          zoneId === "zone-comedor" ? current : BARRA,
+        ),
+        getTablesState: vi.fn().mockResolvedValue([table]),
+        listZones: vi.fn().mockResolvedValue([
+          {
+            id: "zone-comedor",
+            name: "Comedor",
+            displayOrder: 0,
+            active: true,
+            serviceMode: "table_tab",
+          },
+        ]),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+        listDrafts: drafts.listDrafts,
+        saveDraft: drafts.saveDraft,
+        submitDraft: drafts.submitDraft,
+        menuState: vi.fn(async (zoneId: string) =>
+          zoneId === "zone-comedor" ? polled(current) : state([DESAYUNOS, ALMUERZO], "desayunos"),
+        ),
+      });
+      await signIn(el);
+      emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+        tableId: "t2",
+        seated: true,
+      });
+      await flush(el);
+      const screen = () =>
+        el.shadowRoot!.querySelector<HTMLElement>("till-table-order-screen")!.shadowRoot!;
+      const browser = screen().querySelector<
+        HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
+      >("till-menu-browser")!;
+      const lunch = async (endedName: string | null = "Breakfast") => {
+        current = catalogue(COMEDOR, "lunch", endedName);
+        await poll(el);
+      };
+      const marks = () =>
+        [...screen().querySelectorAll("till-basket")].flatMap((basket) => [
+          ...basket.shadowRoot!.querySelectorAll("[data-period-ended]"),
+        ]);
+      return { el, screen, browser, lunch, marks };
+    }
+
+    it("marks the draft line and leaves Send all enabled", async () => {
+      const { el, screen, browser, lunch, marks } = await openTable();
+      browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+      await flush(el);
+      await lunch();
+      expect(browser.store.lines[0]?.blocked).toBeUndefined();
+      expect(marks().map((mark) => mark.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+        "⚠ Breakfast ended",
+      ]);
+      expect(screen().querySelector("[data-flag-remove]")).toBeNull();
+      const sendAll = screen().querySelector<HTMLElement & { disabled: boolean; variant: string }>(
+        '[data-draft-action="send-all"]',
+      )!;
+      expect(sendAll.disabled).toBe(false);
+      expect(sendAll.variant).toBe("primary");
+    });
+
+    /** A line sent earlier and recalled into the person's draft, from Desayunos' offer. */
+    function seedRecalled(): void {
+      const line: import("./api/client.js").RecalledDraftLine["source"]["line"] = {
+        changesAfterSending: null,
+        id: "sent-toast",
+        name: DESAYUNOS.product,
+        productId: DESAYUNOS.product,
+        parentProductId: null,
+        menuItemId: `offer-${DESAYUNOS.id}`,
+        lineNo: 1,
+        parentLineNo: null,
+        quantity: "1",
+        priceQuantity: "1",
+        unitPrecision: 0,
+        unitPriceGross: "3.00",
+        listUnitPriceGross: "3.00",
+        servedAt: null,
+        courseId: null,
+        sentAt: null,
+        firedAt: null,
+        state: null,
+        stationId: null,
+        movable: true,
+        groupId: null,
+        note: null,
+        listId: null,
+      };
+      drafts.drafts.push({
+        id: "draft-recalled",
+        partyId: "party-a",
+        billId: "wo-7",
+        ownerId: "p1",
+        ownerName: "Ana",
+        revision: 2,
+        takenOverFrom: null,
+        lines: [
+          {
+            id: "reference-sent-toast",
+            sourceLineId: "sent-toast",
+            source: { line, extras: [], netAmount: "2.48" },
+            quantity: "1",
+            note: null,
+            courseId: null,
+            makeAt: null,
+            noMerge: true,
+            unavailable: false,
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
+          },
+        ],
+      });
+    }
+
+    it("neither marks nor flags a recalled line whose menu ended today", async () => {
+      seedRecalled();
+      const { screen, browser, lunch, marks } = await openTable();
+      expect(browser.store.lines.map((line) => line.source?.line.id)).toEqual(["sent-toast"]);
+      await lunch();
+      expect(browser.store.lines[0]?.blocked).toBeUndefined();
+      expect(marks()).toEqual([]);
+      expect(screen().querySelector("[data-flag-remove]")).toBeNull();
+    });
   });
 });

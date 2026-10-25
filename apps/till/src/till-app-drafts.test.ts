@@ -116,7 +116,7 @@ function catalogue(version: string, prices: Record<string, string> = {}): ZoneOf
         name: "Lunch",
         isDefault: true,
         orderable: true,
-        sendable: true,
+        endedPeriodName: null,
         audience: "customer",
         versionId: version,
         structure: {
@@ -4904,7 +4904,7 @@ describe("till-app: other people's drafts and taking one over", () => {
           keepOpen: null,
           zoneKeepOpen: null,
         },
-        menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
+        menus: [{ menuId: "lunch", versionId, orderable: true, endedPeriodName: null }],
         unavailable: { products: [], optionLabels: [] },
       });
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
@@ -4972,7 +4972,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       keepOpen: null,
       zoneKeepOpen: null,
     },
-    menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
+    menus: [{ menuId: "lunch", versionId, orderable: true, endedPeriodName: null }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
 
@@ -5696,7 +5696,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       keepOpen: null,
       zoneKeepOpen: null,
     },
-    menus: [{ menuId: "lunch", versionId: "v1", orderable: true, sendable: true }],
+    menus: [{ menuId: "lunch", versionId: "v1", orderable: true, endedPeriodName: null }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
 
@@ -6142,7 +6142,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
         keepOpen: null,
         zoneKeepOpen: null,
       },
-      menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
+      menus: [{ menuId: "lunch", versionId, orderable: true, endedPeriodName: null }],
       unavailable: { products: [], optionLabels: [] },
     });
     const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");

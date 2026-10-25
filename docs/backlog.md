@@ -1354,14 +1354,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
   name and a latest date — left open by A506-5, #1603.
 
-- **A789 — last orders without an offset: a period is when its menu can be ordered**
-  APPROVED 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by default);
-  building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
-  retired) landed in #2047; slice 3 (a confirmed late send accepted and marked; the
-  manager's-PIN setting is per department) landed in #2051;
-  slice 4 (the till's window) next.
-  [Detail](backlog/service-periods.md#a789--last-orders-without-an-offset-a-period-is-when-its-menu-can-be-ordered)
-
 - **The start-time part of the business-day check's `transition_strip` reason never decides it**
   (`inStrip(minutes(startsAt))`, `business-day-schedule.ts`): `endpoint_day` wins first, and a
   mutation deleting it left 95 of 95 tests passing. Delete it or give it a case that needs it — left
@@ -1376,6 +1368,20 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   or a recalled dish's added extras are priced as `ADDED_EXTRAS_ONLY` and skip the late check
   (`priceOrderLines`, `apps/server/src/working-order.ts`), so such an extra made at its own station
   prints and shows unmarked. Left open by A789 slice 3, #2051 (plan D25).
+
+- **A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave
+  the zone's Keep open dialog stuck.** The PIN dialog hides itself for good, but `till-keep-open`
+  ignores its cancel while busy (`apps/till/src/widgets/keep-open.ts`); a wrong or throttled PIN
+  then keeps the dialog's people set, so the Keep open dialog stays on screen as busy, with every
+  button disabled and Escape and close refused (`beforeClose`, `keep-open-dialog.ts`), under a PIN
+  dialog nobody can see. Moving to another zone clears it. A789 slice 4 fixed the same shape for the
+  late-send PIN only. Read in the code, not run. Left open by A789 slice 4.
+
+- **A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table
+  without signing out**, and a send's refusal can open the window after the waiter has left the
+  table; Kitchen agreed then answers "table.error" (`#sendDraft`, `apps/till/src/till-app.ts`). Close
+  both when the table changes, and open the refusal's window only on the table that sent. Read in
+  the code, not run. Left open by A789 slice 4.
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
@@ -1631,6 +1637,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   slice 3's look); not caused by that slice.
   [Detail](backlog/kitchen.md#a1087-kitchen-tickets-print-a-whole-quantity-with-three-decimals)
 
+- **A1092. The kitchen screen once showed only some orders after a switch to Spanish.** Seen,
+  2026-10-25 (A789 slice 4's look, `60` and `61` in `~/waitron-campaign-c/a789-4-shots/`): it showed
+  orders #2 and #4 while the station's queue also held #1 and #7; a reload brought them back and a
+  second switch did not lose them. Cause not found; that slice did not change the kitchen screen.
+
 - **KDS operations — low priority (A9)** — Gaps: a routing audit view (a routing cell keeps no
   record of who changed it or when — the most useful to close); no station `type`/`kind`;
   single-target only. [Detail](backlog/kitchen.md#kds-operations--low-priority-a9)
@@ -1803,6 +1814,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   are out of sight; the bar scrolls inside itself, while the page itself does not scroll sideways.
   A handheld's top bar fits at the same width. Slice 2 did not change the top bar,
   so I believe it predates it.
+
+- **A1093. Handheld 1 sometimes shows its zone tabs with no floor map until a zone tab is
+  tapped**, after sign-in and after a send. Seen, 2026-10-25 (A789 slice 4's look, `x-hl-after.png`,
+  `10`, `11`, `49` and `50` in `~/waitron-campaign-c/a789-4-shots/`), also before any period had
+  ended. Origin not checked.
+
+- **A1094. After a dialog is closed with Escape, the next till dialog draws a blue focus ring around
+  the whole dialog** in the light theme; a first opening draws none. Seen, 2026-10-25 (A789 slice
+  4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
+  the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
 
 - **A1057. A handheld whose profile allows no zones shows a blank Floor.** Seen, 2026-10-24 (A797
   slice 4's finish review, a browser probe on the branch): a till in that state shows the

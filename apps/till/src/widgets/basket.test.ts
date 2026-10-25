@@ -690,6 +690,33 @@ describe("till-basket", () => {
     }
   });
 
+  it("shows a block rather than the ended-period mark on a line that has both", async () => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale("en-GB");
+      const store = new WorkingOrderStore();
+      store.addProduct({ ...cafe, id: "soup", name: "Soup" }, "1");
+      store.addProduct({ ...cafe, id: "toast", name: "Toast" }, "1");
+      const breakfast = { menuId: "breakfast", periodName: "Breakfast" };
+      store.setEndedPeriods([breakfast, breakfast]);
+      store.setBlocked(["extra_removed", undefined]);
+      const { el } = await mountWidget<TillBasket>("till-basket", { store });
+      const entries = [...el.shadowRoot!.querySelectorAll(".entry")];
+      expect(
+        entries.map((entry) => [
+          (entry.querySelector(".line > .name")?.textContent ?? "").replace(/\s+/g, " ").trim(),
+          entry.querySelector("[data-period-ended]") !== null,
+          entry.classList.contains("period-ended-entry"),
+        ]),
+      ).toEqual([
+        ["Soup An extra or choice has changed", false, false],
+        ["Toast ⚠ Breakfast ended", true, true],
+      ]);
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("marks a line whose dish is sold only as an extra, in English and in Spanish", async () => {
     const previousLocale = currentLocale();
     try {
@@ -1308,6 +1335,47 @@ describe("till-basket: stacked", () => {
   it("keeps the name beside the controls when not stacked", async () => {
     const { name, stepper } = await rowOf(false);
     expect(name.bottom).toBeGreaterThan(stepper.top);
+  });
+});
+
+describe("till-basket: the ended-period mark", () => {
+  /** The counter's basket at 1280 px wide, and a phone's, which stacks each name above its
+   * controls. */
+  it.each([
+    ["the counter at 1280", "396px", false],
+    ["a phone at 390", "374px", true],
+  ] as const)("keeps the Spanish mark on one line in %s", async (_where, width, stacked) => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale("es-ES");
+      const store = new WorkingOrderStore();
+      for (const name of ["Croquettes", "Prawns", "Beer"])
+        store.addProduct({ ...cafe, id: name, name }, "1");
+      const open = { menuId: "open", periodName: "Open" };
+      store.setEndedPeriods([open, open, open]);
+      const { el } = await mountWidget<TillBasket>("till-basket", {
+        store,
+        lineDetails: true,
+        stacked,
+      });
+      el.style.width = width;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const marks = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-period-ended]")];
+      expect(marks.map((mark) => mark.textContent!.replace(/\s+/g, " ").trim())).toEqual(
+        Array(3).fill("⚠ Ha terminado Open"),
+      );
+      const right = el.getBoundingClientRect().right;
+      for (const mark of marks) {
+        const wrapped = mark.getBoundingClientRect().height;
+        mark.style.whiteSpace = "nowrap";
+        const oneLine = mark.getBoundingClientRect();
+        mark.style.whiteSpace = "";
+        expect(wrapped).toBe(oneLine.height);
+        expect(oneLine.right).toBeLessThanOrEqual(right);
+      }
+    } finally {
+      setLocale(previousLocale);
+    }
   });
 });
 

@@ -866,6 +866,12 @@ export interface DiscardedDraft {
   party: BillParty;
 }
 
+/** The ended menus a send confirms the kitchen agreed to, with a manager's PIN where one is needed. */
+export interface LateSend {
+  menuIds: string[];
+  override?: { personId: string; pin: string };
+}
+
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
@@ -880,6 +886,7 @@ export interface DraftSubmission extends GroupCommand {
   }[];
   joinGroupId?: string;
   billId?: string;
+  lateSend?: LateSend;
 }
 
 /** The groups placed, and the draft as it is left: null once every line was sent. */
@@ -2803,6 +2810,7 @@ export class TillApi {
     kitchenNote: string | null | undefined,
     guests: number | null | undefined,
     expectedEdit: BillEditExpected | null,
+    lateSend?: LateSend,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2814,6 +2822,7 @@ export class TillApi {
       kitchenNote,
       ...(guests === undefined ? {} : { guests }),
       expectedEdit,
+      ...(lateSend === undefined ? {} : { lateSend }),
     });
   }
 
@@ -2839,6 +2848,7 @@ export class TillApi {
     receiptLanguage?: string;
     kitchenNote?: string | null;
     guests?: number | null;
+    lateSend?: LateSend;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
@@ -3010,6 +3020,7 @@ export class TillApi {
     zoneId?: string;
     label?: string;
     kitchenNote?: string | null;
+    lateSend?: LateSend;
   }): Promise<{
     id: string;
     orderNumber: number;
@@ -3119,6 +3130,7 @@ export class TillApi {
       label?: string;
       revision: number;
       expectedEdit: BillEditExpected | null;
+      lateSend?: LateSend;
     },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(`/api/working-orders/${id}`, "PUT", req);

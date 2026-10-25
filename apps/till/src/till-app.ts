@@ -11,8 +11,15 @@ import {
   type AllergyConfirmDetail,
   type AllergyFieldRefusal,
 } from "./widgets/party-allergy-dialog.js";
-import type { BillEditExpected, BillUnsent, Tender } from "./api/client.js";
+import type { BillEditExpected, BillUnsent, LateSend, Tender } from "./api/client.js";
 import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
+import {
+  endedPeriodOf,
+  isLateSendManagerRefusal,
+  lateSendAsked,
+  type EndedPeriod,
+  type LateSendAsked,
+} from "./state/late-send.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
@@ -147,7 +154,7 @@ import "./screens/till-table-order-screen.js";
 import { offeredReceiptLanguage, shownReceiptLanguage } from "./widgets/receipt-language.js";
 import "./widgets/station-choice-dialog.js";
 import "./widgets/department-transfers.js";
-import { lineProductName } from "./widgets/product-name.js";
+import { lineProductName, productUnit, soldByTheUnit } from "./widgets/product-name.js";
 import { optionAnswers } from "./widgets/option-snapshot.js";
 import type {
   InvoiceEmailRefusal,
@@ -180,6 +187,7 @@ import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
 import "./widgets/supervisor-override-dialog.js";
+import type { OverrideConfirmDetail } from "./widgets/supervisor-override-dialog.js";
 import { CarriedApproval, type CarriedApprover } from "./state/carried-approval.js";
 import "./widgets/adjustment-dialog.js";
 import "./widgets/cancel-item-dialog.js";
@@ -264,6 +272,8 @@ import {
   type Submission,
 } from "./state/bill-payment.js";
 import "./widgets/basket-refresh-dialog.js";
+import "./widgets/late-send-dialog.js";
+import type { LateSendDish } from "./widgets/late-send-dialog.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
@@ -501,6 +511,8 @@ interface PreparedTableAllergy {
   key: string;
   current: () => boolean;
   api: TillApi;
+  /** The party's allergies as last read, a review in the dialog included. */
+  read: () => PartyAllergyRead | undefined;
 }
 
 /**
@@ -517,7 +529,19 @@ type DraftFollowUp =
   | "mark-unsellable"
   | "recheck-dead-ends"
   | { landedOn: string }
+  | { lateSend: LateSendAsked; answered?: AnsweredAllergy }
+  | { approval: LateSendApprovalAsked; answered?: AnsweredAllergy }
   | undefined;
+
+/** The allergy answer a refused submission carried, with the party revision and the dishes it was
+ * given against. */
+interface AnsweredAllergy {
+  patch: AllergyPatch;
+  revision: number;
+  dishes: string;
+}
+
+const dishesKey = (view: PartyAllergyRead) => JSON.stringify(view.dishes);
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
  * when its read failed. Undefined when the operator session it was opened in has ended. */
@@ -1197,6 +1221,29 @@ const TYPED_FIELDS = new Set(["tendered", "amount", "shareOf", "addedTip"]);
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
 const APPROVER_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 
+interface LateSendApprovalAsked {
+  lateSend: LateSend;
+  pinError: string | undefined;
+}
+
+/** A refusal of a request that carried `lateSend` asking for a manager's PIN, with the PIN's own
+ * refusal to show in the dialog when the request carried one. */
+function lateSendApprovalAsked(
+  error: unknown,
+  lateSend: LateSend | undefined,
+): LateSendApprovalAsked | undefined {
+  if (lateSend === undefined) return undefined;
+  if (isLateSendManagerRefusal(error))
+    return {
+      lateSend,
+      pinError: lateSend.override === undefined ? undefined : "authorization.not_permitted",
+    };
+  const refused = asRefusal(error)?.refused;
+  return lateSend.override !== undefined && refused !== undefined && APPROVER_REFUSALS.has(refused)
+    ? { lateSend, pinError: refused }
+    : undefined;
+}
+
 /** Refusals after which the bill may already be cancelled: no answer, and `working_order.not_placed`,
  * which a cancel gets once an earlier cancel of the same bill has been made. */
 const CANCEL_MAY_HAVE_LANDED = new Set(["network", "working_order.not_placed"]);
@@ -1429,7 +1476,8 @@ function isVersionRefusal(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "menu.version_changed";
 }
 
-/** Whether menu membership, versions or selection/sending eligibility differ from the loaded snapshot. */
+/** Whether menu membership, versions, selection eligibility or ended periods differ from the loaded
+ * snapshot. */
 function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"]): boolean {
   return (
     loaded.length !== polled.length ||
@@ -1438,7 +1486,7 @@ function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"])
       return (
         own?.versionId !== menu.versionId ||
         own.orderable !== menu.orderable ||
-        own.sendable !== menu.sendable
+        own.endedPeriodName !== menu.endedPeriodName
       );
     })
   );
@@ -1454,7 +1502,8 @@ class ZoneOfferIndex {
   byId = new Map<string, TillMenuOffer>();
   versions = new Map<string, string>();
   selectable = new Set<string>();
-  sendable = new Set<string>();
+  /** Each menu whose period ended earlier today, to that period's name. */
+  ended = new Map<string, string>();
   /** False after a load that failed, when there is nothing to judge a line against. */
   loaded = false;
   liveFields: string | undefined;
@@ -1466,7 +1515,11 @@ class ZoneOfferIndex {
     this.selectable = new Set(
       catalogue.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
     );
-    this.sendable = new Set(catalogue.menus.filter((menu) => menu.sendable).map((menu) => menu.id));
+    this.ended = new Map(
+      catalogue.menus.flatMap((menu) =>
+        menu.endedPeriodName === null ? [] : [[menu.id, menu.endedPeriodName] as const],
+      ),
+    );
     this.#loaded = catalogue.offers;
     this.#unavailableKey = null;
     this.#setLive(catalogue.offers);
@@ -1505,9 +1558,16 @@ class ZoneOfferIndex {
       if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
       return (
         lineBlock(line, offer)?.reason ??
-        (offer !== undefined && !this.sendable.has(offer.menuId) ? "period_ended" : undefined)
+        (offer !== undefined && !this.selectable.has(offer.menuId) && !this.ended.has(offer.menuId)
+          ? "period_ended"
+          : undefined)
       );
     });
+  }
+
+  /** The ended period each line is marked with; nothing while the offers could not be read. */
+  endedPeriods(lines: readonly OrderLine[]): (EndedPeriod | undefined)[] {
+    return lines.map((line) => (this.loaded ? endedPeriodOf(line, this) : undefined));
   }
 }
 
@@ -2517,6 +2577,29 @@ export class TillApp extends LitElement {
     store: WorkingOrderStore;
     lines: readonly OrderLine[];
   };
+  /** The window asking whether the kitchen agreed to dishes whose period ended: `retry` runs the
+   * action again carrying the confirmation of `menuIds`, `remove` takes the listed dishes out of the
+   * order. */
+  @state() private lateSendWindow: {
+    dishes: readonly LateSendDish[];
+    periodNames: readonly [string, ...string[]];
+    menuIds: string[];
+    purpose: "send" | "save";
+    retry: (lateSend: LateSend) => Promise<void>;
+    remove: () => void;
+  } | null = null;
+  /** The manager's PIN a late send asks for when the department needs one: `retry` runs the action
+   * again carrying `lateSend` with the manager's override. */
+  @state() private lateSendApproval: {
+    authorizers: StaffMember[];
+    error: string | null;
+    lateSend: LateSend;
+    busy: boolean;
+    /** Closed by the waiter while its send was in flight; the dialog cannot reopen, so the send's
+     * answer goes to the app's error line instead. */
+    dismissed: boolean;
+    retry: (lateSend: LateSend) => Promise<void>;
+  } | null = null;
   /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
    * against a menu version staff have not yet reviewed. */
   @state() private basketHeld = false;
@@ -3739,10 +3822,14 @@ export class TillApp extends LitElement {
     this.allergyDialog = null;
   }
 
+  /** `answered` is sent again in place of the question while the party's revision and the dishes are
+   * as it was given against; otherwise the question is asked afresh, and a manager's PIN dialog
+   * waiting on this rerun closes, so no window stays open under it. */
   async #prepareTableAllergy(
     partyId: string,
     target: AllergySendTarget,
     live: () => boolean,
+    answered?: AnsweredAllergy,
   ): Promise<PreparedTableAllergy | null> {
     if (this.allergyDialog !== null) return null;
     const generation = ++this.#allergyGeneration;
@@ -3788,8 +3875,15 @@ export class TillApp extends LitElement {
       partyId,
       target,
       { key, isCurrent: current },
-      (view, key) =>
-        new Promise((resolve) => {
+      (view, key) => {
+        if (
+          answered !== undefined &&
+          view.snapshot.revision === answered.revision &&
+          dishesKey(view) === answered.dishes
+        )
+          return Promise.resolve({ kind: "ready", patch: answered.patch });
+        if (this.lateSendApproval?.busy) this.lateSendApproval = null;
+        return new Promise((resolve) => {
           this.allergyDialog = {
             key,
             view,
@@ -3798,17 +3892,19 @@ export class TillApp extends LitElement {
             busy: false,
             review: () => previewApi.previewPartyAllergy(partyId, target),
           };
-        }),
+        });
+      },
     );
     if (result.kind === "unread") this.errorKey = "table.error";
     return result.kind === "ready" && preview !== undefined
-      ? { ...result, revision: preview.snapshot.revision, key, current, api }
+      ? { ...result, revision: preview.snapshot.revision, key, current, api, read: () => preview }
       : null;
   }
 
   async #writeTableAllergy<T>(
     prepared: PreparedTableAllergy,
     write: (command: AllergyCommand, signal: AbortSignal) => Promise<T>,
+    lateSend?: LateSend,
   ): Promise<{ value: T } | null> {
     let command: AllergyCommand = {
       submissionId: crypto.randomUUID(),
@@ -3838,7 +3934,10 @@ export class TillApp extends LitElement {
           (refusal !== undefined &&
             (DRAFT_REFUSALS.has(refusal.refused) ||
               UNSELLABLE_LINE_REFUSALS.has(refusal.refused) ||
-              refusal.refused === "station.no_replacement"))
+              refusal.refused === "station.no_replacement" ||
+              refusal.refused === "menu_period.ended" ||
+              isLateSendManagerRefusal(error) ||
+              (lateSend?.override !== undefined && APPROVER_REFUSALS.has(refusal.refused))))
         ) {
           this.#closeAllergyDialog(false, prepared.key);
           throw error;
@@ -5518,7 +5617,11 @@ export class TillApp extends LitElement {
       this.#pendingCounterMenus = catalogue.menus;
       this.menus = this.menus.map((menu) => {
         const live = catalogue.menus.find((entry) => entry.id === menu.id);
-        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+        return {
+          ...menu,
+          orderable: live?.orderable ?? false,
+          endedPeriodName: live?.endedPeriodName ?? null,
+        };
       });
       this.#counterMenuPending = true;
     } else {
@@ -5565,7 +5668,11 @@ export class TillApp extends LitElement {
       this.#pendingTableMenus = catalogue.menus;
       this.tableMenus = this.tableMenus.map((menu) => {
         const live = catalogue.menus.find((entry) => entry.id === menu.id);
-        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+        return {
+          ...menu,
+          orderable: live?.orderable ?? false,
+          endedPeriodName: live?.endedPeriodName ?? null,
+        };
       });
       this.#tableMenuPending = true;
     } else {
@@ -5612,6 +5719,7 @@ export class TillApp extends LitElement {
   #markRounds(forget = false): void {
     for (const round of this.#markedRounds) {
       round.setBlocked(this.#tableOffers.blocks(round.lines));
+      round.setEndedPeriods(this.#tableOffers.endedPeriods(round.lines));
       if (forget && round.lines.every((line) => line.blocked === undefined))
         this.#markedRounds.delete(round);
     }
@@ -5628,6 +5736,7 @@ export class TillApp extends LitElement {
     if (store === undefined || !this.#tableOffers.loaded) return;
     const reasons = this.#tableOffers.blocks(store.lines);
     store.setBlocked(reasons, notify);
+    store.setEndedPeriods(this.#tableOffers.endedPeriods(store.lines), notify);
     if (newer)
       store.setUnavailableOnServer(
         store.lines.map(
@@ -5682,6 +5791,7 @@ export class TillApp extends LitElement {
   #evaluateBasket(notify = true): void {
     const versions = this.#counterOffers.versions;
     this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines), notify);
+    this.#store.setEndedPeriods(this.#counterOffers.endedPeriods(this.#store.lines), notify);
     const unsaved = this.#store.lines.filter((line) => line.workingOrderLineId === undefined);
     this.basketStale = unsaved.some(
       (line) => line.blocked === undefined && isStale(line, versions),
@@ -6107,7 +6217,7 @@ export class TillApp extends LitElement {
    * kitchen without payment. The ticket's lines come from the server result, so a rejection leaves
    * the basket untouched on the counter.
    */
-  async #onConfirmPayment(event: Event, retried = false): Promise<void> {
+  async #onConfirmPayment(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
     if (this.#store.lines.some((line) => line.blocked === "period_ended")) {
@@ -6115,6 +6225,8 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#askInvoiceRecipientForLargeBill()) return;
+    const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -6124,6 +6236,7 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
+    const basketLines = [...this.#store.lines];
     const label = this.#store.label;
     const payload = this.#basketPayload();
     const sendsToKitchen = this.#paySendsToKitchen();
@@ -6138,7 +6251,7 @@ export class TillApp extends LitElement {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
       if (
-        !(await this.#syncIfDirty(id, lines, label)) ||
+        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -6156,6 +6269,7 @@ export class TillApp extends LitElement {
         this.#store.kitchenNote ?? undefined,
         guests,
         null,
+        ...(lateSend === undefined ? [] : ([lateSend] as const)),
       );
       if (session !== this.#operatorSession) return;
       this.result = result;
@@ -6167,7 +6281,14 @@ export class TillApp extends LitElement {
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed.
       if (session !== this.#operatorSession) return;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry);
+      // Awaited before `finally` so `submitting` stays set while the managers are read: a second
+      // Pay tap meanwhile cannot open the late-send window under the PIN dialog.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6196,14 +6317,35 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#onConfirmPayment(event, true),
+        this.#onConfirmPayment(event, true, lateSend),
       );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#onConfirmPayment(event, true);
+      await this.#onConfirmPayment(event, true, lateSend);
+  }
+
+  /** The late-send window over the counter basket's marked lines; answers whether it opened. */
+  #askLateSendAtCounter(
+    lateSend: LateSend | undefined,
+    retry: (lateSend: LateSend) => Promise<void>,
+    purpose: "send" | "save" = "send",
+  ): boolean {
+    return this.#openLateSendFromMarks(this.#store.lines, lateSend, purpose, retry, (listed) =>
+      this.#removeDraftLines(this.#store, listed),
+    );
+  }
+
+  #openCounterLateSend(
+    asked: LateSendAsked,
+    retry: (lateSend: LateSend) => Promise<void>,
+    purpose: "send" | "save" = "send",
+  ): void {
+    this.#openLateSend(asked.listed, asked.periods, purpose, retry, (listed) =>
+      this.#removeDraftLines(this.#store, listed),
+    );
   }
 
   /** Another till took a payment on the basket's order first: the held orders are read again, so
@@ -6221,12 +6363,12 @@ export class TillApp extends LitElement {
     ];
   }
 
-  async #onCollectCard(event: Event): Promise<void> {
+  async #onCollectCard(event: Event, lateSend?: LateSend): Promise<void> {
     // A tap ignored here is not counted and moves nothing.
     if (this.submitting) return;
     this.#cardAttemptsRunning++;
     try {
-      await this.#collectCard(event, false);
+      await this.#collectCard(event, false, lateSend);
     } finally {
       if (--this.#cardAttemptsRunning === 0) this.cardAttemptsOver++;
     }
@@ -6237,9 +6379,11 @@ export class TillApp extends LitElement {
    * `network_unavailable` comes back as data, not a throw: nothing was filed, so it is recorded in
    * {@link cardOutcome} and the basket stays, with no error banner.
    */
-  async #collectCard(event: Event, retried: boolean): Promise<void> {
+  async #collectCard(event: Event, retried: boolean, lateSend?: LateSend): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
     if (this.#askInvoiceRecipientForLargeBill()) return;
+    const retry = (confirmed: LateSend) => this.#onCollectCard(event, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -6254,6 +6398,7 @@ export class TillApp extends LitElement {
       : undefined;
     if (demoAttemptId !== undefined) this.#demoAttempt = { orderId: id, attemptId: demoAttemptId };
     const lines = this.#currentSaleLines();
+    const basketLines = [...this.#store.lines];
     const label = this.#store.label;
     const payload = this.#basketPayload();
     const sendsToKitchen = this.#paySendsToKitchen();
@@ -6267,7 +6412,7 @@ export class TillApp extends LitElement {
     let paid = false;
     try {
       if (
-        !(await this.#syncIfDirty(id, lines, label)) ||
+        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -6294,6 +6439,7 @@ export class TillApp extends LitElement {
             // Omitted, the server uses the paying device's chosen reader, else its profile's default.
             ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
             ...(demoAttemptId === undefined ? {} : { demoAttemptId }),
+            ...(lateSend === undefined ? {} : { lateSend }),
           }),
         id,
       );
@@ -6318,7 +6464,14 @@ export class TillApp extends LitElement {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
       if (session !== this.#operatorSession) return;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry);
+      // Awaited before `finally` so `submitting` stays set while the managers are read: a second
+      // Pay tap meanwhile cannot open the late-send window under the PIN dialog.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6353,13 +6506,15 @@ export class TillApp extends LitElement {
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
-      await this.#afterVersionRefusal(refreshed, retried, () => this.#collectCard(event, true));
+      await this.#afterVersionRefusal(refreshed, retried, () =>
+        this.#collectCard(event, true, lateSend),
+      );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#collectCard(event, true);
+      await this.#collectCard(event, true, lateSend);
   }
 
   #demoAttempt?: { orderId: string; attemptId: string };
@@ -7023,7 +7178,12 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
+  async #syncIfDirty(
+    id: string,
+    lines: SaleLine[],
+    label: string | undefined,
+    lateSend?: LateSend,
+  ): Promise<boolean> {
     if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     const session = this.#operatorSession;
@@ -7034,6 +7194,7 @@ export class TillApp extends LitElement {
         lines,
         label,
         revision: this.#store.revision,
+        ...(lateSend === undefined ? {} : { lateSend }),
       });
       if (session !== this.#operatorSession) return false;
       this.#store.markSaved(saved.revision);
@@ -7063,8 +7224,11 @@ export class TillApp extends LitElement {
     retried = false,
     refusalRetry = false,
     clearInactiveChoices = false,
+    lateSend?: LateSend,
   ): Promise<void> {
     if (this.placing) return;
+    const retry = (confirmed: LateSend) => this.#onPlaceOrder(false, false, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.placing = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -7075,6 +7239,7 @@ export class TillApp extends LitElement {
       session === this.#operatorSession &&
       api === this.api &&
       basketVisit === this.#store.loadGeneration;
+    const basketLines = [...this.#store.lines];
     if (!refusalRetry) this.errorKey = undefined;
     let reachedPlace = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
@@ -7116,7 +7281,7 @@ export class TillApp extends LitElement {
         const label = this.#store.label;
         const payload = this.#basketPayload();
         if (this.#store.persisted) {
-          if (!(await this.#syncIfDirty(id, lines, label)) || !current()) return;
+          if (!(await this.#syncIfDirty(id, lines, label, lateSend)) || !current()) return;
           // A refused save can precede a replay, but unsaved edits are a different placement.
           if (this.#basketPayload() !== this.#basketBaseline) {
             this.errorKey = "place.error";
@@ -7128,6 +7293,7 @@ export class TillApp extends LitElement {
             lines,
             label,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+            ...(lateSend === undefined ? {} : { lateSend }),
           });
           if (!current()) return;
           if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
@@ -7164,7 +7330,13 @@ export class TillApp extends LitElement {
       // about refunds.
       if (!current()) return;
       if (!isNetworkFailure(error)) this.#unconfirmedPlace = undefined;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry);
+      // Awaited before `finally` so `placing` stays set while the managers are read.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !refusalRetry &&
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
@@ -7189,10 +7361,12 @@ export class TillApp extends LitElement {
         ["waiting", "refresh.waiting_after_place"],
       ]);
     if (refreshed !== undefined)
-      await this.#afterVersionRefusal(refreshed, retried, () => this.#onPlaceOrder(true));
+      await this.#afterVersionRefusal(refreshed, retried, () =>
+        this.#onPlaceOrder(true, false, false, lateSend),
+      );
     if (recheck) {
       this.errorKey = "place.refused";
-      await this.#onPlaceOrder(retried, true, inactiveChoice);
+      await this.#onPlaceOrder(retried, true, inactiveChoice, lateSend);
     }
   }
 
@@ -8225,8 +8399,10 @@ export class TillApp extends LitElement {
     this.#pushDrill({ kind: "expo" });
   }
 
-  async #onParkOrder(event: Event, retried = false): Promise<void> {
+  async #onParkOrder(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     if (this.parking) return;
+    const retry = (confirmed: LateSend) => this.#onParkOrder(event, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry, "save")) return;
     this.parking = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -8236,6 +8412,7 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
+    const basketLines = [...this.#store.lines];
     this.errorKey = undefined;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let parked = false;
@@ -8254,7 +8431,7 @@ export class TillApp extends LitElement {
           if (session !== this.#operatorSession) return;
           this.#store.markSaved(saved.revision);
         } else if (
-          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label)) ||
+          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label, lateSend)) ||
           basketVisit !== this.#store.loadGeneration
         )
           return;
@@ -8264,6 +8441,7 @@ export class TillApp extends LitElement {
           lines,
           label,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+          ...(lateSend === undefined ? {} : { lateSend }),
         });
       }
       if (session !== this.#operatorSession) return;
@@ -8278,7 +8456,13 @@ export class TillApp extends LitElement {
       parked = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
-      if (
+      const asked = lateSendAsked(error, basketLines);
+      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
+      if (asked !== undefined) this.#openCounterLateSend(asked, retry, "save");
+      // Awaited before `finally` so `parking` stays set while the managers are read.
+      else if (approval !== undefined)
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
+      else if (
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
@@ -8299,14 +8483,16 @@ export class TillApp extends LitElement {
     if (languageUnsaved) this.errorKey = "receipt_language.held_unsaved";
     if (parked) void this.#refreshListsAfterWrite(session, [["held", "refresh.held_after_park"]]);
     if (refreshed !== undefined)
-      await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
+      await this.#afterVersionRefusal(refreshed, retried, () =>
+        this.#onParkOrder(event, true, lateSend),
+      );
     if (recheck) {
       this.errorKey = "held.park_error";
       if (
         (await this.#askCounterDeadEnds("place", false, inactiveChoice)) &&
         session === this.#operatorSession
       )
-        await this.#onParkOrder(event, true);
+        await this.#onParkOrder(event, true, lateSend);
     }
   }
 
@@ -11415,10 +11601,16 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #onSubmitDraft(event: Event): Promise<void> {
-    const { groups, joinGroupId, billId, store, sent, draft } = (
-      event as CustomEvent<Partial<SubmitDraftDetail>>
-    ).detail;
+  #onSubmitDraft(event: Event): Promise<void> {
+    return this.#sendDraft((event as CustomEvent<Partial<SubmitDraftDetail>>).detail);
+  }
+
+  async #sendDraft(
+    detail: Partial<SubmitDraftDetail>,
+    lateSend?: LateSend,
+    answered?: AnsweredAllergy,
+  ): Promise<void> {
+    const { groups, joinGroupId, billId, store, sent, draft } = detail;
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
     let party = this.orderParty;
@@ -11445,6 +11637,16 @@ export class TillApp extends LitElement {
       return;
     }
     if (store.sending) return;
+    if (
+      this.#openLateSendFromMarks(
+        sent.filter((line) => line.source === undefined),
+        lateSend,
+        "send",
+        (confirmed) => this.#sendDraft(detail, confirmed),
+        (listed) => this.#removeDraftLines(store, listed),
+      )
+    )
+      return;
     const partyId = party.id;
     const session = this.#operatorSession;
     const live = () => session === this.#operatorSession;
@@ -11468,11 +11670,33 @@ export class TillApp extends LitElement {
         sent,
         live,
         false,
+        lateSend,
+        answered,
       );
+      // Awaited before `finally` so `store.sending` stays set while the managers are read: a second
+      // Send meanwhile cannot open the late-send window under the PIN dialog.
+      if (typeof followUp === "object" && "approval" in followUp) {
+        const { approval, answered: carried } = followUp;
+        await this.#askLateSendApproval(approval.lateSend, approval.pinError, (confirmed) =>
+          this.#sendDraft(detail, confirmed, carried),
+        );
+        return;
+      }
     } finally {
       store.sending = false;
     }
     if (followUp === undefined) return;
+    if (typeof followUp === "object" && "lateSend" in followUp) {
+      const carried = followUp.answered;
+      this.#openLateSend(
+        followUp.lateSend.listed,
+        followUp.lateSend.periods,
+        "send",
+        (confirmed) => this.#sendDraft(detail, confirmed, carried),
+        (listed) => this.#removeDraftLines(store, listed),
+      );
+      return;
+    }
     if (followUp === "mark-unsellable") {
       await this.#markUnsellable(store);
       return;
@@ -11503,6 +11727,117 @@ export class TillApp extends LitElement {
     this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
     this.#returnToFloor();
+  }
+
+  #onLateSendAgreed(open: NonNullable<TillApp["lateSendWindow"]>): Promise<void> {
+    this.lateSendWindow = null;
+    return open.retry({ menuIds: open.menuIds });
+  }
+
+  async #askLateSendApproval(
+    lateSend: LateSend,
+    pinError: string | undefined,
+    retry: (lateSend: LateSend) => Promise<void>,
+  ): Promise<void> {
+    const open = this.lateSendApproval;
+    if (pinError !== undefined) {
+      if (open !== null && !open.dismissed)
+        this.lateSendApproval = { ...open, busy: false, error: pinError };
+      else {
+        this.lateSendApproval = null;
+        this.errorKey =
+          pinError === "pin.invalid" || pinError === "pin.throttled"
+            ? pinError
+            : { code: pinError };
+      }
+      return;
+    }
+    const session = this.#operatorSession;
+    const api = this.api;
+    try {
+      const authorizers = await api.serviceDayAuthorizers();
+      if (session !== this.#operatorSession || api !== this.api) return;
+      this.lateSendApproval = {
+        authorizers,
+        error: null,
+        lateSend: { menuIds: lateSend.menuIds },
+        busy: false,
+        dismissed: false,
+        retry,
+      };
+    } catch (error) {
+      if (session !== this.#operatorSession || api !== this.api) return;
+      this.lateSendApproval = null;
+      this.errorKey = { code: refusalOf(error, false).code };
+    }
+  }
+
+  async #onLateSendApproved(
+    open: NonNullable<TillApp["lateSendApproval"]>,
+    override: OverrideConfirmDetail,
+  ): Promise<void> {
+    if (this.lateSendApproval !== open || open.busy) return;
+    const sending = { ...open, busy: true, error: null };
+    this.lateSendApproval = sending;
+    await open.retry({ ...open.lateSend, override });
+    if (this.lateSendApproval === sending) this.lateSendApproval = null;
+  }
+
+  #onLateSendRemoved(open: NonNullable<TillApp["lateSendWindow"]>): void {
+    this.lateSendWindow = null;
+    open.remove();
+  }
+
+  /**
+   * Opens the late-send window over the lines marked with an ended period, unless `carried` already
+   * confirms every one of their menus. Answers whether it opened.
+   */
+  #openLateSendFromMarks(
+    lines: readonly OrderLine[],
+    carried: LateSend | undefined,
+    purpose: "send" | "save",
+    retry: (lateSend: LateSend) => Promise<void>,
+    remove: (listed: readonly OrderLine[]) => void,
+  ): boolean {
+    const marked = lines.filter((line) => line.endedPeriod !== undefined);
+    const [head, ...tail] = marked.map((line) => line.endedPeriod!);
+    const confirmed = new Set(carried?.menuIds);
+    if (head === undefined || [head, ...tail].every((period) => confirmed.has(period.menuId)))
+      return false;
+    this.#openLateSend(marked, [head, ...tail], purpose, retry, remove);
+    return true;
+  }
+
+  /** `periods` in the order they apply to `listed`; the window names each once. */
+  #openLateSend(
+    listed: readonly OrderLine[],
+    periods: readonly [EndedPeriod, ...EndedPeriod[]],
+    purpose: "send" | "save",
+    retry: (lateSend: LateSend) => Promise<void>,
+    remove: (listed: readonly OrderLine[]) => void,
+  ): void {
+    const first = periods[0].periodName;
+    const rest = new Set(periods.map((period) => period.periodName));
+    rest.delete(first);
+    this.lateSendWindow = {
+      dishes: listed.map((line) => ({
+        quantity: line.quantity,
+        name: lineProductName(line.product),
+        unitName: productUnit(line.product).name,
+        soldInEach: soldByTheUnit(line.product),
+      })),
+      periodNames: [first, ...rest],
+      menuIds: [...new Set(periods.map((period) => period.menuId))],
+      purpose,
+      retry,
+      remove: () => remove(listed),
+    };
+  }
+
+  /** As a line's own Remove does: a draft that can no longer be edited keeps them (`removeLine`). */
+  #removeDraftLines(store: WorkingOrderStore, listed: readonly OrderLine[]): void {
+    const indexes = listed.map((line) => store.lines.indexOf(line)).sort((a, b) => b - a);
+    for (const index of indexes) store.removeLine(index);
   }
 
   #draftRoutingRevision(store: WorkingOrderStore | null): number | null {
@@ -11608,11 +11943,14 @@ export class TillApp extends LitElement {
     sent: readonly OrderLine[],
     live: () => boolean,
     retried: boolean,
+    lateSend?: LateSend,
+    answered?: AnsweredAllergy,
   ): Promise<DraftFollowUp> {
     const { groups, joinGroupId, billId } = submission;
     this.errorKey = undefined;
     const saving = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
+    let carried: AnsweredAllergy | undefined;
     try {
       const saved = await sync.flush(saving.signal);
       if (!live()) return;
@@ -11639,6 +11977,7 @@ export class TillApp extends LitElement {
         party.id,
         { kind: "draft", draftId: sync.draftId, lineIds: ids },
         live,
+        answered,
       );
       if (allergy === null) return;
       const command: DraftSubmission = {
@@ -11655,20 +11994,53 @@ export class TillApp extends LitElement {
         })),
         ...(joinGroupId === undefined ? {} : { joinGroupId }),
         ...(billId === undefined ? {} : { billId }),
+        ...(lateSend === undefined ? {} : { lateSend }),
       };
       const draftId = sync.draftId;
-      const written = await this.#writeTableAllergy(allergy, (packet, signal) =>
-        allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal }),
+      const written = await this.#writeTableAllergy(
+        allergy,
+        (packet, signal) => {
+          const read = allergy.read();
+          carried =
+            packet.allergy === undefined || read === undefined
+              ? undefined
+              : {
+                  patch: packet.allergy,
+                  revision: packet.expectedPartyRevision,
+                  dishes: dishesKey(read),
+                };
+          return allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal });
+        },
+        lateSend,
       );
       if (written === null) return;
       submitted = written.value;
     } catch (error) {
       if (!live()) return;
+      const asked = lateSendAsked(error, sent);
+      const kept = carried === undefined ? {} : { answered: carried };
+      if (asked !== undefined) return { lateSend: asked, ...kept };
+      const approval = lateSendApprovalAsked(error, lateSend);
+      if (approval !== undefined) return { approval, ...kept };
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
         if (!live()) return;
-        if (outcome === "adopted" && !retried)
-          return this.#submitDraft(tabId, party, sync, submission, sent, live, true);
+        if (outcome === "adopted" && !retried) {
+          const given = carried ?? answered;
+          // A menu version change reconsiders the dishes, never the people: an answer that ticked a
+          // dish is asked again, while the guests and their allergies alone may be sent again.
+          return this.#submitDraft(
+            tabId,
+            party,
+            sync,
+            submission,
+            sent,
+            live,
+            true,
+            lateSend,
+            given?.patch.ticks.length === 0 ? given : undefined,
+          );
+        }
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
         return;
       }
@@ -16296,6 +16668,8 @@ export class TillApp extends LitElement {
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
+    this.lateSendWindow = null;
+    this.lateSendApproval = null;
     this.reprintAsking = null;
     this.receiptLanguageAsking = null;
     this.#closeAdjust();
@@ -16667,35 +17041,51 @@ export class TillApp extends LitElement {
 
   /** The pay card's offer on a counter order a payment is already on: the bill payment dialog opens
    * on it, once an edit made to it in the basket is saved, as a single payment saves it first. */
-  async #onCounterBillPay(event: Event, retried = false): Promise<void> {
+  async #onCounterBillPay(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     const { amount } = (event as CustomEvent<{ amount: string }>).detail;
-    if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
+    if (this.submitting || this.billPaying !== null || this.#basketPaidInPart() === undefined)
+      return;
+    const retry = (confirmed: LateSend) => this.#onCounterBillPay(event, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.#counterSends++;
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
     const session = this.#operatorSession;
+    const basketLines = [...this.#store.lines];
+    let refused = false;
+    let deadEnd: string | undefined;
+    this.submitting = true;
     try {
       if (
-        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label)) ||
+        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
     } catch (error) {
-      if (!this.#hasLeftCounterOrder(id, session))
+      refused = true;
+      if (!this.#hasLeftCounterOrder(id, session)) {
+        const asked = lateSendAsked(error, basketLines);
+        if (asked !== undefined) return this.#openCounterLateSend(asked, retry);
+        const approval = lateSendApprovalAsked(error, lateSend);
+        // Awaited before `finally` so `submitting` stays set while the managers are read: a second
+        // Pay tap meanwhile cannot open the late-send window under the PIN dialog.
+        if (approval !== undefined)
+          return await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
         this.errorKey = counterError(error, "sale.error");
+      }
+      const code = (error as { code?: string }).code ?? "";
+      if (!retried && ["station.no_replacement", "route.station_inactive"].includes(code))
+        deadEnd = code;
+    } finally {
+      this.submitting = false;
+    }
+    if (refused) {
       if (
-        !retried &&
-        ["station.no_replacement", "route.station_inactive"].includes(
-          (error as { code?: string }).code ?? "",
-        ) &&
-        (await this.#askCounterDeadEnds(
-          "place",
-          false,
-          (error as { code?: string }).code === "route.station_inactive",
-        ))
+        deadEnd !== undefined &&
+        (await this.#askCounterDeadEnds("place", false, deadEnd === "route.station_inactive"))
       ) {
         this.errorKey = undefined;
-        await this.#onCounterBillPay(event, true);
+        await this.#onCounterBillPay(event, true, lateSend);
       }
       return;
     }
@@ -18203,6 +18593,8 @@ export class TillApp extends LitElement {
 
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
+    const lateSendWindow = this.lateSendWindow;
+    const lateSendApproval = this.lateSendApproval;
     const served = this.#currentServedCommand();
     const errorMessage = this.errorKey
       ? errorText(
@@ -18687,6 +19079,38 @@ export class TillApp extends LitElement {
                 @wt-basket-refresh-confirmed=${() => this.#onBasketRefreshConfirmed()}
                 @wt-basket-refresh-cancelled=${() => (this.basketRefresh = undefined)}
               ></till-basket-refresh-dialog>`
+        }
+        ${
+          lateSendWindow === null
+            ? nothing
+            : html`<till-late-send-dialog
+                .dishes=${lateSendWindow.dishes}
+                .periodNames=${lateSendWindow.periodNames}
+                .purpose=${lateSendWindow.purpose}
+                @wt-late-send-agreed=${() => void this.#onLateSendAgreed(lateSendWindow)}
+                @wt-late-send-removed=${() => this.#onLateSendRemoved(lateSendWindow)}
+                @wt-late-send-cancelled=${() => (this.lateSendWindow = null)}
+              ></till-late-send-dialog>`
+        }
+        ${
+          lateSendApproval === null
+            ? nothing
+            : html`<till-supervisor-override-dialog
+                data-late-send-approval
+                .authorizers=${lateSendApproval.authorizers}
+                .approverRole=${"manager"}
+                .error=${lateSendApproval.error}
+                @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {
+                  event.stopPropagation();
+                  void this.#onLateSendApproved(lateSendApproval, event.detail);
+                }}
+                @override-cancel=${(event: Event) => {
+                  event.stopPropagation();
+                  if (this.lateSendApproval !== lateSendApproval) return;
+                  if (lateSendApproval.busy) lateSendApproval.dismissed = true;
+                  else this.lateSendApproval = null;
+                }}
+              ></till-supervisor-override-dialog>`
         }
         ${
           this.#inShell() && this.basketStale && this.basketRefresh === undefined

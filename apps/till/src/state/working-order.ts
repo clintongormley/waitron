@@ -18,6 +18,7 @@ import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
+import type { EndedPeriod } from "./late-send.js";
 import type {
   KitchenNoteSnapshot,
   HeldExtra,
@@ -83,6 +84,9 @@ export interface OrderLine {
   notOffered?: true;
   /** What stops this unsaved line being paid as it stands; never sent. */
   blocked?: BlockReason;
+  /** The period that ended earlier today on this unsent line's menu, with no orderable menu
+   * selling the dish. Display only; never sent. */
+  endedPeriod?: EndedPeriod;
   /**
    * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
    * frozen wording (`deriveOptionSelections`), so a list whose wording nothing matches is missing here.
@@ -868,6 +872,23 @@ export class WorkingOrderStore {
       changed = true;
       if (reason === undefined) delete line.blocked;
       else line.blocked = reason;
+    });
+    if (changed && notify) this.emit("changed");
+  }
+
+  /** One entry per line, as {@link setBlocked}. */
+  setEndedPeriods(marks: readonly (EndedPeriod | undefined)[], notify = true): void {
+    let changed = false;
+    this.#lines.forEach((line, index) => {
+      const mark = marks[index];
+      if (
+        line.endedPeriod?.menuId === mark?.menuId &&
+        line.endedPeriod?.periodName === mark?.periodName
+      )
+        return;
+      changed = true;
+      if (mark === undefined) delete line.endedPeriod;
+      else line.endedPeriod = mark;
     });
     if (changed && notify) this.emit("changed");
   }

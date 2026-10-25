@@ -619,9 +619,13 @@ in the zone also sells its product and variant on its own, and otherwise refuses
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
 rows (`working_line_contexts.late_period_name` and `late_confirmed_by`) record the period and who
 confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan
-D19–D28. Saving an unsent table draft does not check the window: the till gates additions and
-increases, and the server checks the window when the order is sent. A period save changes no time
-and takes no clock revision. Picking and sending remain separate from the department's actual open
+D19–D28. The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
+menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a
+`menu_period.ended` refusal's params (`lateSendRefusalOf`, `apps/till/src/state/late-send.ts`). It
+sends `lateSend` only after the waiter chooses Kitchen agreed in its late-send window
+(`till-late-send-dialog`; plan D34–D38). Saving an unsent table draft does not check the window:
+the till gates additions and increases, and the server checks the window when the order is sent. A
+period save changes no time and takes no clock revision. Picking and sending remain separate from the department's actual open
 state. The [A789 plan](../superpowers/plans/2026-10-21-a789-last-orders.md) records the decisions
 (it retired A432's period end offset); `apps/server/src/till-api.service-periods.test.ts`
 exercises the request boundary.
