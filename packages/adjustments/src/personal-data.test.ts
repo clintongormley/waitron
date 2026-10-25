@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, locations, workingOrders, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  withTransaction,
+  workingOrders,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jsonFile } from "@waitron/module";
 import { describe, expect, it } from "vitest";
@@ -464,5 +471,68 @@ describe("ADJUSTMENTS_PERSONAL_DATA", () => {
     for (const [who, text] of Object.entries(files)) {
       for (const note of NOTES) expect(text, `${who}: ${note}`).not.toContain(note);
     }
+  });
+});
+
+interface CompiledStatement {
+  sql: string;
+  params: unknown[];
+}
+
+interface DrizzleSession {
+  prepareQuery(query: CompiledStatement, ...rest: unknown[]): { all(): unknown };
+}
+
+/**
+ * `tx` with every statement drizzle compiles on it recorded, each with its query plan read through
+ * the same session.
+ */
+function planningEveryStatement(tx: Transaction) {
+  const statements: { sql: string; plan: () => string[] }[] = [];
+  const recording = new Proxy(tx, {
+    get: (target, key, receiver) => {
+      const value: unknown = Reflect.get(target, key, receiver);
+      if (key !== "session") return value;
+      const session = value as DrizzleSession;
+      return new Proxy(session, {
+        get: (inner, innerKey, innerReceiver) =>
+          innerKey === "prepareQuery"
+            ? (query: CompiledStatement, ...rest: unknown[]) => {
+                statements.push({
+                  sql: query.sql,
+                  plan: () =>
+                    (
+                      inner
+                        .prepareQuery(
+                          { sql: `explain query plan ${query.sql}`, params: query.params },
+                          undefined,
+                          "all",
+                        )
+                        .all() as { detail: string }[]
+                    ).map((row) => row.detail),
+                });
+                return inner.prepareQuery(query, ...rest);
+              }
+            : Reflect.get(inner, innerKey, innerReceiver),
+      });
+    },
+  });
+  return { recording, statements };
+}
+
+// This read runs while the venue's write lock is held, and the table grows with every void and comp.
+describe("prepare's read", () => {
+  it("finds every row it reads through an index, scanning no table", async () => {
+    await seedFixture();
+    const plans = await withTransaction(suite.db, async (tx) => {
+      const { recording, statements } = planningEveryStatement(tx);
+      await ADJUSTMENTS_PERSONAL_DATA.prepare(recording, subject(MARTA));
+      return statements.map((statement) => ({
+        from: /^select .*? from "(\w+)"/.exec(statement.sql)?.[1],
+        plan: statement.plan(),
+      }));
+    });
+    expect(plans.map((p) => p.from)).toEqual(["adjustments"]);
+    expect(plans.flatMap((p) => p.plan.filter((line) => line.startsWith("SCAN")))).toEqual([]);
   });
 });
