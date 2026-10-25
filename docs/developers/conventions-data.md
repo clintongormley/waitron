@@ -1838,18 +1838,42 @@ A zone's tables are shared by every layout of the zone (`floor_plan_tables`, key
 with a joined table's parts in `floor_plan_table_parts`). A set (`floor_plan_sets`: an id and a
 location) holds at most one layout per zone (`floor_plans`, unique on set and zone); where a layout
 puts a table is a `floor_plan_placements` row, and a table it leaves off has none. Venue-service
-owns the rest: a set's department, name and default (`department_floor_plan_sets`, a unique name
-per department and one default each), and the set a period picks (`menu_periods.floor_plan_set_id`,
-null for the default). That key names core's table, so the database takes another department's
-set; the period routes refuse it `menu_period.invalid`. A set with no `floor_plans` row for a zone
-reads as the zone's tables all off, at revision 0 (`readLayout`, `apps/server/src/floor-plan.ts`).
-A save that changes the zone's shared tables (adds, deletes or renames one, or changes its seats,
-"Moveable" or parts) moves the revision of every layout of the zone in the set's department,
+owns the rest: a set's department, name and default (`department_floor_plan_sets`, a unique name per
+department and one default each), and the set a period picks (`menu_periods.floor_plan_set_id`, null
+for the default). That key names core's table, so the database takes another department's set; the
+period routes refuse it `menu_period.invalid`. A set with no `floor_plans` row for a zone reads as
+the zone's tables all off, at revision 0 (`readLayout`, `apps/server/src/floor-plan.ts`). A save
+that changes the zone's shared tables (adds, deletes or renames one, or changes its short name,
+seats, "Moveable" or parts) moves the revision of every layout of the zone in the set's department,
 writing the missing rows (`saveLayout`, `changedShared`), so an editor open on another set cannot
 save a stale table list. A set is removed only through `FloorDeletion.removeSets`
 (`apps/server/src/floor-plan-sets.ts`), which deletes its layouts and empties
 `floor_today_zones.set_id` wherever it was recorded. A zone in no set's department has no plan on
 the till (`plannedZones`, `apps/server/src/floor-layout-due.ts`).
+
+A table's short name (`short_name`) is on the plan's tables (`floor_plan_tables`), the reset rows
+(`floor_reset_tables`) and the live tables (`dining_tables`), and may be null. The live tables also
+hold a folded copy, `short_name_key`, unique in the venue
+(`dining_tables_location_short_name_key_uq`) and written only through `shortNameColumns`
+(`packages/db/src/table-short-names.ts`). Nothing in the database ties the copy to the short name: a
+writer that skips the helper is not refused. A save resolves each table's short name
+(`resolveShortNames`, `apps/server/src/table-short-names.ts`, called from `checkSave` in
+`apps/server/src/floor-plan.ts`). A table the save sends none for, and whose name it leaves
+unchanged, keeps its stored one, or gets none when another table holds that one; one with no stored
+short name, or one the save adds or renames, is given one proposed from its name
+(`proposeShortName`, `@waitron/shared`), or none when that proposal is taken. A sent one is refused
+`floor_plan.invalid` when blank or longer than five characters, and `table.short_name_taken` when,
+ignoring case, the save keeps it for another table or sends it for an earlier one, or a table of the
+venue's other zones (plan or live) holds it or, having no short name, has it as its full name. A
+table the save adds or renames that is left with none is refused `table.label_taken`, with `takenBy`
+naming the other table, when, ignoring case, a table of the venue's other zones (plan or live) holds
+its full name as a short name or, having no short name, as its full name. A table the save leaves
+under its stored name is not checked for this, and neither is a clash with a short name the same
+save gives another of its own tables. A reset gives a live table its new name and short name
+together, or waits while either is held by another table (`planReset`,
+`apps/server/src/floor-reset-plan.ts`). A configuration file carries `short_name` and never
+`short_name_key`; the import sets the key (`storeTableShortNameKeys`, the core transfer's
+`afterImport`).
 
 Which set is due at a moment is venue-service's answer (`dueFloorLayouts`,
 `packages/venue-service/src/floor-layout-due.ts`): the set of the department's period running,
@@ -1892,23 +1916,23 @@ in `apps/server/src/floor-today-mark-moved.ts`) applies the whole group's change
 marks; on a table that does not need moving it changes nothing. Leave it here (`POST
 /api/tables/:id/today/leave-here`, `leaveHere` in the same file) instead leaves the whole group
 where today's map has it, without changing the saved layout, and on a table that does not need
-moving it too changes nothing. A group row whose table already has the row's name is ended
-(`pending`, `ready_to_move` false, `placed` true), the state the catch-up leaves once it has applied
-a placed row; ending it, rather than leaving it waiting, keeps a member with guests from making
-every floor read run the catch-up (`catchUpDue`). A row that gives its table a new name, as a
-dashboard rename does, stays waiting, marked placed and not ready to move, so the catch-up gives the
-table its name, as for any row waiting only for its name, and never marks it again; while another
-table holds the name it keeps waiting. A row with no table yet (a joined table still to be made) is
-ended, because the catch-up makes the table of a waiting row with no table without reading `placed`.
-The catch-up reads only waiting rows and skips placed ones, so none of these is marked again until a
-reset rewrites the zone's rows; that reset treats them as any reset does: a free table goes to its
-new place, or is marked again when that place is still taken; a table with guests waits and, once
-free, is marked whatever stands in its new place. Once none of a marked group's tables would move
-(taken off, say), the catch-up applies it as any other row. Back to its saved place on a table that
-needs moving is Mark moved (`backToSaved`). A table that needs moving is refused
-`table.needs_moving` when a tab is opened at it (`openTab`, `apps/server/src/working-order.ts`), a
-bill is moved to it (`readTargetTable`, `apps/server/src/move-bill.ts`) or it is merged
-(`apps/server/src/floor-today-merges.ts`).
+moving it too changes nothing. A group row whose table already has the row's name and short name is
+ended (`pending`, `ready_to_move` false, `placed` true), the state the catch-up leaves once it has
+applied a placed row; ending it, rather than leaving it waiting, keeps a member with guests from
+making every floor read run the catch-up (`catchUpDue`). A row that gives its table a new name or
+short name, as a dashboard rename does, stays waiting, marked placed and not ready to move, so the
+catch-up gives the table its names, as for any row waiting only for its names, and never marks it
+again; while another table holds either name it keeps waiting. A row with no table yet (a joined
+table still to be made) is ended, because the catch-up makes the table of a waiting row with no
+table without reading `placed`. The catch-up reads only waiting rows and skips placed ones, so none
+of these is marked again until a reset rewrites the zone's rows; that reset treats them as any reset
+does: a free table goes to its new place, or is marked again when that place is still taken; a table
+with guests waits and, once free, is marked whatever stands in its new place. Once none of a marked
+group's tables would move (taken off, say), the catch-up applies it as any other row. Back to its
+saved place on a table that needs moving is Mark moved (`backToSaved`). A table that needs moving is
+refused `table.needs_moving` when a tab is opened at it (`openTab`,
+`apps/server/src/working-order.ts`), a bill is moved to it (`readTargetTable`,
+`apps/server/src/move-bill.ts`) or it is merged (`apps/server/src/floor-today-merges.ts`).
 
 No reset puts a table down on another. At every reset and catch-up, a table whose new place a table
 staying on the map stands in keeps its place (`standsIn`, `apps/server/src/joined-split-layout.ts`:
@@ -1982,16 +2006,16 @@ every table a party holds `merge.strands_party` (a moved bill can hold one table
 A594). When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and
 tries again, and puts them back if that is refused too (`apps/server/src/table-removal.ts`).
 
-Each room's plan for the day has a revision (`floor_today_zones.generation`, read as `revision`).
-A reset adds one to it (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). Any other request
+Each room's plan for the day has a revision (`floor_today_zones.generation`, read as `revision`). A
+reset adds one to it (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). Any other request
 moves it by one for its own writes, however many rows they touch, when they change the room: the
 request compares the room's print before and after its writes (`roomPrints`,
-`apps/server/src/floor-revision.ts`: each table's name, today's row, group, split and reset row's
-`ready_to_move`). So a read whose catch-up marks a table "Needs moving" moves the revision. The
-catch-up in `ensureToday`, which runs first, moves a room it did not reset by one when it changes
-it; a room it resets moves only by the reset's one. The table routes, the two zone routes (reset
-and update layout) and the party join refuse a sent revision that is not the room's revision after
-the catch-up, before their own write (`floor_today.out_of_date`, `refuseStale` in
+`apps/server/src/floor-revision.ts`: each table's name and short name, today's row, group, split and
+reset row's `ready_to_move`). So a read whose catch-up marks a table "Needs moving" moves the
+revision. The catch-up in `ensureToday`, which runs first, moves a room it did not reset by one when
+it changes it; a room it resets moves only by the reset's one. The table routes, the two zone routes
+(reset and update layout) and the party join refuse a sent revision that is not the room's revision
+after the catch-up, before their own write (`floor_today.out_of_date`, `refuseStale` in
 `apps/server/src/floor-revision.ts`, called by `changeRoom` and `refuseStaleZone` in
 `apps/server/src/floor-today-api.ts` and by `movingRooms` in `apps/server/src/till-api.ts`). A
 refusal rolls back the catch-up with everything else. The till sends the revision with a table

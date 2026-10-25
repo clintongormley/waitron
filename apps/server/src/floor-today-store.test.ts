@@ -20,6 +20,7 @@ import {
   locations,
   locationDayCutoverChanges,
   joinedTableApart,
+  shortNameColumns,
   stillJoinedPart,
   workingOrders,
   type Transaction,
@@ -34,6 +35,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { createTable } from "./testing/live-table.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import {
   catchUpZone,
@@ -79,6 +81,7 @@ const NONE: readonly TableRemoval[] = [];
 
 interface MasterTable {
   label: string;
+  shortName?: string;
   seats?: number;
   fixed?: boolean;
   place?: { x: number; y: number; width: number; height: number };
@@ -119,6 +122,7 @@ async function insertMaster(
     .values({
       zoneId,
       label: table.label,
+      shortName: table.shortName ?? null,
       seats: table.seats ?? null,
       fixed: table.fixed ?? false,
     })
@@ -167,7 +171,14 @@ async function planIdOf(zoneId: string): Promise<string> {
 /** Changes a master table; `x` and `y` move its place on the plan. */
 async function editMaster(
   masterId: string,
-  values: { label?: string; seats?: number; fixed?: boolean; x?: number; y?: number },
+  values: {
+    label?: string;
+    shortName?: string | null;
+    seats?: number;
+    fixed?: boolean;
+    x?: number;
+    y?: number;
+  },
 ) {
   const { x, y, ...table } = values;
   await inTx(v, async (tx) => {
@@ -867,6 +878,137 @@ describe("building today's plan from a zone's layout", () => {
     };
 
     await expect(reset(z, [broken])).rejects.toThrow("disk on fire");
+  });
+});
+
+describe("short names at a reset", () => {
+  const liveWithShort = (label: string, shortName: string, zoneId: string) =>
+    inTx(v, async (tx) => (await createTable(tx, v.cfg, { label, zoneId, shortName })).id);
+
+  it("copies each master's short name onto its live table, with its folded key", async () => {
+    const z = await zone();
+    const t1 = await v.table("Sn 1", z);
+    await masterOf(z, [{ label: "Sn 1", shortName: "Sn1", live: t1 }]);
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ shortName: "Sn1", shortNameKey: "sn1" });
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("makes a new table with its master's short name", async () => {
+    const z = await zone();
+    await masterOf(z, [{ label: "Sn new 1", shortName: "Snn1" }]);
+
+    await reset(z);
+
+    expect(await liveTablesOf(z)).toMatchObject([
+      { label: "Sn new 1", shortName: "Snn1", shortNameKey: "snn1" },
+    ]);
+  });
+
+  it("a master with no short name leaves its live table with none", async () => {
+    const z = await zone();
+    const t1 = await v.table("Sn none 1", z);
+    const t2 = await liveWithShort("Sn none 2", "Snx2", z);
+    await masterOf(z, [
+      { label: "Sn none 1", live: t1 },
+      { label: "Sn none 2", live: t2 },
+    ]);
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ shortName: null, shortNameKey: null });
+    expect(await tableRow(v, t2)).toMatchObject({ shortName: null, shortNameKey: null });
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("changes only a case: no wait", async () => {
+    const z = await zone();
+    const t1 = await liveWithShort("Sn case 1", "Snc1", z);
+    await masterOf(z, [{ label: "Sn case 1", shortName: "SNC1", live: t1 }]);
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ shortName: "SNC1", shortNameKey: "snc1" });
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("swaps two tables' short names", async () => {
+    const z = await zone();
+    const t1 = await liveWithShort("Sw 1", "Sw1", z);
+    const t2 = await liveWithShort("Sw 2", "Sw2", z);
+    const master = await masterOf(z, [
+      { label: "Sw 1", shortName: "Sw1", live: t1 },
+      { label: "Sw 2", shortName: "Sw2", live: t2 },
+    ]);
+    await editMaster(master.get("Sw 1")!, { shortName: "Sw2" });
+    await editMaster(master.get("Sw 2")!, { shortName: "Sw1" });
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ shortName: "Sw2", shortNameKey: "sw2" });
+    expect(await tableRow(v, t2)).toMatchObject({ shortName: "Sw1", shortNameKey: "sw1" });
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("keeps both old names while another zone's table holds the new short name, and takes them once it is free", async () => {
+    const z = await zone();
+    const t1 = await liveWithShort("Sx 1", "Sx0", z);
+    const other = await liveWithShort("Sx elsewhere", "Sx1", v.tables.zoneId);
+    await masterOf(z, [{ label: "Sx 1b", shortName: "Sx1", live: t1 }]);
+
+    await reset(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({ label: "Sx 1", shortName: "Sx0" });
+    expect(await pendingRows(z)).toMatchObject([{ tableId: t1, label: "Sx 1b", shortName: "Sx1" }]);
+
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set(shortNameColumns("Sx9")).where(eq(diningTables.id, other)),
+    );
+    await catchUp(z);
+
+    expect(await tableRow(v, t1)).toMatchObject({
+      label: "Sx 1b",
+      shortName: "Sx1",
+      shortNameKey: "sx1",
+    });
+    expect(await pendingRows(z)).toEqual([]);
+  });
+
+  it("a table waiting for its label keeps its short name, and the table wanting that short name waits too", async () => {
+    const z = await zone();
+    const a = await liveWithShort("Sy a", "Sy1", z);
+    const b = await liveWithShort("Sy b", "Sy0", z);
+    const other = await liveWithShort("Sy elsewhere", "Sye", v.tables.zoneId);
+    await masterOf(z, [
+      { label: "Sy elsewhere", shortName: "Sy2", live: a },
+      { label: "Sy b", shortName: "Sy1", live: b },
+    ]);
+
+    await reset(z);
+
+    expect(await tableRow(v, a)).toMatchObject({ label: "Sy a", shortName: "Sy1" });
+    expect(await tableRow(v, b)).toMatchObject({ label: "Sy b", shortName: "Sy0" });
+    expect((await pendingRows(z)).map((row) => row.tableId).sort()).toEqual([a, b].sort());
+
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ label: "Sy freed" }).where(eq(diningTables.id, other)),
+    );
+    await catchUp(z);
+    await catchUp(z);
+
+    expect(await tableRow(v, a)).toMatchObject({
+      label: "Sy elsewhere",
+      shortName: "Sy2",
+      shortNameKey: "sy2",
+    });
+    expect(await tableRow(v, b)).toMatchObject({
+      label: "Sy b",
+      shortName: "Sy1",
+      shortNameKey: "sy1",
+    });
+    expect(await pendingRows(z)).toEqual([]);
   });
 });
 

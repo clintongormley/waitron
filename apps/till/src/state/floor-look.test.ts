@@ -63,6 +63,7 @@ function table(over: Partial<TableState> & { enRoute?: number } = {}): TableStat
     today: null,
     party: party(),
     signals: [],
+    shortName: over.label ?? "Table 2",
     ...over,
   };
 }

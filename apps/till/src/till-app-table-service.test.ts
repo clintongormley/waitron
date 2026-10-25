@@ -64,6 +64,7 @@ const floorZone: FloorZone = {
 const openTable: TableState = {
   id: "t2",
   label: "2",
+  shortName: "2",
   zoneId: "z1",
   state: "open-tab",
   condition: "free",
@@ -685,6 +686,7 @@ describe("opening a table station move while its station list is pending", () =>
       ...openTable,
       id: "t3",
       label: "3",
+      shortName: "3",
       party: {
         ...openTable.party!,
         kitchenNote: {
@@ -1767,6 +1769,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
+      shortName: "3",
       zoneId: "z2",
       party: {
         ...openTable.party!,
@@ -2277,6 +2280,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
+      shortName: "3",
       zoneId: "z2",
       party: {
         ...openTable.party!,
@@ -2475,6 +2479,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
+      shortName: "3",
       party: {
         ...openTable.party!,
         kitchenNote: {
@@ -2533,6 +2538,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
+      shortName: "3",
       party: {
         ...openTable.party!,
         kitchenNote: {
@@ -2582,6 +2588,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
+      shortName: "3",
       party: {
         ...openTable.party!,
         kitchenNote: {

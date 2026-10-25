@@ -63,6 +63,7 @@ import {
   deviceProfiles,
   devices,
   diningTables,
+  floorPlanTables,
   floorZones,
   kitchenStations,
   kitchenCourses,
@@ -3681,6 +3682,153 @@ it("gives each imported product the folded key of its own name, whatever the bun
     code: "setup.request_invalid",
     params: { field: "products.name_key" },
   });
+});
+
+async function shortNamedBundle(taxId: string) {
+  const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const cfg: TillConfig = {
+    locationId: locationId(source.locationId),
+    nodeId: nodeId(source.nodeId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
+  await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, cfg, { name: "Short service" });
+    const zone = await createServiceZone(tx, cfg, {
+      name: "Short zone",
+      departmentId: department.id,
+    });
+    await createTable(tx, cfg, { label: "Rt table 1", zoneId: zone.id, shortName: "Rt1" });
+    await saveLayout(
+      tx,
+      cfg,
+      enabledTableRemovals(ALL_MODULES),
+      await defaultLayout(tx, cfg, zone.id),
+      {
+        revision: 0,
+        tables: [
+          {
+            key: "rt1",
+            label: "Rt table 1",
+            shortName: "Rt1",
+            fixed: false,
+            seats: 2,
+            placement: { x: 0, y: 0, width: 8, height: 8, rotation: 0, shape: "rect" },
+            partKeys: [],
+          },
+        ],
+      },
+      new Date("2026-10-11T12:00:00Z"),
+    );
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-11T12:00:00Z"),
+    versions,
+  );
+  return { transferred, versions };
+}
+
+async function importedShortNames(target: { locationId: string }) {
+  return targetSuite.db
+    .select({ shortName: diningTables.shortName, shortNameKey: diningTables.shortNameKey })
+    .from(diningTables)
+    .where(
+      and(eq(diningTables.locationId, target.locationId), eq(diningTables.label, "Rt table 1")),
+    );
+}
+
+it("carries each table's short name, and the import sets the live table's key from it", async () => {
+  const { transferred, versions } = await shortNamedBundle("B16180339");
+  const live = transferred.tables.dining_tables!.filter((row) => row.label === "Rt table 1");
+  expect(live.map((row) => row.short_name)).toEqual(["Rt1"]);
+  for (const row of transferred.tables.dining_tables!)
+    expect(row).not.toHaveProperty("short_name_key");
+  expect(
+    transferred.tables
+      .floor_plan_tables!.filter((row) => row.label === "Rt table 1")
+      .map((row) => row.short_name),
+  ).toEqual(["Rt1"]);
+
+  const target = await applyVenue(planVenue(venue("B14142135"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  expect(await importedShortNames(target)).toEqual([{ shortName: "Rt1", shortNameKey: "rt1" }]);
+  const plan = await targetSuite.db
+    .select({ shortName: floorPlanTables.shortName })
+    .from(floorPlanTables)
+    .where(eq(floorPlanTables.label, "Rt table 1"));
+  expect(plan).toEqual([{ shortName: "Rt1" }]);
+
+  await expect(
+    withTransaction(targetSuite.db, (tx) =>
+      importConfigurationTables(
+        tx,
+        {
+          ...transferred,
+          tables: {
+            ...transferred.tables,
+            dining_tables: transferred.tables.dining_tables!.map((row) => ({
+              ...row,
+              short_name_key: "wrong",
+            })),
+          },
+        },
+        { locationId: "unused" },
+        ALL_MODULES,
+        versions,
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "dining_tables.short_name_key" },
+  });
+});
+
+it("imports a file with no short names, at this version, with none", async () => {
+  const { transferred, versions } = await shortNamedBundle("B17320508");
+  const withoutShortNames = (rows: readonly Record<string, unknown>[]) =>
+    rows.map((row) => {
+      const copy = { ...row };
+      delete copy.short_name;
+      return copy;
+    });
+  const target = await applyVenue(planVenue(venue("B22360679"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(
+        tx,
+        {
+          ...transferred,
+          tables: {
+            ...transferred.tables,
+            dining_tables: withoutShortNames(transferred.tables.dining_tables!),
+            floor_plan_tables: withoutShortNames(transferred.tables.floor_plan_tables!),
+          },
+        },
+        result,
+        ALL_MODULES,
+        versions,
+      ),
+  });
+  expect(await importedShortNames(target)).toEqual([{ shortName: null, shortNameKey: null }]);
+  const plan = await targetSuite.db
+    .select({ shortName: floorPlanTables.shortName })
+    .from(floorPlanTables)
+    .where(eq(floorPlanTables.label, "Rt table 1"));
+  expect(plan).toEqual([{ shortName: null }]);
 });
 
 it("keeps a name that equals another row's id, while the ids that point at rows are rewritten", async () => {

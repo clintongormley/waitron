@@ -302,6 +302,20 @@ describe("table + tab routes", () => {
     expect(list).toContainEqual(expect.objectContaining({ id, label: "12", zoneId: seededZoneId }));
   });
 
+  it("GET /api/tables/state names each table by its short name, or by its full name when it has none", async () => {
+    const label = `Short ${randomUUID().slice(0, 6)}`;
+    const [withShort, without] = await withTransaction(suite.db, async (tx) => [
+      await createTable(tx, cfg, { label: `${label} a`, zoneId: seededZoneId, shortName: "Rt1" }),
+      await createTable(tx, cfg, { label: `${label} b`, zoneId: seededZoneId }),
+    ]);
+    const state = (await (await request("/api/tables/state")).json()) as {
+      id: string;
+      shortName: string;
+    }[];
+    expect(state.find((t) => t.id === withShort!.id)?.shortName).toBe("Rt1");
+    expect(state.find((t) => t.id === without!.id)?.shortName).toBe(`${label} b`);
+  });
+
   it("POST /api/tables/:id/seat opens a tab; a second → 409 tab.already_open", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: "3", zoneId: tablesZoneId }),

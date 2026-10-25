@@ -128,10 +128,10 @@ export async function markMoved(
 
 /**
  * Leaves a table that needs moving, and every table of a pending joined group holding it, in the
- * place today's map gives it until the next reset rewrites the rows. A row that renames its table
- * is marked placed but left pending, so the catch-up still gives the table its new name. A row with
- * no table is ended rather than marked placed, because the catch-up makes such a table without
- * reading `placed`.
+ * place today's map gives it until the next reset rewrites the rows. A row whose table does not
+ * yet have the row's label and short name is marked placed but left pending, so the catch-up still
+ * gives the table its new names. A row with no table is ended rather than marked placed, because
+ * the catch-up makes such a table without reading `placed`.
  */
 export async function leaveHere(
   tx: Transaction,
@@ -154,7 +154,9 @@ export async function leaveHere(
       id: floorResetTables.id,
       tableId: floorResetTables.tableId,
       label: floorResetTables.label,
+      shortName: floorResetTables.shortName,
       tableLabel: diningTables.label,
+      tableShortName: diningTables.shortName,
     })
     .from(floorResetTables)
     .leftJoin(diningTables, eq(diningTables.id, floorResetTables.tableId))
@@ -163,7 +165,7 @@ export async function leaveHere(
     const state =
       row.tableId === null
         ? { pending: false, readyToMove: false }
-        : row.label === row.tableLabel
+        : row.label === row.tableLabel && row.shortName === row.tableShortName
           ? { pending: false, readyToMove: false, placed: true }
           : { placed: true, readyToMove: false };
     await tx.update(floorResetTables).set(state).where(eq(floorResetTables.id, row.id));

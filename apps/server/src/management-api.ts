@@ -266,6 +266,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "zone.name_taken": 409,
   "table.not_found": 404,
   "table.label_taken": 409,
+  "table.short_name_taken": 409,
   "table.booked": 409,
   "floor_plan.out_of_date": 409,
   "floor_plan.invalid": 400,
@@ -411,15 +412,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function optionalId(value: unknown, field: string): string | undefined {
+function stringUnlessNullish(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "string") throw new AppError("management.request_invalid", { field });
   return value;
 }
 
 /**
- * The shape of a floor-plan save; `saveLayout` checks the values. A null id or live table
- * is absent, as the read shape sends them.
+ * The shape of a floor-plan save; `saveLayout` checks the values. A null id, live table or
+ * short name is absent, as the read shape sends them.
  */
 function parseZonePlanSave(body: unknown): ZonePlanSave {
   const refuse = (field: string): never => {
@@ -438,7 +439,8 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
       if (typeof table.label !== "string") refuse(`${at}.label`);
       if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
       if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
-      const id = optionalId(table.id, `${at}.id`);
+      const id = stringUnlessNullish(table.id, `${at}.id`);
+      const shortName = stringUnlessNullish(table.shortName, `${at}.shortName`);
       const partKeys = table.partKeys;
       if (!Array.isArray(partKeys) || !partKeys.every((key) => typeof key === "string")) {
         refuse(`${at}.partKeys`);
@@ -451,6 +453,7 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
         fixed: table.fixed as boolean,
         placement: table.placement as ZonePlanSave["tables"][number]["placement"],
         partKeys: partKeys as string[],
+        ...(shortName === undefined ? {} : { shortName }),
       };
     }),
   };

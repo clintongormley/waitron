@@ -905,6 +905,7 @@ const tableParty = (note = partyNote): TableParty & { kitchenNote: typeof partyN
 const tableRow = (party: TableParty | null): TableState => ({
   id: "table-four",
   label: "Four",
+  shortName: "Four",
   zoneId: "zone-counter",
   state: party ? "open-tab" : "free",
   condition: party ? "held" : "free",
@@ -1493,7 +1494,7 @@ it("keeps the second party after the first party's note save returns", async () 
   };
   vi.mocked(api.getTablesState).mockResolvedValue([
     tableRow(tableParty()),
-    { ...tableRow(second), id: "table-second", label: "Second" },
+    { ...tableRow(second), id: "table-second", label: "Second", shortName: "Second" },
   ]);
   emit(tableScreen(el), "floor-refresh", {});
   await flush(el);

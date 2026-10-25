@@ -3266,6 +3266,7 @@ describe("floor plans", () => {
     ["tables.0.fixed", { revision: 0, tables: [{ ...entry("a", "L"), fixed: "no" }] }],
     ["tables.0.id", { revision: 0, tables: [{ ...entry("a", "L"), id: 7 }] }],
     ["tables.0.placement", { revision: 0, tables: [{ ...entry("a", "L"), placement: undefined }] }],
+    ["tables.0.shortName", { revision: 0, tables: [{ ...entry("a", "L"), shortName: 5 }] }],
   ])("refuses a malformed %s as management.request_invalid", async (field, body) => {
     const zoneId = await createZone(unique("PlanShape"));
     const res = await put(zoneId, body);
@@ -3273,6 +3274,29 @@ describe("floor plans", () => {
     expect(await res.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field } },
     });
+  });
+
+  it("saves the short name a table entry carries, and keeps it when a later save sends null", async () => {
+    const zoneId = await createZone(unique("PlanShort"));
+    const shortName = `S${randomUUID().slice(0, 4)}`;
+    const label = unique("Window");
+    const first = await put(zoneId, {
+      revision: 0,
+      tables: [{ ...entry("a", label), shortName }],
+    });
+    expect(first.status).toBe(200);
+    const readShort = async () =>
+      ((await (await get(zoneId)).json()) as { tables: { id: string; shortName: string | null }[] })
+        .tables;
+    const [saved] = await readShort();
+    expect(saved!.shortName).toBe(shortName);
+
+    const second = await put(zoneId, {
+      revision: 1,
+      tables: [{ ...entry("a", label), id: saved!.id, shortName: null }],
+    });
+    expect(second.status).toBe(200);
+    expect((await readShort()).map((t) => t.shortName)).toEqual([shortName]);
   });
 
   it("saves and reads Long table's parts over HTTP", async () => {

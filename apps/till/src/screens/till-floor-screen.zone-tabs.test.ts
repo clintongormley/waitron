@@ -77,6 +77,7 @@ function free(id: string, zoneId: string, over: Partial<TableState> = {}): Table
     today: today(Number(id.slice(1)) * 3),
     signals: [],
     party: null,
+    shortName: over.label ?? id.slice(1),
     ...over,
   };
 }

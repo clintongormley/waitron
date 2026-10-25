@@ -2204,6 +2204,8 @@ export interface FloorAnswer {
 export interface TableState {
   id: string;
   label: string;
+  /** The table's saved short name, else its full name. */
+  shortName: string;
   zoneId: string | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;

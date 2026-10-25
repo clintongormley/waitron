@@ -771,7 +771,11 @@ export class FloorPlanEditor extends LitElement {
   }
 
   #placeRefusal(code: string, params: Record<string, unknown>, body: FloorPlanSave): void {
-    const own = () => codeMessage(code);
+    const takenBy = code === "table.label_taken" ? params.takenBy : undefined;
+    const own =
+      typeof takenBy === "string"
+        ? () => fill("floor_plan_editor.label_shown_as_short_name", { takenBy })
+        : () => codeMessage(code);
     const draft = this.draft!;
     let key: string | undefined;
     let serverField: string | undefined;

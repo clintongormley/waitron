@@ -778,3 +778,11 @@ it("words a refused note on an alert in both languages", () => {
     expect(spanish).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it("words a short name another table already uses, in English and Spanish", () => {
+  const code = "table.short_name_taken";
+  expect(codeMessage(code, "en")).toBe("Another table already uses that short name");
+  const spanish = codeMessage(code, "es");
+  expect(spanish).not.toBe(codeMessage("unknown.code", "es"));
+  expect(spanish).not.toBe(codeMessage(code, "en"));
+});

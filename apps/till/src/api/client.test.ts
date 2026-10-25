@@ -2212,6 +2212,7 @@ describe("TillApi", () => {
       {
         id: "t1",
         label: "Mesa 1",
+        shortName: "Mesa 1",
         zoneId: "z1",
         state: "open-tab",
         condition: "free",
@@ -2241,6 +2242,7 @@ describe("TillApi", () => {
       {
         id: "t2",
         label: "Mesa 2",
+        shortName: "Mesa 2",
         zoneId: null,
         state: "free",
         condition: "needs_clearing",

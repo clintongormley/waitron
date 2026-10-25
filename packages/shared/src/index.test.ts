@@ -77,6 +77,8 @@ import {
   textSearch,
   worstBand,
 } from "./index.js";
+import * as shared from "./index.js";
+import * as tableShortName from "./table-short-name.js";
 
 describe("package public surface (./index.js)", () => {
   it("re-exports the build header name", () => {
@@ -139,6 +141,14 @@ describe("package public surface (./index.js)", () => {
   it("re-exports the seating bound and its check", () => {
     expect(MAX_GUEST_COUNT).toBe(999);
     expect(isValidGuestCount(MAX_GUEST_COUNT)).toBe(true);
+  });
+
+  it("re-exports the table short-name rule", () => {
+    expect(shared.SHORT_NAME_MAX).toBe(tableShortName.SHORT_NAME_MAX);
+    expect(shared.shortNameLength).toBe(tableShortName.shortNameLength);
+    expect(shared.shortNameKey).toBe(tableShortName.shortNameKey);
+    expect(shared.proposeShortName).toBe(tableShortName.proposeShortName);
+    expect(shared.isShortNameShaped).toBe(tableShortName.isShortNameShaped);
   });
 
   it("re-exports the string-to-stored-count converters", () => {

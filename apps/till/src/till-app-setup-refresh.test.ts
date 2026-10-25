@@ -178,6 +178,7 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
   return {
     id,
     label,
+    shortName: label,
     zoneId: "z1",
     state: tableParty === null ? "free" : "open-tab",
     condition: tableParty === null ? "free" : "held",

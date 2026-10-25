@@ -1006,6 +1006,7 @@ const party = {
 const table = {
   id: "t2",
   label: "2",
+  shortName: "2",
   zoneId: "zone-dining",
   state: "open-tab",
   hasOpenTab: true,
@@ -1555,6 +1556,7 @@ const tableB = {
   ...table,
   id: "t3",
   label: "3",
+  shortName: "3",
   party: {
     ...party,
     kitchenNote: {
@@ -2079,7 +2081,7 @@ describe("a round that got no answer while its tab moved to another table", () =
     };
     api.getTablesState.mockResolvedValue([
       { ...seated, party: spread },
-      { ...seated, id: "t4", label: "4", party: spread },
+      { ...seated, id: "t4", label: "4", shortName: "4", party: spread },
     ]);
     emit(tableScreen(el), "move-guests", { toTableId: "t4", bills: "merge" });
     await flush(el);

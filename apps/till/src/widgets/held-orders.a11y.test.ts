@@ -101,6 +101,7 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
     today: null,
     signals: [],
     party: null,
+    shortName: over.label ?? label,
     ...over,
   });
   const tables: TableState[] = [

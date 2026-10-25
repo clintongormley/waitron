@@ -30,12 +30,13 @@ import {
   joinedOutOfService,
   needsMoving,
   resetRowMoves,
+  shortNameColumns,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
-import { AppError, NEW_TABLE_SIZE, groupStep } from "@waitron/shared";
+import { AppError, NEW_TABLE_SIZE, groupStep, shortNameKey } from "@waitron/shared";
 import {
   blockedMoves,
   movesTable,
@@ -94,6 +95,7 @@ export function placementColumns(placement: Placement | null): Placed {
 function targetRow(target: Target) {
   return {
     label: target.label,
+    shortName: target.shortName,
     seats: target.seats,
     fixed: target.fixed,
     ...placementColumns(target.placement),
@@ -236,6 +238,7 @@ async function resetZoneFor(
     master.map((row) => ({
       id: row.id,
       label: row.label,
+      shortName: row.shortName,
       seats: row.seats,
       fixed: row.fixed,
       placement: row.placement,
@@ -333,6 +336,7 @@ function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
       id: diningTables.id,
       label: diningTables.label,
       planTableId: diningTables.planTableId,
+      shortName: diningTables.shortName,
     })
     .from(diningTables)
     .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.zoneId, zoneId)));
@@ -420,6 +424,7 @@ async function catchUpPass(
       tableId: row.tableId,
       planTableId: row.planTableId,
       label: row.label,
+      shortName: row.shortName,
       seats: row.seats,
       fixed: row.fixed,
       placement: placementOf(row),
@@ -432,6 +437,7 @@ async function catchUpPass(
     .select({
       id: diningTables.id,
       label: diningTables.label,
+      shortName: diningTables.shortName,
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
       splitOffFrom: floorTodaySplitParts.joinedTableId,
@@ -442,6 +448,11 @@ async function catchUpPass(
   const inZone = venueTables.filter((table) => table.zoneId === zoneId);
   const takenElsewhere = new Set(
     venueTables.filter((table) => table.zoneId !== zoneId).map((table) => table.label),
+  );
+  const shortNameKeysElsewhere = new Set(
+    venueTables.flatMap((table) =>
+      table.zoneId !== zoneId && table.shortName !== null ? [shortNameKey(table.shortName)] : [],
+    ),
   );
   const ids = inZone.map((table) => table.id);
   const inZoneIds = new Set(ids);
@@ -544,6 +555,7 @@ async function catchUpPass(
     const live: LiveTable[] = inZone.map((table) => ({
       id: table.id,
       label: table.label,
+      shortName: table.shortName,
       held: held.has(table.id),
       refused: refused.has(table.id),
       tied: held.has(table.id) || tied.has(table.id),
@@ -561,7 +573,7 @@ async function catchUpPass(
           : [],
       ),
     );
-    plan = planReset({ targets, live, takenElsewhere, waitingToCreate });
+    plan = planReset({ targets, live, takenElsewhere, shortNameKeysElsewhere, waitingToCreate });
 
     const drawnMoving: { tableId: string; from: Placement; to: Placement | null }[] = [];
     const offMoving: { tableId: string; from: null; to: Placement }[] = [];
@@ -678,6 +690,23 @@ async function catchUpPass(
     ]),
   );
   for (const [tableId, label] of spare) await setLabel(tx, tableId, label);
+  // Short names step aside as null, which the unique (location, short name key) index never
+  // matches, so a swap never meets it halfway.
+  const shortKeyOf = new Map(
+    inZone.map((table) => [table.id, shortNameColumns(table.shortName).shortNameKey]),
+  );
+  const shortRenamed = plan.apply.flatMap(({ target, label }) =>
+    label !== null &&
+    shortNameColumns(target.shortName).shortNameKey !== shortKeyOf.get(target.tableId!)
+      ? [target.tableId!]
+      : [],
+  );
+  if (shortRenamed.length > 0) {
+    await tx
+      .update(diningTables)
+      .set(shortNameColumns(null))
+      .where(inArray(diningTables.id, shortRenamed));
+  }
   const createdIds = new Map<Target, string>();
   for (const target of plan.create) {
     const [created] = await tx
@@ -686,6 +715,7 @@ async function catchUpPass(
         locationId: cfg.locationId,
         zoneId,
         label: target.label,
+        ...shortNameColumns(target.shortName),
         planTableId: target.planTableId,
       })
       .returning({ id: diningTables.id });
@@ -697,7 +727,7 @@ async function catchUpPass(
   const placedNow = new Set<Target>();
   for (const { target, label } of plan.apply) {
     const tableId = target.tableId!;
-    if (label !== null) await setLabel(tx, tableId, label);
+    if (label !== null) await setNames(tx, tableId, label, target.shortName);
     // Placed once per reset: a row waiting only for its name keeps the day's moves and merges.
     if (rowOf.get(target)!.placed) continue;
     placedNow.add(target);
@@ -854,6 +884,18 @@ export function spareLabels(
 
 async function setLabel(tx: Transaction, tableId: string, label: string): Promise<void> {
   await tx.update(diningTables).set({ label }).where(eq(diningTables.id, tableId));
+}
+
+async function setNames(
+  tx: Transaction,
+  tableId: string,
+  label: string,
+  shortName: string | null,
+): Promise<void> {
+  await tx
+    .update(diningTables)
+    .set({ label, ...shortNameColumns(shortName) })
+    .where(eq(diningTables.id, tableId));
 }
 
 /** Every member of each split group, a joined table and the parts split off it, of which some member is `busy`. */

@@ -149,6 +149,7 @@ const floorZone: FloorZone = {
 const freeTable: TableState = {
   id: "t1",
   label: "1",
+  shortName: "1",
   zoneId: "z1",
   state: "free",
   condition: "free",
@@ -166,6 +167,7 @@ const freeTable: TableState = {
 const openTable: TableState = {
   id: "t2",
   label: "2",
+  shortName: "2",
   zoneId: "z1",
   state: "open-tab",
   condition: "free",
@@ -8629,8 +8631,8 @@ describe("till-app", () => {
       return { el, answerA, answerB };
     }
 
-    const tableA: TableState = { ...freeTable, id: "tA", label: "A" };
-    const tableB: TableState = { ...freeTable, id: "tB", label: "B" };
+    const tableA: TableState = { ...freeTable, id: "tA", label: "A", shortName: "A" };
+    const tableB: TableState = { ...freeTable, id: "tB", label: "B", shortName: "B" };
 
     it("an older poll that answers after the action's refresh began does not replace it", async () => {
       const { el, answerA, answerB } = await twoDeferredRefreshes();
@@ -17171,11 +17173,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     unsentDrafts: [],
     reminder: null,
   };
-  const mesa9: TableState = { ...freeTable, id: "t9", label: "Mesa 9" };
+  const mesa9: TableState = { ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" };
   const mesa7: TableState = {
     ...openTable,
     id: "t7",
     label: "Mesa 7",
+    shortName: "Mesa 7",
     condition: "held",
     party: luisParty,
   };
@@ -21648,7 +21651,9 @@ describe("W69 held move basket protection", () => {
   async function loaded(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
     const { el } = await mountApp(
       {
-        getTablesState: vi.fn().mockResolvedValue([{ ...freeTable, id: "t9", label: "Mesa 9" }]),
+        getTablesState: vi
+          .fn()
+          .mockResolvedValue([{ ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" }]),
         askOrderDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [] }),
         previewBillMoveAllergy: counterMovePreview(),
         moveBill: vi

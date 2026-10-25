@@ -79,6 +79,7 @@ function planned(
   return {
     id,
     label,
+    shortName: label,
     zoneId: "z1",
     state: "free",
     condition: seated === null ? "free" : "held",

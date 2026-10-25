@@ -26,6 +26,7 @@ function table(id: string, label: string, todayRow: TableToday): TableState {
   return {
     id,
     label,
+    shortName: label,
     zoneId: "z1",
     state: "free",
     condition: "free",

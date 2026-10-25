@@ -418,6 +418,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     const asked: TableState = {
       id: "t4",
       label: "Mesa 4",
+      shortName: "Mesa 4",
       zoneId: null,
       state: "open-tab",
       condition: "held",
@@ -832,6 +833,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       today: null,
       signals: [],
       party: null,
+      shortName: over.label ?? label,
       ...over,
     });
     const ana: TableParty = { ...party, tableIds: ["t4", "t5"] };

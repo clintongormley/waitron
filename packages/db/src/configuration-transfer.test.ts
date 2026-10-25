@@ -9,6 +9,7 @@ import {
   CORE_CONFIGURATION_TRANSFER,
   validateCoreConfiguration,
 } from "./configuration-transfer.js";
+import { storeTableShortNameKeys } from "./table-short-names.js";
 
 const stationRefusal = expect.objectContaining({
   code: "setup.request_invalid",
@@ -194,6 +195,60 @@ describe("validateCoreConfiguration", () => {
     },
   );
 
+  describe.each(["dining_tables", "floor_plan_tables"])("%s short names", (table) => {
+    it.each(["", "ABCDEF", 5])(
+      "refuses a table short name that is blank, too long or not text: %j",
+      (short_name) => {
+        expect(() => validateCoreConfiguration({ [table]: [{ short_name }] })).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `${table}.short_name` },
+          }),
+        );
+      },
+    );
+
+    it("refuses a short name of spaces", () => {
+      expect(() => validateCoreConfiguration({ [table]: [{ short_name: "  " }] })).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: `${table}.short_name` },
+        }),
+      );
+    });
+
+    it.each(["\u0020T1\u0020", "\u00a0T1"])(
+      "refuses a short name with spaces around it, %j",
+      (short_name) => {
+        expect(() => validateCoreConfiguration({ [table]: [{ short_name }] })).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `${table}.short_name` },
+          }),
+        );
+      },
+    );
+
+    it("accepts a short name that is null or absent, or five characters", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          [table]: [{ short_name: null }, {}, { short_name: "ABCDÉ" }],
+        }),
+      ).not.toThrow();
+    });
+
+    it("refuses two tables whose short names differ only in case", () => {
+      expect(() =>
+        validateCoreConfiguration({ [table]: [{ short_name: "T1" }, { short_name: "t1" }] }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: `${table}.short_name` },
+        }),
+      );
+    });
+  });
+
   it("is the core transfer's validate", () => {
     expect(validateCoreConfiguration).toBeTypeOf("function");
     expect(CORE_CONFIGURATION_TRANSFER.validate).toBe(validateCoreConfiguration);
@@ -205,6 +260,17 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
     expect(CORE_CONFIGURATION_TRANSFER.tables.map((t) => t.name)).not.toContain(
       "table_service_statuses",
     );
+  });
+
+  it("carries a table's short name but never its key, which the import sets", () => {
+    expect(
+      CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "dining_tables"),
+    ).toEqual({
+      name: "dining_tables",
+      locationColumns: ["location_id"],
+      omit: ["needs_clearing_since", "short_name_key"],
+    });
+    expect(CORE_CONFIGURATION_TRANSFER.afterImport).toBe(storeTableShortNameKeys);
   });
 
   it("leaves a deleted printer behind and never carries its poll credential", () => {

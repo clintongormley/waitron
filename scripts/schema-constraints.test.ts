@@ -406,6 +406,7 @@ const EXPECTED_UNIQUE_INDEXES = [
   "device_profiles_live_name_key",
   "devices_location_label_active_key",
   "dining_tables_location_label_key",
+  "dining_tables_location_short_name_key_uq",
   "clock_checks_seq_uq",
   "clock_confirmations_seq_uq",
   "clock_confirmations_check_uq",

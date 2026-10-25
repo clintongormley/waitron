@@ -8,6 +8,7 @@ import type { FloorPlanEditor } from "./floor-plan-editor.js";
 import type { FloorPlanTablesPanel } from "./floor-plan-tables-panel.js";
 import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import {
   addTables,
   changePlacement,
@@ -154,6 +155,24 @@ it("a taken name selects its table and shows the generic sentence", async () => 
   });
   expect(message(el)).toBe("Correct the highlighted fields to continue.");
   expect(button(el, "save").disabled).toBe(false);
+});
+
+it("a name another table uses as its short name says which table, in English and Spanish", async () => {
+  const shown = { code: "table.label_taken", params: { label: "P1", takenBy: "Terrace 1" } };
+  const el = await open(refusing(shown));
+  await change(el, renamed(opened(), "m2", "P1"));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("m2");
+  expect(el.fieldError).toEqual({
+    key: "m2",
+    field: "label",
+    message: "Terrace 1 already uses that as its short name. Choose another name for this table.",
+  });
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(el.fieldError?.message).toBe(
+    es["floor_plan_editor.label_shown_as_short_name"].replace("{takenBy}", "Terrace 1"),
+  );
 });
 
 it("a taken name no draft table carries shows the code's own sentence and selects nothing", async () => {

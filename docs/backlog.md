@@ -122,8 +122,9 @@ come after the list above:
   The handheld, kitchen screen and pass are **A797**: the owner answered Q42 on 2026-10-18 and
   Q51 on 2026-10-24 (all recommended; the Ready warning time in each prep station's editor), so
   nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready
-  bar and List/Map kept per zone on the device) in #2063; slices 1–3 are next, now that #2037 has
-  landed. A773-2 builds the pass's part, and the phone's order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
+  bar and List/Map kept per zone on the device) in #2063; slice 1 (table short names, data) is in
+  review, built from the build plan; slice 2 (the dashboard's short-name field) is next, then
+  slice 3. A773-2 builds the pass's part, and the phone's order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
@@ -2776,13 +2777,83 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Q42 answer; Q51 was answered 2026-10-24 (all recommended; the Ready warning time in each prep
   station's editor), so nothing waits for it. 10–11 wait for A803's slice 3 and 12–12b follow
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
-  List/Map kept per zone on the device) in #2063. Build order: slices 1–3 next (#2037 has landed):
+  List/Map kept per zone on the device) in #2063. Slice 1 (table short names, data) is in review,
+  built from the build plan; slice 2 (the dashboard's short-name field) is next, then slice 3:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
   durable post-invoice payment-refund path. The screen designer was
   retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
+
+- **A1101. Short names on the floor map where a full name does not fit, and on printed kitchen
+  tickets.** A797's design proposes both (§3.7, §9) as later choices for the owner; A797 builds
+  neither. Today the map hides a table's name when the table's shorter side is drawn under 28 px
+  (`NAME_MIN_PX` and `showsName`, `packages/ui/src/floor-plan-geometry.ts`), and the kitchen ticket
+  prints the table's name as the floor shows it — its group's or its own name for today, else its
+  full name — and never its short name (`tableLabel`, from `orderTableLabels` in
+  `packages/db/src/party-table-labels.ts`). Ask the owner first.
+
+- **A1102. The till's tests name tables in Spanish.** `apps/till/src/till-app.test.ts`'s counter
+  move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa …" labels
+  (`git grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md
+  §3). This is the till's share of the Spanish test data the
+  [English-only audit](backlog/english-only-audit.md) counts in its `apps/till` row; A976 covers
+  the server's test venues, and A977's list of test folders still to clean is where this joins. A797
+  slice 1's till test fixtures copy labels into `shortName` (`apps/till/src/api/client.test.ts`'s
+  "Mesa 1" and "Mesa 2" among them), so renaming a label means renaming its short name too. Low
+  priority.
+
+- **A1103. At 390 px the floor plan editor leaves a refused Name field half under the panel's
+  heading.** Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-390-light-en.png` in
+  `~/waitron-campaign-c/a797-1-shots/`): after a refused save the Name field is scrolled only partly
+  into view, and its "Name *" label sits under the panel's sticky heading ("W1 ⌄"), so only the
+  value and the refusal under it show; scrolled by hand, the label shows
+  (`r-refusal-field-390-light-en.png`). Slice 1 changed which sentence the editor shows, not where
+  it scrolls.
+
+- **A1104. Should the till's Ready bar sort by the short name it shows?** Seen, 2026-10-25 (the
+  A797 slice 1 look, `e-bar-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): the
+  bar lists parties in the order their first table appears in the floor's tables (slice 5 of the
+  [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md)), which in the look ran
+  by full name, so "Window 1", shown as W1, came last: "2 · 1", "T1+T2 · 1", "W1 · 1". Ask the
+  owner.
+
+- **A1105. At 390 px in English the till's Ready bar hides its last entry under "Open ›".** Seen,
+  2026-10-25 (the A797 slice 1 look, `e-bar-dining-390-light-en.png` in
+  `~/waitron-campaign-c/a797-1-shots/`): with three entries the last, "W1 · 1", is cut off by the
+  "Open ›" button and the bar scrolls sideways to reach it; in Spanish all three fit
+  (`e-bar-dining-390-light-es.png`).
+
+- **A1106. The till's List cards say "1 items".** Seen, 2026-10-25 (the A797 slice 1 look,
+  `h-list-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): Window 1's card reads
+  "€6.50, 1 items". Fix: a singular wording for a count of 1.
+
+- **A1107. Spanish calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its
+  List card.** Seen, 2026-10-25 (the A797 slice 1 look, `g-details-window1-390-light-es.png` and
+  `h-list-dining-390-light-es.png` in `~/waitron-campaign-c/a797-1-shots/`), for the same table.
+  A1076 is a different Spanish wording of the same flag, in the station editor.
+
+- **A1108. The till order screen's Sent panel reads "Sent !" and "Held ·".** Seen, 2026-10-25 (the
+  A797 slice 1 look, `f-header-window1-1024-light-en.png` and `f-header-window1-1024-dark-es.png` in
+  `~/waitron-campaign-c/a797-1-shots/`): a space before the "!" ("Sent !", «Enviado !»), and the
+  Held line ends in a separator with nothing after it, where the Served line above reads
+  "Served · 0 · €0.00".
+
+- **A1109. The floor plan editor opens Terrace as an empty grid, and its phone Tables panel has a
+  large blank gap.** Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-1280-light-en.png` and
+  `r-tables-panel-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): at 1280 the demo's
+  Terrace tables lie beyond the visible canvas, so none shows without scrolling; at 390 the Tables
+  panel leaves a large blank space between Add tables / Add joined table and the list.
+
+- **A1110. A short name with a "+" in it can read like one of today's joins on the Ready bar.**
+  Found by the A797 slice 1 review (2026-10-25): a save may give "Window" the short name "T1+T2"
+  beside "Terrace 1" (T1) and "Terrace 2" (T2); once the two terrace tables are joined today, the
+  Ready bar lists both the join and Window as "T1+T2". The entries stay separate (one per party),
+  but staff cannot tell them apart. The proposal rule keeps a name of four characters or fewer
+  whole, so a table named "1+2" is proposed "1+2". Decide in slice 2 (the dashboard's short-name
+  field) whether a short name may contain "+", or whether the bar adds the full name when two
+  entries read alike.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when

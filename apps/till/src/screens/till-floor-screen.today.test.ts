@@ -51,6 +51,7 @@ function planned(id: string, x: number, over: Partial<TableToday> = {}): TableSt
   return {
     id,
     label: id.slice(1),
+    shortName: id.slice(1),
     zoneId: "z1",
     state: "free",
     condition: "free",
@@ -589,15 +590,18 @@ describe("till-floor-screen: today's names", () => {
   const counter4 = (over: Partial<TableState> = {}, todayOver: Partial<TableToday> = {}) => ({
     ...planned("t4", 2, { name: "Window", ...todayOver }),
     label: "Counter 4",
+    shortName: "Counter 4",
     ...over,
   });
   const counter5 = (todayOver: Partial<TableToday> = {}) => ({
     ...planned("t5", 4, todayOver),
     label: "Counter 5",
+    shortName: "Counter 5",
   });
   const bar = (todayOver: Partial<TableToday> = {}) => ({
     ...planned("tb", 20, todayOver),
     label: "Bar",
+    shortName: "Bar",
   });
   const inGroup = (joinName: string | null): Partial<TableToday> => ({
     joinId: "j1",
@@ -782,7 +786,7 @@ describe("till-floor-screen: today's names", () => {
         counter4({}, { name: null, ...inGroup("García birthday") }),
         bar(inGroup("García birthday")),
         counter5({ name: "Corner" }),
-        { ...planned("t6", 30, { name: "Patio" }), label: "Counter 6" },
+        { ...planned("t6", 30, { name: "Patio" }), label: "Counter 6", shortName: "Counter 6" },
       ],
       stubApi(),
     );
@@ -800,7 +804,11 @@ describe("till-floor-screen: today's names", () => {
 
   it("Join with… lists its targets in the order of the names they show", async () => {
     const el = await mount(
-      [counter5(), bar({ name: "Zinc" }), { ...planned("t6", 30), label: "Counter 6" }],
+      [
+        counter5(),
+        bar({ name: "Zinc" }),
+        { ...planned("t6", 30), label: "Counter 6", shortName: "Counter 6" },
+      ],
       stubApi(),
     );
     await press(el, "t5", "join-with");
@@ -881,6 +889,7 @@ describe("till-floor-screen: today's names", () => {
     const part = (id: string, label: string) => ({
       ...planned(id, 0, { placement: null, inJoinedTable: "Long table" }),
       label,
+      shortName: label,
     });
     const long = {
       ...planned("tl", 2, {
@@ -888,6 +897,7 @@ describe("till-floor-screen: today's names", () => {
         joined: { parts: ["t3", "t6"], splitOff: [], apart: false },
       }),
       label: "Long table",
+      shortName: "Long table",
     };
     const el = await mount([long, part("t3", "Counter 3"), part("t6", "Counter 6")], stubApi());
     await press(el, "tl", "split-off");

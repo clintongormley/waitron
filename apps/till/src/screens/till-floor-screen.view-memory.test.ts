@@ -24,6 +24,7 @@ function table(id: string, zoneId: string, placed: boolean): TableState {
   return {
     id,
     label: id.slice(1),
+    shortName: id.slice(1),
     zoneId,
     state: "free",
     condition: "free",

@@ -385,6 +385,8 @@ Every table gets a **short name** beside its full name (owner, Q42 (a), ~21:12).
   floor 1" → "TF1"). When the automatic short name clashes, it is still proposed in the field and
   the save refuses it the same way; nothing picks another one silently. Compared ignoring case
   ("t1" is "T1"), and enforced by the database (§5).
+  (2026-10-25, slice 1: until slice 2's field, a proposal another table holds leaves the table
+  with none; see §5 and the build plan's slice 1, D4.)
 - **Where it shows:** tight places show the short name — the handheld's bar buttons, the Ready bar,
   kitchen-screen cards and pass cards. The table's own header and receipts show the full name.
 - **Where it is edited:** the floor-plan editor's table panel (its Name field,
@@ -483,7 +485,9 @@ Each point is (read); the plan confirms it before relying on it.
   refusal can say "Terrace 1 already uses T1"), beside `table.label_taken`
   (`apps/server/src/errors.ts:377`): the domain is the table, as its siblings' is. It joins the HTTP status maps (`till-api.ts:551`,
   `management-api.ts:270`) and both apps' code catalogues (`apps/dashboard/src/i18n/codes.ts:578`,
-  `apps/till/src/i18n/codes.ts:189`). **Migration**, a schema change on a pre-live database: no
+  `apps/till/src/i18n/codes.ts:189`). (2026-10-25, slice 1: only the management status map and
+  the dashboard's catalogue carry it, because no till route can refuse with it; see the build
+  plan's slice 1, D11.) **Migration**, a schema change on a pre-live database: no
   backfill code, a venue reset is acceptable, said in the PR's first line. The plan must not let
   drizzle rebuild `dining_tables` (CLAUDE.md §3: a rebuild runs with foreign keys on); a nullable
   column that the save always fills is the expected shape. **Every table gets one:** the
@@ -498,6 +502,14 @@ Each point is (read); the plan confirms it before relying on it.
   name (plan line 96), and its plan leaves only the handheld's short names to A797 (lines 19, 50, 311);
   this design proposes that A797 adds it to the pass read after A773-2 lands (slice 12b), and asks
   lane G to confirm. Each is a change to what a server read sends the till, so FULL.
+  (2026-10-25, slice 1: a save that sends a table no short name keeps its stored one when it
+  leaves the name unchanged and no other table holds it, and a proposal that is taken leaves the
+  table with none rather than refusing the save; but a table the save adds or renames that is left
+  with none is refused `table.label_taken` when another zone's table already holds its name as a
+  short name, or as its full name having none; see the
+  [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4. An import that
+  carries no short name leaves its tables with none, and a file never carries `short_name_key`,
+  which the import sets; see the build plan's slice 1, D10.)
 - **Whose unsent dishes** (slice 3). The floor read gives each party's unsent New orders with the
   owner's name only (`UnsentDraft`, `apps/server/src/order-drafts.ts:343-348`); the bar needs the
   owner's id and the draft's last-saved time (`order_drafts.owner_id`, `.updated_at`,
@@ -666,7 +678,8 @@ edits the same files)
   (§3.7): later choices for the owner, not built here.
 - What a tight place shows for a group joined today on the till (A504's today's joins), and for a
   table renamed for today: proposed, the members' short names joined ("T4+T5") and the saved short
-  name; the plan of slice 1 settles it.
+  name; the plan of slice 1 settles it. (2026-10-25: settled as the saved short name, and the
+  members' short names joined for a today's join; see the build plan's slice 1, D8.)
 - A larger text size for kitchen screens read from a distance; a "My tables" filter on the handheld
   floor; whether a dish leaves a station's Ready column on its own; the venue's bump mode once a dish
   tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order).

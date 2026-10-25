@@ -12,6 +12,7 @@ const t = (tableId: string | null, label: string, over: Partial<Target> = {}): T
   tableId,
   planTableId: null,
   label,
+  shortName: null,
   seats: 4,
   fixed: false,
   placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
@@ -21,6 +22,7 @@ const t = (tableId: string | null, label: string, over: Partial<Target> = {}): T
 const l = (id: string, label: string, over: Partial<LiveTable> = {}): LiveTable => ({
   id,
   label,
+  shortName: null,
   held: false,
   refused: false,
   tied: false,
@@ -39,7 +41,12 @@ const sorted = <T>(xs: T[]) =>
 describe("planReset", () => {
   it("copies the target onto every free table", () => {
     expect(
-      planReset({ targets: [t("a", "T1")], live: [l("a", "T1")], takenElsewhere: none }).apply,
+      planReset({
+        targets: [t("a", "T1")],
+        live: [l("a", "T1")],
+        takenElsewhere: none,
+        shortNameKeysElsewhere: none,
+      }).apply,
     ).toEqual([{ target: t("a", "T1"), label: "T1" }]);
   });
 
@@ -48,6 +55,7 @@ describe("planReset", () => {
       targets: [t("a", "T2"), t("b", "T1")],
       live: [l("a", "T1", { blocked: true }), l("b", "T2")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b"]);
     expect(plan.apply).toEqual([{ target: t("b", "T1"), label: null }]);
@@ -59,6 +67,7 @@ describe("planReset", () => {
       targets: [t("a", "T1"), t("b", "T2")],
       live: [l("a", "T1", { held: true, tied: true }), l("b", "T2", { mergedWithHeld: true })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.apply).toEqual([]);
     expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b"]);
@@ -70,6 +79,7 @@ describe("planReset", () => {
       targets: [t("a", "T1"), t("b", "T2")],
       live: [l("a", "T1", { splitWithBusy: true }), l("b", "T2")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.apply).toEqual([{ target: t("b", "T2"), label: "T2" }]);
     expect(plan.pending).toEqual([t("a", "T1")]);
@@ -81,6 +91,7 @@ describe("planReset", () => {
       targets: [t("a", "T1", { label: "T9" }), t("b", "T2")],
       live: [l("a", "T1", { clearing: true }), l("b", "T2")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.apply).toEqual([{ target: t("b", "T2"), label: "T2" }]);
     expect(plan.pending).toEqual([t("a", "T1", { label: "T9" })]);
@@ -92,6 +103,7 @@ describe("planReset", () => {
       targets: [t("a", "Patio 1")],
       live: [l("a", "T1", { clearing: true, hasToday: false })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.seed).toEqual([t("a", "Patio 1")]);
     expect(plan.pending).toEqual([t("a", "Patio 1")]);
@@ -104,6 +116,7 @@ describe("planReset", () => {
       targets: [long, t("b", "Bar", { label: "Long" })],
       live: [l("b", "Bar")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
       waitingToCreate: new Set([long]),
     });
     expect(plan.create).toEqual([]);
@@ -120,6 +133,7 @@ describe("planReset", () => {
         l("c", "4+5", { joinedWithWaiting: true }),
       ],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.apply).toEqual([]);
     expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b", "c"]);
@@ -130,6 +144,7 @@ describe("planReset", () => {
       targets: [t("a", "Patio 1")],
       live: [l("a", "T1", { held: true, tied: true, hasToday: false })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.seed).toEqual([t("a", "Patio 1")]);
     expect(plan.pending).toEqual([t("a", "Patio 1")]);
@@ -140,6 +155,7 @@ describe("planReset", () => {
       targets: [t("a", "T1", { remove: true })],
       live: [l("a", "T1", { refused: true })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.remove).toEqual([]);
     expect(plan.hide).toEqual([]);
@@ -152,6 +168,7 @@ describe("planReset", () => {
       targets: [t("a", "T1", { remove: true })],
       live: [l("a", "T1", { refused: true, hasToday: false })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.seed).toEqual([]);
     expect(plan.remove).toEqual([]);
@@ -159,9 +176,14 @@ describe("planReset", () => {
   });
 
   it("creates a table the target adds", () => {
-    expect(planReset({ targets: [t(null, "T2")], live: [], takenElsewhere: none }).create).toEqual([
-      t(null, "T2"),
-    ]);
+    expect(
+      planReset({
+        targets: [t(null, "T2")],
+        live: [],
+        takenElsewhere: none,
+        shortNameKeysElsewhere: none,
+      }).create,
+    ).toEqual([t(null, "T2")]);
   });
 
   it("removes a free table, and hides one still tied", () => {
@@ -169,6 +191,7 @@ describe("planReset", () => {
       targets: [t("a", "T1", { remove: true }), t("b", "T2", { remove: true })],
       live: [l("a", "T1"), l("b", "T2", { tied: true })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan).toMatchObject({ remove: ["a"], hide: ["b"] });
     expect(plan.pending).toEqual([t("b", "T2", { remove: true })]);
@@ -179,6 +202,7 @@ describe("planReset", () => {
       targets: [t("a", "T1", { remove: true }), t(null, "T1")],
       live: [l("a", "T1", { held: true, tied: true })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan).toMatchObject({ remove: [], hide: [], create: [] });
     expect(plan.pending).toEqual([t("a", "T1", { remove: true }), t(null, "T1")]);
@@ -189,6 +213,7 @@ describe("planReset", () => {
       targets: [t("a", "T2"), t("b", "T1")],
       live: [l("a", "T1"), l("b", "T2")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.apply.map((x) => x.label)).toEqual(["T2", "T1"]);
   });
@@ -198,6 +223,7 @@ describe("planReset", () => {
       targets: [t("a", "Terrace 9"), t(null, "Terrace 4")],
       live: [l("a", "Terrace 4", { held: true, tied: true })],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.create).toEqual([]);
     expect(plan.pending.map((x) => x.label)).toEqual(["Terrace 9", "Terrace 4"]);
@@ -213,6 +239,7 @@ describe("planReset", () => {
       ],
       live: [l("a", "T1"), l("b", "T2"), l("c", "T3")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.remove).toEqual(["a", "c"]);
     expect(plan.apply).toEqual([{ target: t("b", "T1"), label: null }]);
@@ -226,6 +253,7 @@ describe("planReset", () => {
       targets: [t("a", "T2"), t("b", "T3"), t("c", "T1")],
       live: [l("a", "T1"), l("b", "T2", { held: true, tied: true }), l("c", "T4")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(sorted(plan.apply.map((x) => [x.target.tableId, x.label]))).toEqual(
       sorted([
@@ -240,6 +268,7 @@ describe("planReset", () => {
       targets: [t("a", "T9"), t(null, "T9"), t("b", "T9")],
       live: [l("a", "T1"), l("b", "T2")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan.apply).toEqual([
       { target: t("a", "T9"), label: "T9" },
@@ -250,15 +279,23 @@ describe("planReset", () => {
 
   it("treats a name used in another zone as in use", () => {
     expect(
-      planReset({ targets: [t(null, "Bar 1")], live: [], takenElsewhere: new Set(["Bar 1"]) })
-        .create,
+      planReset({
+        targets: [t(null, "Bar 1")],
+        live: [],
+        takenElsewhere: new Set(["Bar 1"]),
+        shortNameKeysElsewhere: none,
+      }).create,
     ).toEqual([]);
   });
 
   it("treats the name of a live table outside the plan as in use", () => {
     expect(
-      planReset({ targets: [t(null, "Spare")], live: [l("s", "Spare")], takenElsewhere: none })
-        .create,
+      planReset({
+        targets: [t(null, "Spare")],
+        live: [l("s", "Spare")],
+        takenElsewhere: none,
+        shortNameKeysElsewhere: none,
+      }).create,
     ).toEqual([]);
   });
 
@@ -267,6 +304,7 @@ describe("planReset", () => {
       targets: [t("gone", "T1"), t("old", "T2", { remove: true }), t(null, "T1"), t("a", "T2")],
       live: [l("a", "T3")],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan).toMatchObject({ seed: [], create: [], remove: [], hide: [] });
     expect(plan.apply).toEqual([{ target: t("a", "T2"), label: null }]);
@@ -278,11 +316,176 @@ describe("planReset", () => {
     ]);
   });
 
+  it("waits, keeping both names, while another zone's table holds the target's short name", () => {
+    const target = t("a", "Terrace 1", { shortName: "T1" });
+    const live = [l("a", "Old", { shortName: "O1" })];
+    const held = planReset({
+      targets: [target],
+      live,
+      takenElsewhere: none,
+      shortNameKeysElsewhere: new Set(["t1"]),
+    });
+    expect(held.apply).toEqual([{ target, label: null }]);
+    expect(held.pending).toEqual([target]);
+    const free = planReset({
+      targets: [target],
+      live,
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(free.apply).toEqual([{ target, label: "Terrace 1" }]);
+    expect(free.pending).toEqual([]);
+  });
+
+  it("compares short names ignoring case", () => {
+    const elsewhere = planReset({
+      targets: [t("a", "Terrace 1", { shortName: "t1" })],
+      live: [l("a", "Old")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: new Set(["t1"]),
+    });
+    expect(elsewhere.apply).toEqual([
+      { target: t("a", "Terrace 1", { shortName: "t1" }), label: null },
+    ]);
+    const here = planReset({
+      targets: [t("a", "Terrace 1", { shortName: "t1" }), t("b", "Table 1", { shortName: "TB" })],
+      live: [l("a", "Old"), l("b", "Table 1"), l("c", "Spare", { shortName: "T1" })],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(here.apply).toEqual([
+      { target: t("a", "Terrace 1", { shortName: "t1" }), label: null },
+      { target: t("b", "Table 1", { shortName: "TB" }), label: "Table 1" },
+    ]);
+    const claimed = planReset({
+      targets: [t("a", "A", { shortName: "T1" }), t("b", "B", { shortName: "t1" })],
+      live: [l("a", "A"), l("b", "B")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(claimed.apply).toEqual([
+      { target: t("a", "A", { shortName: "T1" }), label: "A" },
+      { target: t("b", "B", { shortName: "t1" }), label: null },
+    ]);
+  });
+
+  it("lets two tables swap short names in one reset", () => {
+    const plan = planReset({
+      targets: [t("a", "A", { shortName: "T2" }), t("b", "B", { shortName: "T1" })],
+      live: [l("a", "A", { shortName: "T1" }), l("b", "B", { shortName: "T2" })],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.apply).toEqual([
+      { target: t("a", "A", { shortName: "T2" }), label: "A" },
+      { target: t("b", "B", { shortName: "T1" }), label: "B" },
+    ]);
+    expect(plan.pending).toEqual([]);
+  });
+
+  it("a table that waits keeps its short name in use", () => {
+    const plan = planReset({
+      targets: [t("a", "A", { shortName: "T1" }), t("b", "B", { shortName: "T9" })],
+      live: [l("a", "A"), l("b", "B", { held: true, shortName: "T1" })],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.apply).toEqual([{ target: t("a", "A", { shortName: "T1" }), label: null }]);
+    expect(plan.pending.map((x) => x.tableId)).toEqual(["b", "a"]);
+  });
+
+  it("a table that waits for its label keeps its short name in use, so another target wanting it waits", () => {
+    const plan = planReset({
+      targets: [t("a", "X", { shortName: "T5" }), t("b", "B", { shortName: "T1" })],
+      live: [l("a", "A", { shortName: "T1" }), l("b", "B")],
+      takenElsewhere: new Set(["X"]),
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.apply).toEqual([
+      { target: t("a", "X", { shortName: "T5" }), label: null },
+      { target: t("b", "B", { shortName: "T1" }), label: null },
+    ]);
+    expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b"]);
+  });
+
+  it("a label and a short name never block each other", () => {
+    const plan = planReset({
+      targets: [t("a", "12"), t("b", "B", { shortName: "12" }), t("c", "7")],
+      live: [l("a", "12"), l("b", "B"), l("c", "C")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: new Set(["7"]),
+    });
+    expect(plan.apply).toEqual([
+      { target: t("a", "12"), label: "12" },
+      { target: t("b", "B", { shortName: "12" }), label: "B" },
+      { target: t("c", "7"), label: "7" },
+    ]);
+  });
+
+  it("a joined table to create waits, keeping its short name taken, when its group waits", () => {
+    const long = t(null, "Long", { shortName: "L1" });
+    const plan = planReset({
+      targets: [long, t("b", "Bar", { shortName: "l1" })],
+      live: [l("b", "Bar")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+      waitingToCreate: new Set([long]),
+    });
+    expect(plan.create).toEqual([]);
+    expect(plan.apply).toEqual([{ target: t("b", "Bar", { shortName: "l1" }), label: null }]);
+    expect(plan.pending).toEqual([long, t("b", "Bar", { shortName: "l1" })]);
+  });
+
+  it("leaves a target whose table is not live pending, its short name kept from every other table", () => {
+    const plan = planReset({
+      targets: [t("gone", "G", { shortName: "T1" }), t("a", "A", { shortName: "T1" })],
+      live: [l("a", "A")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.apply).toEqual([{ target: t("a", "A", { shortName: "T1" }), label: null }]);
+    expect(plan.pending).toEqual([
+      t("gone", "G", { shortName: "T1" }),
+      t("a", "A", { shortName: "T1" }),
+    ]);
+  });
+
+  it("a short name a waiting table keeps never blocks another table's label", () => {
+    const plan = planReset({
+      targets: [t("h", "H"), t("w", "X", { shortName: "W1" }), t("a", "12"), t("b", "13")],
+      live: [
+        l("h", "H", { held: true, shortName: "12" }),
+        l("w", "W", { shortName: "13" }),
+        l("a", "A"),
+        l("b", "B"),
+      ],
+      takenElsewhere: new Set(["X"]),
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.apply).toEqual([
+      { target: t("w", "X", { shortName: "W1" }), label: null },
+      { target: t("a", "12"), label: "12" },
+      { target: t("b", "13"), label: "13" },
+    ]);
+  });
+
+  it("a removal frees neither name this pass", () => {
+    const plan = planReset({
+      targets: [t("r", "R", { remove: true, shortName: "T1" }), t("a", "A", { shortName: "T1" })],
+      live: [l("r", "R", { shortName: "T1" }), l("a", "A")],
+      takenElsewhere: none,
+      shortNameKeysElsewhere: none,
+    });
+    expect(plan.remove).toEqual(["r"]);
+    expect(plan.apply).toEqual([{ target: t("a", "A", { shortName: "T1" }), label: null }]);
+  });
+
   it("ignores a removal that names no table", () => {
     const plan = planReset({
       targets: [t(null, "T1", { remove: true })],
       live: [],
       takenElsewhere: none,
+      shortNameKeysElsewhere: none,
     });
     expect(plan).toEqual({ apply: [], seed: [], create: [], remove: [], hide: [], pending: [] });
   });
@@ -290,12 +493,13 @@ describe("planReset", () => {
 
 describe("targetsFromMaster", () => {
   it("makes every live table of the zone a target: one that follows no master table goes", () => {
-    const live = [{ id: "c", label: "Old 3", planTableId: null }];
+    const live = [{ id: "c", label: "Old 3", planTableId: null, shortName: null }];
     expect(targetsFromMaster([], live)).toEqual([
       {
         tableId: "c",
         planTableId: null,
         label: "Old 3",
+        shortName: null,
         seats: null,
         fixed: false,
         placement: null,
@@ -306,13 +510,13 @@ describe("targetsFromMaster", () => {
 
   it("builds targets from the master and removes live tables the master no longer has", () => {
     const master = [
-      { id: "m1", label: "T1", seats: 4, fixed: false, placement: null },
-      { id: "m2", label: "T2", seats: 2, fixed: false, placement: null },
+      { id: "m1", label: "T1", seats: 4, fixed: false, placement: null, shortName: null },
+      { id: "m2", label: "T2", seats: 2, fixed: false, placement: null, shortName: null },
     ];
     const live = [
-      { id: "a", label: "Old 1", planTableId: "m1" },
-      { id: "b", label: "Old 2", planTableId: null },
-      { id: "c", label: "Old 3", planTableId: null },
+      { id: "a", label: "Old 1", planTableId: "m1", shortName: null },
+      { id: "b", label: "Old 2", planTableId: null, shortName: null },
+      { id: "c", label: "Old 3", planTableId: null, shortName: null },
     ];
     expect(targetsFromMaster(master, live).map((x) => [x.tableId, x.label, x.remove])).toEqual([
       ["a", "T1", false],
@@ -322,18 +526,19 @@ describe("targetsFromMaster", () => {
     ]);
   });
 
-  it("copies the master's values, and removes a table whose master table is gone under its current name", () => {
+  it("copies the master's values and short name, and removes a table whose master table is gone under its current names", () => {
     const placement = { x: 3, y: 4, width: 8, height: 6, shape: "round" as const, rotation: 45 };
-    const master = [{ id: "m1", label: "T1", seats: 6, fixed: true, placement }];
+    const master = [{ id: "m1", label: "T1", seats: 6, fixed: true, placement, shortName: "M1" }];
     const live = [
-      { id: "a", label: "Old 1", planTableId: "m1" },
-      { id: "b", label: "Old 2", planTableId: "m9" },
+      { id: "a", label: "Old 1", planTableId: "m1", shortName: "O1" },
+      { id: "b", label: "Old 2", planTableId: "m9", shortName: "O2" },
     ];
     expect(targetsFromMaster(master, live)).toEqual([
       {
         tableId: "a",
         planTableId: "m1",
         label: "T1",
+        shortName: "M1",
         seats: 6,
         fixed: true,
         placement,
@@ -343,6 +548,7 @@ describe("targetsFromMaster", () => {
         tableId: "b",
         planTableId: null,
         label: "Old 2",
+        shortName: "O2",
         seats: null,
         fixed: false,
         placement: null,

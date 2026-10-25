@@ -579,6 +579,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A table with that name already exists",
     es: "Ya existe una mesa con ese nombre",
   },
+  "table.short_name_taken": {
+    en: "Another table already uses that short name",
+    es: "Otra mesa ya usa ese nombre corto",
+  },
   "table.not_found": {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",

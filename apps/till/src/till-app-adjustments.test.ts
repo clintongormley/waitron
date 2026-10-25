@@ -77,6 +77,7 @@ const party: TableParty = {
 const mesa4: TableState = {
   id: "t4",
   label: "4",
+  shortName: "4",
   zoneId: "z1",
   state: "open-tab",
   condition: "held",

@@ -85,6 +85,7 @@ function floorTable(label: string, index: number, placed: boolean): TableState {
   return {
     id: `t${index + 1}`,
     label,
+    shortName: label,
     zoneId: "z1",
     state: "free",
     condition: "free",

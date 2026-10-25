@@ -354,6 +354,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     today: null,
     signals: [],
     party: null,
+    shortName: over.label ?? label,
     ...over,
   });
   const luis: TableParty = {

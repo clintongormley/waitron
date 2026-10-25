@@ -187,6 +187,15 @@ describe("ALL_MODULES configuration transfer contribution", () => {
     ).toEqual({ kind: "none" });
   });
 
+  it("never copies a table's short-name key, which the import derives", () => {
+    const tables = ALL_MODULES.flatMap((module) =>
+      module.configurationTransfer?.kind === "tables" ? module.configurationTransfer.tables : [],
+    );
+    expect(tables.find((table) => table.name === "dining_tables")?.omit).toContain(
+      "short_name_key",
+    );
+  });
+
   it("removes clearing marks, hardware authenticators, and the exporting machine's node, addresses and last-seen time from copied configuration", () => {
     const tables = ALL_MODULES.flatMap((module) =>
       module.configurationTransfer?.kind === "tables" ? module.configurationTransfer.tables : [],

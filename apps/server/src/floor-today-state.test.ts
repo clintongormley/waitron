@@ -29,6 +29,7 @@ import {
   todayRow,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
+import { createTable } from "./testing/live-table.js";
 import { listTablesWithState, type TableState } from "./working-order.js";
 import "./errors.js";
 
@@ -192,6 +193,20 @@ describe("the till's table-state answer carries today's plan", () => {
       joinName: null,
       needsMoving: false,
     });
+  });
+
+  it("names each table by its short name, or by its full name when it has none", async () => {
+    const [named, unnamed] = [fresh("Front 1"), fresh("Back 2")];
+    const { withShort, without } = await inTx(v, async (tx) => ({
+      withShort: (
+        await createTable(tx, v.cfg, { label: named, zoneId: v.tables.zoneId, shortName: "Fr1" })
+      ).id,
+      without: (await createTable(tx, v.cfg, { label: unnamed, zoneId: v.tables.zoneId })).id,
+    }));
+
+    const states = await read();
+    expect(states.get(withShort)!.shortName).toBe("Fr1");
+    expect(states.get(without)!.shortName).toBe(unnamed);
   });
 
   it("names the joined table on each part, and on nothing else", async () => {

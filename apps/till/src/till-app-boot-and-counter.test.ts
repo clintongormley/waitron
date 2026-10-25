@@ -6247,6 +6247,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 {
                   id: "look-table",
                   label: "Table 4",
+                  shortName: "Table 4",
                   zoneId: "look-zone",
                   state: "free",
                   hasOpenTab: false,

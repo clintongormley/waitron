@@ -396,6 +396,7 @@ it("refuses the populated predecessor for reset and retains every row after roll
       "_station_printing_choices",
       "_station_bump_mode",
       "_station_changes_after_sending",
+      "_table_short_names",
     ]),
   );
   let before: Record<string, unknown[]>;

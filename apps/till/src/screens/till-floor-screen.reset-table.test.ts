@@ -55,6 +55,7 @@ function table(
     },
     signals: [],
     party: null,
+    shortName: busy.label ?? label,
     ...busy,
   };
 }

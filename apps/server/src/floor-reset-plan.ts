@@ -1,3 +1,4 @@
+import { shortNameKey } from "@waitron/shared";
 import { blocksPlace } from "./joined-split-layout.js";
 
 export type PlanShape = "rect" | "round";
@@ -17,6 +18,7 @@ export interface Target {
   /** The master table copied; null for a removal. */
   planTableId: string | null;
   label: string;
+  shortName: string | null;
   seats: number | null;
   fixed: boolean;
   placement: Placement | null;
@@ -26,6 +28,7 @@ export interface Target {
 export interface LiveTable {
   id: string;
   label: string;
+  shortName: string | null;
   /** An open party sits there now. */
   held: boolean;
   /** A module refuses to let it go, so it waits whole as a held table does, but is never seeded. */
@@ -64,6 +67,8 @@ export interface ResetPlan {
 interface Renaming {
   target: Target;
   current: string | undefined;
+  currentShortKey: string | undefined;
+  targetShortKey: string | undefined;
   wantsNew: boolean;
 }
 
@@ -71,15 +76,25 @@ export function planReset(input: {
   targets: readonly Target[];
   live: readonly LiveTable[];
   takenElsewhere: ReadonlySet<string>;
+  /** Short-name keys of the venue's live tables in other zones. */
+  shortNameKeysElsewhere: ReadonlySet<string>;
   /** Targets with no table yet, a joined table to create whose group waits. */
   waitingToCreate?: ReadonlySet<Target>;
 }): ResetPlan {
   const live = new Map(input.live.map((table) => [table.id, table]));
   const plan: ResetPlan = { apply: [], seed: [], create: [], remove: [], hide: [], pending: [] };
   const fixedInUse = new Set(input.takenElsewhere);
+  // Short-name keys are kept apart from labels, so a label "12" never blocks a short name "12".
+  const fixedShortInUse = new Set(input.shortNameKeysElsewhere);
+  const hold = (label: string, shortName: string | null) => {
+    fixedInUse.add(label);
+    if (shortName !== null) fixedShortInUse.add(shortNameKey(shortName));
+  };
   const targeted = new Set(input.targets.map((target) => target.tableId));
   for (const table of input.live) {
-    if (!targeted.has(table.id)) fixedInUse.add(table.label);
+    if (!targeted.has(table.id)) {
+      hold(table.label, table.shortName);
+    }
   }
   const renamings: Renaming[] = [];
 
@@ -87,11 +102,11 @@ export function planReset(input: {
     const table = target.tableId === null ? undefined : live.get(target.tableId);
     if (target.tableId === null && input.waitingToCreate?.has(target)) {
       plan.pending.push(target);
-      fixedInUse.add(target.label);
+      hold(target.label, target.shortName);
     } else if (target.tableId !== null && !table) {
       // The table's state is unknown, so nothing is done to it and no other table takes its target name.
       plan.pending.push(target);
-      fixedInUse.add(target.label);
+      hold(target.label, target.shortName);
     } else if (
       table &&
       (table.held ||
@@ -104,11 +119,11 @@ export function planReset(input: {
     ) {
       plan.pending.push(target);
       if ((table.held || table.clearing) && !table.hasToday) plan.seed.push(target);
-      fixedInUse.add(table.label);
+      hold(table.label, table.shortName);
     } else if (target.remove) {
       if (!table) continue;
-      // A removal frees its name only once it has succeeded, so the name stays taken this pass.
-      fixedInUse.add(table.label);
+      // A removal frees its names only once it has succeeded, so they stay taken this pass.
+      hold(table.label, table.shortName);
       if (table.tied) {
         plan.hide.push(table.id);
         plan.pending.push(target);
@@ -116,7 +131,14 @@ export function planReset(input: {
         plan.remove.push(table.id);
       }
     } else {
-      renamings.push({ target, current: table?.label, wantsNew: true });
+      renamings.push({
+        target,
+        current: table?.label,
+        currentShortKey:
+          table && table.shortName !== null ? shortNameKey(table.shortName) : undefined,
+        targetShortKey: target.shortName === null ? undefined : shortNameKey(target.shortName),
+        wantsNew: true,
+      });
     }
   }
 
@@ -124,17 +146,28 @@ export function planReset(input: {
   for (let changed = true; changed;) {
     changed = false;
     const inUse = new Set(fixedInUse);
+    const shortInUse = new Set(fixedShortInUse);
     for (const entry of renamings) {
-      if (!entry.wantsNew && entry.current !== undefined) inUse.add(entry.current);
+      if (entry.wantsNew) continue;
+      if (entry.current !== undefined) inUse.add(entry.current);
+      if (entry.currentShortKey !== undefined) shortInUse.add(entry.currentShortKey);
     }
     const claimed = new Set<string>();
+    const shortClaimed = new Set<string>();
     for (const entry of renamings) {
       if (!entry.wantsNew) continue;
-      if (inUse.has(entry.target.label) || claimed.has(entry.target.label)) {
+      const { label } = entry.target;
+      const shortKey = entry.targetShortKey;
+      if (
+        inUse.has(label) ||
+        claimed.has(label) ||
+        (shortKey !== undefined && (shortInUse.has(shortKey) || shortClaimed.has(shortKey)))
+      ) {
         entry.wantsNew = false;
         changed = true;
       } else {
-        claimed.add(entry.target.label);
+        claimed.add(label);
+        if (shortKey !== undefined) shortClaimed.add(shortKey);
       }
     }
   }
@@ -199,8 +232,14 @@ export function targetsFromMaster(
     seats: number | null;
     fixed: boolean;
     placement: Placement | null;
+    shortName: string | null;
   }[],
-  live: readonly { id: string; label: string; planTableId: string | null }[],
+  live: readonly {
+    id: string;
+    label: string;
+    planTableId: string | null;
+    shortName: string | null;
+  }[],
 ): Target[] {
   const byId = new Map(master.map((table) => [table.id, table]));
   const followed = new Set<string>();
@@ -209,11 +248,12 @@ export function targetsFromMaster(
     const source = table.planTableId === null ? undefined : byId.get(table.planTableId);
     if (source) {
       followed.add(source.id);
-      const { label, seats, fixed, placement } = source;
+      const { label, shortName, seats, fixed, placement } = source;
       targets.push({
         tableId: table.id,
         planTableId: source.id,
         label,
+        shortName,
         seats,
         fixed,
         placement,
@@ -224,6 +264,7 @@ export function targetsFromMaster(
         tableId: table.id,
         planTableId: null,
         label: table.label,
+        shortName: table.shortName,
         seats: null,
         fixed: false,
         placement: null,
@@ -231,12 +272,13 @@ export function targetsFromMaster(
       });
     }
   }
-  for (const { id, label, seats, fixed, placement } of master) {
+  for (const { id, label, shortName, seats, fixed, placement } of master) {
     if (!followed.has(id))
       targets.push({
         tableId: null,
         planTableId: id,
         label,
+        shortName,
         seats,
         fixed,
         placement,

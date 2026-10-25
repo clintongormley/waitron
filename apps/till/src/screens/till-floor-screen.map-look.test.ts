@@ -75,6 +75,7 @@ function free(id: string, x: number, over: Partial<TableState> = {}): TableState
     today: today(x),
     signals: [],
     party: null,
+    shortName: over.label ?? id.slice(1),
     ...over,
   };
 }
