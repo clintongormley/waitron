@@ -1445,6 +1445,25 @@ it("reads a waiting check and the wrongly dated sales on a full disk with a chan
   // A second stop's check, left waiting while the first's alert stays open.
   const waitingStop = await stoppedBox(10 * MINUTE);
   await waitingCheck(waitingStop);
+  const handledAt = new Date(waitingStop.behind).toISOString();
+  const [ownHandled] = await venue.db
+    .insert(incidentRows)
+    .values({
+      source: jobOrigin("dashboard").source,
+      code: "clock.records_misdated",
+      params: {
+        confirmationId: randomUUID(),
+        count: 0,
+        from: handledAt,
+        fromOffsetMinutes: 60,
+        partial: false,
+        unconfirmed: true,
+      },
+      severity: "error",
+      detectedAt: handledAt,
+      acknowledgedAt: handledAt,
+    })
+    .returning({ id: incidentRows.id });
 
   venue.db.run(
     sql`insert into change_log (id, payload) values ('clock-check-1', '{"resource":"zz","id":"1"}')`,
@@ -1469,7 +1488,7 @@ it("reads a waiting check and the wrongly dated sales on a full disk with a chan
             and acknowledged_at is not null order by detected_at desc, id desc`,
       )
       .map((row) => row.id);
-    expect(handledIds.length).toBeGreaterThan(0);
+    expect(handledIds).toContain(ownHandled!.id);
     expect(handled.episodes.map((episode) => episode["incidentId"])).toEqual(handledIds);
     expect(changeWaits()).toBe(1);
   } finally {
