@@ -37,6 +37,7 @@ const plan = (zoneId: string, id: string): FloorPlan => ({
       id,
       liveTableId: `l-${id}`,
       label: id.toUpperCase(),
+      shortName: null,
       seats: 4,
       fixed: false,
       placement,
