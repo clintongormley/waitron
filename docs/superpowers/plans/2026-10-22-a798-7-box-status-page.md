@@ -1,5 +1,10 @@
 # A798-B slice 7 — the Box status page and Liberar
 
+> **2026-10-25, A1089:** the `box_status.fillers` wording below is historical.
+> The current [Box status guide](../../../apps/server/src/guide/en/box-status.md#free-space)
+> explains the backup-retention choice and its lack of immediate full-disk recovery,
+> leaving without changes and the files to preserve. The installer referral is superseded.
+
 > **No migration.** Nothing in this slice adds or changes a table, an index or a trigger.
 >
 > **Nothing fiscal moves.** This slice does not change when anything is filed, and does not touch
