@@ -152,9 +152,6 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-- **A1089: certificate checks need a next step for persistent or unclassified refusals.** Keep the installed certificate unchanged; distinguish verified temporary HTTP/connection failure from persistent refusal or a proved Waitron fault.
-  [Audit](backlog/self-service-refusals.md#certificate).
-
 - **A1089: reconciliation support wording needs a verified caller and remedy.** First establish where the reconciliation alerts can reach an owner; then give an evidence/decision route without promising an unimplemented periodic sweep.
   [Audit](backlog/self-service-refusals.md#fiscal-reconcile).
 

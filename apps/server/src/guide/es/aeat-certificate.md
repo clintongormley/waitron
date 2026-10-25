@@ -16,3 +16,9 @@ cifrado moderno. Las instrucciones de exportación están en la pantalla del cer
 
 Si se rechaza el certificado al terminar una configuración interrumpida, corrígelo primero. Después
 se te pedirá que confirmes de nuevo que eres quien inició la configuración antes de continuar.
+
+## Repite una comprobación en Ajustes del local {#dashboard-check}
+
+Si al sustituir un certificado aparece un error HTTP o un fallo inesperado en la comprobación,
+el certificado actual sigue instalado. Pide al administrador del equipo que revise su conexión
+con la AEAT y pulsa **Guardar** de nuevo. El código HTTP por sí solo no indica si esperar ayudará.

@@ -705,7 +705,11 @@ changes take their required review and existing protected-writer approvals.
 
 ### certificate
 
-**Certificate checks need a next step for persistent or unclassified refusals.** Keep the installed certificate unchanged; distinguish verified temporary HTTP/connection failure from persistent refusal or a proved Waitron fault.
+2026-10-25: the Venue settings certificate dialog now asks the box's administrator to check
+its connection to AEAT before retrying an HTTP or unclassified check failure, in English and
+Spanish. It retains the HTTP status and the current-certificate reassurance, and does not assume
+a response is temporary from its status alone. The original source audit above records the earlier
+wording; certificate checking, installation and refusal classification are unchanged.
 
 ### tls-repair
 
