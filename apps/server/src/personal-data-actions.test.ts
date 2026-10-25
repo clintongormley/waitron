@@ -648,6 +648,48 @@ describe("actionsPersonalData", () => {
     });
   });
 
+  it("writes each entry's keys in the plan's order", async () => {
+    const file = JSON.parse(await text(MARTA));
+    expect(JSON.stringify(Object.keys(file))).toBe(
+      JSON.stringify(["counts", "voids", "refunds", "drawerOpenings"]),
+    );
+    expect(JSON.stringify(file.counts)).toBe(
+      JSON.stringify({ voids: 2, refunds: 6, drawerOpenings: 6 }),
+    );
+    expect(JSON.stringify(file.voids[0])).toBe(
+      JSON.stringify({
+        sale: formatInvoiceNumber("TA", 11),
+        amount: "24.68",
+        at: "2026-10-20T09:05:00.000Z",
+      }),
+    );
+    for (const entry of [file.refunds[0], file.refunds[1]])
+      expect(JSON.stringify(Object.keys(entry))).toBe(
+        JSON.stringify(["kind", "sale", "amount", "tip", "method", "state", "at", "yourPart"]),
+      );
+    expect(JSON.stringify(file.refunds[1])).toBe(
+      JSON.stringify({
+        kind: "sale",
+        sale: formatInvoiceNumber("TB", 31),
+        amount: "23.45",
+        tip: "1.50",
+        method: "cash",
+        state: "completed",
+        at: "2026-10-20T10:30:00.000Z",
+        yourPart: ["requested"],
+      }),
+    );
+    expect(JSON.stringify(file.drawerOpenings[0])).toBe(
+      JSON.stringify({
+        reason: "cash_sale",
+        sale: formatInvoiceNumber("TB", 31),
+        at: "2026-10-20T08:30:00.000Z",
+        viaOverride: false,
+        yourPart: ["opened"],
+      }),
+    );
+  });
+
   it("names none of a colleague's sales or amounts", async () => {
     const content = await text(MARTA);
     expect(content).toContain(formatInvoiceNumber("TB", 31));
@@ -704,6 +746,18 @@ describe("actionsPersonalData", () => {
       );
       expect(files.map((f) => f.name)).toEqual(["actions.json"]);
       expect(files[0]!.content).toBe(expected[0]!.content);
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
+  it("looks up a sale or bill payment named twice only once", async () => {
+    const { part } = onlyPart(actionsPersonalData(suite.db, { chunk: 1 }));
+    const build = await suite.db.withWriteLock(() => part.prepare(suite.db, subject(MARTA)));
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+    try {
+      await build();
+      expect(lock.mock.calls.length).toBe(2 + MARTA_SALE_IDS + MARTA_BILL_PAYMENT_IDS);
     } finally {
       lock.mockRestore();
     }
