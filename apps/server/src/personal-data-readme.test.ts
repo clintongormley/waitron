@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
+import type { Database } from "@waitron/db";
 import { personalDataParts } from "@waitron/module";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
+import { actionsPersonalData } from "./personal-data-actions.js";
 import { personalDataReadme, type PersonalDataReadmeInput } from "./personal-data-readme.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
@@ -273,7 +275,10 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
     }
   });
   it("has words in both languages for every file the server adds itself", () => {
-    const names = timeRecordPersonalData(ALL_MODULES).flatMap((p) => p.part.files);
+    const stubDb = {} as Database;
+    const names = [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(stubDb)].flatMap(
+      (p) => p.part.files,
+    );
     expect(names.length).toBeGreaterThan(0);
     for (const name of names) {
       expect(PERSONAL_DATA_README_WORDS.en.files[name], `en ${name}`).toBeDefined();
@@ -388,5 +393,73 @@ ${ASK}
     expect(
       lines.filter((line) => line.startsWith('- The record\'s "Keep until" date')),
     ).toHaveLength(1);
+  });
+
+  const ACTIONS_FILES_SET = ["profile.json", "sign-in.json", "actions.json"];
+
+  it("writes every section in English with the actions file", () => {
+    expect(personalDataReadme({ ...base, files: ACTIONS_FILES_SET })).toBe(`${HEAD}
+
+What each file holds
+${PROFILE_LINE}
+${SIGN_IN_LINE}
+- actions.json: the whole sales voided after they were recorded that you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each and, for each one, the sale number where there is one, the amount where there is one, when it happened and your part in it. Kept to account for the money the venue takes and gives back.
+${MACHINE}
+
+${ORIGIN}
+
+Who else receives it
+${BACKUP}
+${CONFIG_EXPORT}
+${EMAIL}
+${GOOGLE}
+
+How long it is kept
+${PROFILE_KEPT}
+${DISABLE_KEPT}
+${SESSIONS_KEPT}
+${CLEANUP_KEPT}
+- Nothing in the box deletes a voided sale, a refund or a cash-drawer opening.
+${DECIDES}
+
+${RIGHTS}
+${ASK}
+`);
+  });
+
+  it("writes every section in Spanish with the actions file", () => {
+    const w = PERSONAL_DATA_README_WORDS.es;
+    const words = ACTIONS_FILES_SET.map((name) => ({ name, file: w.files[name] }));
+    for (const { name, file } of words) expect(file, name).toBeDefined();
+    const actions = w.files["actions.json"]!;
+    expect(actions.sentTo).toBeUndefined();
+    expect(actions.kept).toHaveLength(1);
+    const venue = "Example Bar S.L.";
+    const lines = [
+      w.title.replace("{venue}", () => venue),
+      w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
+      "",
+      w.filesHeading,
+      ...words.map(({ name, file }) => `- ${name}: ${file!.holds} ${file!.use}`),
+      w.machineReadable,
+      "",
+      w.originHeading,
+      w.origin,
+      "",
+      w.sentToHeading,
+      `- ${w.backup}`,
+      ...words.flatMap(({ file }) => file!.sentTo ?? []).map((s) => `- ${s}`),
+      "",
+      w.keptHeading,
+      ...words.flatMap(({ file }) => file!.kept ?? []).map((s) => `- ${s}`),
+      `- ${w.decides}`,
+      "",
+      w.rightsHeading,
+      w.rights,
+      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
+    ];
+    expect(personalDataReadme({ ...base, language: "es", files: ACTIONS_FILES_SET })).toBe(
+      `${lines.join("\n")}\n`,
+    );
   });
 });

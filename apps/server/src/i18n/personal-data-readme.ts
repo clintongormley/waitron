@@ -119,6 +119,12 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         holds: "the same working-time record as time-record.pdf, as a spreadsheet file.",
         use: "Kept as the venue's record of the hours you worked.",
       },
+      "actions.json": {
+        holds:
+          "the whole sales voided after they were recorded that you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each and, for each one, the sale number where there is one, the amount where there is one, when it happened and your part in it.",
+        use: "Kept to account for the money the venue takes and gives back.",
+        kept: ["Nothing in the box deletes a voided sale, a refund or a cash-drawer opening."],
+      },
     },
     machineReadable: "The .json files are a machine-readable copy you can take to another service.",
     originHeading: "Where it came from",
@@ -229,6 +235,14 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       "time-record.csv": {
         holds: "el mismo registro de jornada que time-record.pdf, como archivo de hoja de cálculo.",
         use: "Se guarda como el registro del local de las horas que trabajaste.",
+      },
+      "actions.json": {
+        holds:
+          "las ventas completas anuladas después de registrarse que autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste: cuántas hay de cada una y, de cada una, el número de venta si lo tiene, el importe si lo tiene, cuándo ocurrió y qué parte tuviste tú.",
+        use: "Se guarda para dar cuenta del dinero que el local cobra y devuelve.",
+        kept: [
+          "Nada en el servidor Waitron del local borra una venta anulada, una devolución ni una apertura del cajón de efectivo.",
+        ],
       },
     },
     machineReadable:
