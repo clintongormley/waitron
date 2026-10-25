@@ -244,6 +244,8 @@ A757 built them (whole-table colour and a cue; A669's red "!" for an allergy). C
   something is ready, and replaces at phone width today's summary above the tables
   (`#stationSummary`, `till-floor-screen.ts:2801-2810`) (read). Above phone width the summary stays
   where it is, retitled from "Ready to serve" to "Ready" so the word is the bar's (Q51 (f)).
+  _2026-10-25, slice 5: built as handheld against till rather than by width (build plan D3), and
+  Open › opens the first table listed until slice 7 (D4)._
 - **The Ready bar warns when food waits** (owner, Q42 (b)): once a ready dish has waited at the pass
   longer than its station's **ready warning time** (3 minutes by default, §3.6; Q51 (c)), the bar
   turns amber (`--wt-color-warning`, `packages/ui-core/src/tokens/colors.css:26`, dark `:161`) and

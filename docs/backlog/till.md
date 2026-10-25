@@ -826,7 +826,11 @@ observations against that design; the original observations below are not fresh 
     space changes the screen's layout, so it is its own change. Likewise the till's
     `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
     above the bottom edge, the room the old bottom-right language button (later the footer)
-    took; decide whether it should drop to the bottom edge. On the dashboard, the account menu (which
+    took; decide whether it should drop to the bottom edge. While a handheld's Ready bar shows,
+    `.app:has(till-floor-screen[ready-bar]) .submitted-toast` lifts the toast by the page's
+    padding as well, which clears the bar only because the bar is no taller than that offset (the
+    "fits one line" cases in `apps/till/src/screens/till-floor-screen.ready-bar.test.ts`).
+    Dropping the toast to the bottom edge must still lift it above the bar while the bar shows. On the dashboard, the account menu (which
     since A582's slice 2b also holds the signed-in language choices) is a native popover in the
     top layer (`wt-row-actions`), so it paints over the alert pop-up (`.alert-toast` in
     `apps/dashboard/src/dashboard-app.ts`, whose `z-index: 40` the top layer ignores): where the two overlap, an alert arriving while the menu is open is hidden under it,

@@ -144,8 +144,9 @@ Cuando la cocina tiene platos listos, quieres saber a qué mesas llevarlos sin t
 En un móvil o una tableta, una barra al pie de **Sala** muestra cada mesa con comida lista y cuántos
 platos esperan, por ejemplo **Listo · Mesa 2 · 3**. Toca una mesa para abrirla, o toca **Abrir ›**
 para abrir la primera de la lista. La barra muestra solo las mesas de las zonas que enseña este
-dispositivo, y desaparece cuando no queda nada listo. Una caja muestra lo mismo en una lista
-**Listo** encima de las mesas, con una línea por cada estación.
+dispositivo, y desaparece cuando no queda nada listo. Una caja muestra en cambio una lista **Listo**
+encima de las mesas, con una línea por cada estación. La lista cuenta la comida lista de las mesas
+de todas las zonas que permite su perfil, no solo de las que enseña.
 
 ## Ver una zona como mapa o lista {#floor-view}
 
