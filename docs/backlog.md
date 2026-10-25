@@ -4514,26 +4514,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#the-amazon-s3-rehearsal-runners-open-edges-a538-7)
 
 - **Loose ends left by the Amazon S3 rehearsal's cleanup and send check (A641, #1704).**
-  - The rehearsal does not track the Litestream processes a restore starts
-    (`packages/stream/src/restore.ts`), so neither its teardown nor its keeper can stop one still
-    running.
-  - When teardown fails to delete the bucket and then fails to write the ownership marker again,
-    the cleanup command refuses (`ownership-unproven`); the runbook says to delete it by hand.
-  - A keeper that cannot reach Amazon S3 when it cleans up after a killed run gives no cleanup
-    command: it reports a bucket the journal says the run owned as of unknown ownership and
-    deletes nothing (`apps/server/src/testing/aws-rehearsal-keeper.ts`).
-  - A journal the keeper refuses leaves the run's scratch folder, so a box's `secrets.env` and
-    `recovery-kit.txt` stay on disk until a person deletes them (`readJournalAt`). The refusal is
-    by design; the folder it leaves is the open part.
-  - A process whose start time could not be read when the rehearsal tracked it is neither stopped
-    by the keeper nor listed as left behind — only a log note says so (the `startTime === null`
-    branch). Decide whether it should be listed as left behind.
-  - The send check's `record` mode is used by no run (`aws-send-gate.ts`): delete it, or document
-    how it refreshes the scenarios' request lists.
-  - The keeper and the cleanup command each read the ownership marker with their own rules
-    (`aws-rehearsal-keeper.ts`, `cleanupFromReceipt` in `aws-rehearsal.ts`); share one reader.
-  - The list of tests that need versitygw is kept in three places in `.github/workflows/ci.yml`,
-    so each new such test edits all three; derive them from one list.
+  The rehearsal does not track the Litestream processes a restore starts
+  (`packages/stream/src/restore.ts`), so neither its teardown nor its keeper can stop one still
+  running.
+  [Detail](backlog/box.md#loose-ends-left-by-the-amazon-s3-rehearsals-cleanup-and-send-check-a641-1704)
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.
