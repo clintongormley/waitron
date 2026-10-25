@@ -175,6 +175,13 @@ export {
   type StartAgainNote,
 } from "./first-setup-start-again-note.js";
 export {
+  START_AGAIN_CONFIRMATIONS_DIR,
+  startAgainSummary,
+  writeStartAgainConfirmation,
+  type StartAgainConfirmation,
+  type StartAgainSummary,
+} from "./first-setup-start-again-confirmation.js";
+export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,

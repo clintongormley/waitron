@@ -1,0 +1,203 @@
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, expect, it } from "vitest";
+import {
+  START_AGAIN_CONFIRMATIONS_DIR,
+  startAgainSummary,
+  writeStartAgainConfirmation,
+} from "./first-setup-start-again-confirmation.js";
+import type { FirstSetupState } from "./first-setup-state.js";
+
+const dirs: string[] = [];
+async function stateDir() {
+  const dir = await mkdtemp(join(tmpdir(), "start-again-confirmation-"));
+  dirs.push(dir);
+  return dir;
+}
+afterEach(async () => {
+  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+type Attempt = { history: { kind: string }[]; result: unknown };
+function state(current: Attempt, previous: Attempt[] = []): FirstSetupState {
+  const shape = (attempt: Attempt) => ({
+    result: attempt.result,
+    history: attempt.history.map((event, index) => ({
+      kind: event.kind,
+      revision: index + 1,
+      ownerGeneration: 1,
+    })),
+  });
+  return { ...shape(current), previous: previous.map(shape) } as unknown as FirstSetupState;
+}
+const events = (...kinds: string[]): Attempt => ({
+  history: kinds.map((kind) => ({ kind })),
+  result: null,
+});
+
+it.each([
+  ["no events past claiming", state(events("claim", "input", "checked", "recover")), "claimed"],
+  ["candidates", state(events("claim", "candidates")), "named"],
+  ["import", state(events("claim", "import")), "named"],
+  ["consumption-intent", state(events("claim", "consumption-intent")), "named"],
+  [
+    "activation-started",
+    state(events("claim", "candidates", "activation-started")),
+    "fiscal-started",
+  ],
+  ["uncertain", state(events("claim", "uncertain")), "fiscal-started"],
+  ["committed", state(events("claim", "activation-started", "committed")), "fiscal-finished"],
+  ["publication", state(events("claim", "publication")), "fiscal-finished"],
+  ["complete", state(events("claim", "complete")), "fiscal-finished"],
+  ["a non-null result", state({ history: [{ kind: "claim" }], result: {} }), "fiscal-finished"],
+  [
+    "an event found only in a previous attempt",
+    state(events("claim"), [events("claim", "activation-started")]),
+    "fiscal-started",
+  ],
+  [
+    "a result found only in a previous attempt",
+    state(events("claim", "candidates"), [{ history: [], result: { done: true } }]),
+    "fiscal-finished",
+  ],
+] as const)("%s reaches %s", (_label, value, reached) => {
+  expect(startAgainSummary(value, null)).toEqual({ reached, lastName: null });
+});
+
+it("passes lastName through unread", () => {
+  expect(startAgainSummary(state(events("claim")), "0CNQT")).toEqual({
+    reached: "claimed",
+    lastName: "0CNQT",
+  });
+  expect(startAgainSummary(state(events("claim")), "not a series name")).toEqual({
+    reached: "claimed",
+    lastName: "not a series name",
+  });
+});
+
+const record = {
+  at: "2026-10-24T13:50:12.000Z",
+  attemptId: "6f0c9a3e-1b2d-4c5e-8f70-123456789abc",
+  database: "missing" as const,
+  administrator: { displayName: "Elena Garcia", email: "elena@example.com" },
+  ownerGeneration: 3,
+  shown: { reached: "fiscal-finished" as const, lastName: "0CNQT" },
+};
+const name = `${Date.parse(record.at)}-${record.attemptId}.json`;
+
+it("a confirmation record round-trips with exactly D3a's keys", async () => {
+  const dir = await stateDir();
+  expect(await writeStartAgainConfirmation(dir, record)).toBe(name);
+  const text = await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8");
+  const stored = JSON.parse(text) as Record<string, unknown>;
+  expect(Object.keys(stored)).toEqual([
+    "version",
+    "at",
+    "attemptId",
+    "database",
+    "administrator",
+    "ownerGeneration",
+    "shown",
+  ]);
+  expect(stored).toEqual({ version: 1, ...record });
+  expect(Object.keys(stored.administrator as object)).toEqual(["displayName", "email"]);
+  expect(Object.keys(stored.shown as object)).toEqual(["reached", "lastName"]);
+  expect(START_AGAIN_CONFIRMATIONS_DIR).toBe("first-setup-start-again-confirmations");
+});
+
+it("keeps only D3a's keys when handed extra ones", async () => {
+  const dir = await stateDir();
+  await writeStartAgainConfirmation(dir, {
+    ...record,
+    administrator: { ...record.administrator, passwordHash: "x" },
+    shown: { ...record.shown, extra: 1 },
+    extra: true,
+  } as typeof record);
+  const stored = JSON.parse(
+    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+  ) as unknown;
+  expect(stored).toEqual({ version: 1, ...record });
+});
+
+it("two confirmations for one attempt are two files", async () => {
+  const dir = await stateDir();
+  const first = await writeStartAgainConfirmation(dir, record);
+  const second = await writeStartAgainConfirmation(dir, {
+    ...record,
+    at: "2026-10-24T13:50:12.001Z",
+    shown: { reached: "claimed", lastName: null },
+  });
+  expect(second).not.toBe(first);
+  expect((await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR))).sort()).toEqual(
+    [first, second].sort(),
+  );
+  expect(
+    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, first), "utf8")),
+  ).toEqual({ version: 1, ...record });
+});
+
+it("an existing file of the same name is refused, not overwritten", async () => {
+  const dir = await stateDir();
+  await mkdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR));
+  await writeFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "kept");
+  await expect(writeStartAgainConfirmation(dir, record)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+    params: {},
+  });
+  expect(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")).toBe("kept");
+});
+
+it("a second write of the same record is refused and the first kept", async () => {
+  const dir = await stateDir();
+  await writeStartAgainConfirmation(dir, record);
+  await expect(
+    writeStartAgainConfirmation(dir, { ...record, ownerGeneration: 4 }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(
+    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
+  ).toEqual({ version: 1, ...record });
+});
+
+it("a record over 16 KiB is refused setup.attempt_invalid and writes nothing", async () => {
+  const dir = await stateDir();
+  await expect(
+    writeStartAgainConfirmation(dir, {
+      ...record,
+      administrator: { displayName: "x".repeat(16 * 1024), email: "elena@example.com" },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
+  expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
+});
+
+it.each([
+  ["an unparseable time", { at: "yesterday" }],
+  ["a time not in canonical form", { at: "2026-10-24T13:50:12Z" }],
+  ["an attempt id that is not a UUID", { attemptId: "../escape" }],
+  ["a database other than missing", { database: "present" }],
+  ["a negative owner generation", { ownerGeneration: -1 }],
+  ["a fractional owner generation", { ownerGeneration: 1.5 }],
+  ["an unknown reached", { shown: { reached: "sold", lastName: null } }],
+  ["a numeric last name", { shown: { reached: "claimed", lastName: 1 } }],
+  ["an empty display name", { administrator: { displayName: "", email: "e@x" } }],
+  ["a missing email", { administrator: { displayName: "Elena" } }],
+  ["a missing administrator", { administrator: null }],
+  ["a missing shown", { shown: undefined }],
+])("refuses %s and writes nothing", async (_label, change) => {
+  const dir = await stateDir();
+  await expect(
+    writeStartAgainConfirmation(dir, { ...record, ...change } as unknown as typeof record),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
+  expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
+});
+
+it("refuses a state folder it cannot look inside, and writes nothing", async () => {
+  const dir = await stateDir();
+  const file = join(dir, "not-a-folder");
+  await writeFile(file, "kept");
+  await expect(writeStartAgainConfirmation(file, record)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+    params: {},
+  });
+  expect(await readFile(file, "utf8")).toBe("kept");
+});
