@@ -28,7 +28,6 @@ const FINISHED = new Set(["committed", "publication", "complete"]);
 const STARTED = new Set(["activation-started", "uncertain"]);
 const NAMED = new Set(["candidates", "import", "consumption-intent"]);
 
-/** `lastName` comes from the fiscal module's seat; shared code never reads a series name. */
 export function startAgainSummary(
   state: FirstSetupState,
   lastName: string | null,
@@ -88,7 +87,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
   };
 }
 
-/** Each confirmation is a new file; an existing one is never replaced, and nothing deletes them. */
+/** Each confirmation is a new file; an existing one is never replaced. This module exports no delete. */
 export async function writeStartAgainConfirmation(
   stateDir: string,
   record: Omit<StartAgainConfirmation, "version">,
