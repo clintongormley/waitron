@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { PERSONAL_DATA_README } from "./i18n/personal-data-readme.js";
+import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { mountMeApi } from "./me-api.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
@@ -73,7 +73,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
       privacyNoticeUrl: url,
     });
     const readme = files["README.txt"]!.trimEnd().split("\n");
-    expect(readme[0]).toBe(PERSONAL_DATA_README.es.title.replace("{venue}", "Test SL"));
+    expect(readme[0]).toBe(PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"));
     expect(readme.at(-1)!.endsWith(url)).toBe(true);
   });
 });

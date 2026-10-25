@@ -330,7 +330,7 @@ export interface ReadmeFileWords {
   /** What the box itself keeps or deletes; listed under "How long it is kept" only when the file is. */
   readonly kept?: readonly string[];
 }
-export const PERSONAL_DATA_README: Record<"en" | "es", { /* the keys below */ files: Record<string, ReadmeFileWords> }>;
+export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", { /* the keys below */ files: Record<string, ReadmeFileWords> }>;
 
 // personal-data-readme.ts
 export interface PersonalDataReadmeInput {
@@ -404,7 +404,7 @@ exactly as shown; the text ends with one `\n`.
 | `decides` | `Ask the venue how long it keeps your data and why; its privacy notice may say.` |
 | `rightsHeading` | `Your rights` |
 | `rights` | `You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so, and why, within that first month. You may also complain to a data-protection authority.` |
-| `ask` | `To ask, contact {venue}.` |
+| `ask` | `Contact {venue} to ask.` |
 | `notice` | `Its privacy notice: {url}` |
 | `unnamedVenue` | `the venue` |
 
@@ -435,7 +435,7 @@ exactly as shown; the text ends with one `\n`.
 | `decides` | `Pregunta al local cuánto tiempo guarda tus datos y por qué; su aviso de privacidad puede indicarlo.` |
 | `rightsHeading` | `Tus derechos` |
 | `rights` | `Puedes pedir al local que corrija o borre tus datos, que limite su uso o que te dé otra copia en un formato que puedas llevar a otro servicio, y puedes oponerte a su uso. Debe responder en el plazo de un mes; si necesita más tiempo, hasta dos meses más, debe decírtelo, y por qué, dentro de ese primer mes. También puedes reclamar ante una autoridad de protección de datos.` |
-| `ask` | `Para pedirlo, contacta con {venue}.` |
+| `ask` | `Contacta con {venue} para pedirlo.` |
 | `notice` | `Su aviso de privacidad: {url}` |
 | `unnamedVenue` | `el local` |
 
@@ -483,12 +483,12 @@ names the box (profile `kept[0]`, sign-in `sentTo[1]`, `kept[0]`, `kept[1]`, and
 Steps:
 
 1. Tests first, in `personal-data-readme.test.ts` (no database):
-   - **English, every section.** `language: "en"`, `venue: "Bar Ejemplo S.L."`,
+   - **English, every section.** `language: "en"`, `venue: "Example Bar S.L."`,
      `person: "Marta López"`, `date: "2026-10-05"`, `privacyNoticeUrl:
-     "https://barejemplo.example/privacy"`, `files: ["profile.json", "sign-in.json"]`: `toBe` the
+     "https://examplebar.example/privacy"`, `files: ["profile.json", "sign-in.json"]`: `toBe` the
      whole expected text, written out in the test as one template literal following the layout.
    - **Spanish, every section.** The same input with `language: "es"`: `toBe` the whole text, built
-     in the test from `PERSONAL_DATA_README.es`'s values (never a Spanish literal in the test).
+     in the test from `PERSONAL_DATA_README_WORDS.es`'s values (never a Spanish literal in the test).
    - **No files.** `files: []`: no "What each file holds" block and no machine-readable line; under
      "Who else receives it" only the backup line; under "How long it is kept" only `decides`.
      `toBe` the whole text.
@@ -499,11 +499,11 @@ Steps:
      alone, after the profile line; nothing else changes. A file name with no words and no `.json`
      ending (`notes.csv`, alone) prints no machine-readable line.
    - **No venue name, no notice.** `venue: null`, no `privacyNoticeUrl`: the title and ask line read
-     `the venue`; the last line is `To ask, contact the venue.` with nothing after it.
+     `the venue`; the last line is `Contact the venue to ask.` with nothing after it.
    - **Replacement is literal.** `venue: "$& Bar"`, `person: "$1 Ana"`: both appear as typed.
    - **Every module file has words.** For every name in
      `personalDataParts(ALL_MODULES).flatMap((p) => p.part.files)`, both
-     `PERSONAL_DATA_README.en.files[name]` and `.es.files[name]` exist; and the two languages' file
+     `PERSONAL_DATA_README_WORDS.en.files[name]` and `.es.files[name]` exist; and the two languages' file
      keys are the same set, and for each file the two languages' `sentTo` and `kept` lists have the
      same length. Weaker than its name (decision 2): it sees module parts only.
    Run `pnpm --filter @waitron/server exec vitest run src/personal-data-readme.test.ts`; watch it
@@ -565,7 +565,7 @@ would not show it). The whole-list assertions at `personal-data-export-api.test.
      README's last line ends with that address; without it, no README line contains `https://`.
    - **The language.** Each row sets Marta's saved `locale` by SQL, sends `Accept-Language` (or
      none) and mounts with a `venueLocale`; the README's first line is the expected language's
-     `title` (from `PERSONAL_DATA_README`). Each row is chosen so a rule that skipped one step
+     `title` (from `PERSONAL_DATA_README_WORDS`). Each row is chosen so a rule that skipped one step
      would give the other language:
 
      | Row | Saved | `Accept-Language` | `venueLocale` | README |

@@ -6,7 +6,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** A downloaded file whose name the server chose. */
 export interface DownloadedFile {
   readonly blob: Blob;
   /** From `Content-Disposition: attachment; filename="<name>"` only; otherwise null. */

@@ -10,7 +10,7 @@ import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/i
 import type { PersonalDataPart } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { PERSONAL_DATA_README } from "./i18n/personal-data-readme.js";
+import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import {
   mountPersonalDataExportApi,
   type PersonalDataExportDeps,
@@ -128,7 +128,7 @@ describe("the README in a person's own personal-data download", () => {
   });
 
   const title = (language: "en" | "es") =>
-    PERSONAL_DATA_README[language].title.replace("{venue}", "Test SL");
+    PERSONAL_DATA_README_WORDS[language].title.replace("{venue}", "Test SL");
   it.each([
     { row: 1, saved: "es-ES", accept: "en-GB", venue: "en-GB", expected: "es" },
     { row: 2, saved: "en-GB", accept: "es-ES", venue: "es-ES", expected: "en" },

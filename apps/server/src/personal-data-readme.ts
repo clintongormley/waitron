@@ -1,4 +1,4 @@
-import { PERSONAL_DATA_README } from "./i18n/personal-data-readme.js";
+import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 
 export interface PersonalDataReadmeInput {
   readonly language: "en" | "es";
@@ -19,7 +19,7 @@ function fill(template: string, values: Readonly<Record<string, string>>): strin
 }
 
 export function personalDataReadme(input: PersonalDataReadmeInput): string {
-  const w = PERSONAL_DATA_README[input.language];
+  const w = PERSONAL_DATA_README_WORDS[input.language];
   const venue = input.venue ?? w.unnamedVenue;
   const present = input.files.map((name) => ({
     name,

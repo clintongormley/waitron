@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { personalDataParts } from "@waitron/module";
-import { PERSONAL_DATA_README } from "./i18n/personal-data-readme.js";
+import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { personalDataReadme, type PersonalDataReadmeInput } from "./personal-data-readme.js";
 
 const base: PersonalDataReadmeInput = {
   language: "en",
-  venue: "Bar Ejemplo S.L.",
+  venue: "Example Bar S.L.",
   person: "Marta López",
   date: "2026-10-05",
-  privacyNoticeUrl: "https://barejemplo.example/privacy",
+  privacyNoticeUrl: "https://examplebar.example/privacy",
   files: ["profile.json", "sign-in.json"],
 };
 
@@ -38,10 +38,10 @@ const CLEANUP_KEPT =
 const DECIDES = "- Ask the venue how long it keeps your data and why; its privacy notice may say.";
 const RIGHTS = `Your rights
 You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so, and why, within that first month. You may also complain to a data-protection authority.`;
-const HEAD = `Your data held by Bar Ejemplo S.L.
+const HEAD = `Your data held by Example Bar S.L.
 Prepared for Marta López on 2026-10-05.`;
 const ASK =
-  "Contact Bar Ejemplo S.L. to ask. Its privacy notice: https://barejemplo.example/privacy";
+  "Contact Example Bar S.L. to ask. Its privacy notice: https://examplebar.example/privacy";
 
 describe("personalDataReadme", () => {
   it("writes every section in English", () => {
@@ -73,10 +73,10 @@ ${ASK}
   });
 
   it("writes every section in Spanish from the Spanish words", () => {
-    const w = PERSONAL_DATA_README.es;
+    const w = PERSONAL_DATA_README_WORDS.es;
     const profile = w.files["profile.json"]!;
     const signIn = w.files["sign-in.json"]!;
-    const venue = "Bar Ejemplo S.L.";
+    const venue = "Example Bar S.L.";
     const lines = [
       w.title.replace("{venue}", () => venue),
       w.prepared.replace("{name}", () => "Marta López").replace("{date}", () => "2026-10-05"),
@@ -99,7 +99,7 @@ ${ASK}
       "",
       w.rightsHeading,
       w.rights,
-      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://barejemplo.example/privacy")}`,
+      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
     ];
     expect(profile.sentTo).toHaveLength(1);
     expect(signIn.sentTo).toHaveLength(2);
@@ -250,7 +250,7 @@ How long it is kept
 ${DECIDES}
 
 ${RIGHTS}
-Contact $& Bar to ask. Its privacy notice: https://barejemplo.example/privacy
+Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
 `);
   });
 
@@ -259,11 +259,11 @@ Contact $& Bar to ask. Its privacy notice: https://barejemplo.example/privacy
     const names = personalDataParts(ALL_MODULES).flatMap((p) => p.part.files);
     expect(names.length).toBeGreaterThan(0);
     for (const name of names) {
-      expect(PERSONAL_DATA_README.en.files[name], `en ${name}`).toBeDefined();
-      expect(PERSONAL_DATA_README.es.files[name], `es ${name}`).toBeDefined();
+      expect(PERSONAL_DATA_README_WORDS.en.files[name], `en ${name}`).toBeDefined();
+      expect(PERSONAL_DATA_README_WORDS.es.files[name], `es ${name}`).toBeDefined();
     }
-    const en = PERSONAL_DATA_README.en.files;
-    const es = PERSONAL_DATA_README.es.files;
+    const en = PERSONAL_DATA_README_WORDS.en.files;
+    const es = PERSONAL_DATA_README_WORDS.es.files;
     expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
     for (const name of Object.keys(en)) {
       expect(es[name]?.sentTo?.length ?? 0, `${name} sentTo`).toBe(en[name]?.sentTo?.length ?? 0);

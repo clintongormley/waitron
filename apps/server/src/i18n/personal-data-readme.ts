@@ -26,7 +26,7 @@ export interface ReadmeWords {
   readonly unnamedVenue: string;
 }
 
-export const PERSONAL_DATA_README: Record<"en" | "es", ReadmeWords> = {
+export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
   en: {
     title: "Your data held by {venue}",
     prepared: "Prepared for {name} on {date}.",

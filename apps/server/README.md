@@ -477,8 +477,9 @@ Create a web OAuth client in Google and register this exact redirect URI:
 ```
 
 Set `WAITRON_PRIVACY_NOTICE_URL` to the restaurant's published privacy notice. Waitron shows the
-link in invitation emails, account setup and **Your profile**. The value must be an absolute HTTP or
-HTTPS URL; leave it unset only while the restaurant's notice has not been published.
+link in invitation emails, account setup, **Your profile** and the `README.txt` inside a person's
+own data download. The value must be an absolute HTTP or HTTPS URL; leave it unset only while the
+restaurant's notice has not been published.
 
 The server refuses a partial client configuration. A person links Google from Your profile before
 the public Google button can identify their Waitron account. Waitron stores Google's stable subject
