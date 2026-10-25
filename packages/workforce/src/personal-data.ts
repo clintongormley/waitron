@@ -1,7 +1,7 @@
 import { locations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import { jsonFile, type ModulePersonalData } from "@waitron/module";
+import { jsonFile, type ModulePersonalData, type PersonalDataFile } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
 import { asc, eq, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -169,95 +169,94 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
 
     const hasAttendance = questionRows.length + responseRows.length + activityRows.length > 0;
 
-    return async () => [
-      ...(employmentRows.length === 0
-        ? []
-        : [
-            jsonFile("employment.json", {
-              employments: employmentRows.map((row) => ({
-                ...row,
-                payRate: centsToDecimal(row.payRate),
-              })),
-            }),
-          ]),
-      ...(hasRota
-        ? [
-            jsonFile("rota.json", {
-              shifts: shiftRows.map((row) => ({
-                location: row.location,
-                startsAt: localWallClock(row.startsAt, row.startsOffsetMinutes),
-                endsAt: localWallClock(row.endsAt, row.endsOffsetMinutes),
-                rota: row.rota,
+    return async () => {
+      const files: PersonalDataFile[] = [];
+      if (employmentRows.length > 0)
+        files.push(
+          jsonFile("employment.json", {
+            employments: employmentRows.map((row) => ({
+              ...row,
+              payRate: centsToDecimal(row.payRate),
+            })),
+          }),
+        );
+      if (hasRota)
+        files.push(
+          jsonFile("rota.json", {
+            shifts: shiftRows.map((row) => ({
+              location: row.location,
+              startsAt: localWallClock(row.startsAt, row.startsOffsetMinutes),
+              endsAt: localWallClock(row.endsAt, row.endsOffsetMinutes),
+              rota: row.rota,
+              createdAt: row.createdAt,
+            })),
+            availability: availabilityRows.map((row) => ({
+              ...row,
+              from: clockOfMinute(row.from),
+              to: clockOfMinute(row.to),
+            })),
+            swaps: swapRows.map((row) => {
+              const mine = row.requestedByPersonId === personId;
+              return {
+                direction: mine ? "requested_by_me" : "offered_to_me",
+                otherPerson: mine ? row.offeredTo : row.requester,
+                status: row.status,
+                decidedBy: row.decidedBy,
+                decidedAt: row.decidedAt,
                 createdAt: row.createdAt,
-              })),
-              availability: availabilityRows.map((row) => ({
-                ...row,
-                from: clockOfMinute(row.from),
-                to: clockOfMinute(row.to),
-              })),
-              swaps: swapRows.map((row) => {
-                const mine = row.requestedByPersonId === personId;
-                return {
-                  direction: mine ? "requested_by_me" : "offered_to_me",
-                  otherPerson: mine ? row.offeredTo : row.requester,
-                  status: row.status,
-                  decidedBy: row.decidedBy,
-                  decidedAt: row.decidedAt,
-                  createdAt: row.createdAt,
-                };
-              }),
+              };
             }),
-          ]
-        : []),
-      ...(absenceRows.length === 0 ? [] : [jsonFile("absences.json", { absences: absenceRows })]),
-      ...(hasAttendance
-        ? [
-            jsonFile("attendance.json", {
-              questions: questionRows.map((row) => ({
-                businessDay: row.businessDay,
-                kind: row.kind,
-                missingKinds: row.missingKinds,
-                startAt: row.startAt,
-                endAt: row.endAt,
+          }),
+        );
+      if (absenceRows.length > 0) files.push(jsonFile("absences.json", { absences: absenceRows }));
+      if (hasAttendance)
+        files.push(
+          jsonFile("attendance.json", {
+            questions: questionRows.map((row) => ({
+              businessDay: row.businessDay,
+              kind: row.kind,
+              missingKinds: row.missingKinds,
+              startAt: row.startAt,
+              endAt: row.endAt,
+              createdAt: row.createdAt,
+              active: row.active,
+              inactiveReason: row.inactiveReason,
+              reminderEmail:
+                row.mailId === null
+                  ? null
+                  : {
+                      recipient: row.recipient,
+                      status: row.status,
+                      outcome: row.outcome,
+                      claimedAt: row.claimedAt,
+                      nextAttemptAt: row.nextAttemptAt,
+                    },
+            })),
+            responses: responseRows.map((row) => {
+              const input = row.input;
+              const reason: string | null = "reason" in input ? input.reason : null;
+              return {
+                action: row.action,
+                byYou: row.requestedByPersonId === personId,
+                authorizedBy: row.authorizedBy,
+                reason,
+                changes: ("changes" in input ? input.changes : []).map((change) => ({
+                  at: localWallClock(change.at, change.offsetMinutes),
+                  missingKind: "missingKind" in change.target ? change.target.missingKind : null,
+                })),
                 createdAt: row.createdAt,
-                active: row.active,
-                inactiveReason: row.inactiveReason,
-                reminderEmail:
-                  row.mailId === null
-                    ? null
-                    : {
-                        recipient: row.recipient,
-                        status: row.status,
-                        outcome: row.outcome,
-                        claimedAt: row.claimedAt,
-                        nextAttemptAt: row.nextAttemptAt,
-                      },
-              })),
-              responses: responseRows.map((row) => {
-                const input = row.input;
-                const reason: string | null = "reason" in input ? input.reason : null;
-                return {
-                  action: row.action,
-                  byYou: row.requestedByPersonId === personId,
-                  authorizedBy: row.authorizedBy,
-                  reason,
-                  changes: ("changes" in input ? input.changes : []).map((change) => ({
-                    at: localWallClock(change.at, change.offsetMinutes),
-                    missingKind: "missingKind" in change.target ? change.target.missingKind : null,
-                  })),
-                  createdAt: row.createdAt,
-                };
-              }),
-              activity: activityRows.map((row) => ({
-                source: row.source,
-                kind: row.kind,
-                at: localWallClock(row.at, row.offsetMinutes),
-                businessDay: row.businessDay,
-                outcome: row.outcome,
-              })),
+              };
             }),
-          ]
-        : []),
-    ];
+            activity: activityRows.map((row) => ({
+              source: row.source,
+              kind: row.kind,
+              at: localWallClock(row.at, row.offsetMinutes),
+              businessDay: row.businessDay,
+              outcome: row.outcome,
+            })),
+          }),
+        );
+      return files;
+    };
   },
 };
