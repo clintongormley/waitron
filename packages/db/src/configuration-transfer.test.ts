@@ -217,6 +217,18 @@ describe("validateCoreConfiguration", () => {
       );
     });
 
+    it.each(["\u0020T1\u0020", "\u0020T1"])(
+      "refuses a short name with spaces around it, %j",
+      (short_name) => {
+        expect(() => validateCoreConfiguration({ [table]: [{ short_name }] })).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `${table}.short_name` },
+          }),
+        );
+      },
+    );
+
     it("accepts a short name that is null or absent, or five characters", () => {
       expect(() =>
         validateCoreConfiguration({

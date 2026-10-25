@@ -28,7 +28,7 @@ describe("storeTableShortNameKeys", () => {
         id: LOCATION,
         name: "Loc",
         invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
+        operationDescription: "Restaurant",
       });
       const [zone] = await tx
         .insert(floorZones)

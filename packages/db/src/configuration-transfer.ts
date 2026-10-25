@@ -48,7 +48,8 @@ export function validateCoreConfiguration(
       if (shortName === undefined || shortName === null) continue;
       if (
         typeof shortName !== "string" ||
-        shortName.trim() === "" ||
+        shortName === "" ||
+        shortName.trim() !== shortName ||
         shortNameLength(shortName) > SHORT_NAME_MAX ||
         keys.has(shortNameKey(shortName))
       )
