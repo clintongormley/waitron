@@ -422,6 +422,12 @@ async function registroCount(cfg: DeviceRequestConfig): Promise<number> {
   });
 }
 
+/** A department's own logo pictures: bytes `[255, 255]` on 58 mm and `[255, 255, 255]` on 80 mm. */
+const OWN_PAIR = {
+  "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
+  "80mm": { widthDots: 24, heightDots: 1, data: "////" },
+};
+
 /** A receipt job's logo pictures: its `GS v 0` raster images after the QR. */
 function logos(payload: Uint8Array): number[][] {
   return printedCommands(payload)
@@ -3448,14 +3454,10 @@ describe("department receipt presentation on thermal jobs", () => {
         "58mm": { widthDots: 8, heightDots: 1, data: "gQ==" },
         "80mm": { widthDots: 16, heightDots: 1, data: "gf8=" },
       };
-      const ownPair = {
-        "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
-        "80mm": { widthDots: 24, heightDots: 1, data: "////" },
-      };
       await suite.db
         .update(tenantReceipts)
         .set({ receipt: { logo: `${"a".repeat(64)}.png`, logoRasters: venuePair } });
-      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, ownPair);
+      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
       const ticket = await sell();
       const saleId = await onlySaleId(cfg);
       await suite.db
@@ -3463,12 +3465,7 @@ describe("department receipt presentation on thermal jobs", () => {
         .set({ receipt: {}, logoRasters: null })
         .where(eq(departmentReceipts.departmentId, departmentId));
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
-      const logoBytes = (await documents()).map((job) =>
-        printedCommands(job.payload)
-          .filter((c) => c.name === "GS v 0" && c.text === undefined)
-          .slice(1)
-          .map((c) => [...c.bytes.subarray(8)]),
-      );
+      const logoBytes = (await documents()).map((job) => logos(job.payload));
       expect(logoBytes).toEqual(
         paperWidth === "58mm" ? [[[255, 255]], []] : [[[255, 255, 255]], []],
       );
@@ -3855,13 +3852,22 @@ describe("the theme's logo on thermal receipts", () => {
     },
   );
 
+  it("a department with saved texts but no logo prints its subtitle and the theme's logo", async () => {
+    const { cfg, departmentId, sell, documents } = await setupReceipt();
+    await storeDepartmentReceipt(departmentId, {
+      headerSubtitle: { "es-ES": "Retained own text" },
+    });
+    await putThemeInUse(suite.db);
+    await sell();
+    const [job] = await documents();
+    expect(logos(job!.payload)).toEqual([[0xf0, 0x0f]]);
+    expect(decodeTicket(job!.payload)).toContain("Retained own text");
+    expect(await registroCount(cfg)).toBe(1);
+  });
+
   it("a department's own receipt logo wins", async () => {
     const { cfg, departmentId, sell, documents } = await setupReceipt();
-    const ownPair = {
-      "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
-      "80mm": { widthDots: 24, heightDots: 1, data: "////" },
-    };
-    await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, ownPair);
+    await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
     await putThemeInUse(suite.db);
     await sell();
     const [job] = await documents();
@@ -3954,9 +3960,9 @@ describe("the theme's logo on thermal receipts", () => {
 
   async function expectTextOnlyReprint(job: { payload: Uint8Array }, cfg: DeviceRequestConfig) {
     expect(logos(job.payload)).toEqual([]);
-    const text = decodeTicket(job.payload);
-    expect(text).toContain("Agua mineral");
-    expect(text).toContain("TOTAL");
+    expect(decodeTicket(job.payload)).toContain("Agua mineral");
+    const lines = printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " "));
+    expect(lines.find((line) => line.startsWith("TOTAL"))).toBe("TOTAL 1,50 €");
     expect(await registroCount(cfg)).toBe(1);
   }
 
@@ -3965,22 +3971,21 @@ describe("the theme's logo on thermal receipts", () => {
     async (_name, untrusted) => {
       const { cfg, departmentId, sell, documents, reprint } = await setupReceipt();
       const at = await untrustedAt(cfg, departmentId);
-      const ownPair = {
-        "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
-        "80mm": { widthDots: 24, heightDots: 1, data: "////" },
-      };
-      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, ownPair);
+      await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
       await putThemeInUse(suite.db);
       const ticket = await sell();
       const [original] = await documents();
       expect(logos(original!.payload)).toEqual([[255, 255, 255]]);
+      let applied = false;
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-      await untrusted.apply(suite.db, at);
       try {
+        await untrusted.apply(suite.db, at);
+        applied = true;
         await expectTextOnlyReprint(await reprint(ticket), cfg);
+        if (untrusted.name !== "the read throws") expect(warning).not.toHaveBeenCalled();
       } finally {
-        await untrusted.undo(suite.db, at);
         warning.mockRestore();
+        if (applied) await untrusted.undo(suite.db, at);
       }
     },
   );
@@ -3994,13 +3999,16 @@ describe("the theme's logo on thermal receipts", () => {
       const ticket = await sell();
       const [original] = await documents();
       expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+      let applied = false;
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-      await untrusted.apply(suite.db, at);
       try {
+        await untrusted.apply(suite.db, at);
+        applied = true;
         await expectTextOnlyReprint(await reprint(ticket), cfg);
+        if (untrusted.name !== "the read throws") expect(warning).not.toHaveBeenCalled();
       } finally {
-        await untrusted.undo(suite.db, at);
         warning.mockRestore();
+        if (applied) await untrusted.undo(suite.db, at);
       }
     },
   );
@@ -4011,9 +4019,11 @@ describe("the theme's logo on thermal receipts", () => {
     const ticket = await sell();
     const [original] = await documents();
     expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+    let hidden = false;
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await suite.db.execute(sql`alter table custom_themes rename to test_hidden_custom_themes`);
     try {
+      await suite.db.execute(sql`alter table custom_themes rename to test_hidden_custom_themes`);
+      hidden = true;
       const copy = await reprint(ticket);
       await expectTextOnlyReprint(copy, cfg);
       expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
@@ -4021,8 +4031,9 @@ describe("the theme's logo on thermal receipts", () => {
         code: "receipt.read_failed",
       });
     } finally {
-      await suite.db.execute(sql`alter table test_hidden_custom_themes rename to custom_themes`);
       warning.mockRestore();
+      if (hidden)
+        await suite.db.execute(sql`alter table test_hidden_custom_themes rename to custom_themes`);
     }
   });
 });

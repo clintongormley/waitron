@@ -998,28 +998,28 @@ describe("the receipt preview's top block", () => {
           set: { receipt: { phone: "910111111" } },
         });
 
-    /** Runs `fn` with the department's receipt read renaming its table after its `nth` call. */
-    async function hidingReceiptsAfterRead<T>(nth: number, fn: () => Promise<T>): Promise<T> {
+    /** Runs `fn` with the department's receipt read renaming its table after its first call. */
+    async function hidingReceiptsAfterRead<T>(fn: () => Promise<T>): Promise<T> {
       const read = VENUE_SERVICE.readDepartmentReceipt;
       const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
       let calls = 0;
-      let hidden = false;
       const spy = vi
         .spyOn(VENUE_SERVICE, "readDepartmentReceipt")
         .mockImplementation(async (...args) => {
           const result = await read(...args);
           calls += 1;
-          if (calls === nth) {
-            await hide.apply(args[0] as unknown as Database, at());
-            hidden = true;
-          }
+          if (calls === 1) await hide.apply(args[0] as unknown as Database, at());
           return result;
         });
       try {
         return await fn();
       } finally {
         spy.mockRestore();
-        if (hidden) await hide.undo(suite.db, at());
+        // A request that rolled back took the rename with it; undoing then would hide its failure.
+        const stillHidden = await suite.db.all(
+          sql`select 1 from sqlite_master where type = 'table' and name = 'test_hidden_department_receipts'`,
+        );
+        if (stillHidden.length > 0) await hide.undo(suite.db, at());
       }
     }
 
@@ -1082,7 +1082,7 @@ describe("the receipt preview's top block", () => {
         expect(sizes(control)).toEqual([[16, 1]]);
         let result: ReceiptPreviewResponse;
         if (name === "the read throws") {
-          result = await hidingReceiptsAfterRead(1, () => rendered({}));
+          result = await hidingReceiptsAfterRead(() => rendered({}));
         } else {
           await untrusted.apply(suite.db, at());
           result = await rendered({});
@@ -1109,8 +1109,9 @@ describe("the receipt preview's top block", () => {
         logoRasters: { "58mm": raster, "80mm": raster },
       });
       expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
-      // The table comes back inside the same transaction: drawing the image lists its uses, which
-      // reads department_receipts after the snapshot's transaction ends.
+      // The table comes back inside the same transaction: reading the image's current details
+      // (readCurrentImageMetadata) counts its uses, which reads department_receipts after the
+      // snapshot's transaction ends.
       const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
       const printed = VENUE_SERVICE.readPrintedDepartmentReceipt;
       const answers: unknown[] = [];

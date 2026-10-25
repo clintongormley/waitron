@@ -110,6 +110,15 @@ describe("resolvePrintedLogo", () => {
     expect(diagnostic).not.toHaveBeenCalled();
   });
 
+  it("a theme naming a logo with no printable picture keeps the name and prints nothing", async () => {
+    await putThemeInUse(suite.db, { printedLogo: undefined });
+    expect(await inTx((tx) => resolvePrintedLogo(tx, null, "80mm", diagnostic))).toEqual({
+      venue: { logo: THEME_LOGO },
+      logo: null,
+    });
+    expect(diagnostic).not.toHaveBeenCalled();
+  });
+
   it("a failed theme read reports and prints nothing", async () => {
     await putThemeInUse(suite.db);
     await withHiddenThemes(async () => {

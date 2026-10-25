@@ -53,7 +53,7 @@ export async function saveThemeThroughRoute(
   const cookie = await withTransaction(db, async (tx) => {
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "manager", role: "manager" })
+      .values({ displayName: `manager ${randomUUID()}`, role: "manager" })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: person!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
@@ -67,6 +67,8 @@ export async function saveThemeThroughRoute(
   });
 }
 
+/** `foreignLocationId` must hold no active department of the same name, nor a default one when this
+ * department is the default, or moving it there breaks a unique index on `departments`. */
 export type UntrustedAt = { departmentId: string; locationId: string; foreignLocationId: string };
 
 export interface UntrustedCase {

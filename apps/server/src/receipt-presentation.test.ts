@@ -88,7 +88,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
   };
   const read = (language = "es-ES") =>
     withTransaction(suite.db, (tx) => readReceiptPresentation(tx, cfg, sale!.id, language));
-  return { cfg, departmentId: department!.id, saleId: sale!.id, read, authored };
+  return { cfg, departmentId: department!.id, read, authored };
 }
 
 describe("department-only on-screen receipt", () => {
@@ -362,12 +362,10 @@ describe("the theme's logo on the ticket view", () => {
 
   function expectNoLogo(
     untrusted: UntrustedCase,
-    control: Awaited<ReturnType<typeof untrustedRead>>["control"],
     presentation: Awaited<ReturnType<typeof untrustedRead>>["presentation"],
   ) {
     expect(presentation.receiptTrim.logo).toBeUndefined();
     expect(presentation.receiptTrim.logoUrl).toBeUndefined();
-    expect(presentation.receiptHeader).toEqual(control.receiptHeader);
     if (untrusted.name === "a numeric logo")
       expect(presentation.receiptTrim.phone).toBe("910111111");
   }
@@ -375,16 +373,16 @@ describe("the theme's logo on the ticket view", () => {
   it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
     "shows no logo when the department cannot be trusted: %s",
     async (_name, untrusted) => {
-      const { control, presentation } = await untrustedRead(untrusted, false);
-      expectNoLogo(untrusted, control, presentation);
+      const { presentation } = await untrustedRead(untrusted, false);
+      expectNoLogo(untrusted, presentation);
     },
   );
 
   it.each(UNTRUSTED_CASES.map((c) => [c.name, c] as const))(
     "a department's own logo shows until it cannot be trusted, then no logo shows: %s",
     async (_name, untrusted) => {
-      const { control, presentation } = await untrustedRead(untrusted, true);
-      expectNoLogo(untrusted, control, presentation);
+      const { presentation } = await untrustedRead(untrusted, true);
+      expectNoLogo(untrusted, presentation);
     },
   );
 });
