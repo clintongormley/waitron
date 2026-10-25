@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -75,7 +75,7 @@ export class MisdatedNoteDialog extends LitElement {
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
 
-  override willUpdate(_changed: PropertyValues): void {
+  override willUpdate(): void {
     if (!this.isConnected) return;
     if (!this.open) {
       if (this.#opened) this.#release();

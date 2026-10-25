@@ -19,8 +19,8 @@ afterEach(() => {
 
 function stubApi() {
   return {
-    markIncidentHandled: vi.fn(async (_id: string, _note?: string) => {}),
-    addIncidentNote: vi.fn(async (_id: string, _note: string) => {}),
+    markIncidentHandled: vi.fn<(id: string, note?: string) => Promise<void>>(async () => {}),
+    addIncidentNote: vi.fn<(id: string, note: string) => Promise<void>>(async () => {}),
   };
 }
 
