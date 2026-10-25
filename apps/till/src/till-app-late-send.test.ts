@@ -4,6 +4,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, draftServer, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { setLocale } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
@@ -661,7 +662,7 @@ describe("a table's send from the refusal", () => {
     ]);
   });
 
-  it("neither lists nor removes a recalled dish on the refused offer", async () => {
+  it("lists the fresh dish alone, and Remove keeps the recalled dish and the Coffee", async () => {
     seedRecalledOmelette();
     const el = await breakfastTable({
       submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(BREAKFAST_ENDED),
@@ -696,7 +697,9 @@ describe("a table's send from the refusal", () => {
     await act(el, "send-all");
 
     expect(windowOf(el)).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("Breakfast has ended");
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(
+      codeMessage("menu_period.ended"),
+    );
     expect(names()).toEqual(["Omelette", "Coffee"]);
     expect(store.sending).toBe(false);
   });

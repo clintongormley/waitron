@@ -38,7 +38,7 @@ export function endedPeriodOf(line: OrderLine, index: LateSendIndex): EndedPerio
 
 /** What a `menu_period.ended` refusal names: the ended menus, and the late dishes by offer id. */
 export interface LateSendRefusal {
-  menus: EndedPeriod[];
+  menus: readonly [EndedPeriod, ...EndedPeriod[]];
   menuItemIds: string[];
 }
 
@@ -56,16 +56,13 @@ function isEndedPeriod(value: unknown): value is EndedPeriod {
 export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
   if (!isRecord(error) || error.code !== "menu_period.ended") return undefined;
   const { menus, menuItemIds } = error;
-  if (!Array.isArray(menus) || menus.length === 0 || !menus.every(isEndedPeriod)) {
-    return undefined;
-  }
+  if (!Array.isArray(menus) || !menus.every(isEndedPeriod)) return undefined;
   if (!Array.isArray(menuItemIds) || !menuItemIds.every((id) => typeof id === "string")) {
     return undefined;
   }
-  return {
-    menus: menus.map(({ menuId, periodName }) => ({ menuId, periodName })),
-    menuItemIds: [...menuItemIds],
-  };
+  const [head, ...tail] = menus.map(({ menuId, periodName }) => ({ menuId, periodName }));
+  if (head === undefined) return undefined;
+  return { menus: [head, ...tail], menuItemIds: [...menuItemIds] };
 }
 
 /**
@@ -75,7 +72,7 @@ export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
  */
 export function refusedLines<T extends OrderLine>(
   lines: readonly T[],
-  refusal: LateSendRefusal,
+  refusal: Pick<LateSendRefusal, "menuItemIds">,
 ): T[] {
   const ids = new Set<string | undefined>(refusal.menuItemIds);
   return lines.filter(
@@ -84,6 +81,23 @@ export function refusedLines<T extends OrderLine>(
       line.source === undefined &&
       ids.has(line.product.menuItemId),
   );
+}
+
+/** What the late-send window shows for a refusal: the request's new lines it names, and its menus. */
+export interface LateSendAsked {
+  listed: OrderLine[];
+  periods: LateSendRefusal["menus"];
+}
+
+/** Undefined when the refusal carries no usable params or names none of `lines`. */
+export function lateSendAsked(
+  error: unknown,
+  lines: readonly OrderLine[],
+): LateSendAsked | undefined {
+  const refusal = lateSendRefusalOf(error);
+  if (refusal === undefined) return undefined;
+  const listed = refusedLines(lines, refusal);
+  return listed.length === 0 ? undefined : { listed, periods: refusal.menus };
 }
 
 /** A send refused because confirming it needs a manager's PIN. */

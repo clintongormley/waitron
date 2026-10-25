@@ -15,9 +15,9 @@ import type { BillEditExpected, BillUnsent, LateSend, Tender } from "./api/clien
 import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
   endedPeriodOf,
-  lateSendRefusalOf,
-  refusedLines,
+  lateSendAsked,
   type EndedPeriod,
+  type LateSendAsked,
 } from "./state/late-send.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
@@ -527,23 +527,6 @@ type DraftFollowUp =
   | { landedOn: string }
   | { lateSend: LateSendAsked }
   | undefined;
-
-/** The window a `menu_period.ended` refusal asks for: the request's new lines it names, and its menus. */
-interface LateSendAsked {
-  listed: OrderLine[];
-  periods: readonly [EndedPeriod, ...EndedPeriod[]];
-}
-
-/** Undefined when the refusal carries no usable params or names none of `lines` (D41). */
-function lateSendAsked(error: unknown, lines: readonly OrderLine[]): LateSendAsked | undefined {
-  const refusal = lateSendRefusalOf(error);
-  if (refusal === undefined) return undefined;
-  const [head, ...tail] = refusal.menus;
-  const listed = refusedLines(lines, refusal);
-  return head === undefined || listed.length === 0
-    ? undefined
-    : { listed, periods: [head, ...tail] };
-}
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
  * when its read failed. Undefined when the operator session it was opened in has ended. */

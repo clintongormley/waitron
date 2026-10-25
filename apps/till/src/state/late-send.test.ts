@@ -3,6 +3,7 @@ import type { TillMenuOffer, TillProduct } from "../api/client.js";
 import {
   endedPeriodOf,
   isLateSendManagerRefusal,
+  lateSendAsked,
   lateSendRefusalOf,
   refusedLines,
 } from "./late-send.js";
@@ -165,6 +166,44 @@ describe("refusedLines", () => {
     const result = refusedLines([stored, recalled, fresh], refusal);
     expect(result).toHaveLength(1);
     expect(result[0]).toBe(fresh);
+  });
+});
+
+describe("lateSendAsked", () => {
+  const menus = [
+    { menuId: "breakfast", periodName: "Breakfast" },
+    { menuId: "brunch", periodName: "Brunch" },
+  ];
+  const ended = (menuItemIds: unknown) => ({
+    code: "menu_period.ended",
+    status: 409,
+    menus,
+    menuItemIds,
+    needsManager: false,
+  });
+
+  it("lists the request's new lines the refusal names, under every menu it names", () => {
+    const toastLine = line("toast-breakfast");
+    const beerLine = line("beer-lunch");
+    const recalled = line("toast-breakfast", {
+      source: { kind: "line" } as unknown as OrderLine["source"],
+    });
+    const asked = lateSendAsked(ended(["toast-breakfast"]), [recalled, beerLine, toastLine]);
+    expect(asked?.periods).toEqual(menus);
+    expect(asked?.listed).toHaveLength(1);
+    expect(asked?.listed[0]).toBe(toastLine);
+  });
+
+  it("is undefined when the refusal names none of the lines", () => {
+    expect(lateSendAsked(ended(["absent"]), [line("toast-breakfast")])).toBeUndefined();
+  });
+
+  it.each([
+    ["the refusal without its params", { code: "menu_period.ended", status: 409 }],
+    ["another code", { code: "product.unavailable", menus, menuItemIds: ["toast-breakfast"] }],
+    ["no error object", undefined],
+  ])("is undefined for %s", (_label, error) => {
+    expect(lateSendAsked(error, [line("toast-breakfast")])).toBeUndefined();
   });
 });
 
