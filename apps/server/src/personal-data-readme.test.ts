@@ -35,7 +35,7 @@ const DISABLE_KEPT =
   "- When your account is disabled, your PIN, password, passkeys, authenticator app, recovery codes and Google login are deleted from the box.";
 const SESSIONS_KEPT = "- Your sign-in sessions stay on the box after they end.";
 const CLEANUP_KEPT =
-  "- The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in after it has expired.";
+  "- The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in or link after it has expired.";
 const DECIDES = "- Ask the venue how long it keeps your data and why; its privacy notice may say.";
 const RIGHTS = `Your rights
 You may ask the venue to correct or delete your data, to limit its use, or to give you another copy in a form you can take to another service, and you may object to its use. It must answer within one month; if it needs longer, up to two more months, it must tell you so, and why, within that first month. You may also complain to a data-protection authority.`;
@@ -302,7 +302,7 @@ ${SIGN_IN_LINE}
 - employment.json: your employment contracts: the contract type, contracted minutes per week, start and end dates and pay rate. Used to manage your employment and pay; your contracted minutes are the baseline for overtime.
 - rota.json: your shifts (their times, location and the state of the rota each is on), the availability recorded for you, and the shift swaps you asked for or were offered, with the other person's name and who decided them. Used to plan the rota.
 - absences.json: your absences: the kind (holiday, sick leave, other leave or unpaid), the dates, whether it was approved, who decided it and any note. Used to plan the rota around your time off.
-- attendance.json: the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, where one was made, the answers you or a supervisor, manager or admin gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) the box records to notice them. Used to keep your working-time record complete.
+- attendance.json: the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, if the box prepared one, the answers you or a supervisor, manager or admin gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) the box records to notice them. Used to keep your working-time record complete.
 - staff-roles.json: the staff roles you can fill, and the area and staff role of each of your shifts that has been given one. Used to plan who covers each area.
 - time-record.pdf: your working-time record at this venue: when you started and finished work, your breaks, every correction and decision, and the closed periods, as the working-time export shows it. Kept as the venue's record of the hours you worked.
 - time-record.csv: the same working-time record as time-record.pdf, as a spreadsheet file. Kept as the venue's record of the hours you worked.
@@ -332,7 +332,7 @@ ${CLEANUP_KEPT}
 - Nothing in the box deletes these questions, emails, answers or activity records.
 - A staff role is taken from you when a manager changes who holds it or deletes the role; a shift's area and role are deleted with the shift.
 - Nothing in the box deletes your working-time record, and the box refuses to change or delete an entry in it: a correction is added as a new entry.
-- The record's "Keep until" date is the legal keeping time counted from the end of the period this copy covers, not from each entry's date.
+- The record's "Keep until" date marks the end of the legal keeping time counted from the end of the period this copy covers, not from each entry's date.
 ${DECIDES}
 
 ${RIGHTS}

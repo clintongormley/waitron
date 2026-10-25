@@ -54,7 +54,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         kept: [
           "When your account is disabled, your PIN, password, passkeys, authenticator app, recovery codes and Google login are deleted from the box.",
           "Your sign-in sessions stay on the box after they end.",
-          "The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in after it has expired.",
+          "The record of an account email that was used or has expired is deleted when another of the same kind is issued to you; an unfinished Google link is deleted the next time anyone starts a Google sign-in or link after it has expired.",
         ],
       },
       "employment.json": {
@@ -85,7 +85,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "attendance.json": {
         holds:
-          "the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, where one was made, the answers you or a supervisor, manager or admin gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) the box records to notice them.",
+          "the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, if the box prepared one, the answers you or a supervisor, manager or admin gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) the box records to notice them.",
         use: "Used to keep your working-time record complete.",
         sentTo: [
           "Reminder emails are sent through the email service the venue set up, when it has one.",
@@ -112,7 +112,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         ],
         kept: [
           "Nothing in the box deletes your working-time record, and the box refuses to change or delete an entry in it: a correction is added as a new entry.",
-          "The record's \"Keep until\" date is the legal keeping time counted from the end of the period this copy covers, not from each entry's date.",
+          "The record's \"Keep until\" date marks the end of the legal keeping time counted from the end of the period this copy covers, not from each entry's date.",
         ],
       },
       "time-record.csv": {
@@ -194,7 +194,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "attendance.json": {
         holds:
-          "las preguntas que te hizo el servidor Waitron del local sobre fichajes de entrada o de salida que faltaban o un fichaje de salida automático, el correo de aviso de una pregunta sobre fichajes que faltaban, si se hizo, las respuestas que diste tú o un supervisor, un gerente o un administrador y quién las autorizó, y la actividad (inicios de sesión, comandas, cobros, descansos) que registra el servidor Waitron del local para detectarlas.",
+          "las preguntas que te hizo el servidor Waitron del local sobre fichajes de entrada o de salida que faltaban o un fichaje de salida automático, el correo de aviso de una pregunta sobre fichajes que faltaban, si el servidor preparó uno, las respuestas que diste tú o un supervisor, un gerente o un administrador y quién las autorizó, y la actividad (inicios de sesión, comandas, cobros, descansos) que registra el servidor para detectarlas.",
         use: "Sirve para que tu registro de jornada esté completo.",
         sentTo: [
           "Los correos de aviso se envían a través del servicio de correo que configuró el local, si tiene uno.",
@@ -223,7 +223,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         ],
         kept: [
           "Nada en el servidor Waitron del local borra tu registro de jornada, y el servidor no permite cambiar ni borrar un asiento: una corrección se añade como un asiento nuevo.",
-          "La fecha «Conservar hasta» del registro es el plazo legal de conservación contado desde el final del período que cubre esta copia, no desde la fecha de cada asiento.",
+          "La fecha «Conservar hasta» del registro marca el final del plazo legal de conservación contado desde el final del período que cubre esta copia, no desde la fecha de cada asiento.",
         ],
       },
       "time-record.csv": {
