@@ -59,6 +59,8 @@ export const shiftSwaps = table(
       name: "shift_swaps_decided_by_person_fk",
     }).onDelete("restrict"),
     index("shift_swaps_from_shift_idx").on(t.fromShiftId),
+    index("shift_swaps_requested_by_person_idx").on(t.requestedByPersonId),
+    index("shift_swaps_to_person_idx").on(t.toPersonId),
     check("shift_swaps_status_ck", enumCheck(t.status)),
   ],
 );

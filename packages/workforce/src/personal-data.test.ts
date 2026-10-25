@@ -4,7 +4,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -1070,5 +1070,38 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
         activity: [],
       }),
     );
+  });
+});
+
+// These reads run while the venue's write lock is held, and both tables grow with trading.
+describe("the reads of a person's growing tables search an index", () => {
+  const plan = async (statement: ReturnType<typeof sql>) =>
+    (await suite.db.execute<{ detail: string }>(sql`explain query plan ${statement}`)).rows.map(
+      (row) => row.detail,
+    );
+
+  it("finds a person's activity by person and returns it in order", async () => {
+    expect(
+      await plan(
+        sql`select source from attendance_operation_facts where person_id = ${"p"} order by at, sequence`,
+      ),
+    ).toEqual([
+      "SEARCH attendance_operation_facts USING INDEX attendance_operation_facts_person_idx (person_id=?)",
+    ]);
+  });
+
+  it("finds the swaps a person asked for or was offered through one index each", async () => {
+    expect(
+      await plan(
+        sql`select id from shift_swaps where requested_by_person_id = ${"p"} or to_person_id = ${"p"} order by created_at, id`,
+      ),
+    ).toEqual([
+      "MULTI-INDEX OR",
+      "INDEX 1",
+      "SEARCH shift_swaps USING INDEX shift_swaps_requested_by_person_idx (requested_by_person_id=?)",
+      "INDEX 2",
+      "SEARCH shift_swaps USING INDEX shift_swaps_to_person_idx (to_person_id=?)",
+      "USE TEMP B-TREE FOR ORDER BY",
+    ]);
   });
 });
