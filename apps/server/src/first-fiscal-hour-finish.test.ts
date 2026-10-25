@@ -36,8 +36,6 @@ import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import {
   createFirstSetupCoordinator,
   createFirstSetupResolutionStore,
-  resolveFirstSetupWorkspace,
-  assertFirstSetupBootTarget,
   readStartAgainMarker,
 } from "@waitron/provisioning";
 import { MODULE, PASSWORD, request } from "../test/first-fiscal.js";
@@ -727,52 +725,6 @@ it.each(
     expect((await f.host.store.read())?.status).toBe("complete");
   },
 );
-
-it("hour restart can resume an interrupted workspace selection using its archived positive empty proof", async () => {
-  const f = await fixture();
-  await suite.db.archiveTo(join(f.venueDir, "venue.db"));
-  const before = await f.host.resolution.captureFirstSetupOriginals();
-  const actions = createFirstSetupResolutionActions({
-    stateDir: f.stateDir,
-    venueDir: f.venueDir,
-    host: f.host,
-  });
-  const actual = await vi.importActual<typeof filesystem>("node:fs/promises");
-  let faults = 0;
-  vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
-    if (String(to).endsWith("/first-setup-workspace.json") && faults === 0) {
-      faults++;
-      throw new Error("synthetic selection interruption");
-    }
-    await actual.rename(from, to);
-  });
-  await expect(
-    actions.startAgainFirstSetup({
-      inspectionId: before.inspection.inspectionId,
-      revision: before.inspection.revision!,
-      ownerGeneration: before.inspection.ownerGeneration!,
-    }),
-  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(faults).toBe(1);
-  vi.mocked(filesystem.rename).mockImplementation(actual.rename);
-  const pending = await actions.inspectWorkspaceSelection();
-  expect(pending).not.toBeNull();
-  await expect(actions.resumeWorkspaceSelection(pending!)).resolves.toMatchObject({
-    workspaceId: pending!.workspaceId,
-    selectionGeneration: 1,
-  });
-  const selected = await resolveFirstSetupWorkspace({ stateDir: f.stateDir, venueDir: f.venueDir });
-  expect(selected.binding?.workspaceId).toBe(pending!.workspaceId);
-  const archive = createFirstSetupResolutionStore({
-    stateDir: f.stateDir,
-    venueDir: f.venueDir,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  expect(await archive.readOriginals(selected.binding!.resolutionId)).toEqual(before.originals);
-  await expect(
-    assertFirstSetupBootTarget({ stateDir: f.stateDir, venueDir: f.venueDir }),
-  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-});
 
 it("real HTTPS resolution boot finishes the retained hour database without document consultation", async () => {
   const f = await fixture();

@@ -10,15 +10,20 @@ import {
   createFirstSetupCoordinator,
   createFirstSetupResolutionStore,
   selectFirstSetupWorkspace,
-  readFirstSetupRetirements,
+  readStartAgainNote,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
+import {
+  decodeMinuteIdentity,
+  encodeMinuteIdentity,
+} from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
+import { expectStartAgainDeleted, startAgainNoteName } from "../test/start-again-deleted.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
+import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import {
   createFakeTimersHourClock,
   selectPastWaits,
@@ -146,6 +151,32 @@ function retainedHour(index = 42, softwareId = "W1") {
     ],
   };
 }
+async function startAgainMissingDatabase(
+  host: Host,
+  folders: { stateDir: string; venueDir: string },
+) {
+  const inspected = await host.resolution.inspectFirstSetupResolution();
+  const recovered = await host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const current = await host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+    owner: { ...recovered.state, capability: recovered.capability },
+  };
+  const actions = createFirstSetupResolutionActions({ ...folders, host });
+  const shown = await actions.startAgainSummary(ids);
+  await actions.startAgainFirstSetup({
+    ...ids,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+}
 async function fixture(
   index = 1,
   taxId = request.taxId,
@@ -160,6 +191,7 @@ async function fixture(
     damage?: "missing-original" | "syntax" | "binding" | "digest";
     source?: "local" | "outside";
   },
+  retire: "archive" | "start-again" = "archive",
 ) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "retired-hour-assignments-")));
   roots.push(root);
@@ -281,62 +313,70 @@ async function fixture(
       bytes: await readFile(publicPath),
     });
   }
-  const resolutionId = randomUUID(),
-    workspaceId = randomUUID();
-  const base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
-  const binding = {
-    workspaceId,
-    resolutionId,
-    anchorStateDir: anchor.stateDir,
-    anchorVenueDir: anchor.venueDir,
-    stateDir: join(base, "state"),
-    venueDir: join(base, "venue"),
-    selectionGeneration: 1,
-  };
-  const records = createFirstSetupResolutionStore({
-    ...anchor,
-    coordinator: createFirstSetupCoordinator(),
-  });
-  const prepared = await records.prepare(
-    {
+  let folders = anchor;
+  if (retire === "start-again") await startAgainMissingDatabase(oldHost, anchor);
+  else {
+    const resolutionId = randomUUID(),
+      workspaceId = randomUUID();
+    const base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
+    const binding = {
+      workspaceId,
       resolutionId,
-      attemptId: old.frozen.attemptId,
-      observedRevision: old.revision,
-      observedOwnerGeneration: old.ownerGeneration,
-      database: "missing",
-      authority: "original-password",
-      register: null,
-      action: "retire",
-      nextWorkspace: binding,
-    },
-    originals,
-  );
-  await selectFirstSetupWorkspace(anchor, await records.apply(prepared));
-  if (retained?.damage === "missing-original") {
-    const archived = await records.readOriginals(resolutionId);
-    expect(
-      archived.some((entry) => entry.name.endsWith(".recovery.json") && entry.bytes !== null),
-    ).toBe(true);
-    // Damage the archived bytes, rather than removing the live file the archive already preserved.
-    const archive = join(anchor.stateDir, "first-setup-resolutions", resolutionId);
-    const files = await readdir(archive, { recursive: true });
-    let removed = false;
-    const original = originals.find((entry) => entry.name.endsWith(".recovery.json"))!.bytes!;
-    for (const name of files) {
-      const path = join(archive, name);
-      const value = await readFile(path).catch(() => null);
-      if (value === null) continue;
-      const chunk = JSON.parse(value.toString("utf8")) as { bytes?: string };
-      if (typeof chunk.bytes === "string" && Buffer.from(chunk.bytes, "base64").equals(original)) {
-        await unlink(path);
-        removed = true;
-        break;
+      anchorStateDir: anchor.stateDir,
+      anchorVenueDir: anchor.venueDir,
+      stateDir: join(base, "state"),
+      venueDir: join(base, "venue"),
+      selectionGeneration: 1,
+    };
+    const records = createFirstSetupResolutionStore({
+      ...anchor,
+      coordinator: createFirstSetupCoordinator(),
+    });
+    const prepared = await records.prepare(
+      {
+        resolutionId,
+        attemptId: old.frozen.attemptId,
+        observedRevision: old.revision,
+        observedOwnerGeneration: old.ownerGeneration,
+        database: "missing",
+        authority: "original-password",
+        register: null,
+        action: "retire",
+        nextWorkspace: binding,
+      },
+      originals,
+    );
+    await selectFirstSetupWorkspace(anchor, await records.apply(prepared));
+    if (retained?.damage === "missing-original") {
+      const archived = await records.readOriginals(resolutionId);
+      expect(
+        archived.some((entry) => entry.name.endsWith(".recovery.json") && entry.bytes !== null),
+      ).toBe(true);
+      // Damage the archived bytes, rather than removing the live file the archive already preserved.
+      const archive = join(anchor.stateDir, "first-setup-resolutions", resolutionId);
+      const files = await readdir(archive, { recursive: true });
+      let removed = false;
+      const original = originals.find((entry) => entry.name.endsWith(".recovery.json"))!.bytes!;
+      for (const name of files) {
+        const path = join(archive, name);
+        const value = await readFile(path).catch(() => null);
+        if (value === null) continue;
+        const chunk = JSON.parse(value.toString("utf8")) as { bytes?: string };
+        if (
+          typeof chunk.bytes === "string" &&
+          Buffer.from(chunk.bytes, "base64").equals(original)
+        ) {
+          await unlink(path);
+          removed = true;
+          break;
+        }
       }
+      expect(removed).toBe(true);
     }
-    expect(removed).toBe(true);
+    folders = binding;
   }
   const host = createFirstSetupModuleHost({
-    ...binding,
+    ...folders,
     modules,
     environment: {},
     database: () => suite.db,
@@ -475,36 +515,42 @@ it("an empty replacement cannot erase inherited spent hours", async () => {
   ).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await f.host.store.read()).toEqual(f.state);
 });
-it("password recovery retires an unused replacement without erasing the earlier hour or inventing register evidence", async () => {
-  const f = await fixture(2, request.taxId, "production", false);
+it("password recovery starts an unused named replacement again in the same folders, and the note holds the later of the two names", async () => {
+  const f = await fixture(2, request.taxId, "production", false, 1, undefined, "start-again");
+  const earlier = (await readStartAgainNote(f.state.stateDir))!.lastName;
+  const named = (await choose(f.host, f.state, f.claim.capability)).state;
+  const later = (firstSetupModuleContext(named, MODULE).request as { identity: string }).identity;
+  expect(decodeMinuteIdentity(later)).toBeGreaterThan(decodeMinuteIdentity(earlier));
   await suite.db.archiveTo(join(f.state.venueDir, "venue.db"));
   const initial = await f.host.resolution.inspectFirstSetupResolution();
   expect(initial.emptyDatabase).toBe(true);
   const recovered = await f.host.owner.recoverFirstSetupOwner({
     inspectionId: initial.inspectionId,
-    revision: f.state.revision,
-    ownerGeneration: f.state.ownerGeneration,
+    revision: named.revision,
+    ownerGeneration: named.ownerGeneration,
     clientClaimNonce: randomBytes(32).toString("base64url"),
     password: PASSWORD,
   });
   const inspection = await f.host.resolution.inspectFirstSetupResolution();
-  const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
   const actions = createFirstSetupResolutionActions({
     stateDir: f.state.stateDir,
     venueDir: f.state.venueDir,
     host: f.host,
   });
-  const binding = await actions.startAgainFirstSetup({
-    inspectionId: inspection.inspectionId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.state.ownerGeneration,
-    owner: { ...recovered.state, capability: recovered.capability },
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: inspection.inspectionId,
+      revision: recovered.state.revision,
+      ownerGeneration: recovered.state.ownerGeneration,
+      owner: { ...recovered.state, capability: recovered.capability },
+    }),
+  ).resolves.toBeUndefined();
+  expect({ stateDir: f.state.stateDir, venueDir: f.state.venueDir }).toEqual({
+    stateDir: f.old.stateDir,
+    venueDir: f.old.venueDir,
   });
-  expect(binding.selectionGeneration).toBe(2);
-  expect(binding.anchorStateDir).toBe(f.old.stateDir);
-  const retired = await readFirstSetupRetirements(binding);
-  expect(retired.map((entry) => entry.record.register)).toEqual([null, null]);
-  expect(retired[1]!.state).toEqual(f.old);
+  await expectStartAgainDeleted(f.state);
+  expect(await startAgainNoteName(f.state)).toBe(later);
 });
 it.each([2, 41, 42, 43])(
   "retained public hour42 bounds offset%s independently of saved hour1",

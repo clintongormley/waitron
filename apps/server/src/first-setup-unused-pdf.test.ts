@@ -1,14 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { readFile, readdir, writeFile, rm } from "node:fs/promises";
-import * as filesystem from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  inspectFirstSetupWorkspaceSelection,
   readStartAgainNote,
   type RegisterAnswer,
   type StartAgainSummary,
@@ -20,17 +17,12 @@ import {
   startAgainUnchanged,
 } from "../test/start-again-deleted.js";
 import { firstFiscalPublicDigest as publicDigest } from "./first-fiscal-delivery.js";
-import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
-import { startServerOrFirstSetupResolution } from "./node-entry.js";
-import { ensureBoxSecrets } from "./box-secrets.js";
-import { freePorts } from "./testing/free-ports.js";
-import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
+import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
 
-vi.mock("node:fs/promises", { spy: true });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => ({
@@ -106,12 +98,18 @@ it.each([
   { identity: "0CNNW", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
   { identity: "0CNQR", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
 ])(
-  "retiring the unused PDF excludes hour $identity across changed bases, spent=$spent",
+  "after Start again, a new attempt with changed bases in the same folders is refused hour $identity at or before the note and picks it after, spent=$spent",
   async ({ identity, issuedAt, spent }) => {
     const f = await fixture();
-    const binding = await f.start();
-    const next = createFirstSetupModuleHost({ ...binding, modules: f.modules, environment: {} });
-    await next.owner.claimFirstSetup(
+    await f.start();
+    const next = createFirstSetupModuleHost({
+      stateDir: f.stateDir,
+      venueDir: f.venueDir,
+      modules: f.modules,
+      environment: {},
+      database: () => suite.db,
+    });
+    const claim = await next.owner.claimFirstSetup(
       {
         environment: "production",
         request: {
@@ -123,28 +121,37 @@ it.each([
       },
       randomBytes(32).toString("base64url"),
     );
-    let state = (await next.store.read())!;
-    const context = firstSetupModuleContext(state, f.module);
-    const input = hourSetupInput(
-      {
-        binding: context.binding,
-        scope: { taxpayerNif: context.taxId, environment: context.environment },
-        bases: [...context.bases].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)),
-        identity,
-        issuedAt,
-      },
-      context.administratorId,
-    );
-    state = await next.store.update(state.frozen.attemptId, state.revision, {
-      kind: "candidates",
-      module: f.module,
-      request: { kind: "waitron-hour-setup", status: "selected", identity, input },
-    });
+    const owner = { ...claim.state, capability: claim.capability };
+    const note = (await readStartAgainNote(f.stateDir))!;
+    // Production setup settles 90 seconds and names the next whole minute, so two minutes early
+    // aims the selection at this row's own minute.
+    vi.setSystemTime(Date.parse(issuedAt) - 2 * 60_000);
+    const select = async () => {
+      const compared = (await next.preparation.prepare(
+        owner,
+        f.module,
+        { action: "compare-clocks", browser: null },
+        { onBox: true },
+      )) as { id: string };
+      return next.preparation.select(
+        owner,
+        f.module,
+        { comparisonId: compared.id },
+        await next.owner.reconfirm(owner, f.password, "block-use"),
+      );
+    };
     if (spent)
-      await expect(next.assertFreshAssignment(state, f.module)).rejects.toMatchObject({
-        code: "setup.attempt_conflict",
+      await expect(select()).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "minute_not_later", allowedFromMs: note.floorMs },
       });
-    else await expect(next.assertFreshAssignment(state, f.module)).resolves.toBeUndefined();
+    else {
+      await selectPastWaits(f.clock, select);
+      const state = (await next.store.read())!;
+      expect(
+        (firstSetupModuleContext(state, f.module).request as { identity: string }).identity,
+      ).toBe(identity);
+    }
   },
 );
 it.each(["activation-started", "uncertain"] as const)(
@@ -397,103 +404,4 @@ it("a rehashed document with an invalid module confirmation cannot authorise unu
   manifest.bindingDigest = publicDigest(manifest.statement);
   await writeFile(manifestPath, JSON.stringify(manifest));
   await expect(f.start()).rejects.toMatchObject({ code: "setup.not_ready" });
-});
-it.each(["first-setup-workspace.json", "first-setup-selection.json"])(
-  "an interrupted unused-PDF selection at %s resumes the same binding without a password",
-  async (point) => {
-    const f = await fixture();
-    const actual = (await vi.importActual<typeof filesystem>("node:fs/promises")).rename;
-    let interrupted = false;
-    vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
-      if (!interrupted && String(to).endsWith(point)) {
-        interrupted = true;
-        throw new Error("unused-PDF selection interruption");
-      }
-      await actual(from, to);
-    });
-    await expect(f.start()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-    expect(interrupted).toBe(true);
-    vi.mocked(filesystem.rename).mockRestore();
-    const pending = (await inspectFirstSetupWorkspaceSelection(f))!;
-    const fresh = createFirstSetupModuleHost({ ...f, environment: {} });
-    const actions = createFirstSetupResolutionActions({ ...f, host: fresh });
-    const observed = (await actions.inspectWorkspaceSelection())!;
-    await expect(
-      actions.resumeWorkspaceSelection({
-        ...observed,
-        register: { kind: "no-current-master", confirmed: true },
-      }),
-    ).rejects.toMatchObject({ code: "setup.not_ready" });
-    await expect(
-      actions.resumeWorkspaceSelection({ ...observed, register: f.answer() }),
-    ).resolves.toEqual(pending.binding);
-    expect(await inspectFirstSetupWorkspaceSelection(f)).toBeNull();
-  },
-);
-it("HTTPS accepts a fresh consulted-register answer for the same interrupted unused-PDF selection", async () => {
-  const f = await fixture();
-  const actual = (await vi.importActual<typeof filesystem>("node:fs/promises")).rename;
-  let interrupted = false;
-  vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
-    if (!interrupted && String(to).endsWith("first-setup-workspace.json")) {
-      interrupted = true;
-      throw new Error("unused-PDF selection interruption");
-    }
-    await actual(from, to);
-  });
-  await expect(f.start()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(interrupted).toBe(true);
-  vi.mocked(filesystem.rename).mockRestore();
-  const pending = (await inspectFirstSetupWorkspaceSelection(f))!;
-  await ensureBoxSecrets({
-    stateDir: f.stateDir,
-    hostnames: ["localhost", "waitron.local"],
-    now: () => new Date(),
-    listIpv4: () => ["127.0.0.1"],
-  });
-  const [port] = await freePorts(1);
-  const restart = vi.fn();
-  const agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
-  let server: Awaited<ReturnType<typeof startServerOrFirstSetupResolution>> | undefined;
-  try {
-    server = await startServerOrFirstSetupResolution(
-      {
-        WAITRON_STATE_DIR: f.stateDir,
-        WAITRON_VENUE_DIR: f.venueDir,
-        WAITRON_HTTP_HOST: "127.0.0.1",
-        WAITRON_HTTP_PORT: String(port),
-      },
-      {},
-      { requestRestart: restart },
-    );
-    const origin = `https://127.0.0.1:${port}`;
-    const observed = await fetch(`${origin}/setup-api/first-setup/resolution/selection`, {
-      dispatcher: agent,
-    } as RequestInit).then((r) => r.json());
-    const register = { ...f.answer(), consultedAt: "2026-10-16T14:00:00.000Z" };
-    const post = (body: unknown) =>
-      fetch(`${origin}/setup-api/first-setup/resolution/resume-selection`, {
-        method: "POST",
-        dispatcher: agent,
-        headers: { "Content-Type": "application/json", Origin: origin },
-        body: JSON.stringify(body),
-      } as RequestInit);
-    const refused = await post({
-      ...observed,
-      register: { ...register, reference: "b".repeat(64) },
-    });
-    expect(refused.status).toBe(503);
-    expect((await refused.json()).error.code).toBe("setup.not_ready");
-    const accepted = await post({ ...observed, register });
-    expect(accepted.status).toBe(200);
-    expect(await accepted.json()).toEqual({
-      workspaceId: pending.binding.workspaceId,
-      selectionGeneration: pending.binding.selectionGeneration,
-      restarting: true,
-    });
-    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
-  } finally {
-    await server?.close();
-    await agent.close();
-  }
 });
