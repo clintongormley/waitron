@@ -1291,6 +1291,9 @@ describe("counter pay", () => {
     expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
     expect(api.updateWorkingOrder!.mock.calls[0]![1].lateSend).toEqual(BREAKFAST_CONFIRMED);
     expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+    expect(api.updateWorkingOrder!.mock.invocationCallOrder[0]).toBeLessThan(
+      api.recordSale!.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("keeps a retrieved order's stored dish on Remove them", async () => {
@@ -1343,5 +1346,330 @@ describe("counter pay", () => {
     expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     expect(api.recordSale).toHaveBeenCalledOnce();
     expect(api.recordSale!.mock.calls[0]![9]).toBeUndefined();
+  });
+
+  it("records a manual card payment with the ended menu once the kitchen agreed", async () => {
+    const el = await lateCounter();
+    emit(counterScreen(el), "confirm-payment", { method: "card", amount: "6.00" });
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(api.recordSale).not.toHaveBeenCalled();
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(api.recordSale!.mock.calls[0]![1]).toEqual({ method: "card", amount: "6.00" });
+    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+  });
+
+  it("asks for the invoice's recipient before the window on a bill over the simplified-invoice limit", async () => {
+    const el = await counterBasket(
+      {
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, fullInvoices: true, simplifiedInvoiceLimit: "4.00" }),
+        getInvoiceDeliveryOptions: vi
+          .fn()
+          .mockResolvedValue({ invoicePrinter: null, emailAvailable: false }),
+      },
+      { products: [] },
+    );
+    // Loaded rather than added: the basket refuses an add that takes it past the limit.
+    counterScreen(el).store.loadFrom(
+      "large",
+      ["Omelette", "Coffee"].map((product) => ({
+        product: menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"),
+        quantity: "1",
+      })),
+    );
+    counterMenus = catalogue("lunch", "zone-barra", "prepay");
+    await poll(el);
+    expect(counterScreen(el).store.lines.map((line) => line.endedPeriod?.menuId)).toEqual([
+      DESAYUNOS.id,
+      undefined,
+    ]);
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    const recipient = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
+    expect(recipient).not.toBeNull();
+    expect(windowOf(el)).toBeNull();
+    emit(recipient!, "invoice-recipient-confirm", {
+      invoiceType: "F1",
+      recipient: {
+        taxId: "12345678Z",
+        legalName: "Example Guest",
+        address: "1 Main Street",
+        countryCode: "ES",
+      },
+      delivery: { medium: "receipt" },
+    });
+    await flush(el);
+
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    await choose(el, "data-late-agreed");
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+  });
+});
+
+/** The held order `wo-1` with a payment on it, so the counter takes the rest as a bill payment. */
+const partlyPaid = {
+  items: [],
+  id: "wo-1",
+  orderNumber: 5,
+  label: null,
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
+  total: "6.00",
+  outstanding: "3.00",
+  hasPayments: true,
+  partyId: null,
+  openedAt: "2026-10-12T12:00:00.000Z",
+  signals: [],
+};
+const partlyPaidBalance = {
+  workingOrderId: "wo-1",
+  status: "open",
+  total: "6.00",
+  received: "3.00",
+  reserved: "0.00",
+  outstanding: "3.00",
+  tips: "0.00",
+  payments: [],
+  paidLines: [],
+};
+const billPayDialog = (el: TillApp) => el.shadowRoot!.querySelector("till-bill-pay-dialog");
+const billPayment = (overrides: Record<string, unknown> = {}) => ({
+  listWorkingOrders: vi.fn().mockResolvedValue([partlyPaid]),
+  getBillBalance: vi.fn().mockResolvedValue(partlyPaidBalance),
+  ...overrides,
+});
+const errorLine = (el: TillApp) =>
+  el.shadowRoot!.querySelector(".error")?.textContent?.trim() ?? "";
+const savedLateSends = () =>
+  api.updateWorkingOrder!.mock.calls.map(([, request]) => request.lateSend);
+
+describe("counter pay of a partly paid order", () => {
+  it("asks about a new marked dish, and saves it with the ended menu before the bill payment opens", async () => {
+    const el = await lateCounter(billPayment(), { products: ["Omelette"], held: true });
+    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(billPayDialog(el)).toBeNull();
+
+    await choose(el, "data-late-agreed");
+
+    expect(savedLateSends()).toEqual([BREAKFAST_CONFIRMED]);
+    expect(api.updateWorkingOrder!.mock.invocationCallOrder[0]).toBeLessThan(
+      api.getBillBalance!.mock.invocationCallOrder[0]!,
+    );
+    expect(billPayDialog(el)).not.toBeNull();
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("opens the window from the save's refusal of a dish the till had not marked", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockResolvedValue({ revision: 4 });
+    const el = await counterBasket(billPayment({ updateWorkingOrder }), {
+      products: ["Omelette"],
+      held: true,
+    });
+    const notice = errorLine(el);
+    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    await flush(el, 6);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(errorLine(el)).toBe(notice);
+    expect(billPayDialog(el)).toBeNull();
+
+    await choose(el, "data-late-agreed");
+
+    expect(savedLateSends()).toEqual([undefined, BREAKFAST_CONFIRMED]);
+    expect(billPayDialog(el)).not.toBeNull();
+  });
+
+  it("keeps the confirmation on the save it repeats after the dead-ends question", async () => {
+    const el = await lateCounter(
+      billPayment({
+        updateWorkingOrder: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "route.station_inactive", status: 409 })
+          .mockResolvedValue({ revision: 4 }),
+        askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [], stations: [] }),
+      }),
+      { products: ["Omelette"], held: true },
+    );
+    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    await flush(el, 6);
+
+    await choose(el, "data-late-agreed");
+
+    expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
+    expect(savedLateSends()).toEqual([BREAKFAST_CONFIRMED, BREAKFAST_CONFIRMED]);
+    expect(billPayDialog(el)).not.toBeNull();
+  });
+
+  it("asks for a manager's PIN when the save needs one, and saves again with it", async () => {
+    const updateWorkingOrder = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValue({ revision: 4 });
+    const el = await lateCounter(
+      billPayment({
+        updateWorkingOrder,
+        serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+      }),
+      { products: ["Omelette"], held: true },
+    );
+    const notice = errorLine(el);
+    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+
+    expect(approval(el)).not.toBeNull();
+    expect(errorLine(el)).toBe(notice);
+    expect(billPayDialog(el)).toBeNull();
+    await authorize(el, "0123");
+
+    expect(savedLateSends()).toEqual([
+      BREAKFAST_CONFIRMED,
+      { ...BREAKFAST_CONFIRMED, override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(billPayDialog(el)).not.toBeNull();
+  });
+});
+
+describe("counter pay with a manager's PIN", () => {
+  const MARTA_OVERRIDE = (pin: string) => ({
+    ...BREAKFAST_CONFIRMED,
+    override: { personId: MARTA.personId, pin },
+  });
+
+  it("asks for a manager on cash Pay, and records the sale again with their PIN", async () => {
+    const recordSale = vi.fn().mockRejectedValueOnce(MANAGER_NEEDED).mockResolvedValue(saleResult);
+    const el = await lateCounter({
+      recordSale,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+
+    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+    await authorize(el, "0123");
+
+    expect(recordSale.mock.calls.map((call) => call.at(-1))).toEqual([
+      BREAKFAST_CONFIRMED,
+      MARTA_OVERRIDE("0123"),
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(windowOf(el)).toBeNull();
+  });
+
+  it("keeps the dialog open on a wrong PIN at cash Pay, and closes it once a right one records", async () => {
+    const recordSale = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockRejectedValueOnce(WRONG_PIN)
+      .mockResolvedValue(saleResult);
+    const el = await lateCounter({
+      recordSale,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+    await authorize(el, "0123");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+    await authorize(el, "4567");
+
+    expect(recordSale.mock.calls.map((call) => call.at(-1))).toEqual([
+      BREAKFAST_CONFIRMED,
+      MARTA_OVERRIDE("0123"),
+      MARTA_OVERRIDE("4567"),
+    ]);
+    expect(approval(el)).toBeNull();
+  });
+
+  it("says in the dialog when the person who approved at cash Pay may not, and keeps it open", async () => {
+    const recordSale = vi.fn().mockRejectedValue(MANAGER_NEEDED);
+    const el = await lateCounter({
+      recordSale,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+    await authorize(el, "0123");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approvalText(el, ".error")).toBe(codeMessage("authorization.not_permitted"));
+    expect(recordSale).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks for a manager on the card reader, and pays again with their PIN", async () => {
+    const pay = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const el = await lateCounter({
+      ...integratedCard(),
+      pay,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    emit(counterScreen(el), "collect-card", {});
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+
+    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    await authorize(el, "0123");
+
+    expect(pay.mock.calls.map(([request]) => request.lateSend)).toEqual([
+      BREAKFAST_CONFIRMED,
+      MARTA_OVERRIDE("0123"),
+    ]);
+    expect(approval(el)).toBeNull();
+  });
+
+  it("keeps the dialog open on a wrong PIN at the card reader", async () => {
+    const pay = vi
+      .fn()
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockRejectedValueOnce(WRONG_PIN)
+      .mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const el = await lateCounter({
+      ...integratedCard(),
+      pay,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    emit(counterScreen(el), "collect-card", {});
+    await flush(el, 6);
+    await choose(el, "data-late-agreed");
+    await authorize(el, "0123");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    await authorize(el, "4567");
+
+    expect(pay.mock.calls.map(([request]) => request.lateSend)).toEqual([
+      BREAKFAST_CONFIRMED,
+      MARTA_OVERRIDE("0123"),
+      MARTA_OVERRIDE("4567"),
+    ]);
+    expect(approval(el)).toBeNull();
   });
 });

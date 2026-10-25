@@ -1209,6 +1209,29 @@ const TYPED_FIELDS = new Set(["tendered", "amount", "shareOf", "addedTip"]);
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
 const APPROVER_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 
+interface LateSendApprovalAsked {
+  lateSend: LateSend;
+  pinError: string | undefined;
+}
+
+/** A refusal of a request that carried `lateSend` asking for a manager's PIN, with the PIN's own
+ * refusal to show in the dialog when the request carried one. */
+function lateSendApprovalAsked(
+  error: unknown,
+  lateSend: LateSend | undefined,
+): LateSendApprovalAsked | undefined {
+  if (lateSend === undefined) return undefined;
+  if (isLateSendManagerRefusal(error))
+    return {
+      lateSend,
+      pinError: lateSend.override === undefined ? undefined : "authorization.not_permitted",
+    };
+  const refused = asRefusal(error)?.refused;
+  return lateSend.override !== undefined && refused !== undefined && APPROVER_REFUSALS.has(refused)
+    ? { lateSend, pinError: refused }
+    : undefined;
+}
+
 /** Refusals after which the bill may already be cancelled: no answer, and `working_order.not_placed`,
  * which a cancel gets once an earlier cancel of the same bill has been made. */
 const CANCEL_MAY_HAVE_LANDED = new Set(["network", "working_order.not_placed"]);
@@ -6177,9 +6200,9 @@ export class TillApp extends LitElement {
       this.errorKey = "menu.last_orders_ended";
       return;
     }
+    if (this.#askInvoiceRecipientForLargeBill()) return;
     const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
-    if (this.#askInvoiceRecipientForLargeBill()) return;
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -6200,6 +6223,7 @@ export class TillApp extends LitElement {
     let recheck = false;
     let inactiveChoice = false;
     let paid = false;
+    let approval: LateSendApprovalAsked | undefined;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
@@ -6235,8 +6259,11 @@ export class TillApp extends LitElement {
       // filed.
       if (session !== this.#operatorSession) return;
       const asked = lateSendAsked(error, basketLines);
+      approval = lateSendApprovalAsked(error, lateSend);
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
-      else if (
+      else if (approval !== undefined) {
+        // Asked once `submitting` has cleared, so the PIN's rerun is not ignored.
+      } else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6263,6 +6290,8 @@ export class TillApp extends LitElement {
     if (session !== this.#operatorSession) return;
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
+    if (approval !== undefined)
+      await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#onConfirmPayment(event, true, lateSend),
@@ -6324,9 +6353,9 @@ export class TillApp extends LitElement {
    */
   async #collectCard(event: Event, retried: boolean, lateSend?: LateSend): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
+    if (this.#askInvoiceRecipientForLargeBill()) return;
     const retry = (confirmed: LateSend) => this.#onCollectCard(event, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
-    if (this.#askInvoiceRecipientForLargeBill()) return;
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -6353,6 +6382,7 @@ export class TillApp extends LitElement {
     let recheck = false;
     let inactiveChoice = false;
     let paid = false;
+    let approval: LateSendApprovalAsked | undefined;
     try {
       if (
         !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
@@ -6408,8 +6438,11 @@ export class TillApp extends LitElement {
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
       if (session !== this.#operatorSession) return;
       const asked = lateSendAsked(error, basketLines);
+      approval = lateSendApprovalAsked(error, lateSend);
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
-      else if (
+      else if (approval !== undefined) {
+        // Asked once `submitting` has cleared, so the PIN's rerun is not ignored.
+      } else if (
         !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6443,6 +6476,8 @@ export class TillApp extends LitElement {
     if (session !== this.#operatorSession) return;
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
+    if (approval !== undefined)
+      await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#collectCard(event, true, lateSend),
@@ -16925,22 +16960,31 @@ export class TillApp extends LitElement {
 
   /** The pay card's offer on a counter order a payment is already on: the bill payment dialog opens
    * on it, once an edit made to it in the basket is saved, as a single payment saves it first. */
-  async #onCounterBillPay(event: Event, retried = false): Promise<void> {
+  async #onCounterBillPay(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     const { amount } = (event as CustomEvent<{ amount: string }>).detail;
     if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
+    const retry = (confirmed: LateSend) => this.#onCounterBillPay(event, false, confirmed);
+    if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.#counterSends++;
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
     const session = this.#operatorSession;
+    const basketLines = [...this.#store.lines];
     try {
       if (
-        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label)) ||
+        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
     } catch (error) {
-      if (!this.#hasLeftCounterOrder(id, session))
+      if (!this.#hasLeftCounterOrder(id, session)) {
+        const asked = lateSendAsked(error, basketLines);
+        if (asked !== undefined) return this.#openCounterLateSend(asked, retry);
+        const approval = lateSendApprovalAsked(error, lateSend);
+        if (approval !== undefined)
+          return this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
         this.errorKey = counterError(error, "sale.error");
+      }
       if (
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -16953,7 +16997,7 @@ export class TillApp extends LitElement {
         ))
       ) {
         this.errorKey = undefined;
-        await this.#onCounterBillPay(event, true);
+        await this.#onCounterBillPay(event, true, lateSend);
       }
       return;
     }
