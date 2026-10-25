@@ -437,6 +437,11 @@ it("an unfinishable deletion is refused setup.start_again_incomplete and nothing
   vi.mocked(resolveFirstSetupBackupEntry).mockClear();
   const entry = await resolveFirstSetupEntry(f, {});
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  if (entry.kind !== "refused") throw new Error("expected a refused start");
+  expect(entry.error).toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "size or hash differs: state/first-setup.json",
+  });
   expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
   expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
     '{"changed":"after the marker"}',

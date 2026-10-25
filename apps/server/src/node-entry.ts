@@ -402,12 +402,17 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   if (admission.kind === "refused") {
     const logDir = deps.logDir ?? join(rooted.stateDir, "logs");
     const exit = deps.exit ?? DEFAULT_EXIT;
+    const reason = admission.error.reason ?? null;
+    deps.log("warn", "recovery.serving_refused_start", { errorCode: admission.code, reason });
     // Both lines, so the page's "Why the last start failed" is this refusal, not an earlier start's.
     const page = pageLog(logDir, now, deps.log);
     page("info", "server.boot_started");
     page("error", "server.boot_failed", {
       errorCode: admission.code,
-      detail: failureDetail(new AppError(admission.code, {})),
+      detail:
+        reason === null
+          ? failureDetail(admission.error)
+          : `${failureDetail(admission.error)}\n${redactSecrets(`reason: ${reason}`)}`,
     });
     await deps.serveRecovery(
       recoveryApp({

@@ -93,9 +93,10 @@ async function refusedAtStart(roots: FirstSetupRoots) {
     await assertNoLegacyFirstSetupWorkspace(canonical);
     await finishStartAgainDeletion(canonical);
   } catch (error) {
-    const code = error instanceof AppError ? error.code : undefined;
-    const refusal = START_REFUSALS.find((candidate) => candidate === code);
-    if (refusal !== undefined) return { kind: "refused" as const, code: refusal, roots: canonical };
+    if (!(error instanceof AppError)) return undefined;
+    const refusal = START_REFUSALS.find((candidate) => candidate === error.code);
+    if (refusal !== undefined)
+      return { kind: "refused" as const, code: refusal, roots: canonical, error };
   }
   return undefined;
 }

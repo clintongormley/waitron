@@ -16,6 +16,7 @@ import { CORE_MIGRATIONS, LOG_FILE_NAME } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { spawnSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { serveRecovery } from "./recovery-listener.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -250,11 +251,8 @@ try {
   return result.stdout;
 }
 
-it.each([
-  { selected: false, failure: false },
-  { selected: false, failure: true },
-])(
-  "startup holds and releases its real locks: selected=$selected failure=$failure",
+it.each([{ failure: false }, { failure: true }])(
+  "startup holds and releases its real locks: failure=$failure",
   async ({ failure }) => {
     const f = await firstFiscalFixture();
     try {
@@ -307,6 +305,32 @@ it.each(["activation-started", "abandoned", "uncertain"] as const)(
   },
 );
 
+it("startup refuses a busy venue before its callback and releases earlier locks", async () => {
+  const f = await firstFiscalFixture();
+  let blocker: DatabaseSync | undefined;
+  try {
+    await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+    const admission = await resolveFirstSetupEntry(f, {});
+    expect(admission.kind).toBe("normal");
+    if (admission.kind !== "normal") throw new Error("expected startup admission");
+    blocker = new DatabaseSync(join(f.venueDir, "venue.lock"));
+    blocker.exec("begin immediate");
+    let entered = false;
+    await expect(
+      admission.run(async () => {
+        entered = true;
+      }),
+    ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+    expect(entered).toBe(false);
+    blocker.close();
+    blocker = undefined;
+    expect(startupLockFromAnotherProcess(f.venueDir)).toBe("AVAILABLE");
+  } finally {
+    blocker?.close();
+    await f.dispose();
+  }
+});
+
 let material: SelfSignedMaterial;
 beforeAll(() => {
   material = mintSelfSignedServerCert({
@@ -316,7 +340,7 @@ beforeAll(() => {
   });
 });
 
-type Box = "archive" | "interrupted" | "unfinishable";
+type Box = "archive" | "interrupted" | "unfinishable" | "unlisted";
 
 /** A box with healthy TLS, so a real recovery listener serves the page rather than connection repair. */
 async function startingBox(box: Box) {
@@ -349,6 +373,7 @@ async function startingBox(box: Box) {
   );
   if (box === "unfinishable")
     await writeFile(join(stateDir, "first-setup.json"), '{"changed":"after the marker"}');
+  if (box === "unlisted") await writeFile(join(venueDir, "venue.db"), "written after the marker");
   return { root, ...roots };
 }
 
@@ -564,3 +589,40 @@ it.each(MODES)(
     await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
   },
 );
+
+it("a deletion refused for an unlisted file names that file under 'Why the last start failed'", async () => {
+  const f = await startingBox("unlisted");
+  const lines: { event: string; fields: unknown }[] = [];
+  const [port] = (await freePorts(1)) as [number];
+  await entry.runEntry({
+    ...f,
+    args: [],
+    statfs: plentyOfSpace,
+    baseEnv: {
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+    },
+    readRecoveryState: async () => FRESH,
+    writeRecoveryState: async () => {},
+    loadBoxEnv: async (base) => base,
+    startServer: stopped,
+    serveRecovery: async (app, options) => {
+      const server = await serveRecovery(app, options);
+      closes.push(() => closeListener(server));
+    },
+    scheduleStayedUp: () => {},
+    installShutdownHandlers: () => {},
+    log: (_level, event, fields) => lines.push({ event, fields }),
+    exit: () => {},
+  });
+  const page = (await overHttps(port, "/", "en-GB")).body;
+  const heading = page.indexOf("Why the last start failed (");
+  expect(heading).toBeGreaterThan(-1);
+  const section = page.slice(heading, page.indexOf("</pre>", heading));
+  expect(section).toContain("unlisted file: venue/venue.db");
+  expect(lines).toContainEqual({
+    event: "recovery.serving_refused_start",
+    fields: { errorCode: "setup.start_again_incomplete", reason: "unlisted file: venue/venue.db" },
+  });
+});

@@ -109,7 +109,11 @@ export async function startServerOrFirstSetupResolution(
         const selectedEnv = await loadBoxEnv(selectedBase, admission.roots.stateDir);
         return (seams.startServer ?? startServer)(selectedEnv, selectedBase);
       });
-    if (admission.kind === "refused")
+    if (admission.kind === "refused") {
+      log("warn", "recovery.serving_refused_start", {
+        errorCode: admission.code,
+        reason: admission.error.reason ?? null,
+      });
       return listen(
         recoveryApp({
           state: refusedAtStart(
@@ -126,6 +130,7 @@ export async function startServerOrFirstSetupResolution(
         }),
         options,
       );
+    }
     return listen(admission.app, options);
   };
   active = await launch();
