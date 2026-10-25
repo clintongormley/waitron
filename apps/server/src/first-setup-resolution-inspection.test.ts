@@ -311,7 +311,7 @@ it.each(["missing", "corrupt", "partial"] as const)(
     await unchanged();
   },
 );
-it("Start again serialises two browsers so an unchanged old claim is retired only once", async () => {
+it("Start again from two browsers deletes the attempt once and refuses the second with setup.attempt_conflict", async () => {
   const f = await actionsFixture(),
     request = await f.startRequest();
   const results = await Promise.allSettled([
@@ -319,10 +319,12 @@ it("Start again serialises two browsers so an unchanged old claim is retired onl
     f.actions.startAgainFirstSetup(request),
   ]);
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-  expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
-  const { resolveFirstSetupWorkspace } = await import("@waitron/provisioning");
-  const target = await resolveFirstSetupWorkspace(f);
-  expect(target.binding).not.toBeNull();
+  const rejected = results.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  expect(rejected).toHaveLength(1);
+  expect(rejected[0]?.reason).toMatchObject({ code: "setup.attempt_conflict" });
+  await expectStartAgainDeleted(f);
 });
 
 it("Start again deletes two attempts in turn in the same folders, writing no note when no name was picked", async () => {
