@@ -131,6 +131,7 @@ export { reconcile } from "./reconcile.js";
 export { selectTimeRecordExport } from "./record-export.js";
 export type { ModuleTimeRecordExport } from "./record-export.js";
 export {
+  jsonFile,
   personalDataParts,
   preparePersonalData,
   validatePersonalDataParts,

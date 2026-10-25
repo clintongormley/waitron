@@ -1,7 +1,7 @@
 import "./errors.js";
 import { deviceProfiles, devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { ModulePersonalData, PersonalDataFile } from "@waitron/module";
+import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { googleOidcStates } from "./schema/google-oidc-states.js";
@@ -22,11 +22,6 @@ const truth = (condition: SQL) => sql<boolean>`${condition}`.mapWith((v: number)
 /** True when the column holds a value; a secret's existence is tested in SQL so the secret itself
  * is never read. */
 const isSet = (column: AnyColumn) => truth(sql`${column} is not null`);
-
-const jsonFile = (name: string, value: unknown): PersonalDataFile => ({
-  name,
-  content: `${JSON.stringify(value, null, 2)}\n`,
-});
 
 export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
   files: ["profile.json", "sign-in.json"],

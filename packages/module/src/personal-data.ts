@@ -19,6 +19,10 @@ export interface PersonalDataFile {
   readonly name: string;
   readonly content: string | Uint8Array;
 }
+export const jsonFile = (name: string, value: unknown): PersonalDataFile => ({
+  name,
+  content: `${JSON.stringify(value, null, 2)}\n`,
+});
 export interface ModulePersonalData {
   /** Every file name this part may add; unique across all parts. */
   readonly files: readonly string[];

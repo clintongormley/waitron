@@ -1,7 +1,7 @@
 import { locations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import type { ModulePersonalData, PersonalDataFile } from "@waitron/module";
+import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
 import { asc, eq, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -18,11 +18,6 @@ import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { shiftSwaps } from "./schema/shift-swaps.js";
 import { shifts } from "./schema/shifts.js";
-
-const jsonFile = (name: string, value: unknown): PersonalDataFile => ({
-  name,
-  content: `${JSON.stringify(value, null, 2)}\n`,
-});
 
 /** Minutes past local midnight as `HH:MM`; 1440 reads `24:00`. */
 const clockOfMinute = (minute: number): string =>

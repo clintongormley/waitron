@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { kitchenStations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { ModulePersonalData } from "@waitron/module";
+import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { departments } from "@waitron/venue-service";
 import { localWallClock, shifts } from "@waitron/workforce";
 import { personStaffRoles, shiftAssignments, staffRoles } from "./schema/staffing.js";
@@ -38,22 +38,15 @@ export const STAFFING_PERSONAL_DATA: ModulePersonalData = {
       roleRows.length + shiftRows.length === 0
         ? []
         : [
-            {
-              name: "staff-roles.json",
-              content: `${JSON.stringify(
-                {
-                  staffRoles: roleRows,
-                  shiftRoles: shiftRows.map((row) => ({
-                    startsAt: localWallClock(row.startsAt, row.startsOffsetMinutes),
-                    endsAt: localWallClock(row.endsAt, row.endsOffsetMinutes),
-                    area: row.area,
-                    staffRole: row.staffRole,
-                  })),
-                },
-                null,
-                2,
-              )}\n`,
-            },
+            jsonFile("staff-roles.json", {
+              staffRoles: roleRows,
+              shiftRoles: shiftRows.map((row) => ({
+                startsAt: localWallClock(row.startsAt, row.startsOffsetMinutes),
+                endsAt: localWallClock(row.endsAt, row.endsOffsetMinutes),
+                area: row.area,
+                staffRole: row.staffRole,
+              })),
+            }),
           ];
   },
 };

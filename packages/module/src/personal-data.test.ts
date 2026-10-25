@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { WaitronModule } from "./module.js";
 import {
+  jsonFile,
   personalDataParts,
   preparePersonalData,
   validatePersonalDataParts,
@@ -38,6 +39,15 @@ const moduleWith = (name: string, value?: ModulePersonalData): WaitronModule => 
   tier: "toggleable",
   migrations: { name, table: name, from: name },
   ...(value === undefined ? {} : { personalData: value }),
+});
+
+describe("jsonFile", () => {
+  it("writes the value as JSON indented by two spaces, ending in one newline", () => {
+    expect(jsonFile("one.json", { a: [1, "x"], b: null })).toEqual({
+      name: "one.json",
+      content: '{\n  "a": [\n    1,\n    "x"\n  ],\n  "b": null\n}\n',
+    });
+  });
 });
 
 describe("personalDataParts", () => {
