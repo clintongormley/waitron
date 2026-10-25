@@ -11,7 +11,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { computeClosureHash } from "./pay-period-chain.js";
-import type { PayPeriodClosure, TimeRecord } from "./record-types.js";
+import type { PayPeriodClosure, PayPeriodSnapshot, TimeRecord } from "./record-types.js";
 import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
 import { readClosures } from "./pay-period-reads.js";
 import { projectTimeRecord } from "./record-projection.js";
@@ -384,6 +384,17 @@ async function twoPeopleClosedJanuary() {
   );
   return { closureId: row.id, ownMarked: outOf(personId) };
 }
+/** The cut written out here, independently of `readClosures`, to compare against. */
+function referenceCut(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSnapshot {
+  const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
+  const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
+  return {
+    sessions: snapshot.sessions.filter((s) => s.personId === personId),
+    entries: ownEntries,
+    summaries: snapshot.summaries.filter((s) => s.personId === personId),
+    markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
+  };
+}
 it("gives one person exactly the full closure read cut to her in JavaScript", async () => {
   const { closureId, ownMarked } = await twoPeopleClosedJanuary();
   const { narrowed, reference } = await run(async (tx) => {
@@ -394,20 +405,10 @@ it("gives one person exactly the full closure read cut to her in JavaScript", as
     record.sessions = record.sessions.filter((s) => s.personId === personId);
     record.entries = record.entries.filter((e) => e.entry.personId === personId);
     record.closedPeriodImpacts = record.closedPeriodImpacts.filter((i) => i.personId === personId);
-    record.closures = record.closures.map((closure) => {
-      const snapshot = closure.snapshot;
-      const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
-      const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
-      return {
-        ...closure,
-        snapshot: {
-          sessions: snapshot.sessions.filter((s) => s.personId === personId),
-          entries: ownEntries,
-          summaries: snapshot.summaries.filter((s) => s.personId === personId),
-          markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
-        },
-      };
-    });
+    record.closures = record.closures.map((closure) => ({
+      ...closure,
+      snapshot: referenceCut(closure.snapshot, personId),
+    }));
     return { narrowed, reference: record };
   });
   expect(reference.closures.map((c) => c.closureId)).toEqual([closureId]);
@@ -425,19 +426,6 @@ it("reads a closure's snapshot cut to the one person asked for", async () => {
     await readClosures(tx, { locationId, period: january, personId }),
   ]);
   const snapshot = full[0]!.snapshot;
-  const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
-  const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
-  expect(own).toEqual([
-    {
-      ...full[0]!,
-      id: closureId,
-      snapshot: {
-        sessions: snapshot.sessions.filter((s) => s.personId === personId),
-        entries: ownEntries,
-        summaries: snapshot.summaries.filter((s) => s.personId === personId),
-        markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
-      },
-    },
-  ]);
+  expect(own).toEqual([{ ...full[0]!, id: closureId, snapshot: referenceCut(snapshot, personId) }]);
   expect(snapshot.sessions.map((s) => s.personId)).toContain(other);
 });

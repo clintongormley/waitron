@@ -28,8 +28,8 @@ export async function readClosures(
   }));
 }
 
-// Cut before projecting, so one person's record projects her rows, not every snapshot's whole
-// venue. Cutting in SQL with json_each measured slower than decoding here (A980 S2b task 6c).
+// Correct only while projecting one person's record reads no other person's rows of a closure's
+// snapshot: the cut runs before the projection.
 function snapshotOf(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSnapshot {
   const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
   const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
