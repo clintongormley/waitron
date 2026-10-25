@@ -24,6 +24,7 @@ import {
   spareSpot,
   sparesOf,
   takenOffOf,
+  joinMembersById,
   tightName,
 } from "./floor-today.js";
 
@@ -1080,7 +1081,7 @@ describe("today's names", () => {
 describe("tightName", () => {
   it("uses the saved short name, whatever today's name", () => {
     const renamed = table("t2", "Table 2", { shortName: "T2", today: today({ name: "Window" }) });
-    expect(tightName(renamed, [renamed])).toBe("T2");
+    expect(tightName(renamed, joinMembersById([renamed]))).toBe("T2");
   });
 
   it("names a table of today's join by the join's tables' short names, in number order", () => {
@@ -1089,15 +1090,15 @@ describe("tightName", () => {
     const t9 = table("t9", "Table 9", { shortName: "T9", today: joined });
     const t3 = table("t3", "Table 3", { shortName: "T3" });
     const tables = [t10, t3, t9];
-    expect(tightName(t10, tables)).toBe("T9+T10");
-    expect(tightName(t9, tables)).toBe("T9+T10");
-    expect(tightName(t3, tables)).toBe("T3");
+    expect(tightName(t10, joinMembersById(tables))).toBe("T9+T10");
+    expect(tightName(t9, joinMembersById(tables))).toBe("T9+T10");
+    expect(tightName(t3, joinMembersById(tables))).toBe("T3");
   });
 
   it("falls back to its own short name when its join's tables are not in the list", () => {
     const t9 = table("t9", "Table 9", { shortName: "T9", today: today({ joinId: "j1" }) });
     const t3 = table("t3", "Table 3", { shortName: "T3" });
-    expect(tightName(t9, [t3])).toBe("T9");
+    expect(tightName(t9, joinMembersById([t3]))).toBe("T9");
   });
 });
 

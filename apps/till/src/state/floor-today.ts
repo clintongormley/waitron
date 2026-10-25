@@ -71,10 +71,28 @@ export function shownUnder(table: TableState): string {
   return table.today?.joinName ?? shownName(table);
 }
 
+/** The tables of each of today's joins, by join id, in `tables`' order. */
+export function joinMembersById(tables: readonly TableState[]): Map<string, TableState[]> {
+  const joins = new Map<string, TableState[]>();
+  for (const table of tables) {
+    const joinId = table.today?.joinId;
+    if (joinId == null) continue;
+    const members = joins.get(joinId);
+    if (members === undefined) joins.set(joinId, [table]);
+    else members.push(table);
+  }
+  return joins;
+}
+
 /** The name a tight place shows: a table of today's join by the join's tables' short names, in
- * number order, else its own saved short name; today's names never. */
-export function tightName(table: TableState, tables: readonly TableState[]): string {
-  const members = table.today?.joinId == null ? [] : mergeMembersOf(tables, table);
+ * number order, else its own saved short name; today's names never. `joins` is
+ * {@link joinMembersById} of the tables in view. */
+export function tightName(
+  table: TableState,
+  joins: ReadonlyMap<string, readonly TableState[]>,
+): string {
+  const joinId = table.today?.joinId;
+  const members = joinId == null ? [] : (joins.get(joinId) ?? []);
   return members.length === 0 ? table.shortName : mergeLabel(members.map((each) => each.shortName));
 }
 

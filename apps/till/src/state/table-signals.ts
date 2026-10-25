@@ -1,6 +1,6 @@
 import type { TableSignal } from "@waitron/shared";
 import type { TableState } from "../api/client.js";
-import { tightName } from "./floor-today.js";
+import { joinMembersById, tightName } from "./floor-today.js";
 
 export function signalOf<K extends TableSignal["kind"]>(
   signals: readonly TableSignal[],
@@ -64,12 +64,13 @@ export function readyTables(
   zoneIds: ReadonlySet<string>,
 ): ReadyTable[] {
   const parties = new Map<string, { entry: ReadyTable; names: string[] }>();
+  const joins = joinMembersById(tables);
   for (const table of tables) {
     const party = table.party;
     if (party === null || table.zoneId === null || !zoneIds.has(table.zoneId)) continue;
     const ready = signalOf(table.signals, "ready");
     if (ready === undefined) continue;
-    const name = tightName(table, tables);
+    const name = tightName(table, joins);
     const known = parties.get(party.id);
     if (known !== undefined) {
       if (!known.names.includes(name)) known.names.push(name);
