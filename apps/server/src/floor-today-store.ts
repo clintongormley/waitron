@@ -693,15 +693,11 @@ async function catchUpPass(
   // Short names step aside as null, which the unique (location, short name key) index never
   // matches, so a swap never meets it halfway.
   const shortKeyOf = new Map(
-    inZone.map((table) => [
-      table.id,
-      table.shortName === null ? null : shortNameKey(table.shortName),
-    ]),
+    inZone.map((table) => [table.id, shortNameColumns(table.shortName).shortNameKey]),
   );
   const shortRenamed = plan.apply.flatMap(({ target, label }) =>
     label !== null &&
-    (target.shortName === null ? null : shortNameKey(target.shortName)) !==
-      shortKeyOf.get(target.tableId!)
+    shortNameColumns(target.shortName).shortNameKey !== shortKeyOf.get(target.tableId!)
       ? [target.tableId!]
       : [],
   );
