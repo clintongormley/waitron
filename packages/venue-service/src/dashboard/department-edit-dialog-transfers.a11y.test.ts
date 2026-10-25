@@ -115,6 +115,7 @@ const model: VenueServiceView = {
   },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };

@@ -611,7 +611,15 @@ Lunch 12:00–14:00, 14:00 itself is refused (`orderableMenuIds` in `resolveDepa
 `packages/venue-service/src/menu-timetable.ts`). A dish line whose period has ended is refused
 `menu_period.not_running` (`apps/server/src/working-order.ts`); increasing a line already sent to
 an order is refused the same way, while unchanged lines, decreases and notes keep their stored-line
-behaviour. Saving an unsent table draft does not check the window: the till gates additions and
+behaviour. A new dish whose period ended earlier the same business day (`endedMenus`) is the
+exception: `priceOrderLines` accepts it at its taken price when a menu the running period offers
+in the zone also sells its product and variant on its own, and otherwise refuses it
+`menu_period.ended` (409) unless the request's `lateSend` names its menu and, where its department's
+`late_send_needs_manager` is on, someone holding `venue_service.manage` authorises it — the
+sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
+rows (`working_line_contexts.late_period_name` and `late_confirmed_by`) record the period and who
+confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan
+D19–D28. Saving an unsent table draft does not check the window: the till gates additions and
 increases, and the server checks the window when the order is sent. A period save changes no time
 and takes no clock revision. Picking and sending remain separate from the department's actual open
 state. The [A789 plan](../superpowers/plans/2026-10-21-a789-last-orders.md) records the decisions

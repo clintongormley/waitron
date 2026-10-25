@@ -158,6 +158,34 @@ describe("retired service-style storage", () => {
   });
 });
 
+describe("the late-send storage", () => {
+  type Column = { name: string; notnull: number; dflt_value: string | null };
+  async function column(table: string, name: string): Promise<Column | undefined> {
+    const rows = await db.execute<Column>(
+      sql`select name, "notnull", dflt_value from pragma_table_info(${table}) where name = ${name}`,
+    );
+    return rows.rows[0];
+  }
+
+  it("a department and a line context carry the late-send columns", async () => {
+    expect(await column("departments", "late_send_needs_manager")).toEqual({
+      name: "late_send_needs_manager",
+      notnull: 1,
+      dflt_value: "false",
+    });
+    expect(await column("working_line_contexts", "late_period_name")).toEqual({
+      name: "late_period_name",
+      notnull: 0,
+      dflt_value: null,
+    });
+    expect(await column("working_line_contexts", "late_confirmed_by")).toEqual({
+      name: "late_confirmed_by",
+      notnull: 0,
+      dflt_value: null,
+    });
+  });
+});
+
 describe("the venue-service migration set carries no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
     const carrying: string[] = [];

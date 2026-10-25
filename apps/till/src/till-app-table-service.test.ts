@@ -1297,6 +1297,24 @@ describe("till-app table ordering: refused and failed table actions", () => {
       },
     );
 
+  for (const locale of ["en-GB", "es-ES"])
+    it(`a dish sent after its period ended says the period has ended (${locale})`, async () => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        submitDraft: vi.fn().mockRejectedValue({ code: "menu_period.ended", status: 409 }),
+      });
+      const screen = await toTableOrder(el);
+      const draft = await ringCafe(el, screen);
+      setLocale(locale);
+
+      emit(screen, "submit-draft", draft);
+      await flush(el);
+
+      const shown = banner(el)!.textContent!.trim();
+      expect(shown).toBe(codeMessage("menu_period.ended", locale));
+      expect(shown).not.toBe(t("table.error"));
+    });
+
   it.each(["bill.presented", "bill.paid", "bill.other_party", "bill.payments_received"])(
     "a merge refused %s says so in that code's own words",
     async (code) => {

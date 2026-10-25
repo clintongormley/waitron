@@ -12,7 +12,6 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 
 import { occurrenceKey } from "./floor-layout-due.js";
-import { addDays } from "./hours-rules.js";
 import {
   parseServiceDay,
   rangeInForce,
@@ -177,22 +176,16 @@ export async function departmentDay(
     .from(menuPeriodStaffMenus)
     .where(eq(menuPeriodStaffMenus.departmentId, departmentId))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
-  if (moment === null) return { periods, staff, ranges: [], previousRanges: [] };
-  const yesterday = addDays(moment.businessDay, -1);
+  if (moment === null) return { periods, staff, ranges: [] };
   const days = await resolveDepartmentDays(
     tx,
     cfg,
     departmentId,
-    [yesterday, moment.businessDay],
+    [moment.businessDay],
     clock,
     plan,
   );
-  return {
-    periods,
-    staff,
-    ranges: days.get(moment.businessDay)!.ranges,
-    previousRanges: days.get(yesterday)!.ranges,
-  };
+  return { periods, staff, ranges: days.get(moment.businessDay)!.ranges };
 }
 
 export function serviceRuns(ranges: readonly ServiceRange[]): ServiceRange[] {
@@ -258,7 +251,7 @@ export async function resolveDepartmentService(
     periodName: null,
     customerMenuId: null,
     orderableMenuIds: [],
-    endedMenuIds: [],
+    endedMenus: [],
     keepOpen: null,
   };
   if (moment === null)
@@ -286,10 +279,11 @@ export async function resolveDepartmentService(
       }),
     ),
   ];
-  const ended = [
-    ...day.previousRanges,
-    ...ranges.filter((range) => rangeSpanInDay(range, context).end <= moment.minute),
-  ];
+  const endedPeriod = new Map<string, string>();
+  for (const range of runs.filter((run) => rangeSpanInDay(run, context).end <= moment.minute)) {
+    const name = periods.find((entry) => entry.id === range.periodId)!.name;
+    for (const menuId of menusOf(range.periodId)) endedPeriod.set(menuId, name);
+  }
   return {
     departmentId,
     open: period !== undefined,
@@ -302,9 +296,9 @@ export async function resolveDepartmentService(
     customerMenuId: period?.menuId ?? null,
     orderableMenuIds,
     keepOpen: keepOpenSubject(ranges, day, moment, context.dayCutover, context),
-    endedMenuIds: [...new Set(ended.flatMap((range) => menusOf(range.periodId)))].filter(
-      (id) => !orderableMenuIds.includes(id),
-    ),
+    endedMenus: [...endedPeriod]
+      .filter(([menuId]) => !orderableMenuIds.includes(menuId))
+      .map(([menuId, periodName]) => ({ menuId, periodName })),
   };
 }
 

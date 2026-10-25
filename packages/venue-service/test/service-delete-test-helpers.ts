@@ -35,6 +35,7 @@ export const view: VenueServiceView = {
   readiness: [],
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };

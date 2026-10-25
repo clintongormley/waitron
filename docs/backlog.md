@@ -1341,14 +1341,25 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A789 — last orders without an offset: a period is when its menu can be ordered**
   APPROVED 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by default);
   building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
-  retired) landed in #2047; slices 3–4 next (slice 3 re-decides where the
-  manager's-PIN setting lives, since #2044 dropped `service_settings`).
+  retired) landed in #2047; slice 3 (a confirmed late send accepted and marked; the
+  manager's-PIN setting is per department) in review as #2051;
+  slice 4 (the till's window) next.
   [Detail](backlog/service-periods.md#a789--last-orders-without-an-offset-a-period-is-when-its-menu-can-be-ordered)
 
 - **The start-time part of the business-day check's `transition_strip` reason never decides it**
   (`inStrip(minutes(startsAt))`, `business-day-schedule.ts`): `endpoint_day` wins first, and a
   mutation deleting it left 95 of 95 tests passing. Delete it or give it a case that needs it — left
   open by A789 slice 1, #1948.
+
+- **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
+  kitchen agreed for**, so a routing cell's line for Lunch does not apply to a Lunch dish confirmed
+  after Lunch. Left open by A789 slice 3, #2051 (plan D33).
+  [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)
+
+- **A1085. Extras added later to a dish sent after its period carry no mark.** An extras-only edit
+  or a recalled dish's added extras are priced as `ADDED_EXTRAS_ONLY` and skip the late check
+  (`priceOrderLines`, `apps/server/src/working-order.ts`), so such an extra made at its own station
+  prints and shows unmarked. Left open by A789 slice 3, #2051 (plan D25).
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
@@ -1593,6 +1604,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reads `*** REPRINT HH:MM ***`, the local time of the reprint, where today it reads
   `*** REPRINT ***` (`apps/server/src/kitchen-ticket.ts`); the original send time stays on the
   ticket. Done when a ticket test pins both times on one reprint.
+
+- **A1086. On a kitchen ticket nothing marks where a run of dishes sent after their period ends.**
+  The late-send mark prints only above the run (`emitGrouped`, `apps/server/src/kitchen-ticket.ts`),
+  so an unmarked dish printed straight after it — a caña after the marked tortilla and entrecot —
+  looks part of the marked group. Seen, 2026-10-25 (A789 slice 3's look).
+
+- **A1087. Kitchen tickets print a whole quantity with three decimals**, such as `2.000 x CROQ
+  JAMON`, and tests pin it; decide with the owner whether it prints `2 x`. Seen, 2026-10-25 (A789
+  slice 3's look); not caused by that slice.
+  [Detail](backlog/kitchen.md#a1087-kitchen-tickets-print-a-whole-quantity-with-three-decimals)
 
 - **KDS operations — low priority (A9)** — Gaps: a routing audit view (a routing cell keeps no
   record of who changed it or when — the most useful to close); no station `type`/`kind`;

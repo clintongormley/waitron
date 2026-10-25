@@ -72,6 +72,7 @@ import type {
   TillSaleDeps as BaseTillSaleDeps,
 } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import type { LateSendConfirmation } from "./late-send.js";
 import {
   beginIntegratedAttendance,
   finishIntegratedAttendance,
@@ -227,6 +228,8 @@ export interface TillSaleRequest {
   receiptLanguage?: string;
   /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
   guests?: number | null;
+  /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
+  lateSend?: LateSendConfirmation;
 }
 
 /**
@@ -521,6 +524,8 @@ export interface PayWorkingOrderRequest {
   receiptLanguage?: string;
   /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
   guests?: number | null;
+  /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
+  lateSend?: LateSendConfirmation;
 }
 
 function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
@@ -592,6 +597,8 @@ export interface IntegratedPayRequest {
   receiptLanguage?: string;
   /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
   guests?: number | null;
+  /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
+  lateSend?: LateSendConfirmation;
 }
 
 /**
@@ -731,6 +738,7 @@ async function runPayWorkingOrder(
             receiptLocale: req.receiptLanguage,
             creditedTo: operatorId,
             invalidMakeAt: "ignore",
+            lateSend: req.lateSend,
             invoiceChoice: {
               invoiceType: req.invoiceType,
               recipient: req.recipient,
@@ -1267,6 +1275,7 @@ async function payIntegrated(
             receiptLocale: req.receiptLanguage,
             creditedTo: operatorId,
             invalidMakeAt: "ignore",
+            lateSend: req.lateSend,
             invoiceChoice: {
               invoiceType: req.invoiceType,
               recipient: req.recipient,
@@ -2312,6 +2321,7 @@ async function runTillSale(
       zoneId: req.zoneId,
       receiptLanguage: req.receiptLanguage,
       guests: req.guests,
+      lateSend: req.lateSend,
     },
     operatorId,
     admit,

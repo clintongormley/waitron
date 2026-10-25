@@ -48,6 +48,7 @@ export interface DepartmentSettingsInput extends Pick<
   name: string;
   tradingName: string;
   needsClearing: boolean;
+  lateSendNeedsManager: boolean;
   releaseReminderMinutes: number | null;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   serviceSteps?: ServiceStepInput[];
@@ -105,6 +106,9 @@ export interface VenueServiceModel {
   releaseReminderMinutesByDepartment: Record<string, number | null>;
   /** The active departments whose tables stay "Needs clearing" after the party leaves. */
   needsClearingDepartmentIds: string[];
+  /** The active departments where a dish sent after its period ended needs someone holding
+   * `venue_service.manage`: the sender, or a manager's PIN. */
+  lateSendManagerDepartmentIds: string[];
   serviceSteps: ServiceStep[];
   courses: { id: string; name: string }[];
 }

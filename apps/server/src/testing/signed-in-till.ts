@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { loginWithPin, persons } from "@waitron/identity";
+import { SimulatorPaymentProvider } from "@waitron/payments";
 import { planVenue } from "@waitron/provisioning";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import {
@@ -45,7 +46,8 @@ export interface SignedInTill {
 /**
  * A Madrid venue provisioned with every module, seeded by the suite, and a till whose profile
  * serves the seed's department, enrolled and signed in as staff member Ana (PIN 5555), with the
- * till routes mounted on a fresh app. Filing never reaches AEAT.
+ * till routes mounted on a fresh app. Filing never reaches AEAT. With `simulatorCard`, the till also
+ * takes cards on the practice simulator.
  */
 export async function provisionSignedInTill<S extends TillSeed>(
   db: Database,
@@ -53,6 +55,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
     taxId: string;
     dayCutover: string;
     seed: (tx: Transaction, cfg: TillConfig) => Promise<S>;
+    simulatorCard?: boolean;
   },
 ): Promise<SignedInTill & S> {
   const venue = await applyVenue(
@@ -119,7 +122,11 @@ export async function provisionSignedInTill<S extends TillSeed>(
     .values({
       name: `Till ${randomUUID()}`,
       formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "take-cash"],
+      capabilities: [
+        ...BASIC_ACTIONS,
+        "take-cash",
+        ...(options.simulatorCard === true ? (["integrated-card-payment"] as const) : []),
+      ],
     })
     .returning({ id: deviceProfiles.id });
   await withTransaction(db, (tx) =>
@@ -147,7 +154,15 @@ export async function provisionSignedInTill<S extends TillSeed>(
   const app = new Hono();
   mountTillApi(
     app,
-    { db, backend, clock, cfg, secureCookies: false, venueLocale: SIGNED_IN_TILL_LOCALE },
+    {
+      db,
+      backend,
+      clock,
+      cfg,
+      secureCookies: false,
+      venueLocale: SIGNED_IN_TILL_LOCALE,
+      ...(options.simulatorCard === true ? { cardProvider: new SimulatorPaymentProvider(db) } : {}),
+    },
     () => {},
   );
   return {

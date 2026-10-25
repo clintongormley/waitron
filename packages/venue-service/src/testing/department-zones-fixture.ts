@@ -109,6 +109,7 @@ export const zonesModel: VenueServiceView = {
   },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };

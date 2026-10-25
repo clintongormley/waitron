@@ -389,6 +389,8 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 
 **2026-10-24 (A789 slice 2):** venue-service 0070 drops `period_extensions`. A squash leaves it out.
 
+**2026-10-25 (A789 slice 3):** venue-service 0071 adds `departments.late_send_needs_manager` and `working_line_contexts.late_period_name`, `late_confirmed_by`. A squash writes the end state.
+
 ## Removed and superseded material
 
 The applied SQL, rather than a union of historical CREATE statements, determines survival. The following trigger names occurred in CREATE/DROP history and were absent at the end: `category_details_media_image_fk_insert`, `category_details_media_image_fk_update`, `category_details_media_image_fk_parent_delete`, `category_details_media_image_fk_parent_rename`, `device_binding_rule_insert`, `device_binding_rule_update`, `visits_clear_table_status`, `working_orders_clear_table_status`. Do not revive them. Category-image triggers are removed in catalogue `0013` / media `0004`; device binding is removed by core `0119`; party status supersedes the visit/tab forms in core `0020` / `0036`.

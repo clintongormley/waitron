@@ -37,7 +37,7 @@ export interface DepartmentService {
   periodName: string | null;
   customerMenuId: string | null;
   orderableMenuIds: readonly string[];
-  endedMenuIds: readonly string[];
+  endedMenus: readonly { menuId: string; periodName: string }[];
   readonly keepOpen: {
     periodId: string;
     periodName: string;

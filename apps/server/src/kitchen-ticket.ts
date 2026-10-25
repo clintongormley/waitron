@@ -11,6 +11,7 @@ import { partyTablesName, stringToThousandths, thousandthsToDecimal } from "@wai
 import type { TicketGrouping } from "@waitron/shared";
 import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
+import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 
 interface KitchenNoteHeading {
   text: string;
@@ -34,6 +35,8 @@ export interface KitchenTicketItem {
   groupLabel?: string;
   /** Printed as sold, never merged or split. */
   printedAsSold?: boolean;
+  /** The period the dish was agreed to be sent after. */
+  afterPeriod?: string;
 }
 
 export interface KitchenTicketStation {
@@ -96,6 +99,7 @@ function entryKey(item: KitchenTicketItem): string {
     item.groupLabel ?? null,
     item.modifiers ?? [],
     item.crossRefs ?? [],
+    item.afterPeriod ?? null,
     item.allergy == null
       ? null
       : [
@@ -260,9 +264,22 @@ function emitGroup(b: ReturnType<typeof esc>, item: KitchenTicketItem, columns: 
   for (const line of wrapText(prepareText(`GROUP ${item.group}${label}`), columns)) b.line(line);
 }
 
+function emitLateMark(
+  b: ReturnType<typeof esc>,
+  period: string,
+  columns: number,
+  locale: string,
+): void {
+  const language = ticketLanguage(locale);
+  const words = KITCHEN_LATE_SEND_WORDS[language].mark.replace("{period}", () => period);
+  for (const line of wrapText(prepareText(`** ${words.toLocaleUpperCase(language)} **`), columns))
+    b.line(line);
+}
+
 /**
  * Emit `items`, heading each with `GROUP n` where its group differs from the item before, `current`
- * before the first.
+ * before the first, and, where `lateMarks`, the late-send mark before each run of items with the
+ * same mark. A MOVED slip describes a move, not the agreed send, so it prints no mark.
  */
 function emitGrouped(
   b: ReturnType<typeof esc>,
@@ -270,11 +287,21 @@ function emitGrouped(
   columns: number,
   current: KitchenTicketItem | undefined,
   locale: string,
+  lateMarks: boolean,
 ): void {
+  let mark: string | undefined;
   for (const item of items) {
-    if (item.group !== undefined && (current === undefined || groupKey(item) !== groupKey(current)))
+    if (
+      item.group !== undefined &&
+      (current === undefined || groupKey(item) !== groupKey(current))
+    ) {
       emitGroup(b, item, columns);
+      mark = undefined;
+    }
     current = item;
+    if (lateMarks && item.afterPeriod !== undefined && item.afterPeriod !== mark)
+      emitLateMark(b, item.afterPeriod, columns, locale);
+    mark = item.afterPeriod;
     emitItem(b, item, columns, locale);
   }
 }
@@ -314,7 +341,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
     ticket.scope === "station" ? [ticket.items] : ticket.stations.map((station) => station.items);
   const onlyGroup = onlyGroupOf(lists.flat());
   const emitList = (items: readonly KitchenTicketItem[]): void =>
-    emitGrouped(b, items, columns, onlyGroup, ticket.locale);
+    emitGrouped(b, items, columns, onlyGroup, ticket.locale, true);
 
   emitAllergyHeading(b, lists.flat(), columns, ticket.locale);
   if (ticket.reprint === true) b.line("*** REPRINT ***");
@@ -565,7 +592,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));
   emitKitchenNote(b, slip.kitchenNote, columns);
-  emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale);
+  emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items), slip.locale, false);
   if (slip.held.length > 0) b.line("HOLD");
   for (const { group, items } of slip.held) {
     emitGroup(b, { ...items[0]!, group }, columns);

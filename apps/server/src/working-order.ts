@@ -68,6 +68,8 @@ import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { RETAINED_COURSE } from "./retained-course.js";
+import type { LateSendConfirmation } from "./late-send.js";
+import { offeredKey } from "@waitron/venue-service";
 import type { RetainedCourseLine } from "./retained-course.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
@@ -553,6 +555,12 @@ async function readBasketOffers(
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 
+/**
+ * Marks a requested line that prices a raised quantity of a stored line: after its period it is
+ * refused `menu_period.not_running`, never late and never also sold. A symbol, so no JSON body can set it.
+ */
+const STORED_RISE = Symbol("storedRise");
+
 // Answers an edit has already settled: symbols, so no JSON body can set them.
 const FROZEN_OPTIONS = Symbol("frozenOptions");
 const FROZEN_EXTRAS = Symbol("frozenExtras");
@@ -583,6 +591,7 @@ export async function priceOrderLines(
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
+    [STORED_RISE]?: true;
     [RECALLED_EXTRAS_SOURCE]?: {
       line: typeof workingOrderLines.$inferSelect;
       unit: NonNullable<ExtraChild["unitContext"]>;
@@ -594,6 +603,7 @@ export async function priceOrderLines(
   snapshot?: ZoneOffers,
   invalidMakeAt: "refuse" | "ignore" = "refuse",
   periodCheck: "added" | "none" = "added",
+  lateSend?: LateSendConfirmation,
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   gross: GrossLines;
@@ -602,6 +612,7 @@ export async function priceOrderLines(
     workingOrderLineId: string;
     menuItemId: string;
     unit?: ExtraChild["unitContext"];
+    late?: { periodName: string; confirmedBy: string };
   }[];
   /** The zone's offers the lines were priced from, for `recordLineContexts`. */
   offers: ZoneOffers;
@@ -638,16 +649,43 @@ export async function priceOrderLines(
       requestedLines,
       requestedLines.map((line) => line.menuItemId),
     ));
+  const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
+  // New dishes whose menu is not orderable but ended earlier today, each with its period's name.
+  const ended = new Map<(typeof requestedLines)[number], string>();
+  let alsoSold: ReadonlySet<string> = new Set();
   if (periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!);
     const at = new Date();
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, cfg, context.departmentId, at);
+    const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
+    const items: { productId: string; variantId: string | null }[] = [];
+    for (const line of requestedLines) {
+      const offer = offerById.get(line.menuItemId);
+      const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
+      if (
+        periodName === undefined ||
+        line[ADDED_EXTRAS_ONLY] === true ||
+        line[STORED_RISE] === true ||
+        service.orderableMenuIds.includes(offer!.menuId)
+      )
+        continue;
+      ended.set(line, periodName);
+      items.push({ productId: offer!.productId, variantId: line.variantId ?? null });
+    }
+    if (items.length > 0) {
+      alsoSold = await VENUE_SERVICE.productsOfferedIn(
+        tx,
+        context.zoneId,
+        service.orderableMenuIds,
+        items,
+      );
+    }
   }
-  const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const late: { index: number; menuItemId: string; menuId: string; periodName: string }[] = [];
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
-  const lines = requestedLines.map((line) => {
+  const lines = requestedLines.map((line, index) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry, or the
     // string spelling of an answer only the server settles.
     if (
@@ -665,7 +703,12 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
       });
     }
-    if (
+    const periodName = ended.get(line);
+    if (periodName !== undefined) {
+      if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
+        late.push({ index, menuItemId: offer.id, menuId: offer.menuId, periodName });
+      }
+    } else if (
       service !== null &&
       line[ADDED_EXTRAS_ONLY] !== true &&
       !service.orderableMenuIds.includes(offer.menuId)
@@ -690,6 +733,24 @@ export async function priceOrderLines(
     }
     return { ...line, offer };
   });
+  // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
+  const marks = new Map<number, { periodName: string; confirmedBy: string }>();
+  if (late.length > 0) {
+    const { departmentId } = service!;
+    const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, cfg, departmentId);
+    if (lateSend === undefined || late.some((dish) => !lateSend.menuIds.has(dish.menuId))) {
+      throw new AppError("menu_period.ended", {
+        departmentId,
+        menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
+          ([menuId, periodName]) => ({ menuId, periodName }),
+        ),
+        menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
+        needsManager,
+      });
+    }
+    const confirmedBy = await lateSend.confirm(tx, needsManager);
+    for (const { index, periodName } of late) marks.set(index, { periodName, confirmedBy });
+  }
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
   const savedLanguages = await readSavedContentLanguages(tx);
   const contentConfig = contentLanguagesOr(savedLanguages, cfg.locale);
@@ -744,6 +805,7 @@ export async function priceOrderLines(
         makeAt: string | null;
         unit: ExtraChild["unitContext"];
         recorded: boolean;
+        late?: { periodName: string; confirmedBy: string };
       }
     | {
         kind: "child";
@@ -751,10 +813,12 @@ export async function priceOrderLines(
         menuItemId: string;
         extraListId: string;
         unit?: ExtraChild["unitContext"];
+        late?: { periodName: string; confirmedBy: string };
       };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
+    const mark = marks.get(index);
     const { offer } = line;
     const source = line[RECALLED_EXTRAS_SOURCE];
     const selection =
@@ -867,6 +931,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       recorded: source !== undefined,
+      ...(mark === undefined ? {} : { late: mark }),
       unit: source?.unit ?? {
         id: selection.unit.id,
         name: {
@@ -888,6 +953,7 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
         extraListId: child.listId,
         unit: child.unitContext,
+        ...(mark === undefined ? {} : { late: mark }),
       });
     }
   }
@@ -980,6 +1046,7 @@ export async function priceOrderLines(
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
     ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
+    ...(meta.late !== undefined ? { late: meta.late } : {}),
   }));
   return { lineRows, gross, identities, lineContexts, offers };
 }
@@ -1429,6 +1496,7 @@ export interface ParkOrderRequest {
   zoneId?: string;
   label?: string;
   operatorId?: string;
+  lateSend?: LateSendConfirmation;
 }
 
 export interface ParkOrderResult {
@@ -1463,6 +1531,7 @@ export async function createOpenOrder(
     receiptLocale?: string;
     creditedTo?: string;
     invalidMakeAt?: "ignore";
+    lateSend?: LateSendConfirmation;
     invoiceChoice?: {
       invoiceType: unknown;
       recipient: unknown;
@@ -1538,6 +1607,8 @@ export async function createOpenOrder(
     effectiveZoneId,
     undefined,
     placement.invalidMakeAt ?? "refuse",
+    "added",
+    placement.lateSend,
   );
   const { gross, identities, lineContexts, offers } = pricedLines;
   if (recipient === null) refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
@@ -1602,6 +1673,7 @@ export async function parkOrder(
         kitchenNote: req.kitchenNote,
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
+        lateSend: req.lateSend,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, cfg.locationId, 0, "park");
       return { id: req.id, orderNumber };
@@ -2851,6 +2923,7 @@ export async function priceTabRound(
   tabId: string,
   lines: TabRoundLine[],
   bill: "check" | "checked" = "check",
+  lateSend?: LateSendConfirmation,
 ): Promise<PricedTabRound> {
   if (bill === "check") await assertPartyBillOpen(tx, cfg, tabId);
   if (lines.length === 0) {
@@ -2867,6 +2940,10 @@ export async function priceTabRound(
     tabId,
     lines,
     context?.zoneId,
+    undefined,
+    "refuse",
+    "added",
+    lateSend,
   );
   return {
     tabId,
@@ -5046,6 +5123,8 @@ export interface UpdateHeldOrderRequest {
   revision: number;
   /** Who saves: credited with the lines the save adds, and named by a group it starts or removes. */
   operatorId?: string;
+  /** The request's confirmation of the save's fresh dishes whose period ended earlier today. */
+  lateSend?: LateSendConfirmation;
 }
 
 /** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
@@ -5450,6 +5529,7 @@ async function applyLineEdits(
   },
   operatorId: string | undefined,
   attendance?: OrderAttendance,
+  lateSend?: LateSendConfirmation,
 ): Promise<{ changed: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
   const routing = routingOnce(tx, cfg, new Date());
@@ -5640,6 +5720,7 @@ async function applyLineEdits(
       (intent.makeAt === null && parent.ticket?.stationChosenAt != null);
     const asOffered = (quantity: string): RequestedLine => ({
       [RETAINED_COURSE]: true,
+      [STORED_RISE]: true,
       courseId: parent.courseId,
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
@@ -5742,6 +5823,8 @@ async function applyLineEdits(
     context?.zoneId,
     snapshot,
     "ignore",
+    "added",
+    lateSend,
   );
   const groups: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.lineContexts }[] = [];
   priced.lineRows.forEach((row, index) => {
@@ -6382,6 +6465,7 @@ export async function updateHeldOrder(
       { edits, removed: order.parents.filter((parent) => !claimed.has(parent.id)), fresh },
       req.operatorId,
       attendance,
+      req.lateSend,
     );
     const relabelled = (req.label ?? null) !== label;
     if (relabelled) {
@@ -7274,6 +7358,8 @@ export interface StationQueueItem {
   asServedDiet?: DietProfile;
   course: StationQueueCourse | null;
   group?: QueueGroup;
+  /** The period this dish was confirmed sent after; absent when it was not. */
+  afterPeriod?: string;
   /** `null` while the item is HELD. */
   firedAt: string | null;
   /** Snapshotted at fire, so a later draft edit never changes what the kitchen already sees. */
@@ -7602,6 +7688,10 @@ export async function listStationQueues(
     tx,
     rows.map((row) => row.workingOrderLineId),
   );
+  const lateMarks = await VENUE_SERVICE.readLateSendMarks(
+    tx,
+    rows.map((row) => row.workingOrderLineId),
+  );
 
   const orderIds = [...new Set(rows.map((row) => row.orderId))];
   const kitchenNotes = await readOrderKitchenNotes(tx, orderIds);
@@ -7689,6 +7779,7 @@ export async function listStationQueues(
       allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       workingOrderLineId: row.workingOrderLineId,
       ...optional("lastMove", lastMove),
+      ...optional("afterPeriod", lateMarks.get(row.workingOrderLineId)),
       state: row.state,
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,

@@ -254,6 +254,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
+import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import {
   checkZones,
   gateZones,
@@ -437,6 +438,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // A line never sent whose product sold out, refused at send and at pay.
   "product.unavailable": 409,
   "product.not_sold_separately": 409,
+  // A confirmation from the kitchen settles it, so it is a conflict rather than a bad request.
+  "menu_period.ended": 409,
   // A basket priced against a menu version that is no longer live: nothing was priced or written.
   "menu.version_changed": 409,
   "sale.unsupported_tender": 400,
@@ -1758,6 +1761,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const guests = readGuestsChoice(body.guests);
+      const lateSend = parseLateSend(body.lateSend);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
@@ -1772,25 +1776,29 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ),
       );
       const saleCfg = sendingCfg(cfg, c, session.device);
-      const result = await recordTillSale(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          clock: deps.clock,
-          log,
-          attendance: deps.attendance,
-          disk: deps.disk,
-        },
-        saleCfg,
-        { ...body, zoneId, guests },
-        { personId, sessionId: session.sessionId },
+      const result = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        recordTillSale(
+          {
+            db: deps.db,
+            backend: deps.backend,
+            clock: deps.clock,
+            log,
+            attendance: deps.attendance,
+            disk: deps.disk,
+          },
+          saleCfg,
+          { ...body, zoneId, guests, lateSend: late },
+          { personId, sessionId: session.sessionId },
+        ),
       );
       return c.json(result);
     }),
   );
 
   // A payment outcome (declined, network unavailable) is neither a client nor a server fault, so it
-  // answers 200 with the outcome as data, even a decline.
+  // answers 200 with the outcome as data, even a decline. A late send's manager PIN holds its turn
+  // for the whole card payment, which runs inside the pay; only another override for the same
+  // manager on this device, which is busy with the payment, waits for it.
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "sale.take_payment" });
@@ -1816,6 +1824,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
       const guests = readGuestsChoice(body.guests);
+      const lateSend = parseLateSend(body.lateSend);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1834,22 +1843,24 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const saleCfg = sendingCfg(cfg, c, device);
 
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, body.readerId);
-      const outcome = await payWorkingOrderIntegrated(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          clock: deps.clock,
-          provider,
-          ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
-          deviceProfileId: device.deviceProfileId,
-          log,
-          attendance: deps.attendance,
-          disk: deps.disk,
-          sayCardChargedNotRecorded: true,
-        },
-        saleCfg,
-        { ...body, zoneId, guests },
-        { personId, sessionId: session.sessionId },
+      const outcome = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        payWorkingOrderIntegrated(
+          {
+            db: deps.db,
+            backend: deps.backend,
+            clock: deps.clock,
+            provider,
+            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
+            deviceProfileId: device.deviceProfileId,
+            log,
+            attendance: deps.attendance,
+            disk: deps.disk,
+            sayCardChargedNotRecorded: true,
+          },
+          saleCfg,
+          { ...body, zoneId, guests, lateSend: late },
+          { personId, sessionId: session.sessionId },
+        ),
       );
       return c.json(outcome); // 200 with the discriminated outcome — even a decline.
     }),
@@ -1873,6 +1884,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         zoneId?: string;
         label?: string;
         kitchenNote?: string | null;
+        lateSend?: unknown;
       }>(c);
       // The client mints `body.id`, which becomes the stored primary key; this screen is the only
       // refusal of a malformed one.
@@ -1880,26 +1892,30 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
+      const lateSend = parseLateSend(body.lateSend);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
         session,
         named(zoneId !== undefined && { zoneId }, { orderId: body.id }),
       );
-      const result = await parkOrder(
-        { db: deps.db },
-        cfg,
-        {
-          id: body.id,
-          lines: body.lines,
-          zoneId,
-          label: body.label,
-          kitchenNote: body.kitchenNote,
-          operatorId: personId,
-        },
-        deps.attendance === undefined
-          ? undefined
-          : { recorder: deps.attendance, clock: deps.clock },
+      const result = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        parkOrder(
+          { db: deps.db },
+          cfg,
+          {
+            id: body.id,
+            lines: body.lines,
+            zoneId,
+            label: body.label,
+            kitchenNote: body.kitchenNote,
+            operatorId: personId,
+            lateSend: late,
+          },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        ),
       );
       return c.json(result);
     }),
@@ -1950,23 +1966,29 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
         revision?: unknown;
         expectedEdit: BillEditExpected | null;
+        lateSend?: unknown;
       }>(c);
+      const expected = requireRevision(body.revision);
+      const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const revision = await updateHeldOrder(
-        { db: deps.db },
-        sendCfg,
-        id,
-        {
-          lines: body.lines,
-          label: body.label,
-          revision: requireRevision(body.revision),
-          operatorId: personId,
-          expectedEdit: body.expectedEdit,
-        },
-        { fiscal, saleCfg: sendCfg },
-        deps.attendance === undefined
-          ? undefined
-          : { recorder: deps.attendance, clock: deps.clock },
+      const revision = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        updateHeldOrder(
+          { db: deps.db },
+          sendCfg,
+          id,
+          {
+            lines: body.lines,
+            label: body.label,
+            revision: expected,
+            operatorId: personId,
+            expectedEdit: body.expectedEdit,
+            lateSend: late,
+          },
+          { fiscal, saleCfg: sendCfg },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        ),
       );
       return c.json({ revision });
     }),
@@ -3201,19 +3223,22 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ...joinGroupOf(body),
         ...billOf(body),
       };
+      const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return submitGroups(
-          tx,
-          sendCfg,
-          partyId,
-          input,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-        );
-      });
+      const submitted = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          return submitGroups(
+            tx,
+            sendCfg,
+            partyId,
+            { ...input, lateSend: late },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
+        }),
+      );
       return c.json(submitted);
     }),
   );
@@ -3733,16 +3758,26 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         groups: parseDraftGroups(body.groups),
         ...joinGroupOf(body),
       };
+      const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withIssuanceTransaction(
-        deps.db,
-        async (tx) => {
-          await checkZones(tx, deps.cfg, session, [{ partyId }]);
-          const result = await submitDraft(tx, sendCfg, partyId, draftId, input, deps.attendance);
-          await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
-          return result;
-        },
-        log,
+      const submitted = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            await checkZones(tx, deps.cfg, session, [{ partyId }]);
+            const result = await submitDraft(
+              tx,
+              sendCfg,
+              partyId,
+              draftId,
+              { ...input, lateSend: late },
+              deps.attendance,
+            );
+            await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
+            return result;
+          },
+          log,
+        ),
       );
       return c.json(submitted);
     }),

@@ -252,6 +252,7 @@ async function buildTicketItems(
     ...row,
     quantity: thousandthsToDecimal(row.quantity),
   }));
+  const lateMarks = await VENUE_SERVICE.readLateSendMarks(tx, lineIds);
   const eachByIdentity = await VENUE_SERVICE.readLinesSoldInEach(tx, [
     ...lineIds,
     ...childRows.map((row) => row.id),
@@ -318,6 +319,7 @@ async function buildTicketItems(
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
         ...(unit === undefined ? {} : { printedAsSold: true }),
+        ...(lateMarks.has(row.id) ? { afterPeriod: lateMarks.get(row.id)! } : {}),
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),

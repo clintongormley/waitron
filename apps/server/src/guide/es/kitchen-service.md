@@ -130,6 +130,19 @@ espera** o **En espera o sin empezar**. Un plato que la cocina ha empezado nunca
 que no fue a ninguna estación, sin ningún extra que fuera a una estación propia, se puede retirar
 sea cual sea el ajuste de las estaciones.
 
+## Un plato enviado tras acabar su periodo {#after-period}
+
+Un plato enviado después de que su periodo acabara antes en el mismo día de servicio, una vez que la
+cocina lo ha aceptado, lleva una marca con el nombre de su periodo. En su comanda de cocina, una
+línea encima dice `** TRAS ALMUERZO — ACEPTADO **`. En la pantalla de cocina, **Comandas** muestra
+**Tras Almuerzo — aceptado** en una fila encima, y **Tablero** muestra las mismas palabras en su
+tarjeta. El terminal aún no puede enviar un plato así.
+
+Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
+con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y cocina**, en su pestaña
+**Servicio** del panel. Desactivado, quien puede enviar lo confirma con la cocina. El ajuste se
+aplicará cuando el terminal pueda enviar un plato así.
+
 ## Pide la preparación desde el terminal {#request-cooking}
 
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases

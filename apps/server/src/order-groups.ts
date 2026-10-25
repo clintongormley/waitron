@@ -98,6 +98,7 @@ import {
 import type { BillEditExpected } from "./order-drafts.js";
 import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
+import type { LateSendConfirmation } from "./late-send.js";
 import {
   applyPartyAllergyPatch,
   assertPartyAllergyAnswered,
@@ -126,6 +127,8 @@ export interface SubmitGroupsInput {
   operatorId: string;
   /** When supplied, must agree with expectedEdit.billId. */
   billId?: string;
+  /** Kept out of the replay fingerprint: a retry without it gets the recorded answer. */
+  lateSend?: LateSendConfirmation;
 }
 
 export interface PartyCommandArgs {
@@ -188,6 +191,7 @@ export async function submitGroups(
     expectedPartyRevision,
     operatorId,
     expectedEdit: observed,
+    lateSend,
     ...body
   } = input;
   const expectedEdit = parseBillEditExpected(observed);
@@ -204,7 +208,7 @@ export async function submitGroups(
         tx,
         cfg,
         partyId,
-        { ...input, expectedEdit },
+        { ...input, expectedEdit, lateSend },
         attendance === undefined
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
@@ -231,7 +235,7 @@ export async function submitGroups(
 
 export type PlaceGroupsInput = Pick<
   SubmitGroupsInput,
-  "joinGroupId" | "operatorId" | "billId" | "expectedEdit"
+  "joinGroupId" | "operatorId" | "billId" | "expectedEdit" | "lateSend"
 > & {
   groups: (SubmitGroupsInput["groups"][number] & { existingLineIds?: string[] })[];
   /** Draft ids in the same order as the input dishes, before extras become child rows. */
@@ -305,7 +309,14 @@ export async function placeGroups(
   const round =
     lines.length === 0 && !groups.some(empty)
       ? null
-      : await priceTabRound(tx, cfg, tabId, empty(groups[0]!) ? [] : lines, "checked");
+      : await priceTabRound(
+          tx,
+          cfg,
+          tabId,
+          empty(groups[0]!) ? [] : lines,
+          "checked",
+          input.lateSend,
+        );
   if (groups.some(empty)) {
     throw new AppError("sale.empty_basket", {});
   }

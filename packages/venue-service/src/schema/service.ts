@@ -32,6 +32,7 @@ export const departments = table(
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
     needsClearing: flag("needs_clearing").notNull().default(false),
+    lateSendNeedsManager: flag("late_send_needs_manager").notNull().default(false),
     // Null is off. No CHECK: adding one rebuilds departments, which other tables' foreign keys
     // point at.
     releaseReminderMinutes: count("release_reminder_minutes").default(10),
@@ -269,6 +270,10 @@ export const workingLineContexts = table(
     diet: json<unknown>("diet"),
     dietDerivation: json<unknown>("diet_derivation"),
     dietOverride: json<unknown>("diet_override"),
+    latePeriodName: label("late_period_name"),
+    // No foreign key: people live in identity's migration set; the writer takes the id from the
+    // same request's session or its manager authorisation.
+    lateConfirmedBy: id("late_confirmed_by"),
   },
   (t) => [
     primaryKey({ columns: [t.workingOrderLineId], name: "working_line_contexts_pk" }),

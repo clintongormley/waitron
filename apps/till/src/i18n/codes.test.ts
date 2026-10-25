@@ -810,3 +810,8 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
     expect(codeMessage(code, "en-GB")).not.toBe(codeMessage("server.internal", "en-GB"));
   }
 });
+
+it("words a dish whose period has ended, in both languages", () => {
+  expect(codeMessage("menu_period.ended", "en")).toBe("A dish's period has ended.");
+  expect(codeMessage("menu_period.ended", "es")).toBe("Ha terminado el periodo de un plato.");
+});

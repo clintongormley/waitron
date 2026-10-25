@@ -58,6 +58,7 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
         salePolicies: { departments: [], zones: [] },
         releaseReminderMinutesByDepartment: {},
         needsClearingDepartmentIds: [],
+        lateSendManagerDepartmentIds: [],
         serviceSteps: [],
         courses: [],
       };

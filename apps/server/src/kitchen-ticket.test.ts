@@ -18,6 +18,7 @@ import {
   printedCommands,
   printedLines,
 } from "./testing/decode-ticket.js";
+import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 
 // Reads the printed text back from the images each line is drawn as; the final three bytes are always
 // the full cut, GS V 0 (0x1D 0x56 0x00).
@@ -1594,5 +1595,156 @@ describe("a kitchen ticket for a named party", () => {
     const bytes = formatKitchenTicket(unnamed, KITCHEN_80);
     expect(printedLines(bytes)).toEqual(["Grill", "Mesa 4", "5", "13:24", "1 x BURG", ""]);
     expect(formatKitchenTicket({ ...unnamed, party: undefined }, KITCHEN_80)).toEqual(bytes);
+  });
+});
+
+describe("a dish sent after its period", () => {
+  const at = new Date(2026, 7, 17, 14, 30);
+  const ticket = (items: KitchenTicketItem[], locale = "en-GB"): KitchenTicket => ({
+    locale,
+    scope: "station",
+    stationName: "Kitchen",
+    tableLabel: "Table 4",
+    orderNumber: "A-17",
+    firedAt: at,
+    items,
+  });
+  const banner = (period: string, language: "en" | "es") =>
+    `** ${KITCHEN_LATE_SEND_WORDS[language].mark.replace("{period}", period).toLocaleUpperCase(language)} **`;
+
+  it.each([
+    ["80mm", KITCHEN_80],
+    ["58mm", KITCHEN_58],
+  ])(
+    "prints the mark once above a run of marked dishes and not above an unmarked one on %s",
+    (_width, layout) => {
+      const lines = printedLines(
+        formatKitchenTicket(
+          ticket([
+            { qty: 1, name: "Steak", afterPeriod: "Lunch" },
+            { qty: 2, name: "Fish", afterPeriod: "Lunch" },
+            { qty: 1, name: "Chips" },
+          ]),
+          layout,
+        ),
+      );
+      expect(banner("Lunch", "en")).toBe("** AFTER LUNCH — AGREED **");
+      expect(lines).toEqual([
+        "Kitchen",
+        "Table 4",
+        "A-17",
+        "14:30",
+        "** AFTER LUNCH — AGREED **",
+        "1 x Steak",
+        "2 x Fish",
+        "1 x Chips",
+        "",
+      ]);
+    },
+  );
+
+  it("prints the mark in the ticket's language", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        ticket([{ qty: 1, name: "Steak", afterPeriod: "Lunch" }], "es-ES"),
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "Kitchen",
+      "Table 4",
+      "A-17",
+      "14:30",
+      banner("Lunch", "es"),
+      "1 x Steak",
+      "",
+    ]);
+  });
+
+  it("wraps a long period name to the paper", () => {
+    const period = "Late afternoon tapas and drinks";
+    const lines = printedLines(
+      formatKitchenTicket(ticket([{ qty: 1, name: "Steak", afterPeriod: period }]), KITCHEN_58),
+    );
+    expect(columnsFor("58mm")).toBe(30);
+    const markLines = lines.slice(4, -2);
+    expect(markLines.length).toBeGreaterThan(1);
+    for (const line of markLines) expect(line.length).toBeLessThanOrEqual(30);
+    expect(markLines.join(" ")).toBe(banner(period, "en"));
+    expect(lines.at(-2)).toBe("1 x Steak");
+  });
+
+  it("keeps a marked and an unmarked identical dish apart when combined", () => {
+    const tortilla: KitchenTicketItem = { qty: "1.000", name: "Tortilla" };
+    expect(
+      arrangeTicketItems(
+        [
+          tortilla,
+          { ...tortilla, afterPeriod: "Lunch" },
+          { ...tortilla },
+          { ...tortilla, afterPeriod: "Lunch" },
+        ],
+        "combined",
+      ),
+    ).toEqual([
+      { ...tortilla, qty: "2.000" },
+      { ...tortilla, afterPeriod: "Lunch", qty: "2.000" },
+    ]);
+  });
+
+  it("prints no mark on a MOVED slip, fired or held", () => {
+    const lines = printedLines(
+      formatMovedSlip(
+        {
+          stationName: "Grill",
+          fromNumber: "28",
+          fromText: "Table 91",
+          toText: "Table 92",
+          at: at.toISOString(),
+          items: [{ qty: 1, name: "Steak", afterPeriod: "Lunch" }],
+          held: [{ group: 2, items: [{ qty: 1, name: "Fish", group: 2, afterPeriod: "Lunch" }] }],
+          locale: "en-GB",
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** MOVED ***",
+      "Grill",
+      "Order 28",
+      "From: Table 91",
+      "To:   Table 92",
+      "14:30",
+      "1 x Steak",
+      "HOLD",
+      "GROUP 2",
+      "1 x Fish",
+      "",
+    ]);
+  });
+
+  it("prints the mark again after each group heading", () => {
+    const lines = printedLines(
+      formatKitchenTicket(
+        ticket([
+          { qty: 1, name: "Steak", group: 1, afterPeriod: "Lunch" },
+          { qty: 1, name: "Fish", group: 2, afterPeriod: "Lunch" },
+        ]),
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "Kitchen",
+      "Table 4",
+      "A-17",
+      "14:30",
+      "GROUP 1",
+      "** AFTER LUNCH — AGREED **",
+      "1 x Steak",
+      "GROUP 2",
+      "** AFTER LUNCH — AGREED **",
+      "1 x Fish",
+      "",
+    ]);
   });
 });

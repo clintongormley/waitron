@@ -71,6 +71,8 @@ import {
   listZoneOffers,
   listWorkingLineContexts,
   readLinesSoldInEach,
+  readLateSendMarks,
+  productsOfferedIn,
   recordOrderServiceContext,
   retargetOrderServiceContext,
   recordWorkingLineContexts,
@@ -92,6 +94,7 @@ import {
   recordKitchenNotices,
 } from "./kitchen-notices.js";
 import { readTablesNeedingClearing } from "./table-clearing.js";
+import { readLateSendNeedsManager } from "./late-send.js";
 import { readReleaseReminderMinutesByZone } from "./release-reminders.js";
 import {
   assertProfileZone,
@@ -167,9 +170,12 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   findOrderZones: findOrderServiceZones,
   listLineContexts: listWorkingLineContexts,
   readLinesSoldInEach,
+  readLateSendMarks,
   listServiceZones,
   resolveZoneContext,
   resolveDepartmentService,
+  readLateSendNeedsManager,
+  productsOfferedIn,
   readKeepOpen,
   keepZoneOpen,
   resolveSalePolicy,

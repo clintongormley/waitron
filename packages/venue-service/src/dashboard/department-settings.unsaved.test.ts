@@ -117,6 +117,7 @@ const model: VenueServiceView = {
   },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };
@@ -480,6 +481,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          lateSendNeedsManager: false,
           releaseReminderMinutes: null,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
@@ -541,6 +543,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          lateSendNeedsManager: false,
           releaseReminderMinutes: null,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
@@ -615,6 +618,7 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
         paidWhen: "prepay",
         collectionNumber: "none",
         needsClearing: false,
+        lateSendNeedsManager: false,
         releaseReminderMinutes: null,
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
@@ -702,6 +706,7 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          lateSendNeedsManager: false,
           releaseReminderMinutes: null,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
         },
@@ -808,6 +813,27 @@ it("toggling Needs clearing dirties the form, toggling it back cleans it, and le
   expect(await leaving).toBe(false);
   expect(control.checked).toBe(true);
   expect(el.hasUnsavedChanges).toBe(true);
+});
+it("toggling only the late-send switch dirties the form and toggling it back cleans it", async () => {
+  const el = await mount();
+  await selectDepartmentTab(el, "service");
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=lateSendNeedsManager]",
+  )!;
+  expect(control).not.toBeNull();
+  const toggle = async (checked: boolean) => {
+    control.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  expect(el.hasUnsavedChanges).toBe(false);
+  await toggle(true);
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(unload()).toBe(true);
+  await toggle(false);
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(unload()).toBe(false);
 });
 it("choosing a reminder dirties the form, choosing the stored one again cleans it, and leaving asks only while dirty", async () => {
   const el = await mount();

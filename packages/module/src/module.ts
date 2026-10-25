@@ -836,8 +836,28 @@ export interface VenueServiceContribution {
   ): Promise<{
     departmentId: string;
     orderableMenuIds: readonly string[];
-    endedMenuIds: readonly string[];
+    endedMenus: readonly { menuId: string; periodName: string }[];
   }>;
+  /**
+   * `${productId}:${variantId ?? ""}` for each item that the live version of some listed menu of
+   * the zone offers (a variant: an offer of its product listing it); a listed menu that is not one
+   * of the zone's is left out.
+   */
+  productsOfferedIn(
+    tx: Transaction,
+    zoneId: string,
+    menuIds: readonly string[],
+    items: readonly { productId: string; variantId: string | null }[],
+  ): Promise<ReadonlySet<string>>;
+  /**
+   * Whether a dish sent after its period ended in this department needs someone holding
+   * `venue_service.manage`: the sender, or a manager's PIN.
+   */
+  readLateSendNeedsManager(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    departmentId: string,
+  ): Promise<boolean>;
   readKeepOpen(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -1290,6 +1310,8 @@ export interface VenueServiceContribution {
         precision: number;
         hardwareUnit: "kg" | "g" | "mg" | null;
       };
+      /** A dish sent after its period ended: that period's name and who confirmed the send. */
+      late?: { periodName: string; confirmedBy: string };
     }[],
     offers: ZoneOffers,
   ): Promise<void>;
@@ -1308,6 +1330,11 @@ export interface VenueServiceContribution {
   /** Which of the lines were sold in Each: by the unit id their context froze, and for a stored
    *  unit by that unit's current seed key; a line with no context is not. */
   readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;
+  /** The period name of each of `lineIds` recorded as sent late; unmarked lines are absent. */
+  readLateSendMarks(
+    tx: Transaction,
+    lineIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>>;
   /** Records one kitchen notice per item, copying each line's kitchen name, unit, note and whether
    *  it was sold in Each as they stand now, so a caller removing a line records its notices first.
    *  Of the named `options`, `direction` and `cancelledExtra` (the extra taken off the dish) are

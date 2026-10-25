@@ -65,6 +65,7 @@ const model: VenueServiceView = {
   salePolicies: { departments: [], zones: [] },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };

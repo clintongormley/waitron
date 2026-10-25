@@ -230,6 +230,7 @@ export async function updateDepartment(
     tradingName?: string;
     orderStart?: OrderStart;
     needsClearing?: boolean;
+    lateSendNeedsManager?: boolean;
     releaseReminderMinutes?: number | null;
   },
 ): Promise<void> {
@@ -239,6 +240,7 @@ export async function updateDepartment(
     input.name !== undefined ||
     input.tradingName !== undefined ||
     input.needsClearing !== undefined ||
+    input.lateSendNeedsManager !== undefined ||
     input.releaseReminderMinutes !== undefined
   )
     await tx
@@ -247,6 +249,9 @@ export async function updateDepartment(
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
         ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
+        ...(input.lateSendNeedsManager === undefined
+          ? {}
+          : { lateSendNeedsManager: input.lateSendNeedsManager }),
         ...(input.releaseReminderMinutes === undefined
           ? {}
           : { releaseReminderMinutes: input.releaseReminderMinutes }),
@@ -762,6 +767,7 @@ export interface DepartmentEditInput extends Pick<
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   needsClearing?: boolean;
+  lateSendNeedsManager?: boolean;
   releaseReminderMinutes?: number | null;
   serviceSteps?: readonly ServiceStepInput[];
 }
@@ -776,6 +782,9 @@ export async function saveDepartmentEditSettings(
     name: input.name,
     tradingName: input.tradingName,
     ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
+    ...(input.lateSendNeedsManager === undefined
+      ? {}
+      : { lateSendNeedsManager: input.lateSendNeedsManager }),
     ...(input.releaseReminderMinutes === undefined
       ? {}
       : { releaseReminderMinutes: input.releaseReminderMinutes }),
@@ -1000,6 +1009,44 @@ export async function listZoneOffers(
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
     liveFields,
   };
+}
+
+/** The key {@link productsOfferedIn} answers for a product, or one of its variants. */
+export const offeredKey = (productId: string, variantId: string | null): string =>
+  `${productId}:${variantId ?? ""}`;
+
+/**
+ * The {@link offeredKey} of each item that the live version of some listed menu of the zone
+ * offers on its own: a product as an offer, a variant as one its product's offer lists. An offer
+ * marked not sold separately adds neither, and a listed menu that is not one of the zone's is left
+ * out.
+ */
+export async function productsOfferedIn(
+  tx: Transaction,
+  zoneId: string,
+  menuIds: readonly string[],
+  items: readonly { productId: string; variantId: string | null }[],
+): Promise<ReadonlySet<string>> {
+  if (menuIds.length === 0 || items.length === 0) return new Set();
+  const zoneMenus = new Set(await zoneMenuIds(tx, zoneId));
+  const live = await zoneLiveDocuments(
+    tx,
+    zoneId,
+    [],
+    menuIds.filter((menuId) => zoneMenus.has(menuId)),
+  );
+  const offered = new Set<string>();
+  for (const { document } of live)
+    for (const offer of documentOffers(document)) {
+      if (offer.ordering === "not_sold_separately") continue;
+      offered.add(offeredKey(offer.productId, null));
+      for (const variant of offer.variants) offered.add(offeredKey(offer.productId, variant.id));
+    }
+  return new Set(
+    items
+      .map((item) => offeredKey(item.productId, item.variantId))
+      .filter((key) => offered.has(key)),
+  );
 }
 
 export async function menuState(
@@ -1313,6 +1360,27 @@ export async function readLinesSoldInEach(
   return new Set(rows.filter((row) => row.soldInEach).map((row) => row.workingOrderLineId));
 }
 
+/** The period name of each of `lineIds` whose context records a late send; unmarked lines are absent. */
+export async function readLateSendMarks(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  if (lineIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      workingOrderLineId: workingLineContexts.workingOrderLineId,
+      latePeriodName: workingLineContexts.latePeriodName,
+    })
+    .from(workingLineContexts)
+    .where(
+      and(
+        inArray(workingLineContexts.workingOrderLineId, [...lineIds]),
+        isNotNull(workingLineContexts.latePeriodName),
+      ),
+    );
+  return new Map(rows.map((row) => [row.workingOrderLineId, row.latePeriodName!]));
+}
+
 /**
  * Snapshot the commercial attribution of newly priced working-order lines, and the menu version
  * each was priced from, from `offers`: the zone's offers the lines were priced from.
@@ -1330,6 +1398,7 @@ export async function recordWorkingLineContexts(
       precision: number;
       hardwareUnit: "kg" | "g" | "mg" | null;
     };
+    late?: { periodName: string; confirmedBy: string };
   }[],
   offers: ZoneOffers,
 ): Promise<void> {
@@ -1397,6 +1466,8 @@ export async function recordWorkingLineContexts(
         diet: offer.diet,
         dietDerivation: offer.dietDerivation,
         dietOverride: offer.dietOverride,
+        latePeriodName: line.late?.periodName ?? null,
+        lateConfirmedBy: line.late?.confirmedBy ?? null,
       };
     }),
   );

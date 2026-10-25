@@ -5397,6 +5397,16 @@ When this device can no longer serve that table's zone (the waiting choice's `zo
 the table cannot send or remove them either, the zones dialog refuses a save there in the status
 line's words, and the narrowing applies once the person leaves the table.
 
+### The kitchen screen's late-send mark
+
+A dish sent after its period ended, once the kitchen agreed, carries "After {period} — agreed"
+(`station.after_period`) in a warning chip: `--wt-color-warning` with `--wt-color-on-warning` text,
+bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets/station-queue.ts`).
+In the Tickets view it is a row of its own above each run of consecutive dishes with the same
+mark, within one course or group heading; in the Board view each marked dish's cell carries it
+above the dish. The pass and expo show no mark. The kitchen ticket prints the same words in
+capitals between `**` above each such run; correction and MOVED slips print none.
+
 ### The notice strip (till)
 
 `till-notice-strip` (`apps/till/src/widgets/notice-strip.ts`) shows the box's staff notices on a
@@ -5580,7 +5590,8 @@ closing the editor returns focus to its originating row menu, or Add when that r
 
 Edit department is tabbed. Details holds name and trading name. Service holds three sections, each
 under its own heading: “Orders and payment”, with the service settings and the zones that differ,
-“Courses and the kitchen”, with the reminder to fire the next course, and “Table states”, with
+“Courses and the kitchen”, with the reminder to fire the next course and the switch for a manager's
+PIN to send after a period ends, and “Table states”, with
 the Needs clearing switch and the department's service steps (a list with drag handles, a row menu
 with Delete, and Add step). Receipts, between Service and Transfers, holds the department's receipt
 editor, and is offered only to someone with `layout.configure`. Transfers holds the allowed

@@ -643,6 +643,64 @@ describe("whole service settings saves", () => {
     }
   });
 
+  async function lateSendManagerIds(fx: Awaited<ReturnType<typeof settingsFixture>>) {
+    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(model.status).toBe(200);
+    return ((await model.json()) as { lateSendManagerDepartmentIds: string[] })
+      .lateSendManagerDepartmentIds;
+  }
+
+  it("saves a department's lateSendNeedsManager switch and lists it in the model", async () => {
+    const fx = await settingsFixture();
+    expect(await lateSendManagerIds(fx)).toEqual([]);
+    const on = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      lateSendNeedsManager: true,
+    });
+    expect(on.status).toBe(204);
+    expect(await lateSendManagerIds(fx)).toEqual([fx.departmentId]);
+    const off = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      lateSendNeedsManager: false,
+    });
+    expect(off.status).toBe(204);
+    expect(await lateSendManagerIds(fx)).toEqual([]);
+  });
+
+  it("leaves lateSendNeedsManager as it was when the save does not name it", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      lateSendNeedsManager: true,
+    });
+    const saved = await send(
+      fx.app,
+      "PUT",
+      fx.departmentPath,
+      fx.managerCookie,
+      departmentSettings,
+    );
+    expect(saved.status).toBe(204);
+    expect(await lateSendManagerIds(fx)).toEqual([fx.departmentId]);
+  });
+
+  it("refuses a lateSendNeedsManager that is not true or false, naming it, and writes nothing", async () => {
+    const fx = await settingsFixture();
+    for (const lateSendNeedsManager of ["yes", 1, null, [true]]) {
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        lateSendNeedsManager,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "lateSendNeedsManager" } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    }
+    expect(await lateSendManagerIds(fx)).toEqual([]);
+  });
+
   async function reminderMinutes(fx: Awaited<ReturnType<typeof settingsFixture>>) {
     const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
     expect(model.status).toBe(200);
