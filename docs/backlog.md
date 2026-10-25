@@ -4483,26 +4483,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **Cloud backup qualification and target-bound recovery: integrate the released Waitron verifier.**
   Wire Cloud to the boot-free `backup-verification.js` bundle and its generated owner inventory,
   with worker threads denied (A1004 provides the copy-only lock scope), then negotiate recovery v2
-  before enabling the qualified caller. Preserve the separate fiscal
-  authority checks. Snapshots remain unavailable until the pinned capture, publication, full data
-  verification, cleanup, current-claim admission and recovery proof passes with the continuous
-  source absent. Qualify timeout, resource limits, wrong/missing keys, unsupported public trust,
-  stale/forged output and uncertain cleanup under the existing limits. Cloud owns its child,
-  catalogue and deployment gates; see the
-  [Waitron implementation and release handoff](superpowers/plans/2026-10-20-a850-backup-verification.md#task-27-finish-evidence-branch-review-and-release-handoff)
-  and [box limits](backlog/box.md#backup-data-verification-and-cloud-release).
-  A1017 qualified the existing [authorised ordinary-restore fixture](developers/authorised-cloud-restore-fixture.md)
-  separately (99 existing restore tests passed). Cloud still needs its own same-run proof and
-  must distinguish verifier non-activation from the ordinary restore's authorised fiscal recovery.
+  before enabling the qualified caller.
+  [Detail](backlog/box.md#cloud-backup-qualification-and-target-bound-recovery-integrate-the-released-waitron-verifier)
 
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
   2026-10-20 (revised after review rounds 1–3), waiting for the owner's answers to three questions
-  (where the name is set, the certificate authority, the old name during a rename;
-  [design](superpowers/specs/2026-10-20-a917-box-local-name-design.md), pictures in
-  [mockups/a917-box-local-name/](backlog/mockups/a917-box-local-name/)); not built. Recommended:
-  named once on the server's first page, before its certificate authority is made; a later rename is
-  a planned "re-trust every device" event — devices pair again in place of their old entries, and the
-  old name only points at the new one for 14 days. Five slices; no migration.
+  (where the name is set, the certificate authority, the old name during a rename); not built.
+  [Detail](backlog/box.md#a917--the-owner-chooses-the-servers-local-name-instead-of-waitronlocal)
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
   with no word of the full disk.**
@@ -4626,20 +4613,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **B3. The bootable USB installer** — DESIGNED 2026-10-21 and REVISED the same day for the
   owner's five answers and W60; waiting for the owner to approve the revision and answer one new
-  question: [design](superpowers/specs/2026-10-21-b3-usb-installer-design.md) §18,
-  [pictures](backlog/mockups/b3-usb-installer/). A small stick boots an installer that, with nobody
-  at the box, fetches the newest release, checks its signature, and writes a ready-made Waitron disk
-  (Debian 13, Docker, the release's images; btrfs subvolumes for A950) inside an encrypted container
-  whose key the box's security chip holds, with a printed recovery key. The owner's three guards: the
-  box's own disk first in the boot order, no restart until the stick is out, and a stick that finds
-  Waitron starts the box unless a key is pressed. The box's screen runs Chromium with no desktop:
-  the setup wizard, then the dashboard, which can make the screen a till; its settings are a Waitron
-  page; a one-time maintenance login comes from the dashboard. A setup code stops a stranger setting
-  up a new box first (W60). Built and booted in CI for every release. Not built. Box image
-  constraints under [Box image constraints (B3)](backlog/box.md#box-image-constraints-b3). The
-  design's §17 lists what it leaves open, each to become its own entry once the revision is approved
-  (among them moving a box from Debian 13 to 14 before Chromium's fixes stop, and notes for A940,
-  A947 and A798).
+  question. Not built.
+  [Detail](backlog/box.md#b3-the-bootable-usb-installer)
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 
@@ -4662,11 +4637,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   that the setup tour offers but never requires.
   [Detail](backlog/box.md#a1016-keep-every-box-current-and-backed-up)
 
-- **A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).** Cloud's
-  approved [monitoring design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) (section 10) holds a version when a new error spreads
-  after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent in Waitron),
-  so the updater must read the hold before offering or applying the version, and offer the fix
-  once released. Belongs with A1016.
+- **A1049. The updater honours a version Waitron Cloud marks held (2026-10-24).**
+  Belongs with A1016.
+  [Detail](backlog/box.md#a1049-the-updater-honours-a-version-waitron-cloud-marks-held-2026-10-24)
 
 - **A1050. A "can this venue trade?" check for a hosted server (2026-10-24).** Cloud's outside
   monitor calls it every minute (design section 5). It must exercise the server, not only its
