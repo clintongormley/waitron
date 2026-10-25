@@ -602,33 +602,56 @@ it.each(["en-GB", "es-ES"])(
 
 const ownerHeader = "X-Waitron-Setup-Owner";
 async function damagedRecord(
-  options: { status?: "claimed" | "consumption-intent"; locale?: string } = {},
+  options: {
+    status?: "claimed" | "consumption-intent" | "abandoned";
+    locale?: string;
+    refuseFlagged?: number;
+    inspectionFailsAfterRefusal?: boolean;
+  } = {},
 ) {
-  let recovered = false;
+  let generation = 1;
+  let refusals = options.refuseFlagged ?? 0;
+  let refused = false;
   const fixture = await mount({
-    intercept(path, _body, headers) {
+    intercept(path, body, headers) {
       if (path.endsWith("/resolution/start-again") && !headers.has(ownerHeader))
         return Response.json(
           { error: { code: "setup.start_again_password_required", params: {} } },
           { status: 403 },
         );
+      if (path.endsWith("/resolution/start-again") && refusals > 0) {
+        refusals -= 1;
+        refused = true;
+        return Response.json(
+          { error: { code: "setup.attempt_conflict", params: {} } },
+          { status: 409 },
+        );
+      }
       if (path.endsWith("/resolution/recover")) {
-        recovered = true;
+        const sent = body as { revision: number; ownerGeneration: number };
+        if (sent.revision !== generation || sent.ownerGeneration !== generation)
+          return Response.json(
+            { error: { code: "setup.attempt_conflict", params: {} } },
+            { status: 409 },
+          );
+        generation += 1;
         const status = options.status ?? "claimed";
         return Response.json({
           state: {
             ...initial,
             status,
             consumptionIntent: status === "consumption-intent",
-            revision: 2,
-            ownerGeneration: 2,
+            revision: generation,
+            ownerGeneration: generation,
           },
           capability: "B".repeat(43),
-          ownerGeneration: 2,
+          ownerGeneration: generation,
         });
       }
-      if (path.endsWith("/resolution") && recovered)
-        return Response.json({ ...inspection, revision: 2, ownerGeneration: 2 });
+      if (path.endsWith("/resolution") && refused && options.inspectionFailsAfterRefusal)
+        return Response.json({ error: { code: "setup.not_ready", params: {} } }, { status: 503 });
+      if (path.endsWith("/resolution"))
+        return Response.json({ ...inspection, revision: generation, ownerGeneration: generation });
     },
   });
   const { app } = fixture;
@@ -776,4 +799,108 @@ it("a password-free Start again on a readable record is unchanged", async () => 
   expect(q(app, "damaged-record-password")).toBeNull();
   expect(startAgainRequests(requests)).toHaveLength(1);
   expect(requests.some((r) => /\/(recover|resume)$/.test(r.path))).toBe(false);
+});
+
+async function confirmDamagedRecord(app: SetupApp) {
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await userEvent.click(
+    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+  );
+}
+async function refusedAtWarning(options: Parameters<typeof damagedRecord>[0] = {}) {
+  const fixture = await damagedRecord({ ...options, refuseFlagged: 1 });
+  await unlockDamagedRecord(fixture.app);
+  await confirmDamagedRecord(fixture.app);
+  await expect.poll(() => startAgainRequests(fixture.requests)).toHaveLength(2);
+  await expect.poll(() => q(fixture.app, "damaged-record-password")).not.toBeNull();
+  await fixture.app.updateComplete;
+  return fixture;
+}
+
+it.each(["en-GB", "es-ES"])(
+  "a refused Start again at the warning goes back to the password step with the reason shown, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const shell = shellText(locale);
+    const { app, requests } = await refusedAtWarning({ locale });
+    expect(q(app, "damaged-record-password").textContent).toBe(t.damagedRecordPassword);
+    expect(q<WtInput>(app, "resume-password").value).toBe("");
+    expect(q(app, "recovery-record-damaged")).toBeNull();
+    expect(q(app, "retire-confirmed")).toBeNull();
+    expect(q(app, "confirm-start-again")).toBeNull();
+    expect(q<WtButton>(app, "start-again")?.disabled ?? true).toBe(true);
+    expect(
+      [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+        (f) => f.error,
+      ),
+    ).toEqual([shell["shell.first_setup.attempt_conflict"]]);
+    expect(app.shadowRoot!.textContent).not.toContain(shell["shell.first_setup.owner_required"]);
+
+    await unlockDamagedRecord(app);
+    await app.updateComplete;
+    expect(q(app, "recovery-record-damaged").textContent).toBe(t.recoveryRecordDamaged);
+    expect(q<HTMLInputElement>(app, "retire-confirmed").checked).toBe(false);
+    expect(q(app, "damaged-record-password")).toBeNull();
+    await confirmDamagedRecord(app);
+    await expect.poll(() => startAgainRequests(requests)).toHaveLength(3);
+    const sent = startAgainRequests(requests)[2]!;
+    expect(sent.body).toEqual({
+      inspectionId: "a".repeat(64),
+      revision: 3,
+      ownerGeneration: 3,
+      recoveryRecordDamagedShown: true,
+    });
+    expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
+    await expect.poll(() => app.shadowRoot!.textContent).toContain(t.restarting);
+  },
+);
+
+it.each(["claimed", "abandoned"] as const)(
+  "the warning step draws neither Abandon nor Enter new setup details, for a %s attempt",
+  async (status) => {
+    const t = initialOwnerStrings.en;
+    const { app } = await damagedRecord({ status });
+    await unlockDamagedRecord(app);
+    await app.updateComplete;
+    expect(q(app, "abandon-attempt")).toBeNull();
+    expect(q(app, "replace-attempt")).toBeNull();
+    expect(app.shadowRoot!.textContent).not.toContain(t.abandon);
+    expect(app.shadowRoot!.textContent).not.toContain(t.replace);
+  },
+);
+
+it.each(["claimed", "abandoned"] as const)(
+  "the password step draws neither Abandon nor Enter new setup details, for a %s attempt",
+  async (status) => {
+    const t = initialOwnerStrings.en;
+    const { app, requests } = await damagedRecord({ status, refuseFlagged: 1 });
+    expect(q(app, "abandon-attempt")).toBeNull();
+    expect(q(app, "replace-attempt")).toBeNull();
+    await unlockDamagedRecord(app);
+    await confirmDamagedRecord(app);
+    await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
+    await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+    await app.updateComplete;
+    expect(q(app, "abandon-attempt")).toBeNull();
+    expect(q(app, "replace-attempt")).toBeNull();
+    expect(app.shadowRoot!.textContent).not.toContain(t.abandon);
+    expect(app.shadowRoot!.textContent).not.toContain(t.replace);
+  },
+);
+
+it("a refused Start again at the warning keeps its own reason when the fresh inspection fails", async () => {
+  const { app, requests } = await refusedAtWarning({ inspectionFailsAfterRefusal: true });
+  expect(q(app, "damaged-record-password").textContent).toBe(
+    initialOwnerStrings.en.damagedRecordPassword,
+  );
+  expect(
+    [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+      (f) => f.error,
+    ),
+  ).toEqual([shellEn["shell.first_setup.attempt_conflict"]]);
+  const refusal = requests.indexOf(startAgainRequests(requests)[1]!);
+  expect(
+    requests.slice(refusal).filter((r) => r.path.endsWith("/first-setup/resolution")),
+  ).toHaveLength(1);
 });

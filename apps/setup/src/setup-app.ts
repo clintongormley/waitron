@@ -1271,6 +1271,16 @@ export class SetupApp extends LitElement {
           this.firstRetireConfirmed = false;
           this.firstDamagedRecord = "password";
           return;
+        } else if (this.firstDamagedRecord === "confirm") {
+          // A refused send leaves the session needing a fresh recovery, so the retry goes through
+          // the password again, against the attempt as it is now.
+          this.firstRestartConfirm = false;
+          this.firstRetireConfirmed = false;
+          this.firstDamagedRecord = "password";
+          this.firstOwnerError = this.#describeFirstError(error);
+          const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
+          if (current() && inspection) this.firstInspection = inspection;
+          return;
         }
         this.firstOwnerError = this.#describeFirstError(error);
       }
@@ -1292,7 +1302,7 @@ export class SetupApp extends LitElement {
     try {
       const session = await this.#openFirstSession();
       if (!current()) return;
-      // F4: the owner path of Start again needs a fresh recovery, whatever the attempt's status.
+      // The owner path of Start again needs a fresh recovery, whatever the attempt's status.
       await session.recover(this.#firstResolutionSnapshot(), password);
       if (!current()) return;
       this.#acceptFirstIdentity();
@@ -2375,8 +2385,8 @@ export class SetupApp extends LitElement {
           ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
           : nothing
       }
-      ${!missing && state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
-      ${!missing && state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
+      ${!missing && !damaged && state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
+      ${!missing && !damaged && state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
       <wt-button
         data-test="reconnect-first"
         variant="secondary"
