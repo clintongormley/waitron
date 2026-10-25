@@ -77,7 +77,8 @@ If your device already trusts that authority, keep its installed certificate. If
 or unusable, the page tells you to install and trust the new public certificate on each device.
 Follow the device's installation help, then open the HTTPS link and check that the page it opens
 has no certificate warning before recovering setup. An installer-supplied certificate needs your
-installer's attention; this action repairs only Waitron-managed material.
+installer's attention; this action repairs only Waitron-managed material. If repair still fails
+after retrying, ask whoever installed the server to check its secure connection.
 
 Repair retains the original fixed TLS files under a private `tls/repair-archive/` directory and
 resumes a reserved replacement after interruption. It does not recreate the vault or change the

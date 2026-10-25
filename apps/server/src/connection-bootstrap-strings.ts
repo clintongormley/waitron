@@ -13,7 +13,8 @@ export const CONNECTION_TEXT = {
     ready: "Certificate ready.",
     certificateReady: "Certificate ready. Follow the instructions, then reconnect.",
     open: "Open Waitron below.",
-    failed: "The connection could not be set up. Try again.",
+    failed:
+      "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection.",
     operator:
       "This server uses an installer-supplied certificate. Ask whoever installed it to check the certificate and address.",
     retained: "Keep your installed Waitron certificate.",
@@ -45,7 +46,8 @@ export const CONNECTION_TEXT = {
     ready: "Certificado listo.",
     certificateReady: "Certificado listo. Sigue las instrucciones y reconecta.",
     open: "Abre Waitron abajo.",
-    failed: "No se ha podido configurar la conexión. Inténtalo de nuevo.",
+    failed:
+      "No se ha podido configurar la conexión. Inténtalo de nuevo; si sigue fallando, pide a quien instaló el servidor que revise su conexión segura.",
     operator:
       "Este servidor usa un certificado del instalador. Pídele que compruebe el certificado y la dirección.",
     retained: "Conserva el certificado de Waitron que ya tienes instalado.",

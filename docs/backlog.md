@@ -4478,7 +4478,8 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
   [Detail](backlog/box.md#backup-destination-failures-log-no-elapsed-time-or-operation-phase)
 
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
-  but a damaged linked folder or managed file cannot be repaired through the public guide.
+  but a damaged linked folder or managed file cannot be repaired through the public guide. The
+  refusal names the installer after a repeated failure; linked-layout repair remains open.
   [Detail](backlog/box.md#public-tls-repair-refuses-linked-layouts)
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
