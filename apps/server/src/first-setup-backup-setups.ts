@@ -6,7 +6,6 @@ import {
   readDurableHostJson,
   firstSetupModuleContext,
   type FirstSetupRoots,
-  type readFirstSetupRetirementArchives,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { readFirstFiscalEvidenceSnapshot } from "./first-fiscal-evidence.js";
@@ -19,10 +18,6 @@ type Recovery = NonNullable<
 >;
 export async function readFirstSetupBackupSetups(
   roots: readonly FirstSetupRoots[],
-  retired: readonly Pick<
-    Awaited<ReturnType<typeof readFirstSetupRetirementArchives>>[number],
-    "state" | "originals"
-  >[],
   module: WaitronModule,
 ): Promise<Pick<Recovery, "setups" | "publicEvidence">> {
   const setups: Recovery["setups"][number][] = [];
@@ -35,10 +30,6 @@ export async function readFirstSetupBackupSetups(
     originals: readonly { name: string; bytes: Uint8Array | null }[],
   ) => {
     publicEvidence.push(...readFirstFiscalEvidenceSnapshot(module.name, originals));
-    for (const original of originals) {
-      if (original.name.startsWith("outside-file:") && original.bytes !== null)
-        publicEvidence.push(JSON.parse(Buffer.from(original.bytes).toString("utf8")) as unknown);
-    }
     if (state === null) {
       if (originals.some((entry) => entry.name.startsWith("state/first-fiscal-documents/")))
         invalid();
@@ -85,7 +76,6 @@ export async function readFirstSetupBackupSetups(
         await add(join(directory, name), `state/first-fiscal-documents/${name}`);
       await collect(state, originals);
     }
-    for (const entry of retired) await collect(entry.state, entry.originals);
     return { setups, publicEvidence };
   } catch {
     return invalid();

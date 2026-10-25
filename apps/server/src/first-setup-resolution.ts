@@ -6,7 +6,6 @@ import {
   createFirstSetupStore,
   inspectFirstSetupWorkspaceSelection,
   assertFirstSetupBootTarget,
-  readFirstSetupRetirementArchives,
   selectFirstSetupWorkspace,
   firstSetupModuleContext,
   raiseStartAgainNote,
@@ -360,46 +359,26 @@ export function createFirstSetupResolutionActions(
               ) ||
               (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
           );
-          const retired = await readFirstSetupRetirementArchives(options);
-          const noInheritedRegister = retired.every(
-            ({ state, record }) =>
-              record.action === "retire" &&
-              record.register?.kind === "no-current-master" &&
-              unused(state),
-          );
           const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
-          const empty = emptyWorkspace && noInheritedRegister;
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          let unusedAssignment =
+          const unusedAssignment =
             inspection.emptyDatabase &&
             (request.register === undefined || request.register.kind === "current-master") &&
             host.modules !== undefined &&
             ((request.register === undefined && emptyWorkspace) ||
               (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules)));
-          if (unusedAssignment) {
-            for (const old of retired) {
-              if (
-                old.record.database !== "empty-preactivation" ||
-                (!unused(old.state) &&
-                  !(await firstSetupUnusedAssignment(old.state, old.originals, host.modules!)))
-              ) {
-                unusedAssignment = false;
-                break;
-              }
-            }
-          }
           if (request.owner === undefined) {
             if (
               !unusedAssignment &&
-              (!empty ||
+              (!emptyWorkspace ||
                 request.register?.kind !== "no-current-master" ||
                 request.register?.confirmed !== true)
             )
               unavailable();
           } else {
             await assertRecoveredOwner(request.owner, state);
-            if (request.register?.kind === "no-current-master" && !empty) unavailable();
+            if (request.register?.kind === "no-current-master" && !emptyWorkspace) unavailable();
             if (inspection.database !== "missing" && !emptyWorkspace && !unusedAssignment)
               unavailable();
           }
