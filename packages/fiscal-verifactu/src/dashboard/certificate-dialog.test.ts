@@ -7,6 +7,7 @@ import {
   setLocale,
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
+import { t } from "./strings.js";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { CertificateCardView, InstallAnswerView, InstallBody } from "./client.js";
 import type { AeatCertificateCard } from "./certificate-card.js";
@@ -394,19 +395,19 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "an HTTP error",
       { outcome: "refused", reason: "aeat_http", details: { status: 503 } },
       "bottom",
-      "AEAT answered with HTTP error 503. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
+      "AEAT answered with HTTP error 503. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
     ],
     [
       "anything else",
       { outcome: "refused", reason: "check_failed" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
     ],
     [
       "a reason this copy does not know",
       { outcome: "refused", reason: "something_new" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Ask the box's administrator to check its connection to AEAT, then try again.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
     ],
   ];
 
@@ -755,5 +756,113 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(dialog.shadowRoot!.querySelector("wt-disclosure")!.getAttribute("heading")).not.toBe(
       "Get your certificate file",
     );
+  });
+});
+
+describe("certificate check self-service choices", () => {
+  const refusals: Array<[string, InstallAnswerView]> = [
+    ["HTTP 403", { outcome: "refused", reason: "aeat_http", details: { status: 403 } }],
+    ["unexpected failure", { outcome: "refused", reason: "check_failed" }],
+    ["unknown reason", { outcome: "refused", reason: "future_reason" }],
+  ];
+
+  describe.each(["en", "es"])("%s", (language) => {
+    it.each(refusals)(
+      "%s: offers retry and a corrected certificate without a referral",
+      async (_name, refusal) => {
+        setLocale(language);
+        let attempt = 0;
+        const { card, dialog, install, reads } = await open({
+          reads: [
+            async () => view(),
+            async () =>
+              view({
+                revision: "rev-2",
+                installed: { ...view().installed!, organisation: "Renewed Company" },
+              }),
+          ],
+          install: async () =>
+            ++attempt < 3
+              ? refusal
+              : {
+                  outcome: "installed",
+                  reason: "installed",
+                  details: { checkedAt: "2026-10-18T11:05:00.000Z" },
+                },
+        });
+        await filled(dialog);
+        await press(dialog);
+        const sentence = t(
+          refusal.reason === "aeat_http"
+            ? "aeat_certificate.refused.aeat_http"
+            : "aeat_certificate.refused.check_failed",
+          refusal.details,
+        );
+        await vi.waitFor(() => expect(actions(dialog).error).toBe(sentence));
+        expect(sentence).toContain(t("aeat_certificate.dialog.save"));
+        expect(sentence).toContain(t("aeat_certificate.dialog.cancel"));
+        if (language === "en") {
+          expect(sentence).toContain("Select Save to check again, or Cancel to stop.");
+          expect(sentence).not.toMatch(/ask|administrator|support/i);
+        }
+        expect(fileField(dialog).files[0]?.name).toBe("bar-lucia-2026.p12");
+        expect(passField(dialog).value).toBe(" cert pass 9 ");
+        expect(kindField(dialog).value).toBe("representante");
+        expect(reads()).toBe(1);
+        expect(save(dialog).disabled).toBe(false);
+        await press(dialog);
+        await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(2));
+        expect(install.mock.calls[1]![0]).toEqual(install.mock.calls[0]![0]);
+        await vi.waitFor(() => expect(actions(dialog).error).toBe(sentence));
+        const replacement = new File([new Uint8Array([1, 2, 3])], "replacement.p12");
+        await choose(dialog, replacement);
+        kindField(dialog).dispatchEvent(
+          new CustomEvent("wt-change", {
+            detail: { value: "sello" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await dialog.updateComplete;
+        const close = closed(dialog);
+        await press(dialog);
+        await close;
+        expect(install).toHaveBeenCalledTimes(3);
+        expect(install.mock.calls[2]![0]).toEqual({
+          pfxBase64: "AQID",
+          passphrase: " cert pass 9 ",
+          certKind: "sello",
+          expectedRevision: "rev-1",
+        });
+        await vi.waitFor(() => expect(reads()).toBe(2));
+        expect(card.shadowRoot!.querySelector("dashboard-aeat-certificate-dialog")).toBeNull();
+        expect(text(card.shadowRoot!.querySelector("dd[data-test=issued-to]"))).toBe(
+          "Renewed Company",
+        );
+      },
+    );
+
+    it("Cancel stops after a failed check without submitting another certificate", async () => {
+      setLocale(language);
+      const { card, dialog, install, reads } = await open({
+        install: async () => ({ outcome: "refused", reason: "check_failed" }),
+      });
+      await filled(dialog);
+      await press(dialog);
+      await vi.waitFor(() =>
+        expect(actions(dialog).error).toBe(t("aeat_certificate.refused.check_failed")),
+      );
+      expect(actions(dialog).error).toContain(t("aeat_certificate.dialog.cancel"));
+      if (language === "en") expect(actions(dialog).error).toContain("or Cancel to stop.");
+      const close = closed(dialog);
+      await userEvent.click(q(dialog, "[data-test=certificate-cancel]"));
+      await close;
+      expect(card.shadowRoot!.querySelector("dashboard-aeat-certificate-dialog")).toBeNull();
+      expect(install).toHaveBeenCalledTimes(1);
+      expect(reads()).toBe(1);
+      expect(text(card.shadowRoot!.querySelector("dd[data-test=issued-to]"))).toBe(
+        view().installed!.organisation,
+      );
+    });
   });
 });

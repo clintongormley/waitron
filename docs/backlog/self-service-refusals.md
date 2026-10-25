@@ -35,7 +35,7 @@ referrals, not completed recovery experiments.
 | --- | --- |
 | [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and explicit/autofill refusal views explain password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
 | [Public connection](#tls-repair), #2055 | Replace the installer referral with a connection-repair choice the reader can complete. Include installer-supplied certificates and managed-device installation restrictions, which also refer to another person. Retain the separate linked-layout recovery gap and public-page privacy. |
-| [Certificate](#certificate), #2056 | Replace the administrator referral with certificate/check/connection choices, preserving the installed certificate. Add sign-in at the action if extra rights are needed. |
+| [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Replace the administrator referral with a way to inspect and correct effective configuration. Explain what each key choice does and keep both key records until their use is established. |
 | [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. Recheck lane A's A1042 S7l after landing; this lane does not change it. |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
@@ -791,6 +791,19 @@ wording; certificate checking, installation and refusal classification are uncha
 **Reopened after the 14:02 owner correction:** replace the administrator referral with applicable
 certificate/check/connection choices, offering any needed sign-in there. Keep the current
 certificate until a replacement passes its checks; a generic retry does not resolve every cause.
+
+**2026-10-25 self-service rework:** HTTP and unexpected/unknown check refusals now explain the
+existing choices in English and Spanish: check the internet connection or choose a different file
+or certificate type, Save to check again, or Cancel to stop. The installed certificate is retained
+on a check refusal. The dialog already requires `system.manage` for replacement; these choices
+introduce no action with additional rights. The guide also explains the unsaved-changes question
+when cancelling. Certificate classification, checking and installation are unchanged.
+
+**Still open: persistent AEAT connection/configuration diagnosis.** The dialog has no diagnostic
+workflow that distinguishes an operator-correctable connection/configuration failure from a
+Waitron fault, or offers its corresponding repair. Build that workflow with any needed sign-in
+at the action. Changing the file/type, retrying or cancelling does not establish that every
+persistent refusal has a repair. The wording change does not qualify that missing workflow.
 
 ### tls-repair
 

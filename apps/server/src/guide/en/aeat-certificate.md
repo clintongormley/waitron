@@ -20,5 +20,7 @@ asks you to confirm ownership again before you continue.
 ## Retry a check in Venue settings {#dashboard-check}
 
 If replacing a certificate fails with an HTTP error or an unexpected check failure, the current
-certificate stays installed. Ask the box's administrator to check its connection to AEAT, then
-select **Save** again. An HTTP status alone does not tell you whether waiting will help.
+certificate stays installed. Check the internet connection, or choose another file or certificate
+type in the dialog. Select **Save** to check again. Select **Cancel** to stop without replacing
+the current certificate; if asked about unsaved changes, choose **Discard changes** to close.
+An HTTP status alone does not tell you whether waiting will help.

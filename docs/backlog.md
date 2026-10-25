@@ -152,10 +152,11 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-- **A1089: rework certificate-check refusals without an administrator referral (#2056).**
-  Offer applicable certificate/check/connection choices and any needed sign-in there. Preserve the
-  current certificate and record a substantial missing workflow separately.
-  [Correction](backlog/self-service-refusals.md#certificate).
+- **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate
+  dialog offers file/type changes, another check and Cancel. Add connection/configuration
+  diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not
+  resolve every HTTP or unclassified failure.
+  [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
 - **A1089: reconciliation support wording needs a verified caller and remedy.** First establish where the reconciliation alerts can reach an owner; then give an evidence/decision route without promising an unimplemented periodic sweep.
   [Audit](backlog/self-service-refusals.md#fiscal-reconcile).
