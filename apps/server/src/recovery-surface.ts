@@ -255,7 +255,7 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
  *
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
- * 2026-09-10). Each such action names whoever installed the box: the reader has no terminal.
+ * 2026-09-10).
  */
 export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>> = {
   "provisioning.database_ahead": {
@@ -459,24 +459,26 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
   },
   "setup.workspace_unsupported": {
     "en-GB": {
-      title: "This box holds a first setup kept by an older Waitron.",
-      action: "Ask whoever installed this box to reinstall Waitron on it.",
+      title:
+        "This box holds a setup from an older version of Waitron that this version cannot use.",
+      action: "Reinstall Waitron on this box to start fresh.",
     },
     "es-ES": {
-      title: "Este equipo guarda una configuración inicial de una versión anterior de Waitron.",
-      action: "Pide a quien instaló este equipo que reinstale Waitron en él.",
+      title:
+        "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar.",
+      action: "Reinstala Waitron en este equipo para empezar de cero.",
     },
   },
   "setup.start_again_incomplete": {
     "en-GB": {
       title: "Start again did not finish, and the box found files it did not expect.",
       action:
-        "Ask whoever installed this box to look at its setup folders before anything else: the files it found may be a restored venue.",
+        "The box has not changed these files, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
     },
     "es-ES": {
       title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
       action:
-        "Antes de nada, pide a quien instaló este equipo que revise sus carpetas de configuración: los archivos que encontró pueden ser un local recuperado.",
+        "El equipo no ha cambiado estos archivos, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.",
     },
   },
   // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.

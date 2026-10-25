@@ -463,13 +463,13 @@ const STATUS_EN = "Level: recovery. This start was refused before it began, and 
 const STATUS_ES = "Nivel: recovery. Este arranque se rechazó antes de empezar y no se ha contado.";
 const REFUSED_TEXT = {
   "setup.workspace_unsupported": {
-    title: "This box holds a first setup kept by an older Waitron.",
-    action: "Ask whoever installed this box to reinstall Waitron on it.",
+    title: "This box holds a setup from an older version of Waitron that this version cannot use.",
+    action: "Reinstall Waitron on this box to start fresh.",
   },
   "setup.start_again_incomplete": {
     title: "Start again did not finish, and the box found files it did not expect.",
     action:
-      "Ask whoever installed this box to look at its setup folders before anything else: the files it found may be a restored venue.",
+      "The box has not changed these files, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
   },
 } as const;
 

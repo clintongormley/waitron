@@ -1116,12 +1116,14 @@ describe("a start refused before it began", () => {
     {
       code: "setup.workspace_unsupported",
       "en-GB": {
-        title: "This box holds a first setup kept by an older Waitron.",
-        action: "Ask whoever installed this box to reinstall Waitron on it.",
+        title:
+          "This box holds a setup from an older version of Waitron that this version cannot use.",
+        action: "Reinstall Waitron on this box to start fresh.",
       },
       "es-ES": {
-        title: "Este equipo guarda una configuración inicial de una versión anterior de Waitron.",
-        action: "Pide a quien instaló este equipo que reinstale Waitron en él.",
+        title:
+          "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar.",
+        action: "Reinstala Waitron en este equipo para empezar de cero.",
       },
     },
     {
@@ -1129,12 +1131,12 @@ describe("a start refused before it began", () => {
       "en-GB": {
         title: "Start again did not finish, and the box found files it did not expect.",
         action:
-          "Ask whoever installed this box to look at its setup folders before anything else: the files it found may be a restored venue.",
+          "The box has not changed these files, because they may be a venue restored from a backup. If you reinstall Waitron, the box starts fresh, but everything on it is lost, these files included.",
       },
       "es-ES": {
         title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
         action:
-          "Antes de nada, pide a quien instaló este equipo que revise sus carpetas de configuración: los archivos que encontró pueden ser un local recuperado.",
+          "El equipo no ha cambiado estos archivos, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él, también estos archivos.",
       },
     },
   ] as const;
@@ -1176,4 +1178,21 @@ describe("a start refused before it began", () => {
       expect(spanish).not.toMatch(/disco/i);
     },
   );
+  it("neither refused start sends the person to someone else, in either language", () => {
+    for (const row of ROWS) {
+      for (const lang of ["en-GB", "es-ES"] as const) {
+        const action = OPERATOR_TEXT[row.code]![lang].action;
+        expect(action, `${row.code} ${lang}`).not.toMatch(/whoever installed/i);
+        expect(action, `${row.code} ${lang}`).not.toMatch(/quien instaló/i);
+      }
+    }
+  });
+
+  it("the unfinished Start again line never tells the person to reinstall, and says what reinstalling loses", () => {
+    const text = OPERATOR_TEXT["setup.start_again_incomplete"]!;
+    expect(text["en-GB"].action).not.toMatch(/(^|[.!?]\s+)Reinstall\b/);
+    expect(text["en-GB"].action).toContain("lost");
+    expect(text["es-ES"].action).not.toMatch(/(^|[.!?]\s+)Reinstala\b/);
+    expect(text["es-ES"].action).toContain("pierde");
+  });
 });

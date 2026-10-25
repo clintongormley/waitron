@@ -9,7 +9,7 @@ export const shellEn = {
   "shell.first_setup.start_again_incomplete":
     "Start again has not finished. Restart the box, then try again.",
   "shell.first_setup.workspace_unsupported":
-    "This box holds a first setup kept by an older Waitron. Reinstall Waitron on it.",
+    "This box holds a setup from an older version of Waitron that this version cannot use. Reinstall Waitron on this box to start fresh.",
 
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
@@ -153,7 +153,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.first_setup.start_again_incomplete":
     "«Empezar de nuevo» aún no ha terminado. Reinicia el equipo y vuelve a intentarlo.",
   "shell.first_setup.workspace_unsupported":
-    "Este equipo guarda una configuración inicial de una versión anterior de Waitron. Reinstala Waitron en él.",
+    "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar. Reinstala Waitron en este equipo para empezar de cero.",
 
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",
