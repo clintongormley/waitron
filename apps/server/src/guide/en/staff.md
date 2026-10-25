@@ -33,7 +33,7 @@ Open **Account settings** from the account menu and, on **Your details**, press 
 beside **Copy of your data**. You get a ZIP file with your profile and sign-in details as `.json`
 files. If the venue plans staff or records working time in Waitron, the download can also hold
 your employment details, rota, absences, staff roles and attendance questions as `.json` files,
-and your working-time record as a PDF and a `.csv` spreadsheet. It can also hold `actions.json`:
+and your working-time record as a PDF and a `.csv` spreadsheet. There can be an `actions.json` too:
 the whole sales already recorded whose void you authorised, the refunds you asked for, authorised
 or recorded the outcome of, and the cash-drawer openings you made or authorised.
 

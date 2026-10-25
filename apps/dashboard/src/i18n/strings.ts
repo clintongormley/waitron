@@ -1084,7 +1084,7 @@ export const en = {
   "profile.data_copy_busy": "Preparing…",
   "profile.data_copy_help_label": "What the copy holds",
   "profile.data_copy_help":
-    "Your profile and sign-in details, and your work records if the venue keeps them in Waitron. The whole sales already recorded whose void you authorised. The refunds you asked for, authorised or recorded the outcome of. The cash-drawer openings you made or authorised. A README.txt that explains them and your rights.",
+    "Your profile and sign-in details, and your work records if the venue keeps them in Waitron. The whole sales already recorded whose void you authorised. The refunds you asked for, authorised or recorded the outcome of. The cash-drawer openings you made or authorised. A README.txt that explains each file and your rights.",
   "profile.data_copy_help_guide": "More about your data",
   "account.offer_passkey": "Set up a passkey?",
   "account.passkey_optional":
@@ -4465,7 +4465,7 @@ export const es: Record<StringKey, string> = {
   "profile.data_copy_busy": "Preparando…",
   "profile.data_copy_help_label": "Qué contiene la copia",
   "profile.data_copy_help":
-    "Tus datos de perfil y de acceso, y tus datos de trabajo si el local los guarda en Waitron. Las ventas completas ya registradas cuya anulación autorizaste. Las devoluciones que pediste, autorizaste o cuyo resultado registraste. Las aperturas del cajón de efectivo que hiciste o autorizaste. Un README.txt que los explica junto con tus derechos.",
+    "Tus datos de perfil y de acceso, y tus datos de trabajo si el local los guarda en Waitron. Las ventas completas ya registradas cuya anulación autorizaste. Las devoluciones que pediste, autorizaste o cuyo resultado registraste. Las aperturas del cajón de efectivo que hiciste o autorizaste. Un README.txt que explica cada archivo y tus derechos.",
   "profile.data_copy_help_guide": "Más sobre tus datos",
   "account.offer_passkey": "¿Configurar una passkey?",
   "account.passkey_optional":
