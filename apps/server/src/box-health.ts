@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { devices, incidents, printers, sales, type Database, type Transaction } from "@waitron/db";
 import type {
   ClockConfirmationSource,
@@ -45,8 +45,9 @@ export interface ClockStopView extends Omit<
   } | null;
 }
 
-/** An open `clock.records_misdated` alert's own params. */
+/** A `clock.records_misdated` alert's incident id and its own params. */
 export interface MisdatedOpen {
+  incidentId: string;
   confirmationId: string;
   count: number;
   from: string;
@@ -55,6 +56,14 @@ export interface MisdatedOpen {
   toOffsetMinutes?: number;
   partial: boolean;
   unconfirmed: boolean;
+}
+
+/** The box handled it itself; a person whose row is gone has no name. */
+export type MisdatedHandler = { kind: "box" } | { kind: "person"; name: string | null };
+
+export interface MisdatedHandled extends MisdatedOpen {
+  handledAt: string;
+  handledBy: MisdatedHandler;
 }
 
 export interface BoxHealth {
@@ -84,6 +93,7 @@ export interface BoxHealth {
   /** Since the check's opening reading; null when no check waits, or the seat keeps none. */
   clockCheckWaiting: { since: string } | null;
   misdatedOpen: MisdatedOpen[];
+  misdatedHandledCount: number;
 }
 
 export interface BoxHealthReaders {
@@ -192,14 +202,49 @@ export function clockCheckWaitingReader(deps: {
   };
 }
 
+const MISDATED = "clock.records_misdated";
+
+const misdatedParams = (params: Record<string, unknown>) =>
+  params as unknown as Omit<MisdatedOpen, "incidentId">;
+
 /** The open `clock.records_misdated` alerts' params, oldest first. */
 export async function readMisdatedOpen(tx: Transaction): Promise<MisdatedOpen[]> {
   const rows = await tx
-    .select({ params: incidents.params })
+    .select({ id: incidents.id, params: incidents.params })
     .from(incidents)
-    .where(and(eq(incidents.code, "clock.records_misdated"), isNull(incidents.acknowledgedAt)))
+    .where(and(eq(incidents.code, MISDATED), isNull(incidents.acknowledgedAt)))
     .orderBy(asc(incidents.detectedAt), asc(incidents.id));
-  return rows.map((row) => row.params as unknown as MisdatedOpen);
+  return rows.map((row) => ({ incidentId: row.id, ...misdatedParams(row.params) }));
+}
+
+export async function countMisdatedHandled(tx: Transaction): Promise<number> {
+  const [row] = await tx
+    .select({ n: count() })
+    .from(incidents)
+    .where(and(eq(incidents.code, MISDATED), isNotNull(incidents.acknowledgedAt)));
+  return row!.n;
+}
+
+/** Handled `clock.records_misdated` alerts, newest first by detection, with who handled them. */
+export async function readMisdatedHandled(tx: Transaction): Promise<MisdatedHandled[]> {
+  const rows = await tx
+    .select({
+      id: incidents.id,
+      params: incidents.params,
+      handledAt: incidents.acknowledgedAt,
+      handledBy: incidents.acknowledgedBy,
+      name: persons.displayName,
+    })
+    .from(incidents)
+    .leftJoin(persons, eq(persons.id, incidents.acknowledgedBy))
+    .where(and(eq(incidents.code, MISDATED), isNotNull(incidents.acknowledgedAt)))
+    .orderBy(desc(incidents.detectedAt), desc(incidents.id));
+  return rows.map((row) => ({
+    incidentId: row.id,
+    ...misdatedParams(row.params),
+    handledAt: row.handledAt!,
+    handledBy: row.handledBy === null ? { kind: "box" } : { kind: "person", name: row.name },
+  }));
 }
 
 const OUTBOX_WROTE = new Error("the fiscal outbox read changed rows");
@@ -239,6 +284,7 @@ export async function collectBoxHealth(
       printers: printerRows,
       readers: readerRows,
       misdatedOpen: await readMisdatedOpen(db),
+      misdatedHandledCount: await countMisdatedHandled(db),
     };
   });
 
@@ -317,5 +363,6 @@ export async function collectBoxHealth(
     clockStop,
     clockCheckWaiting,
     misdatedOpen: rows.misdatedOpen,
+    misdatedHandledCount: rows.misdatedHandledCount,
   };
 }

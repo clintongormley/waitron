@@ -1178,6 +1178,19 @@ interface MisdatedLists {
   }[];
 }
 
+interface MisdatedHandledEpisodes {
+  episodes: (Record<string, unknown> & {
+    confirmationId: string;
+    records: MisdatedLists["lists"][number]["records"] | null;
+  })[];
+}
+
+async function misdatedHandledOf(app: Hono): Promise<MisdatedHandledEpisodes> {
+  const answer = await send(app, marta.cookie, "GET", "/api/box/clock-misdated/handled");
+  expect(answer.status).toBe(200);
+  return answer.json as unknown as MisdatedHandledEpisodes;
+}
+
 async function misdatedOf(app: Hono, cookie = marta.cookie): Promise<MisdatedLists> {
   const answer = await send(app, cookie, "GET", "/api/box/clock-misdated");
   expect(answer.status).toBe(200);
@@ -1260,7 +1273,7 @@ it("says a check waits from its opening reading once its stop ends by itself, un
   expect((await healthOf(stop)).clockCheckWaiting).toBeNull();
 });
 
-it("lists the sales a closing found dated wrongly, by series, number and time, on the stored values alone, until its alert is handled", async () => {
+it("lists the sales a closing found dated wrongly, by series, number and time, on the stored values alone, until its alert is handled, and keeps it, marked handled, on the handled route after its alert is handled", async () => {
   const stop = await stoppedBox(10 * MINUTE);
   handOpenMisdated(stop.behind);
   await waitingCheck(stop);
@@ -1311,6 +1324,8 @@ it("lists the sales a closing found dated wrongly, by series, number and time, o
     (await misdatedOf(stop.app)).lists.find((list) => list.confirmationId === confirmationId),
   ).toEqual(listed);
 
+  const handledBefore = (await healthOf(stop)).misdatedHandledCount;
+  const handledAt = new Date(boxTime(stop)).toISOString();
   const handled = await send(
     stop.app,
     marta.cookie,
@@ -1324,6 +1339,19 @@ it("lists the sales a closing found dated wrongly, by series, number and time, o
   expect(
     (await healthOf(stop)).misdatedOpen.some((entry) => entry.confirmationId === confirmationId),
   ).toBe(false);
+
+  const episode = (await misdatedHandledOf(stop.app)).episodes.find(
+    (entry) => entry.confirmationId === confirmationId,
+  );
+  const { records, ...summary } = episode!;
+  expect(records).toEqual(listed!.records);
+  expect(summary).toEqual({
+    ...open!,
+    incidentId: misdatedIncident(confirmationId),
+    handledAt,
+    handledBy: { kind: "person", name: "Marta" },
+  });
+  expect((await healthOf(stop)).misdatedHandledCount).toBe(handledBefore + 1);
 });
 
 it("says an alert that cannot tell which sales are dated wrongly is unconfirmed, with no count, and lists none for it", async () => {
@@ -1352,6 +1380,7 @@ it("says an alert that cannot tell which sales are dated wrongly is unconfirmed,
     expect(
       (await healthOf(stop)).misdatedOpen.find((entry) => entry.confirmationId === confirmationId),
     ).toEqual({
+      incidentId: misdatedIncident(confirmationId),
       confirmationId,
       count: 0,
       from,
@@ -1525,4 +1554,71 @@ it("lists a later closing's wrongly dated sales beside an open alert that cannot
       .filter((incident) => incident.code === "clock.records_misdated")
       .map((incident) => incident.params["confirmationId"]),
   ).toEqual([confirmationId, cannotTell.confirmation!.id]);
+});
+
+it("keeps an alert that cannot tell, handled by the box when an earlier start replaces it, on the handled route with no list", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  const closeByItself = (atMs: number) =>
+    withTransaction(venue.db, (tx) =>
+      venue.backend.closeClockCheckByItself!(tx, {
+        reading: { instant: new Date(atMs), offsetMinutes: 60 },
+        boot: BOOT,
+        nodeId: venue.cfg.nodeId,
+        witnesses: [
+          {
+            kind: "authority",
+            id: "authority",
+            boxAt: new Date(atMs).toISOString(),
+            witnessAt: new Date(atMs + 20 * MINUTE).toISOString(),
+            uncertaintyMs: 0,
+          },
+        ],
+      }),
+    );
+  const openAt = (ms: number) =>
+    withTransaction(venue.db, (tx) =>
+      venue.backend.openClockCheck!(tx, {
+        reading: { instant: new Date(ms), offsetMinutes: 60 },
+        boot: BOOT,
+        nodeId: venue.cfg.nodeId,
+      }),
+    );
+  await openAt(stop.behind);
+  // After the opening, which may close an earlier case's check that cannot tell.
+  handOpenMisdated(stop.behind);
+  const endedAt = nowMs() + MINUTE;
+  const first = await closeByItself(endedAt);
+  expect(first.confirmation?.source).toBe("elapsed");
+  const replacedId = first.confirmation!.id;
+  // The clock steps back further than the first stop's start, and that stop ends the same way.
+  await openAt(stop.behind - HOUR);
+  const replacedAt = endedAt + 2 * MINUTE;
+  const second = await closeByItself(replacedAt);
+  expect(second.confirmation?.source).toBe("elapsed");
+  try {
+    const episode = (await misdatedHandledOf(stop.app)).episodes.find(
+      (entry) => entry.confirmationId === replacedId,
+    );
+    expect(episode).toEqual({
+      incidentId: misdatedIncident(replacedId),
+      confirmationId: replacedId,
+      count: 0,
+      from: new Date(stop.behind).toISOString(),
+      fromOffsetMinutes: 60,
+      partial: false,
+      unconfirmed: true,
+      handledAt: new Date(replacedAt).toISOString(),
+      handledBy: { kind: "box" },
+      records: null,
+    });
+
+    const refused = await send(stop.app, sergio.cookie, "GET", "/api/box/clock-misdated/handled");
+    expect(refused.status).toBe(403);
+    expect(refused.json).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "system.manage" },
+    });
+  } finally {
+    handOpenMisdated(replacedAt);
+  }
 });

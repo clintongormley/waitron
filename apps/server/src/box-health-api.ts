@@ -1,7 +1,13 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import type { BootReading, ClockWitness, FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type {
+  BootReading,
+  ClockWitness,
+  FiscalBackend,
+  MisdatedRecord,
+  TrustedClock,
+} from "@waitron/fiscal";
 // The registry of `clock.confirm_refused` and `clock.check_expired`, which this file throws.
 import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
@@ -11,7 +17,12 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, diskFullIn } from "@waitron/shared";
-import { displayNameOf, readMisdatedOpen, type BoxHealth } from "./box-health.js";
+import {
+  displayNameOf,
+  readMisdatedHandled,
+  readMisdatedOpen,
+  type BoxHealth,
+} from "./box-health.js";
 import { clockChallenges } from "./clock-challenges.js";
 import type { FreedSpace } from "./free-space-now.js";
 import { invoiceNumberParts } from "./invoice-number-parts.js";
@@ -83,6 +94,15 @@ function confirmBody(body: unknown): { challengeId: string; deviceAt: number } {
   return { challengeId, deviceAt };
 }
 
+function listRecord(record: MisdatedRecord) {
+  return {
+    recordId: record.recordId,
+    ...invoiceNumberParts(record.invoiceNumber),
+    at: record.generatedAt,
+    offsetMinutes: record.offsetMinutes,
+  };
+}
+
 async function requiredNameOf(tx: Transaction, personId: string): Promise<string> {
   const name = await displayNameOf(tx, personId);
   if (name === null) throw new Error(`no person ${personId}`);
@@ -127,17 +147,35 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
             if (!answer.known) continue;
             found.push({
               confirmationId,
-              records: answer.records.map((record) => ({
-                recordId: record.recordId,
-                ...invoiceNumberParts(record.invoiceNumber),
-                at: record.generatedAt,
-                offsetMinutes: record.offsetMinutes,
-              })),
+              records: answer.records.map(listRecord),
             });
           }
           return found;
         });
         return c.json({ lists }, 200);
+      }),
+    );
+    // Every handled alert, newest first, with its list; one that cannot tell has none.
+    app.get("/api/box/clock-misdated/handled", (c) =>
+      misdatedRun(c, log, async () => {
+        await authorizeSystemManager(deps.db, c);
+        // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses.
+        const episodes = await deps.db.withWriteLock(async () => {
+          const found = [];
+          for (const episode of await readMisdatedHandled(deps.db)) {
+            const answer = await misdatedRecords(deps.db, episode.confirmationId);
+            if (answer === null)
+              log("warn", "box-clock-misdated.unknown_confirmation", {
+                confirmationId: episode.confirmationId,
+              });
+            found.push({
+              ...episode,
+              records: answer?.known === true ? answer.records.map(listRecord) : null,
+            });
+          }
+          return found;
+        });
+        return c.json({ episodes }, 200);
       }),
     );
   }
