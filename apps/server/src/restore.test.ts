@@ -279,6 +279,26 @@ describe("restoreFromArtifact", () => {
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it.each(["first-setup-start-again.json", "first-setup-start-again-confirmations/1-earlier.json"])(
+    "refuses a backup entry for %s and leaves the box's own file unchanged",
+    async (path) => {
+      const kept = Buffer.from('{"kept":"the box\'s own bytes"}');
+      await mkdir(join(stateDir, path, ".."), { recursive: true });
+      await writeFile(join(stateDir, path), kept);
+      const artifact = buildArtifact([
+        ...FULL_ENTRIES,
+        { name: `secrets/${path}`, bytes: Buffer.from('{"from":"the backup"}') },
+      ]);
+      await expect(restoreFromArtifact(deps({ artifact }))).rejects.toMatchObject({
+        code: "restore.unexpected_entry",
+        params: { name: `secrets/${path}` },
+      });
+      expect(await readFile(join(stateDir, path))).toEqual(kept);
+      await expectVenueUntouched();
+      await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    },
+  );
+
   it("refuses to replace the venue database while another process holds the folder", async () => {
     await mkdir(venueDir, { recursive: true });
     await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
