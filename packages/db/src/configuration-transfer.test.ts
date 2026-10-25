@@ -217,7 +217,7 @@ describe("validateCoreConfiguration", () => {
       );
     });
 
-    it.each(["\u0020T1\u0020", "\u0020T1"])(
+    it.each(["\u0020T1\u0020", "\u00a0T1"])(
       "refuses a short name with spaces around it, %j",
       (short_name) => {
         expect(() => validateCoreConfiguration({ [table]: [{ short_name }] })).toThrowError(
