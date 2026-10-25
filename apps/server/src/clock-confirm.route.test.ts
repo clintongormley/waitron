@@ -1416,6 +1416,20 @@ it("logs an open alert whose closing the seat does not know, and lists none for 
       "box-clock-misdated.unknown_confirmation",
       { confirmationId },
     ]);
+
+    handOpenMisdated(stop.behind);
+    logged.length = 0;
+    const handled = await misdatedHandledOf(
+      boxApp(stop, venue.db, (...entry) => void logged.push(entry)),
+    );
+    expect(
+      handled.episodes.find((episode) => episode.confirmationId === confirmationId)?.records,
+    ).toBeNull();
+    expect(logged).toContainEqual([
+      "warn",
+      "box-clock-misdated.unknown_confirmation",
+      { confirmationId },
+    ]);
   } finally {
     handOpenMisdated(stop.behind);
   }
@@ -1448,6 +1462,15 @@ it("reads a waiting check and the wrongly dated sales on a full disk with a chan
     expect(health.misdatedOpen.map((entry) => entry.confirmationId)).toContain(confirmationId);
     const lists = await misdatedOf(boxApp(waitingStop, db));
     expect(lists.lists.map((list) => list.confirmationId)).toContain(confirmationId);
+    const handled = await misdatedHandledOf(boxApp(waitingStop, db));
+    const handledIds = venue.db
+      .all<{ id: string }>(
+        sql`select id from incidents where code = 'clock.records_misdated'
+            and acknowledged_at is not null order by detected_at desc, id desc`,
+      )
+      .map((row) => row.id);
+    expect(handledIds.length).toBeGreaterThan(0);
+    expect(handled.episodes.map((episode) => episode["incidentId"])).toEqual(handledIds);
     expect(changeWaits()).toBe(1);
   } finally {
     venue.db.run(sql`delete from change_log where id = 'clock-check-1'`);
