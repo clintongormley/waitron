@@ -219,6 +219,7 @@ ${ASK}
 
   it("names the venue generically and ends at the ask line with no name and no notice", () => {
     const { privacyNoticeUrl: _omitted, ...rest } = base;
+    void _omitted;
     const text = personalDataReadme({ ...rest, venue: null, files: [] });
     expect(text).toBe(`Your data held by the venue
 Prepared for Marta López on 2026-10-05.
