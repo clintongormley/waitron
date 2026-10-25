@@ -1,6 +1,15 @@
 import { asc, eq, inArray, or } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
-import { invoiceSeries, sales, saleVoids, tenderRefunds, type Database } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  billPayments,
+  drawerOpens,
+  invoiceSeries,
+  sales,
+  saleVoids,
+  tenderRefunds,
+  type Database,
+} from "@waitron/db";
 import { jsonFile, type PersonalDataFile, type PersonalDataPart } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
 
@@ -10,8 +19,10 @@ import { centsToDecimal } from "@waitron/shared";
 // turns of its own after the snapshot turn has closed. The person's rows and their sale numbers
 // measured about 192 ms at 1,000,000 drawer openings, which would push the snapshot turn past its
 // 250 ms bar, and an index on the person columns did not remove the cost of joining each row to its
-// sale. So: one turn for the person's rows, no join, then one turn per `chunk` sale ids, by primary
-// key; each awaited in turn, none inside `withTransaction`, so nothing is written. An action
+// sale. So: one turn for the person's voids and refunds, one for their drawer openings, neither
+// joining another table; then one turn per `chunk` sale ids, by primary key; then one turn per
+// `chunk` bill-payment ids, by primary key, each finding the sale filed from the payment's order.
+// Each is awaited in turn, none inside `withTransaction`, so nothing is written. An action
 // committed between the snapshot turn and these turns may appear in the file; it happened before
 // the download was sent, and the route's re-check still runs before any bytes go.
 
@@ -23,6 +34,11 @@ type Role = "requested" | "authorized" | "attested";
 interface SaleFacts {
   number: string;
   total: number;
+}
+
+interface BillPaymentFacts {
+  method: "cash" | "card";
+  sale: string | null;
 }
 
 async function saleFacts(
@@ -49,6 +65,44 @@ async function saleFacts(
       facts.set(row.id, { number: formatInvoiceNumber(row.code, row.number), total: row.total });
   }
   return facts;
+}
+
+async function billPaymentFacts(
+  db: Database,
+  billPaymentIds: readonly string[],
+  chunk: number,
+): Promise<Map<string, BillPaymentFacts>> {
+  const facts = new Map<string, BillPaymentFacts>();
+  for (let start = 0; start < billPaymentIds.length; start += chunk) {
+    const ids = billPaymentIds.slice(start, start + chunk);
+    const rows = await db.withWriteLock(() =>
+      db
+        .select({
+          id: billPayments.id,
+          method: billPayments.method,
+          code: invoiceSeries.code,
+          number: sales.invoiceNumber,
+        })
+        .from(billPayments)
+        .leftJoin(sales, eq(sales.workingOrderId, billPayments.workingOrderId))
+        .leftJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+        .where(inArray(billPayments.id, ids)),
+    );
+    for (const row of rows)
+      facts.set(row.id, {
+        method: row.method,
+        sale:
+          row.code === null || row.number === null
+            ? null
+            : formatInvoiceNumber(row.code, row.number),
+      });
+  }
+  return facts;
+}
+
+function byTimeThenId(a: { at: string; id: string }, b: { at: string; id: string }): number {
+  if (a.at !== b.at) return a.at < b.at ? -1 : 1;
+  return a.id < b.id ? -1 : 1;
 }
 
 export function actionsPersonalData(
@@ -94,40 +148,146 @@ export function actionsPersonalData(
                   ),
                 )
                 .orderBy(asc(tenderRefunds.createdAt), asc(tenderRefunds.id));
-              return { voids, refunds };
+              const billRefunds = await db
+                .select({
+                  id: billPaymentRefunds.id,
+                  billPaymentId: billPaymentRefunds.billPaymentId,
+                  amount: billPaymentRefunds.appliedAmount,
+                  tip: billPaymentRefunds.tipAmount,
+                  state: billPaymentRefunds.state,
+                  at: billPaymentRefunds.createdAt,
+                  requestedBy: billPaymentRefunds.requestedBy,
+                  authorizedBy: billPaymentRefunds.authorizedBy,
+                  attestedBy: billPaymentRefunds.attestedBy,
+                })
+                .from(billPaymentRefunds)
+                .where(
+                  or(
+                    eq(billPaymentRefunds.requestedBy, person),
+                    eq(billPaymentRefunds.authorizedBy, person),
+                    eq(billPaymentRefunds.attestedBy, person),
+                  ),
+                );
+              return { voids, refunds, billRefunds };
             });
-            if (rows.voids.length === 0 && rows.refunds.length === 0) return [];
-            const saleIds = [...new Set([...rows.voids, ...rows.refunds].map((row) => row.saleId))];
+            const openings = await db.withWriteLock(() =>
+              db
+                .select({
+                  id: drawerOpens.id,
+                  reason: drawerOpens.reason,
+                  at: drawerOpens.openedAt,
+                  saleId: drawerOpens.saleId,
+                  billPaymentId: drawerOpens.billPaymentId,
+                  viaOverride: drawerOpens.viaOverride,
+                  personId: drawerOpens.personId,
+                  authorizedBy: drawerOpens.authorizedBy,
+                })
+                .from(drawerOpens)
+                .where(or(eq(drawerOpens.personId, person), eq(drawerOpens.authorizedBy, person)))
+                .orderBy(asc(drawerOpens.openedAt), asc(drawerOpens.id)),
+            );
+            if (
+              rows.voids.length === 0 &&
+              rows.refunds.length === 0 &&
+              rows.billRefunds.length === 0 &&
+              openings.length === 0
+            )
+              return [];
+            const saleIds = [
+              ...new Set(
+                [...rows.voids, ...rows.refunds, ...openings].flatMap((row) =>
+                  row.saleId === null ? [] : [row.saleId],
+                ),
+              ),
+            ];
             const facts = await saleFacts(db, saleIds, chunk);
-            // Both tables' `sale_id` is not null and restricts the sale's deletion.
+            const billPaymentIds = [
+              ...new Set(
+                [...rows.billRefunds, ...openings].flatMap((row) =>
+                  row.billPaymentId === null ? [] : [row.billPaymentId],
+                ),
+              ),
+            ];
+            const bills = await billPaymentFacts(db, billPaymentIds, chunk);
+            // Every `sale_id` and `bill_payment_id` read has a foreign key restricting its target's
+            // deletion.
             const sale = (saleId: string) => facts.get(saleId)!;
+            const bill = (billPaymentId: string) => bills.get(billPaymentId)!;
+            const rolesOf = (row: {
+              requestedBy: string;
+              authorizedBy: string;
+              attestedBy: string | null;
+            }): Role[] => {
+              const yourPart: Role[] = [];
+              if (row.requestedBy === person) yourPart.push("requested");
+              if (row.authorizedBy === person) yourPart.push("authorized");
+              if (row.attestedBy === person) yourPart.push("attested");
+              return yourPart;
+            };
             const voids = rows.voids.map((row) => ({
               sale: sale(row.saleId).number,
               amount: centsToDecimal(sale(row.saleId).total),
               at: row.at,
             }));
-            const refunds = rows.refunds.map((row) => {
-              const yourPart: Role[] = [];
-              if (row.requestedBy === person) yourPart.push("requested");
-              if (row.authorizedBy === person) yourPart.push("authorized");
-              if (row.attestedBy === person) yourPart.push("attested");
-              return {
-                kind: "sale",
-                sale: sale(row.saleId).number,
-                amount: centsToDecimal(row.amount),
-                tip: centsToDecimal(row.tip),
-                method: row.method,
-                state: row.state,
+            const refunds = [
+              ...rows.refunds.map((row) => ({
+                id: row.id,
                 at: row.at,
+                entry: {
+                  kind: "sale",
+                  sale: sale(row.saleId).number,
+                  amount: centsToDecimal(row.amount),
+                  tip: centsToDecimal(row.tip),
+                  method: row.method,
+                  state: row.state,
+                  at: row.at,
+                  yourPart: rolesOf(row),
+                },
+              })),
+              ...rows.billRefunds.map((row) => ({
+                id: row.id,
+                at: row.at,
+                entry: {
+                  kind: "bill_payment",
+                  sale: bill(row.billPaymentId).sale,
+                  amount: centsToDecimal(row.amount),
+                  tip: centsToDecimal(row.tip),
+                  method: bill(row.billPaymentId).method,
+                  state: row.state,
+                  at: row.at,
+                  yourPart: rolesOf(row),
+                },
+              })),
+            ]
+              .sort(byTimeThenId)
+              .map((row) => row.entry);
+            const drawerOpenings = openings.map((row) => {
+              const yourPart: ("opened" | "authorized")[] = [];
+              if (row.personId === person) yourPart.push("opened");
+              if (row.authorizedBy === person) yourPart.push("authorized");
+              return {
+                reason: row.reason,
+                sale:
+                  row.saleId !== null
+                    ? sale(row.saleId).number
+                    : row.billPaymentId !== null
+                      ? bill(row.billPaymentId).sale
+                      : null,
+                at: row.at.toISOString(),
+                viaOverride: row.viaOverride,
                 yourPart,
               };
             });
             return [
               jsonFile("actions.json", {
-                counts: { voids: voids.length, refunds: refunds.length, drawerOpenings: 0 },
+                counts: {
+                  voids: voids.length,
+                  refunds: refunds.length,
+                  drawerOpenings: drawerOpenings.length,
+                },
                 voids,
                 refunds,
-                drawerOpenings: [],
+                drawerOpenings,
               }),
             ];
           };
