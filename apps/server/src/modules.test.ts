@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { BOOKINGS_TABLE_REMOVAL } from "@waitron/bookings";
+import { PERMISSIONS } from "@waitron/identity";
 import type { AlertSource, StaffNoticeSource, WaitronModule } from "@waitron/module";
 import {
   ALL_ALERT_CLAIMS,
   ALL_CLASSIFICATIONS,
+  ALL_MODULE_PERMISSIONS,
   ALL_MODULES,
   VENUE_SERVICE,
   enabledAlertSources,
@@ -14,6 +16,13 @@ import {
 describe("venue-service assembly", () => {
   it("injects the composed contribution through the generic module seat", () => {
     expect(VENUE_SERVICE).toBe(ALL_MODULES.find((module) => module.venueService)?.venueService);
+  });
+});
+
+describe("permission assembly", () => {
+  it("registers no core permission as a module's, so no module floor widens one", () => {
+    const core: readonly string[] = PERMISSIONS;
+    expect(ALL_MODULE_PERMISSIONS.filter((p) => core.includes(p.permission))).toEqual([]);
   });
 });
 

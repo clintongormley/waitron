@@ -14,6 +14,8 @@ export const PERMISSIONS = [
   "catalogue.manage",
   // Assigning or removing the admin role changes who can control every permission. Admin only.
   "person.admin",
+  // Downloads another person's personal data. Admin only.
+  "personal_data.export",
   "layout.configure",
   "venue.view",
   "venue.configure",
