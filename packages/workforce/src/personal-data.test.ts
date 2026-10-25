@@ -20,9 +20,9 @@ import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { shiftSwaps } from "./schema/shift-swaps.js";
-import { shifts } from "./schema/shifts.js";
 import { timeEntries } from "./schema/time-entries.js";
 import {
+  insertDraftShift,
   insertRosterVersion,
   insertTimeEntry,
   seedLocation,
@@ -171,26 +171,10 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     periodEnd: "2026-02-15",
   });
 
-  const shift = async (
-    personId: string,
-    values: {
-      startsAt: string;
-      startsOffsetMinutes: number;
-      endsAt: string;
-      endsOffsetMinutes: number;
-      rosterVersionId: string | null;
-      createdAt: string;
-    },
-  ) => {
-    const [row] = await db
-      .insert(shifts)
-      .values({ personId, locationId, ...values })
-      .returning({ id: shifts.id });
-    return row!.id;
-  };
-
   // Inserted, and recorded (created_at), in the opposite order to their starts.
-  const summer = await shift(marta, {
+  const summer = await insertDraftShift(db, {
+    personId: marta,
+    locationId,
     startsAt: "2026-07-10T16:00:00Z",
     startsOffsetMinutes: 120,
     endsAt: "2026-07-10T22:00:00Z",
@@ -198,7 +182,9 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     rosterVersionId: publishedVersion,
     createdAt: "2025-12-01T08:10:00.000Z",
   });
-  const draft = await shift(marta, {
+  const draft = await insertDraftShift(db, {
+    personId: marta,
+    locationId,
     startsAt: "2026-02-14T03:41:00Z",
     startsOffsetMinutes: 60,
     endsAt: "2026-02-14T11:41:00Z",
@@ -206,7 +192,9 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     rosterVersionId: draftVersion,
     createdAt: "2025-12-15T08:20:00.000Z",
   });
-  await shift(marta, {
+  await insertDraftShift(db, {
+    personId: marta,
+    locationId,
     startsAt: "2026-01-02T00:30:00Z",
     startsOffsetMinutes: -120,
     endsAt: "2026-01-02T08:30:00Z",
@@ -215,7 +203,9 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     createdAt: "2026-01-01T08:40:00.000Z",
   });
 
-  const colleagueEarly = await shift(colleague, {
+  const colleagueEarly = await insertDraftShift(db, {
+    personId: colleague,
+    locationId,
     startsAt: "2026-03-05T02:17:00Z",
     startsOffsetMinutes: 60,
     endsAt: "2026-03-05T09:17:00Z",
@@ -223,7 +213,9 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     rosterVersionId: null,
     createdAt: "2026-02-20T06:59:00.000Z",
   });
-  const colleagueLate = await shift(colleague, {
+  const colleagueLate = await insertDraftShift(db, {
+    personId: colleague,
+    locationId,
     startsAt: "2026-04-11T21:53:00Z",
     startsOffsetMinutes: 120,
     endsAt: "2026-04-12T05:53:00Z",
@@ -231,7 +223,9 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
     rosterVersionId: null,
     createdAt: "2026-03-21T06:58:00.000Z",
   });
-  const colleagueGiveAway = await shift(colleague, {
+  const colleagueGiveAway = await insertDraftShift(db, {
+    personId: colleague,
+    locationId,
     startsAt: "2026-05-16T15:23:00Z",
     startsOffsetMinutes: 120,
     endsAt: "2026-05-16T23:23:00Z",
