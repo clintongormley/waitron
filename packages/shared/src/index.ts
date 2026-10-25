@@ -71,6 +71,12 @@ export {
   TABLE_SEPARATOR,
 } from "./party-name.js";
 export {
+  proposeShortName,
+  SHORT_NAME_MAX,
+  shortNameKey,
+  shortNameLength,
+} from "./table-short-name.js";
+export {
   basisPointsToDecimal,
   decimalToBasisPoints,
   decimalToThousandths,
