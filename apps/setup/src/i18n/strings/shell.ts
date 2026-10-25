@@ -6,6 +6,10 @@ export const shellEn = {
   "shell.first_setup.attempt_uncertain":
     "This assignment may have been used. Resume the saved attempt; do not assign it again.",
   "shell.first_setup.attempt_invalid": "The saved setup cannot be read. Contact support.",
+  "shell.first_setup.start_again_incomplete":
+    "Start again has not finished. Restart the box, then try again.",
+  "shell.first_setup.workspace_unsupported":
+    "This box holds a first setup kept by an older Waitron. Reinstall Waitron on it.",
 
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
@@ -146,6 +150,10 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta asignación puede estar usada. Reanuda el intento guardado; no la asignes de nuevo.",
   "shell.first_setup.attempt_invalid":
     "No se puede leer la configuración guardada. Contacta con soporte.",
+  "shell.first_setup.start_again_incomplete":
+    "«Empezar de nuevo» aún no ha terminado. Reinicia el equipo y vuelve a intentarlo.",
+  "shell.first_setup.workspace_unsupported":
+    "Este equipo guarda una configuración inicial de una versión anterior de Waitron. Reinstala Waitron en él.",
 
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",

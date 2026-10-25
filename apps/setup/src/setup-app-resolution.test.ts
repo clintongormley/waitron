@@ -6,6 +6,7 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import type { FirstSetupInspection } from "./api/first-setup-types.js";
 import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
+import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial, venue, wizardApi } from "../test/first-setup-browser.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
@@ -495,5 +496,73 @@ it.each(["checkable", "uncheckable"] as const)(
       database: "unknown",
       emptyDatabase: false,
     });
+  },
+);
+
+const shellText = (locale: string) => (locale.startsWith("es") ? shellEs : shellEn);
+
+it.each([
+  ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "en-GB"],
+  ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "es-ES"],
+  ["setup.workspace_unsupported", "shell.first_setup.workspace_unsupported", "en-GB"],
+  ["setup.workspace_unsupported", "shell.first_setup.workspace_unsupported", "es-ES"],
+] as const)(
+  "explains a refused Start again's %s (%s) on the repair page in %s",
+  async (code, key, locale) => {
+    const { app } = await mount({
+      intercept(path) {
+        if (path.endsWith("/start-again"))
+          return Response.json({ error: { code, params: {} } }, { status: 409 });
+      },
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+    await userEvent.click(
+      q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+    );
+    await expect
+      .poll(() =>
+        [
+          ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
+        ].map((f) => f.error),
+      )
+      .toContain(shellText(locale)[key]);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "explains an unfinished Start again on the bucket restore screen in %s",
+  async (locale) => {
+    const { api } = wizardApi({
+      intercept(path) {
+        if (path === "/setup-api/restore-bucket")
+          return Response.json(
+            { error: { code: "setup.start_again_incomplete", params: {} } },
+            { status: 409 },
+          );
+      },
+    });
+    const { el: app } = await mountWidget<SetupApp>("setup-app", { api });
+    setLocale(locale);
+    await app.updateComplete;
+    app.shadowRoot!.querySelector("main")!.dispatchEvent(
+      new CustomEvent("bucket-restore-requested", {
+        detail: {
+          request: { kit: "k", environment: "production", oldBoxGone: false, venueConfirmed: null },
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const screen = () =>
+      app.shadowRoot!.querySelector<HTMLElement & { errorMessage?: string }>(
+        "[data-test=screen-restore-bucket]",
+      );
+    await expect.poll(() => screen()?.errorMessage).toBeTypeOf("string");
+    expect(screen()!.errorMessage).toBe(
+      shellText(locale)["shell.first_setup.start_again_incomplete"],
+    );
   },
 );

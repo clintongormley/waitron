@@ -198,6 +198,8 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.attempt_conflict": "shell.first_setup.attempt_conflict",
   "setup.attempt_uncertain": "shell.first_setup.attempt_uncertain",
   "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
+  "setup.start_again_incomplete": "shell.first_setup.start_again_incomplete",
+  "setup.workspace_unsupported": "shell.first_setup.workspace_unsupported",
 };
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
