@@ -1,11 +1,16 @@
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
-import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import {
+  type DurableJsonIo,
+  readDurableHostJson,
+  writeDurableHostJson,
+} from "./durable-host-json.js";
 import "./errors.js";
 
 export const START_AGAIN_NOTE_FILE = "first-setup-start-again.json";
 const NOTE_LIMIT = 4096;
 const KEYS = ["version", "floorMs", "lastName", "module"];
+const MODULE_ID = /^[a-z][a-z0-9-]*$/;
 
 export interface StartAgainNote {
   version: 1;
@@ -28,7 +33,10 @@ function parseNote(value: unknown): StartAgainNote {
     note.version !== 1 ||
     !Number.isSafeInteger(note.floorMs) ||
     typeof note.lastName !== "string" ||
-    typeof note.module !== "string"
+    note.lastName.length < 1 ||
+    note.lastName.length > 64 ||
+    typeof note.module !== "string" ||
+    !MODULE_ID.test(note.module)
   )
     throw new AppError("setup.attempt_invalid", {});
   return {
@@ -48,11 +56,12 @@ export async function readStartAgainNote(stateDir: string): Promise<StartAgainNo
 export async function raiseStartAgainNote(
   stateDir: string,
   next: Omit<StartAgainNote, "version">,
+  io?: DurableJsonIo,
 ): Promise<StartAgainNote> {
   const candidate = parseNote({ version: 1, ...next });
   const current = await readStartAgainNote(stateDir);
   if (current !== null && current.floorMs >= candidate.floorMs) return current;
-  await writeDurableHostJson(join(stateDir, START_AGAIN_NOTE_FILE), candidate, NOTE_LIMIT);
+  await writeDurableHostJson(join(stateDir, START_AGAIN_NOTE_FILE), candidate, NOTE_LIMIT, io);
   return candidate;
 }
 

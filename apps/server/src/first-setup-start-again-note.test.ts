@@ -6,7 +6,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
-import { readModulePreparationHistory, readStartAgainNote } from "@waitron/provisioning";
+import {
+  raiseStartAgainNote,
+  readModulePreparationHistory,
+  readStartAgainNote,
+} from "@waitron/provisioning";
 import {
   EPOCH_MS,
   MINUTE_MS,
@@ -20,6 +24,10 @@ import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
 
+vi.mock("@waitron/provisioning", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/provisioning")>();
+  return { ...actual, raiseStartAgainNote: vi.fn(actual.raiseStartAgainNote) };
+});
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: async () => ({
@@ -51,7 +59,7 @@ afterEach(async () => {
 
 type Host = ReturnType<typeof createFirstSetupModuleHost>;
 
-async function startedAgain() {
+async function abandonedAttempt() {
   const clock = createFakeTimersHourClock();
   const f = await hourFirstFiscalFixture({ clock, database: () => suite.db });
   fixtures.push(f);
@@ -62,18 +70,24 @@ async function startedAgain() {
   const floorMs = EPOCH_MS + (decodeMinuteIdentity(name) + 1) * MINUTE_MS;
   const actions = createFirstSetupResolutionActions({ ...f, host: f.host });
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  const binding = await actions.startAgainFirstSetup({
+  const startRequest = {
     inspectionId: inspected.inspectionId,
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
     register: {
-      kind: "current-master",
-      status: "Consumed",
+      kind: "current-master" as const,
+      status: "Consumed" as const,
       custodian: "Elena",
       reference: f.staged.ref.bindingDigest,
       consultedAt: "2026-10-16T12:20:00.000Z",
     },
-  });
+  };
+  return { f, clock, name, floorMs, actions, startRequest };
+}
+
+async function startedAgain() {
+  const { f, clock, name, floorMs, actions, startRequest } = await abandonedAttempt();
+  const binding = await actions.startAgainFirstSetup(startRequest);
   const next = createFirstSetupModuleHost({
     ...binding,
     modules: f.modules,
@@ -207,4 +221,34 @@ it("an attempt naming a module is refused when the host was given no modules to 
     ),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await readStartAgainNote(folders.stateDir)).toBeNull();
+});
+
+it("two Start again requests at once raise the note once", async () => {
+  const { f, name, floorMs, actions, startRequest } = await abandonedAttempt();
+  const exclusion = f.host.resolution.withVenueExclusion.bind(f.host.resolution);
+  let arrived = 0;
+  let releaseBoth!: () => void;
+  const bothArrived = new Promise<void>((resolve) => (releaseBoth = resolve));
+  vi.spyOn(f.host.resolution, "withVenueExclusion").mockImplementation(async (run) => {
+    arrived += 1;
+    if (arrived === 2) releaseBoth();
+    await bothArrived;
+    return exclusion(run);
+  });
+  vi.mocked(raiseStartAgainNote).mockClear();
+  const results = await Promise.allSettled([
+    actions.startAgainFirstSetup(startRequest),
+    actions.startAgainFirstSetup(startRequest),
+  ]);
+  expect(arrived).toBe(2);
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  const refusal = results.find((result) => result.status === "rejected");
+  expect(refusal?.reason).toMatchObject({ code: "setup.attempt_uncertain" });
+  expect(vi.mocked(raiseStartAgainNote)).toHaveBeenCalledTimes(1);
+  expect(await readStartAgainNote(f.stateDir)).toEqual({
+    version: 1,
+    floorMs,
+    lastName: name,
+    module: "fiscal-verifactu",
+  });
 });
