@@ -340,15 +340,25 @@ export class TillFloorScreen extends LitElement {
     stepChipStyles,
     helpAnchorStyles,
     css`
+      /* Isolated so nothing raised inside the Floor, the Ready bar included, paints over an overlay
+         the shell lays over it; at least the scrolling area's height so the bar sits at its foot. */
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        isolation: isolate;
+        min-height: 100%;
       }
 
       .screen {
         display: flex;
+        flex: 1;
         flex-direction: column;
         gap: var(--wt-space-4);
         padding: var(--wt-space-4);
+      }
+
+      .screen:has(> .ready-bar) {
+        padding-block-end: 0;
       }
 
       @media ${unsafeCSS(PHONE_WIDTH)} {
@@ -801,14 +811,30 @@ export class TillFloorScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      /* Above the cards' raised parts (z-index 1), which scroll under it. */
       .ready-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
         display: flex;
         align-items: center;
         gap: var(--wt-space-2);
+        margin-block-start: auto;
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-success);
         border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
+        background: var(--wt-color-surface-raised);
+      }
+
+      .ready-bar h2,
+      .ready-bar [data-ready-open],
+      .ready-tables wt-button {
+        flex: none;
+        white-space: nowrap;
+      }
+
+      .ready-tables wt-button::part(button) {
+        border-radius: var(--wt-radius-full);
       }
 
       .ready-bar h2 {

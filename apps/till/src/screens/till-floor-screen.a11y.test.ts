@@ -724,6 +724,51 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     });
   }
 
+  for (const locale of ["en", "es"]) {
+    for (const width of [390, 1024]) {
+      it(`has no violations with the Ready bar, on the list, in ${locale} at ${width} px`, async () => {
+        const [owing, paid] = partyTables as [TableState, TableState];
+        const readyAt = (table: TableState): TableState => ({
+          ...table,
+          signals: [
+            { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+          ],
+        });
+        const previous = currentLocale();
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        try {
+          setLocale(locale);
+          await page.viewport(width, 844);
+          const { el, host } = await mountWidget<TillFloorScreen>(
+            "till-floor-screen",
+            { zones, tables: [readyAt(owing), readyAt(paid)], handheld: true },
+            theme,
+          );
+          const bar = el.shadowRoot!.querySelector<HTMLElement>("[data-ready-bar]")!;
+          const entries = [...bar.querySelectorAll<HTMLElement>("[data-ready-table]")];
+          expect(entries).toHaveLength(2);
+          const native = (button: HTMLElement) => button.shadowRoot!.querySelector("button")!;
+          for (const entry of entries) {
+            await expect
+              .element(native(entry))
+              .toHaveAccessibleName(entry.textContent!.replace(/\s+/g, " ").trim());
+          }
+          const open = bar.querySelector<HTMLElement>("[data-ready-open]")!;
+          const first = entries[0]!.textContent!.trim().split(" · ")[0]!;
+          await expect
+            .element(native(open))
+            .toHaveAccessibleName(
+              (locale === "es" ? es : en)["floor.ready_bar_open_label"].replace("{table}", first),
+            );
+          await expectNoA11yViolations(host);
+        } finally {
+          setLocale(previous);
+          await page.viewport(viewport.width, viewport.height);
+        }
+      });
+    }
+  }
+
   it("has no violations with an edge mark at 390 px", async () => {
     const [owing] = partyTables as [TableState];
     const names = ["Bar", "Upstairs lounge", "Garden terrace", "Patio", "Private room"];

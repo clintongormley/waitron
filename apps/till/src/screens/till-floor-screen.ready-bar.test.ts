@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { page } from "vitest/browser";
+import {
+  cleanupWidgets,
+  mountWidget,
+  pageAt,
+  resetPage,
+  type Theme,
+} from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
@@ -193,4 +200,148 @@ describe("till-floor-screen: the Ready bar", () => {
       expect(nameOf(button)).not.toMatch(/listos/i);
     }
   });
+});
+
+/** `n` tables, the first `readyCount` of them with food ready, named Mesa 1 to Mesa n. */
+const numbered = (n: number, readyCount: number): TableState[] =>
+  Array.from({ length: n }, (_, i) =>
+    table({
+      id: `t${i + 1}`,
+      label: `Mesa ${i + 1}`,
+      party: party({ id: `v${i + 1}`, displayName: `Mesa ${i + 1}`, tableIds: [`t${i + 1}`] }),
+      signals: i < readyCount ? [ready(["bar", "Bar", 2])] : [],
+    }),
+  );
+
+interface InShell {
+  floor: TillFloorScreen;
+  area: HTMLElement;
+  overlay: HTMLElement;
+}
+
+/**
+ * The floor inside a copy of the shell's region (`till-shell.ts` `.region`, `.body`, `.drill`): a
+ * positioned column of a fixed height whose scrolling area holds the floor, and an overlay over it,
+ * hidden until a case opens it.
+ */
+async function inShell(tables: TableState[], theme: Theme = "light"): Promise<InShell> {
+  const { el: region } = await mountWidget<HTMLDivElement>("div", {}, theme);
+  region.style.cssText = "position: relative; display: flex; flex-direction: column; height: 600px";
+  const area = document.createElement("div");
+  area.style.cssText = "flex: 1; min-height: 0; overflow: auto";
+  const overlay = document.createElement("div");
+  overlay.hidden = true;
+  // A colour nothing in the bar is painted with, so the painted check cannot pass by accident.
+  overlay.style.cssText =
+    "position: absolute; inset: 0; overflow: auto; background: var(--wt-color-warning)";
+  const floor = document.createElement("till-floor-screen") as TillFloorScreen;
+  Object.assign(floor, { zones: [zone("z1", "Comedor", 0)], tables, now, handheld: true });
+  area.append(floor);
+  region.append(area, overlay);
+  await floor.updateComplete;
+  return { floor, area, overlay };
+}
+
+const rgb = (colour: string) => colour.match(/\d+/g)!.slice(0, 3).map(Number);
+const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
+
+/** The colour painted at page point (x, y), read from a real screenshot of `within`. */
+async function paintedAt(within: HTMLElement, x: number, y: number): Promise<number[]> {
+  // With `save: false` the screenshot comes back as the base64 string itself.
+  const shot: unknown = await page.screenshot({ element: within, base64: true, save: false });
+  const image = new Image();
+  image.src = `data:image/png;base64,${shot as string}`;
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const box = within.getBoundingClientRect();
+  const k = image.width / box.width;
+  return [
+    ...context
+      .getImageData(Math.round((x - box.left) * k), Math.round((y - box.top) * k), 1, 1)
+      .data.slice(0, 3),
+  ];
+}
+
+/** `calc(var(--wt-tap-min) + 2 * var(--wt-space-3))` in px, read from the tokens in force. */
+function oneLine(inside: HTMLElement): number {
+  const probe = document.createElement("div");
+  probe.style.height = "calc(var(--wt-tap-min) + 2 * var(--wt-space-3))";
+  inside.append(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return height;
+}
+
+const frames: [number, number][] = [
+  [390, 844],
+  [1024, 768],
+];
+
+describe("till-floor-screen: where the Ready bar sits", () => {
+  afterEach(resetPage);
+
+  for (const [width, height] of frames) {
+    it(`sits at the foot of the scrolling area, with two tables or forty (${width} px)`, async () => {
+      await pageAt(width, height);
+      for (const tables of [
+        [mesa2(), mesa8()],
+        [mesa2(), mesa8(), ...numbered(40, 0).slice(2)],
+      ]) {
+        const { floor, area } = await inShell(tables);
+        const foot = area.getBoundingClientRect().bottom;
+        expect(Math.abs(bar(floor)!.getBoundingClientRect().bottom - foot)).toBeLessThanOrEqual(1);
+        area.scrollTop = area.scrollHeight;
+        const cards = floor.shadowRoot!.querySelectorAll<HTMLElement>(".grid [data-table]");
+        expect(cards).toHaveLength(tables.length);
+        const barBox = bar(floor)!.getBoundingClientRect();
+        expect(Math.abs(barBox.bottom - foot)).toBeLessThanOrEqual(1);
+        expect(cards[cards.length - 1]!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          barBox.top,
+        );
+        cleanupWidgets();
+      }
+    });
+
+    it(`fits one line (${width} px)`, async () => {
+      await pageAt(width, height);
+      const { floor, area } = await inShell(numbered(8, 8));
+      const section = bar(floor)!;
+      expect(section.querySelectorAll("[data-ready-table]")).toHaveLength(8);
+      expect(section.getBoundingClientRect().height).toBeLessThanOrEqual(oneLine(area));
+      const inside = area.getBoundingClientRect();
+      for (const part of [section.querySelector("h2")!, openButton(floor)]) {
+        const box = part.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(inside.left);
+        expect(box.right).toBeLessThanOrEqual(inside.right);
+      }
+      const tops = [...section.querySelectorAll("[data-ready-table]")].map(
+        (entry) => entry.getBoundingClientRect().top,
+      );
+      expect(new Set(tops).size).toBe(1);
+      // Eight fit side by side at 1024 px; on a phone they do not, and the strip scrolls instead.
+      const strip = section.querySelector<HTMLElement>(".ready-tables")!;
+      if (width === 390) expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+    });
+
+    it(`is drawn under an overlay (${width} px)`, async () => {
+      await pageAt(width, height);
+      const { floor, area, overlay } = await inShell([
+        mesa2(),
+        mesa8(),
+        ...numbered(40, 0).slice(2),
+      ]);
+      overlay.hidden = false;
+      const box = bar(floor)!.getBoundingClientRect();
+      const centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      // The point read must be on screen, inside the region, or the screenshot has no pixel there.
+      expect(centre.y).toBeLessThan(area.getBoundingClientRect().bottom);
+      const painted = await paintedAt(area.parentElement!, centre.x, centre.y);
+      expect(distance(painted, rgb(getComputedStyle(overlay).backgroundColor))).toBeLessThan(4);
+      expect(getComputedStyle(floor).isolation).toBe("isolate");
+    });
+  }
 });
