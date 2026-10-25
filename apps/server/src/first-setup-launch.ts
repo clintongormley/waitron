@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { AppError } from "@waitron/shared";
 import { join } from "node:path";
 import { DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
@@ -105,6 +106,7 @@ export async function startServerOrFirstSetupResolution(
         const selectedEnv = await loadBoxEnv(selectedBase, admission.roots.stateDir);
         return (seams.startServer ?? startServer)(selectedEnv, selectedBase);
       });
+    if (admission.kind === "refused") throw new AppError(admission.code, {});
     return listen(admission.app, options);
   };
   active = await launch();

@@ -8,6 +8,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import {
   assertNoLegacyFirstSetupWorkspace,
   canonicalFirstSetupDirectory,
+  finishStartAgainDeletion,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -49,6 +50,8 @@ export async function resolveFirstSetupEntry(
   requestRestart?: () => void,
   log: Logger = () => {},
 ) {
+  const refused = await refusedAtStart(roots);
+  if (refused !== undefined) return refused;
   const backup = await resolveFirstSetupBackupEntry(roots);
   if (backup.kind === "repair")
     return {
@@ -71,6 +74,30 @@ export async function resolveFirstSetupEntry(
     };
   }
   return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log);
+}
+
+const START_REFUSALS = ["setup.workspace_unsupported", "setup.start_again_incomplete"] as const;
+
+/** Runs before A731's entry, which would otherwise serve its repair page from a half-deleted attempt. */
+async function refusedAtStart(roots: FirstSetupRoots) {
+  let canonical: FirstSetupRoots;
+  try {
+    canonical = {
+      venueDir: await canonicalFirstSetupDirectory(roots.venueDir),
+      stateDir: await canonicalFirstSetupDirectory(roots.stateDir),
+    };
+  } catch {
+    return undefined;
+  }
+  try {
+    await assertNoLegacyFirstSetupWorkspace(canonical);
+    await finishStartAgainDeletion(canonical);
+  } catch (error) {
+    const code = error instanceof AppError ? error.code : undefined;
+    const refusal = START_REFUSALS.find((candidate) => candidate === code);
+    if (refusal !== undefined) return { kind: "refused" as const, code: refusal, roots: canonical };
+  }
+  return undefined;
 }
 
 async function resolveLegacyFirstSetupEntry(

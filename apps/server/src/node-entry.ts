@@ -415,6 +415,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
+  if (admission.kind === "refused") throw new AppError(admission.code, {});
   const selected = !moved ? deps : rooted;
   return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }

@@ -8,6 +8,7 @@ import {
   assertOtherFirstSetupAllowed,
   assertFirstSetupBackupBootTarget,
   assertNoLegacyFirstSetupWorkspace,
+  assertNoStartAgainDeletion,
   readTenantIdentities,
 } from "@waitron/provisioning";
 import {
@@ -881,6 +882,7 @@ async function bootServer(
 
   await assertFirstSetupBackupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
   await assertNoLegacyFirstSetupWorkspace({ venueDir: config.venueDir, stateDir: config.stateDir });
+  await assertNoStartAgainDeletion(config.venueDir);
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({

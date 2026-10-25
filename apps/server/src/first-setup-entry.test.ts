@@ -2,15 +2,27 @@ import { CORE_MIGRATIONS, tenants, openVenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import {
+  START_AGAIN_MARKER_FILE,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
+} from "@waitron/provisioning";
 import { startServer } from "./boot.js";
 import { writeValidated, validateDatabaseEntries } from "./restore.js";
 import { runStagedRestore } from "./restore-request.js";
 import { runStagedReset } from "./reset-request.js";
 import { freePorts } from "./testing/free-ports.js";
+import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
+
+vi.mock("./first-setup-backup-entry.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./first-setup-backup-entry.js")>();
+  return { ...actual, resolveFirstSetupBackupEntry: vi.fn(actual.resolveFirstSetupBackupEntry) };
+});
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
 async function fixture() {
@@ -377,4 +389,72 @@ it.each([
       },
     ),
   ).rejects.toMatchObject({ code: "restore.unexpected_entry" });
+});
+
+async function markedDeletion() {
+  const root = await mkdtemp(join(tmpdir(), "first-entry-marked-"));
+  dirs.push(root);
+  const venueDir = join(root, "venue");
+  const stateDir = join(root, "state");
+  await mkdir(venueDir);
+  await mkdir(stateDir);
+  await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
+  await writeFile(join(venueDir, "first-setup-claim.json"), '{"synthetic":"claim"}');
+  const roots = { venueDir, stateDir };
+  await writeStartAgainMarker(
+    roots,
+    await startAgainMarkerFor(roots, {
+      attemptId: "33333333-3333-4333-8333-333333333333",
+      frozenDigest: "a".repeat(64),
+    }),
+  );
+  return { root, ...roots };
+}
+const gone = (path: string) => expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+
+it("a box holding a pre-A1042 archive is refused setup.workspace_unsupported before A731's entry runs", async () => {
+  const f = await fixture();
+  await writeFile(join(f.venueDir, "first-setup-retirement.json"), '{"version":1}');
+  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
+  const entry = await resolveFirstSetupEntry(f, {});
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.workspace_unsupported" });
+  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
+});
+
+it("an interrupted Start again is finished and setup is served", async () => {
+  const f = await markedDeletion();
+  const entry = await resolveFirstSetupEntry(f, {});
+  expect(entry.kind).toBe("normal");
+  await gone(join(f.stateDir, "first-setup.json"));
+  await gone(join(f.venueDir, "first-setup-claim.json"));
+  await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
+});
+
+it("an unfinishable deletion is refused setup.start_again_incomplete and nothing is deleted", async () => {
+  const f = await markedDeletion();
+  await writeFile(join(f.stateDir, "first-setup.json"), '{"changed":"after the marker"}');
+  vi.mocked(resolveFirstSetupBackupEntry).mockClear();
+  const entry = await resolveFirstSetupEntry(f, {});
+  expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
+  expect(resolveFirstSetupBackupEntry).not.toHaveBeenCalled();
+  expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+    '{"changed":"after the marker"}',
+  );
+  expect(await readFile(join(f.venueDir, "first-setup-claim.json"), "utf8")).toBe(
+    '{"synthetic":"claim"}',
+  );
+  expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
+});
+
+it("folders reached through a symbolic link still finish an interrupted Start again", async () => {
+  const f = await markedDeletion();
+  const link = `${f.root}-link`;
+  await symlink(f.root, link);
+  dirs.push(link);
+  const links = { venueDir: join(link, "venue"), stateDir: join(link, "state") };
+  const entry = await resolveFirstSetupEntry(links, {});
+  expect(entry.kind).toBe("normal");
+  await gone(join(f.stateDir, "first-setup.json"));
+  await gone(join(f.venueDir, "first-setup-claim.json"));
+  await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
 });
