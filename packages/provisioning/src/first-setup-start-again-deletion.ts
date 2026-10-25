@@ -59,9 +59,12 @@ export interface StartAgainMarker {
   wal: Record<(typeof WAL_FILES)[number], StartAgainFingerprint | null>;
 }
 
-const incomplete = () => new AppError("setup.start_again_incomplete", {});
+/** `reason` is log-only: a check's name and a path, never a file's contents. */
+const incomplete = (reason: string) => new AppError("setup.start_again_incomplete", {}, { reason });
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
+const codeOf = (error: unknown) =>
+  object(error) && error.code !== undefined ? String(error.code) : "unknown";
 const exactKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 const missing = (error: unknown) => object(error) && error.code === "ENOENT";
@@ -98,13 +101,13 @@ function fingerprint(value: unknown): StartAgainFingerprint {
     typeof value.sha256 !== "string" ||
     !HASH.test(value.sha256)
   )
-    throw incomplete();
+    throw incomplete("marker damaged");
   return { size: value.size as number, sha256: value.sha256 };
 }
 
 function parseMarker(value: unknown): StartAgainMarker {
   const keys = ["version", "attemptId", "frozenDigest", "venueDir", "stateDir", "files", "wal"];
-  if (!object(value) || !exactKeys(value, keys)) throw incomplete();
+  if (!object(value) || !exactKeys(value, keys)) throw incomplete("marker damaged");
   const { version, attemptId, frozenDigest, venueDir, stateDir, files, wal } = value;
   if (
     version !== 1 ||
@@ -120,10 +123,11 @@ function parseMarker(value: unknown): StartAgainMarker {
     !object(wal) ||
     !exactKeys(wal, WAL_FILES)
   )
-    throw incomplete();
+    throw incomplete("marker damaged");
   const seen = new Set<string>();
   const parsed = files.map((entry: unknown): StartAgainMarkedFile => {
-    if (!object(entry) || !exactKeys(entry, ["root", "name", "size", "sha256"])) throw incomplete();
+    if (!object(entry) || !exactKeys(entry, ["root", "name", "size", "sha256"]))
+      throw incomplete("marker damaged");
     const { root, name } = entry;
     if (
       (root !== "venue" && root !== "state") ||
@@ -131,7 +135,7 @@ function parseMarker(value: unknown): StartAgainMarker {
       !listed(root, name) ||
       seen.has(`${root}:${name}`)
     )
-      throw incomplete();
+      throw incomplete("marker damaged");
     seen.add(`${root}:${name}`);
     return { root, name, ...fingerprint({ size: entry.size, sha256: entry.sha256 }) };
   });
@@ -169,8 +173,8 @@ async function info(path: string) {
   }
 }
 const present = async (path: string) => (await info(path)) !== null;
-const same = (a: StartAgainFingerprint | null | undefined, b: StartAgainFingerprint) =>
-  a !== null && a !== undefined && a.size === b.size && a.sha256 === b.sha256;
+const same = (a: StartAgainFingerprint | null, b: StartAgainFingerprint) =>
+  a !== null && a.size === b.size && a.sha256 === b.sha256;
 
 type Item =
   | { kind: "file"; root: Root; name: string; path: string }
@@ -180,12 +184,14 @@ type Item =
 async function entries(path: string): Promise<{ name: string; folder: boolean }[] | null> {
   const folder = await info(path);
   if (folder === null) return null;
-  if (!folder.isDirectory() || folder.isSymbolicLink()) throw incomplete();
+  if (!folder.isDirectory() || folder.isSymbolicLink())
+    throw incomplete(`layout unexpected: ${path}`);
   const names = (await readdir(path)).sort();
   const result: { name: string; folder: boolean }[] = [];
   for (const name of names) {
     const entry = await lstat(join(path, name));
-    if (entry.isSymbolicLink() || !(entry.isFile() || entry.isDirectory())) throw incomplete();
+    if (entry.isSymbolicLink() || !(entry.isFile() || entry.isDirectory()))
+      throw incomplete(`layout unexpected: ${join(path, name)}`);
     result.push({ name, folder: entry.isDirectory() });
   }
   return result;
@@ -198,7 +204,7 @@ async function itemsOnDisk(roots: Roots): Promise<Item[]> {
     const path = join(root === "venue" ? roots.venueDir : roots.stateDir, name);
     const found = await info(path);
     if (found === null) return;
-    if (!found.isFile() || found.isSymbolicLink()) throw incomplete();
+    if (!found.isFile() || found.isSymbolicLink()) throw incomplete(`layout unexpected: ${path}`);
     items.push({ kind: "file", root, name, path });
   };
   const filesIn = async (relative: string, allowFolders: boolean) => {
@@ -206,7 +212,7 @@ async function itemsOnDisk(roots: Roots): Promise<Item[]> {
     if (found === null) return null;
     for (const entry of found) {
       if (entry.folder) {
-        if (!allowFolders) throw incomplete();
+        if (!allowFolders) throw incomplete(`layout unexpected: ${relative}/${entry.name}`);
       } else await file("state", `${relative}/${entry.name}`);
     }
     return found;
@@ -225,11 +231,12 @@ async function itemsOnDisk(roots: Roots): Promise<Item[]> {
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
     for (const record of records) {
-      if (!record.folder || !isUuid(record.name)) throw incomplete();
+      if (!record.folder || !isUuid(record.name))
+        throw incomplete(`layout unexpected: ${RECORDS}/${record.name}`);
       const relative = `${RECORDS}/${record.name}`;
       const inside = (await entries(join(roots.stateDir, relative)))!;
       for (const step of inside.filter((entry) => entry.folder)) {
-        if (!STEP.test(step.name)) throw incomplete();
+        if (!STEP.test(step.name)) throw incomplete(`layout unexpected: ${relative}/${step.name}`);
         await filesIn(`${relative}/${step.name}`, false);
         items.push({ kind: "folder", path: join(roots.stateDir, relative, step.name) });
       }
@@ -295,13 +302,14 @@ export async function readStartAgainMarker(venueDir: string): Promise<StartAgain
   try {
     value = await readDurableHostJson(join(venueDir, START_AGAIN_MARKER_FILE), MARKER_LIMIT);
   } catch {
-    throw incomplete();
+    throw incomplete("marker unreadable");
   }
   return value === null ? null : parseMarker(value);
 }
 
 export async function assertNoStartAgainDeletion(venueDir: string): Promise<void> {
-  if (await present(join(venueDir, START_AGAIN_MARKER_FILE)).catch(() => true)) throw incomplete();
+  if (await present(join(venueDir, START_AGAIN_MARKER_FILE)).catch(() => true))
+    throw incomplete("a Start again deletion is pending");
 }
 
 export async function writeStartAgainMarker(roots: Roots, marker: StartAgainMarker): Promise<void> {
@@ -309,7 +317,7 @@ export async function writeStartAgainMarker(roots: Roots, marker: StartAgainMark
   const value = parseMarker(marker);
   const canonical = await canonicalRoots(roots);
   if (value.venueDir !== canonical.venueDir || value.stateDir !== canonical.stateDir)
-    throw incomplete();
+    throw incomplete("marker folders differ");
   await assertNoStartAgainDeletion(canonical.venueDir);
   await writeDurableHostJson(
     join(canonical.venueDir, START_AGAIN_MARKER_FILE),
@@ -330,16 +338,19 @@ export async function deleteMarkedAttempt(
   const value = parseMarker(marker);
   const canonical = await canonicalRoots(roots);
   if (value.venueDir !== canonical.venueDir || value.stateDir !== canonical.stateDir)
-    throw incomplete();
+    throw incomplete("marker folders differ");
   const named = new Set(value.files.map((entry) => `${entry.root}:${entry.name}`));
+  let current = "";
   try {
     for (const item of await itemsOnDisk(canonical)) {
+      current = item.path;
       if (item.kind === "folder") await remove(item.path, "folder");
       else if (item.kind === "side" || named.has(`${item.root}:${item.name}`))
         await remove(item.path, "file");
     }
-  } catch {
-    throw incomplete();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw incomplete(`deletion failed: ${codeOf(error)} ${current}`);
   }
 }
 
@@ -352,28 +363,34 @@ export async function finishStartAgainDeletion(roots: Roots): Promise<void> {
     const marker = await readStartAgainMarker(canonical.venueDir);
     if (marker === null) return;
     if (marker.venueDir !== canonical.venueDir || marker.stateDir !== canonical.stateDir)
-      throw incomplete();
+      throw incomplete("marker folders differ");
     for (const root of ["state", "venue"] as const)
       for (const name of REFUSED[root])
         if (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
-          throw incomplete();
+          throw incomplete(`refused artifact present: ${root}/${name}`);
     const recorded = new Map(marker.files.map((entry) => [`${entry.root}:${entry.name}`, entry]));
-    for (const item of await itemsOnDisk(canonical))
-      if (
-        item.kind === "file" &&
-        !same(recorded.get(`${item.root}:${item.name}`), await sha256(item.path))
-      )
-        throw incomplete();
+    for (const item of await itemsOnDisk(canonical)) {
+      if (item.kind !== "file") continue;
+      const expected = recorded.get(`${item.root}:${item.name}`);
+      if (expected === undefined) throw incomplete(`unlisted file: ${item.root}/${item.name}`);
+      if (!same(expected, await sha256(item.path)))
+        throw incomplete(`size or hash differs: ${item.root}/${item.name}`);
+    }
     for (const name of WAL_FILES) {
       const path = join(canonical.venueDir, name);
       if (!(await present(path))) continue;
       const actual = await sha256(path);
-      if (actual.size !== 0 && !same(marker.wal[name], actual)) throw incomplete();
+      if (actual.size !== 0 && !same(marker.wal[name], actual))
+        throw incomplete(`unexpected -wal: venue/${name}`);
     }
     await deleteMarkedAttempt(canonical, marker);
     await removeAndSync(join(canonical.venueDir, START_AGAIN_MARKER_FILE), "file");
   } catch (error) {
-    throw error instanceof AppError ? error : incomplete();
+    throw error instanceof AppError
+      ? error
+      : incomplete(
+          `check failed: ${codeOf(error)}${object(error) && typeof error.path === "string" ? ` ${error.path}` : ""}`,
+        );
   } finally {
     hold.release();
   }

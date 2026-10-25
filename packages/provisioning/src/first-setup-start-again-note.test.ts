@@ -515,17 +515,6 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
     (roots) => writeFile(join(roots.venueDir, "venue.db"), "main databasf"),
   ],
   [
-    "beside a newly placed venue.db the marker does not name",
-    async (roots) => {
-      await deleteMarkedAttempt(
-        roots,
-        (await readStartAgainMarker(roots.venueDir))!,
-        cutAt(2),
-      ).catch(() => undefined);
-      await writeFile(join(roots.venueDir, "venue.db"), "a restored database");
-    },
-  ],
-  [
     "beside a -wal that is neither empty nor the recorded bytes",
     (roots) => writeFile(join(roots.venueDir, "venue.db-wal"), "x"),
   ],
@@ -677,7 +666,10 @@ it("a pending deletion beside a folder it cannot read is refused, and nothing is
   const documents = join(roots.stateDir, "first-fiscal-documents");
   await fs.chmod(documents, 0o000);
   try {
-    await expect(finishStartAgainDeletion(roots)).rejects.toMatchObject(incomplete);
+    await expect(finishStartAgainDeletion(roots)).rejects.toMatchObject({
+      ...incomplete,
+      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "first-fiscal-documents")}`,
+    });
   } finally {
     await fs.chmod(documents, 0o700);
   }
@@ -784,4 +776,72 @@ it.each<[string, unknown]>([
   const base = await stateDir();
   await writeFile(join(base, START_AGAIN_MARKER_FILE), JSON.stringify(value));
   await expect(readStartAgainMarker(base)).rejects.toMatchObject(incomplete);
+});
+
+it.each([
+  ["placed", true],
+  ["not placed", false],
+])(
+  "an attempt whose marker names no venue.db: a venue.db %s after the marker",
+  async (_name, placed) => {
+    const roots = await attemptFolders(
+      { "first-setup-claim.json": "{}" },
+      { "first-setup.json": "state" },
+    );
+    const marker = await marked(roots);
+    expect(marker.files.some((entry) => entry.name === "venue.db")).toBe(false);
+    if (!placed) {
+      await finishStartAgainDeletion(roots);
+      await expectOnlyKept(roots);
+      return;
+    }
+    await writeFile(join(roots.venueDir, "venue.db"), "a restored database");
+    const before = await snapshot(roots);
+    await expect(finishStartAgainDeletion(roots)).rejects.toMatchObject({
+      ...incomplete,
+      reason: "unlisted file: venue/venue.db",
+    });
+    expect(await snapshot(roots)).toEqual(before);
+  },
+);
+
+it("a refusal names the check that failed, in its log-only reason", async () => {
+  const roots = await attemptFolders();
+  await marked(roots);
+  await writeFile(join(roots.venueDir, "venue.db-wal"), "x");
+  await expect(finishStartAgainDeletion(roots)).rejects.toMatchObject({
+    ...incomplete,
+    reason: "unexpected -wal: venue/venue.db-wal",
+  });
+  await fs.unlink(join(roots.venueDir, "venue.db-wal"));
+  await writeFile(join(roots.venueDir, "venue.db"), "main databasf");
+  const error: unknown = await finishStartAgainDeletion(roots).catch((caught: unknown) => caught);
+  expect(error).toMatchObject({ ...incomplete, reason: "size or hash differs: venue/venue.db" });
+  expect(JSON.stringify(error)).not.toContain("reason");
+});
+
+it("a deletion that throws names the error's code and path in its reason", async () => {
+  const roots = await attemptFolders();
+  const marker = await marked(roots);
+  const venue = await fs.realpath(roots.venueDir);
+  const refuse = async () => {
+    throw Object.assign(new Error("refused"), { code: "EACCES" });
+  };
+  await expect(deleteMarkedAttempt(roots, marker, refuse)).rejects.toMatchObject({
+    ...incomplete,
+    reason: `deletion failed: EACCES ${join(venue, "venue.db")}`,
+  });
+});
+
+it("a deletion that meets an unexpected layout names it, and deletes nothing", async () => {
+  const roots = await attemptFolders();
+  const marker = await marked(roots);
+  const link = join(roots.stateDir, "first-fiscal-documents", "link.json");
+  await symlink(join(roots.stateDir, "first-setup.json"), link);
+  const before = await snapshot(roots);
+  await expect(deleteMarkedAttempt(roots, marker)).rejects.toMatchObject({
+    ...incomplete,
+    reason: `layout unexpected: ${join(await fs.realpath(roots.stateDir), "first-fiscal-documents", "link.json")}`,
+  });
+  expect(await snapshot(roots)).toEqual(before);
 });
