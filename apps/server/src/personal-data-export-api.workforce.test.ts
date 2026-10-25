@@ -5,6 +5,8 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
+  billPaymentRefunds,
+  billPayments,
   drawerOpens,
   invoiceSeries,
   locations,
@@ -14,6 +16,7 @@ import {
   tenderRefunds,
   tenders,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
@@ -109,6 +112,9 @@ const COLLEAGUE = {
   refundedAt: "2026-05-12T20:31:00.000Z",
   drawerSale: { code: "TA", number: 96, total: 1975 },
   drawerOpenedAt: "2026-05-13T13:47:00.000Z",
+  billSale: { code: "TB", number: 38, total: 7458 },
+  billRefundAmountCents: 3197,
+  billRefundedAt: "2026-05-16T21:52:00.000Z",
 };
 const MARTA_ACTIONS = {
   voidSale: { code: "TA", number: 41, total: 2468 },
@@ -118,6 +124,9 @@ const MARTA_ACTIONS = {
   refundedAt: "2026-05-06T19:44:00.000Z",
   drawerSale: { code: "TA", number: 63, total: 4091 },
   drawerOpenedAt: "2026-05-09T12:34:56.000Z",
+  billSale: { code: "TB", number: 27, total: 5321 },
+  billRefundAmountCents: 2864,
+  billRefundedAt: "2026-05-15T18:03:00.000Z",
 };
 const ADMIN = { name: "Ana Admin", email: "ana.admin@example.test" };
 const MANAGER = { name: "Luis Manager", email: "luis.manager@example.test" };
@@ -149,6 +158,9 @@ const MARTA_VALUES: [file: string, value: string][] = [
   ["actions.json", MARTA_ACTIONS.refundedAt],
   ["actions.json", `"sale": "TA/63"`],
   ["actions.json", MARTA_ACTIONS.drawerOpenedAt],
+  ["actions.json", `"sale": "TB/27"`],
+  ["actions.json", '"amount": "28.64"'],
+  ["actions.json", MARTA_ACTIONS.billRefundedAt],
 ];
 
 /** The colleague's values in the same places as Marta's. */
@@ -176,6 +188,9 @@ const COLLEAGUE_VALUES = [
   COLLEAGUE.refundedAt,
   formatInvoiceNumber(COLLEAGUE.drawerSale.code, COLLEAGUE.drawerSale.number),
   COLLEAGUE.drawerOpenedAt,
+  formatInvoiceNumber(COLLEAGUE.billSale.code, COLLEAGUE.billSale.number),
+  (COLLEAGUE.billRefundAmountCents / 100).toFixed(2),
+  COLLEAGUE.billRefundedAt,
 ];
 
 const logger = vi.fn();
@@ -546,8 +561,8 @@ beforeEach(async () => {
 type Sale = { code: string; number: number; total: number };
 
 /**
- * Marta's sale void, refund and drawer opening, and the colleague's, each on a sale of its own.
- * Marta's refund is authorised by the colleague and the colleague's by the manager.
+ * Marta's sale void, refund, drawer opening and bill-payment refund, and the colleague's, each on a
+ * sale of its own. Marta's refunds are authorised by the colleague and the colleague's by the manager.
  */
 async function seedActions(colleague: string): Promise<void> {
   const { deviceId } = await seedDevice(suite.db, { locationId });
@@ -559,7 +574,7 @@ async function seedActions(colleague: string): Promise<void> {
       .returning({ id: invoiceSeries.id });
     series[code] = row!.id;
   }
-  const sale = async (s: Sale) => {
+  const sale = async (s: Sale, workingOrderId?: string) => {
     const [row] = await suite.db
       .insert(sales)
       .values({
@@ -576,6 +591,7 @@ async function seedActions(colleague: string): Promise<void> {
         invoiceLocales: ["es"],
         fiscalBackend: "none",
         fiscalState: "not_applicable",
+        ...(workingOrderId === undefined ? {} : { workingOrderId }),
       })
       .returning({ id: sales.id });
     const [tender] = await suite.db
@@ -629,6 +645,43 @@ async function seedActions(colleague: string): Promise<void> {
       deviceId,
       saleId: drawerSale.saleId,
       openedAt: new Date(a.drawerOpenedAt),
+    });
+    const [order] = await suite.db
+      .insert(workingOrders)
+      .values({ source: "dashboard", locationId, nodeId: NODE_ID, orderNumber: a.billSale.number })
+      .returning({ id: workingOrders.id });
+    const [payment] = await suite.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order!.id,
+        submissionId: crypto.randomUUID(),
+        fingerprint: `bill ${personId}`,
+        kind: "contribution",
+        method: "cash",
+        applied: a.billSale.total,
+        tendered: a.billSale.total,
+        state: "received",
+        receivedAt: "2026-05-14T12:00:00.000Z",
+        requestedBy: personId,
+        source: "device",
+        deviceId,
+      })
+      .returning({ id: billPayments.id });
+    await sale(a.billSale, order!.id);
+    await suite.db.insert(billPaymentRefunds).values({
+      billPaymentId: payment!.id,
+      submissionId: crypto.randomUUID(),
+      fingerprint: `bill refund ${personId}`,
+      reason: "Charged twice",
+      source: "device",
+      deviceId,
+      appliedAmount: a.billRefundAmountCents,
+      tipAmount: 0,
+      requestedBy: personId,
+      authorizedBy: authorizer,
+      state: "completed",
+      createdAt: a.billRefundedAt,
+      completedAt: a.billRefundedAt,
     });
   }
 }
@@ -795,7 +848,7 @@ describe("a staff member's whole personal-data download", () => {
       .select({ hash: managementSessions.tokenHash })
       .from(managementSessions)
       .where(eq(managementSessions.personId, martaId));
-    suite.db.run(sql`update persons set status = 'suspended' where id = ${martaId}`);
+    await suite.db.run(sql`update persons set status = 'suspended' where id = ${martaId}`);
 
     const files = await download(
       `/management-api/staff/${martaId}/personal-data/export`,
