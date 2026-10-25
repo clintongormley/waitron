@@ -189,6 +189,9 @@ it (the signed-in person). The kitchen ticket and the kitchen screen read that r
 2026-10-24 (plan D23): the "also sold" acceptance applies to a dish whose own period ended earlier
 the same business day; a line naming a period that has not yet run is refused as before.
 
+2026-10-25 (plan D23): a running menu that offers the dish only as not sold separately does not
+count as selling it.
+
 2026-10-24 (plan D25): the record is two columns on the line's service context
 (`working_line_contexts`), not on the order line.
 
