@@ -374,7 +374,8 @@ export interface ServedMenu {
   isDefault: boolean;
   readonly orderable: boolean;
   /** The period that ended earlier this business day whose menu this is, while no running
-   * period offers it; else null. */
+   * period offers it; else null, and null on a read that resolves no service period
+   * (`withDefault: false`). */
   readonly endedPeriodName: string | null;
   readonly audience: "customer" | "staff";
   versionId: string;
