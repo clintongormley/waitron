@@ -223,9 +223,10 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    next; should they instead join this slice? Worked example from what the product records today:
    Marta, a cashier, cancelled three lines on table 4's bill with the till's **Void…**, asked for
    one cash refund that a supervisor authorised, and rang two cash sales, each of which opened the
-   drawer. Her `actions.json` lists the refund (`yourPart` `["requested"]`) and the two openings
-   (`["opened"]`), `counts.voids` is 0, and the three lines are not there; her Profile help names
-   only what the file holds, so she is not told the lines are there.
+   drawer. Her `actions.json` lists the refund (`yourPart` `["requested"]`) and three openings
+   (`["opened"]`) — the cash refund opened the drawer too — `counts.voids` is 0, and the three lines are not there; her Profile help names
+   only what the file holds, so she is not told the lines are there. (corrected 2026-10-25: three openings, the cash
+   refund's own included.)
 
 4. **The actions part reads in short write-lock turns of its own during the build, not in the
    snapshot turn. No index, no migration.** Why:
@@ -786,6 +787,9 @@ openings, and the bill-payment sale-number turns (decision 4, step 3).
 | --- | --- | --- |
 | `bill_payment_refunds` | `bill_payment_id` (as `sale`, through a bill-payment turn: the payment's order's sale, and the payment's `method`), `applied_amount`, `tip_amount`, `state`, `created_at`, `requested_by`, `authorized_by`, `attested_by` | `id`, `submission_id`, `fingerprint`, `reason`, `source`, `device_id`, `sent_at`, `send_count`, `provider_refund_ref`, `refs_before_send`, `attestation_note`, `completed_at`, `failed_at` |
 | `drawer_opens` | `reason`, `opened_at` (as `at`), `sale_id`, `bill_payment_id`, `tender_refund_id` (as `sale`), `via_override` (as `viaOverride`), `person_id`, `authorized_by` (select; as `yourPart`) | `id`, `device_id`, `printer_id` |
+
+(2026-10-25: `tender_refund_id` is not read — the shipped read does not select it, and
+`personal-data-actions.coverage.test.ts` lists it as not read.)
 
 1. Tests first, in the same file (read how a bill payment, a working order and a device are
    seeded in the bill-refund suites; drawer openings must satisfy `drawer_opens_target_ck`,

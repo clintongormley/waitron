@@ -2597,7 +2597,7 @@ case is "the managers' email reads its context on a full disk with a change wait
 Since A980 S2a1, the staff personal-data downloads (`GET /management-api/me/personal-data/export`
 and, for an admin, `GET /management-api/staff/:id/personal-data/export`, both in
 `apps/server/src/personal-data-export-api.ts`) read in two `withWriteLock` turns with no drain —
-every part, and the venue's name for the README, in the first, the caller checked again in the
+every other part, and the venue's name for the README, in the first, the caller checked again in the
 second after the files are built — and resolve the session with `touch: false`, so they answer on a
 full disk with a change waiting. Since S2c, the actions part (`apps/server/src/personal-data-actions.ts`)
 reads in `withWriteLock` turns of its own between the two, while the files are built, also with no

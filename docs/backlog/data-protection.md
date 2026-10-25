@@ -108,8 +108,8 @@ by the answers):
     'packages/*/src/**' ':!*.test.ts'` on 2026-10-25, less the fiscal backends' own `recordVoid`
     and the payments packages' unrelated provider void). Worked example: Marta, a cashier, cancels
     three lines on table 4's bill with **Void…**, asks for one cash refund a supervisor authorises,
-    and rings two cash sales that each open the drawer. Her `actions.json` lists the refund and the
-    two openings, `counts.voids` is 0, and the three lines are not there. **Open decision for the
+    and rings two cash sales that each open the drawer. Her `actions.json` lists the refund and
+    three openings (`["opened"]`) — the cash refund opened the drawer too — `counts.voids` is 0, and the three lines are not there. **Open decision for the
     owner** (S2c decision 3, built with S2d as the next slice): should line voids, comps and
     discounts have joined S2c instead?
   - **The 28 core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
@@ -160,8 +160,7 @@ by the answers):
   0.3 s over 86 turns. `actions.json` was 7.07 MB. The two row turns scan their whole tables,
   because none of the person columns they select on has an index, so they grow with the venue's
   whole history, not only the person's (S2c decision 4). A control with indexes on those columns,
-  not shipped, brought row turn 2 to 61 and 75 ms; the rest of its cost is sorting and mapping the
-  person's rows. Repeat the turns and the file's size on a box.
+  not shipped, brought row turn 2 to 61 and 75 ms. Repeat the turns and the file's size on a box.
 - **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
   badge sits over the last letter of "Copy of your data" / "Copia de tus datos". The placement
   came from S2a2 (#2049), whose test in
