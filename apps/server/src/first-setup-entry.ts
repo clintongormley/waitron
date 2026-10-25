@@ -201,6 +201,7 @@ async function resolutionApp(
   const actions = createFirstSetupResolutionActions({ ...roots, host });
   mountFirstSetupResolutionApi(app, host, log, {
     startAgain: actions.startAgainFirstSetup,
+    summary: actions.startAgainSummary,
     selection: actions,
     ...(moduleConfig === undefined
       ? {}

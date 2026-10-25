@@ -15,6 +15,10 @@ import {
   raiseStartAgainNote,
   readModulePreparationHistory,
   readFirstSetupRecoveryDeliverySnapshot,
+  boxFolders,
+  startAgainSummary,
+  writeStartAgainConfirmation,
+  type StartAgainSummary,
   type RegisterAnswer,
   type WorkspaceBinding,
   type FirstSetupState,
@@ -37,6 +41,13 @@ export interface StartAgainFirstSetupRequest {
   ownerGeneration: number;
   owner?: FirstSetupOwnerAttempt;
   register?: RegisterAnswer;
+  confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
+}
+export interface StartAgainSummaryRequest {
+  inspectionId: string;
+  revision: number;
+  ownerGeneration: number;
+  owner?: FirstSetupOwnerAttempt;
 }
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
@@ -57,9 +68,8 @@ function unused(state: FirstSetupState) {
   );
 }
 /** Outside evidence refuses Start again, so only the attempt's own public evidence is read here. */
-async function recordStartAgainFloor(
+async function gatherStartAgainFloor(
   roots: FirstSetupRoots,
-  anchor: FirstSetupRoots,
   state: FirstSetupState,
   originals: readonly { name: string; bytes: Uint8Array | null }[],
   modules: readonly WaitronModule[] | undefined,
@@ -68,7 +78,7 @@ async function recordStartAgainFloor(
   const names = [
     ...new Set(attempts.flatMap((attempt) => attempt.frozen.modules.map(({ module }) => module))),
   ];
-  if (names.length === 0) return;
+  if (names.length === 0) return null;
   if (modules === undefined) unavailable();
   let latest: { floorMs: number; lastName: string; module: string } | null = null;
   for (const module of names) {
@@ -92,8 +102,7 @@ async function recordStartAgainFloor(
     if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
       latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
   }
-  if (latest !== null) await raiseStartAgainNote(anchor.stateDir, latest);
-  await rm(join(anchor.stateDir, "module-preparation-state.json"), { force: true });
+  return latest;
 }
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
@@ -101,9 +110,48 @@ export function createFirstSetupResolutionActions(
       evidence: Pick<FirstFiscalHost["evidence"], "invalidate">;
       delivery: Pick<FirstFiscalHost["delivery"], "invalidate">;
     } & Partial<Pick<FirstFiscalHost, "modules">>;
+    /** Tests only: fails the kept picks file's deletion. */
+    remove?: (path: string) => Promise<void>;
   },
 ) {
   const { host } = options;
+  const remove = options.remove ?? ((path: string) => rm(path, { force: true }));
+  const roots = { stateDir: options.stateDir, venueDir: options.venueDir };
+  const assertRecoveredOwner = async (
+    owner: FirstSetupOwnerAttempt | undefined,
+    state: FirstSetupState,
+  ) => {
+    if (owner === undefined) throw new AppError("setup.owner_required", {});
+    const status = await host.owner.status(owner);
+    const latest = [...status.history]
+      .reverse()
+      .find((event) => ["claim", "resume", "recover"].includes(event.kind));
+    if (
+      status.revision !== state.revision ||
+      latest?.kind !== "recover" ||
+      latest.ownerGeneration !== status.ownerGeneration
+    )
+      throw new AppError("setup.owner_required", {});
+  };
+  const exactKeys = (request: unknown, keys: readonly string[]) => {
+    if (
+      typeof request !== "object" ||
+      request === null ||
+      Object.keys(request).some((key) => !keys.includes(key))
+    )
+      conflict();
+  };
+  const matchesInspection = (
+    inspection: { inspectionId: string; revision: number | null; ownerGeneration: number | null },
+    request: { inspectionId: string; revision: number; ownerGeneration: number },
+  ) => {
+    if (
+      inspection.inspectionId !== request.inspectionId ||
+      inspection.revision !== request.revision ||
+      inspection.ownerGeneration !== request.ownerGeneration
+    )
+      conflict();
+  };
   const inspectSelection = async () => {
     const inspected = await inspectFirstSetupWorkspaceSelection(options);
     if (inspected === null) return null;
@@ -253,30 +301,54 @@ export function createFirstSetupResolutionActions(
       await assertLocalReset(inspected);
       return resume();
     },
+    startAgainSummary(request: StartAgainSummaryRequest): Promise<StartAgainSummary> {
+      return host.resolution.withVenueExclusion(() =>
+        host.coordinator.run(async () => {
+          exactKeys(request, ["inspectionId", "revision", "ownerGeneration", "owner"]);
+          await assertFirstSetupBootTarget(options);
+          const inspection = await host.resolution.inspectFirstSetupResolution();
+          matchesInspection(inspection, request);
+          if (inspection.database !== "missing") unavailable();
+          const retained = await host.store.readForRepair();
+          if (retained === null) unavailable();
+          await assertRecoveredOwner(request.owner, retained.state);
+          const snapshot = await host.resolution.captureFirstSetupOriginals();
+          if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
+          const floor = await gatherStartAgainFloor(
+            roots,
+            retained.state,
+            snapshot.originals,
+            host.modules,
+          );
+          return startAgainSummary(retained.state, floor?.lastName ?? null);
+        }),
+      );
+    },
     startAgainFirstSetup(request: StartAgainFirstSetupRequest): Promise<WorkspaceBinding> {
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {
-          if (
-            typeof request !== "object" ||
-            request === null ||
-            Object.keys(request).some(
-              (key) =>
-                !["inspectionId", "revision", "ownerGeneration", "owner", "register"].includes(key),
-            )
-          )
-            conflict();
+          exactKeys(request, [
+            "inspectionId",
+            "revision",
+            "ownerGeneration",
+            "owner",
+            "register",
+            "confirmMissingDatabase",
+          ]);
           await assertFirstSetupBootTarget(options);
           const inspection = await host.resolution.inspectFirstSetupResolution();
-          if (
-            inspection.inspectionId !== request.inspectionId ||
-            inspection.revision !== request.revision ||
-            inspection.ownerGeneration !== request.ownerGeneration
-          )
-            conflict();
+          matchesInspection(inspection, request);
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
           const { state } = retained;
-          if (!["claimed", "consumption-intent", "abandoned"].includes(state.status)) unavailable();
+          const missing = inspection.database === "missing";
+          if (!missing && request.confirmMissingDatabase !== undefined) conflict();
+          if (missing) {
+            // D3a: with the database missing, any status but complete, and only once confirmed.
+            if (state.status === "complete" || request.confirmMissingDatabase === undefined)
+              unavailable();
+          } else if (!["claimed", "consumption-intent", "abandoned"].includes(state.status))
+            unavailable();
           if (!["no-venue-rows", "missing"].includes(inspection.database)) unavailable();
           const noOtherHistory = inspection.artifacts.every(
             (artifact) =>
@@ -328,16 +400,7 @@ export function createFirstSetupResolutionActions(
               authority = "local-empty-no-custodian";
             }
           } else {
-            const owner = await host.owner.status(request.owner);
-            const latest = [...owner.history]
-              .reverse()
-              .find((event) => ["claim", "resume", "recover"].includes(event.kind));
-            if (
-              owner.revision !== state.revision ||
-              latest?.kind !== "recover" ||
-              latest.ownerGeneration !== owner.ownerGeneration
-            )
-              throw new AppError("setup.owner_required", {});
+            await assertRecoveredOwner(request.owner, state);
             authority = "original-password";
             if (request.register?.kind === "no-current-master" && !empty) unavailable();
             if (inspection.database !== "missing" && !emptyWorkspace && !unusedAssignment)
@@ -362,13 +425,27 @@ export function createFirstSetupResolutionActions(
             stateDir: join(base, "state"),
             selectionGeneration: (current.binding?.selectionGeneration ?? 0) + 1,
           };
-          await recordStartAgainFloor(
-            { stateDir: options.stateDir, venueDir: options.venueDir },
-            anchor,
-            state,
-            snapshot.originals,
-            host.modules,
-          );
+          const floor = await gatherStartAgainFloor(roots, state, snapshot.originals, host.modules);
+          const confirmation = request.confirmMissingDatabase;
+          if (missing) {
+            const shown = startAgainSummary(state, floor?.lastName ?? null);
+            if (
+              confirmation?.nothingFiledOrSold !== true ||
+              !isDeepStrictEqual(confirmation.shown, shown)
+            )
+              conflict();
+            const { displayName, email } = state.frozen.request.admin;
+            await writeStartAgainConfirmation((await boxFolders(roots)).stateDir, {
+              at: new Date().toISOString(),
+              attemptId: state.frozen.attemptId,
+              database: "missing",
+              administrator: { displayName, email },
+              ownerGeneration: state.ownerGeneration,
+              shown,
+            });
+          }
+          if (floor !== null) await raiseStartAgainNote(anchor.stateDir, floor);
+          await remove(join(anchor.stateDir, "module-preparation-state.json"));
           const records = createFirstSetupResolutionStore({
             ...anchor,
             coordinator: createFirstSetupCoordinator(),

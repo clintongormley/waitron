@@ -281,6 +281,7 @@ it.each(["configuration", "offerings"] as const)(
         "/cloud-recovery/start",
         "/first-setup/claim",
         "/first-setup/resolution/start-again",
+        "/first-setup/resolution/start-again/summary",
         "/first-setup/resolution/recover",
         "/first-setup/resolution/resume-selection",
       ]) {

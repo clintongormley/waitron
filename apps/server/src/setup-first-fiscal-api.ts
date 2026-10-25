@@ -64,6 +64,26 @@ function registerAnswer(value: unknown): import("@waitron/provisioning").Registe
   return register;
 }
 
+function missingDatabaseConfirmation(value: unknown) {
+  const body = exact(value, ["nothingFiledOrSold", "shown"]);
+  const shown = exact(body.shown, ["reached", "lastName"]);
+  if (
+    body.nothingFiledOrSold !== true ||
+    !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string) ||
+    (shown.lastName !== null &&
+      (typeof shown.lastName !== "string" ||
+        shown.lastName.length < 1 ||
+        shown.lastName.length > 64))
+  )
+    invalid();
+  return {
+    nothingFiledOrSold: true as const,
+    shown: {
+      reached: shown.reached as "claimed" | "named" | "fiscal-started" | "fiscal-finished",
+      lastName: shown.lastName as string | null,
+    },
+  };
+}
 function assertFirstFiscalRequest(c: Context): void {
   const origin = c.req.header("Origin"),
     site = c.req.header("Sec-Fetch-Site");
@@ -594,6 +614,9 @@ export function mountFirstSetupResolutionApi(
     startAgain?: ReturnType<
       typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
     >["startAgainFirstSetup"];
+    summary?: ReturnType<
+      typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
+    >["startAgainSummary"];
     requestRestart?: () => void;
     withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
     selection?: Pick<
@@ -810,19 +833,50 @@ export function mountFirstSetupResolutionApi(
       );
   }
 
+  const assertHttps = (c: Context) => {
+    const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+    if (!(socket instanceof TLSSocket) || !socket.encrypted)
+      throw new AppError("setup.owner_required", {});
+  };
+  if (options.summary !== undefined)
+    app.post(`${root}/resolution/start-again/summary`, (c) =>
+      boundary(c, log, async () => {
+        assertFirstFiscalRequest(c);
+        assertHttps(c);
+        const body = exact(await readFirstFiscalBody(c), [
+          "inspectionId",
+          "revision",
+          "ownerGeneration",
+        ]);
+        if (
+          ![body.revision, body.ownerGeneration].every(
+            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+          )
+        )
+          invalid();
+        const owner = firstFiscalOwner(c);
+        return c.json(
+          await options.summary!({
+            inspectionId: text(body.inspectionId),
+            revision: body.revision as number,
+            ownerGeneration: body.ownerGeneration as number,
+            owner,
+          }),
+        );
+      }),
+    );
   if (options.startAgain !== undefined)
     app.post(`${root}/resolution/start-again`, (c) =>
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
-        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-        if (!(socket instanceof TLSSocket) || !socket.encrypted)
-          throw new AppError("setup.owner_required", {});
+        assertHttps(c);
         const rawBody = object(await readFirstFiscalBody(c));
         const body = exact(rawBody, [
           "inspectionId",
           "revision",
           "ownerGeneration",
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
+          ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
         ]);
         if (
           ![body.revision, body.ownerGeneration].every(
@@ -833,11 +887,15 @@ export function mountFirstSetupResolutionApi(
         const register = Object.hasOwn(body, "register")
           ? registerAnswer(body.register)
           : undefined;
+        const confirmMissingDatabase = Object.hasOwn(body, "confirmMissingDatabase")
+          ? missingDatabaseConfirmation(body.confirmMissingDatabase)
+          : undefined;
         const selected = await options.startAgain!({
           inspectionId: text(body.inspectionId),
           revision: body.revision as number,
           ownerGeneration: body.ownerGeneration as number,
           register,
+          ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
           ...(c.req.header("X-Waitron-Setup-Owner") === undefined
             ? {}
             : { owner: firstFiscalOwner(c) }),
