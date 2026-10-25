@@ -307,6 +307,23 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     }
     return cloud;
   };
+  const scratchCloud = async (id: string) => {
+    if (clouds.has(id)) return;
+    if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-repair-cloud-"));
+    cloudScratch.push(stateDir);
+    clouds.set(id, { stateDir, client: createCloudRecoveryClient({ ...options.cloud, stateDir }) });
+  };
+  // A sealed id stays final. With no journal nothing is kept under it, so the next Start or Start
+  // again begins a new wait under a new id and a new Cloud request; Check keeps reading the old one.
+  const pendingSealed = () =>
+    pendingCloudId !== undefined && cloudWaits.get(pendingCloudId)?.sealed !== undefined;
+  const freshCloud = async () => {
+    const id = randomUUID();
+    await scratchCloud(id);
+    clouds.delete(pendingCloudId!);
+    pendingCloudId = id;
+  };
   const saveCloud = async (entry: Entry, destination: string) => {
     const cloud = await cloudFor(entry.session.recoveryId);
     const state = await readCloudRecoveryState(cloud.stateDir);
@@ -677,17 +694,9 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             conflict();
           pendingCloudId = record.target.recoveryId;
           clouds.delete(pendingCloudId);
-        }
+        } else if (pendingSealed()) await freshCloud();
         pendingCloudId ??= randomUUID();
-        if (!clouds.has(pendingCloudId)) {
-          if (options.cloud === undefined) throw new AppError("setup.not_ready", {});
-          const stateDir = await mkdtemp(join(tmpdir(), "waitron-repair-cloud-"));
-          cloudScratch.push(stateDir);
-          clouds.set(pendingCloudId, {
-            stateDir,
-            client: createCloudRecoveryClient({ ...options.cloud, stateDir }),
-          });
-        }
+        await scratchCloud(pendingCloudId);
         generation++;
         const id = pendingCloudId;
         const answer = await (await cloudFor(id)).client.start();
@@ -723,6 +732,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             )) !== null)
         )
           conflict();
+        if (record === undefined && pendingSealed()) await freshCloud();
         generation++;
         const id = pendingCloudId;
         const answer = await (await cloudFor(id)).client.startAgain();
