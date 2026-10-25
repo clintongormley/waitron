@@ -389,9 +389,9 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 
 **2026-10-24 (A789 slice 2):** venue-service 0070 drops `period_extensions`. A squash leaves it out.
 
-**2026-10-25 (A789 slice 3):** venue-service 0071 adds `departments.late_send_needs_manager` and `working_line_contexts.late_period_name`, `late_confirmed_by`. A squash writes the end state.
-
 **2026-10-24 (A798-B slice 9):** fiscal-verifactu 0011 adds the append-only `clock_checks` and `clock_confirmations`. A squash writes the end state.
+
+**2026-10-25 (A789 slice 3):** venue-service 0071 adds `departments.late_send_needs_manager` and `working_line_contexts.late_period_name`, `late_confirmed_by`. A squash writes the end state.
 
 ## Removed and superseded material
 
