@@ -382,6 +382,38 @@ At three retirements on the owner's Mac, A1037 took a request from about 9,300 f
     checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably
     be refused one, which fits a practice-only venue, but nothing ran it.
 
+## Loose ends left by #334.
+
+- **Loose ends left by #334.**
+  - The certificate export help has never been followed on a real machine. Nobody exported a
+    certificate through Windows', macOS' or Firefox's own certificate store while reading the new
+    guidance, so the instructions are unverified against the thing they describe. The Spanish
+    steps name Chrome, macOS and Firefox menus from memory ("Gestionar certificados importados de
+    Windows", "Acceso a Llaveros", "Sus certificados"…). The three FNMT links use its English
+    site, whose article text was still Spanish when opened on 2026-10-20; check the instructions
+    on real Spanish systems (left open by C42, #837).
+    [Detail](#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
+  - Switching setup mode does not clean up what the server already holds. If someone fills in
+    Demo, Prepare or Live far enough that the server has stored part of that answer and then
+    switches mode, what the server kept is untested — write a test that stages configuration in
+    one mode, switches, and asserts what survives.
+    [Detail](#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
+  - The setup app's catch-all redirect was not proven by deleting it. The reviews checked this by
+    running the route tests and the full server suites, not by removing each exclusion one at a
+    time and watching a test fail, and no separate probe confirmed the trading app is untouched by
+    the redirect.
+    [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
+
+## Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.
+
+- **Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.**
+  - In Demo, a server refusal of a field Demo hides can only be retried unchanged. Whether the
+    server ever refuses Demo's fixed series codes is not established.
+    [Detail](#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
+  - In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
+    not run; whether a real draft can reach that state has not been tested.
+    [Detail](#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country

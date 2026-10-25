@@ -601,24 +601,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   languages. Left open by C42 (#837).
 
 - **Loose ends left by #334.**
-  - The certificate export help has never been followed on a real machine. Nobody exported a
-    certificate through Windows', macOS' or Firefox's own certificate store while reading the new
-    guidance, so the instructions are unverified against the thing they describe. The Spanish
-    steps name Chrome, macOS and Firefox menus from memory ("Gestionar certificados importados de
-    Windows", "Acceso a Llaveros", "Sus certificados"…). The three FNMT links use its English
-    site, whose article text was still Spanish when opened on 2026-10-20; check the instructions
-    on real Spanish systems (left open by C42, #837).
-    [Detail](backlog/setup.md#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
-  - Switching setup mode does not clean up what the server already holds. If someone fills in
-    Demo, Prepare or Live far enough that the server has stored part of that answer and then
-    switches mode, what the server kept is untested — write a test that stages configuration in
-    one mode, switches, and asserts what survives.
-    [Detail](backlog/setup.md#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
-  - The setup app's catch-all redirect was not proven by deleting it. The reviews checked this by
-    running the route tests and the full server suites, not by removing each exclusion one at a
-    time and watching a test fail, and no separate probe confirmed the trading app is untouched by
-    the redirect.
-    [Detail](backlog/setup.md#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
+  [Detail](backlog/setup.md#loose-ends-left-by-334)
 
 - **A fiscal test or a provision that answers after the wizard has been removed from the page
   leaves it stuck when it is put back** — found while bringing `apps/setup` to the coverage bar
@@ -626,12 +609,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a-fiscal-test-or-a-provision-that-answers-after-the-wizard-has-been-removed-from-the-page-leaves-it-stuck-when-it-is-put-back)
 
 - **Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.**
-  - In Demo, a server refusal of a field Demo hides can only be retried unchanged. Whether the
-    server ever refuses Demo's fixed series codes is not established.
-    [Detail](backlog/setup.md#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
-  - In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
-    not run; whether a real draft can reach that state has not been tested.
-    [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
+  [Detail](backlog/setup.md#loose-ends-left-by-c47s-840-demo-gaps-on-the-setup-wizards-venue-screen-left-unfixed)
 
 - **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
   backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input
