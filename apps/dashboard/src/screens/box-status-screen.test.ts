@@ -1025,6 +1025,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     await userEvent.click(q(el, "[data-test=clock-check-confirm]")!);
     await flush(el);
     expect(footerMessage(el)).toBe("The check took too long. Try again.");
+    expect(q(el, "[data-test=clock-check-confirm]")).not.toBeNull();
   });
 
   it("words any other refusal by its code", async () => {
