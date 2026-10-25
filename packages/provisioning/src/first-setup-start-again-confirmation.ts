@@ -12,6 +12,7 @@ const REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"] as con
 export type StartAgainSummary = {
   readonly reached: (typeof REACHED)[number];
   readonly lastName: string | null;
+  readonly recoveryRecordDamaged?: true;
 };
 
 export interface StartAgainConfirmation {
@@ -70,7 +71,8 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     (ownerGeneration as number) < 0 ||
     !object(shown) ||
     !(REACHED as readonly unknown[]).includes(shown.reached) ||
-    (shown.lastName !== null && typeof shown.lastName !== "string")
+    (shown.lastName !== null && typeof shown.lastName !== "string") ||
+    (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true)
   )
     throw invalid();
   return {
@@ -83,6 +85,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     shown: {
       reached: shown.reached as StartAgainSummary["reached"],
       lastName: shown.lastName as string | null,
+      ...(shown.recoveryRecordDamaged === true && { recoveryRecordDamaged: true as const }),
     },
   };
 }

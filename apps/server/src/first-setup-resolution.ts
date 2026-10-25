@@ -79,16 +79,36 @@ async function gatherStartAgainFloor(
   const names = [
     ...new Set(attempts.flatMap((attempt) => attempt.frozen.modules.map(({ module }) => module))),
   ];
-  if (names.length === 0) return null;
+  if (names.length === 0) return { floor: null, recoveryRecordDamaged: false };
   if (modules === undefined) unavailable();
   let latest: { floorMs: number; lastName: string; module: string } | null = null;
+  let recoveryRecordDamaged = false;
   for (const module of names) {
     const seat = initialSetupFor(modules, module)?.startAgainFloor;
     if (seat === undefined) continue;
     const publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
-    const recovery = readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
+    const recoveryName = `state/first-fiscal-documents/${module}.recovery.json`;
+    let recovery: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;
+    let seen = originals;
+    try {
+      recovery = readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
+    } catch (error) {
+      if (
+        !(error instanceof AppError) ||
+        originals.find((entry) => entry.name === recoveryName)?.bytes == null
+      )
+        throw error;
+      // The kept recovery record is the recovery sheet's public statement, which never sets Start
+      // again's floor (`isNamelessEvidence`), so one that cannot be read is treated as missing.
+      // Every other reader here still refuses.
+      recovery = null;
+      recoveryRecordDamaged = true;
+      seen = originals.map((entry) =>
+        entry.name === recoveryName ? { name: entry.name, bytes: null } : entry,
+      );
+    }
     const document =
-      recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(module, state, originals));
+      recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(module, state, seen));
     if (document !== undefined) publicEvidence.push(document);
     const floor = seat({
       attempts: attempts
@@ -103,7 +123,14 @@ async function gatherStartAgainFloor(
     if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
       latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
   }
-  return latest;
+  return { floor: latest, recoveryRecordDamaged };
+}
+function summaryOf(
+  state: FirstSetupState,
+  gathered: Awaited<ReturnType<typeof gatherStartAgainFloor>>,
+): StartAgainSummary {
+  const summary = startAgainSummary(state, gathered.floor?.lastName ?? null);
+  return gathered.recoveryRecordDamaged ? { ...summary, recoveryRecordDamaged: true } : summary;
 }
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
@@ -316,13 +343,13 @@ export function createFirstSetupResolutionActions(
           await assertRecoveredOwner(request.owner, retained.state);
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          const floor = await gatherStartAgainFloor(
+          const gathered = await gatherStartAgainFloor(
             roots,
             retained.state,
             snapshot.originals,
             host.modules,
           );
-          return startAgainSummary(retained.state, floor?.lastName ?? null);
+          return summaryOf(retained.state, gathered);
         }),
       );
     },
@@ -394,10 +421,16 @@ export function createFirstSetupResolutionActions(
               : error;
           });
           if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT)) unavailable();
-          const floor = await gatherStartAgainFloor(roots, state, snapshot.originals, host.modules);
+          const gathered = await gatherStartAgainFloor(
+            roots,
+            state,
+            snapshot.originals,
+            host.modules,
+          );
+          const floor = gathered.floor;
           const confirmation = request.confirmMissingDatabase;
           if (missing) {
-            const shown = startAgainSummary(state, floor?.lastName ?? null);
+            const shown = summaryOf(state, gathered);
             if (
               confirmation?.nothingFiledOrSold !== true ||
               !isDeepStrictEqual(confirmation.shown, shown)

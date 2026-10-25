@@ -68,9 +68,11 @@ function registerAnswer(value: unknown): import("@waitron/provisioning").Registe
 
 function missingDatabaseConfirmation(value: unknown) {
   const body = exact(value, ["nothingFiledOrSold", "shown"]);
-  const shown = exact(body.shown, ["reached", "lastName"]);
+  const shown = exact(body.shown, ["reached", "lastName"], ["recoveryRecordDamaged"]);
+  const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
   if (
     body.nothingFiledOrSold !== true ||
+    (damaged && shown.recoveryRecordDamaged !== true) ||
     !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string) ||
     (shown.lastName !== null &&
       (typeof shown.lastName !== "string" ||
@@ -83,6 +85,7 @@ function missingDatabaseConfirmation(value: unknown) {
     shown: {
       reached: shown.reached as "claimed" | "named" | "fiscal-started" | "fiscal-finished",
       lastName: shown.lastName as string | null,
+      ...(damaged && { recoveryRecordDamaged: true as const }),
     },
   };
 }

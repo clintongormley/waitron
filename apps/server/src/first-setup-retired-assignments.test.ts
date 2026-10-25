@@ -176,6 +176,7 @@ async function startAgainMissingDatabase(
     ...ids,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
+  return shown;
 }
 async function fixture(
   index = 1,
@@ -290,7 +291,7 @@ async function fixture(
     await writeFile(publicPath, JSON.stringify(retainedHour(1)));
   if (retained?.outsideChange === "remove") await unlink(publicPath);
   // The hour module configures no outside evidence, so the outside rows name the file directly.
-  await startAgainMissingDatabase(
+  const shown = await startAgainMissingDatabase(
     oldHost,
     anchor,
     retained?.source === "outside"
@@ -320,7 +321,17 @@ async function fixture(
       request: selectedRequest(state, index),
     });
   vi.setSystemTime(instant(index));
-  return { root, host, state, old, claim, publicPath, module: MODULE, password: PASSWORD };
+  return {
+    root,
+    host,
+    state,
+    old,
+    claim,
+    publicPath,
+    module: MODULE,
+    password: PASSWORD,
+    shown,
+  };
 }
 /** A fixture whose Start again is refused: the abandoned attempt stays, and no note or marker is written. */
 async function expectStartAgainRefused(made: Promise<unknown>, code: string) {
@@ -553,14 +564,39 @@ it("a kept recovery document deleted before Start again leaves the note holding 
   );
 });
 it.each(["syntax", "binding", "digest"] as const)(
-  "a damaged recovery document %s refuses Start again, never becomes absence of history",
+  "a damaged recovery document %s is treated as missing: the summary says so, and the note keeps the attempt's own name",
   async (damage) => {
-    await expectStartAgainRefused(
-      fixture(43, request.taxId, "production", false, 42, { document: true, damage }),
-      "setup.not_ready",
-    );
+    const f = await fixture(43, request.taxId, "production", false, 42, { document: true, damage });
+    const name = (firstSetupModuleContext(f.old, MODULE).request as { identity: string }).identity;
+    expect(f.shown).toEqual({ reached: "named", lastName: name, recoveryRecordDamaged: true });
+    expect(await startAgainNoteName(f.state)).toBe(name);
   },
 );
+it.each([{ document: true }, { document: true, damage: "missing-original" as const }])(
+  "a kept recovery document that is valid or missing is not reported as damaged %#",
+  async (retained) => {
+    const f = await fixture(43, request.taxId, "production", false, 42, retained);
+    expect("recoveryRecordDamaged" in f.shown).toBe(false);
+  },
+);
+it("a damaged recovery document does not hide the rest of the history: the note takes the later retained name", async () => {
+  const f = await fixture(43, request.taxId, "production", false, 1, {
+    document: true,
+    damage: "syntax",
+    history: retainedHour(),
+  });
+  await expectNoteBounds(f, encodeMinuteIdentity(instant(42)), false);
+});
+it("a damaged recovery document beside invalid public evidence still refuses with a domain refusal", async () => {
+  await expectStartAgainRefused(
+    fixture(43, request.taxId, "production", false, 1, {
+      document: true,
+      damage: "syntax",
+      legacy: { version: 1, modules: {}, history: [null] },
+    }),
+    "setup.attempt_invalid",
+  );
+});
 it("Start again is refused while an outside hour-history file is configured", async () => {
   await expectStartAgainRefused(
     fixture(43, request.taxId, "production", false, 1, {

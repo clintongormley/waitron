@@ -201,3 +201,32 @@ it("refuses a state folder it cannot look inside, and writes nothing", async () 
   });
   expect(await readFile(file, "utf8")).toBe("kept");
 });
+
+it("a confirmation that showed a damaged recovery record keeps that in the record", async () => {
+  const dir = await stateDir();
+  const damaged = { ...record, shown: { ...record.shown, recoveryRecordDamaged: true as const } };
+  await writeStartAgainConfirmation(dir, damaged);
+  const stored = JSON.parse(
+    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+  ) as Record<string, unknown>;
+  expect(stored).toEqual({ version: 1, ...damaged });
+  expect(Object.keys(stored.shown as object)).toEqual([
+    "reached",
+    "lastName",
+    "recoveryRecordDamaged",
+  ]);
+});
+
+it.each([false, "yes"])(
+  "a recoveryRecordDamaged other than true (%s) is refused setup.attempt_invalid and writes nothing",
+  async (recoveryRecordDamaged) => {
+    const dir = await stateDir();
+    await expect(
+      writeStartAgainConfirmation(dir, {
+        ...record,
+        shown: { ...record.shown, recoveryRecordDamaged },
+      } as unknown as typeof record),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
+    expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
+  },
+);

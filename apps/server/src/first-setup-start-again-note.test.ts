@@ -42,6 +42,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { publicHourSelectionHistory } from "@waitron/fiscal-verifactu/src/hour-selection.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+import { expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { PASSWORD, request } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
@@ -296,13 +297,17 @@ it("two Start again requests at once raise the note once", async () => {
 
 const CONFIRMATIONS = "first-setup-start-again-confirmations";
 
-async function missingDatabase(changes: readonly FirstSetupChange[] = []) {
+async function missingDatabase(
+  changes: readonly FirstSetupChange[] = [],
+  afterRemove?: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
+) {
   const base = await abandonedAttempt();
   const { f } = base;
   let state = (await f.store.read())!;
   for (const change of changes)
     state = await f.store.update(state.frozen.attemptId, state.revision, change);
   await rm(join(f.venueDir, "venue.db"));
+  await afterRemove?.(f);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const recovered = await f.host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
@@ -603,6 +608,114 @@ it("the Start again route takes the confirmation only in its exact shape", async
   const accepted = await send({ nothingFiledOrSold: true, shown });
   expect(accepted.status, await accepted.clone().text()).toBe(200);
   expect(await readdir(join(f.stateDir, CONFIRMATIONS))).toHaveLength(1);
+});
+
+function recoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  return join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`);
+}
+
+async function damageRecoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
+  await expect(lstat(recoveryRecord(f))).resolves.toMatchObject({ size: expect.any(Number) });
+  await writeFile(recoveryRecord(f), "{damaged");
+}
+
+function sendStartAgain(
+  app: Hono,
+  owner: Awaited<ReturnType<typeof missingDatabase>>["owner"],
+  body: unknown,
+) {
+  return app.request(
+    "https://box.test/setup-api/first-setup/resolution/start-again",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...ownerHeaders(owner) },
+      body: JSON.stringify(body),
+    },
+    tls(),
+  );
+}
+
+it("with the database missing, a damaged recovery record reaches the confirmation: the summary route answers it, never setup.not_ready", async () => {
+  const { f, name, actions, owner, ids } = await missingDatabase([], damageRecoveryRecord);
+  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  expect(answered.status, await answered.clone().text()).toBe(200);
+  expect(await answered.json()).toEqual({
+    reached: "named",
+    lastName: name,
+    recoveryRecordDamaged: true,
+  });
+});
+
+it("Start again past a damaged recovery record goes ahead once the summary showing it is confirmed", async () => {
+  const { f, name, actions, owner, ids, request } = await missingDatabase([], damageRecoveryRecord);
+  const app = routes(f, actions);
+  const shown = await (await postSummary(app, ids, ownerHeaders(owner))).json();
+  const accepted = await sendStartAgain(app, owner, {
+    ...ids,
+    register: request.register,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  expect(accepted.status, await accepted.clone().text()).toBe(200);
+  const files = await readdir(join(f.stateDir, CONFIRMATIONS));
+  expect(files).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8")).shown,
+  ).toEqual({ reached: "named", lastName: name, recoveryRecordDamaged: true });
+  expect((await readStartAgainNote(f.stateDir))?.lastName).toBe(name);
+  await expectStartAgainDeleted(f);
+});
+
+it("a confirmation that did not show the damaged recovery record is refused, and nothing is written", async () => {
+  const { f, name, actions, request } = await missingDatabase([], damageRecoveryRecord);
+  const before = await attemptFiles(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...request,
+      confirmMissingDatabase: {
+        nothingFiledOrSold: true,
+        shown: { reached: "named", lastName: name },
+      },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await attemptFiles(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+});
+
+it("a confirmation that shows a damaged recovery record the box does not find is refused", async () => {
+  const { f, name, actions, request } = await missingDatabase();
+  await expect(lstat(recoveryRecord(f))).resolves.toMatchObject({ size: expect.any(Number) });
+  const before = await attemptFiles(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...request,
+      confirmMissingDatabase: {
+        nothingFiledOrSold: true,
+        shown: { reached: "named", lastName: name, recoveryRecordDamaged: true },
+      },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await attemptFiles(f)).toEqual(before);
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
+});
+
+it("the Start again route takes recoveryRecordDamaged only as true", async () => {
+  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const app = routes(f, actions);
+  for (const recoveryRecordDamaged of [false, "true", 1]) {
+    const refused = await sendStartAgain(app, owner, {
+      ...ids,
+      register: request.register,
+      confirmMissingDatabase: {
+        nothingFiledOrSold: true,
+        shown: { reached: "named", lastName: name, recoveryRecordDamaged },
+      },
+    });
+    expect(await refused.json(), JSON.stringify(recoveryRecordDamaged)).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+  }
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("an attempt that never chose a name is summarised as claimed, with no name", async () => {
