@@ -1,11 +1,24 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, mkdir, realpath, readFile, rm, writeFile, symlink } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  realpath,
+  readFile,
+  rm,
+  writeFile,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createFirstSetupCoordinator, createFirstSetupStore } from "@waitron/provisioning";
+import {
+  createFirstSetupCoordinator,
+  createFirstSetupStore,
+  type StartAgainSummary,
+} from "@waitron/provisioning";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
@@ -197,17 +210,46 @@ it("an authenticated missing-database retirement preserves spent intent and all 
     "retained malformed public chunk",
   );
   const before = await readFile(join(f.stateDir, "first-setup.json"));
-  const binding = await f.actions.startAgainFirstSetup({
-    ...(await f.startRequest()),
+  const startAgain = async (confirmMissingDatabase?: {
+    nothingFiledOrSold: true;
+    shown: StartAgainSummary;
+  }) =>
+    f.actions.startAgainFirstSetup({
+      ...(await f.startRequest()),
+      owner,
+      register: {
+        kind: "current-master",
+        status: "Unknown",
+        custodian: "Elena",
+        reference: "d".repeat(64),
+        consultedAt: "2026-10-16T02:00:00.000Z",
+      },
+      ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+    });
+  await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  await expect(
+    readdir(join(f.stateDir, "first-setup-start-again-confirmations")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
+  const { revision, ownerGeneration, inspectionId } = await f.startRequest();
+  const shown = await f.actions.startAgainSummary({
+    inspectionId,
+    revision,
+    ownerGeneration,
     owner,
-    register: {
-      kind: "current-master",
-      status: "Unknown",
-      custodian: "Elena",
-      reference: "d".repeat(64),
-      consultedAt: "2026-10-16T02:00:00.000Z",
-    },
   });
+  expect(shown).toEqual({ reached: "named", lastName: null });
+  const binding = await startAgain({ nothingFiledOrSold: true, shown });
+  const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
+  expect(confirmations).toHaveLength(1);
+  expect(
+    JSON.parse(
+      await readFile(
+        join(f.stateDir, "first-setup-start-again-confirmations", confirmations[0]!),
+        "utf8",
+      ),
+    ),
+  ).toMatchObject({ database: "missing", shown });
   expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
   expect((JSON.parse(before.toString()) as { consumptionIntent: boolean }).consumptionIntent).toBe(
     true,

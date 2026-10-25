@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { readFile, readdir, writeFile, rm } from "node:fs/promises";
 import * as filesystem from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -12,6 +12,7 @@ import {
   createFirstSetupResolutionStore,
   inspectFirstSetupWorkspaceSelection,
   type RegisterAnswer,
+  type StartAgainSummary,
 } from "@waitron/provisioning";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { firstFiscalPublicDigest as publicDigest } from "./first-fiscal-delivery.js";
@@ -202,12 +203,24 @@ it("successive never-activated PDFs retain every old block while allowing a thir
     selectionGeneration: 3,
   });
 });
-it("an earlier abandoned activation with a missing database does not become empty because a replacement has an unused PDF", async () => {
+const CONFIRMATIONS = "first-setup-start-again-confirmations";
+async function abandonedWithMissingDatabase(
+  changes: readonly ("activation-started" | "committed")[],
+) {
   const f = await fixture();
-  const state = await f.store.update(f.ownerAttempt.attemptId, f.ownerAttempt.revision, {
-    kind: "activation-started",
-  });
-  await f.store.update(f.ownerAttempt.attemptId, state.revision, { kind: "abandoned" });
+  let revision = f.ownerAttempt.revision;
+  for (const kind of changes) {
+    const state = await f.store.update(
+      f.ownerAttempt.attemptId,
+      revision,
+      kind === "committed" ? { kind, result: {} } : { kind },
+    );
+    revision = state.revision;
+  }
+  await f.store.update(f.ownerAttempt.attemptId, revision, { kind: "abandoned" });
+  const name = (
+    firstSetupModuleContext((await f.store.read())!, f.module).request as { identity: string }
+  ).identity;
   await rm(join(f.venueDir, "venue.db"));
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const recovered = await f.host.owner.recoverFirstSetupOwner({
@@ -218,24 +231,79 @@ it("an earlier abandoned activation with a missing database does not become empt
     password: f.password,
   });
   const current = await f.host.resolution.inspectFirstSetupResolution();
-  const binding = await f.actions.startAgainFirstSetup({
+  const ids = {
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
-    register: f.answer(),
     owner: {
       attemptId: recovered.state.attemptId,
       revision: recovered.state.revision,
       ownerGeneration: recovered.state.ownerGeneration,
       capability: recovered.capability,
     },
+  };
+  const startAgain = (shown?: StartAgainSummary) =>
+    f.actions.startAgainFirstSetup({
+      ...ids,
+      register: f.answer(),
+      ...(shown === undefined
+        ? {}
+        : { confirmMissingDatabase: { nothingFiledOrSold: true as const, shown } }),
+    });
+  const attemptFiles = () =>
+    Promise.all(
+      [join(f.stateDir, "first-setup.json"), join(f.venueDir, "first-setup-claim.json")].map(
+        (path) => readFile(path),
+      ),
+    );
+  const confirmations = () =>
+    readdir(join(f.stateDir, CONFIRMATIONS)).catch((error: { code?: string }) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+  const summary = () => f.actions.startAgainSummary(ids);
+  return { f, name, startAgain, summary, attemptFiles, confirmations };
+}
+it("an earlier abandoned activation with a missing database does not become empty because a replacement has an unused PDF", async () => {
+  const { f, name, startAgain, summary, attemptFiles, confirmations } =
+    await abandonedWithMissingDatabase(["activation-started"]);
+  const before = await attemptFiles();
+  await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await attemptFiles()).toEqual(before);
+  expect(await confirmations()).toEqual([]);
+  const shown = await summary();
+  expect(shown).toEqual({ reached: "fiscal-started", lastName: name });
+  await expect(startAgain({ reached: "named", lastName: name })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
   });
+  expect(await attemptFiles()).toEqual(before);
+  expect(await confirmations()).toEqual([]);
+  const binding = await startAgain(shown);
+  const written = await confirmations();
+  expect(written).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, written[0]!), "utf8")),
+  ).toMatchObject({ database: "missing", shown });
   const replacement = await fixture({
     root: f.root,
     venueDir: binding.venueDir,
     stateDir: binding.stateDir,
   });
   await expect(replacement.start()).rejects.toMatchObject({ code: "setup.not_ready" });
+});
+it("an attempt committed before it was abandoned, with a missing database, is shown as fiscal-finished and starts again on confirmation", async () => {
+  const { f, name, startAgain, summary, confirmations } = await abandonedWithMissingDatabase([
+    "activation-started",
+    "committed",
+  ]);
+  const shown = await summary();
+  expect(shown).toEqual({ reached: "fiscal-finished", lastName: name });
+  await startAgain(shown);
+  const written = await confirmations();
+  expect(written).toHaveLength(1);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, written[0]!), "utf8")),
+  ).toMatchObject({ database: "missing", shown });
 });
 it.each([
   "no-master",

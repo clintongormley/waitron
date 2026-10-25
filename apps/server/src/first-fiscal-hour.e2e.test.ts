@@ -80,19 +80,37 @@ it.each(
           (path) => readFile(path),
         ),
       );
+      const ids = {
+        inspectionId: fresh.inspectionId,
+        revision: fresh.revision,
+        ownerGeneration: fresh.ownerGeneration,
+      };
+      const ownerHeaders = {
+        "X-Waitron-Setup-Owner": owner.capability,
+        "X-Waitron-Setup-Attempt": owner.state.attemptId,
+        "X-Waitron-Setup-Revision": String(owner.state.revision),
+        "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
+      };
+      const unconfirmed = await post(
+        "/setup-api/first-setup/resolution/start-again",
+        ids,
+        ownerHeaders,
+      );
+      expect(unconfirmed.status).toBe(503);
+      expect(await unconfirmed.json()).toMatchObject({ error: { code: "setup.not_ready" } });
+      const summary = await post(
+        "/setup-api/first-setup/resolution/start-again/summary",
+        ids,
+        ownerHeaders,
+      );
+      expect(summary.status, await summary.clone().text()).toBe(200);
       const selected = await post(
         "/setup-api/first-setup/resolution/start-again",
         {
-          inspectionId: fresh.inspectionId,
-          revision: fresh.revision,
-          ownerGeneration: fresh.ownerGeneration,
+          ...ids,
+          confirmMissingDatabase: { nothingFiledOrSold: true, shown: await summary.json() },
         },
-        {
-          "X-Waitron-Setup-Owner": owner.capability,
-          "X-Waitron-Setup-Attempt": owner.state.attemptId,
-          "X-Waitron-Setup-Revision": String(owner.state.revision),
-          "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
-        },
+        ownerHeaders,
       );
       expect(selected.status).toBe(200);
       const selection = await selected.json();

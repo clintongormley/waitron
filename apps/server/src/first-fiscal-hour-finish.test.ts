@@ -512,8 +512,39 @@ it("a missing hour database needs freshly recovered ownership before retirement"
     ownerGeneration: snapshot.inspection.ownerGeneration!,
     owner: f.owner(),
   };
-  const pending = actions.startAgainFirstSetup(input);
+  await expect(actions.startAgainFirstSetup(input)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  const shown = await actions.startAgainSummary(input);
+  expect(shown).toEqual(await hourShown(f));
+  const at = new Date().toISOString();
+  const pending = actions.startAgainFirstSetup({
+    ...input,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
   await expect(pending).resolves.toMatchObject({ selectionGeneration: 1 });
+  const state = (await f.host.store.read())!;
+  const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
+  expect(confirmations).toEqual([`${Date.parse(at)}-${state.frozen.attemptId}.json`]);
+  expect(
+    JSON.parse(
+      await readFile(
+        join(f.stateDir, "first-setup-start-again-confirmations", confirmations[0]!),
+        "utf8",
+      ),
+    ),
+  ).toEqual({
+    version: 1,
+    at,
+    attemptId: state.frozen.attemptId,
+    database: "missing",
+    administrator: {
+      displayName: state.frozen.request.admin.displayName,
+      email: state.frozen.request.admin.email,
+    },
+    ownerGeneration: input.owner.ownerGeneration,
+    shown,
+  });
   const binding = await pending;
   const store = createFirstSetupResolutionStore({
     stateDir: f.stateDir,
@@ -534,6 +565,38 @@ it("a missing hour database needs freshly recovered ownership before retirement"
     })),
   );
   expect(await store.readOriginals(binding.resolutionId)).toEqual(snapshot.originals);
+});
+
+async function hourShown(f: Awaited<ReturnType<typeof fixture>>) {
+  const state = (await f.host.store.read())!;
+  return {
+    reached: "named" as const,
+    lastName: (firstSetupModuleContext(state, MODULE).request as { identity: string }).identity,
+  };
+}
+
+it("a missing hour database refuses a confirmed Start again from an owner whose latest event is not a fresh recovery", async () => {
+  const f = await fixture();
+  await f.refreshOwner();
+  const snapshot = await f.host.resolution.captureFirstSetupOriginals();
+  const actions = createFirstSetupResolutionActions({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    host: f.host,
+  });
+  const shown = await hourShown(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: snapshot.inspection.inspectionId,
+      revision: snapshot.inspection.revision!,
+      ownerGeneration: snapshot.inspection.ownerGeneration!,
+      owner: f.owner(),
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(
+    readdir(join(f.stateDir, "first-setup-start-again-confirmations")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("hour Finish requires fresh recovery and cannot activate an uncommitted attempt", async () => {
