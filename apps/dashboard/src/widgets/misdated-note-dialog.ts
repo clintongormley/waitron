@@ -18,6 +18,7 @@ import type { DashboardApi } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { wholeTimes, wholeTimesStyles } from "./alert-format.js";
 
 const NOTE_LIMIT = 500;
 
@@ -33,6 +34,7 @@ export class MisdatedNoteDialog extends LitElement {
 
   static override styles = [
     baseStyles,
+    wholeTimesStyles,
     css`
       :host {
         display: contents;
@@ -194,7 +196,7 @@ export class MisdatedNoteDialog extends LitElement {
       ${
         this.open
           ? html`<div class="fields">
-              ${this.summary ? html`<p data-test="note-summary">${this.summary}</p>` : nothing}
+              ${this.summary ? html`<p data-test="note-summary">${wholeTimes(this.summary)}</p>` : nothing}
               <wt-textarea
                 name="note"
                 label=${t("misdated_note.label")}

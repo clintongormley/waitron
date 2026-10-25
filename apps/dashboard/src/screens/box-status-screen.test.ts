@@ -1899,6 +1899,39 @@ describe("dashboard-box-status-screen's sales dated wrongly", () => {
       );
     });
 
+    it.each(["en", "es"] as const)(
+      "never breaks a time across two lines in the dialog's summary, for a list and for one that cannot tell (%s)",
+      async (locale) => {
+        setLocale(locale);
+        const { innerWidth, innerHeight } = window;
+        onTestFinished(() => page.viewport(innerWidth, innerHeight));
+        const { el } = await mount(withNotes([OPEN, UNCONFIRMED]));
+        const broken: string[] = [];
+        let checked = 0;
+        for (const [index, entry] of qa(el, "[data-test=misdated-entry]").entries()) {
+          await userEvent.click(markIn(entry)!);
+          await flush(el);
+          const dialog = noteDialog(el)!;
+          const summary = () => dialog.shadowRoot!.querySelector("[data-test=note-summary]");
+          expect(summary()).not.toBeNull();
+          // Past phone widths the dialog stops growing, so its summary's lines stop moving.
+          for (let width = 320; width <= 560; width += 4) {
+            await page.viewport(width, 900);
+            await el.updateComplete;
+            const found = timesAcrossLines([summary()!]);
+            checked += found.checked;
+            broken.push(...found.broken.map((time) => `entry ${index}, ${width}px: ${time}`));
+          }
+          (dialog.shadowRoot!.querySelector("[data-test=note-cancel]") as HTMLElement).click();
+          await flush(el);
+          await vi.waitFor(() => expect(dialog.open).toBe(false));
+        }
+        // Each width checks the list's two times and the cannot-tell sentence's one.
+        expect(checked).toBe(61 * 3);
+        expect(broken).toEqual([]);
+      },
+    );
+
     it("Add note on a handled entry with no note opens the dialog to add its note; one with a note has none", async () => {
       const { el } = await mount(withNotes([], [NO_NOTE, NOTED]));
       await openFold(el);
