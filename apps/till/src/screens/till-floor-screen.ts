@@ -10,6 +10,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
@@ -827,8 +828,11 @@ export class TillFloorScreen extends LitElement {
 
   @state() private activeZone: string | undefined = undefined;
   @property() selectedZoneId: string | undefined = undefined;
-  /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
-  @state() private viewOverride: "map" | "list" | undefined = undefined;
+  /** List or Map as this device last chose it for each zone; unset, each zone derives its view. */
+  @property({ attribute: false }) viewMemory?: FloorViewChoices;
+  /** A toggle tap this session, per zone (`undefined` on a floor with no zones); it wins over
+   * `viewMemory`, and a zone with neither derives its view. */
+  @state() private viewOverride: ReadonlyMap<string | undefined, FloorView> = new Map();
   /** The free table whose guest count is being asked for, with the tables seated beside it. */
   @state() private seating: {
     table: TableState;
@@ -1246,8 +1250,11 @@ export class TillFloorScreen extends LitElement {
     this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key });
   }
 
-  #toggleView(current: "map" | "list"): void {
-    this.viewOverride = current === "map" ? "list" : "map";
+  #toggleView(current: FloorView): void {
+    const next = current === "map" ? "list" : "map";
+    const key = this.#zone.activeKey;
+    this.viewOverride = new Map(this.viewOverride).set(key, next);
+    if (key !== undefined) this.viewMemory?.remember(key, next);
   }
 
   #onCanvasOpen(event: Event): void {
@@ -2233,6 +2240,7 @@ export class TillFloorScreen extends LitElement {
       this.activeZone,
       this.refusedZoneId,
       this.viewOverride,
+      this.viewMemory,
       this.#pending,
       currentLocale(),
       reminderClock(this.tables, this.#drawnAt),
@@ -2258,7 +2266,10 @@ export class TillFloorScreen extends LitElement {
     const onMap = mapTables(drawn, this.#drawnAt);
     const mapIds = new Set(onMap.map((table) => table.id));
     const unplaced = listed.filter((table) => !mapIds.has(table.id));
-    const view = this.viewOverride ?? (onMap.length > 0 ? "map" : "list");
+    const view =
+      this.viewOverride.get(activeKey) ??
+      (activeKey === undefined ? undefined : this.viewMemory?.read(activeKey)) ??
+      (onMap.length > 0 ? "map" : "list");
     return {
       tabs,
       marks,
