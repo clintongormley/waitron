@@ -447,3 +447,35 @@ it("a freshly confirmed committed unsigned promotion returns the exact result wi
   expect(replay).toEqual(first);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
+
+it("preparation keeps the input it began with when the caller changes it during the evidence read", async () => {
+  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  const f = fixture(),
+    current = structuredClone(f.facts);
+  let reached!: () => void, release!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const preparation = FISCAL_OPERATIONS.configure!({
+    environment: {},
+    readPublicEvidence: async () => {
+      reached();
+      await waiting;
+      return { trust: null, current };
+    },
+  });
+  const result = await withOperationAuthority(f.binding, "manager", async (authority) => {
+    const pending = preparation.prepare({ binding: f.binding, authority, input: f.input }, (op) =>
+      withTransaction(suite.db, (tx) => ALLOCATED_FISCAL_STANDBY.reserve!(tx, primary, target, op)),
+    );
+    await reading;
+    Object.assign(f.input, fixture(41).input);
+    release();
+    return pending;
+  });
+  expect(result).toEqual({ state: { version: 1, evidence: current.input } });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+});
