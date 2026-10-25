@@ -368,7 +368,8 @@ export class TillFloorScreen extends LitElement {
 
         /* Room for the badge hanging past the trailing edge, whether help is on or off. */
         .actions,
-        .layout-due {
+        .layout-due,
+        .ready-bar {
           margin-inline-end: calc(var(--wt-help-badge-target) / 2);
         }
       }

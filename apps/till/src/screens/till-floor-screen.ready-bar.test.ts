@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
+import { setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import {
   cleanupWidgets,
   mountWidget,
@@ -282,7 +283,10 @@ const frames: [number, number][] = [
 ];
 
 describe("till-floor-screen: where the Ready bar sits", () => {
-  afterEach(resetPage);
+  afterEach(async () => {
+    setHelpMode(false);
+    await resetPage();
+  });
 
   for (const [width, height] of frames) {
     it(`sits at the foot of the scrolling area, with two tables or forty (${width} px)`, async () => {
@@ -325,6 +329,31 @@ describe("till-floor-screen: where the Ready bar sits", () => {
       // Eight fit side by side at 1024 px; on a phone they do not, and the strip scrolls instead.
       const strip = section.querySelector<HTMLElement>(".ready-tables")!;
       if (width === 390) expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+    });
+
+    it(`with help on, the bar's badge shows whole inside the scrolling area (${width} px)`, async () => {
+      await pageAt(width, height);
+      const { floor, area } = await inShell(numbered(8, 8));
+      // The shell's own badge size, which the scrolling area inherits in the app.
+      area.parentElement!.style.setProperty("--wt-help-badge-target", "32px");
+      area.parentElement!.style.setProperty("--wt-help-badge-size", "24px");
+      setHelpMode(true);
+      await floor.updateComplete;
+      const section = bar(floor)!;
+      const badge = section.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+      await badge.updateComplete;
+      const at = badge.getBoundingClientRect();
+      const inside = area.getBoundingClientRect();
+      expect(at.width).toBeGreaterThan(0);
+      expect(at.left).toBeGreaterThanOrEqual(inside.left);
+      expect(at.right).toBeLessThanOrEqual(inside.right);
+      expect(at.top).toBeGreaterThanOrEqual(inside.top);
+      expect(at.bottom).toBeLessThanOrEqual(inside.bottom);
+      for (const part of [section.querySelector("h2")!, openButton(floor)]) {
+        const box = part.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(inside.left);
+        expect(box.right).toBeLessThanOrEqual(inside.right);
+      }
     });
 
     it(`is drawn under an overlay (${width} px)`, async () => {
