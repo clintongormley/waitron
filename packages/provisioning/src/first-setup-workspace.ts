@@ -406,6 +406,9 @@ export async function selectFirstSetupWorkspace(
     uncertain();
   }
 }
+export function insideFirstSetupWorkspace(dir: string): boolean {
+  return basename(dirname(dirname(dir))) === "first-setup-workspaces";
+}
 export async function resolveFirstSetupWorkspace(
   anchorInput: FirstSetupAnchor,
 ): Promise<FirstSetupBootTarget> {
@@ -423,7 +426,7 @@ async function resolveWorkspace(
     if (venue === null && state === null && retirement === null) {
       const value = await read(join(anchor.venueDir, "first-setup-workspace.json"));
       if (value === null) {
-        if (basename(dirname(dirname(anchor.venueDir))) === "first-setup-workspaces") uncertain();
+        if (insideFirstSetupWorkspace(anchor.venueDir)) uncertain();
         return { ...anchor, binding: null };
       }
       const { binding } = checkedWitness(value);
@@ -458,7 +461,7 @@ export async function assertFirstSetupVenueTarget(venueInput: string): Promise<v
       uncertain();
     const backlink = await read(join(venueDir, "first-setup-workspace.json"));
     if (backlink === null) {
-      if (basename(dirname(dirname(venueDir))) === "first-setup-workspaces") uncertain();
+      if (insideFirstSetupWorkspace(venueDir)) uncertain();
       return;
     }
     const witness = checkedWitness(backlink);
@@ -489,7 +492,7 @@ async function assertBootTarget(
       uncertain();
     const backlink = await read(join(target.venueDir, "first-setup-workspace.json"));
     if (backlink === null) {
-      if (basename(dirname(dirname(target.venueDir))) === "first-setup-workspaces") uncertain();
+      if (insideFirstSetupWorkspace(target.venueDir)) uncertain();
       return;
     }
     const witness = checkedWitness(backlink);

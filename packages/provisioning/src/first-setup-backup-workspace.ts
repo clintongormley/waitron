@@ -631,6 +631,12 @@ export function createFirstSetupBackupWorkspace(anchorInput: FirstSetupRoots) {
         .catch(writeFailure),
   };
 }
+export function insideBackupRepairTarget(dir: string): boolean {
+  return (
+    basename(dirname(dir)) === "target" &&
+    basename(dirname(dirname(dirname(dir)))) === "backup-recovery"
+  );
+}
 export async function resolveFirstSetupBackupWorkspace(
   anchorInput: FirstSetupRoots,
 ): Promise<{ kind: "absent" } | { kind: "repair" | "selected"; target: BackupRepairTarget }> {
@@ -680,14 +686,7 @@ export async function assertFirstSetupBackupBootTarget(input: FirstSetupRoots): 
       const v1 = await read(join(target.venueDir, "first-setup-workspace.json"));
       const anchor = v1 === null ? target : await firstSetupAnchorFor(target);
       const location = await resolveFirstSetupBackupWorkspace(anchor);
-      if (
-        location.kind !== "absent" ||
-        Object.values(target).some(
-          (root) =>
-            basename(dirname(root)) === "target" &&
-            basename(dirname(dirname(dirname(root)))) === "backup-recovery",
-        )
-      )
+      if (location.kind !== "absent" || Object.values(target).some(insideBackupRepairTarget))
         uncertain();
       return;
     }

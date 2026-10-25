@@ -2,8 +2,12 @@ import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
-import { firstSetupAnchorFor } from "./first-setup-workspace.js";
-import { resolveFirstSetupBackupWorkspace } from "./first-setup-backup-workspace.js";
+import { firstSetupAnchorFor, insideFirstSetupWorkspace } from "./first-setup-workspace.js";
+import {
+  insideBackupRepairTarget,
+  resolveFirstSetupBackupWorkspace,
+} from "./first-setup-backup-workspace.js";
+import { AppError } from "@waitron/shared";
 import "./errors.js";
 
 export async function boxFolders(roots: FirstSetupRoots): Promise<FirstSetupRoots> {
@@ -17,5 +21,12 @@ export async function boxFolders(roots: FirstSetupRoots): Promise<FirstSetupRoot
     (error: NodeJS.ErrnoException) => error.code !== "ENOENT",
   );
   if (workspace) return firstSetupAnchorFor(roots);
-  return { stateDir: await canonicalFirstSetupDirectory(roots.stateDir), venueDir };
+  const folders = { stateDir: await canonicalFirstSetupDirectory(roots.stateDir), venueDir };
+  if (
+    Object.values(folders).some(
+      (dir) => insideFirstSetupWorkspace(dir) || insideBackupRepairTarget(dir),
+    )
+  )
+    throw new AppError("setup.attempt_uncertain", {});
+  return folders;
 }
