@@ -314,29 +314,17 @@ function checkParts(tables: ZonePlanSave["tables"]): void {
   });
 }
 
-async function namesTaken(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<Set<string>> {
-  const masters = await tx
-    .select({ label: floorPlanTables.label })
-    .from(floorPlanTables)
-    .innerJoin(floorZones, eq(floorZones.id, floorPlanTables.zoneId))
-    .where(and(eq(floorZones.locationId, cfg.locationId), ne(floorPlanTables.zoneId, zoneId)));
-  const live = await tx
-    .select({ label: diningTables.label })
-    .from(diningTables)
-    .where(and(eq(diningTables.locationId, cfg.locationId), ne(diningTables.zoneId, zoneId)));
-  return new Set([...masters.map((m) => m.label), ...live.map((t) => t.label)]);
-}
-
 /**
- * The short names other zones' tables hold, by key, each mapped to its holder's full name; a table
- * with none is shown by its full name, so that name is held too. Plan tables come first, so a name
- * both hold is named by the plan's table.
+ * Other zones' tables, read once for a save's checks: their labels, and the short names they hold
+ * by key, each mapped to its holder's full name. A table with no short name is shown by its full
+ * name, so that name is held too. Plan tables come first, so a name both hold is named by the
+ * plan's table.
  */
-async function shortNamesTaken(
+async function otherZonesTaken(
   tx: Transaction,
   cfg: TillConfig,
   zoneId: string,
-): Promise<Map<string, string>> {
+): Promise<{ labels: Set<string>; shortNames: Map<string, string> }> {
   const masters = await tx
     .select({ label: floorPlanTables.label, shortName: floorPlanTables.shortName })
     .from(floorPlanTables)
@@ -346,12 +334,14 @@ async function shortNamesTaken(
     .select({ label: diningTables.label, shortName: diningTables.shortName })
     .from(diningTables)
     .where(and(eq(diningTables.locationId, cfg.locationId), ne(diningTables.zoneId, zoneId)));
-  const taken = new Map<string, string>();
+  const labels = new Set<string>();
+  const shortNames = new Map<string, string>();
   for (const { label, shortName } of [...masters, ...live]) {
+    labels.add(label);
     const key = shortNameKey(shortName ?? label);
-    if (!taken.has(key)) taken.set(key, label);
+    if (!shortNames.has(key)) shortNames.set(key, label);
   }
-  return taken;
+  return { labels, shortNames };
 }
 
 type CheckedTable = Omit<ZonePlanSave["tables"][number], "shortName"> & {
@@ -411,11 +401,12 @@ async function checkSave(
     }
   }
 
-  const taken = await namesTaken(tx, cfg, zoneId);
+  const taken = await otherZonesTaken(tx, cfg, zoneId);
   const seen = new Set<string>();
   for (const table of tables) {
     const label = table.label.trim();
-    if (seen.has(label) || taken.has(label)) throw new AppError("table.label_taken", { label });
+    if (seen.has(label) || taken.labels.has(label))
+      throw new AppError("table.label_taken", { label });
     seen.add(label);
   }
   const masterById = new Map(masters.map((m) => [m.id, m]));
@@ -430,7 +421,7 @@ async function checkSave(
           : { stored: { label: master.label, shortName: master.shortName } }),
       };
     }),
-    await shortNamesTaken(tx, cfg, zoneId),
+    taken.shortNames,
   );
 
   const kept = new Set(tables.map((t) => t.id));

@@ -1381,15 +1381,35 @@ describe("short names", () => {
   it("refuses a short name another zone's plan table or live table uses, ignoring case", async () => {
     const z = await zone();
     for (const holding of [masterHolding, liveHolding]) {
-      const s = short();
-      const takenBy = await holding(s);
-      const sent = s.toUpperCase();
+      const hex = randomUUID().slice(0, 4);
+      const takenBy = await holding(`s${hex}`);
+      const sent = `S${hex.toUpperCase()}`;
       const error = await refusal(
         check(z, { revision: 0, tables: [entry("a", fresh("New"), { shortName: sent })] }),
       );
       expect(error.code).toBe("table.short_name_taken");
       expect(error.params).toEqual({ shortName: sent, takenBy, field: "shortName" });
     }
+  });
+
+  it("names the plan table when a plan table and a live table both hold the short name", async () => {
+    const other = await zone();
+    const s = short();
+    const planLabel = fresh("Plan");
+    const [planId] = await masterOf(other, [{ label: planLabel }]);
+    const live = await liveTable(other, fresh("Live"));
+    await inTx(v, async (tx) => {
+      await tx.update(floorPlanTables).set({ shortName: s }).where(eq(floorPlanTables.id, planId!));
+      await tx.update(diningTables).set(shortNameColumns(s)).where(eq(diningTables.id, live));
+    });
+    const error = await refusal(
+      check(await zone(), {
+        revision: 0,
+        tables: [entry("a", fresh("New"), { shortName: s })],
+      }),
+    );
+    expect(error.code).toBe("table.short_name_taken");
+    expect(error.params).toEqual({ shortName: s, takenBy: planLabel, field: "shortName" });
   });
 
   it("counts another zone's table with no short name by its full name", async () => {
