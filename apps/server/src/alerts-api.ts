@@ -51,7 +51,7 @@ function judgeNoteBody(text: string, required: boolean): string | null {
     }
     if (parsed !== null) {
       if (typeof parsed !== "object" || Array.isArray(parsed))
-        throw new AppError("management.request_invalid", { field: "note" });
+        throw new AppError("management.request_invalid", { field: "body" });
       const raw = (parsed as { note?: unknown }).note;
       if (raw !== undefined) {
         if (typeof raw !== "string")

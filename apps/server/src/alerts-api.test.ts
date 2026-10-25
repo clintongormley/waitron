@@ -429,14 +429,20 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
     }
   });
 
-  it("refuses a note that is not a string, and a body that is not an object", async () => {
+  it("refuses a note that is not a string under the note, and a body that is not an object as the body", async () => {
     const v = await seedVenue();
     const app = appFor();
     const id = await raise(v, MISDATED);
-    for (const body of [note(42), note(null), note(["x"]), "[]", '"x"', "7"]) {
+    for (const body of [note(42), note(null), note(["x"])]) {
       await expectError(await postBody(app, id, v.manager, body), 400, {
         code: "management.request_invalid",
         params: { field: "note" },
+      });
+    }
+    for (const body of ["[]", '"x"', "7"]) {
+      await expectError(await postBody(app, id, v.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "body" },
       });
     }
     expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
@@ -609,7 +615,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
     });
   });
 
-  it("refuses a missing, empty or blank note, and a body that does not parse", async () => {
+  it("refuses a missing, empty or blank note, and a body that does not parse or is not an object", async () => {
     const v = await seedVenue();
     const app = appFor();
     const id = await raise(v, MISDATED);
@@ -620,10 +626,12 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
         params: { field: "note" },
       });
     }
-    await expectError(await postNote(app, id, v.manager, '{note:"x"'), 400, {
-      code: "management.request_invalid",
-      params: { field: "body" },
-    });
+    for (const body of ['{note:"x"', "[]", '"x"', "7"]) {
+      await expectError(await postNote(app, id, v.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "body" },
+      });
+    }
     expect((await storedIncident(id)).acknowledgedNote).toBeNull();
   });
 
