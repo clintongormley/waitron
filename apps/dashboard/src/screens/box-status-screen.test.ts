@@ -162,6 +162,33 @@ function deferred<T>() {
 }
 
 describe("dashboard-box-status-screen", () => {
+  it.each(["en", "es"] as const)(
+    "explains exhausted cleanup without sending someone else to fix it (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const api = stubApi(
+        {},
+        health({}, { freeBytes: 0, reclaimable: { bytes: 0, backupRunning: false } }),
+      );
+      const { el } = await mount(api);
+      expect(text(freeButton(el))).toBe(t("box_status.free_nothing"));
+      expect(freeButton(el)!.hasAttribute("disabled")).toBe(true);
+      const guidance = text(q(el, "[data-test=fillers]"));
+      expect(guidance).toContain(t("backup.title"));
+      if (locale === "en") {
+        expect(guidance).toContain("only after a new backup succeeds");
+        expect(guidance).toContain("cannot free a full disk now");
+        expect(guidance).toContain("Leave without changes to stop");
+        expect(guidance).toContain("database, recovery keys and saved backups");
+        expect(guidance).not.toMatch(/installer|installed|support/i);
+      } else {
+        expect(guidance).toBe(es["box_status.fillers"]);
+      }
+      cleanupWidgets();
+      expect(api.freeBoxSpace).not.toHaveBeenCalled();
+    },
+  );
+
   it("draws the title and the seven parts in order, each with its state", async () => {
     const { el } = await mount(stubApi());
     expect(text(q(el, "h1"))).toBe(t("box_status.title"));

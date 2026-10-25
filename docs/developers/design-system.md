@@ -5507,9 +5507,10 @@ alert list. Its one staged input is the note in its note dialog, which takes its
 - **Under the rows.** A note when a staff-notice check, or the read of the records waiting to be
   sent, could not be made; a note when the bell's
   alerts could not be read (the rows still show, from the box's read); "{n} other alerts" with
-  See all alerts when some alert or notice belongs to no row; and how to free more space, and who
-  can. What fills the disk (database, backups on the box, logs, the rest of the disk) is the Disk
-  space row's detail.
+  See all alerts when some alert or notice belongs to no row; and the backup-retention choice,
+  its lack of immediate disk-space recovery, leaving without changes and the files to preserve.
+  What fills the disk (database, backups on the box, logs, the rest of the disk) is the Disk space
+  row's detail.
 - **Free.** On the Disk space row, "Free {size}" with the figure the box would free, and a help-mode
   "?" that opens the guide. It is not drawn until the box's read has answered (the page draws no
   rows until then, nor until the bell's read has answered or failed). Its states follow the button rule (Forms, above): quiet and disabled

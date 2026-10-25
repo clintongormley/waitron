@@ -96,9 +96,13 @@ much it freed.
 While a backup is running, **Free** leaves the backup's working folder alone, including anything a
 cut-off backup left there, and the page says those files are not counted.
 
-At the bottom, the page always says how to free more: keep fewer backups on the box, on the
-**Backups** page, or ask whoever installed the box to remove old versions of Waitron or fit a
-bigger disk. The sizes under **Disk space** show what is filling the disk.
+The sizes under **Disk space** show what is filling the disk. On **Backups**, you can choose how
+many archives to keep. Older archives are removed only after a new backup succeeds at that
+destination, so changing this setting cannot free a full disk immediately. Leave without changing
+the settings to stop. Keep your database, recovery keys and saved backups.
+
+This page cannot remove other files or move your data to a larger disk. If **Free** is not enough
+and no new backup can be made, that recovery route is not available here.
 
 When the bell says a backup could not be prepared because there is not enough space, open
 **Box status** and check **Disk space**. Use **Free** if it is available, or leave without

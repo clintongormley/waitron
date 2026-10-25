@@ -4590,7 +4590,7 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 - **A1089: backup preparation still needs missing-file and unknown-cause recovery.** Establish a supported remedy for `recovery.state_incomplete` and the `backup_stop` fallback; retain the safe cause and never manufacture replacement keys.
   [Audit](backlog/self-service-refusals.md#backup-preparation).
 
-- **A1089: disk-space guidance must cover exhausted cleanup without installer referrals.** The staging-space alert now names Box status's existing Free action and its limit. Rework the page's installer footer and provide a supported choice when no reclaimable files remain, preserving database files, keys and saved backups.
+- **A1089: exhausted cleanup still needs a supported disk-recovery workflow.** Box status explains the backup-retention choice, its lack of immediate space recovery and leaving without changes. Provide an authenticated recovery choice when no reclaimable files remain and a new backup cannot fit; preserve database files, keys and saved backups.
   [Audit](backlog/self-service-refusals.md#backup-preparation).
 
 - **A1089: a failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, offer a correction and any required sign-in there, and recheck that sealing succeeds. Do not promise current recovery keys before success.

@@ -101,10 +101,14 @@ Mientras se está haciendo una copia de seguridad, **Liberar** no toca la carpet
 copias, ni siquiera lo que dejó en ella una copia interrumpida, y la página dice que esos archivos
 no se cuentan.
 
-Al final, la página siempre explica cómo ganar más espacio: guardar menos copias en el equipo, en la
-página **Copias de seguridad**, o pedir a quien instaló el equipo que borre versiones anteriores
-de Waitron o ponga un disco mayor. Los tamaños bajo **Espacio en disco** muestran qué está
-llenando el disco.
+Los tamaños bajo **Espacio en disco** muestran qué está llenando el disco. En **Copias de
+seguridad**, puedes elegir cuántas copias conservar. Las antiguas solo se borran después de guardar
+una nueva en ese destino, así que cambiar este ajuste no libera espacio de inmediato en un disco
+lleno. Sal sin cambiar los ajustes para parar. Conserva la base de datos, las claves de recuperación
+y las copias guardadas.
+
+Esta página no puede borrar otros archivos ni trasladar tus datos a un disco mayor. Si **Liberar**
+no basta y no se puede hacer una copia nueva, esa vía de recuperación no está disponible aquí.
 
 Si la campana avisa de que no se pudo preparar una copia por falta de espacio, abre
 **Estado del equipo** y revisa **Espacio en disco**. Pulsa **Liberar** si está disponible, o sal

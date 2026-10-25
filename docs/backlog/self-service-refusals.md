@@ -769,10 +769,17 @@ and leaving without cleanup. Free's filesystem cases exercise leftovers, log/cra
 rules, active-backup exclusion and retained data; the dashboard cases exercise an explicit press
 and leaving without one. They do not establish that cleanup frees enough for every backup.
 
-**Still open: space beyond the supported cleanup.** The message states that Free cannot remove
-other files. Box status's existing footer still refers to an installer, and safe in-app guidance
-when no reclaimable files remain needs a separate fix. Do not delete database files, keys or
-saved backups to silence the alert. The historical source inventory above remains unchanged.
+**2026-10-25 Box status footer rework:** the footer explains choosing how many archives to keep
+on Backups, that older archives are removed only after a new backup succeeds, and leaving without
+changes. It names the database, recovery keys and saved backups to preserve. The installer
+referral is removed in both languages; the guides state that moving to a larger disk is not an
+action this page provides.
+
+**Still open: space beyond the supported cleanup.** When no reclaimable files remain and a new
+backup cannot fit, there is no supported in-app disk-recovery workflow. Add an authenticated
+choice with evidence and a safe Stop; do not delete database files, keys or saved backups to
+silence the alert. Changing retention is not immediate full-disk recovery. The historical source
+inventory above remains unchanged.
 
 **Missing files and unknown preparation failures still need remedies.** Preserve the safe error
 category and establish the component's recovery route before replacing `recovery.state_incomplete`
