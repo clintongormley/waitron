@@ -1342,7 +1342,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   APPROVED 2026-10-18 (Q39: all recommended; whether a late send needs a manager's PIN is a setting, off by default);
   building — slice 1 (the end offset retired) landed in #1948; slice 2 (the period Keep open
   retired) landed in #2047; slice 3 (a confirmed late send accepted and marked; the
-  manager's-PIN setting is per department) in review on `feat/a789-3-confirmed-late-send`;
+  manager's-PIN setting is per department) in review as #2051;
   slice 4 (the till's window) next.
   [Detail](backlog/service-periods.md#a789--last-orders-without-an-offset-a-period-is-when-its-menu-can-be-ordered)
 
@@ -1353,13 +1353,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
   kitchen agreed for**, so a routing cell's line for Lunch does not apply to a Lunch dish confirmed
-  after Lunch. Left open by A789 slice 3 (`feat/a789-3-confirmed-late-send`).
+  after Lunch. Left open by A789 slice 3, #2051 (plan D33).
   [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)
 
 - **A1085. Extras added later to a dish sent after its period carry no mark.** An extras-only edit
   or a recalled dish's added extras are priced as `ADDED_EXTRAS_ONLY` and skip the late check
   (`priceOrderLines`, `apps/server/src/working-order.ts`), so such an extra made at its own station
-  prints and shows unmarked. Left open by A789 slice 3 (plan D25).
+  prints and shows unmarked. Left open by A789 slice 3, #2051 (plan D25).
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.

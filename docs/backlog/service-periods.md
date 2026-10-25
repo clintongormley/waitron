@@ -551,7 +551,7 @@ review.
   now could not be routed apart; the resolver is asked for extras made at their own station, by
   `fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
   (`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
-  its id. Left open by A789 slice 3 (plan D33).
+  its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Decisions and deliberate limits
 
