@@ -4519,7 +4519,10 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 - **A1089: a failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, offer a correction and any required sign-in there, and recheck that sealing succeeds. Do not promise current recovery keys before success.
   [Audit](backlog/self-service-refusals.md#backup-state).
 
-- **A1089: a stopped or refused bucket stream needs safe settings, restart or ownership choices.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
+- **A1089: bucket-copy host-configuration failures need guided diagnosis.** The settings refusal explains Change bucket, Test, Save and turn on, and Cancel. A configuration failure outside those fields still needs authenticated diagnosis and an applicable correction; preserve recovery keys and existing copies.
+  [Remaining workflow](backlog/self-service-refusals.md#backup-stream).
+
+- **A1089: a stopped or refused bucket stream needs restart or ownership choices.** Distinguish an unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
   [Audit](backlog/self-service-refusals.md#backup-stream).
 
 - **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop.

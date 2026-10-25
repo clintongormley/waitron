@@ -42,7 +42,7 @@ referrals, not completed recovery experiments.
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
 | [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. Persistent host/key diagnosis and correction remain open. |
-| [Bucket stream](#backup-stream) | Give reason-specific settings, restart or ownership choices, with authentication and evidence before resuming a primary. |
+| [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Host-configuration diagnosis, restart and ownership choices remain open, with authentication and evidence before resuming a primary. |
 | [Sealed state](#backup-state) | Expose the safe cause and a correction/retry choice; show whether the key copy was refreshed. |
 | [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
 | [Restored first start](#restore-start) | Preserve the completion refusal and offer a specific correction when restart fails again. |
@@ -740,7 +740,22 @@ The original audit above retains its earlier words and source receipts.
 
 ### backup-stream
 
-**A stopped or refused bucket stream needs safe settings, restart or ownership choices.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
+**2026-10-25 settings-refusal wording:** the alert explains **Change bucket**, **Test**,
+**Save and turn on** and **Cancel** in both languages. Browser cases exercise a named prefix
+refusal, a corrected test without a settings save, applying the correction, and cancelling without
+a save or shutdown request. The server route suite exercises real validation and credential writes;
+its bucket probe and stream process are test doubles. These checks do not qualify a live bucket
+or show that replacing settings repairs every configuration failure.
+
+**Still open: host-configuration diagnosis and correction.** The supervisor's
+`config_unsafe` state also covers values the form cannot edit, including the database path
+(`packages/stream/src/supervisor.ts`, `#configurationIsSafe`). The message states that diagnostic
+limit. Add authenticated diagnosis and the applicable correction separately; do not discard keys
+or existing backup files.
+
+**A stopped or refused bucket stream still needs restart or ownership choices.** Distinguish an
+unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary.
+Offer any required sign-in there and build a missing restart/ownership workflow separately.
 
 ### backup-state
 

@@ -52,6 +52,12 @@ If a folder is refused, correct it before applying again. A successful save can 
 loading error, so check the resulting status before relying on a new backup. This page cannot
 diagnose every persistent host or key failure; keep your recovery keys and existing backup files.
 
+If the bucket copy says its settings could not be used safely, choose **Change bucket** in
+**Backups**. Correct the fields it marks. **Test** checks the bucket without saving settings;
+**Save and turn on** applies them. **Cancel** leaves the saved settings as they were. This form
+cannot diagnose a failure in the box's own configuration. Keep your recovery keys and existing
+copies if the refusal persists.
+
 ## Make the new series {#series}
 
 Use the recovery controls below the authenticated details. Enter the matching key again, confirm

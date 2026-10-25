@@ -102,8 +102,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La copia en el bucket se ha detenido porque otro equipo está escribiendo la copia de este local en el mismo bucket. Nunca deben vender dos equipos para un mismo local. Contacta con soporte.",
   },
   "backup.stream_settings_unusable": {
-    en: "The bucket copy has not started because its settings cannot be used safely. Check the bucket settings on the Backups page, and contact support if they look right.",
-    es: "La copia en el bucket no se ha iniciado porque sus ajustes no se pueden usar de forma segura. Revisa los ajustes del bucket en la página de Copias y, si parecen correctos, contacta con soporte.",
+    en: "The bucket copy has not started because its settings could not be used safely. In Backups, Change bucket lets you edit them. Test checks the bucket without saving settings; Save and turn on applies them; Cancel keeps the saved settings. This form cannot diagnose faults in the box's own configuration.",
+    es: "La copia en el bucket no se ha iniciado porque no se han podido usar sus ajustes de forma segura. En Copias de seguridad, Cambiar de bucket permite editarlos. Probar comprueba el bucket sin guardar ajustes; Guardar y activar los aplica; Cancelar conserva los ajustes guardados. Este formulario no puede diagnosticar fallos de configuración del propio equipo.",
   },
   "backup.stream_bucket_unusable": {
     en: "Your bucket is refusing this box: its access key may no longer work, or the bucket may no longer support the check Waitron uses to stop two boxes overwriting each other's copy. Check the bucket settings on the Backups page.",
