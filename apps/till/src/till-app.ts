@@ -13,6 +13,7 @@ import {
 } from "./widgets/party-allergy-dialog.js";
 import type { BillEditExpected, BillUnsent, Tender } from "./api/client.js";
 import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
+import { endedPeriodOf } from "./state/late-send.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
@@ -1455,6 +1456,8 @@ class ZoneOfferIndex {
   byId = new Map<string, TillMenuOffer>();
   versions = new Map<string, string>();
   selectable = new Set<string>();
+  /** Each menu whose period ended earlier today, to that period's name. */
+  ended = new Map<string, string>();
   /** False after a load that failed, when there is nothing to judge a line against. */
   loaded = false;
   liveFields: string | undefined;
@@ -1465,6 +1468,11 @@ class ZoneOfferIndex {
   ): void {
     this.selectable = new Set(
       catalogue.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
+    );
+    this.ended = new Map(
+      catalogue.menus.flatMap((menu) =>
+        menu.endedPeriodName === null ? [] : [[menu.id, menu.endedPeriodName] as const],
+      ),
     );
     this.#loaded = catalogue.offers;
     this.#unavailableKey = null;
@@ -1504,9 +1512,16 @@ class ZoneOfferIndex {
       if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
       return (
         lineBlock(line, offer)?.reason ??
-        (offer !== undefined && !this.selectable.has(offer.menuId) ? "period_ended" : undefined)
+        (offer !== undefined && !this.selectable.has(offer.menuId) && !this.ended.has(offer.menuId)
+          ? "period_ended"
+          : undefined)
       );
     });
+  }
+
+  /** The ended period each line is marked with; nothing while the offers could not be read. */
+  endedPeriods(lines: readonly OrderLine[]): ReturnType<typeof endedPeriodOf>[] {
+    return lines.map((line) => (this.loaded ? endedPeriodOf(line, this) : undefined));
   }
 }
 
@@ -5619,6 +5634,7 @@ export class TillApp extends LitElement {
   #markRounds(forget = false): void {
     for (const round of this.#markedRounds) {
       round.setBlocked(this.#tableOffers.blocks(round.lines));
+      round.setEndedPeriods(this.#tableOffers.endedPeriods(round.lines));
       if (forget && round.lines.every((line) => line.blocked === undefined))
         this.#markedRounds.delete(round);
     }
@@ -5635,6 +5651,7 @@ export class TillApp extends LitElement {
     if (store === undefined || !this.#tableOffers.loaded) return;
     const reasons = this.#tableOffers.blocks(store.lines);
     store.setBlocked(reasons, notify);
+    store.setEndedPeriods(this.#tableOffers.endedPeriods(store.lines), notify);
     if (newer)
       store.setUnavailableOnServer(
         store.lines.map(
@@ -5689,6 +5706,7 @@ export class TillApp extends LitElement {
   #evaluateBasket(notify = true): void {
     const versions = this.#counterOffers.versions;
     this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines), notify);
+    this.#store.setEndedPeriods(this.#counterOffers.endedPeriods(this.#store.lines), notify);
     const unsaved = this.#store.lines.filter((line) => line.workingOrderLineId === undefined);
     this.basketStale = unsaved.some(
       (line) => line.blocked === undefined && isStale(line, versions),

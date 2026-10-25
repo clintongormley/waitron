@@ -76,6 +76,14 @@ function blockedMarker(reason: BlockReason) {
   return html` <span class="not-offered">${t(BLOCKED_WORDS[reason])}</span>`;
 }
 
+/** An unsent dish whose period ended earlier today: a warning, not a block. */
+function periodEndedMarker(period: string) {
+  return html` <span class="period-ended" data-period-ended
+    ><span aria-hidden="true">⚠</span>
+    ${t("basket.period_ended").replace("{period}", () => period)}</span
+  >`;
+}
+
 /** A stored order's lines as the server listed them, and the revision they were read at. */
 export interface StoredLines {
   orderId: string;
@@ -368,6 +376,19 @@ export class TillBasket extends LitElement {
         color: var(--wt-color-on-warning);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      .period-ended {
+        display: inline-block;
+        overflow-wrap: normal;
+        color: var(--wt-color-warning);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .period-ended-entry {
+        padding-inline-start: var(--wt-space-2);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
       }
 
       .allergen-chip {
@@ -847,7 +868,13 @@ export class TillBasket extends LitElement {
           const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
           return html`
             <slot name=${`before-${index}`}></slot>
-            <div class="entry">
+            <div
+              class=${
+                line.blocked === undefined && line.endedPeriod !== undefined
+                  ? "entry period-ended-entry"
+                  : "entry"
+              }
+            >
               <div class="entry-body">
                 <div
                   class="line"
@@ -888,6 +915,10 @@ export class TillBasket extends LitElement {
                     >${this.#nutrition(line)}${
                       line.notOffered ? notOfferedMarker() : nothing
                     }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
+                      line.blocked === undefined && line.endedPeriod !== undefined
+                        ? periodEndedMarker(line.endedPeriod.periodName)
+                        : nothing
+                    }${
                       line.unavailableOnServer === true &&
                       line.blocked === undefined &&
                       line.notOffered === undefined

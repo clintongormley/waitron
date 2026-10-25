@@ -32,7 +32,10 @@ const menus = servedMenus(
   [{ id: "coffee-offer", menuId: "breakfast", productId: "coffee" }],
 );
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 for (const locale of ["en-GB", "es-ES"] as const) {
   for (const theme of ["light", "dark"] as const) {
@@ -152,6 +155,56 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               });
             } finally {
               setLocale(previousLocale);
+              await page.viewport(1280, 768);
+            }
+          });
+          it(`${kind} ended marks a dish whose period ended earlier today`, async () => {
+            setLocale(locale);
+            await page.viewport(width, 900);
+            try {
+              const store = new WorkingOrderStore();
+              store.addProduct(coffee, "2");
+              store.setEndedPeriods([{ menuId: "breakfast", periodName: "Breakfast" }]);
+              const shared = {
+                service: {
+                  open: true,
+                  zoneOpen: true,
+                  periodName: "Lunch",
+                  periodOccurrenceKey: '["department","2026-10-12","Lunch","12:00"]',
+                  zoneKeepOpen: null,
+                  keepOpen: null,
+                },
+                departmentName: "Restaurant",
+                products: [coffee],
+                menus: menus.map((menu) => ({
+                  ...menu,
+                  orderable: false,
+                  endedPeriodName: "Breakfast",
+                })),
+              };
+              const { el, host } =
+                kind === "counter"
+                  ? await mountWidget<TillCounterScreen>(
+                      "till-counter-screen",
+                      { ...shared, embedded: true, store },
+                      theme,
+                    )
+                  : await mountWidget<TillTableOrderScreen>(
+                      "till-table-order-screen",
+                      { ...shared, draftStore: store },
+                      theme,
+                    );
+              const marks = [...el.shadowRoot!.querySelectorAll("till-basket")].flatMap(
+                (basket) => [...basket.shadowRoot!.querySelectorAll("[data-period-ended]")],
+              );
+              expect(marks.map((mark) => mark.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+                locale === "en-GB" ? "⚠ Breakfast ended" : "⚠ Ha terminado Breakfast",
+              ]);
+              await expectNoA11yViolations(host);
+              await page.screenshot({
+                path: `../__screenshots__/a432-service/${kind}-ended-${locale}-${theme}-${width}.png`,
+              });
+            } finally {
               await page.viewport(1280, 768);
             }
           });

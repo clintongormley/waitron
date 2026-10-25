@@ -1676,6 +1676,7 @@ export const en = {
   "menu.period_not_running": "{menu} is not available in the current period.",
   "menu.last_orders_ended": "Last orders have ended",
   "basket.blocked.period_ended": "Last orders have ended",
+  "basket.period_ended": "{period} ended",
   "basket_refresh.period_ended": "{name}: last orders have ended",
   "menu.department_closed": "{department} is closed: no period is running",
   "menu.zone_closed":
@@ -3394,6 +3395,7 @@ export const es: Record<StringKey, string> = {
   "menu.period_not_running": "{menu} no está disponible en el periodo actual.",
   "menu.last_orders_ended": "Ya no se admiten pedidos",
   "basket.blocked.period_ended": "Ya no se admiten pedidos",
+  "basket.period_ended": "Ha terminado {period}",
   "basket_refresh.period_ended": "{name}: ya no se admiten pedidos",
   "menu.department_closed": "{department} está cerrado: no hay ningún periodo en curso",
   "menu.zone_closed":
