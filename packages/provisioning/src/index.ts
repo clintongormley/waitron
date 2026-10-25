@@ -166,6 +166,7 @@ export * from "./artifact-cipher.js";
 export * from "./backup-archive.js";
 export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
+export { boxFolders } from "./box-folders.js";
 export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
