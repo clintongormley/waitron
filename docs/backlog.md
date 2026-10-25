@@ -5749,6 +5749,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the current rule and planning files stay in place until then.
   [Detail](backlog/architecture.md#go-live-day-steps).
 
+- **A query with tens of thousands of bound values crashes in the store's adapter**:
+  `packages/store/src/node-sqlite-adapter.ts` passes every bound value as its own argument
+  (`stmt.all(...bind(params))`), and an `inArray` over 60,000 ids answered `RangeError: Maximum
+  call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
+  size). Found by A1088's review, whose own query no longer names ids; any other query that binds
+  one value per row can still meet it.
+
 - **A760. Squash every migration set before go-live.** The watcher starts the sole job after big
   work and migration branches drain, with the full Waitron/Cloud mutation freeze and named
   reset/operator roster recorded.
