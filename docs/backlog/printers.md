@@ -909,3 +909,12 @@ construct a friendly computer name from a printer label. See the
   the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
   removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
   hint.
+
+
+## A department's Receipts preview logs nothing when its saved logo's read fails.
+
+- **A department's Receipts preview logs nothing when its saved logo's read fails.** When the draft
+  names the saved logo, `apps/server/src/receipt-preview-api.ts` reads the stored picture through
+  `readPrintedDepartmentReceipt` with the plain scope, no `receiptDiagnostic`, unlike the no-logo
+  branch beside it (since `082553a65`, 2026-10-12; found by #2050's review). Pass the same
+  diagnostic, with a test that a failed read warns.
