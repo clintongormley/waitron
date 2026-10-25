@@ -781,6 +781,41 @@ it("Cancel at the warning sends nothing", async () => {
   expect(startAgainRequests(requests)).toHaveLength(1);
 });
 
+it("Cancel at the warning lands on the page as it was, and Start again from there goes straight to the warning", async () => {
+  const t = initialOwnerStrings.en;
+  const { app, requests } = await damagedRecord();
+  await unlockDamagedRecord(app);
+  await userEvent.click(
+    q<WtButton>(app, "cancel-start-again").shadowRoot!.querySelector("button")!,
+  );
+  await app.updateComplete;
+  expect(app.shadowRoot!.querySelector("h1")!.textContent).toBe(t.interrupted);
+  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
+  expect(q(app, "recover-backup")).not.toBeNull();
+  expect(q<WtButton>(app, "resume")).not.toBeNull();
+  expect(q<WtInput>(app, "resume-password").value).toBe("");
+  expect(q(app, "abandon-attempt")).toBeNull();
+  expect(app.shadowRoot!.textContent).not.toContain(t.startUnavailable);
+
+  await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+  await app.updateComplete;
+  expect(q(app, "recovery-record-damaged").textContent).toBe(t.recoveryRecordDamaged);
+  expect(q(app, "damaged-record-password")).toBeNull();
+  expect(q<HTMLInputElement>(app, "retire-confirmed").checked).toBe(false);
+  await confirmDamagedRecord(app);
+  await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
+  const sent = startAgainRequests(requests)[1]!;
+  expect(sent.body).toEqual({
+    inspectionId: "a".repeat(64),
+    revision: 2,
+    ownerGeneration: 2,
+    recoveryRecordDamagedShown: true,
+  });
+  expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
+  expect(requests.filter((r) => r.path.endsWith("/resolution/recover"))).toHaveLength(1);
+  await expect.poll(() => app.shadowRoot!.textContent).toContain(t.restarting);
+});
+
 it("the password step calls recover, never resume, for a consumption-intent attempt", async () => {
   const { app, requests } = await damagedRecord({ status: "consumption-intent" });
   await unlockDamagedRecord(app);

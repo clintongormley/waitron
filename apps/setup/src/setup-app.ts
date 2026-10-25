@@ -2156,9 +2156,12 @@ export class SetupApp extends LitElement {
 
   #renderFirstOwner(): TemplateResult {
     const t = initialOwnerStrings[setupLocale()];
-    const state = this.#firstSession?.state;
-    const missing = this.firstInspection?.database === "missing";
     const damaged = this.firstDamagedRecord;
+    // Cancel at the damaged-record warning keeps the recovered owner, so Start again goes straight
+    // back to the warning; the page is drawn as it was before Start again was pressed.
+    const warningClosed = damaged === "confirm" && !this.firstRestartConfirm;
+    const state = warningClosed ? undefined : this.#firstSession?.state;
+    const missing = this.firstInspection?.database === "missing";
     // The damaged-record steps keep the repair block drawn after the password signs this tab in.
     const inspection = !state || missing || damaged ? this.firstInspection : undefined;
     const authenticatedMissing =
@@ -2254,7 +2257,7 @@ export class SetupApp extends LitElement {
               variant="secondary"
               ?disabled=${this.firstOwnerBusy}
               @click=${() => {
-                if (damaged) this.#cancelDamagedRecord();
+                if (damaged) this.firstOwnerError = undefined;
                 this.firstRestartConfirm = false;
                 this.firstRetireConfirmed = false;
               }}
@@ -2300,7 +2303,7 @@ export class SetupApp extends LitElement {
       }
       ${
         ((!terminal && !authenticatedMissing) || this.#firstSession?.recoveryRequired) &&
-        damaged === undefined &&
+        (damaged === undefined || warningClosed) &&
         !this.firstOwnerBusy &&
         !this.firstRestarting &&
         (state !== undefined || inspection?.password === "checkable")
@@ -2320,7 +2323,7 @@ export class SetupApp extends LitElement {
       }
       ${
         inspection && !this.firstRestarting
-          ? damaged
+          ? damaged && !warningClosed
             ? damaged === "confirm"
               ? startAgainConfirm
               : nothing
