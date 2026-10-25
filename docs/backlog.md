@@ -4539,8 +4539,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#cloud-backup-qualification-and-target-bound-recovery-integrate-the-released-waitron-verifier)
 
 - **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
-  2026-10-20 (revised after review rounds 1–3), waiting for the owner's answers to three questions
-  (where the name is set, the certificate authority, the old name during a rename); not built.
+  2026-10-20 (revised after review rounds 1–3) and its three questions answered (where the name is
+  set, the certificate authority, the old name during a rename), but on 2026-10-25 the owner said
+  they are reconsidering whether the name should be changeable at all, so it is not scheduled; not
+  built.
   [Detail](backlog/box.md#a917--the-owner-chooses-the-servers-local-name-instead-of-waitronlocal)
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,

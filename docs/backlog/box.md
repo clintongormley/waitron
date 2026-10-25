@@ -719,10 +719,12 @@ must distinguish verifier non-activation from the ordinary restore's authorised 
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
 **A917 — the owner chooses the server's `.local` name instead of `waitron.local`** — DESIGNED
-2026-10-20 (revised after review rounds 1–3), waiting for the owner's answers to three questions
-(where the name is set, the certificate authority, the old name during a rename;
+2026-10-20 (revised after review rounds 1–3) and its three questions answered (where the name is
+set, the certificate authority, the old name during a rename;
 [design](../superpowers/specs/2026-10-20-a917-box-local-name-design.md), pictures in
-[mockups/a917-box-local-name/](../backlog/mockups/a917-box-local-name/)); not built. Recommended:
+[mockups/a917-box-local-name/](../backlog/mockups/a917-box-local-name/)); not built. **Not
+scheduled:** on 2026-10-25 the owner said "Put it on the backlog. I'm not sure I want to allow that
+change", so whether the name should be changeable at all is open again. Recommended in the design:
 named once on the server's first page, before its certificate authority is made; a later rename is
 a planned "re-trust every device" event — devices pair again in place of their old entries, and the
 old name only points at the new one for 14 days. Five slices; no migration.
