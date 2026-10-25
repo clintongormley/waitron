@@ -207,27 +207,32 @@ const MISDATED = "clock.records_misdated";
 const misdatedParams = (params: Record<string, unknown>) =>
   params as unknown as Omit<MisdatedOpen, "incidentId">;
 
-/** The open `clock.records_misdated` alerts' params, oldest first. */
-export async function readMisdatedOpen(tx: Transaction): Promise<MisdatedOpen[]> {
-  const rows = await tx
+export const misdatedOpenQuery = (tx: Transaction) =>
+  tx
     .select({ id: incidents.id, params: incidents.params })
     .from(incidents)
     .where(and(eq(incidents.code, MISDATED), isNull(incidents.acknowledgedAt)))
     .orderBy(asc(incidents.detectedAt), asc(incidents.id));
+
+/** The open `clock.records_misdated` alerts' params, oldest first. */
+export async function readMisdatedOpen(tx: Transaction): Promise<MisdatedOpen[]> {
+  const rows = await misdatedOpenQuery(tx);
   return rows.map((row) => ({ incidentId: row.id, ...misdatedParams(row.params) }));
 }
 
-export async function countMisdatedHandled(tx: Transaction): Promise<number> {
-  const [row] = await tx
+export const misdatedHandledCountQuery = (tx: Transaction) =>
+  tx
     .select({ n: count() })
     .from(incidents)
     .where(and(eq(incidents.code, MISDATED), isNotNull(incidents.acknowledgedAt)));
+
+export async function countMisdatedHandled(tx: Transaction): Promise<number> {
+  const [row] = await misdatedHandledCountQuery(tx);
   return row!.n;
 }
 
-/** Handled `clock.records_misdated` alerts, newest first by detection, with who handled them. */
-export async function readMisdatedHandled(tx: Transaction): Promise<MisdatedHandled[]> {
-  const rows = await tx
+export const misdatedHandledQuery = (tx: Transaction) =>
+  tx
     .select({
       id: incidents.id,
       params: incidents.params,
@@ -239,6 +244,10 @@ export async function readMisdatedHandled(tx: Transaction): Promise<MisdatedHand
     .leftJoin(persons, eq(persons.id, incidents.acknowledgedBy))
     .where(and(eq(incidents.code, MISDATED), isNotNull(incidents.acknowledgedAt)))
     .orderBy(desc(incidents.detectedAt), desc(incidents.id));
+
+/** Handled `clock.records_misdated` alerts, newest first by detection, with who handled them. */
+export async function readMisdatedHandled(tx: Transaction): Promise<MisdatedHandled[]> {
+  const rows = await misdatedHandledQuery(tx);
   return rows.map((row) => ({
     incidentId: row.id,
     ...misdatedParams(row.params),

@@ -7,9 +7,12 @@ import { hashPin, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, DEMO_READER_ID, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   collectBoxHealth,
+  misdatedHandledCountQuery,
+  misdatedHandledQuery,
+  misdatedOpenQuery,
   readMisdatedHandled,
   type BoxHealthReaders,
   type ClockStopView,
@@ -529,5 +532,50 @@ describe("collectBoxHealth", () => {
     fail = false;
     await collectBoxHealth(suite.db, readers);
     expect(lines).toEqual(["staff_notice.source_unavailable", "staff_notice.source_recovered"]);
+  });
+});
+
+function replayEmitted(emitted: { sql: string; params: unknown[] }, prefix: string) {
+  const parts = emitted.sql.split("?");
+  expect(parts).toHaveLength(emitted.params.length + 1);
+  const statement = sql.raw(`${prefix}${parts[0]}`);
+  for (let i = 0; i < emitted.params.length; i++) {
+    statement.append(sql`${emitted.params[i]}`);
+    statement.append(sql.raw(parts[i + 1]!));
+  }
+  return statement;
+}
+
+describe("the wrongly dated sales reads", () => {
+  it.each([
+    ["open", () => misdatedOpenQuery(suite.db).toSQL()],
+    ["handled", () => misdatedHandledQuery(suite.db).toSQL()],
+    ["handled count", () => misdatedHandledCountQuery(suite.db).toSQL()],
+  ])("plans the %s read on the code and detection index, not a scan", async (_name, emit) => {
+    const plan = await suite.db.execute<{ detail: string }>(
+      replayEmitted(emit(), "explain query plan "),
+    );
+    const details = plan.rows.map((row) => row.detail);
+    expect(details.some((d) => d.includes("USING INDEX incidents_code_detected_idx"))).toBe(true);
+    expect(details.some((d) => d.includes("SCAN incidents"))).toBe(false);
+  });
+
+  it("stores and reads back a handled incident's note", async () => {
+    const [row] = await suite.db
+      .insert(incidents)
+      .values({
+        source: "dashboard",
+        code: "clock.records_misdated",
+        severity: "error",
+        detectedAt: "2026-10-22T08:00:00.000Z",
+        acknowledgedAt: "2026-10-22T11:00:00.000Z",
+        acknowledgedNote: "Checked with the accountant",
+      })
+      .returning({ id: incidents.id });
+    const [read] = await suite.db
+      .select({ note: incidents.acknowledgedNote })
+      .from(incidents)
+      .where(eq(incidents.id, row!.id));
+    expect(read).toEqual({ note: "Checked with the accountant" });
   });
 });
