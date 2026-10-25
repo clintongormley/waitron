@@ -34,14 +34,14 @@ referrals, not completed recovery experiments.
 | Area | Work still required under the clarified rule |
 | --- | --- |
 | [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and explicit/autofill refusal views explain password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
-| [Public connection](#tls-repair), #2055 | Replace the installer referral with a connection-repair choice the reader can complete. Include installer-supplied certificates and managed-device installation restrictions, which also refer to another person. Retain the separate linked-layout recovery gap and public-page privacy. |
+| [Public connection](#tls-repair), #2055 | Referral reworked in #2064: read-only Check again and Stop, applicable HTTPS/device choices, pending actions and no-JavaScript guidance are covered in its dated addendum. Authenticated certificate replacement and linked-layout repair remain open. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
 | [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. Recheck lane A's A1042 S7l after landing; this lane does not change it. |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
-| [Archive settings](#backup-settings) | Preserve the cause after a failed Save and give the person a setting to correct or a recovery choice. |
+| [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. Persistent host/key diagnosis and correction remain open. |
 | [Bucket stream](#backup-stream) | Give reason-specific settings, restart or ownership choices, with authentication and evidence before resuming a primary. |
 | [Sealed state](#backup-state) | Expose the safe cause and a correction/retry choice; show whether the key copy was refreshed. |
 | [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
@@ -724,7 +724,19 @@ before making it. This is a separate workflow; this rework does not claim to imp
 
 ### backup-settings
 
-**Unusable archive settings need a next step after resaving fails.** Keep the existing Save route and preserve the underlying non-secret refusal instead of escalating every repeat to support.
+**2026-10-25 archive-settings wording rework:** the alert points to Backups to read the load
+error and choose settings again. It names **Turn on backups**, which replaces the saved choices,
+and leaving without applying, which sends no settings write in the exercised browser cases.
+The EN/ES cases show the original load error, a refused folder followed by correction and a
+successful apply using the held recovery key, plus leaving a draft without applying. Existing
+server route cases exercise replacement of unreadable records, rejection of a missing new secret
+and a successful write whose reload still fails. The latter remains a saved write with a load
+error; the message does not promise that every apply starts the worker.
+
+**Still open:** guided diagnosis and correction when a host/key refusal persists after replacement.
+The screen displays a code, but this wording change adds no authenticated host repair. Do not
+replace recovery keys or discard backup files just because settings cannot be read.
+The original audit above retains its earlier words and source receipts.
 
 ### backup-stream
 

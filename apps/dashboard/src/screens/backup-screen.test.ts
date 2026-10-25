@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
@@ -2101,5 +2102,99 @@ describe("keeping recovery keys after an unconfirmed change", () => {
         }
       });
     }
+  }
+});
+
+describe("A1089 unreadable archive settings choices", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    it(`explains reconfiguration, keeps a refusal, and applies corrected choices (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi(
+          {},
+          {
+            ...OFF,
+            loadErrorCode: "backup.archive_settings_invalid",
+            recoveryKeySet: true,
+            keyFingerprint: "ab12cd34",
+          },
+        );
+        vi.mocked(api.applyBackup).mockRejectedValueOnce({
+          code: "backup.request_invalid",
+          params: { field: "dir" },
+        });
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+        await flush(el);
+        const message = alertMessage("backup.archive_settings_unusable", {}, locale);
+        const apply = () => q(el, "[data-test=apply]") as HTMLElement & { disabled: boolean };
+        expect(message).toContain(apply().textContent!.trim());
+        if (locale === "en-GB") {
+          expect(message).toContain("leave without applying");
+          expect(message).not.toContain("contact support");
+        }
+        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(
+          codeMessage("backup.archive_settings_invalid"),
+        );
+        expect(api.applyBackup).not.toHaveBeenCalled();
+        expect(api.mintBackupKey).not.toHaveBeenCalled();
+        setInput(el, "[data-test=destination]", "/mnt/usb/unavailable");
+        await el.updateComplete;
+        apply().click();
+        await flush(el);
+        expect(q(el, "[data-test=destination]")!.getAttribute("error")).toBeTruthy();
+        expect((q(el, "[data-test=destination]") as WtInput).value).toBe("/mnt/usb/unavailable");
+        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(
+          codeMessage("backup.archive_settings_invalid"),
+        );
+        setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+        await el.updateComplete;
+        expect(apply().disabled).toBe(false);
+        apply().click();
+        await flush(el);
+        expect(api.applyBackup).toHaveBeenCalledTimes(2);
+        expect(api.applyBackup).toHaveBeenLastCalledWith({
+          destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }],
+          schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+          retention: { count: 7, days: 30 },
+        });
+        expect(q(el, "[data-test=load-failed]")).toBeNull();
+        expect(el.shadowRoot!.textContent).toContain("/mnt/usb/waitron");
+        expect(api.rotateBackupKey).not.toHaveBeenCalled();
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`explains stopping without replacing unreadable settings (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi(
+          {},
+          {
+            ...OFF,
+            loadErrorCode: "credentials.decrypt_failed",
+            recoveryKeySet: true,
+          },
+        );
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+        await flush(el);
+        const message = alertMessage("backup.archive_settings_unusable", {}, locale);
+        expect(message).toContain(t("backup.apply"));
+        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(
+          codeMessage("credentials.decrypt_failed"),
+        );
+        setInput(el, "[data-test=destination]", "/mnt/usb/reconsidered");
+        await el.updateComplete;
+        el.remove();
+        await flush(el);
+        expect(api.applyBackup).not.toHaveBeenCalled();
+        expect(api.rotateBackupKey).not.toHaveBeenCalled();
+        expect(api.mintBackupKey).not.toHaveBeenCalled();
+      } finally {
+        setLocale(previous);
+      }
+    });
   }
 });

@@ -48,6 +48,13 @@ tras este rechazo. No sigas cambiando claves y sal de la página sin volver a en
 no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia concreta;
 no sustituyas ninguno de los dos registros de claves basándote en este mensaje.
 
+Abre **Copias de seguridad** y lee el error junto al estado de las copias. Elige de nuevo los
+destinos y el horario. **Activar las copias** sustituye los ajustes guardados; sal sin aplicarlos
+para conservarlos. Si se rechaza una carpeta, corrígela antes de volver a aplicar. Aunque se guarden
+los ajustes, puede fallar su carga: comprueba el estado antes de confiar en una copia nueva.
+Esta página no permite diagnosticar todos los fallos persistentes del equipo o de sus claves;
+conserva las claves de recuperación y los archivos de copia existentes.
+
 ## Crea las nuevas series {#series}
 
 Usa los controles bajo los datos autenticados. Vuelve a introducir la clave correspondiente, confirma

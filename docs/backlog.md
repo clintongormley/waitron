@@ -4522,7 +4522,7 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 - **A1089: a stopped or refused bucket stream needs safe settings, restart or ownership choices.** Distinguish bad settings, unavailable process and conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
   [Audit](backlog/self-service-refusals.md#backup-stream).
 
-- **A1089: unusable archive settings need a next step after resaving fails.** Keep the existing Save route and preserve the underlying non-secret refusal instead of escalating every repeat to support.
+- **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop.
   [Audit](backlog/self-service-refusals.md#backup-settings).
 
 - **Backup destination failures log no elapsed time or operation phase.**
@@ -5339,6 +5339,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **A1089 merge read-back: server coverage upload timed out.** Run `40222796480`, job `121257963434`, completed its tests but failed creating `server-blob-4` with `ETIMEDOUT`. Preserve the failed upload log and investigate bounded upload recovery separately; the underlying network/service cause is unknown and merged server coverage is unqualified.
 
 - **The first fiscal-hour end-to-end file exceeds the four-minute job budget on slow CI runners.**
   Four successful main runs on 24 October measured the file alone at 248–250 seconds. Split or
