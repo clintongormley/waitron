@@ -126,7 +126,7 @@ function selectedRequest(state: FirstSetupState, index: number) {
     ),
   };
 }
-function retainedHour(index = 42, softwareId = "W1") {
+function retainedHour(index = 42, softwareId = "W1", laterMs = 0) {
   return {
     format: "waitron-hour-history",
     scope: { taxpayerNif: request.taxId, environment: "production" },
@@ -142,8 +142,8 @@ function retainedHour(index = 42, softwareId = "W1") {
             environment: "production",
             softwareId,
             nodeId: "retired-peer",
-            identity: encodeMinuteIdentity(instant(index)),
-            recordedAtMs: instant(index),
+            identity: encodeMinuteIdentity(instant(index) + laterMs),
+            recordedAtMs: instant(index) + laterMs,
           },
         ],
       },
@@ -188,7 +188,7 @@ async function fixture(
     legacy?: unknown;
     previousIndex?: number;
     document?: boolean;
-    damage?: "syntax" | "binding" | "digest";
+    damage?: "missing-original" | "syntax" | "binding" | "digest";
     source?: "local" | "outside";
     outsideChange?: "replace" | "remove";
   },
@@ -248,6 +248,7 @@ async function fixture(
   if (retained?.document) {
     await keepHourRecoveryDocument(oldHost, ownerFor(old, oldClaim.capability), PASSWORD);
     const path = join(anchor.stateDir, "first-fiscal-documents", `${MODULE}.recovery.json`);
+    if (retained.damage === "missing-original") await unlink(path);
     if (retained.damage === "syntax") await writeFile(path, "{damaged recovery document");
     if (retained.damage === "binding" || retained.damage === "digest") {
       const manifest = JSON.parse(await readFile(path, "utf8"));
@@ -342,7 +343,12 @@ async function expectNoteBounds(
       code: "sif.allocation_invalid",
       params: { reason: "minute_not_later" },
     });
-  else expect((await selection).state.consumptionIntent).toBe(true);
+  else {
+    const chosen = (await selection).state;
+    expect(chosen.consumptionIntent).toBe(true);
+    const name = (firstSetupModuleContext(chosen, MODULE).request as { identity: string }).identity;
+    expect(decodeMinuteIdentity(name)).toBeGreaterThan(decodeMinuteIdentity(noteName));
+  }
 }
 
 it("fresh events cannot reuse a retired hour with another allocation ID", async () => {
@@ -503,6 +509,12 @@ it.each([2, 41, 42, 43])(
     await expectNoteBounds(f, encodeMinuteIdentity(instant(42)), index < 42);
   },
 );
+it("a public record naming the hour the chooser picks at offset42 refuses that same name", async () => {
+  const f = await fixture(42, request.taxId, "production", false, 1, {
+    history: retainedHour(42, "W1", 120_000),
+  });
+  await expectNoteBounds(f, "0CR2T", true);
+});
 it("a public hour under another software ID still goes into the note", async () => {
   const f = await fixture(2, request.taxId, "production", false, 1, {
     history: retainedHour(42, "OTHER"),
@@ -531,6 +543,15 @@ it.each([2, 42, 43])(
     await expectNoteBounds(f, name, index <= 42);
   },
 );
+it("a kept recovery document deleted before Start again leaves the note holding the attempt's frozen name", async () => {
+  const f = await fixture(43, request.taxId, "production", false, 42, {
+    document: true,
+    damage: "missing-original",
+  });
+  expect(await startAgainNoteName(f.state)).toBe(
+    (firstSetupModuleContext(f.old, MODULE).request as { identity: string }).identity,
+  );
+});
 it.each(["syntax", "binding", "digest"] as const)(
   "a damaged recovery document %s refuses Start again, never becomes absence of history",
   async (damage) => {
