@@ -1429,17 +1429,13 @@ function isVersionRefusal(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "menu.version_changed";
 }
 
-/** Whether menu membership, versions or selection/sending eligibility differ from the loaded snapshot. */
+/** Whether menu membership, versions or selection eligibility differ from the loaded snapshot. */
 function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"]): boolean {
   return (
     loaded.length !== polled.length ||
     polled.some((menu) => {
       const own = loaded.find((entry) => entry.id === menu.menuId);
-      return (
-        own?.versionId !== menu.versionId ||
-        own.orderable !== menu.orderable ||
-        own.sendable !== menu.sendable
-      );
+      return own?.versionId !== menu.versionId || own.orderable !== menu.orderable;
     })
   );
 }
@@ -1454,7 +1450,6 @@ class ZoneOfferIndex {
   byId = new Map<string, TillMenuOffer>();
   versions = new Map<string, string>();
   selectable = new Set<string>();
-  sendable = new Set<string>();
   /** False after a load that failed, when there is nothing to judge a line against. */
   loaded = false;
   liveFields: string | undefined;
@@ -1466,7 +1461,6 @@ class ZoneOfferIndex {
     this.selectable = new Set(
       catalogue.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
     );
-    this.sendable = new Set(catalogue.menus.filter((menu) => menu.sendable).map((menu) => menu.id));
     this.#loaded = catalogue.offers;
     this.#unavailableKey = null;
     this.#setLive(catalogue.offers);
@@ -1505,7 +1499,7 @@ class ZoneOfferIndex {
       if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
       return (
         lineBlock(line, offer)?.reason ??
-        (offer !== undefined && !this.sendable.has(offer.menuId) ? "period_ended" : undefined)
+        (offer !== undefined && !this.selectable.has(offer.menuId) ? "period_ended" : undefined)
       );
     });
   }
@@ -5518,7 +5512,7 @@ export class TillApp extends LitElement {
       this.#pendingCounterMenus = catalogue.menus;
       this.menus = this.menus.map((menu) => {
         const live = catalogue.menus.find((entry) => entry.id === menu.id);
-        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+        return { ...menu, orderable: live?.orderable ?? false };
       });
       this.#counterMenuPending = true;
     } else {
@@ -5565,7 +5559,7 @@ export class TillApp extends LitElement {
       this.#pendingTableMenus = catalogue.menus;
       this.tableMenus = this.tableMenus.map((menu) => {
         const live = catalogue.menus.find((entry) => entry.id === menu.id);
-        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+        return { ...menu, orderable: live?.orderable ?? false };
       });
       this.#tableMenuPending = true;
     } else {

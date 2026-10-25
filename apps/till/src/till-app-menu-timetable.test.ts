@@ -665,7 +665,7 @@ describe("device and zone period memory", () => {
 });
 
 describe("period service at the counter", () => {
-  it("end-offset poll closes selection with unchanged service and versions, then marks grace expiry", async () => {
+  it("a poll that stops the running menu blocks its dish and holds Pay", async () => {
     const running = {
       ...BARRA,
       service: {
@@ -681,38 +681,16 @@ describe("period service at the counter", () => {
     await signIn(el);
     add(el, DESAYUNOS);
     await flush(el);
-    const grace = {
+    const expired = {
       ...running,
       defaultMenuId: null,
       menus: running.menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: true,
+        sendable: false,
         isDefault: false,
       })),
     };
-    api.listZoneOffers.mockResolvedValue(grace);
-    api.menuState.mockResolvedValue({
-      ...state([DESAYUNOS, ALMUERZO]),
-      service: running.service,
-      menus: state([DESAYUNOS, ALMUERZO]).menus.map((menu) => ({
-        ...menu,
-        orderable: false,
-        sendable: true,
-      })),
-    });
-    await poll(el);
-    expect(counter(el).menus.every((menu) => !menu.orderable && menu.sendable)).toBe(true);
-    const screen = counter(el);
-    const grid = screen;
-    expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
-    expect(screen.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim()).toBe(
-      "Last orders have ended",
-    );
-    expect(screen.store.lines[0]?.blocked).toBeUndefined();
-    screen.store.setLineQuantity(0, "2");
-    expect(screen.store.lines[0]?.quantity).toBe("1");
-    const expired = { ...grace, menus: grace.menus.map((menu) => ({ ...menu, sendable: false })) };
     api.listZoneOffers.mockResolvedValue(expired);
     api.menuState.mockResolvedValue({
       ...state([DESAYUNOS, ALMUERZO]),
@@ -724,6 +702,11 @@ describe("period service at the counter", () => {
       })),
     });
     await poll(el);
+    const screen = counter(el);
+    const grid = screen;
+    expect(screen.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim()).toBe(
+      "Last orders have ended",
+    );
     expect(screen.store.lines[0]?.blocked).toBe("period_ended");
     const basket = grid.shadowRoot!.querySelector("till-basket")!;
     expect(basket.shadowRoot!.textContent).toContain("Last orders have ended");
@@ -1584,7 +1567,7 @@ describe("an open table's order", () => {
     expect(selected(el)).toBe("desayunos");
   });
 
-  it("end-offset table poll hides selection and retains sendable grace before expiry", async () => {
+  it("a table poll that stops the running menu blocks its dish and leaves nothing to send", async () => {
     const breakfast = {
       ...COMEDOR,
       service: {
@@ -1597,13 +1580,13 @@ describe("an open table's order", () => {
       },
       menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
-    const lunch = {
+    const ended = {
       ...breakfast,
       defaultMenuId: null,
       menus: COMEDOR.menus.map((menu) => ({
         ...menu,
         orderable: false,
-        sendable: true,
+        sendable: false,
         isDefault: false,
       })),
     };
@@ -1656,20 +1639,14 @@ describe("an open table's order", () => {
     >("till-menu-browser")!;
     browser.store.addProduct({ ...menuOfferToTillProduct(offer(DESAYUNOS), "v1") }, "1");
     await flush(el);
-    current = lunch;
+    current = ended;
     await poll(el);
     expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
-    expect(
-      tableScreen(el).shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim(),
-    ).toBe("Last orders have ended");
-    expect(browser.store.lines[0]?.blocked).toBeUndefined();
     browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
     browser.store.setLineQuantity(0, "2");
     expect(browser.store.lines.map((line) => [line.product.productId, line.quantity])).toEqual([
       ["Tostada", "1"],
     ]);
-    current = { ...lunch, menus: lunch.menus.map((menu) => ({ ...menu, sendable: false })) };
-    await poll(el);
     expect(browser.store.lines[0]?.blocked).toBe("period_ended");
     const sendButtons = tableScreen(el).shadowRoot!.querySelectorAll<
       HTMLElement & { disabled: boolean; variant: string }

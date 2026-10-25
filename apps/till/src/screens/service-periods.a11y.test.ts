@@ -155,7 +155,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               await page.viewport(1280, 768);
             }
           });
-          for (const state of ["last-orders", "grace", "expired"] as const) {
+          for (const state of ["last-orders", "expired"] as const) {
             it(`${kind} ${state} keeps period eligibility and its basket readable`, async () => {
               const previousLocale = currentLocale();
               try {
@@ -179,7 +179,6 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                   menus: menus.map((menu) => ({
                     ...menu,
                     orderable: false,
-                    sendable: state === "grace",
                   })),
                 };
                 const { el, host } =
