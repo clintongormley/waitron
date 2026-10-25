@@ -106,6 +106,12 @@ página **Copias de seguridad**, o pedir a quien instaló el equipo que borre ve
 de Waitron o ponga un disco mayor. Los tamaños bajo **Espacio en disco** muestran qué está
 llenando el disco.
 
+Si la campana avisa de que no se pudo preparar una copia por falta de espacio, abre
+**Estado del equipo** y revisa **Espacio en disco**. Pulsa **Liberar** si está disponible, o sal
+sin pulsarlo para no hacer la limpieza. Liberar espacio no inicia una copia. Si no basta,
+**Liberar** no puede borrar otros archivos por ti; conserva la base de datos, las claves de
+recuperación y las copias guardadas.
+
 ## Cuando el equipo no tiene espacio {#out-of-space}
 
 Cuando el disco está lleno, no se puede guardar nada: los terminales no pueden guardar pedidos,
