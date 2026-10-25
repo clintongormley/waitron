@@ -34,13 +34,13 @@ it("a missing state folder is no floor", async () => {
 it("a note round-trips exactly", async () => {
   const dir = await stateDir();
   const written = await raiseStartAgainNote(dir, {
-    floorMs: 1792150980000,
+    floorMs: 1792154580000,
     lastName: "0CNQT",
     module: "fiscal-verifactu",
   });
   const note = {
     version: 1 as const,
-    floorMs: 1792150980000,
+    floorMs: 1792154580000,
     lastName: "0CNQT",
     module: "fiscal-verifactu",
   };
@@ -48,7 +48,7 @@ it("a note round-trips exactly", async () => {
   expect(await readStartAgainNote(dir)).toEqual(note);
   expect(JSON.parse(await readFile(join(dir, START_AGAIN_NOTE_FILE), "utf8"))).toEqual(note);
   expect(startAgainFloorSources(note)).toEqual([
-    { reference: "start-again-note", complete: true, records: [], timeFloorMs: 1792150980000 },
+    { reference: "start-again-note", complete: true, records: [], timeFloorMs: 1792154580000 },
   ]);
 });
 

@@ -156,7 +156,7 @@ So the ask lives on the **repair page, after the setup password step**. It canno
 The note is `first-setup-start-again.json` in the box's own state folder, found by `boxFolders` (Task 0b). Exact keys only:
 
 ```json
-{ "version": 1, "floorMs": 1792150980000, "lastName": "0CNQT", "module": "fiscal-verifactu" }
+{ "version": 1, "floorMs": 1792154580000, "lastName": "0CNQT", "module": "fiscal-verifactu" }
 ```
 
 `floorMs` is the first moment a later name may be taken (the start of the minute after the last name). `lastName` is that name, for people reading the folder; shared code never parses it. `module` is the module whose seat gave the floor. Limit 4096 bytes.

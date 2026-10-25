@@ -925,6 +925,51 @@ it("a select with another page's box-only comparison stays refused", async () =>
 });
 
 const minuteMs = (iso: string) => Date.parse(iso);
+const digest = "a".repeat(64);
+// The kinds of public evidence a real reader returns that carry no minute name.
+const namelessEvidence = [
+  {
+    format: "waitron-hour-history",
+    scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+    sources: [{ reference: "venue", complete: true, records: [] }],
+  },
+  {
+    kind: "waitron-recovery-document",
+    version: 1,
+    scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
+    taxpayerName: "Olivo",
+    venueName: "Centro",
+    createdAt: "2026-10-16T11:40:00.000Z",
+    nodeKey: { nodeId: "node", name: "key" },
+  },
+  {
+    version: 1,
+    kind: "cloud-initial-confirmation",
+    binding: context.binding,
+    operatorId: "administrator",
+    allocationId: "cloud/event",
+    receiptId: "receipt",
+    priorActivation: "none",
+    incidentEvidence: "cloud/event",
+    requiredBases: context.bases,
+    delivery: { kept: true, documentDigest: digest, historyDigest: digest },
+  },
+  {
+    version: 1,
+    allocationId: "paper/event",
+    binding: context.binding,
+    operatorId: "administrator",
+    priorActivation: "none",
+    incidentEvidence: "paper/event",
+    requiredBases: context.bases,
+    recipientVenueId: "first-setup:attempt",
+    generationId: "generation",
+    blockId: "block",
+    currentRegisterConfirmed: true,
+    consumptionConfirmed: true,
+    currentEntryState: "consumed-for-event",
+  },
+];
 const hourEvidence = (identity: string) => ({
   format: "waitron-hour-history",
   scope: { taxpayerNif: "89890001K", environment: "preproduction" },
@@ -964,9 +1009,29 @@ it("no name gives no floor", () => {
     seat.startAgainFloor!({
       attempts: [{ context, input: undefined }],
       preparations: [null],
-      publicEvidence: [{}],
+      publicEvidence: namelessEvidence,
     }),
   ).toBeNull();
+});
+it("evidence that names nothing and is no known nameless kind is refused, not read as empty", () => {
+  const seat = configured().seat;
+  for (const evidence of [
+    {},
+    { foo: 1 },
+    { format: "waitron-hour-histroy" },
+    { ...namelessEvidence[1], venueName: 7 },
+    { ...namelessEvidence[2], delivery: null },
+    { ...namelessEvidence[3], currentEntryState: "kept" },
+    { ...namelessEvidence[3], extra: true },
+  ])
+    expect(() =>
+      seat.startAgainFloor!({ attempts: [], preparations: [], publicEvidence: [evidence] }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "sif.allocation_invalid",
+        params: { reason: "history_invalid" },
+      }),
+    );
 });
 it("the latest of a frozen request, an intent and public evidence gives the floor", async () => {
   const { seat, state } = await selectedIntents("2026-10-16T11:45:00.000Z", "0CNP1");

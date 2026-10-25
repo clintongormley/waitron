@@ -1,7 +1,7 @@
 import { seriesMatchBases } from "./allocation-identity.js";
 
-const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
-const MINUTE_MS = 60_000;
+export const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
+export const MINUTE_MS = 60_000;
 const MINUTE_COUNT = 32 ** 5;
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 

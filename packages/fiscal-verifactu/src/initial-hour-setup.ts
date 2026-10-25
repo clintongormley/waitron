@@ -7,8 +7,14 @@ import {
   type ModuleOperationHost,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { encodeMinuteIdentity, decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
-import { projectHourHistory } from "./hour-history.js";
+import {
+  EPOCH_MS,
+  MINUTE_MS,
+  encodeMinuteIdentity,
+  decodeMinuteIdentity,
+  isMinuteIdentity,
+} from "./hour-identity.js";
+import { readInitialCloudConfirmation } from "./initial-cloud-setup.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import { publicHourSelectionHistory } from "./hour-selection.js";
 import "./errors.js";
@@ -82,21 +88,89 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   return structuredClone(expected);
 }
 
-const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
-const MINUTE_MS = 60_000;
-function preparedMinutes(preparations: readonly unknown[]): number[] {
-  return publicHourSelectionHistory(preparations).records.map((row) => {
-    const scope = row as { taxpayerNif: unknown; environment: unknown };
-    const checked = projectHourHistory({
-      scope: { taxpayerNif: scope.taxpayerNif, environment: scope.environment },
-      sources: [{ reference: "prepared-hours", complete: true, records: [row] }],
-    });
-    if (checked.contradictions.length > 0) refuse();
-    return checked.greatestSpentMinute!;
-  });
+function hourAssignmentPositions(context: InitialSetupContext, input?: unknown) {
+  if (context.request == null && input === undefined) return [];
+  const allocation = readHourSetupInput(
+    context,
+    input ?? (context.request as { input: unknown }).input,
+  ).allocation;
+  return [
+    {
+      namespace: JSON.stringify([context.taxId, context.environment, "hour"]),
+      position: decodeMinuteIdentity(allocation.installationIdentity),
+    },
+  ];
 }
-function isHourNamespace(namespace: string): boolean {
-  return (JSON.parse(namespace) as unknown[]).at(-1) === "hour";
+const PAPER_BLOCK_CONFIRMATION_KEYS = [
+  "version",
+  "allocationId",
+  "binding",
+  "operatorId",
+  "priorActivation",
+  "incidentEvidence",
+  "requiredBases",
+  "recipientVenueId",
+  "generationId",
+  "blockId",
+  "currentRegisterConfirmed",
+  "consumptionConfirmed",
+  "currentEntryState",
+];
+/** Public evidence a real reader returns that legitimately names no minute; anything else that
+ * names nothing is unreadable, never empty. */
+function isNamelessEvidence(evidence: unknown): boolean {
+  if (!record(evidence)) return false;
+  if (evidence.format === "waitron-hour-history") return true;
+  if (evidence.kind === "waitron-recovery-document") {
+    parseRecoveryDocumentPublic(evidence);
+    return true;
+  }
+  if (evidence.kind === "cloud-initial-confirmation") {
+    readInitialCloudConfirmation(evidence);
+    return true;
+  }
+  return (
+    exact(evidence, PAPER_BLOCK_CONFIRMATION_KEYS) &&
+    evidence.version === 1 &&
+    evidence.currentEntryState === "consumed-for-event"
+  );
+}
+export function hourStartAgainFloor(
+  retainedAssignments: NonNullable<InitialSetupContribution["retainedAssignments"]>,
+): NonNullable<InitialSetupContribution["startAgainFloor"]> {
+  return ({ attempts, preparations, publicEvidence }) => {
+    let minutes: number[];
+    try {
+      minutes = [
+        ...attempts.flatMap(({ context, input }) =>
+          hourAssignmentPositions(context, input).map(({ position }) => position),
+        ),
+        ...publicHourSelectionHistory(preparations).records.map((row) =>
+          decodeMinuteIdentity((row as { identity: string }).identity),
+        ),
+        ...publicEvidence.flatMap((evidence) => {
+          const retained = retainedAssignments(evidence);
+          if (
+            retained.keys.length === 0 &&
+            retained.positions.length === 0 &&
+            !isNamelessEvidence(evidence)
+          )
+            refuse();
+          return retained.positions
+            .filter(({ namespace }) => (JSON.parse(namespace) as unknown[]).at(-1) === "hour")
+            .map(({ position }) => position);
+        }),
+      ];
+    } catch {
+      return refuse("history_invalid");
+    }
+    if (minutes.length === 0) return null;
+    const minute = Math.max(...minutes);
+    return {
+      floorMs: EPOCH_MS + (minute + 1) * MINUTE_MS,
+      lastName: encodeMinuteIdentity(EPOCH_MS + minute * MINUTE_MS),
+    };
+  };
 }
 
 async function reviewCommandClock(
@@ -128,7 +202,7 @@ export function createHourInitialSetup(
   base: InitialSetupContribution,
 ): InitialSetupContribution {
   const candidates = new WeakSet<object>();
-  const seat: InitialSetupContribution = {
+  return {
     ...base,
     configure: undefined,
     resolutionEvidence: () => ({ files: [], directories: [] }),
@@ -308,52 +382,7 @@ export function createHourInitialSetup(
         ]),
       ];
     },
-    assignmentPositions(context, input) {
-      if (context.request == null && input === undefined) return [];
-      const allocation = readHourSetupInput(
-        context,
-        input ?? (context.request as { input: unknown }).input,
-      ).allocation;
-      return [
-        {
-          namespace: JSON.stringify([context.taxId, context.environment, "hour"]),
-          position: decodeMinuteIdentity(allocation.installationIdentity),
-        },
-      ];
-    },
-    startAgainFloor({ attempts, preparations, publicEvidence }) {
-      let minutes: number[];
-      try {
-        minutes = [
-          ...attempts.flatMap(({ context, input }) =>
-            context.request == null && input === undefined
-              ? []
-              : [
-                  decodeMinuteIdentity(
-                    readHourSetupInput(
-                      context,
-                      input ?? (context.request as { input: unknown }).input,
-                    ).allocation.installationIdentity,
-                  ),
-                ],
-          ),
-          ...preparedMinutes(preparations),
-          ...publicEvidence.flatMap((evidence) =>
-            seat.retainedAssignments!(evidence)
-              .positions.filter(({ namespace }) => isHourNamespace(namespace))
-              .map(({ position }) => position),
-          ),
-        ];
-      } catch {
-        return refuse("history_invalid");
-      }
-      if (minutes.length === 0) return null;
-      const minute = Math.max(...minutes);
-      return {
-        floorMs: EPOCH_MS + (minute + 1) * MINUTE_MS,
-        lastName: encodeMinuteIdentity(EPOCH_MS + minute * MINUTE_MS),
-      };
-    },
+    assignmentPositions: hourAssignmentPositions,
+    startAgainFloor: hourStartAgainFloor(base.retainedAssignments!),
   };
-  return seat;
 }
