@@ -478,20 +478,20 @@ it("an empty never-activated setup retains its public recovery binding when star
   await f.register();
   await f.kept();
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
-  const before = await f.host.resolution.captureFirstSetupOriginals();
   const inspection = await f.host.resolution.inspectFirstSetupResolution();
   expect(inspection.emptyDatabase).toBe(true);
-  const binding = await createFirstSetupResolutionActions(f).startAgainFirstSetup({
+  await createFirstSetupResolutionActions(f).startAgainFirstSetup({
     inspectionId: inspection.inspectionId,
     revision: inspection.revision!,
     ownerGeneration: inspection.ownerGeneration!,
   });
-  expect(binding.venueDir).not.toBe(f.venueDir);
-  expect(await readFile(f.path)).toEqual(
-    before.originals.find((entry) => entry.name.endsWith(`${MODULE}.recovery.json`))!.bytes,
-  );
+  await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(readdir(join(f.stateDir, "first-fiscal-documents"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
   const next = createFirstSetupModuleHost({
-    ...binding,
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
     environment: {},
     modules: f.modules,
     database: () => suite.db,

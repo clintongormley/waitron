@@ -8,13 +8,17 @@ import { afterEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  createFirstSetupCoordinator,
-  createFirstSetupResolutionStore,
   inspectFirstSetupWorkspaceSelection,
+  readStartAgainNote,
   type RegisterAnswer,
   type StartAgainSummary,
 } from "@waitron/provisioning";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+import {
+  expectStartAgainDeleted,
+  startAgainNoteName,
+  startAgainUnchanged,
+} from "../test/start-again-deleted.js";
 import { firstFiscalPublicDigest as publicDigest } from "./first-fiscal-delivery.js";
 import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request } from "../test/first-fiscal.js";
@@ -82,39 +86,17 @@ async function fixture(workspace?: { root: string; stateDir: string; venueDir: s
   };
   return { ...f, host, actions, start, answer };
 }
+const nameOf = (f: { context: { request?: unknown } }) =>
+  (f.context.request as { identity: string }).identity;
 it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   "a never-activated box with a delivered PDF can start again after answering %s",
   async (status) => {
     const f = await fixture();
-    const before = await f.host.resolution.captureFirstSetupOriginals();
-    const binding = await f.start(f.answer(status));
-    expect(binding.venueDir).not.toBe(f.venueDir);
-    const records = createFirstSetupResolutionStore({
-      ...f,
-      coordinator: createFirstSetupCoordinator(),
-    });
-    const all = await records.read(binding.resolutionId);
-    expect(all.map((r) => [r.action, r.phase, r.authority, r.database])).toEqual([
-      ["retire", "prepared", "local-empty-unused-assignment", "empty-preactivation"],
-      ["retire", "applied", "local-empty-unused-assignment", "empty-preactivation"],
-      ["select-workspace", "prepared", "local-empty-unused-assignment", "empty-preactivation"],
-      ["select-workspace", "applied", "local-empty-unused-assignment", "empty-preactivation"],
-    ]);
-    expect(all[1]!.register).toEqual(f.answer(status));
-    expect(await records.readOriginals(binding.resolutionId)).toEqual(before.originals);
-    for (const original of before.originals) {
-      if (original.bytes === null || !/^(state|venue)\//.test(original.name)) continue;
-      const [root, ...parts] = original.name.split("/");
-      expect(await readFile(join(root === "state" ? f.stateDir : f.venueDir, ...parts))).toEqual(
-        original.bytes,
-      );
-    }
-    expect((await f.store.readForRepair())?.state.consumptionIntent).toBe(true);
-    await expect(readFile(join(binding.venueDir, "venue.db"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await f.start(f.answer(status));
+    await expectStartAgainDeleted(f);
+    expect(await startAgainNoteName(f)).toBe(nameOf(f));
     await expect(f.host.owner.status(f.ownerAttempt)).rejects.toMatchObject({
-      code: "setup.attempt_uncertain",
+      code: "setup.owner_required",
     });
   },
 );
@@ -182,26 +164,19 @@ it("an unused PDF remains eligible after a publication binding was staged but ac
     kind: "publication-binding",
     digest: "a".repeat(64),
   });
-  await expect(f.start()).resolves.toMatchObject({ selectionGeneration: 1 });
+  await expect(f.start()).resolves.toBeUndefined();
+  expect(await startAgainNoteName(f)).toBe(nameOf(f));
 });
 it("successive never-activated PDFs retain every old block while allowing a third replacement", async () => {
   const first = await fixture();
-  const secondBinding = await first.start();
-  const second = await fixture({
-    root: first.root,
-    venueDir: secondBinding.venueDir,
-    stateDir: secondBinding.stateDir,
-  });
-  const thirdBinding = await second.start();
-  const third = await fixture({
-    root: first.root,
-    venueDir: thirdBinding.venueDir,
-    stateDir: thirdBinding.stateDir,
-  });
-  await expect(third.start()).resolves.toMatchObject({
-    anchorStateDir: secondBinding.anchorStateDir,
-    selectionGeneration: 3,
-  });
+  const folders = { root: first.root, venueDir: first.venueDir, stateDir: first.stateDir };
+  await first.start();
+  const second = await fixture(folders);
+  await second.start();
+  const third = await fixture(folders);
+  await expect(third.start()).resolves.toBeUndefined();
+  await expectStartAgainDeleted(folders);
+  expect(await startAgainNoteName(folders)).toBe(nameOf(third));
 });
 const CONFIRMATIONS = "first-setup-start-again-confirmations";
 async function abandonedWithMissingDatabase(
@@ -278,18 +253,52 @@ it("an earlier abandoned activation with a missing database does not become empt
   });
   expect(await attemptFiles()).toEqual(before);
   expect(await confirmations()).toEqual([]);
-  const binding = await startAgain(shown);
+  await startAgain(shown);
   const written = await confirmations();
   expect(written).toHaveLength(1);
   expect(
     JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, written[0]!), "utf8")),
   ).toMatchObject({ database: "missing", shown });
-  const replacement = await fixture({
-    root: f.root,
-    venueDir: binding.venueDir,
-    stateDir: binding.stateDir,
+  const note = (await readStartAgainNote(f.stateDir))!;
+  const fresh = createFirstSetupModuleHost({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    modules: f.modules,
+    environment: {},
+    database: () => suite.db,
   });
-  await expect(replacement.start()).rejects.toMatchObject({ code: "setup.not_ready" });
+  const claim = await fresh.owner.claimFirstSetup(
+    {
+      environment: "production",
+      request: {
+        ...request,
+        seriesCode: "B",
+        fullSeriesCode: "BFF",
+        rectificativeSeriesCode: "BR",
+      },
+    },
+    randomBytes(32).toString("base64url"),
+  );
+  const owner = { ...claim.state, capability: claim.capability };
+  vi.setSystemTime(note.floorMs - 10 * 60_000);
+  const compared = (await fresh.preparation.prepare(
+    owner,
+    f.module,
+    { action: "compare-clocks", browser: null },
+    { onBox: true },
+  )) as { id: string };
+  await expect(
+    fresh.preparation.select(
+      owner,
+      f.module,
+      { comparisonId: compared.id },
+      await fresh.owner.reconfirm(owner, f.password, "block-use"),
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later" },
+  });
+  expect(await startAgainNoteName(f)).toBe(name);
 });
 it("an attempt committed before it was abandoned, with a missing database, is shown as fiscal-finished and starts again on confirmation", async () => {
   const { f, name, startAgain, summary, confirmations } = await abandonedWithMissingDatabase([
@@ -341,12 +350,11 @@ it.each([
     await writeFile(path, JSON.stringify(state));
   }
   if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
+  const unchanged = await startAgainUnchanged(f);
   await expect(
     f.start(why === "no-master" ? { kind: "no-current-master", confirmed: true } : f.answer()),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
-  await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  await unchanged();
 });
 it.each([
   [

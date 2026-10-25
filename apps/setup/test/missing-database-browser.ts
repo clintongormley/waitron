@@ -57,12 +57,7 @@ export async function missingDatabaseFixture(
           ownerGeneration: 2,
         });
       }
-      if (path.endsWith("/start-again"))
-        return Response.json({
-          workspaceId: "successor",
-          selectionGeneration: 1,
-          restarting: true,
-        });
+      if (path.endsWith("/start-again")) return Response.json({ restarting: true });
     },
   });
   if (options.sameTab)

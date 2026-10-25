@@ -22,6 +22,7 @@ import {
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
+import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
 afterEach(async () => {
@@ -108,33 +109,22 @@ async function actionsFixture() {
 }
 it("Start again retires a qualified unused workspace without a password and never changes its original claim", async () => {
   const f = await actionsFixture();
-  const before = await readFile(join(f.stateDir, "first-setup.json"));
-  const binding = await f.actions.startAgainFirstSetup(await f.startRequest());
-  expect(binding.anchorVenueDir).toBe(
-    await import("node:fs/promises").then((fs) => fs.realpath(f.venueDir)),
-  );
-  expect(binding.venueDir).not.toBe(f.venueDir);
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-  await expect(readFile(join(binding.venueDir, "venue.db"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  await f.actions.startAgainFirstSetup(await f.startRequest());
+  await expectStartAgainDeleted(f);
   const { assertVenueFirstSetupAllowed } = await import("@waitron/provisioning");
-  await expect(assertVenueFirstSetupAllowed(f.venueDir)).rejects.toMatchObject({
-    code: "setup.attempt_uncertain",
-  });
+  await expect(assertVenueFirstSetupAllowed(f.venueDir)).resolves.toBeUndefined();
 });
 it.each(["module-operation-public.json", "first-setup-node-key.json", "modules.json"])(
   "absence of a paper signer does not make %s history eligible for password-free reset",
   async (name) => {
     const f = await actionsFixture();
+    const unchanged = await startAgainUnchanged(f);
     await writeFile(join(f.stateDir, name), "{}");
     const req = await f.startRequest();
     await expect(f.actions.startAgainFirstSetup(req)).rejects.toMatchObject({
       code: "setup.not_ready",
     });
-    await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await unchanged();
   },
 );
 it("a no-master declaration cannot clear saved consumption intent", async () => {
@@ -151,6 +141,7 @@ it.each(["file", "directory"] as const)(
   "a missing configured outside %s is unknown register history for password-free Start again",
   async (kind) => {
     const f = await actionsFixture();
+    const unchanged = await startAgainUnchanged(f);
     const missing = join(f.root, "missing-outside-history");
     const resolution = createFirstSetupResolutionInspection({
       ...f,
@@ -181,9 +172,7 @@ it.each(["file", "directory"] as const)(
       }),
     ).rejects.toMatchObject({ code: "setup.not_ready" });
     expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-    await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await unchanged();
   },
 );
 it("an authenticated missing-database retirement preserves spent intent and all document bytes", async () => {
@@ -239,7 +228,7 @@ it("an authenticated missing-database retirement preserves spent intent and all 
     owner,
   });
   expect(shown).toEqual({ reached: "named", lastName: null });
-  const binding = await startAgain({ nothingFiledOrSold: true, shown });
+  await startAgain({ nothingFiledOrSold: true, shown });
   const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
   expect(confirmations).toHaveLength(1);
   expect(
@@ -250,28 +239,23 @@ it("an authenticated missing-database retirement preserves spent intent and all 
       ),
     ),
   ).toMatchObject({ database: "missing", shown });
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-  expect((JSON.parse(before.toString()) as { consumptionIntent: boolean }).consumptionIntent).toBe(
-    true,
-  );
+  await expect(readFile(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
   await expect(readFile(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readFile(join(f.stateDir, "first-fiscal-documents", "orphan.json"), "utf8")).toBe(
-    "retained malformed public chunk",
-  );
-  await expect(readFile(join(binding.venueDir, "venue.db"))).rejects.toMatchObject({
+  await expect(readdir(join(f.stateDir, "first-fiscal-documents"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
 it("Start again rejects a stale snapshot before recording retirement", async () => {
   const f = await actionsFixture();
+  const unchanged = await startAgainUnchanged(f);
   const request = await f.startRequest();
   await writeFile(join(f.stateDir, "trading.env"), "CHANGED");
   await expect(f.actions.startAgainFirstSetup(request)).rejects.toMatchObject({
     code: "setup.attempt_conflict",
   });
-  await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  await unchanged();
 });
 
 it("retirement snapshots retain configured public files, receipt directories and absent paths", async () => {
@@ -312,6 +296,7 @@ it.each(["missing", "corrupt", "partial"] as const)(
   "password-free Start again refuses a %s database",
   async (kind) => {
     const f = await actionsFixture();
+    const unchanged = await startAgainUnchanged(f);
     const path = join(f.venueDir, "venue.db");
     await rm(path);
     if (kind === "corrupt") await writeFile(path, "not a database");
@@ -319,9 +304,7 @@ it.each(["missing", "corrupt", "partial"] as const)(
     await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
       code: "setup.not_ready",
     });
-    await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await unchanged();
   },
 );
 it("Start again serialises two browsers so an unchanged old claim is retired only once", async () => {
@@ -340,42 +323,30 @@ it("Start again serialises two browsers so an unchanged old claim is retired onl
 
 it("Start again can retire two fresh attempts while discovery stays at the original roots", async () => {
   const f = await actionsFixture();
-  const first = await f.actions.startAgainFirstSetup(await f.startRequest());
+  await f.actions.startAgainFirstSetup(await f.startRequest());
+  await expectStartAgainDeleted(f);
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
   const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
   const host = createFirstSetupModuleHost({
     environment: {},
-    stateDir: first.stateDir,
-    venueDir: first.venueDir,
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
     modules: [],
   });
   const claim = await host.owner.claimFirstSetup(
     { environment: "production", request },
     randomBytes(32).toString("base64url"),
   );
-  await suite.db.archiveTo(join(first.venueDir, "venue.db"));
+  await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   const inspection = await host.resolution.inspectFirstSetupResolution();
-  const actions = createFirstSetupResolutionActions({ ...first, host });
-  const next = await actions.startAgainFirstSetup({
+  const actions = createFirstSetupResolutionActions({ ...f, host });
+  await actions.startAgainFirstSetup({
     inspectionId: inspection.inspectionId,
     revision: claim.state.revision,
     ownerGeneration: claim.state.ownerGeneration,
     register: { kind: "no-current-master", confirmed: true },
   });
-  expect(next.anchorStateDir).toBe(first.anchorStateDir);
-  expect(next.anchorVenueDir).toBe(first.anchorVenueDir);
-  expect(next.selectionGeneration).toBe(2);
-  expect(next.venueDir.startsWith(join(first.anchorStateDir, "first-setup-workspaces"))).toBe(true);
-  const { resolveFirstSetupWorkspace } = await import("@waitron/provisioning");
-  expect(
-    (
-      await resolveFirstSetupWorkspace({
-        stateDir: first.anchorStateDir,
-        venueDir: first.anchorVenueDir,
-      })
-    ).binding,
-  ).toEqual(next);
-  expect((await host.resolution.inspectFirstSetupResolution()).database).toBe("no-venue-rows");
+  await expectStartAgainDeleted(f);
 });
 
 it("retirement captures stable physical paths for configured ancestor aliases and deduplicates the same original", async () => {
@@ -447,6 +418,7 @@ it("refuses empty-only restart with retained catalogue rows and no taxpayer or l
   const { catalogues } = await import("@waitron/db");
   await suite.db.insert(catalogues).values({ name: "Restaurant retained menu" });
   const f = await actionsFixture();
+  const unchanged = await startAgainUnchanged(f);
   const inspection = await f.service.inspectFirstSetupResolution();
   expect(inspection.database).toBe("no-venue-rows");
   const before = await readFile(join(f.stateDir, "first-setup.json"));
@@ -454,9 +426,7 @@ it("refuses empty-only restart with retained catalogue rows and no taxpayer or l
     code: "setup.not_ready",
   });
   expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-  await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  await unchanged();
 });
 
 it("requires the configured module schema for empty-only restart", async () => {
