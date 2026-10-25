@@ -74,6 +74,7 @@ import {
   STAFFING_CLASSIFICATION,
   STAFFING_CONFIGURATION_TRANSFER,
   STAFFING_PERMISSIONS,
+  STAFFING_PERSONAL_DATA,
   STAFFING_ROUTES,
   describeShifts,
 } from "@waitron/staffing";
@@ -83,6 +84,7 @@ import {
   WORKFORCE_CONFIGURATION_TRANSFER,
   WORKFORCE_CHANGE_SOURCES,
   WORKFORCE_PERMISSIONS,
+  WORKFORCE_PERSONAL_DATA,
 } from "@waitron/workforce";
 import {
   VENUE_SERVICE,
@@ -218,6 +220,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: WORKFORCE_CHANGE_SOURCES,
     permissions: WORKFORCE_PERMISSIONS,
     configurationTransfer: WORKFORCE_CONFIGURATION_TRANSFER,
+    personalData: WORKFORCE_PERSONAL_DATA,
   },
   {
     name: "workforce-es",
@@ -376,5 +379,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     permissions: STAFFING_PERMISSIONS,
     describeShifts,
     configurationTransfer: STAFFING_CONFIGURATION_TRANSFER,
+    personalData: STAFFING_PERSONAL_DATA,
   },
 ];
