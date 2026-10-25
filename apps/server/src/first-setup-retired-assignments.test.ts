@@ -1,12 +1,16 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, writeFile, unlink, rm, realpath } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, writeFile, unlink, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { initialSetupFor, withOperationAuthority } from "@waitron/module";
-import { readStartAgainNote, type FirstSetupState } from "@waitron/provisioning";
+import {
+  readStartAgainMarker,
+  readStartAgainNote,
+  type FirstSetupState,
+} from "@waitron/provisioning";
 import {
   decodeMinuteIdentity,
   encodeMinuteIdentity,
@@ -18,6 +22,7 @@ import { expectStartAgainDeleted, startAgainNoteName } from "../test/start-again
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
+import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import {
   createFakeTimersHourClock,
   selectPastWaits,
@@ -148,6 +153,7 @@ function retainedHour(index = 42, softwareId = "W1") {
 async function startAgainMissingDatabase(
   host: Host,
   folders: { stateDir: string; venueDir: string },
+  resolution: Host["resolution"] = host.resolution,
 ) {
   const inspected = await host.resolution.inspectFirstSetupResolution();
   const recovered = await host.owner.recoverFirstSetupOwner({
@@ -157,14 +163,14 @@ async function startAgainMissingDatabase(
     clientClaimNonce: randomBytes(32).toString("base64url"),
     password: PASSWORD,
   });
-  const current = await host.resolution.inspectFirstSetupResolution();
+  const current = await resolution.inspectFirstSetupResolution();
   const ids = {
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
     owner: { ...recovered.state, capability: recovered.capability },
   };
-  const actions = createFirstSetupResolutionActions({ ...folders, host });
+  const actions = createFirstSetupResolutionActions({ ...folders, host: { ...host, resolution } });
   const shown = await actions.startAgainSummary(ids);
   await actions.startAgainFirstSetup({
     ...ids,
@@ -182,13 +188,15 @@ async function fixture(
     legacy?: unknown;
     previousIndex?: number;
     document?: boolean;
-    damage?: "missing-original" | "syntax" | "binding" | "digest";
+    damage?: "syntax" | "binding" | "digest";
     source?: "local" | "outside";
+    outsideChange?: "replace" | "remove";
   },
 ) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "retired-hour-assignments-")));
   roots.push(root);
   const anchor = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
+  const outsidePath = join(root, "outside-history.json");
   const oldHost = createFirstSetupModuleHost({
     ...anchor,
     modules,
@@ -250,7 +258,7 @@ async function fixture(
   }
   const publicPath =
     retained?.source === "outside"
-      ? join(root, "outside-history.json")
+      ? outsidePath
       : join(anchor.stateDir, "module-operation-public.json");
   const hasPublic = retained?.history !== undefined || Object.hasOwn(retained ?? {}, "legacy");
   if (hasPublic) {
@@ -277,7 +285,22 @@ async function fixture(
       ),
     );
   }
-  await startAgainMissingDatabase(oldHost, anchor);
+  if (retained?.outsideChange === "replace")
+    await writeFile(publicPath, JSON.stringify(retainedHour(1)));
+  if (retained?.outsideChange === "remove") await unlink(publicPath);
+  // The hour module configures no outside evidence, so the outside rows name the file directly.
+  await startAgainMissingDatabase(
+    oldHost,
+    anchor,
+    retained?.source === "outside"
+      ? createFirstSetupResolutionInspection({
+          ...anchor,
+          store: oldHost.store,
+          expectedMigrationSets: modules.map((module) => module.migrations.name),
+          publicEvidencePaths: [outsidePath],
+        })
+      : oldHost.resolution,
+  );
   const host = createFirstSetupModuleHost({
     ...anchor,
     modules,
@@ -297,6 +320,29 @@ async function fixture(
     });
   vi.setSystemTime(instant(index));
   return { root, host, state, old, claim, publicPath, module: MODULE, password: PASSWORD };
+}
+/** A fixture whose Start again is refused: the abandoned attempt stays, and no note or marker is written. */
+async function expectStartAgainRefused(made: Promise<unknown>, code: string) {
+  await expect(made).rejects.toMatchObject({ code });
+  const root = roots.at(-1)!;
+  const anchor = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
+  await expect(lstat(join(anchor.stateDir, "first-setup.json"))).resolves.toBeDefined();
+  expect(await readStartAgainNote(anchor.stateDir)).toBeNull();
+  expect(await readStartAgainMarker(anchor.venueDir)).toBeNull();
+}
+async function expectNoteBounds(
+  f: Awaited<ReturnType<typeof fixture>>,
+  noteName: string,
+  refused: boolean,
+) {
+  expect(await startAgainNoteName(f.state)).toBe(noteName);
+  const selection = choose(f.host, f.state, f.claim.capability);
+  if (refused)
+    await expect(selection).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later" },
+    });
+  else expect((await selection).state.consumptionIntent).toBe(true);
 }
 
 it("fresh events cannot reuse a retired hour with another allocation ID", async () => {
@@ -387,8 +433,7 @@ it.each([1, 41, 42, 43])("a retired hour at offset42 bounds fresh offset%s", asy
     });
   else expect((await selection).state.consumptionIntent).toBe(true);
 });
-// S7g: skipped until Task 4c.
-it.skip("an empty replacement cannot erase inherited spent hours", async () => {
+it("Start again of an empty replacement keeps the inherited floor in the note", async () => {
   const f = await fixture(2, request.taxId, "production", false);
   await suite.db.archiveTo(join(f.state.venueDir, "venue.db"));
   const inspection = await f.host.resolution.inspectFirstSetupResolution();
@@ -406,8 +451,11 @@ it.skip("an empty replacement cannot erase inherited spent hours", async () => {
       ownerGeneration: f.state.ownerGeneration,
       register: { kind: "no-current-master", confirmed: true },
     }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
-  expect(await f.host.store.read()).toEqual(f.state);
+  ).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.state);
+  expect(await startAgainNoteName(f.state)).toBe(
+    (firstSetupModuleContext(f.old, MODULE).request as { identity: string }).identity,
+  );
 });
 it("password recovery starts an unused named replacement again in the same folders, and the note holds the later of the two names", async () => {
   const f = await fixture(2, request.taxId, "production", false);
@@ -446,100 +494,72 @@ it("password recovery starts an unused named replacement again in the same folde
   await expectStartAgainDeleted(f.state);
   expect(await startAgainNoteName(f.state)).toBe(later);
 });
-// S7i: skipped until Task 4c.
-it.skip.each([2, 41, 42, 43])(
-  "retained public hour42 bounds offset%s independently of saved hour1",
+it.each([2, 41, 42, 43])(
+  "the attempt's own public hour42 goes into the note and bounds offset%s, not its saved hour1",
   async (index) => {
-    const f = await fixture(index, request.taxId, "production", true, 1, {
+    const f = await fixture(index, request.taxId, "production", false, 1, {
       history: retainedHour(),
     });
-    if (index <= 42)
-      await expect(f.host.assertFreshAssignment(f.state, MODULE)).rejects.toMatchObject({
-        code: "setup.attempt_conflict",
-      });
-    else await f.host.assertFreshAssignment(f.state, MODULE);
+    await expectNoteBounds(f, encodeMinuteIdentity(instant(42)), index < 42);
   },
 );
-// S7j: skipped until Task 4c.
-it.skip("a retained hour under another software ID still consumes that taxpayer's hour", async () => {
-  const f = await fixture(2, request.taxId, "production", true, 1, {
+it("a public hour under another software ID still goes into the note", async () => {
+  const f = await fixture(2, request.taxId, "production", false, 1, {
     history: retainedHour(42, "OTHER"),
   });
-  await expect(f.host.assertFreshAssignment(f.state, MODULE)).rejects.toMatchObject({
-    code: "setup.attempt_conflict",
-  });
+  await expectNoteBounds(f, encodeMinuteIdentity(instant(42)), true);
 });
-// S7k: skipped until Task 4c.
-it.skip.each(["other-taxpayer", "other-environment"])(
-  "retained public hour facts preserve the %s namespace",
+it.each(["other-taxpayer", "other-environment"])(
+  "the note from public hour facts bounds a replacement under an %s",
   async (which) => {
     const f = await fixture(
       2,
       which === "other-taxpayer" ? "89890001K" : request.taxId,
       which === "other-environment" ? "preproduction" : "production",
-      true,
+      false,
       1,
       { history: retainedHour() },
     );
-    await f.host.assertFreshAssignment(f.state, MODULE);
+    await expectNoteBounds(f, encodeMinuteIdentity(instant(42)), true);
   },
 );
-// S7i: skipped until Task 4c.
-it.skip.each([2, 42, 43])(
-  "retirement retains the real recovery document and hour42 before admitting offset%s",
+it.each([2, 42, 43])(
+  "Start again with a kept recovery document for hour42 notes hour42 before admitting offset%s",
   async (index) => {
-    const f = await fixture(index, request.taxId, "production", true, 42, { document: true });
-    if (index <= 42)
-      await expect(f.host.assertFreshAssignment(f.state, MODULE)).rejects.toMatchObject({
-        code: "setup.attempt_conflict",
-      });
-    else await f.host.assertFreshAssignment(f.state, MODULE);
+    const f = await fixture(index, request.taxId, "production", false, 42, { document: true });
+    const name = (firstSetupModuleContext(f.old, MODULE).request as { identity: string }).identity;
+    await expectNoteBounds(f, name, index <= 42);
   },
 );
-// S7l: skipped until Task 4c.
-it.skip.each(["missing-original", "syntax", "binding", "digest"] as const)(
-  "damaged retired recovery document %s never becomes absence of history",
+it.each(["syntax", "binding", "digest"] as const)(
+  "a damaged recovery document %s refuses Start again, never becomes absence of history",
   async (damage) => {
-    if (damage === "missing-original") {
-      await expect(
-        fixture(43, request.taxId, "production", true, 42, { document: true, damage }),
-      ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-      return;
-    }
-    const f = await fixture(43, request.taxId, "production", true, 42, { document: true, damage });
-    await expect(f.host.assertFreshAssignment(f.state, MODULE)).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
+    await expectStartAgainRefused(
+      fixture(43, request.taxId, "production", false, 42, { document: true, damage }),
+      "setup.not_ready",
+    );
   },
 );
-// S7i: skipped until Task 4c.
-it.skip.each([2, 43])(
-  "independent hour-history file42 retained at retirement bounds offset%s",
-  async (index) => {
-    const f = await fixture(index, request.taxId, "production", true, 1, {
+it("Start again is refused while an outside hour-history file is configured", async () => {
+  await expectStartAgainRefused(
+    fixture(43, request.taxId, "production", false, 1, {
       history: retainedHour(),
       source: "outside",
-    });
-    if (index <= 42)
-      await expect(f.host.assertFreshAssignment(f.state, MODULE)).rejects.toMatchObject({
-        code: "setup.attempt_conflict",
-      });
-    else await f.host.assertFreshAssignment(f.state, MODULE);
-  },
-);
-// S7l: skipped until Task 4c.
-it.skip.each([
+    }),
+    "setup.not_ready",
+  );
+});
+it.each([
   null,
   { version: 1, modules: {}, history: [null] },
   { version: 1, modules: {}, history: [], extra: true },
-])("invalid retained public evidence fails with a domain refusal %#", async (legacy) => {
-  const f = await fixture(43, request.taxId, "production", true, 1, { legacy });
-  await expect(f.host.assertFreshAssignment(f.state, MODULE)).rejects.toMatchObject({
-    code: "setup.attempt_invalid",
-  });
+])("invalid public evidence refuses Start again with a domain refusal %#", async (legacy) => {
+  await expectStartAgainRefused(
+    fixture(43, request.taxId, "production", false, 1, { legacy }),
+    "setup.attempt_invalid",
+  );
 });
-// S7m: skipped until Task 4c.
-it.skip.each(["reuse", "later"])(
+it.each(["reuse", "later"])(
   "ordinary hour preparation retains earlier abandoned events for %s",
   async (which) => {
     const f = await fixture(which === "reuse" ? 42 : 44, request.taxId, "production", false, 43, {
@@ -564,7 +584,7 @@ it.skip.each(["reuse", "later"])(
         input: unknown;
       };
       expect(selected.identity).toBe("0CR6J");
-      const path = join(f.old.stateDir, "module-preparation-state.json");
+      const path = join(f.state.stateDir, "module-preparation-state.json");
       const journal = await readFile(path);
       const restart = createFirstSetupModuleHost({
         stateDir: f.state.stateDir,
@@ -628,23 +648,16 @@ it.skip.each(["reuse", "later"])(
     }
   },
 );
-// S7n: skipped until Task 4c.
-it.skip.each(["replace", "remove"])(
-  "a live outside history may %s without releasing its archived hour42",
-  async (change) => {
-    for (const index of [2, 43]) {
-      const f = await fixture(index, request.taxId, "production", true, 1, {
+it.each(["replace", "remove"] as const)(
+  "Start again stays refused when a configured outside history is changed by %s",
+  async (outsideChange) => {
+    await expectStartAgainRefused(
+      fixture(43, request.taxId, "production", false, 1, {
         history: retainedHour(),
         source: "outside",
-      });
-      if (change === "replace") await writeFile(f.publicPath, JSON.stringify(retainedHour(1)));
-      else await unlink(f.publicPath);
-      if (index <= 42)
-        await expect(f.host.assertFreshAssignment(f.state, MODULE)).rejects.toMatchObject({
-          code: "setup.attempt_conflict",
-        });
-      else await f.host.assertFreshAssignment(f.state, MODULE);
-      expect(await f.host.store.read()).toEqual(f.state);
-    }
+        outsideChange,
+      }),
+      "setup.not_ready",
+    );
   },
 );
