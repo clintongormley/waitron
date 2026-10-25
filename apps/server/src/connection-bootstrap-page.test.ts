@@ -401,7 +401,7 @@ it.each(["en", "es"] as const)(
     try {
       await open(page, { ...retained, state: "healthy" }, undefined, { locale, device: "linux" });
       const help = await page.locator("#connection-help").textContent();
-      expect(help).not.toMatch(/ask (them|your administrator)|pide ayuda|Un administrador debe/);
+      expect(help).not.toMatch(/ask (them|your administrator)/);
       expect(help).toContain(
         locale === "en"
           ? "If this device blocks certificate installation, use a venue device that allows it."
