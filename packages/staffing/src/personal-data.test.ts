@@ -72,8 +72,8 @@ async function seedAll() {
       { personId: colleague, staffRoleId: SOMMELIER },
     ]);
     // The night shift starts later but has the lower id and is inserted first; its local date
-    // (+01:00) is the day after its UTC date. The evening shift ends at a different offset from
-    // its start, as across a daylight-saving change.
+    // (+01:00) is the day after its UTC date. The evening shift's start and end are stored with
+    // different offsets.
     await tx.insert(shifts).values([
       {
         id: NIGHT_SHIFT,
