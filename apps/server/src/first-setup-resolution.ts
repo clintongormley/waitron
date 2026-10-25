@@ -114,6 +114,8 @@ export function createFirstSetupResolutionActions(
     } & Partial<Pick<FirstFiscalHost, "modules">>;
     /** Tests only: replaces each removal of Start again's deletion. */
     remove?: (path: string, kind: "file" | "folder") => Promise<void>;
+    /** Tests only: the deletion marker's size limit. */
+    markerLimit?: number;
   },
 ) {
   const { host } = options;
@@ -412,7 +414,7 @@ export function createFirstSetupResolutionActions(
               ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
               : error;
           });
-          if (markerSize(marker) > START_AGAIN_MARKER_LIMIT) unavailable();
+          if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT)) unavailable();
           const floor = await gatherStartAgainFloor(roots, state, snapshot.originals, host.modules);
           const confirmation = request.confirmMissingDatabase;
           if (missing) {

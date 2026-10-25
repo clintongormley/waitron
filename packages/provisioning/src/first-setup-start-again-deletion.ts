@@ -359,12 +359,8 @@ export async function assertStartAgainAllowedOnDisk(roots: Roots): Promise<Roots
       throw notReady(`check failed: ${codeOf(error)} ${path}`);
     }
   };
-  if (insideFirstSetupWorkspace(canonical.venueDir))
-    throw new AppError(
-      "setup.workspace_unsupported",
-      {},
-      { reason: "venue folder in a workspace" },
-    );
+  if (Object.values(canonical).some(insideFirstSetupWorkspace))
+    throw new AppError("setup.workspace_unsupported", {}, { reason: "folder in a workspace" });
   for (const root of ["state", "venue"] as const)
     for (const name of LEGACY)
       if (await exists(join(rootOf(root), name)))

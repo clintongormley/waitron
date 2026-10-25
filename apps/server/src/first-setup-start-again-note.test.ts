@@ -908,27 +908,34 @@ it("the start-again route is not served by ordinary setup", async () => {
     tls(),
   );
   expect(response.status).toBe(404);
+  const control = await app.request("https://box.test/setup-api/first-setup/resolution");
+  expect(control.status, await control.clone().text()).toBe(200);
+  expect(await control.json()).toMatchObject({ inspectionId: startRequest.inspectionId });
   expect(await folderTrees(f)).toEqual(before);
 });
 
 it("a repair-page inspection read between deletions, then a cut, still lets the next start finish", async () => {
   const { f, startRequest } = await abandonedAttempt();
   const routed: { app?: Hono } = {};
-  const reads: number[] = [];
+  const reads: [number, number, string][] = [];
   const actions = createFirstSetupResolutionActions({
     ...f,
     host: f.host,
     remove: cutAt(5, async (call) => {
-      if (call !== 2 && call !== 4) return;
+      if (call !== 1 && call !== 4) return;
       const read = await routed.app!.request("https://box.test/setup-api/first-setup/resolution");
-      reads.push(read.status);
+      reads.push([call, read.status, ((await read.json()) as { database: string }).database]);
     }),
   });
   routed.app = routes(f, actions);
   await expect(actions.startAgainFirstSetup(startRequest)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
   });
-  expect(reads).toEqual([200, 200]);
+  // The first read opens venue.db before its deletion; the second finds it gone.
+  expect(reads).toEqual([
+    [1, 200, "no-venue-rows"],
+    [4, 200, "missing"],
+  ]);
   await finishStartAgainDeletion(f);
   await expectAttemptGone(f);
 });
@@ -950,4 +957,23 @@ it("Start again leaves the note and the confirmation folder in place", async () 
   await actions.startAgainFirstSetup(startRequest);
   await expectAttemptGone(f);
   expect(await kept()).toEqual(before);
+});
+
+it("a marker over its limit refuses Start again before anything is written", async () => {
+  const { f, name, request } = await missingDatabase();
+  const actions = createFirstSetupResolutionActions({ ...f, host: f.host, markerLimit: 1 });
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...request,
+      confirmMissingDatabase: {
+        nothingFiledOrSold: true,
+        shown: { reached: "named", lastName: name },
+      },
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(before.state[`${CONFIRMATIONS}/`]).toBeUndefined();
+  expect(before.venue[START_AGAIN_MARKER_FILE]).toBeUndefined();
+  expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });

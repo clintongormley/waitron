@@ -990,6 +990,17 @@ it("a venue folder inside an earlier Waitron's workspace is refused as unsupport
   await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(unsupported);
 });
 
+it("a state folder inside an earlier Waitron's workspace is refused as unsupported", async () => {
+  const base = await stateDir();
+  const roots = {
+    stateDir: join(base, "anchor", "first-setup-workspaces", randomUUID(), "state"),
+    venueDir: join(base, "venue"),
+  };
+  await mkdir(roots.venueDir, { recursive: true });
+  await mkdir(roots.stateDir, { recursive: true });
+  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(unsupported);
+});
+
 it("folders inside a backup recovery's target are refused", async () => {
   const base = await stateDir();
   const target = join(
@@ -1016,7 +1027,7 @@ it("a folder whose entries cannot be checked is refused, not read as absent", as
   }
 });
 
-it("the marker is cleared with its folder synced, and clearing is refused when there is none", async () => {
+it("the marker is cleared, and clearing is refused when there is none", async () => {
   const roots = await startableFolders();
   await marked(roots);
   await clearStartAgainMarker(roots.venueDir);
