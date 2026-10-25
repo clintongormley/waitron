@@ -100,7 +100,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "A manager or admin can download a configuration export that holds the staff roles you can fill, including after you leave.",
         ],
         kept: [
-          "A staff role is taken from you when a manager changes who holds it or deletes the role; a shift's area and role are deleted with the shift.",
+          "A staff role is taken from you when a manager or admin changes who holds it or deletes the role; a shift's area and role are deleted with the shift.",
         ],
       },
       "time-record.pdf": {
@@ -123,7 +123,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
     machineReadable: "The .json files are a machine-readable copy you can take to another service.",
     originHeading: "Where it came from",
     origin:
-      "You or the venue's managers entered your details, or they were imported when the box was set up; the rest was recorded automatically as you used Waitron.",
+      "You, or a supervisor, manager or admin at the venue, entered your details, or they were imported when the box was set up; the rest was recorded automatically as you used Waitron.",
     sentToHeading: "Who else receives it",
     backup:
       "If the venue has set up backups, they hold a copy of the whole database, this data included, wherever the venue keeps them.",
@@ -211,7 +211,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "Un gerente o un administrador puede descargar una exportación de la configuración que contiene los roles de personal que puedes cubrir, también después de que te vayas.",
         ],
         kept: [
-          "Un rol de personal se te quita cuando un gerente cambia quién lo tiene o borra el rol; el área y el rol de un turno se borran con el turno.",
+          "Un rol de personal se te quita cuando un gerente o un administrador cambia quién lo tiene o borra el rol; el área y el rol de un turno se borran con el turno.",
         ],
       },
       "time-record.pdf": {
@@ -235,7 +235,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       "Los archivos .json son una copia legible por máquina que puedes llevar a otro servicio.",
     originHeading: "De dónde salen",
     origin:
-      "Tus datos los introdujiste tú o los gerentes del local, o se importaron al configurar el servidor Waitron del local; el resto se registró automáticamente mientras usabas Waitron.",
+      "Tus datos los introdujiste tú o un supervisor, un gerente o un administrador del local, o se importaron al configurar el servidor Waitron del local; el resto se registró automáticamente mientras usabas Waitron.",
     sentToHeading: "Quién más los recibe",
     backup:
       "Si el local tiene copias de seguridad, estas guardan una copia de toda la base de datos, incluidos estos datos, allí donde el local las tenga.",

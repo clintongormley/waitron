@@ -20,7 +20,7 @@ const SIGN_IN_LINE =
   "- sign-in.json: how you sign in: whether you have a PIN, a password, an authenticator app or a Google login (never the secrets themselves), your passkeys, how many recovery codes you have, your sign-ins, the account emails issued to you and any setup you started but did not finish. Used to keep your account secure.";
 const MACHINE = "The .json files are a machine-readable copy you can take to another service.";
 const ORIGIN = `Where it came from
-You or the venue's managers entered your details, or they were imported when the box was set up; the rest was recorded automatically as you used Waitron.`;
+You, or a supervisor, manager or admin at the venue, entered your details, or they were imported when the box was set up; the rest was recorded automatically as you used Waitron.`;
 const BACKUP =
   "- If the venue has set up backups, they hold a copy of the whole database, this data included, wherever the venue keeps them.";
 const CONFIG_EXPORT =
@@ -330,7 +330,7 @@ ${CLEANUP_KEPT}
 - A shift can be deleted only while its rota is a draft or while it is on no rota, and deleting it deletes the swaps that offer it; nothing in the box deletes your availability or your other swaps.
 - Nothing in the box deletes an absence.
 - Nothing in the box deletes these questions, emails, answers or activity records.
-- A staff role is taken from you when a manager changes who holds it or deletes the role; a shift's area and role are deleted with the shift.
+- A staff role is taken from you when a manager or admin changes who holds it or deletes the role; a shift's area and role are deleted with the shift.
 - Nothing in the box deletes your working-time record, and the box refuses to change or delete an entry in it: a correction is added as a new entry.
 - The record's "Keep until" date marks the end of the legal keeping time counted from the end of the period this copy covers, not from each entry's date.
 ${DECIDES}

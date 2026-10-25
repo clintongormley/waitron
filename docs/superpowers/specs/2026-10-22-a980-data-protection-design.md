@@ -428,6 +428,10 @@ marta-lopez-2026-10-05.zip
 language, else their browser's, else the venue's; the S2a2 plan's decision 1); the button is
 **Download** beside **Copy of your data** on Account settings → Your details.
 
+2026-10-25: S2b writes the work files as JSON (`employment.json`, `rota.json`, `absences.json`)
+and adds `attendance.json` (workforce) and `staff-roles.json` (staffing); the working-time record
+is only this node's location's (the S2b plan's decisions 2 and 6).
+
 `time-record` reuses the existing export (`apps/server/src/attendance-export-api.ts:77-80`).
 `actions.csv` lists sale numbers and amounts, never another person's data. The JSON files are the
 Article 20 copy. Waitron keeps no list of requests (O7); the venue notes the request and its

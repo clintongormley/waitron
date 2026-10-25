@@ -2,7 +2,8 @@
 // id held without one, or inside a JSON column (`attendance_response_commands.input`,
 // `pay_period_closures.snapshot`, `attendance_questions.evidence_keys`), is not seen, nor is a
 // JSON list of ids of rows that name a person (`attendance_day_work.deferred_shift_ids`, shift
-// ids); and it proves a column was classified, not that WORKFORCE_PERSONAL_DATA honours the
+// ids); the columns of `time_entries`, exported whole as the working-time record, are not checked
+// at all; and it proves a column was classified, not that WORKFORCE_PERSONAL_DATA honours the
 // classification (personal-data.test.ts's exact-files cases do that).
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";

@@ -1,7 +1,7 @@
 // Weaker than its name: it finds a person's table only through declared foreign keys, so a person
 // id held without one, or inside a JSON column, is not seen; and it proves a column was
 // classified, not that STAFFING_PERSONAL_DATA honours the classification (personal-data.test.ts's
-// exact-files cases do that).
+// "writes her roles by name …" case does that).
 import { is } from "drizzle-orm";
 import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
