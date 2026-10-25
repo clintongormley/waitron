@@ -35,6 +35,7 @@ describe("roleHasPermission", () => {
       "mirror.create",
       "node.promote",
       "person.admin",
+      "personal_data.export",
     ]);
     for (const p of PERMISSIONS) {
       expect(roleHasPermission("manager", p)).toBe(!ADMIN_ONLY.has(p));
@@ -161,6 +162,15 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("manager", "node.promote")).toBe(false);
     expect(roleHasPermission("supervisor", "node.promote")).toBe(false);
     expect(roleHasPermission("staff", "node.promote")).toBe(false);
+  });
+  it("grants personal_data.export to admin only (another person's data download)", () => {
+    expect(PERMISSIONS).toContain("personal_data.export");
+    expect(roleHasPermission("admin", "personal_data.export")).toBe(true);
+    expect(roleHasPermission("manager", "personal_data.export")).toBe(false);
+    expect(roleHasPermission("supervisor", "personal_data.export")).toBe(false);
+    expect(roleHasPermission("staff", "personal_data.export")).toBe(false);
+    expect(permissionsForRole("admin")).toContain("personal_data.export");
+    expect(permissionsForRole("manager")).not.toContain("personal_data.export");
   });
   it("grants mirror.create to admin only (sync cloud-mirror C2b bundle minting)", () => {
     expect(PERMISSIONS).toContain("mirror.create");

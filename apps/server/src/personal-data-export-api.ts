@@ -2,7 +2,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { locations, nodes, readTenant, type Database, type Transaction } from "@waitron/db";
-import { resolveManagementSession } from "@waitron/identity";
+import { authorizeManager, persons, resolveManagementSession } from "@waitron/identity";
 import {
   personalDataParts,
   preparePersonalData,
@@ -10,7 +10,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { civilDateOf } from "@waitron/reporting";
-import { AppError, resolveActiveLocale } from "@waitron/shared";
+import { AppError, isUuid, resolveActiveLocale } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { archiveFileName, zipArchive } from "./download-archive.js";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -37,10 +37,14 @@ export const withPersonalDataErrors = createErrorBoundary(
     "management_session.required": 401,
     "management_session.expired": 401,
     "person.suspended": 403,
+    "authorization.not_permitted": 403,
+    "person.not_found": 404,
     "module.config_invalid": 500,
   },
   "personal_data.failed",
 );
+
+const toLanguage = (locale: string): "en" | "es" => (locale.startsWith("es-") ? "es" : "en");
 
 async function venuePlace(tx: Transaction, nodeId: string) {
   const [row] = await tx
@@ -120,8 +124,34 @@ export function mountPersonalDataExportApi(
         return {
           personId: viewer.personId,
           label: viewer.displayName,
-          language: locale.startsWith("es-") ? "es" : "en",
+          language: toLanguage(locale),
         };
+      });
+    }),
+  );
+
+  app.get("/management-api/staff/:id/personal-data/export", (c) =>
+    withPersonalDataErrors(c, log, () => {
+      const token = requireManagementSession(c);
+      const hasQuery = new URL(c.req.url).search !== "";
+      const id = c.req.param("id");
+      return sendPersonalData(c, deps, async (tx) => {
+        // Permission before the id: a caller without it gets one answer for any id, real or not.
+        await authorizeManager(tx, {
+          managementSessionId: token,
+          permission: "personal_data.export",
+          touch: false,
+        });
+        if (hasQuery) throw new AppError("management.request_invalid", { field: "query" });
+        if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+        const [target] = await tx
+          .select({ id: persons.id, displayName: persons.displayName, locale: persons.locale })
+          .from(persons)
+          .where(eq(persons.id, id));
+        if (target === undefined) throw new AppError("person.not_found", { personId: id });
+        // The target's language, not the admin's browser: the README is addressed to them.
+        const locale = resolveActiveLocale(target.locale, deps.venueLocale);
+        return { personId: target.id, label: target.displayName, language: toLanguage(locale) };
       });
     }),
   );

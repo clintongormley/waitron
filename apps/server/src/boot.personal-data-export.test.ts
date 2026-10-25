@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import type { StartedServer } from "./boot.js";
@@ -26,8 +26,8 @@ const suite = useVenueDb({
   ),
 });
 
-describe("the own personal-data download in a real start", () => {
-  it("answers a signed-in person with their own profile in primary mode", async () => {
+describe("the personal-data downloads in a real start", () => {
+  it("answers a signed-in person with their own profile, gives an administrator another person's, and refuses a manager, in primary mode", async () => {
     beforeServerStarts();
     const venue = await createClockVenue(suite.db, () => new Date(), modules);
     const session = await withTransaction(suite.db, (tx) =>
@@ -39,6 +39,17 @@ describe("the own personal-data download in a real start", () => {
       body: JSON.stringify({ expectedEntryId: null }),
     });
     expect(clockedIn.status).toBe(200);
+    const [admin, manager] = await suite.db
+      .insert(persons)
+      .values([
+        { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
+        { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
+      ])
+      .returning({ id: persons.id });
+    const [adminSession, managerSession] = await withTransaction(suite.db, async (tx) => [
+      await startManagementSession(tx, { personId: admin!.id }),
+      await startManagementSession(tx, { personId: manager!.id }),
+    ]);
     await stampDeployment(suite.db, "preproduction");
     const scratch = await mkdtemp(join(tmpdir(), "waitron-personal-data-boot-"));
     let server: StartedServer | undefined;
@@ -78,6 +89,30 @@ describe("the own personal-data download in a real start", () => {
         Object.hasOwn(files, "time-record.pdf"),
         Object.hasOwn(files, "staff-roles.json"),
       ]).toEqual([true, true, false]);
+
+      const url = `http://127.0.0.1:${port}/management-api/staff/${venue.personId}/personal-data/export`;
+      const other = await fetch(url, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${adminSession.token}` },
+      });
+      expect(other.status).toBe(200);
+      expect(other.headers.get("content-type")).toBe("application/zip");
+      const otherFiles = unzipSync(new Uint8Array(await other.arrayBuffer()));
+      const otherProfile = JSON.parse(strFromU8(otherFiles["profile.json"]!)) as Record<
+        string,
+        unknown
+      >;
+      expect([otherProfile.id, otherProfile.displayName]).toEqual([venue.personId, "Ana"]);
+
+      const refused = await fetch(url, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },
+      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual({
+        error: {
+          code: "authorization.not_permitted",
+          params: { permission: "personal_data.export" },
+        },
+      });
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });

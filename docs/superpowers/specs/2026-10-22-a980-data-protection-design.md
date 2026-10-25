@@ -436,6 +436,10 @@ language, else their browser's, else the venue's; the S2a2 plan's decision 1); t
 and adds `attendance.json` (workforce) and `staff-roles.json` (staffing); the working-time record
 is only this node's location's (the S2b plan's decisions 2 and 6).
 
+2026-10-25: S2c writes `actions.json`, not `actions.csv`; it holds whole sales voided after they
+were recorded, refunds and cash-drawer openings, not line voids; the admin's action is **Download
+their data** in the person's row menu on **Users** (the S2c plan's decisions 3, 5 and 11).
+
 `time-record` reuses the existing export (`apps/server/src/attendance-export-api.ts:77-80`).
 `actions.csv` lists sale numbers and amounts, never another person's data. The JSON files are the
 Article 20 copy. Waitron keeps no list of requests (O7); the venue notes the request and its

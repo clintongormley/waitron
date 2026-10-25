@@ -16,7 +16,15 @@ the README's language. The module files are JSON, not the design's `rota.csv` an
 `absences.csv` (S2b decision 2); the person's own absences, swaps and attendance answers name
 who decided them (S2b decision 11), and a swap's shift times wait for the owner (S2b
 decision 8). S2b also adds workforce migration 0010: three indexes for the download's
-by-person reads, with no table rebuilt. Design:
+by-person reads, with no table rebuilt. 2026-10-25: S2c is built
+([its plan](2026-10-25-a980-s2c-actions-admin-download.md)): the download holds `actions.json`
+(counts, and the invoice numbers of the whole sales already recorded whose void the person
+authorised, of the refunds they asked for, authorised or recorded the outcome of, and of the
+cash-drawer openings they made or authorised), read in short turns of its own after the first
+turn, and an admin downloads another person's data under `personal_data.export`, with the README
+in that person's language, else the venue's. No product path records a whole-sale void yet, so the
+voids list is empty on every box until one does. Line voids, comps and discounts are S2d, next; the
+rest of who did what waits (S2c decisions 2 and 3). Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md), whose §5.3
 lists the slices and §8 records the owner's ten answers. This is an overview: it says what each
 slice does, whether it changes the database, how heavily it is reviewed, what it waits for and in
@@ -38,7 +46,7 @@ S11 also wait for the labour and privacy specialists (A664's gates G2 and G3).
 
 ## The slices
 
-S2 is split in four (S2a1, S2a2, S2b, S2c) and S1 in two (S1a, S1b) so that each fits one implementer
+S2 is split in five (S2a1, S2a2, S2b, S2c, S2d) and S1 in two (S1a, S1b) so that each fits one implementer
 well under about 100 tool calls. Slice numbers are the design's; S5, S7 and S8 were dropped by the
 owner's answers.
 
@@ -49,6 +57,7 @@ owner's answers.
 | **S2a2** | The dashboard side: the Profile page's download button, the README inside the ZIP in English and Spanish, and the guide pages in English and Spanish. | **No.** | FULL (personal data) | S2a1 | Yes, after S2a1 |
 | **S2b** | The workforce and staffing parts of the same download: employment and pay rate, rota, availability and swaps, absences, and the existing working-time export. | **No.** Reads only. | FULL (personal data) | S2a1 | Yes, after S2a1 |
 | **S2c** | The actions part (counts of voids, refunds, drawer openings, with sale numbers) and an admin's download of another person's data under the new `personal_data.export` permission. | **No.** Permissions are a list in code (`packages/identity/src/permissions.ts:5-37`); the database stores only a person's role (`persons.ts:65`). The roles design (A1002) proposes roles stored with an explicit set of permission ids; if it lands first, adding the permission may need data written as well. | FULL (permission, by-id read) | S2a1 | Yes, after S2a1 |
+| **S2d** | Line voids, comps and discounts in the download: the adjustments module's own part (its actor columns) and core's `line_service_cancellations.actor_id`, with README words and a column guard. | Not yet read: S2d's plan reads the tables' indexes. | FULL (personal data) | S2c | Yes, after S2c |
 | **S3** | An admin finds an invoice customer by tax number (NIF), ignoring an "ES" prefix, letter case and spaces, and downloads what the box holds about them. | **No.** `sales` has no index on `counterparty_tax_id` (its indexes and unique keys, `packages/db/src/schema/sales.ts:118-153`, cover the invoice number, issue time, filing state, corrected sale and order), and a match that ignores case and spaces could not use a plain column index anyway, so the search reads the sales that name a recipient. Measure it on a large fixture; if it is too slow, an index is its own later slice, and that one is a migration. | FULL (personal data, permission) | S2a1 and S2a2 (ZIP and README), S2c (the permission) | Yes, after S2c |
 | **S6** | English and Spanish help-guide pages: the privacy-notice templates, a record of processing, and a breach checklist. | **No.** Markdown under `apps/server/src/guide/en/` and `es/` plus the guide's page list (`apps/server/src/guide-catalogue.ts`). | LIGHT | nothing | Yes |
 | **S10** | Find out whether any logged error carries a person's name or email (an email-server refusal; the `person.email_taken` and `person.display_name_taken` parameters, `staff.ts:53-66`), and mask it if so. | **No.** Logs are files, not tables. | FULL (personal data on the recovery page, which needs no sign-in) | nothing | Yes |
@@ -140,7 +149,7 @@ read from the environment (`apps/server/src/config.ts:503-511`, `:548`) and pass
 ## Build order
 
 1. **S4** now: it closes a live defect and is small.
-2. **S2a1**, then **S2a2**, **S2b** and **S2c** (any order), then **S3**.
+2. **S2a1**, then **S2a2**, **S2b** and **S2c** (any order), then **S2d** and **S3**, in either order, both after S2c.
 3. **S6** and **S10** at any time. S6 adds pages to `GUIDE_PAGES` in
    `apps/server/src/guide-catalogue.ts`, as S1a and S2a2 may; the later of any two rebases onto
    the earlier. S10 may mask the error parameters in `packages/identity/src/staff.ts` (`:53-66`), a

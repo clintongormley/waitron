@@ -3,10 +3,30 @@ import { eq, sql } from "drizzle-orm";
 import { unzipSync } from "fflate";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { locations, nodes, withTransaction } from "@waitron/db";
+import { formatInvoiceNumber } from "@waitron/core";
+import {
+  billPaymentRefunds,
+  billPayments,
+  drawerOpens,
+  invoiceSeries,
+  locations,
+  nodes,
+  sales,
+  saleVoids,
+  tenderRefunds,
+  tenders,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
+import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  hashPin,
+  hashSessionToken,
+  managementSessions,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { selectTimeRecordExport } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -58,6 +78,7 @@ const FILES = [
   "staff-roles.json",
   "time-record.pdf",
   "time-record.csv",
+  "actions.json",
 ];
 
 const MARTA = {
@@ -84,7 +105,30 @@ const COLLEAGUE = {
   staffRole: "Sommelier",
   area: "Cellar",
   clockInAt: "2026-03-04T09:07:00.000Z",
+  voidSale: { code: "TA", number: 74, total: 8642 },
+  voidedAt: "2026-05-11T15:26:00.000Z",
+  refundSale: { code: "TB", number: 85, total: 6420 },
+  refundAmountCents: 2109,
+  refundedAt: "2026-05-12T20:31:00.000Z",
+  drawerSale: { code: "TA", number: 96, total: 1975 },
+  drawerOpenedAt: "2026-05-13T13:47:00.000Z",
+  billSale: { code: "TB", number: 38, total: 7458 },
+  billRefundAmountCents: 3197,
+  billRefundedAt: "2026-05-16T21:52:00.000Z",
 };
+const MARTA_ACTIONS = {
+  voidSale: { code: "TA", number: 41, total: 2468 },
+  voidedAt: "2026-05-04T08:21:00.000Z",
+  refundSale: { code: "TB", number: 52, total: 3579 },
+  refundAmountCents: 1357,
+  refundedAt: "2026-05-06T19:44:00.000Z",
+  drawerSale: { code: "TA", number: 63, total: 4091 },
+  drawerOpenedAt: "2026-05-09T12:34:56.000Z",
+  billSale: { code: "TB", number: 27, total: 5321 },
+  billRefundAmountCents: 2864,
+  billRefundedAt: "2026-05-15T18:03:00.000Z",
+};
+const ADMIN = { name: "Ana Admin", email: "ana.admin@example.test" };
 const MANAGER = { name: "Luis Manager", email: "luis.manager@example.test" };
 
 /** One of Marta's values per file and table, each beside the file it must be found in. */
@@ -106,6 +150,17 @@ const MARTA_VALUES: [file: string, value: string][] = [
   ["staff-roles.json", '"staffRole": "Barback"'],
   ["staff-roles.json", "Rooftop bar"],
   ["time-record.csv", "2026-03-03T00:30:00+01:00"],
+  ["actions.json", `"sale": "TA/41"`],
+  ["actions.json", '"amount": "24.68"'],
+  ["actions.json", MARTA_ACTIONS.voidedAt],
+  ["actions.json", `"sale": "TB/52"`],
+  ["actions.json", '"amount": "13.57"'],
+  ["actions.json", MARTA_ACTIONS.refundedAt],
+  ["actions.json", `"sale": "TA/63"`],
+  ["actions.json", MARTA_ACTIONS.drawerOpenedAt],
+  ["actions.json", `"sale": "TB/27"`],
+  ["actions.json", '"amount": "28.64"'],
+  ["actions.json", MARTA_ACTIONS.billRefundedAt],
 ];
 
 /** The colleague's values in the same places as Marta's. */
@@ -125,10 +180,22 @@ const COLLEAGUE_VALUES = [
   COLLEAGUE.staffRole,
   COLLEAGUE.area,
   localWallClock(COLLEAGUE.clockInAt, CLOCK_OFFSET_MINUTES),
+  formatInvoiceNumber(COLLEAGUE.voidSale.code, COLLEAGUE.voidSale.number),
+  (COLLEAGUE.voidSale.total / 100).toFixed(2),
+  COLLEAGUE.voidedAt,
+  formatInvoiceNumber(COLLEAGUE.refundSale.code, COLLEAGUE.refundSale.number),
+  (COLLEAGUE.refundAmountCents / 100).toFixed(2),
+  COLLEAGUE.refundedAt,
+  formatInvoiceNumber(COLLEAGUE.drawerSale.code, COLLEAGUE.drawerSale.number),
+  COLLEAGUE.drawerOpenedAt,
+  formatInvoiceNumber(COLLEAGUE.billSale.code, COLLEAGUE.billSale.number),
+  (COLLEAGUE.billRefundAmountCents / 100).toFixed(2),
+  COLLEAGUE.billRefundedAt,
 ];
 
 const logger = vi.fn();
 let locationId: string, martaId: string, colleagueId: string, managerId: string, cookie: string;
+let adminCookie: string;
 
 beforeEach(async () => {
   await seedTenant(suite.db);
@@ -143,7 +210,7 @@ beforeEach(async () => {
     .returning({ id: locations.id });
   locationId = location!.id;
   await suite.db.insert(nodes).values({ id: NODE_ID, locationId, name: "Box" });
-  const [marta, colleague, manager] = await suite.db
+  const [marta, colleague, manager, admin] = await suite.db
     .insert(persons)
     .values([
       {
@@ -159,6 +226,7 @@ beforeEach(async () => {
         passkeyOfferedAt: COLLEAGUE.passkeyOfferedAt,
       },
       { displayName: MANAGER.name, email: MANAGER.email, role: "manager" },
+      { displayName: ADMIN.name, email: ADMIN.email, role: "admin" },
     ])
     .returning({ id: persons.id });
   martaId = marta!.id;
@@ -478,14 +546,147 @@ beforeEach(async () => {
       sql`insert into shift_assignments (shift_id, department_id, staff_role_id) values (${shiftId}, ${departmentId}, ${roleId})`,
     );
 
-  cookie = await withTransaction(
-    suite.db,
-    async (tx) =>
-      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: martaId })).token}`,
-  );
+  await seedActions(colleagueId);
+
+  const sessionCookie = (personId: string) =>
+    withTransaction(
+      suite.db,
+      async (tx) =>
+        `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId })).token}`,
+    );
+  cookie = await sessionCookie(martaId);
+  adminCookie = await sessionCookie(admin!.id);
 });
 
-async function download(): Promise<Record<string, Uint8Array>> {
+type Sale = { code: string; number: number; total: number };
+
+/**
+ * Marta's sale void, refund, drawer opening and bill-payment refund, and the colleague's, each on a
+ * sale of its own. Marta's refunds are authorised by the colleague and the colleague's by the manager.
+ */
+async function seedActions(colleague: string): Promise<void> {
+  const { deviceId } = await seedDevice(suite.db, { locationId });
+  const series: Record<string, string> = {};
+  for (const code of ["TA", "TB"]) {
+    const [row] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: NODE_ID, code, purpose: "standard" })
+      .returning({ id: invoiceSeries.id });
+    series[code] = row!.id;
+  }
+  const sale = async (s: Sale, workingOrderId?: string) => {
+    const [row] = await suite.db
+      .insert(sales)
+      .values({
+        source: "device",
+        deviceId,
+        nodeId: NODE_ID,
+        seriesId: series[s.code]!,
+        invoiceNumber: s.number,
+        issuedAt: "2026-05-01T08:00:00.000Z",
+        issuedOffsetMinutes: 120,
+        total: s.total,
+        vatBreakdown: [],
+        locale: "es",
+        invoiceLocales: ["es"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+        ...(workingOrderId === undefined ? {} : { workingOrderId }),
+      })
+      .returning({ id: sales.id });
+    const [tender] = await suite.db
+      .insert(tenders)
+      .values({
+        saleId: row!.id,
+        method: "cash",
+        amount: s.total,
+        settledAt: "2026-05-01T08:00:00.000Z",
+      })
+      .returning({ id: tenders.id });
+    return { saleId: row!.id, tenderId: tender!.id };
+  };
+  const rows = [
+    { personId: martaId, authorizer: colleague, a: MARTA_ACTIONS },
+    { personId: colleague, authorizer: managerId, a: COLLEAGUE },
+  ];
+  for (const { personId, authorizer, a } of rows) {
+    const voided = await sale(a.voidSale);
+    await suite.db.insert(saleVoids).values({
+      saleId: voided.saleId,
+      voidedBy: personId,
+      voidedAt: a.voidedAt,
+      reason: "Rang up the wrong table",
+    });
+    const refunded = await sale(a.refundSale);
+    await suite.db.insert(tenderRefunds).values({
+      saleId: refunded.saleId,
+      tenderId: refunded.tenderId,
+      submissionId: crypto.randomUUID(),
+      fingerprint: `refund ${personId}`,
+      reason: "Cold soup",
+      source: "device",
+      deviceId,
+      nodeId: NODE_ID,
+      locationId,
+      method: "cash",
+      manual: false,
+      appliedAmount: a.refundAmountCents,
+      tipAmount: 0,
+      requestedBy: personId,
+      authorizedBy: authorizer,
+      state: "completed",
+      createdAt: a.refundedAt,
+      completedAt: a.refundedAt,
+    });
+    const drawerSale = await sale(a.drawerSale);
+    await suite.db.insert(drawerOpens).values({
+      reason: "cash_sale",
+      personId,
+      deviceId,
+      saleId: drawerSale.saleId,
+      openedAt: new Date(a.drawerOpenedAt),
+    });
+    const [order] = await suite.db
+      .insert(workingOrders)
+      .values({ source: "dashboard", locationId, nodeId: NODE_ID, orderNumber: a.billSale.number })
+      .returning({ id: workingOrders.id });
+    const [payment] = await suite.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order!.id,
+        submissionId: crypto.randomUUID(),
+        fingerprint: `bill ${personId}`,
+        kind: "contribution",
+        method: "cash",
+        applied: a.billSale.total,
+        tendered: a.billSale.total,
+        state: "received",
+        receivedAt: "2026-05-14T12:00:00.000Z",
+        requestedBy: personId,
+        source: "device",
+        deviceId,
+      })
+      .returning({ id: billPayments.id });
+    await sale(a.billSale, order!.id);
+    await suite.db.insert(billPaymentRefunds).values({
+      billPaymentId: payment!.id,
+      submissionId: crypto.randomUUID(),
+      fingerprint: `bill refund ${personId}`,
+      reason: "Charged twice",
+      source: "device",
+      deviceId,
+      appliedAmount: a.billRefundAmountCents,
+      tipAmount: 0,
+      requestedBy: personId,
+      authorizedBy: authorizer,
+      state: "completed",
+      createdAt: a.billRefundedAt,
+      completedAt: a.billRefundedAt,
+    });
+  }
+}
+
+async function download(path = PATH, as = cookie): Promise<Record<string, Uint8Array>> {
   const app = new Hono();
   mountMeApi(
     app,
@@ -499,7 +700,7 @@ async function download(): Promise<Record<string, Uint8Array>> {
     },
     logger,
   );
-  const response = await app.request(PATH, { headers: { cookie } });
+  const response = await app.request(path, { headers: { cookie: as } });
   expect(response.status).toBe(200);
   return unzipSync(new Uint8Array(await response.arrayBuffer()));
 }
@@ -631,6 +832,51 @@ describe("a staff member's whole personal-data download", () => {
       .where(eq(timeEntries.personId, martaId));
     const secrets = [pin!.hash!, session!.hash, MARTA_CLAIM_TOKEN, entry!.hash];
     const text = await readable(await download());
+    const found = Object.entries(text).flatMap(([file, content]) =>
+      secrets.filter((secret) => content.includes(secret)).map((secret) => [file, secret]),
+    );
+    expect(found).toEqual([]);
+    expect(text["profile.json"]!.includes(MARTA.email)).toBe(true);
+  });
+
+  it("gives an admin every file and value of hers once she is disabled, and none of a colleague's or a secret", async () => {
+    const [pin] = await suite.db
+      .select({ hash: persons.pinHash })
+      .from(persons)
+      .where(eq(persons.id, martaId));
+    const [session] = await suite.db
+      .select({ hash: managementSessions.tokenHash })
+      .from(managementSessions)
+      .where(eq(managementSessions.personId, martaId));
+    await suite.db.run(sql`update persons set status = 'suspended' where id = ${martaId}`);
+
+    const files = await download(
+      `/management-api/staff/${martaId}/personal-data/export`,
+      adminCookie,
+    );
+    expect(Object.keys(files)).toEqual(["README.txt", ...FILES]);
+    const text = await readable(files);
+
+    expect(MARTA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
+
+    const colleagueAsOther = `"otherPerson": "${COLLEAGUE.name}"`;
+    expect(occurrences(text["rota.json"]!, colleagueAsOther)).toBe(1);
+    const withoutOther = {
+      ...text,
+      "rota.json": text["rota.json"]!.replaceAll(colleagueAsOther, ""),
+    };
+    const leaks = Object.entries(withoutOther).flatMap(([file, content]) =>
+      [...COLLEAGUE_VALUES, COLLEAGUE.name, colleagueId]
+        .filter((value) => content.includes(value))
+        .map((value) => [file, value]),
+    );
+    expect(leaks).toEqual([]);
+
+    const secrets = [
+      pin!.hash!,
+      session!.hash,
+      hashSessionToken(adminCookie.slice(`${MANAGEMENT_COOKIE}=`.length)),
+    ];
     const found = Object.entries(text).flatMap(([file, content]) =>
       secrets.filter((secret) => content.includes(secret)).map((secret) => [file, secret]),
     );

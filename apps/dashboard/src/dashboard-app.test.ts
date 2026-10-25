@@ -8695,3 +8695,138 @@ it.each([false, true])("passes admin authority to the staff screen (%s)", async 
   await flush(el);
   expect((staff(el) as HTMLElementTagNameMap["dashboard-staff-screen"]).canAdminister).toBe(admin);
 });
+
+it.each([false, true])(
+  "passes the personal-data export permission to the staff screen (%s)",
+  async (canExport) => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        permissions: ["person.manage", canExport ? "personal_data.export" : "person.admin"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navStaff(el)!.click();
+    await flush(el);
+    expect(
+      (staff(el) as HTMLElementTagNameMap["dashboard-staff-screen"]).canExportPersonalData,
+    ).toBe(canExport);
+  },
+);
+
+it("signs out through the leave coordinator when the staff screen asks for an administrator", async () => {
+  const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await flush(el);
+  navStaff(el)!.click();
+  await flush(el);
+  const coordinator = leaveCoordinatorFor(staff(el)!)!;
+  const request = vi.spyOn(coordinator, "request");
+
+  staff(el)!.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }));
+  await flush(el);
+
+  expect(request).toHaveBeenCalledOnce();
+  expect(request).toHaveBeenCalledWith({
+    scopes: "all",
+    reason: "signout",
+    proceed: expect.any(Function),
+  });
+  await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+  expect(login(el)).toBeTruthy();
+  expect(staff(el)).toBeNull();
+});
+
+describe("the Users screen's administrator sign-in, pressed for real", () => {
+  const marta: PersonSummary = {
+    personId: "p2",
+    displayName: "Marta",
+    firstNames: "Marta",
+    lastNames: "López",
+    telephone: null,
+    role: "staff",
+    status: "active",
+    hasPassword: false,
+    hasTotp: false,
+    email: null,
+  };
+
+  async function refusedOnUsers(): Promise<{ el: DashboardApp; api: DashboardApi }> {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        permissions: ["person.manage", "personal_data.export"],
+      }),
+      listStaff: vi.fn().mockResolvedValue([marta]),
+      downloadPersonalData: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navStaff(el)!.click();
+    await flush(el);
+    await expect
+      .poll(() => staff(el)!.shadowRoot!.querySelector("dashboard-staff-list"))
+      .not.toBeNull();
+    staff(el)!
+      .shadowRoot!.querySelector("dashboard-staff-list")!
+      .dispatchEvent(
+        new CustomEvent("download-person-data", {
+          detail: { personId: "p2" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    await expect.poll(() => signInButton(el)).not.toBeNull();
+    return { el, api };
+  }
+
+  const signInButton = (el: DashboardApp) =>
+    staff(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=admin-sign-in]");
+
+  async function choose(el: DashboardApp, decision: "keep" | "discard") {
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+    await expect.poll(() => question.open).toBe(false);
+  }
+
+  it("signs out when the button is pressed", async () => {
+    const { el, api } = await refusedOnUsers();
+    signInButton(el)!.click();
+    await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+    await expect.poll(() => login(el)).toBeTruthy();
+    expect(staff(el)).toBeNull();
+  });
+
+  it("stays signed in when the person keeps an unsaved change, and signs out once they discard it", async () => {
+    const { el, api } = await refusedOnUsers();
+    const coordinator = leaveCoordinatorFor(staff(el)!)!;
+    let value = "Original";
+    const scope = coordinator.register({
+      id: staff(el)!,
+      current: () => value,
+      snapshot: (v) => v,
+      equal: (a, b) => a === b,
+      restore: (v) => {
+        value = v;
+      },
+    });
+    value = "Edited";
+    scope.changed();
+    expect(coordinator.isDirty()).toBe(true);
+
+    signInButton(el)!.click();
+    await choose(el, "keep");
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(staff(el)).not.toBeNull();
+    expect(login(el)).toBeFalsy();
+
+    signInButton(el)!.click();
+    await choose(el, "discard");
+    await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+    await expect.poll(() => login(el)).toBeTruthy();
+    expect(staff(el)).toBeNull();
+  });
+});

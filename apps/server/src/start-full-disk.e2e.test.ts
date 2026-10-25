@@ -22,9 +22,12 @@ import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
+  drawerOpens,
+  invoiceSeries,
   locations,
   nodes,
   openVenueDatabase,
+  sales,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -68,6 +71,7 @@ import { ALL_ALERT_CLAIMS, ALL_MODULES, enabledAlertSources } from "./modules.js
 import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
+import { actionsPersonalData } from "./personal-data-actions.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { escapeHtml } from "./recovery-surface.js";
@@ -221,6 +225,8 @@ describe("the Box status read and free-space deletion on a real full disk", () =
   let logDir: string;
   let manager: { personId: string; token: string; cookie: string };
   let supervisor: { personId: string; token: string; cookie: string };
+  let admin: { personId: string; token: string; cookie: string };
+  let cashier: { personId: string; token: string; cookie: string };
   let nodeId: string;
 
   async function seedPerson(role: PersonRoleValue, name: string) {
@@ -256,6 +262,8 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       .returning({ id: locations.id });
     manager = await seedPerson("manager", "Marta");
     supervisor = await seedPerson("supervisor", "Sergio");
+    admin = await seedPerson("admin", "Ana");
+    cashier = await seedPerson("staff", "Paula");
     const [node] = await db
       .insert(nodes)
       .values({ locationId: main!.id, name: "Box" })
@@ -273,6 +281,37 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         at: new Date(Date.now() - 3_600_000).toISOString(),
       }),
     );
+    // Paula's sale and its drawer opening, so her download looks a sale number up on the full disk.
+    const { deviceId } = await seedDevice(db, { locationId: main!.id });
+    const [series] = await db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "FD", purpose: "standard" })
+      .returning({ id: invoiceSeries.id });
+    const [sale] = await db
+      .insert(sales)
+      .values({
+        source: "device",
+        deviceId,
+        nodeId,
+        seriesId: series!.id,
+        invoiceNumber: 317,
+        issuedAt: "2026-10-20T08:00:00.000Z",
+        issuedOffsetMinutes: 120,
+        total: 1234,
+        vatBreakdown: [],
+        locale: "en",
+        invoiceLocales: ["en"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+      })
+      .returning({ id: sales.id });
+    await db.insert(drawerOpens).values({
+      reason: "cash_sale",
+      personId: cashier.personId,
+      deviceId,
+      saleId: sale!.id,
+      openedAt: new Date("2026-10-20T08:00:05.000Z"),
+    });
 
     const now = () => new Date();
     diskState = createDiskFullState({ dir: venueDir, now, log: () => {} });
@@ -355,7 +394,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         db,
         nodeId,
         modules: ALL_MODULES,
-        serverParts: timeRecordPersonalData(ALL_MODULES),
+        serverParts: [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(db)],
         venueLocale: "en-GB",
       },
       () => {},
@@ -453,6 +492,71 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     expect(lastSeen()).toBe(before);
     expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs3'`)).toEqual([
       { id: "bs3" },
+    ]);
+  });
+
+  const lastSeenOf = (token: string) =>
+    db.all<{ at: string }>(
+      sql`select last_seen_at as at from management_sessions where token_hash = ${hashSessionToken(token)}`,
+    )[0]!.at;
+  const adminDownload = (personId: string) =>
+    app.request(`/management-api/staff/${personId}/personal-data/export`, {
+      headers: { cookie: admin.cookie },
+    });
+
+  it("an admin's personal-data download of another person answers on a full disk with a change waiting, and writes nothing", async (ctx) => {
+    const small = needDisk(ctx);
+    const at = new Date(Date.now() - 60_000).toISOString();
+    db.run(
+      sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(admin.token)}`,
+    );
+    // With room on the disk a touch of the session would succeed, so only this check sees one.
+    const roomy = await adminDownload(manager.personId);
+    expect(roomy.status).toBe(200);
+    await roomy.arrayBuffer();
+    expect(lastSeenOf(admin.token)).toBe(at);
+    db.run(sql`insert into change_log (id, payload) values ('bs4', '{"resource":"zz","id":"4"}')`);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+
+    const res = await adminDownload(manager.personId);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    expect(
+      Object.hasOwn(unzipSync(new Uint8Array(await res.arrayBuffer())), "time-record.csv"),
+    ).toBe(true);
+    expect(lastSeenOf(admin.token)).toBe(at);
+    expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs4'`)).toEqual([
+      { id: "bs4" },
+    ]);
+  });
+
+  it("an admin's personal-data download of a person with a drawer opening looks its sale number up on a full disk", async (ctx) => {
+    const small = needDisk(ctx);
+    db.run(sql`insert into change_log (id, payload) values ('bs5', '{"resource":"zz","id":"5"}')`);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+
+    const res = await adminDownload(cashier.personId);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    expect(JSON.parse(new TextDecoder().decode(files["actions.json"]))).toEqual({
+      counts: { voids: 0, refunds: 0, drawerOpenings: 1 },
+      voids: [],
+      refunds: [],
+      drawerOpenings: [
+        {
+          reason: "cash_sale",
+          sale: "FD/317",
+          at: "2026-10-20T08:00:05.000Z",
+          viaOverride: false,
+          yourPart: ["opened"],
+        },
+      ],
+    });
+    expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs5'`)).toEqual([
+      { id: "bs5" },
     ]);
   });
 

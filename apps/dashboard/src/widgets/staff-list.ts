@@ -17,6 +17,8 @@ export class StaffList extends LitElement {
 
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
+  @property({ type: Boolean }) canExportPersonalData = false;
+  @property({ attribute: false }) downloadingPersonId: string | null = null;
   @property() searchTerm = "";
   /** What the table says with no rows; the screen filters by role and status before the table, so
    * it names its own. */
@@ -36,7 +38,13 @@ export class StaffList extends LitElement {
   #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<PersonSummary>[] };
 
   #columns(): DataTableColumn<PersonSummary>[] {
-    const inputs = [currentLocale(), this.currentPersonId, this.canAdminister];
+    const inputs = [
+      currentLocale(),
+      this.currentPersonId,
+      this.canAdminister,
+      this.canExportPersonalData,
+      this.downloadingPersonId,
+    ];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#columnsMemo.columns;
     const columns: DataTableColumn<PersonSummary>[] = [
@@ -110,6 +118,7 @@ export class StaffList extends LitElement {
                 : this.#action(person, "disable", t("person.disable"))
             }
             ${person.status === "pending" ? this.#action(person, "resend-invitation", t("person.resend_invitation")) : nothing}
+            ${this.#downloadData(person)}
           </wt-row-actions>
         `,
       },
@@ -120,20 +129,35 @@ export class StaffList extends LitElement {
 
   #action(person: PersonSummary, action: string, label: string) {
     if (!this.canAdminister) return nothing;
+    return this.#menuItem(
+      `${action}-${person.personId}`,
+      action === "disable" && person.personId === this.currentPersonId,
+      label,
+      "person-action",
+      { personId: person.personId, action },
+    );
+  }
+
+  #downloadData(person: PersonSummary) {
+    if (!this.canExportPersonalData) return nothing;
+    return this.#menuItem(
+      `download-data-${person.personId}`,
+      this.downloadingPersonId !== null,
+      t("person.download_data"),
+      "download-person-data",
+      { personId: person.personId },
+    );
+  }
+
+  #menuItem(test: string, disabled: boolean, label: string, name: string, detail: object) {
     return html`<wt-button
       variant="ghost"
       align="start"
-      data-test=${`${action}-${person.personId}`}
-      ?disabled=${action === "disable" && person.personId === this.currentPersonId}
+      data-test=${test}
+      ?disabled=${disabled}
       @click=${(event: Event) => {
         event.stopPropagation();
-        this.dispatchEvent(
-          new CustomEvent("person-action", {
-            detail: { personId: person.personId, action },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
       }}
       >${label}</wt-button
     >`;

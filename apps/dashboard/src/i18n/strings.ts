@@ -1084,7 +1084,7 @@ export const en = {
   "profile.data_copy_busy": "Preparing…",
   "profile.data_copy_help_label": "What the copy holds",
   "profile.data_copy_help":
-    "Your profile and sign-in details, your work records if the venue keeps them in Waitron, and a README.txt that explains them and your rights.",
+    "Your profile and sign-in details, and your work records if the venue keeps them in Waitron. The whole sales already recorded whose void you authorised. The refunds you asked for, authorised or recorded the outcome of. The cash-drawer openings you made or authorised. A README.txt that explains each file and your rights.",
   "profile.data_copy_help_guide": "More about your data",
   "account.offer_passkey": "Set up a passkey?",
   "account.passkey_optional":
@@ -1175,6 +1175,14 @@ export const en = {
   "staff.invitation_sent": "Invitation email sent.",
   "staff.invitation_not_sent":
     "The account was created, but the invitation could not be sent. Check email settings, then ask the user to reset their password.",
+  "staff.data_copy_busy": "Preparing a copy of {name}'s data…",
+  "staff.data_copy_not_permitted":
+    "Only an administrator can download another person's data, and this account can no longer do it. Sign in as an administrator to download {name}'s data: this signs you out here first.",
+  "staff.data_copy_not_found":
+    "{name} is on this list, but the box has no record of them. That is a fault in Waitron. The list has been reloaded.",
+  "staff.data_copy_not_found_unreloaded":
+    "{name} is on this list, but the box has no record of them. That is a fault in Waitron.",
+  "staff.sign_in_as_admin": "Sign in as an administrator",
   "catalogue.title": "Products",
   "units.title": "Units",
   "units.description": "Define how product quantities are measured and displayed.",
@@ -1905,6 +1913,7 @@ export const en = {
   "person.set_password": "Set password",
   "person.save_email": "Save email",
   "person.resend_invitation": "Send new invitation",
+  "person.download_data": "Download their data",
   "allergen.add": "Add allergen",
   "allergen.search": "Search allergens",
   "allergen.no_matches": "No matching allergens.",
@@ -4456,7 +4465,7 @@ export const es: Record<StringKey, string> = {
   "profile.data_copy_busy": "Preparando…",
   "profile.data_copy_help_label": "Qué contiene la copia",
   "profile.data_copy_help":
-    "Tus datos de perfil y de acceso, tus datos de trabajo si el local los guarda en Waitron, y un README.txt que los explica junto con tus derechos.",
+    "Tus datos de perfil y de acceso, y tus datos de trabajo si el local los guarda en Waitron. Las ventas completas ya registradas cuya anulación autorizaste. Las devoluciones que pediste, autorizaste o cuyo resultado registraste. Las aperturas del cajón de efectivo que hiciste o autorizaste. Un README.txt que explica cada archivo y tus derechos.",
   "profile.data_copy_help_guide": "Más sobre tus datos",
   "account.offer_passkey": "¿Configurar una passkey?",
   "account.passkey_optional":
@@ -4548,6 +4557,14 @@ export const es: Record<StringKey, string> = {
   "staff.invitation_sent": "Se ha enviado el correo de invitación.",
   "staff.invitation_not_sent":
     "La cuenta se ha creado, pero no se ha podido enviar la invitación. Revisa el correo y pide al usuario que restablezca su contraseña.",
+  "staff.data_copy_busy": "Preparando una copia de los datos de {name}…",
+  "staff.data_copy_not_permitted":
+    "Solo un administrador puede descargar los datos de otra persona, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para descargar los datos de {name}: antes se cierra tu sesión aquí.",
+  "staff.data_copy_not_found":
+    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron. Se ha vuelto a cargar la lista.",
+  "staff.data_copy_not_found_unreloaded":
+    "{name} aparece en esta lista, pero la caja no tiene ningún registro suyo. Es un fallo de Waitron.",
+  "staff.sign_in_as_admin": "Iniciar sesión como administrador",
   "catalogue.title": "Productos",
   "units.title": "Unidades",
   "units.description": "Define cómo se miden y muestran las cantidades de los productos.",
@@ -5290,6 +5307,7 @@ export const es: Record<StringKey, string> = {
   "person.set_password": "Establecer contraseña",
   "person.save_email": "Guardar correo",
   "person.resend_invitation": "Enviar nueva invitación",
+  "person.download_data": "Descargar sus datos",
   "allergen.add": "Añadir alérgeno",
   "allergen.search": "Buscar alérgenos",
   "allergen.no_matches": "No hay alérgenos coincidentes.",

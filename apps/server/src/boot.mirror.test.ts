@@ -20,7 +20,8 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { resolveManagementSession } from "@waitron/identity";
+import { persons, resolveManagementSession } from "@waitron/identity";
+import { strFromU8, unzipSync } from "fflate";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { serverFixture } from "./testing/server-fixture.js";
@@ -46,6 +47,7 @@ const stores = {} as Record<VenueName, VenueDatabase>;
 const db = {} as Record<VenueName, Database>;
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
+const MIRROR_STAFF_ID = "66666666-6666-4666-8666-666666666666";
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
 
@@ -133,6 +135,9 @@ beforeAll(async () => {
   await seedIdentity(db.mirror);
   await seedIdentity(db.primary);
   await seedIdentity(db.noConfig);
+  await db.mirror
+    .insert(persons)
+    .values({ id: MIRROR_STAFF_ID, displayName: "Marta", role: "staff" });
   // The primary directory writes no `node_roles` row: `readDeploymentAxes` reads it as 'primary'.
   await stampDeployment(db.mirror, "preproduction");
   await setDeploymentMode(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
@@ -171,7 +176,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
 }
 
 describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
-  it("serves a dashboard read via the ambient viewer and refuses writes", async () => {
+  it("serves dashboard reads, another person's download among them, via the ambient viewer and refuses writes", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -190,6 +195,17 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       const read = await fetch(`${base}/management-api/catalogues`, { headers: { cookie } });
       expect(read.status).toBe(200);
       expect(await read.json()).toEqual([]);
+
+      // An administrator's download of another person answers on a mirror like every other read.
+      const download = await fetch(
+        `${base}/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
+        { headers: { cookie } },
+      );
+      expect(download.status).toBe(200);
+      expect(download.headers.get("content-type")).toBe("application/zip");
+      const files = unzipSync(new Uint8Array(await download.arrayBuffer()));
+      const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
+      expect([profile.id, profile.displayName]).toEqual([MIRROR_STAFF_ID, "Marta"]);
 
       const write = await fetch(`${base}/management-api/catalogues`, {
         method: "POST",

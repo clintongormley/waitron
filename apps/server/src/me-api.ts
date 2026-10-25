@@ -53,6 +53,7 @@ import type { OnboardingIntent } from "./trading-config.js";
 import type { AccountEmailSender } from "./account-email.js";
 import { modulesNamed } from "./modules.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
+import { actionsPersonalData } from "./personal-data-actions.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
 export interface MeApiDeps {
@@ -105,7 +106,8 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * Staff self-service routes. Every route acts as the person its management session names, never
  * one the request body names. Deliberately role-blind — never `authorizeManager`: a `staff` person
  * holds none of the permissions the management routes ask for, so that gate would refuse every
- * staff member.
+ * staff member. The personal-data mount this calls also carries the admin's download of another
+ * person's data, which does call `authorizeManager`.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing;
@@ -123,7 +125,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       db: deps.db,
       nodeId: deps.cfg.nodeId,
       modules,
-      serverParts: timeRecordPersonalData(modules),
+      serverParts: [...timeRecordPersonalData(modules), ...actionsPersonalData(deps.db)],
       venueLocale: deps.venueLocale,
       privacyNoticeUrl: deps.privacyNoticeUrl,
       now: deps.now,

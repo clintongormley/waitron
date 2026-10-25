@@ -119,6 +119,12 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         holds: "the same working-time record as time-record.pdf, as a spreadsheet file.",
         use: "Kept as the venue's record of the hours you worked.",
       },
+      "actions.json": {
+        holds:
+          "the whole sales already recorded whose void you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each; for each one, the invoice number where there is one, the amount where there is one and when it happened; for each refund, the tip it gave back, whether it was cash or card and whether it went through, failed or is still waiting; for each opening, why the drawer opened and whether another person authorised it for the person who opened it; and for each refund and opening, your part in it.",
+        use: "Kept to account for the money the venue takes and gives back.",
+        kept: ["Nothing in the box deletes a voided sale, a refund or a cash-drawer opening."],
+      },
     },
     machineReadable: "The .json files are a machine-readable copy you can take to another service.",
     originHeading: "Where it came from",
@@ -229,6 +235,14 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       "time-record.csv": {
         holds: "el mismo registro de jornada que time-record.pdf, como archivo de hoja de cálculo.",
         use: "Se guarda como el registro del local de las horas que trabajaste.",
+      },
+      "actions.json": {
+        holds:
+          "las ventas completas ya registradas cuya anulación autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste: cuántas hay de cada una; de cada una, el número de factura si lo tiene, el importe si lo tiene y cuándo ocurrió; de cada devolución, la propina devuelta, si fue en efectivo o con tarjeta y si se completó, falló o sigue pendiente; de cada apertura, por qué se abrió el cajón y si otra persona la autorizó para quien lo abrió; y de cada devolución y cada apertura, qué parte tuviste tú.",
+        use: "Se guarda para dar cuenta del dinero que el local cobra y devuelve.",
+        kept: [
+          "Nada en el servidor Waitron del local borra una venta anulada, una devolución ni una apertura del cajón de efectivo.",
+        ],
       },
     },
     machineReadable:

@@ -103,6 +103,8 @@ every retained or new declared entry regardless of seed suggestions. Every propo
 | Adjustment application role lists       | `packages/adjustments/src/policy.ts:142`         | New `adjustment.apply`, T                    | Necessary for direct comps/discounts, additionally restricted by each reason.                               |
 | Adjustment approval role lists          | `packages/adjustments/src/policy.ts:185`         | New `adjustment.approve`, S                  | Necessary for reason/bill-limit approval, additionally restricted by that policy.                           |
 
+2026-10-25: A980 S2c added `personal_data.export` to the catalog, admin only (`packages/identity/src/permissions.ts`).
+
 These merges reduce duplicated action grants without joining identity, personnel, reporting and
 sales into a single manager switch. Do not merge `person.admin` into `person.manage`, or privacy
 exports into `report.export`. Do not conflate printer-job retries with receipt copies: current retry

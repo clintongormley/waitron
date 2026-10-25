@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/staff-list.js";
@@ -51,6 +51,15 @@ export class StaffScreen extends LitElement {
         color: var(--wt-color-text);
         margin-top: var(--wt-space-3);
       }
+      .download-error {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
+      .download-error p {
+        margin: 0;
+      }
       .filters {
         display: grid;
         grid-template-columns: minmax(calc(var(--wt-space-6) * 7), 1fr) repeat(
@@ -80,6 +89,7 @@ export class StaffScreen extends LitElement {
   );
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
+  @property({ type: Boolean }) canExportPersonalData = false;
   @state() private people: PersonSummary[] = [];
   @state() private formOpen = false;
   @state() private editingPerson: PersonSummary | null = null;
@@ -99,6 +109,76 @@ export class StaffScreen extends LitElement {
     action: "reset-login" | "reset-pin" | "disable" | "reactivate" | "resend-invitation";
   } | null = null;
   @state() private rowBusy = false;
+
+  @state() private downloadingPerson: PersonSummary | null = null;
+  /** Kept apart from `errorKey`, which the edit and create dialogs' feet read. */
+  @state() private downloadFailure: { code: string; name: string; reloaded: boolean } | null = null;
+  #download = 0;
+
+  async #onDownloadPersonData(event: CustomEvent<{ personId: string }>): Promise<void> {
+    event.stopPropagation();
+    if (this.downloadingPerson !== null || !this.canExportPersonalData) return;
+    const person = this.people.find((person) => person.personId === event.detail.personId);
+    if (person === undefined) return;
+    const download = ++this.#download;
+    this.downloadingPerson = person;
+    this.downloadFailure = null;
+    try {
+      const file = await this.api.downloadPersonalData(person.personId);
+      if (this.#download !== download) return;
+      const url = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.fileName ?? "personal-data.zip";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      if (this.#download !== download) return;
+      const code = codeOf(error);
+      this.downloadFailure = { code, name: person.displayName, reloaded: false };
+      if (code === "person.not_found" && (await this.#load()) && this.#download === download)
+        this.downloadFailure = { ...this.downloadFailure, reloaded: true };
+    } finally {
+      if (this.#download === download) this.downloadingPerson = null;
+    }
+  }
+
+  #renderDownloadLines() {
+    if (this.downloadingPerson !== null)
+      return html`<p class="status" role="status" data-test="download-data-status">
+        ${fill("staff.data_copy_busy", { name: this.downloadingPerson.displayName })}
+      </p>`;
+    const failure = this.downloadFailure;
+    if (failure === null) return nothing;
+    // person.not_found: only first setup's import deletes persons, before Users can open (S2c plan
+    // decision 8).
+    const text =
+      failure.code === "authorization.not_permitted"
+        ? fill("staff.data_copy_not_permitted", { name: failure.name })
+        : failure.code === "person.not_found"
+          ? fill(
+              failure.reloaded
+                ? "staff.data_copy_not_found"
+                : "staff.data_copy_not_found_unreloaded",
+              { name: failure.name },
+            )
+          : codeMessage(failure.code);
+    return html`<div class="error download-error" role="alert" data-test="download-data-error">
+      <p data-test="download-data-error-text">${text}</p>
+      ${
+        failure.code === "authorization.not_permitted"
+          ? html`<wt-button
+              data-test="admin-sign-in"
+              @click=${() =>
+                this.dispatchEvent(
+                  new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+                )}
+              >${t("staff.sign_in_as_admin")}</wt-button
+            >`
+          : nothing
+      }
+    </div>`;
+  }
 
   #onRowAction(event: CustomEvent<{ personId: string; action: string }>): void {
     event.stopPropagation();
@@ -177,14 +257,34 @@ export class StaffScreen extends LitElement {
     void this.#load();
   }
 
-  async #load(): Promise<void> {
+  override disconnectedCallback(): void {
+    this.#download++;
+    this.downloadingPerson = null;
+    super.disconnectedCallback();
+  }
+
+  #newestLoad: Promise<boolean> | null = null;
+
+  /** Resolves whether the list now shown was read. The query controller settles a watch a newer
+   * one replaced without reading, so a replaced load answers with the newest load's result. */
+  #load(): Promise<boolean> {
+    const load: Promise<boolean> = this.#readList().then((read) =>
+      this.#newestLoad === load ? read : this.#newestLoad!,
+    );
+    this.#newestLoad = load;
+    return load;
+  }
+
+  async #readList(): Promise<boolean> {
     if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listStaff", [], (value) => {
         this.people = value;
       });
+      return true;
     } catch (error) {
       this.#showReadError(error);
+      return false;
     }
   }
 
@@ -416,6 +516,10 @@ export class StaffScreen extends LitElement {
         .emptyMessage=${this.people.length === 0 ? t("staff.empty") : tableNoMatches()}
         .currentPersonId=${this.currentPersonId}
         .canAdminister=${this.canAdminister}
+        .canExportPersonalData=${this.canExportPersonalData}
+        .downloadingPersonId=${this.downloadingPerson?.personId ?? null}
+        @download-person-data=${(event: CustomEvent<{ personId: string }>) =>
+          void this.#onDownloadPersonData(event)}
         @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
         >${this.people.length === 0 ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
@@ -425,6 +529,7 @@ export class StaffScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
+      ${this.#renderDownloadLines()}
       ${
         this.invitationStatus
           ? html`<p class="status" role="status" data-test="invitation-status">

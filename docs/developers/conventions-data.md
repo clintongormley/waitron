@@ -2594,13 +2594,19 @@ and the email settings in one `withWriteLock` turn with no drain (`readBoxEmailC
 case is "the managers' email reads its context on a full disk with a change waiting" in
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
-Since A980 S2a1, the staff personal-data download (`GET /management-api/me/personal-data/export`,
-`apps/server/src/personal-data-export-api.ts`) reads in two `withWriteLock` turns with no drain —
-every part, and the venue's name for the README, in the first, the session checked again in the
-second after the files are built — and resolves the session with `touch: false`, so it answers on a
-full disk with a change waiting. The case is "a person's own personal-data download answers on a
-full disk with a change waiting" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated
-exception to one `withTransaction` per route.
+Since A980 S2a1, the staff personal-data downloads (`GET /management-api/me/personal-data/export`
+and, for an admin, `GET /management-api/staff/:id/personal-data/export`, both in
+`apps/server/src/personal-data-export-api.ts`) read in two `withWriteLock` turns with no drain —
+every other part, and the venue's name for the README, in the first, the caller checked again in the
+second after the files are built — and resolve the session with `touch: false`, so they answer on a
+full disk with a change waiting. Since S2c, the actions part (`apps/server/src/personal-data-actions.ts`)
+reads in `withWriteLock` turns of its own between the two, while the files are built, also with no
+drain. The cases are "a person's own personal-data download answers on a full disk with a change
+waiting", "an admin's personal-data download of another person answers on a full disk with a
+change waiting, and writes nothing" and "an admin's personal-data download of a person with a
+drawer opening looks its sale number up on a full disk", all in
+`apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one `withTransaction`
+per route.
 
 Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
 one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
