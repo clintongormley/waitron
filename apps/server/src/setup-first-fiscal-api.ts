@@ -31,6 +31,7 @@ const boundary = createErrorBoundary(
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
     "setup.attempt_uncertain": 409,
+    "setup.start_again_incomplete": 409,
   },
   "setup.provision_failed",
 );
@@ -890,22 +891,25 @@ export function mountFirstSetupResolutionApi(
         const confirmMissingDatabase = Object.hasOwn(body, "confirmMissingDatabase")
           ? missingDatabaseConfirmation(body.confirmMissingDatabase)
           : undefined;
-        const selected = await options.startAgain!({
-          inspectionId: text(body.inspectionId),
-          revision: body.revision as number,
-          ownerGeneration: body.ownerGeneration as number,
-          register,
-          ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
-          ...(c.req.header("X-Waitron-Setup-Owner") === undefined
-            ? {}
-            : { owner: firstFiscalOwner(c) }),
-        });
+        try {
+          await options.startAgain!({
+            inspectionId: text(body.inspectionId),
+            revision: body.revision as number,
+            ownerGeneration: body.ownerGeneration as number,
+            register,
+            ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+            ...(c.req.header("X-Waitron-Setup-Owner") === undefined
+              ? {}
+              : { owner: firstFiscalOwner(c) }),
+          });
+        } catch (error) {
+          // A marker is on disk: the next start finishes the deletion or serves the recovery page.
+          if (error instanceof AppError && error.code === "setup.start_again_incomplete")
+            setTimeout(() => options.requestRestart?.(), 0);
+          throw error;
+        }
         setTimeout(() => options.requestRestart?.(), 0);
-        return c.json({
-          workspaceId: selected.workspaceId,
-          selectionGeneration: selected.selectionGeneration,
-          restarting: true,
-        });
+        return c.json({ restarting: true });
       }),
     );
 }

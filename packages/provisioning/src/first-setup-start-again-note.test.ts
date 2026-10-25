@@ -14,7 +14,10 @@ import {
 } from "./first-setup-start-again-note.js";
 import {
   START_AGAIN_MARKER_FILE,
+  START_AGAIN_MARKER_LIMIT,
   assertNoStartAgainDeletion,
+  assertStartAgainAllowedOnDisk,
+  clearStartAgainMarker,
   deleteMarkedAttempt,
   finishStartAgainDeletion,
   markerSize,
@@ -844,4 +847,197 @@ it("a deletion that meets an unexpected layout names it, and deletes nothing", a
     reason: `layout unexpected: ${join(await fs.realpath(roots.stateDir), "first-fiscal-documents", "link.json")}`,
   });
   expect(await snapshot(roots)).toEqual(before);
+});
+
+it("a deletion whose walk cannot read a folder names that folder in its reason", async () => {
+  const roots = await attemptFolders();
+  const marker = await marked(roots);
+  const documents = join(roots.stateDir, "first-fiscal-documents");
+  await fs.chmod(documents, 0o000);
+  try {
+    await expect(deleteMarkedAttempt(roots, marker)).rejects.toMatchObject({
+      ...incomplete,
+      reason: `deletion failed: EACCES ${join(await fs.realpath(roots.stateDir), "first-fiscal-documents")}`,
+    });
+  } finally {
+    await fs.chmod(documents, 0o700);
+  }
+});
+
+async function startableFolders() {
+  const roots = await attemptFolders({ ...VENUE_FILES, "node.db": "" });
+  await rm(join(roots.venueDir, "node.db"));
+  const node = new DatabaseSync(join(roots.venueDir, "node.db"));
+  node.exec("pragma journal_mode = wal");
+  node.close();
+  return roots;
+}
+const notReady = { code: "setup.not_ready", params: {} };
+const unsupported = { code: "setup.workspace_unsupported", params: {} };
+
+it("an attempt with an empty node.db may start again, and the folders come back canonical", async () => {
+  const roots = await startableFolders();
+  const before = await snapshot(roots);
+  expect(await assertStartAgainAllowedOnDisk(roots)).toEqual({
+    venueDir: await fs.realpath(roots.venueDir),
+    stateDir: await fs.realpath(roots.stateDir),
+  });
+  expect(await snapshot(roots)).toEqual(before);
+});
+
+it("an attempt with no node.db may start again, and none is created", async () => {
+  const roots = await startableFolders();
+  await rm(join(roots.venueDir, "node.db"));
+  await assertStartAgainAllowedOnDisk(roots);
+  await expect(stat(join(roots.venueDir, "node.db"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Promise<unknown>]>([
+  ...[
+    "trading.env",
+    "setup-operation.json",
+    "restore-request.json",
+    "reset-request.json",
+    "modules.json",
+    "cloud-replacement.json",
+  ].map(
+    (
+      name,
+    ): [string, object, (roots: { venueDir: string; stateDir: string }) => Promise<unknown>] => [
+      `beside state/${name}`,
+      notReady,
+      (roots) => writeFile(join(roots.stateDir, name), "x"),
+    ],
+  ),
+  [
+    "beside a streamed folder",
+    notReady,
+    (roots) => mkdir(join(roots.venueDir, ".venue.db-litestream")),
+  ],
+  [
+    "beside an A731 journal in the state folder",
+    notReady,
+    (roots) => mkdir(join(roots.stateDir, "first-setup-resolutions", "backup-recovery")),
+  ],
+  [
+    "beside an A731 journal in the venue folder",
+    notReady,
+    (roots) =>
+      mkdir(join(roots.venueDir, "first-setup-resolutions", "backup-recovery"), {
+        recursive: true,
+      }),
+  ],
+  [
+    "beside a record subfolder not named step-NNNNNN",
+    notReady,
+    (roots) => mkdir(join(roots.stateDir, "first-setup-resolutions", RECORD, "other")),
+  ],
+  [
+    "beside a node.db holding a table",
+    notReady,
+    async (roots) => {
+      const node = new DatabaseSync(join(roots.venueDir, "node.db"));
+      node.exec("create table t(x)");
+      node.close();
+    },
+  ],
+  [
+    "beside a node.db-wal holding pages",
+    notReady,
+    (roots) => writeFile(join(roots.venueDir, "node.db-wal"), "pages"),
+  ],
+  [
+    "beside a node.db that is not a database",
+    notReady,
+    (roots) => writeFile(join(roots.venueDir, "node.db"), "not a database"),
+  ],
+  ...(["state", "venue"] as const).flatMap((root) =>
+    [
+      "first-setup-workspaces",
+      "first-setup-selection.json",
+      "first-setup-retirement.json",
+      "first-setup-workspace.json",
+    ].map(
+      (
+        name,
+      ): [string, object, (roots: { venueDir: string; stateDir: string }) => Promise<unknown>] => [
+        `beside ${root}/${name} from an earlier Waitron`,
+        unsupported,
+        (roots) => writeFile(join(root === "state" ? roots.stateDir : roots.venueDir, name), "x"),
+      ],
+    ),
+  ),
+  [
+    "beside a pending deletion marker",
+    incomplete,
+    async (roots) => writeStartAgainMarker(roots, await startAgainMarkerFor(roots, ATTEMPT)),
+  ],
+])("Start again %s is refused, and nothing changes", async (_name, code, change) => {
+  const roots = await startableFolders();
+  await change(roots);
+  const before = await snapshot(roots);
+  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(code);
+  expect(await snapshot(roots)).toEqual(before);
+});
+
+it("a venue folder inside an earlier Waitron's workspace is refused as unsupported", async () => {
+  const base = await stateDir();
+  const roots = {
+    stateDir: join(base, "state"),
+    venueDir: join(base, "state", "first-setup-workspaces", randomUUID(), "venue"),
+  };
+  await mkdir(roots.venueDir, { recursive: true });
+  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(unsupported);
+});
+
+it("folders inside a backup recovery's target are refused", async () => {
+  const base = await stateDir();
+  const target = join(
+    base,
+    "state",
+    "first-setup-resolutions",
+    "backup-recovery",
+    randomUUID(),
+    "target",
+  );
+  const roots = { stateDir: join(target, "state"), venueDir: join(target, "venue") };
+  await mkdir(roots.venueDir, { recursive: true });
+  await mkdir(roots.stateDir, { recursive: true });
+  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(notReady);
+});
+
+it("a folder whose entries cannot be checked is refused, not read as absent", async () => {
+  const roots = await startableFolders();
+  await fs.chmod(roots.venueDir, 0o600);
+  try {
+    await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(notReady);
+  } finally {
+    await fs.chmod(roots.venueDir, 0o700);
+  }
+});
+
+it("the marker is cleared with its folder synced, and clearing is refused when there is none", async () => {
+  const roots = await startableFolders();
+  await marked(roots);
+  await clearStartAgainMarker(roots.venueDir);
+  expect(await readStartAgainMarker(roots.venueDir)).toBeNull();
+  await expect(clearStartAgainMarker(roots.venueDir)).rejects.toMatchObject(incomplete);
+});
+
+it("the marker limit the writer enforces is exported for a check before anything is written", () => {
+  expect(START_AGAIN_MARKER_LIMIT).toBe(1024 * 1024);
+});
+
+it("node.db is read wherever the venue folder is, even under a name holding # and ?", async () => {
+  const base = await stateDir();
+  const roots = { venueDir: join(base, "v #1?x"), stateDir: join(base, "state") };
+  await mkdir(roots.venueDir);
+  await mkdir(roots.stateDir);
+  const node = new DatabaseSync(join(roots.venueDir, "node.db"));
+  node.exec("pragma journal_mode = wal; create table t(x)");
+  node.close();
+  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject({
+    ...notReady,
+    reason: "node.db holds a table",
+  });
 });

@@ -1,5 +1,4 @@
 import { AppError } from "@waitron/shared";
-import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   createFirstSetupCoordinator,
@@ -7,24 +6,27 @@ import {
   createFirstSetupStore,
   inspectFirstSetupWorkspaceSelection,
   assertFirstSetupBootTarget,
-  firstSetupAnchorFor,
-  resolveFirstSetupWorkspace,
   readFirstSetupRetirementArchives,
   selectFirstSetupWorkspace,
   firstSetupModuleContext,
   raiseStartAgainNote,
   readModulePreparationHistory,
   readFirstSetupRecoveryDeliverySnapshot,
-  boxFolders,
   startAgainSummary,
   writeStartAgainConfirmation,
+  assertStartAgainAllowedOnDisk,
+  clearStartAgainMarker,
+  deleteMarkedAttempt,
+  firstSetupFrozenDigest,
+  markerSize,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
+  START_AGAIN_MARKER_LIMIT,
   type StartAgainSummary,
   type RegisterAnswer,
   type WorkspaceBinding,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import { join } from "node:path";
-import { readFile, rm } from "node:fs/promises";
 import { lockVenueDatabase } from "@waitron/db";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
 import { readFirstFiscalEvidenceSnapshot } from "./first-fiscal-evidence.js";
@@ -110,12 +112,11 @@ export function createFirstSetupResolutionActions(
       evidence: Pick<FirstFiscalHost["evidence"], "invalidate">;
       delivery: Pick<FirstFiscalHost["delivery"], "invalidate">;
     } & Partial<Pick<FirstFiscalHost, "modules">>;
-    /** Tests only: fails the kept picks file's deletion. */
-    remove?: (path: string) => Promise<void>;
+    /** Tests only: replaces each removal of Start again's deletion. */
+    remove?: (path: string, kind: "file" | "folder") => Promise<void>;
   },
 ) {
   const { host } = options;
-  const remove = options.remove ?? ((path: string) => rm(path, { force: true }));
   const roots = { stateDir: options.stateDir, venueDir: options.venueDir };
   const assertRecoveredOwner = async (
     owner: FirstSetupOwnerAttempt | undefined,
@@ -324,7 +325,7 @@ export function createFirstSetupResolutionActions(
         }),
       );
     },
-    startAgainFirstSetup(request: StartAgainFirstSetupRequest): Promise<WorkspaceBinding> {
+    startAgainFirstSetup(request: StartAgainFirstSetupRequest): Promise<void> {
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {
           exactKeys(request, [
@@ -386,45 +387,32 @@ export function createFirstSetupResolutionActions(
               }
             }
           }
-          let authority:
-            "original-password" | "local-empty-no-custodian" | "local-empty-unused-assignment";
           if (request.owner === undefined) {
-            if (unusedAssignment) authority = "local-empty-unused-assignment";
-            else {
-              if (
-                !empty ||
+            if (
+              !unusedAssignment &&
+              (!empty ||
                 request.register?.kind !== "no-current-master" ||
-                request.register?.confirmed !== true
-              )
-                unavailable();
-              authority = "local-empty-no-custodian";
-            }
+                request.register?.confirmed !== true)
+            )
+              unavailable();
           } else {
             await assertRecoveredOwner(request.owner, state);
-            authority = "original-password";
             if (request.register?.kind === "no-current-master" && !empty) unavailable();
             if (inspection.database !== "missing" && !emptyWorkspace && !unusedAssignment)
               unavailable();
           }
-          const anchor = await firstSetupAnchorFor(options);
-          const current = await resolveFirstSetupWorkspace(anchor);
-          if (current.binding !== null)
-            snapshot.originals.push({
-              name: "workspace:predecessor",
-              bytes: await readFile(join(current.venueDir, "first-setup-workspace.json")),
-            });
-          const resolutionId = randomUUID(),
-            workspaceId = randomUUID();
-          const base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
-          const binding: WorkspaceBinding = {
-            workspaceId,
-            resolutionId,
-            anchorVenueDir: anchor.venueDir,
-            anchorStateDir: anchor.stateDir,
-            venueDir: join(base, "venue"),
-            stateDir: join(base, "state"),
-            selectionGeneration: (current.binding?.selectionGeneration ?? 0) + 1,
-          };
+          if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
+            unavailable();
+          const box = await assertStartAgainAllowedOnDisk(roots);
+          const marker = await startAgainMarkerFor(box, {
+            attemptId: state.frozen.attemptId,
+            frozenDigest: firstSetupFrozenDigest(state),
+          }).catch((error: unknown) => {
+            throw error instanceof AppError && error.code === "setup.start_again_incomplete"
+              ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
+              : error;
+          });
+          if (markerSize(marker) > START_AGAIN_MARKER_LIMIT) unavailable();
           const floor = await gatherStartAgainFloor(roots, state, snapshot.originals, host.modules);
           const confirmation = request.confirmMissingDatabase;
           if (missing) {
@@ -435,7 +423,7 @@ export function createFirstSetupResolutionActions(
             )
               conflict();
             const { displayName, email } = state.frozen.request.admin;
-            await writeStartAgainConfirmation((await boxFolders(roots)).stateDir, {
+            await writeStartAgainConfirmation(box.stateDir, {
               at: new Date().toISOString(),
               attemptId: state.frozen.attemptId,
               database: "missing",
@@ -444,32 +432,16 @@ export function createFirstSetupResolutionActions(
               shown,
             });
           }
-          if (floor !== null) await raiseStartAgainNote(anchor.stateDir, floor);
-          await remove(join(anchor.stateDir, "module-preparation-state.json"));
-          const records = createFirstSetupResolutionStore({
-            ...anchor,
-            coordinator: createFirstSetupCoordinator(),
-          });
-          const prepared = await records.prepare(
-            {
-              resolutionId,
-              attemptId: state.frozen.attemptId,
-              observedRevision: state.revision,
-              observedOwnerGeneration: state.ownerGeneration,
-              database: emptyWorkspace || unusedAssignment ? "empty-preactivation" : "missing",
-              authority,
-              register: request.register ?? null,
-              action: "retire",
-              nextWorkspace: binding,
-            },
-            snapshot.originals,
-          );
-          const applied = await records.apply(prepared);
-          const selected = await selectFirstSetupWorkspace(anchor, applied);
-          host.owner.invalidate(state.frozen.attemptId);
-          host.evidence.invalidate(state.frozen.attemptId);
-          host.delivery.invalidate(state.frozen.attemptId);
-          return selected;
+          if (floor !== null) await raiseStartAgainNote(box.stateDir, floor);
+          await writeStartAgainMarker(box, marker);
+          try {
+            await deleteMarkedAttempt(box, marker, options.remove);
+            await clearStartAgainMarker(box.venueDir);
+          } finally {
+            host.owner.invalidate(state.frozen.attemptId);
+            host.evidence.invalidate(state.frozen.attemptId);
+            host.delivery.invalidate(state.frozen.attemptId);
+          }
         }),
       );
     },

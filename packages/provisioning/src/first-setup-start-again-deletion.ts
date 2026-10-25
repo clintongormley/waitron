@@ -2,16 +2,27 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readFile, readdir, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
+import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
+import { insideBackupRepairTarget } from "./first-setup-backup-workspace.js";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
-const MARKER_LIMIT = 1024 * 1024;
+export const START_AGAIN_MARKER_LIMIT = 1024 * 1024;
+const MARKER_LIMIT = START_AGAIN_MARKER_LIMIT;
 const HASH = /^[a-f0-9]{64}$/;
 const RECORDS = "first-setup-resolutions";
+const LEGACY = [
+  "first-setup-workspaces",
+  "first-setup-selection.json",
+  "first-setup-retirement.json",
+  "first-setup-workspace.json",
+] as const;
 const DOCUMENTS = "first-fiscal-documents";
 const STEP = /^step-\d{6}$/;
 const WAL_FILES = ["venue.db-wal", "node.db-wal"] as const;
@@ -68,6 +79,8 @@ const codeOf = (error: unknown) =>
 const exactKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 const missing = (error: unknown) => object(error) && error.code === "ENOENT";
+const pathOf = (error: unknown) =>
+  object(error) && typeof error.path === "string" ? error.path : undefined;
 const entryName = (name: string) =>
   name !== "" && name !== "." && name !== ".." && !name.includes("/") && !name.includes("\0");
 
@@ -326,6 +339,82 @@ export async function writeStartAgainMarker(roots: Roots, marker: StartAgainMark
   );
 }
 
+export async function clearStartAgainMarker(venueDir: string): Promise<void> {
+  try {
+    await removeAndSync(join(venueDir, START_AGAIN_MARKER_FILE), "file");
+  } catch (error) {
+    throw incomplete(`clear failed: ${codeOf(error)} ${pathOf(error) ?? venueDir}`);
+  }
+}
+
+/** D3's refusals that the folders alone can answer; returns the canonical folders. */
+export async function assertStartAgainAllowedOnDisk(roots: Roots): Promise<Roots> {
+  const notReady = (reason: string) => new AppError("setup.not_ready", {}, { reason });
+  const canonical = await canonicalRoots(roots);
+  const rootOf = (root: Root) => (root === "venue" ? canonical.venueDir : canonical.stateDir);
+  const exists = async (path: string) => {
+    try {
+      return await present(path);
+    } catch (error) {
+      throw notReady(`check failed: ${codeOf(error)} ${path}`);
+    }
+  };
+  if (insideFirstSetupWorkspace(canonical.venueDir))
+    throw new AppError(
+      "setup.workspace_unsupported",
+      {},
+      { reason: "venue folder in a workspace" },
+    );
+  for (const root of ["state", "venue"] as const)
+    for (const name of LEGACY)
+      if (await exists(join(rootOf(root), name)))
+        throw new AppError(
+          "setup.workspace_unsupported",
+          {},
+          { reason: `earlier layout: ${root}/${name}` },
+        );
+  if (Object.values(canonical).some(insideBackupRepairTarget))
+    throw notReady("folder in a backup recovery target");
+  for (const root of ["state", "venue"] as const)
+    for (const name of REFUSED[root])
+      if (await exists(join(rootOf(root), name)))
+        throw notReady(`refused artifact: ${root}/${name}`);
+  await assertNoStartAgainDeletion(canonical.venueDir);
+  try {
+    await itemsOnDisk(canonical);
+  } catch (error) {
+    if (error instanceof AppError) throw notReady(error.reason ?? error.code);
+    throw notReady(`check failed: ${codeOf(error)} ${pathOf(error) ?? ""}`);
+  }
+  const node = join(canonical.venueDir, "node.db");
+  if (await exists(node)) {
+    // An immutable open leaves no side files behind, but reads only the main file, so a -wal
+    // that may hold pages is refused rather than read past.
+    const wal = await info(`${node}-wal`).catch((error: unknown) => {
+      throw notReady(`check failed: ${codeOf(error)} ${node}-wal`);
+    });
+    if (wal !== null && wal.size !== 0) throw notReady("node.db-wal holds pages");
+    const url = pathToFileURL(node);
+    url.searchParams.set("mode", "ro");
+    url.searchParams.set("immutable", "1");
+    let tables: unknown[];
+    try {
+      const connection = new DatabaseSync(url, { readOnly: true });
+      try {
+        tables = connection
+          .prepare("select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
+          .all();
+      } finally {
+        connection.close();
+      }
+    } catch {
+      throw notReady("node.db unreadable");
+    }
+    if (tables.length !== 0) throw notReady("node.db holds a table");
+  }
+  return canonical;
+}
+
 /**
  * Deletes only the marked files and the side files beside the databases; a folder goes by
  * `rmdir`, so a file the marker does not name stops its folder's removal and stays.
@@ -350,7 +439,7 @@ export async function deleteMarkedAttempt(
     }
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw incomplete(`deletion failed: ${codeOf(error)} ${current}`);
+    throw incomplete(`deletion failed: ${codeOf(error)} ${pathOf(error) ?? current}`);
   }
 }
 
@@ -389,7 +478,7 @@ export async function finishStartAgainDeletion(roots: Roots): Promise<void> {
     throw error instanceof AppError
       ? error
       : incomplete(
-          `check failed: ${codeOf(error)}${object(error) && typeof error.path === "string" ? ` ${error.path}` : ""}`,
+          `check failed: ${codeOf(error)}${pathOf(error) === undefined ? "" : ` ${pathOf(error)}`}`,
         );
   } finally {
     hold.release();

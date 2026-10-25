@@ -183,7 +183,10 @@ export {
 } from "./first-setup-start-again-confirmation.js";
 export {
   START_AGAIN_MARKER_FILE,
+  START_AGAIN_MARKER_LIMIT,
   assertNoStartAgainDeletion,
+  assertStartAgainAllowedOnDisk,
+  clearStartAgainMarker,
   deleteMarkedAttempt,
   finishStartAgainDeletion,
   markerSize,
