@@ -15,7 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { listOpenIncidents, recordIncident } from "@waitron/core";
+import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import {
   hashPin,
   hashSessionToken,
@@ -514,6 +514,148 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
       acknowledgedAt: NOW.toISOString(),
       acknowledgedNote: null,
     });
+  });
+});
+
+describe("adding a note to a handled wrongly dated sales alert", () => {
+  const MISDATED = "clock.records_misdated";
+  const note = (text: unknown) => JSON.stringify({ note: text });
+  const postNote = (app: Hono, id: string, cookie: string | undefined, body: string) =>
+    app.request(`/management-api/alerts/incidents/${id}/note`, {
+      method: "POST",
+      headers: cookie === undefined ? {} : { cookie },
+      body,
+    });
+  const handle = (id: string, personId: string | null) =>
+    withTransaction(db, (tx) => markIncidentHandled(tx, { id, personId, handledAt: NOW }));
+  const handledBy = async (id: string) =>
+    (
+      await db.select({ by: incidents.acknowledgedBy }).from(incidents).where(eq(incidents.id, id))
+    )[0]!.by;
+
+  it("adds the trimmed note to an alert a person handled", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, MISDATED);
+    expect(
+      (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status,
+    ).toBe(204);
+    expect((await postNote(app, id, v.manager, note("  Sent to the accountant  "))).status).toBe(
+      204,
+    );
+    expect(await storedIncident(id)).toEqual({
+      acknowledgedAt: NOW.toISOString(),
+      acknowledgedNote: "Sent to the accountant",
+    });
+  });
+
+  it("adds a note to an alert the box handled, keeping it the box's", async () => {
+    const v = await seedVenue();
+    const id = await raise(v, MISDATED);
+    await handle(id, null);
+    expect((await postNote(appFor(), id, v.manager, note("Box closed it"))).status).toBe(204);
+    expect(await storedIncident(id)).toEqual({
+      acknowledgedAt: NOW.toISOString(),
+      acknowledgedNote: "Box closed it",
+    });
+    expect(await handledBy(id)).toBeNull();
+  });
+
+  it("refuses a second note and keeps the first", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, MISDATED);
+    await handle(id, null);
+    expect((await postNote(app, id, v.manager, note("First"))).status).toBe(204);
+    await expectError(await postNote(app, id, v.manager, note("Second")), 409, {
+      code: "alert.note_exists",
+      params: { id },
+    });
+    expect((await storedIncident(id)).acknowledgedNote).toBe("First");
+  });
+
+  it("refuses a note on an open alert and leaves it open", async () => {
+    const v = await seedVenue();
+    const id = await raise(v, MISDATED);
+    await expectError(await postNote(appFor(), id, v.manager, note("Too soon")), 409, {
+      code: "alert.not_handled",
+      params: { id },
+    });
+    expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
+  });
+
+  it("answers not found for a malformed id and an unknown one", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    for (const id of ["not-a-uuid", "99999999-9999-4999-8999-999999999999"]) {
+      await expectError(await postNote(app, id, v.manager, note("x")), 404, {
+        code: "alert.not_found",
+        params: { id },
+      });
+    }
+  });
+
+  it("answers not found for another code's handled alert and stores nothing", async () => {
+    const v = await seedVenue();
+    const id = await raise(v, "printing.mystery");
+    await handle(id, null);
+    await expectError(await postNote(appFor(), id, v.manager, note("Paper jam")), 404, {
+      code: "alert.not_found",
+      params: { id },
+    });
+    expect(await storedIncident(id)).toEqual({
+      acknowledgedAt: NOW.toISOString(),
+      acknowledgedNote: null,
+    });
+  });
+
+  it("refuses a missing, empty or blank note, and a body that does not parse", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, MISDATED);
+    await handle(id, null);
+    for (const body of ["", "null", "{}", note(""), note("  \n\t ")]) {
+      await expectError(await postNote(app, id, v.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "note" },
+      });
+    }
+    await expectError(await postNote(app, id, v.manager, '{note:"x"'), 400, {
+      code: "management.request_invalid",
+      params: { field: "body" },
+    });
+    expect((await storedIncident(id)).acknowledgedNote).toBeNull();
+  });
+
+  it("judges the session and the claim before an empty note", async () => {
+    const v = await seedVenue();
+    const app = appFor();
+    const id = await raise(v, MISDATED);
+    await handle(id, null);
+    await expectError(await postNote(app, id, undefined, note("")), 401, {
+      code: "management_session.required",
+      params: {},
+    });
+    roleOverride.set("supervisor", ["payments.manage"]);
+    await expectError(await postNote(app, id, v.supervisor, note("")), 403, {
+      code: "authorization.not_permitted",
+      params: { permission: "system.manage" },
+    });
+    const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
+    const idle = new Date(Date.now() - 31 * 60_000).toISOString();
+    await db.execute(
+      sql`update management_sessions set last_seen_at = ${idle} where token_hash = ${hashSessionToken(sid)}`,
+    );
+    const expired = await postNote(app, id, v.manager, note(""));
+    expect(expired.status).toBe(401);
+    expect(((await expired.json()) as { error: { code: string } }).error.code).toBe(
+      "management_session.expired",
+    );
+    await expectError(await postNote(app, id, v.admin, note("")), 400, {
+      code: "management.request_invalid",
+      params: { field: "note" },
+    });
+    expect((await storedIncident(id)).acknowledgedNote).toBeNull();
   });
 });
 

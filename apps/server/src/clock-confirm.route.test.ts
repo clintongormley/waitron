@@ -1350,6 +1350,7 @@ it("lists the sales a closing found dated wrongly, by series, number and time, o
     incidentId: misdatedIncident(confirmationId),
     handledAt,
     handledBy: { kind: "person", name: "Marta" },
+    note: null,
   });
   expect((await healthOf(stop)).misdatedHandledCount).toBe(handledBefore + 1);
 });
@@ -1651,6 +1652,7 @@ it("keeps an alert that cannot tell, handled by the box when an earlier start re
       unconfirmed: true,
       handledAt: new Date(replacedAt).toISOString(),
       handledBy: { kind: "box" },
+      note: null,
       records: null,
     });
 

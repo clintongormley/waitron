@@ -764,3 +764,15 @@ it("words a note refused on an already handled alert in both languages", () => {
   expect(spanish).not.toBe(codeMessage("unknown.code", "es"));
   expect(spanish).not.toBe(codeMessage("alert.already_handled", "en"));
 });
+
+it("words a refused note on an alert in both languages", () => {
+  expect(codeMessage("alert.note_exists", "en")).toBe("This alert already has a note.");
+  expect(codeMessage("alert.not_handled", "en")).toBe(
+    "This alert has not been marked handled yet.",
+  );
+  for (const code of ["alert.note_exists", "alert.not_handled"]) {
+    const spanish = codeMessage(code, "es");
+    expect(spanish).not.toBe(codeMessage("unknown.code", "es"));
+    expect(spanish).not.toBe(codeMessage(code, "en"));
+  }
+});

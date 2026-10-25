@@ -462,6 +462,7 @@ describe("collectBoxHealth", () => {
           detectedAt: "2026-10-22T09:30:00.000Z",
           acknowledgedAt: "2026-10-22T09:45:00.000Z",
           acknowledgedBy: rosa!.id,
+          acknowledgedNote: "Sent to the accountant",
         },
         {
           source: "payment_check",
@@ -496,18 +497,21 @@ describe("collectBoxHealth", () => {
         ...params("by Rosa"),
         handledAt: "2026-10-22T09:45:00.000Z",
         handledBy: { kind: "person", name: "Rosa Handler" },
+        note: "Sent to the accountant",
       },
       {
         incidentId: ids[2]!.id,
         ...params("by nobody known"),
         handledAt: "2026-10-22T10:00:00.000Z",
         handledBy: { kind: "person", name: null },
+        note: null,
       },
       {
         incidentId: ids[0]!.id,
         ...params("by the box"),
         handledAt: "2026-10-22T11:00:00.000Z",
         handledBy: { kind: "box" },
+        note: null,
       },
     ]);
   });

@@ -1294,6 +1294,10 @@ declare module "@waitron/shared" {
     "alert.not_found": { id: string };
     /** A note came with marking an incident handled that was already handled, so it was not saved. */
     "alert.already_handled": { id: string };
+    /** A note was sent for an incident that already has one; the first is kept. */
+    "alert.note_exists": { id: string };
+    /** A note was sent for an incident not yet marked handled. */
+    "alert.not_handled": { id: string };
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */
     "alert.source_unavailable": { area: string };

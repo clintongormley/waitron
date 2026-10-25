@@ -64,6 +64,7 @@ export type MisdatedHandler = { kind: "box" } | { kind: "person"; name: string |
 export interface MisdatedHandled extends MisdatedOpen {
   handledAt: string;
   handledBy: MisdatedHandler;
+  note: string | null;
 }
 
 export interface BoxHealth {
@@ -238,6 +239,7 @@ export const misdatedHandledQuery = (tx: Transaction) =>
       params: incidents.params,
       handledAt: incidents.acknowledgedAt,
       handledBy: incidents.acknowledgedBy,
+      note: incidents.acknowledgedNote,
       name: persons.displayName,
     })
     .from(incidents)
@@ -253,6 +255,7 @@ export async function readMisdatedHandled(tx: Transaction): Promise<MisdatedHand
     ...misdatedParams(row.params),
     handledAt: row.handledAt!,
     handledBy: row.handledBy === null ? { kind: "box" } : { kind: "person", name: row.name },
+    note: row.note,
   }));
 }
 
