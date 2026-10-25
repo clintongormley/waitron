@@ -763,6 +763,57 @@ it("the password-required refusal answers 403 over HTTPS", async () => {
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
+it("a damaged record with no owner still refuses for a marker over its limit, before asking for the password, and nothing changes", async () => {
+  const { f, startRequest } = await abandonedAttempt();
+  await damageRecoveryRecord(f);
+  const actions = createFirstSetupResolutionActions({ ...f, host: f.host, markerLimit: 1 });
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...startRequest,
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision!,
+      ownerGeneration: inspected.ownerGeneration!,
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await folderTrees(f)).toEqual(before);
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
+it("the Start again route passes recoveryRecordDamagedShown on: with the owner and a damaged record it starts again over HTTPS", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damageRecoveryRecord(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const recovered = await f.host.owner.recoverFirstSetupOwner({
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const accepted = await sendStartAgain(
+    routes(f, actions),
+    {
+      attemptId: recovered.state.attemptId,
+      revision: recovered.state.revision,
+      ownerGeneration: recovered.state.ownerGeneration,
+      capability: recovered.capability,
+    },
+    {
+      inspectionId: current.inspectionId,
+      revision: current.revision,
+      ownerGeneration: current.ownerGeneration,
+      register: startRequest.register,
+      recoveryRecordDamagedShown: true,
+    },
+  );
+  expect(accepted.status, await accepted.clone().text()).toBe(200);
+  expect(await accepted.json()).toEqual({ restarting: true });
+  await expectStartAgainDeleted(f);
+});
+
 it("an attempt that never chose a name is summarised as claimed, with no name", async () => {
   const { folders, host } = await claimedWithoutName();
   await rm(join(folders.venueDir, "venue.db"));

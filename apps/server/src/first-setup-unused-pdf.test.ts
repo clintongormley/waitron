@@ -547,6 +547,24 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
     await unchanged();
   },
 );
+it("with the setup password, a damaged record and no staged node key is refused setup.not_ready, and nothing changes", async () => {
+  const f = await fixture();
+  await damageRecord(f, "manifest");
+  await rm(join(f.stateDir, "first-setup-node-key.json"));
+  const { ids, owner } = await withPassword(f);
+  const unchanged = await startAgainUnchanged(f);
+  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  await expect(
+    f.actions.startAgainFirstSetup({
+      ...ids,
+      owner,
+      register: f.answer(),
+      recoveryRecordDamagedShown: true,
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  await unchanged();
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+});
 it("a damaged record beside a refused artifact refuses setup.not_ready without asking for the password", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
