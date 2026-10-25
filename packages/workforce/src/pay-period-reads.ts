@@ -1,12 +1,12 @@
 import { and, eq, gt, lt } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import type { Period } from "./projection.js";
-import type { PayPeriodClosure, PayPeriodSnapshot } from "./record-types.js";
+import type { PayPeriodClosure } from "./record-types.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 
 export async function readClosures(
   tx: Database | Transaction,
-  input: { locationId?: string; period: Period; personId?: string },
+  input: { locationId?: string; period: Period },
 ): Promise<PayPeriodClosure[]> {
   const rows = await tx
     .select()
@@ -20,23 +20,8 @@ export async function readClosures(
         gt(payPeriodClosures.periodEnd, input.period.start),
       ),
     );
-  const personId = input.personId;
-  return rows.map(({ periodStart, periodEnd, snapshot, ...row }) => ({
+  return rows.map(({ periodStart, periodEnd, ...row }) => ({
     ...row,
     period: { start: periodStart, end: periodEnd },
-    snapshot: personId === undefined ? snapshot : snapshotOf(snapshot, personId),
   }));
-}
-
-// Correct only while projecting one person's record reads no other person's rows of a closure's
-// snapshot: the cut runs before the projection.
-function snapshotOf(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSnapshot {
-  const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
-  const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
-  return {
-    sessions: snapshot.sessions.filter((s) => s.personId === personId),
-    entries: ownEntries,
-    summaries: snapshot.summaries.filter((s) => s.personId === personId),
-    markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
-  };
 }

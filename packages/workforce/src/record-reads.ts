@@ -5,7 +5,7 @@ import { timeEntries } from "./schema/time-entries.js";
 import type { TimeEntryRecord } from "./projection.js";
 import type { Period } from "./projection.js";
 import { AppError } from "@waitron/shared";
-import type { TimeRecord } from "./record-types.js";
+import type { PayPeriodSnapshot, TimeRecord } from "./record-types.js";
 import { projectTimeRecord } from "./record-projection.js";
 import { recordInPeriod } from "./record-period.js";
 import { readClosures } from "./pay-period-reads.js";
@@ -37,15 +37,30 @@ export async function readTimeRecord(
     locationId: query.locationId,
     personId: query.personId,
   });
-  const closures = await readClosures(tx, query);
-  const record = recordInPeriod(projectTimeRecord(entries, closures), query.period);
-  if (query.personId !== undefined) {
-    const personId = query.personId;
-    record.sessions = record.sessions.filter((s) => s.personId === personId);
-    record.entries = record.entries.filter((e) => e.entry.personId === personId);
-    record.closedPeriodImpacts = record.closedPeriodImpacts.filter((i) => i.personId === personId);
-  }
-  return record;
+  const closures = await readClosures(tx, { locationId: query.locationId, period: query.period });
+  const personId = query.personId;
+  return recordInPeriod(
+    projectTimeRecord(
+      entries,
+      personId === undefined
+        ? closures
+        : closures.map((c) => ({ ...c, snapshot: snapshotOf(c.snapshot, personId) })),
+    ),
+    query.period,
+  );
+}
+
+// Correct only while projecting one person's record reads no other person's rows of a closure's
+// snapshot: the cut runs before the projection.
+function snapshotOf(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSnapshot {
+  const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
+  const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
+  return {
+    sessions: snapshot.sessions.filter((s) => s.personId === personId),
+    entries: ownEntries,
+    summaries: snapshot.summaries.filter((s) => s.personId === personId),
+    markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
+  };
 }
 
 export async function readRecordedEntries(

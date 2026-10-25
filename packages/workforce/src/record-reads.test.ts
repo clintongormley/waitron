@@ -384,7 +384,7 @@ async function twoPeopleClosedJanuary() {
   );
   return { closureId: row.id, ownMarked: outOf(personId) };
 }
-/** The cut written out here, independently of `readClosures`, to compare against. */
+/** The cut written out here, independently of `readTimeRecord`, to compare against. */
 function referenceCut(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSnapshot {
   const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
   const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
@@ -419,13 +419,22 @@ it("gives one person exactly the full closure read cut to her in JavaScript", as
   expect(reference.entries.some((e) => e.closedPeriodIds.includes(closureId))).toBe(true);
   expect(narrowed).toEqual(reference);
 });
-it("reads a closure's snapshot cut to the one person asked for", async () => {
+it("gives one person each closure's snapshot cut to her", async () => {
   const { closureId } = await twoPeopleClosedJanuary();
-  const [full, own] = await run(async (tx) => [
-    await readClosures(tx, { locationId, period: january }),
-    await readClosures(tx, { locationId, period: january, personId }),
-  ]);
+  const { full, own } = await run(async (tx) => ({
+    full: await readClosures(tx, { locationId, period: january }),
+    own: await readTimeRecord(tx, { period: january, personId }),
+  }));
   const snapshot = full[0]!.snapshot;
-  expect(own).toEqual([{ ...full[0]!, id: closureId, snapshot: referenceCut(snapshot, personId) }]);
+  expect(own.closures).toEqual([
+    {
+      closureId,
+      locationId,
+      period: january,
+      closedAt: full[0]!.closedAt,
+      closureHash: full[0]!.closureHash,
+      snapshot: referenceCut(snapshot, personId),
+    },
+  ]);
   expect(snapshot.sessions.map((s) => s.personId)).toContain(other);
 });
