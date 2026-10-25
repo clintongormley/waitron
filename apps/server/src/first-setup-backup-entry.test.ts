@@ -284,3 +284,75 @@ it("retains an empty V2 namespace as uncertain repair evidence", async () => {
     "opaque retained attempt",
   );
 });
+
+/** A supervised start of `f`'s box with the staged steps stubbed and the server's env recorded. */
+async function superviseSelected(
+  f: Awaited<ReturnType<typeof fixture>>,
+  over: Partial<Parameters<typeof runEntry>[0]> = {},
+) {
+  let env: NodeJS.ProcessEnv | undefined;
+  let surface: Hono | undefined;
+  const statfsCalls: string[] = [];
+  await runEntry({
+    ...f.roots,
+    args: [],
+    baseEnv: { WAITRON_STATE_DIR: f.roots.stateDir, WAITRON_VENUE_DIR: f.roots.venueDir },
+    statfs: async (dir) => {
+      statfsCalls.push(dir);
+      return plenty();
+    },
+    readRecoveryState: async () => FRESH,
+    writeRecoveryState: async () => {},
+    loadBoxEnv: async (base) => base,
+    runStagedRestore: async () => false,
+    runStagedReset: async () => false,
+    clearReplacedDatabases: async () => {},
+    assertNotAhead: async () => {},
+    startServer: async (started) => {
+      env = started;
+      return stopped();
+    },
+    serveRecovery: async (app) => {
+      surface = app;
+    },
+    installShutdownHandlers: () => {},
+    scheduleStayedUp: () => {},
+    log: () => {},
+    ...over,
+  });
+  return { env, surface, statfsCalls };
+}
+
+it("a supervised start after a finished backup recovery runs the server on the restored target", async () => {
+  const f = await fixture("selected");
+  const backup = await resolveFirstSetupBackupEntry(f.roots);
+  if (backup.kind !== "selected") throw new Error("selected entry missing");
+  const target = { stateDir: backup.roots.stateDir, venueDir: backup.roots.venueDir };
+  expect(target).toEqual(f.target.target);
+  const dump = join(target.stateDir, "backup-staging", "waitron-20261020T000000Z.dump");
+  await mkdir(join(target.stateDir, "backup-staging"));
+  await writeFile(dump, "cut-off copy");
+  const { env, surface, statfsCalls } = await superviseSelected(f);
+  expect(surface).toBeUndefined();
+  // The folders the start runs from are the ones its first clean-up was handed.
+  expect(env).toMatchObject({
+    WAITRON_STATE_DIR: target.stateDir,
+    WAITRON_VENUE_DIR: target.venueDir,
+  });
+  expect(statfsCalls).toEqual(expect.arrayContaining([target.stateDir, target.venueDir]));
+  await expect(stat(dump)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("a supervised start after a finished backup recovery judges the floor on the original folders too", async () => {
+  const f = await fixture("selected");
+  const original = new Set([f.roots.stateDir, f.roots.venueDir]);
+  const diskFull = Object.assign(new Error("database or disk is full"), { errcode: 13 });
+  const { env, surface } = await superviseSelected(f, {
+    statfs: async (dir) => (original.has(dir) ? { bavail: 1, frsize: 1 } : plenty()),
+    withRecoveryLock: () => Promise.reject(diskFull),
+  });
+  expect(env).toBeUndefined();
+  expect(await (await surface!.request("/")).text()).toContain(
+    "The box&#39;s disk is full, so Waitron cannot save anything.",
+  );
+});

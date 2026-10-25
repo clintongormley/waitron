@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { Hono } from "hono";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
@@ -14,33 +14,6 @@ import { startFailureCode } from "./boot-failure.js";
 import { recordedStartFailureCode, runEntry } from "./node-entry.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
-
-/** When set, first-setup resolution answers that the box runs from these folders instead. */
-const workspace = vi.hoisted(() => ({
-  roots: undefined as { stateDir: string; venueDir: string } | undefined,
-  /** Runs while resolution answers, after the start's clean-up of the given folders. */
-  duringResolution: undefined as (() => Promise<void>) | undefined,
-}));
-
-vi.mock("./first-setup-entry.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./first-setup-entry.js")>();
-  type Admission = Awaited<ReturnType<typeof original.resolveFirstSetupEntry>>;
-  return {
-    ...original,
-    resolveFirstSetupEntry: async (
-      ...args: Parameters<typeof original.resolveFirstSetupEntry>
-    ): Promise<Admission> => {
-      const roots = workspace.roots;
-      if (roots === undefined) return original.resolveFirstSetupEntry(...args);
-      await workspace.duringResolution?.();
-      return {
-        kind: "normal",
-        roots: { ...roots, binding: { ...roots } },
-        run: <T>(body: (venueHeld: boolean) => Promise<T>) => body(true),
-      } as unknown as Admission;
-    },
-  };
-});
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
 type Lock = <T>(stateDir: string, body: () => Promise<T>) => Promise<T>;
@@ -418,87 +391,6 @@ describe("an ordinary start with room", () => {
     const d = deps({ lockVenue: lockVenueDatabase }, () => 100 * MIB);
     await runEntry(d);
     expect(existsSync(staged)).toBe(false);
-  });
-});
-
-describe("a start that first setup moved to a workspace", () => {
-  afterEach(() => {
-    workspace.roots = undefined;
-    workspace.duringResolution = undefined;
-  });
-
-  /** The workspace's folders: a cut-off backup's copy, a staged recovery copy and a rotated log. */
-  async function movedToWorkspace() {
-    const base = join(STATE_DIR, "first-setup-workspaces", "0b6f3c1e-5d2a-4c8e-9f1a-7e2d4b6a8c90");
-    dirs.push(join(STATE_DIR, "first-setup-workspaces"));
-    const roots = { stateDir: join(base, "state"), venueDir: join(base, "venue") };
-    await mkdir(roots.venueDir, { recursive: true });
-    const dump = join(
-      roots.stateDir,
-      "backup-staging",
-      dumpFileName(new Date("2026-10-20T00:00:00Z")),
-    );
-    await mkdir(dirname(dump), { recursive: true });
-    await writeFile(dump, "copy");
-    const staged = join(roots.stateDir, "restore-staging", "staged-recovery");
-    await mkdir(join(staged, "upload-1"), { recursive: true });
-    await writeFile(join(staged, "upload-1", "venue.db"), "copy");
-    const workspaceLog = join(roots.stateDir, "logs", "waitron.log.2");
-    await mkdir(dirname(workspaceLog), { recursive: true });
-    await writeFile(workspaceLog, "old lines");
-    workspace.roots = roots;
-    return { roots, dump, staged, workspaceLog };
-  }
-
-  /** A rotated log that appears in the given log folder after the start has cleaned it. */
-  async function logWrittenDuringResolution(): Promise<{ logDir: string; late: string }> {
-    const { logDir } = await logsWithLeftover();
-    const late = join(logDir, "waitron.log.3");
-    workspace.duringResolution = () => writeFile(late, "old lines");
-    return { logDir, late };
-  }
-
-  it("deletes the workspace's staging leftovers, then judges the floor on the space that freed", async () => {
-    const { roots, dump, staged, workspaceLog } = await movedToWorkspace();
-    const { logDir, late } = await logWrittenDuringResolution();
-    const d = deps({ logDir }, () => (existsSync(staged) ? 10 : 5000));
-    await runEntry(d);
-    // Only the attempt's count: a start judged below the floor writes the count back first.
-    expect(vi.mocked(d.writeRecoveryState).mock.calls).toEqual([
-      [roots.stateDir, expect.objectContaining({ failures: 1 })],
-    ]);
-    expect(d.serveRecovery).not.toHaveBeenCalled();
-    expect(d.startServer).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(d.startServer).mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
-    expect(existsSync(dump)).toBe(false);
-    expect(existsSync(staged)).toBe(false);
-    expect(existsSync(late)).toBe(true);
-    expect(existsSync(workspaceLog)).toBe(true);
-  });
-
-  it("deletes the workspace's staging leftovers when there is room", async () => {
-    const { roots, dump, staged } = await movedToWorkspace();
-    const d = deps({}, () => 5000);
-    await runEntry(d);
-    expect(d.serveRecovery).not.toHaveBeenCalled();
-    expect(d.startServer).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(d.startServer).mock.calls[0]![0].WAITRON_VENUE_DIR).toBe(roots.venueDir);
-    expect(existsSync(dump)).toBe(false);
-    expect(existsSync(staged)).toBe(false);
-  });
-
-  it("serves the full-disk page when the workspace's clean-up leaves it below the floor", async () => {
-    const { dump, staged, workspaceLog } = await movedToWorkspace();
-    const { logDir, late } = await logWrittenDuringResolution();
-    const d = deps({ logDir, withRecoveryLock: rejectingLock(diskFull()) }, () => 10);
-    await runEntry(d);
-    expect(d.startServer).not.toHaveBeenCalled();
-    expect(await (await servedApp(d).request("/")).text()).toContain(TITLE);
-    expect(d.log).toHaveBeenCalledWith("warn", "recovery.serving_disk_full", { freeBytes: 10 });
-    expect(existsSync(dump)).toBe(false);
-    expect(existsSync(staged)).toBe(false);
-    expect(existsSync(late)).toBe(true);
-    expect(existsSync(workspaceLog)).toBe(true);
   });
 });
 
