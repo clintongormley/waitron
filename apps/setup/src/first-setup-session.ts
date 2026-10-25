@@ -215,6 +215,18 @@ export class FirstSetupSession {
     this.#waitGrants.clear();
     return this.#releaseLocks();
   }
+  /** Disposes the session and forgets its owner, so the next session in this tab starts signed out. */
+  forgetOwner(): Promise<void> {
+    if (this.#saved) {
+      this.#saved = {
+        version: 1,
+        clientClaimNonce: this.#saved.clientClaimNonce,
+        claimPending: false,
+      };
+      this.#save();
+    }
+    return this.dispose();
+  }
   async #run<T>(body: (current: () => void) => Promise<T>): Promise<T> {
     if (!this.#opened || this.#disposed || this.#busy) failure("setup.attempt_conflict");
     this.#busy = true;

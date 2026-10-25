@@ -1153,8 +1153,10 @@ export class SetupApp extends LitElement {
     this.firstOwnerBusy = true;
     this.firstOwnerError = undefined;
     this.firstMissingSummary = undefined;
-    this.firstDamagedRecord = undefined;
     this.firstBackupPhase = undefined;
+    // After Cancel at the damaged-record warning the page is drawn signed out, so its Continue
+    // signs in as that page does, and keeps Start again until the password is accepted.
+    const damagedSignedOut = this.firstDamagedRecord === "confirm" && !this.firstRestartConfirm;
     const generation = ++this.#firstGeneration;
     const current = () => this.isConnected && generation === this.#firstGeneration;
     try {
@@ -1166,6 +1168,7 @@ export class SetupApp extends LitElement {
         this.firstInspection = inspection;
       }
       if (
+        damagedSignedOut ||
         !session.state ||
         this.firstInspection?.database === "missing" ||
         ["activation-started", "committed", "publication"].includes(session.state.status)
@@ -1173,6 +1176,7 @@ export class SetupApp extends LitElement {
         await session.recover(this.#firstResolutionSnapshot(), password);
       } else await session.resume(password);
       if (!current()) return;
+      this.firstDamagedRecord = undefined;
       this.#acceptFirstIdentity();
       if (this.firstInspection?.database === "missing" && session.state!.status !== "complete") {
         this.screen = "first-owner";
@@ -1209,10 +1213,21 @@ export class SetupApp extends LitElement {
       if (!current()) return;
       this.#afterFirstOwner();
     } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+      if (current()) {
+        this.firstOwnerError = this.#describeFirstError(error);
+        if (damagedSignedOut && this.#firstSession?.recoveryRequired)
+          await this.#signOutFirstSession();
+      }
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
+  }
+  /** Leaves the page honestly signed out: the next owner step in this tab is a fresh recover. */
+  async #signOutFirstSession(): Promise<void> {
+    const session = this.#firstSession;
+    this.#firstSession = undefined;
+    this.firstDamagedRecord = undefined;
+    await session?.forgetOwner();
   }
   #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
     const inspection = this.firstInspection;
@@ -1315,7 +1330,7 @@ export class SetupApp extends LitElement {
       if (current()) this.firstOwnerBusy = false;
     }
   }
-  #cancelDamagedRecord(): void {
+  async #cancelDamagedRecord(): Promise<void> {
     this.firstDamagedRecord = undefined;
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
@@ -1323,6 +1338,9 @@ export class SetupApp extends LitElement {
     this.firstOwnerPassword = "";
     this.#firstPasswordScope?.commit("");
     this.firstOwnerError = undefined;
+    // A refused send at the warning leaves the tab signed in but needing a fresh recovery.
+    if (this.#firstSession?.state && this.#firstSession.recoveryRequired)
+      await this.#signOutFirstSession();
   }
   #showsDamagedRecord(missing: boolean, ask: StartAgainSummary | undefined): boolean {
     return (
@@ -2289,7 +2307,7 @@ export class SetupApp extends LitElement {
                   slot="cancel"
                   data-test="cancel-damaged-record"
                   variant="secondary"
-                  @click=${() => this.#cancelDamagedRecord()}
+                  @click=${() => void this.#cancelDamagedRecord()}
                   >${t.cancel}</wt-button
                 >
                 <wt-button

@@ -416,6 +416,32 @@ describe("first setup tab ownership", () => {
     );
   });
 
+  it("forgetOwner keeps the tab's nonce, drops its owner, and lets the next session open signed out", async () => {
+    const unopened = create(claim);
+    await unopened.session.forgetOwner();
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBeNull();
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    const { clientClaimNonce } = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
+    await first.session.forgetOwner();
+    expect(first.session.state).toBeUndefined();
+    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!)).toEqual({
+      version: 1,
+      clientClaimNonce,
+      claimPending: false,
+    });
+    const next = create(() => json({ claimed: true }));
+    await next.session.open();
+    expect(next.session.recoveryRequired).toBe(false);
+    await next.session.refresh();
+    expect(next.session.state).toBeUndefined();
+    expect(next.session.recoveryRequired).toBe(true);
+    expect(next.requests.map((r) => [r.path, r.headers.has("X-Waitron-Setup-Owner")])).toEqual([
+      ["/setup-api/first-setup/status", false],
+    ]);
+  });
+
   it("refuses a duplicate tab's real Web Lock before any HTTP, and releases only its own hold", async () => {
     const first = create(claim);
     await first.session.open();
