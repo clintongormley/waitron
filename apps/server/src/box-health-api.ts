@@ -117,8 +117,8 @@ async function requiredNameOf(tx: Transaction, personId: string): Promise<string
 }
 
 /** `GET /api/box/health`, `POST /api/box/free-space`, `GET /api/box/clock-misdated` and its
- * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both
- * `person.admin` and refused on the box itself. */
+ * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/clock-challenge`
+ * and `POST /api/box/clock-confirm`, both `person.admin` and refused on the box itself. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
   const freeRun = createErrorBoundary(STATUS, "box-free-space.failed");

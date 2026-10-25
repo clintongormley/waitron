@@ -1788,6 +1788,48 @@ it("downloads the list with Spanish column headings for a Spanish venue", async 
   expect(headings).toEqual(Object.values(MISDATED_SALES_WORDS.es.columns));
 });
 
+it("names AEAT's time, and no person, in the header of a list from a closing AEAT confirmed", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  handOpenMisdated(stop.behind);
+  await waitingCheck(stop);
+  const reading = stop.clock.now();
+  const at = reading.instant.toISOString();
+  const closed = await withTransaction(venue.db, (tx) =>
+    venue.backend.closeClockCheckByItself!(tx, {
+      reading,
+      // The boot-time clock ran on with the box's, as `waitingCheck` let it.
+      boot: { ms: BOOT.ms + (reading.instant.getTime() - stop.behind), id: BOOT.id },
+      nodeId: venue.cfg.nodeId,
+      witnesses: [
+        { kind: "authority", id: "authority", boxAt: at, witnessAt: at, uncertaintyMs: 0 },
+      ],
+    }),
+  );
+  expect(closed.confirmation?.source).toBe("authority");
+  const incidentId = misdatedIncident(closed.confirmation!.id);
+
+  const detail = await withTransaction(venue.db, (tx) =>
+    venue.backend.misdatedDetail!(tx, closed.confirmation!.id),
+  );
+  if (detail?.known !== true) throw new Error("the closing lists no sales");
+  const open = (await healthOf(stop)).misdatedOpen.find(
+    (entry) => entry.confirmationId === closed.confirmation!.id,
+  )!;
+
+  const answer = await download(stop.app, incidentId);
+  expect(answer.status).toBe(200);
+  const [[sentence]] = csvRows(new Uint8Array(await answer.arrayBuffer()));
+  const time = (iso: string) => receiptDateTimeNumeric(iso, "en-GB", 60);
+  const bound = Math.ceil((Date.parse(detail.closing.correctedStart) + MINUTE) / MINUTE) * MINUTE;
+  expect(detail.records.length).toBeGreaterThan(1);
+  expect(sentence).toBe(
+    `${venueName()}: ${detail.records.length} sales were recorded with a time later than the ` +
+      `real one, from ${time(open.from)} to ${time(open.to!)}. Each was made before ` +
+      `${time(new Date(bound).toISOString())}. The clock was confirmed by the tax agency's time ` +
+      `on ${time(detail.closing.confirmedAt)}.`,
+  );
+});
+
 it("downloads nothing for an id that is not a list alert's: malformed, unknown, another code's, or one that cannot tell", async () => {
   const { stop, confirmationId, incidentId } = await listEpisode();
   const params = venue.db.all<{ params: string }>(

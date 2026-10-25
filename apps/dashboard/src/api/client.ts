@@ -1782,7 +1782,7 @@ export interface MisdatedRecordView {
 }
 
 /** LOCAL copy of `GET /api/box/clock-misdated/handled`'s answer (`apps/server/src/box-health-api.ts`),
- * newest first; `records` is null for a closing that cannot tell which sales it covers. */
+ * newest first; `records` is null when the box cannot list the sales. */
 export interface ClockMisdatedHandledView {
   episodes: (MisdatedOpenView & {
     handledAt: string;
@@ -4254,7 +4254,7 @@ export class DashboardApi {
     return this.#request<AlertsResponse>("/management-api/alerts/handled", "GET");
   }
 
-  /** Without a note, succeeds when the incident is already handled; with one, that is refused. */
+  /** A non-blank note on an already-handled alert is refused. */
   markIncidentHandled(incidentId: string, note?: string): Promise<void> {
     return this.#request<void>(
       `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/handled`,
@@ -4287,7 +4287,6 @@ export class DashboardApi {
     return this.#request<ClockMisdatedHandledView>("/api/box/clock-misdated/handled", "GET");
   }
 
-  /** One alert's list of wrongly dated sales as a spreadsheet file. */
   downloadMisdatedSales(incidentId: string): Promise<Blob> {
     return this.#request<Blob>(
       `/api/box/clock-misdated/${encodeURIComponent(incidentId)}/download`,
