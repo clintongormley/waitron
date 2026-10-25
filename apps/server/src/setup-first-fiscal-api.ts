@@ -27,6 +27,7 @@ const boundary = createErrorBoundary(
     "setup.not_ready": 503,
     "setup.certificate_refused": 422,
     "setup.owner_required": 403,
+    "setup.start_again_password_required": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
@@ -823,7 +824,15 @@ export function mountFirstSetupResolutionApi(
           "ownerGeneration",
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
+          ...(Object.hasOwn(rawBody, "recoveryRecordDamagedShown")
+            ? ["recoveryRecordDamagedShown"]
+            : []),
         ]);
+        if (
+          Object.hasOwn(body, "recoveryRecordDamagedShown") &&
+          body.recoveryRecordDamagedShown !== true
+        )
+          invalid();
         if (
           ![body.revision, body.ownerGeneration].every(
             (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
@@ -843,6 +852,9 @@ export function mountFirstSetupResolutionApi(
             ownerGeneration: body.ownerGeneration as number,
             register,
             ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+            ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
+              ? { recoveryRecordDamagedShown: true as const }
+              : {}),
             ...(c.req.header("X-Waitron-Setup-Owner") === undefined
               ? {}
               : { owner: firstFiscalOwner(c) }),

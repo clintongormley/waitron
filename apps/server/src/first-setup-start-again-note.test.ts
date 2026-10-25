@@ -722,6 +722,47 @@ it("the Start again route takes recoveryRecordDamaged only as true", async () =>
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("the Start again route takes recoveryRecordDamagedShown only as true", async () => {
+  const { f, actions, owner, ids, request } = await missingDatabase();
+  const app = routes(f, actions);
+  for (const recoveryRecordDamagedShown of [false, "true", 1]) {
+    const refused = await sendStartAgain(app, owner, {
+      ...ids,
+      register: request.register,
+      recoveryRecordDamagedShown,
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json(), JSON.stringify(recoveryRecordDamagedShown)).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+  }
+});
+
+it("the password-required refusal answers 403 over HTTPS", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damageRecoveryRecord(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  const refused = await routes(f, actions).request(
+    "https://box.test/setup-api/first-setup/resolution/start-again",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision,
+        ownerGeneration: inspected.ownerGeneration,
+        register: startRequest.register,
+      }),
+    },
+    tls(),
+  );
+  expect(refused.status, await refused.clone().text()).toBe(403);
+  expect(await refused.json()).toEqual({
+    error: { code: "setup.start_again_password_required", params: {} },
+  });
+  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+});
+
 it("an attempt that never chose a name is summarised as claimed, with no name", async () => {
   const { folders, host } = await claimedWithoutName();
   await rm(join(folders.venueDir, "venue.db"));

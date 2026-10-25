@@ -36,6 +36,7 @@ export interface StartAgainFirstSetupRequest {
   owner?: FirstSetupOwnerAttempt;
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
+  recoveryRecordDamagedShown?: true;
 }
 export interface StartAgainSummaryRequest {
   inspectionId: string;
@@ -208,6 +209,7 @@ export function createFirstSetupResolutionActions(
             "owner",
             "register",
             "confirmMissingDatabase",
+            "recoveryRecordDamagedShown",
           ]);
           await assertNoLegacyFirstSetupWorkspace(options);
           const inspection = await host.resolution.inspectFirstSetupResolution();
@@ -217,6 +219,7 @@ export function createFirstSetupResolutionActions(
           const { state } = retained;
           const missing = inspection.database === "missing";
           if (!missing && request.confirmMissingDatabase !== undefined) conflict();
+          if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
           if (missing) {
             // D3a: with the database missing, any status but complete, and only once confirmed.
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
@@ -234,12 +237,15 @@ export function createFirstSetupResolutionActions(
           const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          const unusedAssignment =
+          const assignment =
             inspection.emptyDatabase &&
             (request.register === undefined || request.register.kind === "current-master") &&
             host.modules !== undefined &&
             ((request.register === undefined && emptyWorkspace) ||
               (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules)));
+          const unusedAssignment = Boolean(assignment);
+          const recoveryRecordDamaged =
+            !missing && typeof assignment === "object" && assignment.recoveryRecordDamaged;
           if (request.owner === undefined) {
             if (
               !unusedAssignment &&
@@ -266,6 +272,9 @@ export function createFirstSetupResolutionActions(
               : error;
           });
           if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT)) unavailable();
+          if (recoveryRecordDamaged && request.owner === undefined)
+            throw new AppError("setup.start_again_password_required", {});
+          if (recoveryRecordDamaged !== (request.recoveryRecordDamagedShown === true)) conflict();
           const gathered = await gatherStartAgainFloor(
             roots,
             state,

@@ -1031,6 +1031,11 @@ declare module "@waitron/shared" {
      */
     "setup.reset_unavailable": Record<string, never>;
     /**
+     * Start again with the database present cannot go ahead without the setup password: the kept
+     * recovery-key record cannot be read. NO params.
+     */
+    "setup.start_again_password_required": Record<string, never>;
+    /**
      * A manual open-drawer request found no active cash drawer choice on the requesting device (its
      * own, else its profile's default), so there is nothing to send the kick through. `deviceId`
      * names the device.

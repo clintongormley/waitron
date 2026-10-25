@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { AppError } from "@waitron/shared";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
 import type { FirstSetupOriginal, FirstSetupState } from "@waitron/provisioning";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -10,7 +11,7 @@ export async function firstSetupUnusedAssignment(
   state: FirstSetupState,
   originals: readonly FirstSetupOriginal[],
   modules: readonly WaitronModule[],
-): Promise<boolean> {
+): Promise<false | { recoveryRecordDamaged: boolean }> {
   if (
     Object.keys(state.inputs).some(
       (name) =>
@@ -67,6 +68,7 @@ export async function firstSetupUnusedAssignment(
     const staged = read("state/first-setup-node-key.json");
     const key = staged === null ? null : readFirstSetupStagedKey(staged, state);
     let assignments = 0;
+    let recoveryRecordDamaged = false;
     const names = new Set<string>();
     for (const module of state.frozen.modules) {
       if (!Object.hasOwn(state.inputs, module.module) && module.request === null) continue;
@@ -84,12 +86,30 @@ export async function firstSetupUnusedAssignment(
       }
       const imported = seat.inspect(context, state.inputs[module.module]);
       if (seat.recoveryDocument !== undefined) {
-        const manifest = readFirstSetupRecoveryDeliverySnapshot(
-          module.module,
-          state,
-          originals,
-          modules,
-        );
+        let manifest: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;
+        try {
+          manifest = readFirstSetupRecoveryDeliverySnapshot(
+            module.module,
+            state,
+            originals,
+            modules,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof AppError) ||
+            originals.find(
+              (original) =>
+                original.name === `state/first-fiscal-documents/${module.module}.recovery.json`,
+            )?.bytes == null
+          )
+            throw error;
+          // A damaged recovery record proves nothing about this attempt, so the caller requires the
+          // setup password and the warning. Every other check here still decides.
+          recoveryRecordDamaged = true;
+          names.add(`${module.module}.recovery.json`);
+          assignments++;
+          continue;
+        }
         if (manifest !== null) {
           if (key === null || !isDeepStrictEqual(manifest.stage, key)) return false;
           names.add(`${module.module}.recovery.json`);
@@ -125,14 +145,14 @@ export async function firstSetupUnusedAssignment(
         names.add(`${manifest.id}-${index}.json`);
       assignments++;
     }
-    return (
-      assignments > 0 &&
+    return assignments > 0 &&
       originals.every(
         (original) =>
           !original.name.startsWith("state/first-fiscal-documents/") ||
           names.has(original.name.slice("state/first-fiscal-documents/".length)),
       )
-    );
+      ? { recoveryRecordDamaged }
+      : false;
   } catch {
     return false;
   }
