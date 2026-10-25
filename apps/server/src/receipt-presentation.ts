@@ -5,6 +5,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { readLocationAddress } from "./venue-address.js";
 import { readPresentations } from "@waitron/media";
+import { readVenueLogoName } from "./receipt-venue-logo.js";
 
 export async function readReceiptPresentation(
   tx: Transaction,
@@ -41,7 +42,7 @@ export async function readReceiptPresentation(
   }
   const receiptTrim = resolveReceiptTrim(
     department?.receipt ?? null,
-    {},
+    await readVenueLogoName(tx, department, diagnostic),
     printedLanguage,
     current.locale,
   );

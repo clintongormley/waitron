@@ -18,14 +18,17 @@ export const THEME_DOTS = {
 /** Clears before it inserts: the unique index on `in_use` refuses a second row holding 1. */
 export async function putThemeInUse(
   db: Database,
-  input: { light?: string; printedLogo?: unknown; name?: string } = {},
+  input: { light?: string; dark?: string; printedLogo?: unknown; name?: string } = {},
 ): Promise<string> {
   const id = randomUUID();
   const name = input.name ?? `Theme ${id}`;
   const theme = {
     ...WAITRON_CHOICES,
     brandColor: "#1e5b3a",
-    logo: { light: input.light ?? THEME_LOGO },
+    logo: {
+      light: input.light ?? THEME_LOGO,
+      ...(input.dark === undefined ? {} : { dark: input.dark }),
+    },
     printedLogo: "printedLogo" in input ? input.printedLogo : THEME_DOTS,
   };
   await db.execute(sql`update custom_themes set in_use = null where in_use = 1`);
