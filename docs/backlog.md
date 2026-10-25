@@ -4965,57 +4965,29 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive
   destination).**
-  - The status watcher does not retry its own failed mint (the mint is a POST, never passive
-    session activity), so the screen then offers no key until it is reopened.
-  - The edit-settings form can meet `backup.recovery_key_exists` when a rotate (from another tab
-    or admin) lands after it fetched the key.
+  The status watcher does not retry its own failed mint (the mint is a POST, never passive
+  session activity), so the screen then offers no key until it is reopened.
+  [Detail](backlog/box.md#loose-ends-left-by-sqlite-slice-2-task-2a-557-a-recovery-key-that-does-not-need-an-archive-destination)
 
 - **Loose ends left by SQLite slice 2 Task 3a (#566, one process per venue folder; #573; #608).**
   [Detail](backlog/box.md#loose-ends-left-by-sqlite-slice-2-task-3a-566-one-process-per-venue-folder-573-608)
 
 - **Loose ends left by SQLite slice 2 Task 5 (#569, `@waitron/stream`).**
-  - Which real providers other than Amazon S3 lack S3's multi-object delete, and what each
-    answers, is not established; Amazon S3 answered batches of 1,000 and 5 keys with 200 and no
-    per-key errors on 2026-10-14 ([receipts](receipts/a538/README.md), A538-10). A provider that
-    refuses it with a status other than 501 fails the day's prune (`stream.prune_failed`).
-    `probeBucket` deletes one object at a time, so it cannot reveal such a provider; having it
-    delete its test object through `deleteMany` would.
-  - Amazon S3 is the only real provider's bucket the package has run against (the 2026-10-14
-    rehearsal, [receipts](receipts/a538/README.md), A538-10); the unit tests drive the real S3
-    client over a scripted network, and the loop test drives it against versitygw.
-  - Every synchronous `deriveKey` caller still blocks the event loop while it derives.
-    [Detail](backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives)
+  Every synchronous `deriveKey` caller still blocks the event loop while it derives.
+  [Detail](backlog/box.md#loose-ends-left-by-sqlite-slice-2-task-5-569-waitronstream)
 
 - **Loose ends left by SQLite slice 2 Task 6 (#590, the Litestream supervisor).**
-  - A pointer write from a process that has since died, landing after the restart, can still make
-    the box refuse itself, because a restarted process starts with an empty record. In both cases
-    the owner's alert (`backup.stream_refused`) still says another box is writing.
-    [Detail](backlog/box.md#a-pointer-write-from-a-process-that-has-since-died-landing-after-the-restart-can-still-make-the-box-refuse-itself)
-  - The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a
-    large database Litestream may not finish its last upload (it is still told to stop and does
-    not outlive the server).
-  - `pnpm setup:litestream` skips the download when the installed binary already reports the
-    pinned version, so the checksum protects fresh downloads only.
+  `pnpm setup:litestream` skips the download when the installed binary already reports the
+  pinned version, so the checksum protects fresh downloads only.
+  [Detail](backlog/box.md#loose-ends-left-by-sqlite-slice-2-task-6-590-the-litestream-supervisor)
 
 - **Loose ends left by SQLite slice 2 Task 7 (#619, how current the bucket copy is).**
-  - A commit that changes no row but writes to the side file, such as a schema change or a pragma
-    such as `user_version`, is not reported, so the lag can read low.
-  - An update that writes the same value, straight after a schema-only commit, is still reported,
-    although it adds nothing for the bucket (a test pins it).
-  - The check that the side file changed was measured on the Mac's filesystem only, not the box's
-    Linux one; a commit landing in the same file-time tick after a side-file restart is missed.
-  - A sale whose write transaction began before the supervisor first subscribed after boot is not
-    counted, so the lag reads low for it.
-  - Whether Litestream uploads anything while the side file is unchanged is not measured.
+  Whether Litestream uploads anything while the side file is unchanged is not measured.
+  [Detail](backlog/box.md#loose-ends-left-by-sqlite-slice-2-task-7-619-how-current-the-bucket-copy-is)
 
 - **Loose ends left by A549.**
-  - While the bucket is away, Litestream's local level-0 folder grows with nothing measuring or
-    limiting it (`.venue.db-litestream/ltx/0/`): 61 MB over 1,595 sales in about 60 s, with the
-    stream pause test's sellers slowed to about CI's rate (an 80 ms wait before each sale) on the
-    owner's Mac. A venue's real rate and the box's disk were not measured.
-  - Whether the side file grows, and the pause fires, in a real network outage was not run. A549
-    stopped the bucket server; with a refused or timed-out connection, Litestream's start-up check
-    errors and drops its read transaction to retry (`db.go` v0.5.17, `init`).
+  Whether the side file grows, and the pause fires, in a real network outage was not run.
+  [Detail](backlog/box.md#loose-ends-left-by-a549)
 
 - **Task 8a** (#627, the server side of the bucket-copy settings): the dead-process pointer write
   under Task 6 applies here too. Left open by SQLite slice 2.
@@ -5053,17 +5025,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Loose ends left by #668, #686, A57, A60 and #723 (the pause test and the bucket's error
   reports).**
-  - The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
-    502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
-    code also covers a bad value in the recovery kit, where 400 is right.
-  - A batch delete's `backup.stream_request_failed` still carries the file's name as the bucket
-    listed it in `key` (the `deleteMany` refusal in `packages/stream/src/s3-store.ts`); that the
-    prune logger drops it is a review seat's reading and one run, not a guard.
-  - The status and `errorName` on the stream's log lines other than the pause check's 403 were
-    shown by reading, by the store's scripted HTTP answers and by the supervisor's injected
-    errors, not against a real bucket. Amazon S3's 403 to the pause check was logged with
-    `backup.stream_request_failed`, 403 and `AccessDenied` (A538-10).
-    [Detail](backlog/box.md#the-status-and-errorname-on-the-streams-log-lines-other-than-the-pause-checks-403-were-shown-by-reading)
+  The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
+  502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
+  code also covers a bad value in the recovery kit, where 400 is right.
+  [Detail](backlog/box.md#loose-ends-left-by-668-686-a57-a60-and-723-the-pause-test-and-the-buckets-error-reports)
 
 - **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** The owner approved
   Cloud email or your own SMTP server; Cloud is optional. Build the local SMTP route from the
