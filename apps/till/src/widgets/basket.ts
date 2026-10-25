@@ -217,6 +217,11 @@ export class TillBasket extends LitElement {
         grid-column: 2;
         margin-inline-end: 0;
       }
+      /* The name column is too narrow for the mark, so a marked name takes the row and its controls
+         drop to the next row, in their own columns. */
+      :host([line-details]) .period-ended-entry .line .name {
+        grid-column: 1 / -1;
+      }
       :host([line-details]) .line-total,
       :host([line-details]) .option-total {
         grid-column: 3;

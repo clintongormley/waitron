@@ -1338,6 +1338,47 @@ describe("till-basket: stacked", () => {
   });
 });
 
+describe("till-basket: the ended-period mark", () => {
+  /** The counter's basket at 1280 px wide, and a phone's, which stacks each name above its
+   * controls. */
+  it.each([
+    ["the counter at 1280", "396px", false],
+    ["a phone at 390", "374px", true],
+  ] as const)("keeps the Spanish mark on one line in %s", async (_where, width, stacked) => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale("es-ES");
+      const store = new WorkingOrderStore();
+      for (const name of ["Croquetas", "Gambas", "Caña"])
+        store.addProduct({ ...cafe, id: name, name }, "1");
+      const open = { menuId: "open", periodName: "Open" };
+      store.setEndedPeriods([open, open, open]);
+      const { el } = await mountWidget<TillBasket>("till-basket", {
+        store,
+        lineDetails: true,
+        stacked,
+      });
+      el.style.width = width;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const marks = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-period-ended]")];
+      expect(marks.map((mark) => mark.textContent!.replace(/\s+/g, " ").trim())).toEqual(
+        Array(3).fill("⚠ Ha terminado Open"),
+      );
+      const right = el.getBoundingClientRect().right;
+      for (const mark of marks) {
+        const wrapped = mark.getBoundingClientRect().height;
+        mark.style.whiteSpace = "nowrap";
+        const oneLine = mark.getBoundingClientRect();
+        mark.style.whiteSpace = "";
+        expect(wrapped).toBe(oneLine.height);
+        expect(oneLine.right).toBeLessThanOrEqual(right);
+      }
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+});
+
 describe("till-basket: the note editor keeps to its line", () => {
   const flan: TillProduct = { ...cafe, id: "flan", name: "Flan" };
 
