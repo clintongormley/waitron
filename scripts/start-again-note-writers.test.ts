@@ -5,7 +5,8 @@
  *
  * Weaker than its name: it reads TEXT in the `.ts`, `.mjs` and `.sh` files `git ls-files` lists,
  * skipping test files, so a path built from pieces escapes it; it never checks what an allowed
- * file does with the name.
+ * file does with the name, nor code that removes the whole state folder, or everything in it,
+ * without naming the file.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";

@@ -1438,7 +1438,7 @@ it.each([
     false,
   ],
 ] as const)(
-  "lifetime: a staged restore %s leaves the note and the confirmation record unchanged",
+  "lifetime: a staged restore %s, with placement stubbed, leaves the note and the confirmation record unchanged",
   async (_name, placement, placed) => {
     const folders = await emptyFolders();
     const kept = await seedKept(folders.stateDir);
