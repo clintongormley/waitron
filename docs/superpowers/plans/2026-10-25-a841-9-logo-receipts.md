@@ -1277,7 +1277,7 @@ Every existing assertion this plan changes, and the design line behind it:
   image use, so the entry needs nothing more.
 - **Record in the design's decisions list** (section 16, "The answers, and the branches not taken"),
   as lane A rulings dated the day they are made: slice 9 in two pull requests (D1), not taken: one
-  of fourteen tasks; `unreadable` keeps the readable fields of case 3 (D2), not taken: an empty
+  of sixteen tasks; `unreadable` keeps the readable fields of case 3 (D2), not taken: an empty
   receipt; "prints blank" means zero black dots (D9), not taken: a threshold; "How it prints" is
   drawn by a read route under `venue.view` from the draft's image (D8), not taken: drawing the saved
   `printedLogo`, which an unsaved logo does not have yet; "How it prints" asks again when the light

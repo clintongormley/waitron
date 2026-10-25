@@ -3473,7 +3473,7 @@ describe("department receipt presentation on thermal jobs", () => {
     },
   );
 
-  it("omits a corrupt explicit department picture without substituting the venue logo", async () => {
+  it("omits a corrupt explicit department picture without substituting the `tenant_receipts` logo", async () => {
     const { cfg, departmentId, sell, documents } = await setupReceipt();
     const pair = {
       "58mm": { widthDots: 8, heightDots: 1, data: "gQ==" },

@@ -14,10 +14,7 @@ function report(diagnostic: ReceiptReadDiagnostic, operation: string): void {
   }
 }
 
-/**
- * No department, or a trusted one naming no logo of its own. The one place that decides whether the
- * venue's logo may print.
- */
+/** No department, or a trusted one naming no logo of its own. */
 export function venueLogoMayPrint(department: PrintedDepartmentReceipt | null): boolean {
   if (department === null) return true;
   return department.unreadable !== true && department.receipt.logo === undefined;
