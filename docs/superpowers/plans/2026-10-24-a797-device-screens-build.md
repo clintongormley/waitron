@@ -1916,11 +1916,9 @@ which decides whether a catch-up moves a room's revision), and the till's `ready
   entry (`packages/db/src/configuration-transfer.ts:58-62`) gains `"short_name_key"` in `omit`, and
   `CORE_CONFIGURATION_TRANSFER` gains `afterImport: storeTableShortNameKeys` (in
   `packages/db/src/table-short-names.ts`), which sets every `dining_tables` row's key from its
-  short name, one `update … where id = ?` per row that has one (`packages/db` has no batching
-  helper — `batches` is `@waitron/catalogue`'s, `packages/catalogue/src/batches.ts:5` — and a
-  venue's tables number in the tens or hundreds, two bound values a statement, in the import's
-  one transaction) — the catalogue's precedent, `products.name_key` omitted and set by
-  `storeProductNameKeys` (`packages/catalogue/src/product-names.ts:16-33`, declared at
+  short name, in batched `case id when … end` updates — the catalogue's precedent,
+  `products.name_key` omitted and set by `storeProductNameKeys`
+  (`packages/catalogue/src/product-names.ts:16-33`, declared at
   `packages/catalogue/src/configuration-transfer.ts:180`). A file that supplies the key is already
   refused (`setup.request_invalid` `{ field: "dining_tables.short_name_key" }`) by the import's
   omitted-column check (`packages/provisioning/src/configuration-transfer.ts:575-577`, read),
@@ -2477,8 +2475,7 @@ calls.
 - Modify: `packages/db/src/configuration-transfer.ts` (`dining_tables`'s `omit`, `:58-62`;
   `validateCoreConfiguration`, `:10-38`; `afterImport`), `packages/db/src/table-short-names.ts`
   (`storeTableShortNameKeys(tx)`: read every row's id and short name, fold in JavaScript, and
-  update row by row, one `update … where id = ?` per row that has one — D10 says why no batching
-  helper)
+  set the keys in batched updates, D10)
 - Test: `packages/db/src/configuration-transfer.test.ts` (validate cases; "CORE_CONFIGURATION_TRANSFER"
   `describe`, `:203`, gains the omit and the hook), `apps/server/src/configuration-transfer.test.ts`
   (one round-trip case beside the products' key case, `:3640-3684`),
