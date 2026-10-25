@@ -549,6 +549,42 @@ A987's design does not change the route
   a status read that began before the reload, or one made after `stop()`; a test needs one of those
   shapes. Left open by A538-3.
 
+## Backup destination failures log no elapsed time or operation phase.
+
+- **Backup destination failures log no elapsed time or operation phase.**
+  `runOnce` in `apps/server/src/backup-sweep.ts` reports the destination, error code and errno,
+  so a timed-out upload cannot be distinguished from time spent waiting on local filesystem work
+  by those fields. Add non-sensitive phase and elapsed-time diagnostics when investigating real
+  destination timeouts. A1035 reproduced the main test's folder timeout under controlled load;
+  the original CI delay remains unmeasured.
+  [Test timing guidance](../developers/testing-guide.md#a-deadline-test-must-separate-timer-ordering-from-filesystem-speed).
+
+## Public TLS repair refuses linked layouts.
+
+- **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
+  but a damaged linked folder or managed file cannot be repaired through the public guide.
+  Decide whether to support links contained within the state folder while retaining archive,
+  exclusion and path-containment checks; cover the restored-layout startup and repair path.
+  Found by A733's whole-branch review; see the server README's secure-connection section.
+
+## On a full disk, a box whose kept certificates cannot be used shows the connection set-up page, with no word of the full disk.
+
+- **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
+  with no word of the full disk.** The connection-bootstrap branch (`needsConnectionBootstrap`,
+  `apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
+  decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
+  folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
+  should that page also say the disk is full and show the free space?
+
+## Guide replacement address settings after a cold restore.
+
+- **Guide replacement address settings after a cold restore.** Replace manual configuration of
+  the advertised origin and dashboard origin/passkey domain with a recovery step that checks they
+  match the replacement's address. Local certificate repair and authenticated restore entry already
+  have surfaces; Cloud tunnel and staff-certificate installation remain under the Cloud integration
+  loose ends below. Coordinate naming with A917 and failover addressing with A947.
+  [Tested steps and remaining limits](../developers/cold-restore-surfaces.md).
+
 ## Decisions and deliberate limits
 
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh

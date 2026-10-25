@@ -4449,18 +4449,13 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 ### The box: backups, upgrades and recovery
 
 - **Backup destination failures log no elapsed time or operation phase.**
-  `runOnce` in `apps/server/src/backup-sweep.ts` reports the destination, error code and errno,
-  so a timed-out upload cannot be distinguished from time spent waiting on local filesystem work
-  by those fields. Add non-sensitive phase and elapsed-time diagnostics when investigating real
-  destination timeouts. A1035 reproduced the main test's folder timeout under controlled load;
-  the original CI delay remains unmeasured.
-  [Test timing guidance](developers/testing-guide.md#a-deadline-test-must-separate-timer-ordering-from-filesystem-speed).
+  Add non-sensitive phase and elapsed-time diagnostics when investigating real
+  destination timeouts.
+  [Detail](backlog/box.md#backup-destination-failures-log-no-elapsed-time-or-operation-phase)
 
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
   but a damaged linked folder or managed file cannot be repaired through the public guide.
-  Decide whether to support links contained within the state folder while retaining archive,
-  exclusion and path-containment checks; cover the restored-layout startup and repair path.
-  Found by A733's whole-branch review; see the server README's secure-connection section.
+  [Detail](backlog/box.md#public-tls-repair-refuses-linked-layouts)
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
@@ -4489,11 +4484,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   old name only points at the new one for 14 days. Five slices; no migration.
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
-  with no word of the full disk.** The connection-bootstrap branch (`needsConnectionBootstrap`,
-  `apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
-  decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
-  folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
-  should that page also say the disk is full and show the free space?
+  with no word of the full disk.**
+  Open: should that page also say the disk is full and show the free space?
+  [Detail](backlog/box.md#on-a-full-disk-a-box-whose-kept-certificates-cannot-be-used-shows-the-connection-set-up-page-with-no-word-of-the-full-disk)
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
@@ -4603,10 +4596,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **Guide replacement address settings after a cold restore.** Replace manual configuration of
   the advertised origin and dashboard origin/passkey domain with a recovery step that checks they
-  match the replacement's address. Local certificate repair and authenticated restore entry already
-  have surfaces; Cloud tunnel and staff-certificate installation remain under the Cloud integration
-  loose ends below. Coordinate naming with A917 and failover addressing with A947.
-  [Tested steps and remaining limits](developers/cold-restore-surfaces.md).
+  match the replacement's address.
+  [Detail](backlog/box.md#guide-replacement-address-settings-after-a-cold-restore)
 
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
   `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
