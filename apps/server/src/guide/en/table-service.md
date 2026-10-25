@@ -138,12 +138,12 @@ repeat: **Done** clears the one on show, and another order starts the count agai
 
 When the kitchen has dishes ready, you want to know which tables to take them to without going to
 look. On a phone or tablet, a bar at the foot of the **Floor** lists each table with food ready and
-how many dishes are waiting, such as **Ready · T2 · 3**. Each table is shown by its short name,
-such as T2 for Table 2, or by its full name while it has none; a table joined to another for today
-shows both, such as T4+T5. Tap a table to open it, or tap **Open ›** to open the first table listed. The bar lists only the tables in the zones this device
-shows, and it goes away once nothing is ready. A till instead shows a **Ready** list above the
-tables, one line for each station. The list counts ready food at tables in every zone the till's
-profile allows, not only the zones it shows.
+how many dishes are waiting, such as **Ready · T2 · 3**. Each table is shown by its short name, such
+as T2 for Table 2, or by its full name while it has none; a table joined to another for today shows
+both, such as T4+T5. Tap a table to open it, or tap **Open ›** to open the first table listed. The
+bar lists only the tables in the zones this device shows, and it goes away once nothing is ready. A
+till instead shows a **Ready** list above the tables, one line for each station. The list counts
+ready food at tables in every zone the till's profile allows, not only the zones it shows.
 
 ## Show a zone as a map or a list {#floor-view}
 

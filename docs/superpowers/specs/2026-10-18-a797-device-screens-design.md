@@ -500,9 +500,12 @@ Each point is (read); the plan confirms it before relying on it.
   name (plan line 96), and its plan leaves only the handheld's short names to A797 (lines 19, 50, 311);
   this design proposes that A797 adds it to the pass read after A773-2 lands (slice 12b), and asks
   lane G to confirm. Each is a change to what a server read sends the till, so FULL.
-  (2026-10-25, slice 1: a save keeps a table's stored short name when it leaves the name
-  unchanged, and a proposal that is taken leaves the table with none rather than refusing the
-  save; see the [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4.)
+  (2026-10-25, slice 1: a save that sends a table no short name keeps its stored one when it
+  leaves the name unchanged and no other table holds it, and a proposal that is taken leaves the
+  table with none rather than refusing the save; but a table the save adds or renames that is left
+  with none is refused `table.label_taken` when another zone's table already holds its name as a
+  short name, or as its full name having none; see the
+  [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4.)
 - **Whose unsent dishes** (slice 3). The floor read gives each party's unsent New orders with the
   owner's name only (`UnsentDraft`, `apps/server/src/order-drafts.ts:343-348`); the bar needs the
   owner's id and the draft's last-saved time (`order_drafts.owner_id`, `.updated_at`,

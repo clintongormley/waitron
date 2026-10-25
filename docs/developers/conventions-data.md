@@ -1855,19 +1855,25 @@ A table's short name (`short_name`) is on the plan's tables (`floor_plan_tables`
 (`floor_reset_tables`) and the live tables (`dining_tables`), and may be null. The live tables also
 hold a folded copy, `short_name_key`, unique in the venue
 (`dining_tables_location_short_name_key_uq`) and written only through `shortNameColumns`
-(`packages/db/src/table-short-names.ts`). Nothing in the database ties the copy to the short name:
-a writer that skips the helper is not refused. A save resolves each table's short name
+(`packages/db/src/table-short-names.ts`). Nothing in the database ties the copy to the short name: a
+writer that skips the helper is not refused. A save resolves each table's short name
 (`resolveShortNames`, `apps/server/src/table-short-names.ts`, called from `checkSave` in
-`apps/server/src/floor-plan.ts`). A table the save sends none for keeps its stored one when the
-save leaves its name unchanged and it has one; otherwise it is given one proposed from its name
-(`proposeShortName`, `@waitron/shared`), or none when that proposal is taken. A sent one is
-refused `floor_plan.invalid` when blank or longer than five characters, and
-`table.short_name_taken` when, ignoring case, the save keeps it for another table or sends it for
-an earlier one, or a table of the venue's other zones (plan or live) holds it or, having no short
-name, has it as its full name. A reset gives a live table its new name and short name together, or
-waits while either is held by another table (`planReset`, `apps/server/src/floor-reset-plan.ts`).
-A configuration file carries `short_name` and never `short_name_key`; the import sets the key
-(`storeTableShortNameKeys`, the core transfer's `afterImport`).
+`apps/server/src/floor-plan.ts`). A table the save sends none for, and whose name it leaves
+unchanged, keeps its stored one, or gets none when another table holds that one; one with no stored
+short name, or one the save adds or renames, is given one proposed from its name
+(`proposeShortName`, `@waitron/shared`), or none when that proposal is taken. A sent one is refused
+`floor_plan.invalid` when blank or longer than five characters, and `table.short_name_taken` when,
+ignoring case, the save keeps it for another table or sends it for an earlier one, or a table of the
+venue's other zones (plan or live) holds it or, having no short name, has it as its full name. A
+table the save adds or renames that is left with none is refused `table.label_taken`, with `takenBy`
+naming the other table, when, ignoring case, a table of the venue's other zones (plan or live) holds
+its full name as a short name or, having no short name, as its full name. A table the save leaves
+under its stored name is not checked for this, and neither is a clash with a short name the same
+save gives another of its own tables. A reset gives a live table its new name and short name
+together, or waits while either is held by another table (`planReset`,
+`apps/server/src/floor-reset-plan.ts`). A configuration file carries `short_name` and never
+`short_name_key`; the import sets the key (`storeTableShortNameKeys`, the core transfer's
+`afterImport`).
 
 Which set is due at a moment is venue-service's answer (`dueFloorLayouts`,
 `packages/venue-service/src/floor-layout-due.ts`): the set of the department's period running,

@@ -2788,16 +2788,21 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A1101. Short names on the floor map where a full name does not fit, and on printed kitchen
   tickets.** A797's design proposes both (§3.7, §9) as later choices for the owner; A797 builds
-  neither. Today the map hides a name on a table drawn under 28 px (`NAME_MIN_PX`,
-  `packages/ui/src/floor-plan-geometry.ts`) and the kitchen ticket prints the full name
-  (`tableLabel`, `apps/server/src/kitchen-ticket.ts`). Ask the owner first.
+  neither. Today the map hides a table's name when the table's shorter side is drawn under 28 px
+  (`NAME_MIN_PX` and `showsName`, `packages/ui/src/floor-plan-geometry.ts`), and the kitchen ticket
+  prints the table's name as the floor shows it — its group's or its own name for today, else its
+  full name — and never its short name (`tableLabel`, from `orderTableLabels` in
+  `packages/db/src/party-table-labels.ts`). Ask the owner first.
 
 - **A1102. The till's tests name tables in Spanish.** `apps/till/src/till-app.test.ts`'s counter
   move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa …" labels
   (`git grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md
-  §3).
-  The till's share of the test data the [English-only audit](backlog/english-only-audit.md) counts;
-  A976 covers the server's. Low priority.
+  §3). This is the till's share of the Spanish test data the
+  [English-only audit](backlog/english-only-audit.md) counts in its `apps/till` row; A976 covers
+  the server's test venues, and A977's list of test folders still to clean is where this joins. A797
+  slice 1's till test fixtures copy labels into `shortName` (`apps/till/src/api/client.test.ts`'s
+  "Mesa 1" and "Mesa 2" among them), so renaming a label means renaming its short name too. Low
+  priority.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
