@@ -1728,6 +1728,7 @@ describe("dashboard-app", () => {
           readiness: [],
           releaseReminderMinutesByDepartment: {},
           needsClearingDepartmentIds: [],
+          lateSendManagerDepartmentIds: [],
           serviceSteps: [],
           courses: [],
         } as never)
@@ -4499,6 +4500,7 @@ describe("dashboard URL navigation", () => {
             salePolicies: { departments: [], zones: [] },
             releaseReminderMinutesByDepartment: {},
             needsClearingDepartmentIds: [],
+            lateSendManagerDepartmentIds: [],
             serviceSteps: [],
             courses: [],
           }
@@ -4573,6 +4575,7 @@ describe("dashboard URL navigation", () => {
             salePolicies: { departments: [], zones: [] },
             releaseReminderMinutesByDepartment: {},
             needsClearingDepartmentIds: [],
+            lateSendManagerDepartmentIds: [],
             serviceSteps: [],
             courses: [],
           }
@@ -8065,6 +8068,7 @@ describe("department list links inside dashboard capture", () => {
       salePolicies: { departments: [], zones: [] },
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: [],
+      lateSendManagerDepartmentIds: [],
       serviceSteps: [],
       courses: [],
     };
@@ -8181,6 +8185,7 @@ describe("mounted public department dialogs", () => {
       salePolicies: { departments: [], zones: [] },
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: [],
+      lateSendManagerDepartmentIds: [],
       serviceSteps: [],
       courses: [],
     };

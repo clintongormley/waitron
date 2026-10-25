@@ -68,6 +68,7 @@ const fieldTab: Record<Field, DepartmentTab> = {
   paidWhen: "service",
   collectionNumber: "service",
   needsClearing: "service",
+  lateSendNeedsManager: "service",
   releaseReminderMinutes: "service",
   serviceSteps: "service",
   transfers: "transfers",
@@ -93,6 +94,7 @@ const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
   a.needsClearing === b.needsClearing &&
+  a.lateSendNeedsManager === b.lateSendNeedsManager &&
   a.releaseReminderMinutes === b.releaseReminderMinutes &&
   stepsEqual(a.serviceSteps, b.serviceSteps) &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
@@ -285,6 +287,7 @@ export class DepartmentSettings extends LitElement {
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
+      lateSendNeedsManager: this.model!.lateSendManagerDepartmentIds.includes(row.id),
       // One model read lists the departments and keys every active one here, so the fallback only
       // types the lookup.
       releaseReminderMinutes: this.model!.releaseReminderMinutesByDepartment[row.id] ?? null,
@@ -622,6 +625,7 @@ export class DepartmentSettings extends LitElement {
       "paidWhen",
       "collectionNumber",
       "needsClearing",
+      "lateSendNeedsManager",
       "releaseReminderMinutes",
       ...(this.draft?.transfers
         ? (["receivingProfileId", "destinationDepartmentIds"] as const)
@@ -886,6 +890,22 @@ export class DepartmentSettings extends LitElement {
           <section aria-label=${t("venue.courses_and_kitchen")}>
             <h3>${t("venue.courses_and_kitchen")}</h3>
             ${this.releaseReminder(this.model!.releaseReminderMinutesByDepartment[row.id] ?? null, draft.releaseReminderMinutes, errors.releaseReminderMinutes, disabled)}
+            <div>
+              <wt-switch
+                name="lateSendNeedsManager"
+                label=${t("venue.late_send_needs_manager")}
+                .description=${errors.lateSendNeedsManager ? `${errors.lateSendNeedsManager} ${t("venue.late_send_needs_manager_hint")}` : t("venue.late_send_needs_manager_hint")}
+                .checked=${draft.lateSendNeedsManager}
+                ?disabled=${disabled}
+                aria-invalid=${errors.lateSendNeedsManager ? "true" : nothing}
+                @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+                  e.stopPropagation();
+                  this.changed("lateSendNeedsManager", e.detail.checked);
+                }}
+              ></wt-switch>
+              <p class="hint">${t("venue.late_send_needs_manager_hint")}</p>
+              ${errors.lateSendNeedsManager ? html`<p class="error" data-field-error="lateSendNeedsManager">${errors.lateSendNeedsManager}</p>` : nothing}
+            </div>
           </section>
           <section aria-label=${t("venue.table_states")}>
             <h3>${t("venue.table_states")}</h3>

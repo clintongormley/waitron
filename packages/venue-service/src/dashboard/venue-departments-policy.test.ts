@@ -151,6 +151,7 @@ it.each([
                 paidWhen: "prepay",
                 collectionNumber: "none",
                 needsClearing: false,
+                lateSendNeedsManager: false,
                 releaseReminderMinutes: null,
                 [field]: changed,
               },

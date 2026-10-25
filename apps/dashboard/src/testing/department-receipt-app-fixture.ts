@@ -43,6 +43,7 @@ export function venueServiceModel(
     },
     releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
+    lateSendManagerDepartmentIds: [],
     serviceSteps: [],
     courses: [],
   };

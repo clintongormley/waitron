@@ -435,6 +435,8 @@ const en = {
   "venue.needs_clearing": "Needs clearing",
   "venue.needs_clearing_hint":
     "A table stays “Needs clearing” after the party leaves, until marked cleared.",
+  "venue.late_send_needs_manager": "Manager's PIN to send after a period ends",
+  "venue.late_send_needs_manager_hint": "Off: anyone who can send confirms with the kitchen.",
   "venue.tab_needs_fixing": "needs fixing",
   "venue.zones_that_differ": "Zones that differ",
   "venue.receipt_on_request": "Receipt on request",
@@ -1325,6 +1327,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.needs_clearing": "Por recoger",
   "venue.needs_clearing_hint":
     "Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.",
+  "venue.late_send_needs_manager": "PIN de encargado para enviar tras acabar el periodo",
+  "venue.late_send_needs_manager_hint":
+    "Desactivado: quien puede enviar lo confirma con la cocina.",
   "venue.tab_needs_fixing": "hay que corregirlo",
   "venue.zones_that_differ": "Zonas con otros ajustes",
   "venue.receipt_on_request": "Recibo a petición",

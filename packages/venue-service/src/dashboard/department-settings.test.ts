@@ -5,6 +5,7 @@ import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import type { DepartmentSettings } from "./department-settings.js";
 import "./department-settings.js";
 import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
@@ -118,6 +119,7 @@ const model: VenueServiceView = {
   },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };
@@ -243,6 +245,7 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
         needsClearing: false,
+        lateSendNeedsManager: false,
         releaseReminderMinutes: null,
         transfers: { receivingProfileId: "p2", destinationDepartmentIds: ["d2"] },
       },
@@ -1505,6 +1508,90 @@ it("reads in Spanish", async () => {
   expect(needsClearing(el).label).toBe("Por recoger");
   expect(section.querySelector(".hint")!.textContent!.trim()).toBe(
     "Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.",
+  );
+});
+function lateSend(el: DepartmentSettings) {
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=lateSendNeedsManager]",
+  );
+  expect(control, "late-send switch").not.toBeNull();
+  return control!;
+}
+it("shows the late-send switch under Courses and the kitchen, after the reminder, off for a department the model does not list", async () => {
+  const { el } = await mount();
+  await selectDepartmentTab(el, "service");
+  const control = lateSend(el);
+  const section = control.closest("section")!;
+  expect(shownPanel(el).contains(section)).toBe(true);
+  expect(section.getAttribute("aria-label")).toBe("Courses and the kitchen");
+  const reminder = section.querySelector("wt-combobox[name=releaseReminderMinutes]")!;
+  expect(reminder.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(control.label).toBe("Manager's PIN to send after a period ends");
+  expect(control.checked).toBe(false);
+  expect(control.getAttribute("aria-invalid")).toBeNull();
+  const hint = "Off: anyone who can send confirms with the kitchen.";
+  expect(control.description).toBe(hint);
+  expect(control.nextElementSibling!.classList.contains("hint")).toBe(true);
+  expect(control.nextElementSibling!.textContent!.trim()).toBe(hint);
+  expect(section.querySelector("[data-field-error=lateSendNeedsManager]")).toBeNull();
+});
+it("shows the late-send switch on for a department the model lists", async () => {
+  const view = structuredClone(model);
+  view.lateSendManagerDepartmentIds = ["d1"];
+  const { el } = await mount(view);
+  expect(lateSend(el).checked).toBe(true);
+  expect(needsClearing(el).checked).toBe(false);
+});
+it("switching the late-send switch on enables Save and saves it with the department", async () => {
+  const { el, writes } = await mount();
+  await selectDepartmentTab(el, "service");
+  expect(save(el).disabled).toBe(true);
+  lateSend(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(save(el).disabled).toBe(false);
+  expect(save(el).variant).toBe("primary");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
+  expect(writes[0]!.body).toMatchObject({ lateSendNeedsManager: true, needsClearing: false });
+  await expect.poll(() => save(el).disabled).toBe(true);
+});
+it("a refusal naming the late-send switch, sent while Details shows, brings back Service and marks it", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "management.request_invalid",
+    params: { field: "lateSendNeedsManager" },
+  });
+  await change(el, "name", "Revised");
+  expect(el.tab).toBe("details");
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("service");
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
+    "needs fixing",
+    undefined,
+  ]);
+  const control = lateSend(el);
+  expect(shownPanel(el).contains(control)).toBe(true);
+  expect(control.getAttribute("aria-invalid")).toBe("true");
+  expect(control.description).toBe(
+    `${REFUSED} Off: anyone who can send confirms with the kitchen.`,
+  );
+  expect(
+    shownPanel(el).querySelector("[data-field-error=lateSendNeedsManager]")!.textContent!.trim(),
+  ).toBe(REFUSED);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(control);
+  expect(needsClearing(el).getAttribute("aria-invalid")).toBeNull();
+});
+it("reads the late-send switch in Spanish", async () => {
+  setLocale("es");
+  const { el } = await mount();
+  const es = VENUE_SERVICE_STRINGS.es;
+  expect(lateSend(el).label).toBe(es["venue.late_send_needs_manager"]);
+  expect(lateSend(el).nextElementSibling!.textContent!.trim()).toBe(
+    es["venue.late_send_needs_manager_hint"],
   );
 });
 type Reminder = HTMLElementTagNameMap["wt-combobox"];

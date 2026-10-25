@@ -15,6 +15,7 @@ const model: VenueServiceView = {
   floorZones: [],
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };

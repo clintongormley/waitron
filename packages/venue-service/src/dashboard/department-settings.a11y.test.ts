@@ -116,6 +116,7 @@ const model: VenueServiceView = {
   },
   releaseReminderMinutesByDepartment: {},
   needsClearingDepartmentIds: [],
+  lateSendManagerDepartmentIds: [],
   serviceSteps: [],
   courses: [],
 };
@@ -223,6 +224,37 @@ describe.each(["light", "dark"] as const)("department-settings %s", (theme) => {
         )
         .toContain("This value was not accepted");
     }
+    await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("department-settings late send (%s)", (theme) => {
+  it.each(["late-send-off", "late-send-on"] as const)("%s", async (state) => {
+    setLocale("en");
+    const el = (await mountThemed(
+      "<department-settings></department-settings>",
+      theme,
+    )) as HTMLElementTagNameMap["department-settings"];
+    el.model = {
+      ...structuredClone(model),
+      lateSendManagerDepartmentIds: state === "late-send-on" ? ["d1"] : [],
+    };
+    el.departmentId = "d1";
+    el.api = new VenueServiceApi((async (path) =>
+      path.endsWith("/profiles")
+        ? [{ id: "p1", name: "Restaurant counter" }]
+        : {
+            departmentId: "d1",
+            receivingProfileId: "p1",
+            destinationDepartmentIds: ["d2"],
+          }) as DashboardRequest);
+    await el.updateComplete;
+    await selectDepartmentTab(el, "service");
+    const control = el.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
+      "wt-switch[name=lateSendNeedsManager]",
+    )!;
+    expect(control.checkVisibility()).toBe(true);
+    expect(control.checked).toBe(state === "late-send-on");
     await expectNoA11yViolations(host);
   });
 });

@@ -48,6 +48,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       hours: [],
       readiness: [],
       needsClearingDepartmentIds: [],
+      lateSendManagerDepartmentIds: [],
       serviceSteps: [],
       courses: [],
     };
@@ -97,6 +98,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       readiness: [],
       releaseReminderMinutesByDepartment: {},
       needsClearingDepartmentIds: [],
+      lateSendManagerDepartmentIds: [],
       serviceSteps: [],
       courses: [],
     };

@@ -32,6 +32,7 @@ function view(): VenueServiceView {
     readiness: [],
     releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
+    lateSendManagerDepartmentIds: [],
     serviceSteps: [],
     courses: [],
   };
@@ -506,6 +507,7 @@ it.each(["success", "failure"] as const)(
           paidWhen: "prepay",
           collectionNumber: "none",
           needsClearing: false,
+          lateSendNeedsManager: false,
           releaseReminderMinutes: null,
         },
       ],

@@ -21,6 +21,7 @@ function model(name = "Restaurant"): VenueServiceView {
     readiness: [],
     releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
+    lateSendManagerDepartmentIds: [],
     serviceSteps: [],
     courses: [],
   };

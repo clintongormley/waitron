@@ -29,6 +29,7 @@ function model(count = 2): VenueServiceView {
     readiness: [],
     releaseReminderMinutesByDepartment: {},
     needsClearingDepartmentIds: [],
+    lateSendManagerDepartmentIds: [],
     serviceSteps: [],
     courses: [],
   };
