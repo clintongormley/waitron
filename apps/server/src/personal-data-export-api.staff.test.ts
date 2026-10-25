@@ -288,7 +288,8 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
     ["en-GB", "en"],
   ] as const) {
     it(`writes the README in the venue's language (${venueLocale}) when she has none saved`, async () => {
-      const response = await ask(staffPath(ids.otherAdmin), tokens.admin, { venueLocale });
+      const browser = { "accept-language": language === "es" ? "en-GB" : "es-ES" };
+      const response = await ask(staffPath(ids.otherAdmin), tokens.admin, { venueLocale }, browser);
       expect(response.status).toBe(200);
       expect(subjects.map((s) => s.language)).toEqual([language]);
       const files = await unzipped(response);
@@ -331,15 +332,22 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
     expect(subjects.map((s) => s.personId)).toEqual([ids.marta]);
   });
 
-  it("leaves the admin session's last-seen time as it was", async () => {
+  it("changes no row, not the admin session's last-seen time nor a waiting change", async () => {
     suite.db
       .update(managementSessions)
       .set({ lastSeenAt: new Date(Date.now() - 5 * 60_000).toISOString() })
       .where(eq(managementSessions.tokenHash, hashSessionToken(tokens.admin)))
       .run();
+    suite.db.run(
+      sql`insert into change_log (id, payload) values ('pd1', '{"resource":"zz","id":"1"}')`,
+    );
+    const changes = () => suite.db.all<{ n: number }>(sql`select total_changes() as n`)[0]!.n;
     const before = lastSeen(tokens.admin);
+    const changesBefore = changes();
     expect((await ask(staffPath(ids.marta), tokens.admin)).status).toBe(200);
     expect(lastSeen(tokens.admin)).toBe(before);
+    expect(changes()).toBe(changesBefore);
+    expect(suite.db.all(sql`select id from change_log`)).toEqual([{ id: "pd1" }]);
   });
 
   it("carries none of her hashes, nor the admin's session token hash", async () => {
