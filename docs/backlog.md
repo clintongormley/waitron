@@ -4454,9 +4454,6 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 - **A1089: a repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
   [Audit](backlog/self-service-refusals.md#restore-start).
 
-- **A1089: an effective backup-key mismatch needs configuration guidance.** Explain which administrator action addresses conflicting effective configuration; preserve accurate key status after a partial write.
-  [Audit](backlog/self-service-refusals.md#backup-key).
-
 - **A1089: backup preparation refusals need disk and missing-file remedies.** Replace both named backup_stop support substitutions and its generic fallback. Establish safe cleanup/recovery for each cause; no blanket deletion or replacement private keys.
   [Audit](backlog/self-service-refusals.md#backup-preparation).
 

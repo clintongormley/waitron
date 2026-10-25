@@ -673,7 +673,13 @@ changes take their required review and existing protected-writer approvals.
 
 ### backup-key
 
-**An effective backup-key mismatch needs configuration guidance.** Explain which administrator action addresses conflicting effective configuration; preserve accurate key status after a partial write.
+2026-10-25: the Backups refusal now asks the box's administrator to check its backup configuration
+before retrying, in English and Spanish. The browser cases exercise both applying settings and
+changing the key, retaining the displayed status after refusal and allowing a subsequent successful
+submission. The [recovery guide](../../apps/server/src/guide/en/backup-recovery.md#proof) tells you to
+keep both key records; the refusal does not establish which key opens a backup. Key persistence,
+effective-key checks and status handling are unchanged. The original source audit above records
+the earlier wording.
 
 ### restore-start
 

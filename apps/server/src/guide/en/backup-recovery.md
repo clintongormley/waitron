@@ -36,6 +36,10 @@ location, date and key name. Check those details before continuing.
 Opening a backup pauses ordinary setup even if the key is refused. You can retry recovery here.
 To return to ordinary setup, restart the box; going back or refreshing the page does not resume it.
 
+If **Backups** says the saved key did not take effect, ask the box's administrator to check its
+backup configuration before trying again. Keep both the previous key and the key you just saved;
+the refusal does not confirm which key will open a backup.
+
 ## Make the new series {#series}
 
 Use the recovery controls below the authenticated details. Enter the matching key again, confirm
