@@ -2789,9 +2789,13 @@ no short name**.
     `shortName` is the marked table's trimmed short name.
 
   Like the Name's check it runs at the first Save and then follows the draft
-  (`#followMark`, `floor-plan-editor.ts:752-771`). The input has **no `maxlength`**: that
-  counts UTF-16 units, so it would cut a five-character "é…" (ten units) that the shared
-  rule accepts. **Why only the zone:** the dashboard has no other zone's short names
+  (`#followMark`, `floor-plan-editor.ts:752-771`). The input has **no `maxlength`**: a browser counts that in UTF-16
+  code units. An "é" typed or pasted decomposed, `"e\u0301"` ("e" and a combining accent), is two
+  units but one character after `normalize("NFC")`, so `maxlength=5` would cut
+  `"e\u0301".repeat(5)` (ten units), which the shared rule accepts as five characters (ran: `node -e`
+  → `.length` 10, NFC code points 5). A precomposed `"\u00e9"` is one unit, so a test written
+  with it could not tell units from characters; the tests write the decomposed form with its
+  escape. **Why only the zone:** the dashboard has no other zone's short names
   (`DashboardTable`, `client.ts:675-681`). The server refuses those clashes with the table's
   name (D6).
 - **D5. Other zones are checked by the server's refusal only; no read changes.** Showing
@@ -2835,14 +2839,26 @@ no short name**.
   - **Automatic:** under today's preview, a second line `[data-short-preview]`, "Short names: T11
     to T15" / «Nombres cortos: T11 a T15». It uses the existing `name_range` for two or more and
     the single short name for one. The proposals are of the automatic names. There is no
-    per-table field: up to 100 tables, and Custom exists for choosing. Clashes are caught by D4's
-    check and D6's refusal once the tables are in the draft. **Why a second line:** the
+    per-table field: up to 100 tables, and Custom exists for choosing. **The dialog checks them at
+    Save**, by `shortNameKey`, against the draft's short names and each other: the first clash is
+    refused beside **Prefix**, the field that changes them, "{takenBy} already uses {shortName}",
+    with the bottom message, and nothing is added (design-system.md → Forms: an invalid
+    submission explains itself beside the bad field). Example: the demo's Terrace holds "T1"–"T5"
+    (`apps/server/scripts/demo-seed/floor.ts:140-176`, read). No label there starts "Terrace ",
+    so Add tables opened there names "Terrace 1" (`automaticNames`,
+    `packages/ui/src/floor-plan-geometry.ts:337-352`), previews "Short names: T1", and Save is
+    refused "T1 already uses T1" beside Prefix; with Prefix "Window" it adds "Window 1" / "W1".
+    Without this check the editor would take the tables and then mark the clashes one per Save
+    (D4). Other zones' clashes stay the server's (D5). **Why a second line:** the
     preview's existing checks (`floor-plan-add-tables.test.ts:116-142`, `:333-338`) stay as
     they are.
   - **Custom:** each `Name n` gets a `Short name n` («Nombre corto {n}») beside it in one row,
-    `name="short-name"`, `required`, following its name (D3). Checked at Save: blank and too long
-    as D4; repeated (by key) against the draft's short names and earlier entries of the batch →
-    "{takenBy} already uses {shortName}".
+    `name="short-name"`, `required`, with the same placeholder as the panel's, "Shown where space
+    is tight" (the hint is the placeholder, D8), following its name (D3). Checked at Save: blank
+    and too long as D4; repeated (by key) against the draft's short names and earlier entries of
+    the batch → "{takenBy} already uses {shortName}", where `takenBy` for an earlier entry is
+    `tableName` of it, so a blank earlier name reads "Unnamed" («Sin nombre»,
+    `floor-plan-draft.ts:43-45`) rather than leaving the sentence without a subject.
   - `addTables` takes an optional `shortName` per table, defaulting to the name's proposal
     (Automatic passes none, Custom passes the typed values).
 - **D10. Add joined table: Short name under Name, required, following the name.** `JoinedForm`
@@ -2853,17 +2869,25 @@ no short name**.
   (`draftScopeFor`, `floor-plan-editor.ts:472-480`) asks about it. `trimLabels` trims a short name
   sent padded, as it trims a label (the server stores it trimmed, `table-short-names.ts:44`), so
   the saved draft equals the next read. The dialogs' `sameForm` compare short names.
-- **D12. A1110: the dashboard refuses a "+" in any short name it would save, whether typed or
-  proposed.** Own last task (Task 7), droppable. What the proposal gives (ran, the probe's
+- **D12. A1110: the dashboard refuses a "+" in a short name it would save that differs from
+  the table's stored one: typed, or a proposal for a table stored with none, or any new
+  table's.** Own last task (Task 7), droppable. What the proposal gives (ran, the probe's
   `proposeShortName`): "1+2" → "1+2" (four characters or fewer are kept whole), "T1+2" → "T1+2",
   "T1+T2" → "T2", "Table 1+2" → "T12", "10+11" → "111". So refusing "+" only in a **typed**
   short name (A1110's option a) would leave a table named "1+2" with the short name "1+2", which
   reads exactly like tables 1 and 2 joined today ("1+2", `mergeLabel`,
   `packages/ui/src/components/wt-floor-map.ts:144-145`; a party at two tables reads the same
-  way, `apps/till/src/state/table-signals.ts:85`). The recommendation therefore refuses it
-  wherever the dashboard would send it. A table named "1+2" shows its proposal "1+2" refused
-  under the field, and the person types one, such as "12" (design §3.7: nothing picks another
-  silently). Message "Leave out +: it marks joined tables." / «Quita el +: marca mesas unidas.»
+  way, `apps/till/src/state/table-signals.ts:85`). The recommendation therefore refuses a proposal
+  too: a table named "1+2" with no stored short name shows its proposal "1+2" refused under the
+  field, and the person types one, such as "12" (design §3.7: nothing picks another silently).
+  **A stored "+" is left alone:** slice 1's save stored "1+2" as the proposal of a table named
+  "1+2" saved with none sent, and the seed, the API and a configuration file still can; refusing
+  it on every save would hold Save off for every later edit of that zone until someone retyped a
+  table they never touched. So `DraftTable` gains `savedShortName?: string`, set by
+  `draftFromPlan` only when the plan read's `shortName` is not `null`, never sent and not compared
+  by `sameTable` (like `keptSize`). The check refuses "+" only when the trimmed short name differs
+  from `savedShortName`. A saved joined table named after its parts ("1+2") is probably the
+  commonest source. Message "Leave out +: it marks joined tables." / «Quita el +: marca mesas unidas.»
   The server, the proposal function and the configuration import are unchanged: a seed or an API
   call can still store one (a residual, Task 8's backlog step). **Why this default:** it fixes
   every tight place at once (slices 3, 8b and 12b read the same short name, slice 1 D8). It
@@ -2872,9 +2896,13 @@ no short name**.
 - **D13. A1103 is not fixed here.** The new field's refusal reaches the screen by the same path
   as Name's (`#selectFlagged` opens the phone sheet over the panel), so it may meet A1103 (a
   refused field left half under the sheet's heading at 390 px). The code that scrolls the field
-  was not found in the editor or in `wt-sheet`: no `scrollIntoView` or `scrollTop` in either
-  (ran: `grep -rn "sticky\|scrollIntoView\|scrollTop"` over `floor-plan*.ts` and
-  `wt-sheet.ts`, nothing). Fixing it needs that cause found first. The LOOK (Task 9) shoots
+  was not found: nothing in the editor, its panels or `wt-sheet` scrolls or focuses it (ran:
+  `grep -rn "sticky\|scrollIntoView\|scrollTop"` over `floor-plan*.ts` and `wt-sheet.ts`, and
+  `grep -n "focus(\|focusFirstInvalid\|scrollIntoView"` over `floor-plan-editor.ts`,
+  `floor-plan-table-panel.ts`, `floor-plan-tables-panel.ts` and `wt-sheet.ts`: nothing). The
+  canvas's one focus call passes `preventScroll: true`
+  (`packages/ui/src/components/wt-floor-plan-canvas.ts:1053`). So the browser is not scrolling a
+  focused field into view; the cause is still unlocated, and fixing it needs it found first. The LOOK (Task 9) shoots
   the Short name refusal at 390 px, and Task 8 adds what it shows to A1103's entry.
 
 ### Changed test checks (from the probes; the implementer confirms each)
@@ -2882,22 +2910,25 @@ no short name**.
 **Probe 1 (ran): the types only.** `FloorPlan`'s tables gain `shortName: string | null`,
 `FloorPlanSave`'s `shortName: string`, `DraftTable`'s `shortName: string`. Then `pnpm --filter
 @waitron/dashboard typecheck` reported **75 errors**: 5 in `floor-plan-draft.ts` (the functions
-Task 1 changes) and 70 in 15 test files, every one a fixture missing `shortName` (`tsc.txt`):
-`api/client.test.ts` (1), `floor-plan-add-joined-table.test.ts` (13),
-`floor-plan-add-joined-table.unsaved.test.ts` (1), `floor-plan-add-tables.test.ts` (1),
-`floor-plan-add-tables.unsaved.test.ts` (1), `floor-plan-draft.test.ts` (8),
+Task 1b changes) and 70 in 15 test files, every one a fixture missing `shortName` (`tsc.txt`).
+**Probe 1a (ran): `FloorPlan`'s `shortName: string | null` alone** → **46 errors, all in 8 test
+files, none in a source file** (`tsc-1a.txt`): `floor-plan-draft.test.ts` (7),
 `floor-plan-editor.a11y.test.ts` (5), `floor-plan-editor.deleted-zone.test.ts` (1),
 `floor-plan-editor.refusals.test.ts` (10), `floor-plan-editor.save.test.ts` (9),
 `floor-plan-editor.test.ts` (10), `floor-plan-editor.unsaved.test.ts` (1),
-`floor-plan-table-panel.test.ts` (7), `floor-plan-tables-panel.a11y.test.ts` (1),
-`floor-plan-tables-panel.test.ts` (1). These are **Fixture-only** (Task 1).
+`floor-plan-table-panel.test.ts` (3). These are **Fixture-only, Task 1a**. The other 24 are
+**Fixture-only, Task 1b**: `api/client.test.ts` (1), `floor-plan-add-joined-table.test.ts` (13),
+`floor-plan-add-joined-table.unsaved.test.ts` (1), `floor-plan-add-tables.test.ts` (1),
+`floor-plan-add-tables.unsaved.test.ts` (1), `floor-plan-draft.test.ts` (1),
+`floor-plan-table-panel.test.ts` (4), `floor-plan-tables-panel.a11y.test.ts` (1),
+`floor-plan-tables-panel.test.ts` (1).
 
 **Probe 3 (ran): D2's read and send, and new tables carrying their proposal.** `shortName`
 optional so no fixture changed, `draftFromPlan` filling stored-or-proposal, `saveFromDraft`
 sending it trimmed, `addTables` and `addJoinedTable` setting the proposal. Then
 `pnpm exec vitest run src/screens/floor-plan` in `apps/dashboard` →
 `Test Files 4 failed | 11 passed (15)`, `Tests 10 failed | 467 passed (477)`. The ten, each
-failing only on the new key, all Task 1, Reason D2 (or D9/D10 for an added table):
+failing only on the new key, all Task 1b, Reason D2 (or D9/D10 for an added table):
 - `floor-plan-draft.test.ts`: "keys every master table by id" (`:132`; each table read gains
   `shortName`, here "T9" and "T1", the proposals of fixture tables with none); "sends a save with
   a key per table" (`:160`); "never sends a live-table adoption field for an unsaved draft table"
@@ -2913,6 +2944,19 @@ failing only on the new key, all Task 1, Reason D2 (or D9/D10 for an added table
   at the first free spot" (`:243`): the added table gains `shortName: "LT"`.
 
 `src/api/client.test.ts` passed in probe 3's first run, with it included (`run1.txt`: 16 files).
+
+**Probe 4 (ran): probe 3 plus D4's short-name checks in `checkDraft` and D9's Automatic check in
+Add tables.** `pnpm exec vitest run src/screens/floor-plan` → `Test Files 5 failed | 10 passed
+(15)`, `Tests 11 failed | 466 passed (477)` (`run4.txt`): probe 3's ten and one more, which
+probe 3 could not show because it had no D4:
+- `floor-plan-editor.test.ts` "gives added tables keys no draft table holds, through saves, undo
+  and redo" (`:930-981`). Its fixture holds "T1" and "T2" (`terrace()`, `:38`, `:48`) in a zone
+  named "Terrace", so `addViaDialog` (`:884-889`) adds "Terrace 1" and "Terrace 2", proposing
+  "T1" and "T2": D9's check refuses the add (probe 4 printed `[ 'm1', 'm2' ]` against `[ 'm1',
+  'm2', 'new:1', 'new:2' ]`), and without D9's check D4's would stop the Save and the "m5" poll
+  would time out. **Change (Task 2, Reason D4):** `addViaDialog` sets Prefix "Window" before
+  confirming, and the mocked saved plan's m5 and m6 are labelled "Window 1" and "Window 2"
+  (`:940-961`). Every assertion stays as it is. The probe ran that change: `Tests 1 passed`.
 
 **Probe 2 (ran): a bare Short name input in the panel and in Add joined table**, on top of probe
 3's read and send. Three more failures, each a list of field names gaining `"short-name"` after
@@ -2936,38 +2980,62 @@ Any other failure, in any suite a task names, is a STOP.
 ### Review focus (inputs the spec implies and today's tests may not pin)
 
 1. **A table stored with no short name whose proposal another zone holds** (made before
-   slice 1, or "Table 1" beside another zone's "Terrace 1"): the field shows "T1", and saving
-   any change to the zone is refused "Terrace 1 already uses T1" under that table's field, with
+   slice 1, or "Table 3" beside another zone's "Terrace 3"): the field shows "T3", and saving
+   any change to the zone is refused "Terrace 3 already uses T3" under that table's field, with
    Save still enabled (D2, D6; Task 4 case 4).
 2. **A rename after a typed short name, and after an automatic one**: "Tb1" stays; "T1" follows
    to "T2"; a table whose stored short name was `null` follows too (D3; Tasks 2, 3).
 3. **A clash that differs only in case inside the zone**: "t1" beside "T1" is marked at Save
    (D4, by `shortNameKey`; Task 2 case 5); the server's refusal naming "t9" finds the entry that
    sent "t9" (D6; Task 4 case 3).
-4. **Five characters that are more than five code units**: "é" five times is accepted and
-   six times refused, with no `maxlength` cutting it (D4; Task 2 case 4).
+4. **Five characters that are more than five code units**: decomposed `"e\u0301".repeat(5)`
+   (ten UTF-16 units) is accepted and `.repeat(6)` refused (D4; Task 2 case 4), and typed into
+   the panel it reaches the draft whole, with no `maxlength` cutting it (Task 3 case 9).
 5. **A short name typed with spaces round it**: sent trimmed, and after the save the draft holds
    it trimmed and Save is quiet again (D11; Task 4 case 6).
 
 ---
 
-**Task order and why.** The draft and the types first, with every fixture (Task 1). Then the
+**Task order and why.** The plan read's type and its fixtures first (Task 1a, no behaviour), then
+the draft holding and sending short names with the rest of the fixtures (Task 1b). Then the
 draft's pure rules (Task 2). Then the panel's field (Task 3). Then the editor's marks and the server's
 refusals (Task 4). Then the two dialogs (Tasks 5, 6), the "+" rule (Task 7, droppable), docs
 (Task 8) and the LOOK (Task 9). Each leaves the tree green and is sized well under 100 tool calls.
 The dashboard is a browser package (`grep -c browser apps/dashboard/vitest.config.ts` → 17):
 check free memory first (`memory_pressure | grep free`) and read each run's `Tests` count.
 
-### Task 1: The draft reads, holds and sends every table's short name
+### Task 1a: The plan read's type carries the short name (fixtures only)
 
 **Files:**
 - Modify: `apps/dashboard/src/api/client.ts` (`FloorPlan`'s tables `:693-703`: `shortName: string
-  | null`, documented "null for a table with none"; `FloorPlanSave`'s tables `:714-723`:
+  | null`, documented "null for a table with none"; the server already sends it,
+  `apps/server/src/floor-plan.ts:31`)
+- Test: the 8 files of probe 1a (Fixture-only)
+
+Nothing reads the field yet, so no behaviour changes and no test is written first; this task
+only makes the type say what the server sends, so Task 1b starts from a small error list.
+
+- [ ] **Step 1:** add the field; `pnpm --filter @waitron/dashboard typecheck 2>&1 | grep "error TS"
+  > <scratch outside the worktree>/dash-tsc-1a.txt`; expect probe 1a's 46 sites in its 8 test
+  files and no source file (a source error is a STOP).
+- [ ] **Step 2: Fixture-only edits, by script** (kept outside the worktree; read its diff): each
+  listed plan-read literal (it has `partIds`) gets `shortName: null` beside its `label`, a table
+  with none.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/dashboard typecheck` (0 errors), then
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan`: all pass, unchanged
+  (probe 3's baseline: 15 files).
+- [ ] **Step 4:** eslint the changed files; `pnpm format:check`; ledger (the Fixture-only files);
+  `git commit -s -m "A797-2: the floor-plan read's type carries the short name"`
+
+### Task 1b: The draft reads, holds and sends every table's short name
+
+**Files:**
+- Modify: `apps/dashboard/src/api/client.ts` (`FloorPlanSave`'s tables `:714-723`:
   `shortName: string`), `apps/dashboard/src/screens/floor-plan-draft.ts` (`DraftTable` `:9-21`;
   `TablePatch` `:55` gains `"shortName"`; `draftFromPlan` `:57-71`; `saveFromDraft` `:73-86`;
   `addTables` `:278-300`; `addJoinedTable` `:302-324`)
 - Test: `apps/dashboard/src/screens/floor-plan-draft.test.ts` (new cases; seven changed checks),
-  and the Fixture-only and changed-check files from probes 1 and 3
+  and Task 1b's Fixture-only files (probe 1) and changed-check files (probe 3)
 
 **Interfaces:**
 - Produces: `DraftTable.shortName: string`;
@@ -2989,15 +3057,13 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
   Then the seven changed checks in this file (probe 3) gain `shortName` exactly.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-draft.test.ts`.
 - [ ] **Step 3: Implement** D2 in the types and the draft functions above.
-- [ ] **Step 4: Fixture-only edits.** `pnpm --filter @waitron/dashboard typecheck 2>&1 | grep
-  "error TS" > <scratch outside the worktree>/dash-tsc.txt` lists the probe 1 sites. In each
-  literal, beside its `label`: a **plan-read** table (it has `partIds`) gets `shortName: null`, a
-  table with none, so the draft proposes from its label, which is what probe 3 ran. A **draft**
-  table (it has `parts`) gets `shortName` equal to `proposeShortName(label)`, written as a
+- [ ] **Step 4: Fixture-only edits, by script** (kept outside the worktree; read its diff).
+  `pnpm --filter @waitron/dashboard typecheck 2>&1 | grep "error TS" > <scratch outside the
+  worktree>/dash-tsc.txt` lists probe 1's remaining 24 sites. In each, beside its `label`, a
+  **draft** table (it has `parts`) gets `shortName` equal to `proposeShortName(label)`, written as a
   literal ("T1" for "T1", "C3" for "Counter 3", "LT" for "Long table"). In a builder, use its
   label parameter through `proposeShortName` imported from `@waitron/shared`. The
-  `saveFloorPlan` body in `api/client.test.ts:1536` gets `shortName: "1"`. A small script over
-  the error list is fine, kept outside the worktree; read its diff. Then the three changed checks
+  `saveFloorPlan` body in `api/client.test.ts:1536` gets `shortName: "1"`. Then the three changed checks
   outside this file (probe 3: `floor-plan-editor.save.test.ts:782`,
   `floor-plan-add-tables.test.ts:145`, `floor-plan-add-joined-table.test.ts:243`) gain their
   `shortName`.
@@ -3012,7 +3078,8 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
 **Files:**
 - Modify: `apps/dashboard/src/screens/floor-plan-draft.ts` (`followName`, `renameTable` (new);
   `sameTable` `:127-149`; `DraftProblem` and `checkDraft` `:162-174`)
-- Test: `apps/dashboard/src/screens/floor-plan-draft.test.ts`
+- Test: `apps/dashboard/src/screens/floor-plan-draft.test.ts`; `apps/dashboard/src/screens/floor-plan-editor.test.ts`
+  (one changed check, probe 4)
 
 **Interfaces:**
 - Produces:
@@ -3044,22 +3111,30 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
   3. "a changed short name is a changed draft": `sameDraft` false after `patchTable({ shortName:
      "Tb1" })`, true after patching it back (D11).
   4. `it.each` "checkDraft marks a short name that is %s": `""` and `"   "` →
-     `short_name_missing`; `"ABCDEF"` and `"é".repeat(6)` → `short_name_too_long`;
-     `"ABCDE"` and `"é".repeat(5)` → `null` (Review focus 4).
+     `short_name_missing`; `"ABCDEF"` and `"e\u0301".repeat(6)` (decomposed, twelve UTF-16 units,
+     six characters) → `short_name_too_long`; `"ABCDE"` and `"e\u0301".repeat(5)` (ten units, five
+     characters) → `null` (Review focus 4). Write the escape, not a typed "é".
   5. "checkDraft marks the later of two tables sharing a short name, ignoring case": "Terrace 1"
      (`"T1"`) then "Table 1" (`"t1"`) → `{ key: <Table 1's>, problem: "short_name_repeated",
      takenBy: "Terrace 1", shortName: "t1" }` (Review focus 3).
   6. "checkDraft reports a missing name before a missing short name, and a short name before too
      few parts": the order D4 gives.
+  Changed check (probe 4): `floor-plan-editor.test.ts` "gives added tables keys no draft table
+  holds, through saves, undo and redo" (`:930-981`): `addViaDialog` sets Prefix "Window", and the
+  mocked saved plan's m5 and m6 are "Window 1" and "Window 2". Reason D4: the tables it added,
+  "Terrace 1" and "Terrace 2", propose the fixture's own "T1" and "T2". Its assertions stay as
+  they are. Ledger.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-draft.test.ts`.
 - [ ] **Step 3: Implement** D3, D4 and D11's `sameTable`, using `proposeShortName`,
   `shortNameKey`, `shortNameLength` and `SHORT_NAME_MAX` from `@waitron/shared`.
 - [ ] **Step 4: Run; expect PASS**, then `pnpm --filter @waitron/dashboard typecheck`. The editor
   compiles unchanged (`#markProblem`, `floor-plan-editor.ts:723-735`, takes the wider type); until
-  Task 4 it would mark a short-name problem on the Name field with the generic sentence, which no
-  fixture reaches.
-  Then `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan`.
-- [ ] **Step 5:** eslint; format check; ledger; `git commit -s -m "A797-2: a short name follows its name until typed, and the editor checks short names"`
+  Task 4 it marks a short-name problem on the Name field with the generic sentence.
+- [ ] **Step 5: Run every floor-plan suite with D4 in place, before trusting the changed-check
+  list:** `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan`. Expected:
+  all pass once the changed check above is made (probe 4 found it as the only D4 failure). Any
+  other failure is a STOP: report it with its message; do not edit it.
+- [ ] **Step 6:** eslint; format check; ledger; `git commit -s -m "A797-2: a short name follows its name until typed, and the editor checks short names"`
 
 ### Task 3: The table panel's Short name field
 
@@ -3085,8 +3160,9 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
      "Tb1" (Review focus 2).
   4. Panel: "shows a refusal under Short name": `fieldErrors` `[{ field: "shortName", message:
      "Terrace 1 already uses T1" }]` → that field's `error`.
-  5. Panel: "names Short name in Spanish": «Nombre corto», placeholder «Se muestra donde hay poco
-     espacio».
+  5. Panel: "names Short name in Spanish": the label and placeholder read from the strings file,
+     `es["floor_plan_editor.short_name"]` and `es["floor_plan_editor.short_name_hint"]` (CLAUDE.md
+     §3: a test of a non-English screen reads its expected text from the strings file).
   6. Editor: "a joined table's form fits its reserved area without scrolling, at 1280 and 390
      px": select the fixture's joined table (`counters()`, `:1315`); the `.table-slot`'s
      `scrollHeight` ≤ `clientHeight` + 1. Before D8's height it scrolls.
@@ -3095,6 +3171,9 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
      change closes without asking" (`:192`) do for a move.
   8. Unsaved: "Undo takes back a typed short name": after Undo the field shows the old value and
      Save is quiet.
+  9. Panel: "a short name of five characters reaches the draft whole, however many code units":
+     typing `"e\u0301".repeat(5)` sends a draft whose `shortName` is that string, unshortened
+     (D4: no `maxlength`; Review focus 4).
   Changed checks (probe 2): "lays out Name, then Seats beside Shape and Moveable, and nothing more"
   (`:127`), renamed and gaining `"short-name"`; "a joined table's form shows Made of…" (`:459`),
   gaining `"short-name"`. Ledger.
@@ -3125,17 +3204,20 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
      message "Correct the highlighted fields to continue.", Save disabled; type "T2" → mark gone,
      Save enabled.
   2. "two tables sharing a short name: the later is marked with the earlier's name": "T1" and
-     "t1" → "T1 already uses t1" on the second, Spanish «T1 ya usa t1» read from `es` (the file
-     already imports it, `:11`).
+     "t1" → "T1 already uses t1" on the second; in Spanish the sentence `es` gives with the same
+     values (the file already imports `es`, `:11`).
   3. "a taken short name lands under the table that sent it, naming the table holding it":
      `refusing({ code: "table.short_name_taken", params: { shortName: "t9", takenBy: "Terrace 9",
      field: "shortName" } })`, the draft's m9 sending `"t9"`: m9 selected, `fieldError` `{ key:
      "m9", field: "shortName", message: "Terrace 9 already uses t9" }`, Save **enabled**
-     (D6). Spanish: «Terrace 9 ya usa t9».
+     (D6). In Spanish the message is `fill(es["floor_plan_editor.short_name_taken"], …)` with the
+     same values, read from the strings file.
   4. "a stored table with no short name sends its proposal, and a refusal of it lands under its
-     field": a plan table `{ label: "Table 1", shortName: null }`; move another table and Save;
-     the body sends `"T1"`; refused with `takenBy: "Terrace 1"` → marked under Table 1's Short
-     name (Review focus 1).
+     field": a plan table `{ label: "Table 3", shortName: null }` added to the file's plan, whose
+     tables are "T1", "T2" and "T9" (`plan()`, `:37-75`), so its proposal "T3" passes the editor's own
+     check; move another table and Save; the body sends `"T3"`; refused with `takenBy: "Terrace
+     3"` → marked under Table 3's Short name (Review focus 1). ("Table 1" would propose the
+     fixture's own "T1", and the editor's check would stop the save before the server.)
   5. "a taken short name no sent table carries goes in the bottom message and selects nothing".
   6. In `save.test.ts`: "a short name sent with spaces round it is kept trimmed, and Save is
      quiet after" (Review focus 5).
@@ -3182,6 +3264,7 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
 **Files:**
 - Modify: `apps/dashboard/src/screens/floor-plan-add-tables.ts` (`AddForm` `:29-37` gains
   `shortNames: string[]`, resized with `names` in `#edit` `:153-163`; `AddErrors` gains
+  `prefix: string` (D9's Automatic check, shown as the Prefix field's `error`) and
   `shortNames: string[]`; `sameForm` `:47-57`; `#errors` `:173-192`; `#add` `:198-224`; a second
   preview line after `:302`; a `Short name n` beside each `Name n`, `:303-316`),
   `apps/dashboard/src/i18n/strings.ts` (`floor_plan_editor.short_name_n` "Short name {n}" /
@@ -3193,19 +3276,27 @@ check free memory first (`memory_pressure | grep free`) and read each run's `Tes
 - [ ] **Step 1: Failing tests** (the file's fixture `draft`, `:31-38`, Terrace 1/2/10 and Terrace
   bar 3):
   1. "the preview gives the short names the tables will get": count 5 → `[data-short-preview]`
-     reads "Short names: T11 to T15"; count 1 → "Short names: T11"; Spanish «Nombres cortos: T11
-     a T15». The existing preview line is unchanged.
-  2. "automatic names add each table with its proposal": already pinned by Task 1's changed
-     check (`:145`); no new case.
+     reads "Short names: T11 to T15"; count 1 → "Short names: T11"; in Spanish the text built from
+     `es["floor_plan_editor.short_names_preview"]` and `es["floor_plan_editor.name_range"]`. The
+     existing preview line is unchanged.
+  2. "automatic short names the draft already holds are refused beside Prefix": a draft table
+     "Patio" with short name "T11" (the fixture's next automatic name is "Terrace 11") → Save
+     refused, Prefix's `error` "Patio already uses T11", the bottom message, nothing added;
+     Prefix "Window" → added (D9). Mount the dialog with its own draft for this case; the file's
+     shared `draft` stays as it is.
+  Automatic names adding each table with its proposal is already pinned by Task 1b's changed
+  check (`:145`).
   3. "custom naming shows a short name beside each name, following it until typed": three
-     names → three `short-name` fields labelled "Short name 1"…"Short name 3", each `required`;
+     names → three `short-name` fields labelled "Short name 1"…"Short name 3", each `required`
+     and with the placeholder "Shown where space is tight";
      Name 1 "Patio 1" → "P1"; type "Pt1"; Name 1 "Patio 9" → still "Pt1".
   4. "adds the custom short names as typed, trimmed": " Pt1 " → `"Pt1"`.
   5. "a custom short name blank, too long, used by the draft or twice in the batch is refused
      beside its field": `""`, `"ABCDEF"`, `"t1"` (the draft's "Terrace 1" holds "T1") and a
      batch of two "X1"s → "Enter a short name.", "Enter up to 5 characters.", "Terrace 1 already
-     uses t1", and "{first entry's name} already uses X1" on the second; bottom message; nothing
-     added.
+     uses t1", and "Bar 1 already uses X1" on the second of a batch "Bar 1"/"Bar 2" both given
+     "X1"; with the first name left blank the second reads "Unnamed already uses X1"; bottom
+     message; nothing added.
   6. Unsaved: "a typed short name asks before Escape" (as "typed custom names ask before
      Escape…", `:96`).
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-add-tables.test.ts src/screens/floor-plan-add-tables.unsaved.test.ts`.
@@ -3223,8 +3314,10 @@ Built as the recommended default while the owner's answer is awaited. **If the o
 A1110 in the backlog with the answer.
 
 **Files:**
-- Modify: `apps/dashboard/src/screens/floor-plan-draft.ts` (`DraftProblem` gains
-  `"short_name_plus"`, checked after `short_name_too_long`), `floor-plan-editor.ts`
+- Modify: `apps/dashboard/src/screens/floor-plan-draft.ts` (`DraftTable` gains
+  `savedShortName?: string`, set by `draftFromPlan` only from a non-null read, never sent and not
+  compared by `sameTable`; `DraftProblem` gains `"short_name_plus"`, checked after
+  `short_name_too_long`, only for a trimmed short name that differs from `savedShortName`), `floor-plan-editor.ts`
   (`#markProblem`, `tableProblem`), `floor-plan-add-tables.ts` and
   `floor-plan-add-joined-table.ts` (`#errors`), `apps/dashboard/src/i18n/strings.ts`
   (`floor_plan_editor.short_name_plus`: "Leave out +: it marks joined tables." / «Quita el +:
@@ -3233,13 +3326,16 @@ A1110 in the backlog with the answer.
   `floor-plan-add-tables.test.ts`, `floor-plan-add-joined-table.test.ts`
 
 - [ ] **Step 1: Failing tests:**
-  1. Draft: `it.each` "checkDraft refuses a short name holding +: %s": `"T1+T2"`, `"1+2"`, `"+"`
-     → `short_name_plus`; `"T12"` → `null`.
-  2. Editor: "a table named 1+2 shows its proposal 1+2, refused at Save until another is typed":
-     the field reads "1+2"; Save → "Leave out +: it marks joined tables." under Short name; type
+  1. Draft: `it.each` "checkDraft refuses a new or changed short name holding +: %s": `"T1+T2"`,
+     `"1+2"`, `"+"` on a new table → `short_name_plus`; `"T12"` → `null`.
+  2. Draft: "an untouched stored short name with + is left alone, and a changed one is not": a
+     plan table stored `{ label: "1+2", shortName: "1+2" }` → `checkDraft` `null` (its zone still
+     saves); patched to `"1+3"` → `short_name_plus`; patched back to `"1+2"` → `null`.
+  3. Editor: "a table named 1+2 stored with no short name shows its proposal 1+2, refused at Save
+     until another is typed": the field reads "1+2"; Save → "Leave out +: it marks joined tables." under Short name; type
      "12" → saved with `"12"`.
-  3. Each dialog: a typed "A+B" is refused beside its field.
-  4. "the full-width plus is not refused": `"T1＋T2"` (U+FF0B) → `null`. This is a stated
+  4. Each dialog: a typed "A+B" is refused beside its field.
+  5. "the full-width plus is not refused": `"T1＋T2"` (U+FF0B) → `null`. This is a stated
      limit: the till joins names with ASCII "+" only (`mergeLabel`), so only that one reads
      like a join.
 - [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-draft.test.ts src/screens/floor-plan-editor.refusals.test.ts src/screens/floor-plan-add-tables.test.ts src/screens/floor-plan-add-joined-table.test.ts`.
@@ -3278,7 +3374,8 @@ No guide covers the floor-plan editor today (ran: `grep -rn -i "floor plan" apps
 - [ ] **Step 3: design-system.md.** "The form holds Name, then Seats…" becomes "The form holds
   Name, then Short name, then Seats…". Add one sentence: Short name follows Name until it is
   typed, and its hint is its placeholder. Add another: Add tables shows the short names on a
-  second preview line and, with custom names, a Short name beside each Name. The reserved-area
+  second preview line and refuses beside Prefix one the draft already holds, and with custom names
+  puts a Short name beside each Name. The reserved-area
   sentence stays true (D8).
 - [ ] **Step 4: conventions-data.md.** After "A sent one is refused…", add: the dashboard's floor
   plan editor sends a short name for every table (the stored one, else its name's proposal), so
@@ -3314,9 +3411,11 @@ No guide covers the floor-plan editor today (ran: `grep -rn -i "floor plan" apps
     table selected, the bottom message, Save **enabled** (D6); type "Tb1" → saved;
   - **at 390 px, the refused Short name in the phone sheet**: whether its label sits under the
     sheet's heading as A1103 describes for Name (D13). Record it either way;
-  - Add tables → Automatic, count 3: the second preview line "Short names: …";
+  - Add tables → Automatic in Terrace, as it opens: the preview "Short names: T1", and Save
+    refused "T1 already uses T1" beside Prefix (D9); Prefix "Window", count 3: "Short names: W1
+    to W3", added;
   - Add joined table: its Short name field following the name;
-  - with Task 7: a table renamed "1+2" shows "1+2" refused with "Leave out +: …".
+  - with Task 7: Add joined table named "1+2" shows "1+2" refused with "Leave out +: …".
 - [ ] **Step 3: Save** the PNGs under `/Users/clintongormley/waitron-campaign-c/a797-2-shots/`
   (`<step>-<width>-<theme>-<lang>.png`), open each, describe them in the ledger and the PR body,
   and hand Task 8's A1103 sentence its file name.
@@ -3333,8 +3432,8 @@ No guide covers the floor-plan editor today (ran: `grep -rn -i "floor plan" apps
 - PR body. **First line: "No venue reset needed."** Then: **What a person sees** (the Short name
   field in the table form, Add tables and Add joined table; the refusal under it; Save stays
   enabled after a refusal); **Decisions** D1–D13 in one line each; **Changed test checks** (from
-  the ledger: Task 1's ten, Task 3's two, Task 5's one, Task 4's deleted case); **Fixture-only**
-  (Task 1's fifteen files); **Departure from picture 09** (D6: Save not disabled by a refusal);
+  the ledger: Task 1b's ten, Task 2's one, Task 3's two, Task 5's one, Task 4's deleted case);
+  **Fixture-only** (Task 1a's eight files, Task 1b's nine); **Departure from picture 09** (D6: Save not disabled by a refusal);
   **A1110** (D12; Task 7 is its own commit and goes with one revert); **LOOK**.
 - **Owner FYI** (one line each in the PR and the lane's questions file, not questions):
   - D2: a table that has no short name yet shows its automatic one, and a save of its zone is
@@ -3342,8 +3441,12 @@ No guide covers the floor-plan editor today (ran: `grep -rn -i "floor plan" apps
   - D3: a typed short name stays when the table is renamed; an automatic one follows the name.
   - D5: a clash with another zone's table shows only when Save is pressed.
   - D6: after a refusal Save stays pressable (the Forms rule), where picture 09 drew it greyed.
-  - D9: Add tables with automatic names shows the short names but has no field for them; change
-    one in the table's form afterwards.
+  - D9: Add tables with automatic names shows the short names but has no field for them, and
+    refuses beside Prefix any the zone already holds. Opened in the demo's Terrace (tables
+    "T1"–"T5") it proposes "Terrace 1" / "T1" and is refused until the prefix changes; change a
+    short name in the table's form afterwards.
+  - D12 (if Task 7 lands): a short name already saved with "+" stays until someone changes it;
+    only a new or changed one is refused.
 - **Owner question, A1110** (the lane's questions file; the block is in this slice's report to
   the driver).
 - After merge: delete the branch local and remote and check the remote one is gone; update the
