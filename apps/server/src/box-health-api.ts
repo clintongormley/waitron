@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
 import type {
   BootReading,
   ClockWitness,
@@ -16,23 +17,28 @@ import {
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
-import { AppError, diskFullIn } from "@waitron/shared";
+import { AppError, diskFullIn, isUuid } from "@waitron/shared";
 import {
   displayNameOf,
+  readMisdatedEpisode,
   readMisdatedHandled,
   readMisdatedOpen,
   type BoxHealth,
 } from "./box-health.js";
 import { clockChallenges } from "./clock-challenges.js";
+import "./errors.js";
 import type { FreedSpace } from "./free-space-now.js";
 import { invoiceNumberParts } from "./invoice-number-parts.js";
 import type { Logger } from "./logger.js";
+import { misdatedSalesFileName, renderMisdatedSalesCsv } from "./misdated-sales-csv.js";
 import { requestFromBox } from "./request-from-box.js";
 
 export interface BoxHealthApiDeps {
   db: Database;
   readHealth: () => Promise<BoxHealth>;
   freeSpace: (personId: string) => Promise<FreedSpace>;
+  /** The wrongly dated sales download is in the venue's language and names its location. */
+  venue: { locationId: string; language: "en" | "es" };
   /** A seat that cannot confirm a clock stop has no confirmation routes. */
   clockConfirm: {
     backend: FiscalBackend;
@@ -58,6 +64,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "clock.check_expired": 400,
   "clock.unusable": 409,
   "management.request_invalid": 400,
+  "alert.not_found": 404,
 };
 
 /** When a full disk refuses the transaction (its last-seen stamp or its change-log drain), the same
@@ -109,8 +116,8 @@ async function requiredNameOf(tx: Transaction, personId: string): Promise<string
   return name;
 }
 
-/** `GET /api/box/health`, `POST /api/box/free-space` and `GET /api/box/clock-misdated`, all
- * `system.manage`; `POST /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both
+/** `GET /api/box/health`, `POST /api/box/free-space`, `GET /api/box/clock-misdated` and its
+ * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/clock-challenge` and `POST /api/box/clock-confirm`, both
  * `person.admin` and refused on the box itself. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
@@ -176,6 +183,57 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
           return found;
         });
         return c.json({ episodes }, 200);
+      }),
+    );
+  }
+  const misdatedDetail = clockConfirm.backend.misdatedDetail?.bind(clockConfirm.backend);
+  if (misdatedDetail !== undefined) {
+    const downloadRun = createErrorBoundary(STATUS, "box-clock-misdated-download.failed");
+    // One alert's list as a spreadsheet file, open or handled; one that cannot tell has none.
+    app.get("/api/box/clock-misdated/:incidentId/download", (c) =>
+      downloadRun(c, log, async () => {
+        await authorizeSystemManager(deps.db, c);
+        const id = c.req.param("incidentId");
+        // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses.
+        const found = await deps.db.withWriteLock(async () => {
+          const episode = isUuid(id) ? await readMisdatedEpisode(deps.db, id) : null;
+          if (episode === null) return null;
+          const detail = await misdatedDetail(deps.db, episode.confirmationId);
+          if (detail === null) {
+            log("warn", "box-clock-misdated.unknown_confirmation", {
+              confirmationId: episode.confirmationId,
+            });
+            return null;
+          }
+          if (!detail.known) return null;
+          const [location] = await deps.db
+            .select({ name: locations.name })
+            .from(locations)
+            .where(eq(locations.id, deps.venue.locationId));
+          const personId = detail.closing.personId;
+          const confirmedByName = personId === null ? null : await displayNameOf(deps.db, personId);
+          return { episode, detail, venue: location!.name, confirmedByName };
+        });
+        if (found === null) throw new AppError("alert.not_found", { id });
+        const { episode, detail } = found;
+        const bytes = renderMisdatedSalesCsv({
+          venue: found.venue,
+          language: deps.venue.language,
+          confirmedByName: found.confirmedByName,
+          // A closing that lists sales always stores where its list ends.
+          episode: {
+            from: episode.from,
+            fromOffsetMinutes: episode.fromOffsetMinutes,
+            to: episode.to!,
+            toOffsetMinutes: episode.toOffsetMinutes!,
+          },
+          detail,
+        });
+        c.header("Content-Type", "text/csv; charset=utf-8");
+        c.header("Content-Disposition", `attachment; filename="${misdatedSalesFileName(episode)}"`);
+        c.header("Cache-Control", "no-store");
+        c.header("X-Content-Type-Options", "nosniff");
+        return c.body(Uint8Array.from(bytes));
       }),
     );
   }

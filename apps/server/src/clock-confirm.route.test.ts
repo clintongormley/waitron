@@ -45,6 +45,9 @@ import { systemClock } from "./till-backend.js";
 import { writeRefusingDb } from "./testing/write-refusing-db.js";
 import "./errors.js";
 import type { Logger } from "./logger.js";
+import { MISDATED_SALES_WORDS } from "./i18n/misdated-sales.js";
+import { misdatedSalesFileName } from "./misdated-sales-csv.js";
+import { receiptDateTimeNumeric } from "./receipt-dates.js";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -192,7 +195,12 @@ const BOOT: BootReading = { ms: 7_200_000, id: "boot-route-test" };
  * unless `setFromBox(true)`. */
 async function stoppedBox(
   gapMs: number,
-  options: { backend?: FiscalBackend; devMode?: boolean; boot?: BootReading } = {},
+  options: {
+    backend?: FiscalBackend;
+    devMode?: boolean;
+    boot?: BootReading;
+    language?: "en" | "es";
+  } = {},
 ): Promise<Stop> {
   const backend = options.backend ?? venue.backend;
   const sale = await cashSale(venue.appAt(clockAt(nowMs() + 1000)));
@@ -218,6 +226,7 @@ async function stoppedBox(
       db: venue.db,
       readHealth: () => health(),
       freeSpace: () => Promise.reject(new Error("not freed here")),
+      venue: { locationId: venue.cfg.locationId, language: options.language ?? "en" },
       clockConfirm: {
         backend,
         witnesses: () => witnesses.witnesses(),
@@ -1240,6 +1249,7 @@ function boxApp(stop: Stop, db: Database, log: Logger = () => {}): Hono {
       db,
       readHealth: () => stop.health(db),
       freeSpace: () => Promise.reject(new Error("not freed here")),
+      venue: { locationId: venue.cfg.locationId, language: "en" },
       clockConfirm: {
         backend: venue.backend,
         witnesses: () => stop.witnesses.witnesses(),
@@ -1664,5 +1674,244 @@ it("keeps an alert that cannot tell, handled by the box when an earlier start re
     });
   } finally {
     handOpenMisdated(replacedAt);
+  }
+});
+
+/** An open list from an administrator's closing: a stop, its waiting check, and Mario's
+ * confirmation, with every earlier case's open alert handled first. */
+async function listEpisode(
+  options: { language?: "en" | "es" } = {},
+): Promise<{ stop: Stop; confirmationId: string; incidentId: string }> {
+  const stop = await stoppedBox(10 * MINUTE, options);
+  handOpenMisdated(stop.behind);
+  await waitingCheck(stop);
+  const confirmed = await confirm(stop, mario.cookie);
+  expect(confirmed.status).toBe(200);
+  const confirmationId = confirmed.json.confirmationId as string;
+  return { stop, confirmationId, incidentId: misdatedIncident(confirmationId) };
+}
+
+const downloadPath = (incidentId: string) => `/api/box/clock-misdated/${incidentId}/download`;
+
+async function download(app: Hono, incidentId: string): Promise<Response> {
+  return app.request(downloadPath(incidentId), { headers: { cookie: marta.cookie } });
+}
+
+/** The file's lines, each split into its cells; the first line is the header sentence alone. */
+function csvRows(bytes: Uint8Array): string[][] {
+  const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes).slice(1);
+  return text
+    .split("\r\n")
+    .filter((line) => line !== "")
+    .map((line) => line.slice(1, -1).split('","'));
+}
+
+function storedIssueDate(recordId: string): string {
+  const [row] = venue.db.all<{ date: string }>(
+    sql`select fecha_expedicion_factura as date from registros_facturacion where id = ${recordId}`,
+  );
+  return row!.date;
+}
+
+function venueName(): string {
+  const [row] = venue.db.all<{ name: string }>(
+    sql`select name from locations where id = ${venue.cfg.locationId}`,
+  );
+  return row!.name;
+}
+
+it("downloads an open list as a spreadsheet file, row for row with the list, and the same file after its alert is handled", async () => {
+  const { stop, confirmationId, incidentId } = await listEpisode();
+  const listed = (await misdatedOf(stop.app)).lists.find(
+    (list) => list.confirmationId === confirmationId,
+  )!;
+  const open = (await healthOf(stop)).misdatedOpen.find(
+    (entry) => entry.confirmationId === confirmationId,
+  )!;
+
+  const answer = await download(stop.app, incidentId);
+  expect(answer.status).toBe(200);
+  expect(answer.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+  expect(answer.headers.get("content-disposition")).toBe(
+    `attachment; filename="${misdatedSalesFileName(open)}"`,
+  );
+  expect(answer.headers.get("cache-control")).toBe("no-store");
+  expect(answer.headers.get("x-content-type-options")).toBe("nosniff");
+  const bytes = new Uint8Array(await answer.arrayBuffer());
+  expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+
+  const [[sentence], headings, ...rows] = csvRows(bytes);
+  expect(sentence!.startsWith(`${venueName()}: `)).toBe(true);
+  expect(sentence).toContain("(Mario)");
+  expect(sentence).toContain(
+    listed.records.length === 1 ? "One sale" : `${listed.records.length} sales`,
+  );
+  expect(headings).toEqual(Object.values(MISDATED_SALES_WORDS.en.columns));
+  expect(rows).toHaveLength(listed.records.length);
+  rows.forEach((row, index) => {
+    const record = listed.records[index]!;
+    const invoice = invoiceOf(record.recordId);
+    const [year, month, day] = storedIssueDate(record.recordId).split("-");
+    expect(row.slice(0, 5)).toEqual([
+      record.series,
+      String(record.number),
+      `${day}/${month}/${year}`,
+      receiptDateTimeNumeric(invoice.at, "en-GB", invoice.offset),
+      MISDATED_SALES_WORDS.en.unknown,
+    ]);
+  });
+
+  const refused = await send(stop.app, sergio.cookie, "GET", downloadPath(incidentId));
+  expect(refused.status).toBe(403);
+  expect(refused.json).toEqual({
+    code: "authorization.not_permitted",
+    params: { permission: "system.manage" },
+  });
+
+  const handled = await send(
+    stop.app,
+    marta.cookie,
+    "POST",
+    `/management-api/alerts/incidents/${incidentId}/handled`,
+  );
+  expect(handled.status).toBe(204);
+  const afterHandled = await download(stop.app, incidentId);
+  expect(afterHandled.status).toBe(200);
+  expect(new Uint8Array(await afterHandled.arrayBuffer())).toEqual(bytes);
+});
+
+it("downloads the list with Spanish column headings for a Spanish venue", async () => {
+  const { stop, incidentId } = await listEpisode({ language: "es" });
+  const answer = await download(stop.app, incidentId);
+  expect(answer.status).toBe(200);
+  const [, headings] = csvRows(new Uint8Array(await answer.arrayBuffer()));
+  expect(headings).toEqual(Object.values(MISDATED_SALES_WORDS.es.columns));
+});
+
+it("downloads nothing for an id that is not a list alert's: malformed, unknown, another code's, or one that cannot tell", async () => {
+  const { stop, confirmationId, incidentId } = await listEpisode();
+  const params = venue.db.all<{ params: string }>(
+    sql`select params from incidents where id = ${incidentId}`,
+  )[0]!.params;
+  // Another code's alert whose params read as this list's, so only its code tells it apart.
+  const [restarted] = await venue.db
+    .insert(incidentRows)
+    .values({
+      source: jobOrigin("dashboard").source,
+      code: "clock.behind_chain_restarted",
+      params: {
+        ...(JSON.parse(params) as Record<string, unknown>),
+        confirmedBy: "admin",
+        person: "Mario",
+        clockAt: new Date(stop.behind).toISOString(),
+        lastRecordAt: new Date(stop.behind).toISOString(),
+      },
+      severity: "error",
+      detectedAt: new Date(stop.behind).toISOString(),
+      acknowledgedAt: new Date(stop.behind).toISOString(),
+    })
+    .returning({ id: incidentRows.id });
+  expect((JSON.parse(params) as { confirmationId: string }).confirmationId).toBe(confirmationId);
+
+  // A later stop's check closes by itself with AEAT disagreeing, so the box cannot tell.
+  const blind = await stoppedBox(10 * MINUTE);
+  await withTransaction(venue.db, (tx) =>
+    venue.backend.openClockCheck!(tx, {
+      reading: blind.clock.now(),
+      boot: BOOT,
+      nodeId: venue.cfg.nodeId,
+    }),
+  );
+  const endedAt = nowMs() + MINUTE;
+  const cannotTell = await withTransaction(venue.db, (tx) =>
+    venue.backend.closeClockCheckByItself!(tx, {
+      reading: { instant: new Date(endedAt), offsetMinutes: 60 },
+      boot: BOOT,
+      nodeId: venue.cfg.nodeId,
+      witnesses: [
+        {
+          kind: "authority",
+          id: "authority",
+          boxAt: new Date(endedAt).toISOString(),
+          witnessAt: new Date(endedAt + 20 * MINUTE).toISOString(),
+          uncertaintyMs: 0,
+        },
+      ],
+    }),
+  );
+  expect(cannotTell.confirmation?.source).toBe("elapsed");
+  const cannotTellId = misdatedIncident(cannotTell.confirmation!.id);
+
+  try {
+    for (const id of ["not-a-uuid", randomUUID(), restarted!.id, cannotTellId]) {
+      const answer = await send(stop.app, marta.cookie, "GET", downloadPath(id));
+      expect(answer.status).toBe(404);
+      expect(answer.json).toEqual({ code: "alert.not_found", params: { id } });
+    }
+  } finally {
+    handOpenMisdated(endedAt);
+  }
+});
+
+it("logs a list alert whose closing the seat does not know, and downloads nothing for it", async () => {
+  const stop = await stoppedBox(10 * MINUTE);
+  const confirmationId = randomUUID();
+  const from = new Date(stop.behind).toISOString();
+  const [row] = await venue.db
+    .insert(incidentRows)
+    .values({
+      source: jobOrigin("dashboard").source,
+      code: "clock.records_misdated",
+      params: {
+        confirmationId,
+        count: 1,
+        from,
+        fromOffsetMinutes: 60,
+        to: from,
+        toOffsetMinutes: 60,
+        partial: false,
+        unconfirmed: false,
+      },
+      severity: "error",
+      detectedAt: from,
+    })
+    .returning({ id: incidentRows.id });
+  const logged: Parameters<Logger>[] = [];
+  try {
+    const app = boxApp(stop, venue.db, (...entry) => void logged.push(entry));
+    const answer = await send(app, marta.cookie, "GET", downloadPath(row!.id));
+    expect(answer.status).toBe(404);
+    expect(answer.json).toEqual({ code: "alert.not_found", params: { id: row!.id } });
+    expect(logged).toContainEqual([
+      "warn",
+      "box-clock-misdated.unknown_confirmation",
+      { confirmationId },
+    ]);
+  } finally {
+    handOpenMisdated(stop.behind);
+  }
+});
+
+it("downloads a list on a full disk with a change waiting, and leaves the change waiting", async () => {
+  const { stop, incidentId } = await listEpisode();
+  const expected = new Uint8Array(await (await download(stop.app, incidentId)).arrayBuffer());
+  venue.db.run(
+    sql`insert into change_log (id, payload) values ('download-1', '{"resource":"zz","id":"1"}')`,
+  );
+  const changeWaits = () =>
+    venue.db.all<{ id: string }>(sql`select id from change_log where id = 'download-1'`).length;
+  try {
+    const db = writeRefusingDb(venue.db);
+    await expect(withTransaction(db, async () => {})).rejects.toHaveProperty(
+      "code",
+      "storage.disk_full",
+    );
+    const answer = await download(boxApp(stop, db), incidentId);
+    expect(answer.status).toBe(200);
+    expect(new Uint8Array(await answer.arrayBuffer())).toEqual(expected);
+    expect(changeWaits()).toBe(1);
+  } finally {
+    venue.db.run(sql`delete from change_log where id = 'download-1'`);
+    handOpenMisdated(stop.behind);
   }
 });

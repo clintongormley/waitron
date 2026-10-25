@@ -2413,6 +2413,7 @@ async function bootServer(
     app,
     {
       db,
+      venue: { locationId: till.locationId, language: venueLocale === "es-ES" ? "es" : "en" },
       readHealth: () =>
         collectBoxHealth(db, {
           now,

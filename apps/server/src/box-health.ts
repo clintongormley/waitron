@@ -221,6 +221,19 @@ export async function readMisdatedOpen(tx: Transaction): Promise<MisdatedOpen[]>
   return rows.map((row) => ({ incidentId: row.id, ...misdatedParams(row.params) }));
 }
 
+/** One `clock.records_misdated` alert's params, open or handled; null when the id names no alert
+ * of that code. */
+export async function readMisdatedEpisode(
+  tx: Transaction,
+  incidentId: string,
+): Promise<MisdatedOpen | null> {
+  const [row] = await tx
+    .select({ id: incidents.id, params: incidents.params })
+    .from(incidents)
+    .where(and(eq(incidents.id, incidentId), eq(incidents.code, MISDATED)));
+  return row === undefined ? null : { incidentId: row.id, ...misdatedParams(row.params) };
+}
+
 export const misdatedHandledCountQuery = (tx: Transaction) =>
   tx
     .select({ n: count() })
