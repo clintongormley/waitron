@@ -698,6 +698,14 @@ describe("two restarts of two records", () => {
     });
   });
 
+  it("bounds the first by the second while only the first is in force", async () => {
+    const { first } = await twoRestarts();
+    expect((await disprove(R + M)).recorded).toEqual([first.id]);
+    expect(incidents(DISPROVED).map((row) => row.params)).toEqual([
+      { confirmationId: first.id, from: iso(R + 10 * S), to: iso(T + H) },
+    ]);
+  });
+
   it("control: two alerts of one code on one sale leave one open row", async () => {
     await sale(T);
     const { saleId } = latest();
@@ -719,5 +727,45 @@ describe("two restarts of two records", () => {
       }
     });
     expect(incidents(RESTARTED)).toHaveLength(1);
+  });
+});
+
+describe("two restarts with no sale between them", () => {
+  const R2 = R - 2 * M;
+
+  async function twoRestartsWithEqualHeads() {
+    await sale(T);
+    const first = await lift(R, [], { personId: FIRST, personName: "Ana" });
+    const second = await lift(R2, [], { personId: SECOND, personName: "Berta" });
+    return { first, second };
+  }
+
+  it("counts a later sale as written under the second, and answers the first unused", async () => {
+    const { first, second } = await twoRestartsWithEqualHeads();
+    await sale(R2 + 10 * S);
+    expect(await disprove(R + M)).toEqual({ recorded: [second.id], unused: [first.id], held: [] });
+    expect(incidents(DISPROVED).map((row) => row.params)).toEqual([
+      { confirmationId: second.id, from: iso(R2 + 10 * S), to: iso(R2 + 10 * S) },
+    ]);
+  });
+
+  it("bounds the first by the second when a restart whose heads are null comes between them", async () => {
+    await sale(T);
+    const first = await lift(R, [], { personId: FIRST, personName: "Ana" });
+    const between = "77777777-7777-4777-8777-777777777777";
+    suite.db.run(sql`
+      insert into clock_confirmations
+        (id, seq, node_id, box_clock_at, confirmed_at, step_ms, source, person_id, reason, proof,
+         check_id, registro_id, record_at)
+      select ${between}, max(seq) + 1, ${nodeId}, ${iso(R - M)}, ${iso(R - M)}, 0, 'devices', null,
+             'behind_chain', '{"heads":null}', null, ${latest().id}, ${iso(T)}
+      from clock_confirmations`);
+    const second = await lift(R2, [], { personId: SECOND, personName: "Berta" });
+    await sale(R2 + 10 * S);
+    expect(await disprove(R + M)).toEqual({
+      recorded: [second.id],
+      unused: [first.id, between],
+      held: [],
+    });
   });
 });

@@ -127,12 +127,6 @@ function parsed(text: string): unknown {
   }
 }
 
-function total(heads: Map<string, number>): number {
-  let sum = 0;
-  for (const head of heads.values()) sum += head;
-  return sum;
-}
-
 /** The earliest and latest generation times among the records past `heads` and at or before
  * `bound`, on the chains `current` names; a node either map leaves out counts from 0. Null when
  * there are none. */
@@ -191,11 +185,6 @@ export async function recordDisproofs(
     // A CHECK keeps `record_at` set wherever `registro_id` is.
     .map((row) => ({ ...row, registroId: row.registroId!, recordAt: row.recordAt! }));
   const withHeads = rows.map((row) => ({ ...row, heads: storedHeads(parsed(row.proof)) }));
-  // Every lift writes its heads after the one before it, so the next by total is the next.
-  const byTotal: { sum: number; heads: Map<string, number> }[] = [];
-  for (const row of withHeads)
-    if (row.heads !== null) byTotal.push({ sum: total(row.heads), heads: row.heads });
-  byTotal.sort((a, b) => a.sum - b.sum);
   const disproved = new Set(
     (
       await tx
@@ -211,7 +200,7 @@ export async function recordDisproofs(
   const recorded: string[] = [];
   const unused: string[] = [];
   const held: string[] = [];
-  for (const lift of withHeads) {
+  for (const [index, lift] of withHeads.entries()) {
     // Negated so that an unreadable stored time (NaN) is never in force.
     if (!(lift.confirmedAt.getTime() <= at && at < lift.recordAt.getTime())) continue;
     if (disproved.has(lift.id)) continue;
@@ -220,8 +209,9 @@ export async function recordDisproofs(
       unused.push(lift.id);
       continue;
     }
-    const own = total(heads);
-    const next = byTotal.find((other) => other.sum > own)?.heads ?? null;
+    // The next lift in `seq` order, not by heads: two lifts with no record between them store the
+    // same heads. One whose heads cannot be read bounds nothing.
+    const next = withHeads.slice(index + 1).find((later) => later.heads !== null)?.heads ?? null;
     const times = await timesWrittenBetween(tx, current, heads, next);
     if (times === null) {
       unused.push(lift.id);
