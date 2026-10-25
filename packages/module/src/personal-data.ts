@@ -28,7 +28,8 @@ export interface ModulePersonalData {
   readonly files: readonly string[];
   /** Reads everything this part holds about the person, inside the caller's transaction, and
    * returns a function that builds the files once that transaction has closed. The returned
-   * function must not use `tx`. */
+   * function must not use `tx`. A server part constructed with the `Database` may take write-lock
+   * turns of its own in the returned function. */
   prepare(
     tx: Transaction,
     subject: PersonalDataSubject,
