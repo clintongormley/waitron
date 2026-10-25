@@ -1758,6 +1758,15 @@ export class TillApp extends LitElement {
         z-index: 10;
       }
 
+      /* The Ready bar, no taller than the offset above, sits at the scrolling area's foot, which
+         the page's padding lifts off the window's bottom. */
+      .app:has(till-floor-screen[ready-bar]) .submitted-toast {
+        bottom: calc(
+          var(--wt-page-padding) + var(--wt-tap-min) + 2 * var(--wt-space-3) +
+            env(safe-area-inset-bottom)
+        );
+      }
+
       .error-action {
         display: block;
         margin-top: var(--wt-space-2);

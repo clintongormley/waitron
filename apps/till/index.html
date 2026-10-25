@@ -14,7 +14,8 @@
         box-sizing: border-box;
         height: 100dvh;
         margin: 0;
-        padding: 24px;
+        --wt-page-padding: 24px;
+        padding: var(--wt-page-padding);
         background: var(--wt-color-bg);
         color: var(--wt-color-text);
         font-family: var(--wt-font-family);
@@ -27,7 +28,7 @@
 
       @media (max-width: 40rem) {
         body {
-          padding: var(--wt-space-2);
+          --wt-page-padding: var(--wt-space-2);
         }
       }
     </style>

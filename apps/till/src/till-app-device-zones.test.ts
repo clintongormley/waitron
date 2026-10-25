@@ -12,10 +12,12 @@ import {
   toggleFloorView,
 } from "./widgets/test-helpers.js";
 import { billOptions, listPage } from "../test/find-bill-fixtures.js";
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillApi, FloorZone, ZoneOfferCatalogue } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { SessionActivity } from "./session-activity.js";
 import { TillApp } from "./till-app.js";
 
@@ -2145,6 +2147,122 @@ describe("a handheld's zones", () => {
         // The control: the bar and the overlay are painted in colours the check can tell apart.
         expect(distance(overlay, barColour)).toBeGreaterThan(4);
         expect(distance(painted, overlay)).toBeLessThan(4);
+      },
+    );
+
+    /** The real page chain, as the case above mounts it, with a send's API behind it. */
+    async function mountSending(width: number, height: number, formFactor: string) {
+      await pageAt(width, height);
+      applyTokens(document.documentElement);
+      const drafts = draftServer(() => ({ tabId: "bill-t-room", revision: 1, groups: [] }));
+      drafts.bills.add("bill-t-room");
+      // The person `mount` signs in, so the saved draft is theirs to send.
+      drafts.personId = "person";
+      const over = {
+        getTablesState: vi.fn().mockResolvedValue(readyTables()),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+        getPartyBills: vi.fn().mockResolvedValue([]),
+        listDrafts: drafts.listDrafts,
+        saveDraft: drafts.saveDraft,
+        submitDraft: drafts.submitDraft,
+      };
+      const { el, api } =
+        formFactor === "till"
+          ? await mount(selection(["room"], "room"), over)
+          : await mountHandheld(selection(["room"], "room"), formFactor, over);
+      Object.assign(api, answeredPartyAllergy(el));
+      el.parentElement!.id = "app";
+      await onReadyFloor(el);
+      return el;
+    }
+
+    /** Opens table t-room from the Floor, adds a coffee, sends it, and waits for the Sent toast. */
+    async function sendCoffee(el: TillApp): Promise<HTMLElement> {
+      floor(el).dispatchEvent(
+        new CustomEvent("open-table", {
+          detail: { tableId: "t-room", seated: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      const order = () =>
+        el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
+      await vi.waitFor(() =>
+        expect(
+          order()
+            ?.shadowRoot!.querySelector("till-menu-browser")
+            ?.shadowRoot!.querySelector(".name"),
+        ).toBeTruthy(),
+      );
+      [
+        ...order()!
+          .shadowRoot!.querySelector("till-menu-browser")!
+          .shadowRoot!.querySelectorAll<HTMLElement>("wt-button"),
+      ]
+        .find((button) => button.querySelector(".name")?.textContent === "Coffee")!
+        .click();
+      // The coffee's draft is saved before anything is sent.
+      await vi.waitFor(() => expect(order()!.billEdit?.draftRevision).toBe(1));
+      await el.updateComplete;
+      await order()!.updateComplete;
+      // A handheld sends from its Review sheet; a till from the order screen itself.
+      const review = order()!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review !== null) await userEvent.click(review);
+      const sendAll = () =>
+        order()!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          '[data-draft-action="send-all"]',
+        );
+      // Send all waits for the draft's save.
+      await vi.waitFor(() => expect(sendAll()?.disabled).toBe(false));
+      await userEvent.click(sendAll()!);
+      const toast = () =>
+        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+          "wt-toast[data-submitted-toast]",
+        )!;
+      await vi.waitFor(() => expect(toast().open).toBe(true));
+      await onReadyFloor(el);
+      await el.updateComplete;
+      return toast();
+    }
+
+    /** `calc(var(--wt-tap-min) + 2 * var(--wt-space-3))` in px, the toast's offset on a till. */
+    function oneLine(): number {
+      const probe = document.createElement("div");
+      probe.style.height = "calc(var(--wt-tap-min) + 2 * var(--wt-space-3))";
+      document.body.append(probe);
+      const line = probe.getBoundingClientRect().height;
+      probe.remove();
+      return line;
+    }
+
+    it.each([
+      ["phone-portrait", 390, 844],
+      ["tablet-landscape", 1024, 768],
+    ] as const)(
+      "after a send the Sent toast sits above the Ready bar, never over it (%s, %i px)",
+      async (formFactor, width, height) => {
+        const el = await mountSending(width, height, formFactor);
+        const toast = await sendCoffee(el);
+        await vi.waitFor(() => expect(readyBar(el)).not.toBeNull());
+        const bar = readyBar(el)!.getBoundingClientRect();
+        const box = toast.getBoundingClientRect();
+        expect(box.height).toBeGreaterThan(0);
+        expect(bar.bottom).toBeLessThanOrEqual(window.innerHeight);
+        expect(box.bottom).toBeLessThanOrEqual(bar.top);
+      },
+    );
+
+    it.each([
+      [390, 844],
+      [1024, 768],
+    ] as const)(
+      "on a till, which draws no bar, the Sent toast keeps its place (%i px)",
+      async (width, height) => {
+        const el = await mountSending(width, height, "till");
+        const toast = await sendCoffee(el);
+        expect(readyBar(el)).toBeNull();
+        expect(toast.getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight - oneLine(), 0);
       },
     );
 
