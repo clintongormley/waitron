@@ -962,7 +962,7 @@ describe("Leave it here", () => {
     return { zoneId, tableId: table.a! };
   }
 
-  it("Leave it here keeps a row waiting whose table has its new label but not its new short name", async () => {
+  it("Leave it here still gives a table a new short name when its label is unchanged", async () => {
     const { zoneId, tableId } = await shortNameChangeWaiting("Lh1");
     const label = (await tableRow(v, tableId)).label;
 
@@ -973,7 +973,7 @@ describe("Leave it here", () => {
     expect(await rowStateOf(tableId)).toEqual(ended);
   });
 
-  it("Leave it here keeps waiting for a case-only change", async () => {
+  it("Leave it here still gives a table a new short name when only its case changes", async () => {
     const { zoneId, tableId } = await shortNameChangeWaiting("SN1", "Sn1");
 
     await expectRevision(v, leaveHere(tableId), zoneId);
