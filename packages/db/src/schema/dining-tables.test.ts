@@ -117,8 +117,6 @@ describe("dining_tables columns", () => {
     );
   });
 
-  // Nothing in the database ties the key to the short name, so every writer goes through
-  // `shortNameColumns`.
   it("a key a writer did not fold is not refused", async () => {
     await seedTable(LOCATION_A, "Terrace 1", "t1");
     const id = await inTx(async (tx) => {
