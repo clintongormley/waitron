@@ -6,7 +6,14 @@ findings 1 to 16) and the claim check (`…/claim-check.md`, N1 to N16) are fold
 coordinator's rulings: the deciding manager is named (finding 1), a swap carries no shift times
 until the owner answers (finding 2 and N10, decision 8), the locked read is timed before the
 working-time part is built (finding 3), the record's keeping sentence is replaced (finding 4) and
-Task 9 is split (finding 5). Design:
+Task 9 is split (finding 5). Revised again the same day after round 3, a narrow check of that
+revision (`…/round3-check.md`, findings 1 to 11, all accepted): the manager check in Task 9b
+covers the module files only, since the working-time record names its authors by person id and
+name (decisions 6 and 8); the timing becomes Task 6a, dispatched before the working-time part
+(Task 6b), and decides whether the narrowing, Task 6c, is added, whose proof is the CSV saved
+before any narrowing; the configuration-export probe becomes Task 7b, with an ended contract;
+`authorizedBy` is never null; the staff-roles keeping sentence stays as it is, on purpose.
+Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §4.2 (the
 download and its worked example), §2.1 rows s7 to s11 and s13 (what is held about staff), §2.4 r4
 (the configuration export), §5.3 row S2 (its tests), §8 owner answer O5. Overview:
@@ -112,7 +119,7 @@ Left for later, on purpose:
      (`packages/composition/src/modules.ts:237`), which the server part calls.
    - Every name passes S2a1's name rule (lower-case ASCII ending `.json`, `.csv` or `.pdf`,
      `packages/module/src/personal-data.ts:39`) and none collides with identity's. Task 8 and
-     Task 6 each run `validatePersonalDataParts` over the full list.
+     Task 6b each run `validatePersonalDataParts` over the full list.
 
 2. **The module files are JSON, not the CSV the design's example shows for `rota.csv` and
    `absences.csv`.** S2a1 chose JSON (its decision 10). The rota file holds three different
@@ -187,22 +194,26 @@ Left for later, on purpose:
      the period, each with its whole snapshot of everyone's rows
      (`packages/workforce/src/pay-period-reads.ts:7-22`), cut to the person after reading
      (`record-reads.ts:42-60`). A whole-history period therefore reads every closure at the
-     location inside the write lock; Task 6 times it before the part is built (the next point).
+     location inside the write lock; Task 6a times it before the part is built (the next point).
      The record's "Keep until" date is the period's end plus four years
      (`packages/workforce-es/src/registro-jornada.ts:170-174`, `:207-208`, `ANOS_CONSERVACION = 4`
      at `:35`), as for any period a person chooses in the existing export; the README's keeping
-     sentence says so without naming a date (Task 7).
-   - **The locked read is timed, and narrowed if slow, never cut.** Task 6 step 2 builds a
-     throwaway fixture (one location, 30 staff, four years of shifts worked, 48 monthly pay-period
-     closes) and times, on this Mac, the reading the part does inside the write-lock turn: the
-     first/last-day query plus the exporter's `prepare` for one long-serving person over the whole
-     history. The number goes in the pull request and the Review focus. If it is over 250 ms, the
-     read is narrowed inside the export's own read path (`readClosures` / `readTimeRecord`), so the
-     one copy of the export reads less for one person and still gives the same document: every
-     existing workforce, workforce-es and attendance-export test passes unedited and Task 6's
-     byte-for-byte case stays green. If that cannot be done without a second copy of the export's
-     logic, the number is recorded and a backlog point is added. No period limit or other ceiling
-     that leaves out any of the person's record.
+     sentence says so without naming a date (Task 7a).
+   - **The locked read is timed, and narrowed if slow, never cut.** Task 6a, dispatched before
+     the part is built, builds a throwaway fixture (one location, 30 staff, four years of shifts
+     worked, 48 monthly pay-period closes) and times, on this Mac, the reading the part will do
+     inside the write-lock turn: the first/last-day query plus the exporter's `prepare` for one
+     long-serving person over the whole history. The number goes in the pull request and the
+     Review focus. If it is over 250 ms, Task 6c is added: it narrows the read inside the export's
+     own read path (`readClosures` / `readTimeRecord`), so the one copy of the export reads less for
+     one person and still gives the same document. Its proof compares with the code before the
+     change, not with the own-export route (which would read through the same narrowed code): the
+     long-serving person's CSV, saved from Task 6a's fixture before any narrowing, must equal the
+     narrowed result byte for byte, and a committed workforce case with a pay-period close holding
+     two people's rows must give, for one of them, exactly what the full read cut in JavaScript
+     gives (Task 6c). If narrowing cannot be done without a second copy of the export's logic, the
+     number is recorded and a backlog point is added. No period limit or other ceiling that leaves
+     out any of the person's record.
    - **Standard audience**: it is the worker's own full version; the "representatives" version
      leaves out free-text reasons (`record-export.ts:199`, `:275`).
    - **Both PDF and CSV**: the design names "time-record.pdf/.csv the existing working-time
@@ -221,8 +232,15 @@ Left for later, on purpose:
      hash string present" test (§5.3 row S2) is about secrets (S2a1's rule: hashes of PINs,
      passwords, tokens and codes); entry hashes (`time_entries.entry_hash`) are not in the export
      (`record-export.ts:93-119` lists its entry columns).
-   - **Other people's names in the record** (the author of a correction, `record-export.ts:270-271`)
-     are what the existing own export already gives the person; S2b changes nothing in the record.
+   - **Other people's names and person ids in the record.** The history columns carry each
+     entry's author as `authorPersonId` ("Author reference") and `authorName`
+     (`record-export.ts:114-115`, filled at `:269-270`), and the frozen history repeats them
+     (`:388-393`); so a manager who approved a correction appears in the record by id and name. The
+     round-3 check ran the existing case that shows it (`pnpm --filter @waitron/workforce-es exec
+     vitest run src/record-export.test.ts -t "retains unknown actor"`, 1 passed; it finds a history
+     row whose `authorPersonId` is the manager's, `record-export.test.ts:455-470`). This is what the
+     existing own export already gives the person, before this slice; S2b changes nothing in the
+     record, and Task 6b's byte-for-byte case holds it to that.
    - **Not limited to the single primary.** Boot mounts the working-time export only on the
      single primary and never on a mirror (`boot.ts:1753-1754`, `:2115`); the personal-data route
      is mounted everywhere `mountMeApi` is, and this part reads only. On a mirror whose copied
@@ -232,7 +250,7 @@ Left for later, on purpose:
      `serverParts: timeRecordPersonalData(modules)` with the `modulesNamed(deps.modules)` list it
      already builds, so `boot.ts` does not change.
    - **The guard on its words.** S2a2's guard sees module parts only
-     (`apps/server/src/personal-data-readme.test.ts:258-273`, "weaker than its name"). Task 7 adds
+     (`apps/server/src/personal-data-readme.test.ts:258-273`, "weaker than its name"). Task 7a adds
      the server part's files to it.
 
 7. **What each workforce and staffing file holds.** Rule, as S2a1 decision 10: every column of a
@@ -268,8 +286,13 @@ Left for later, on purpose:
      `grep -rln payRate apps/server/src packages/*/src`, tests excluded: only `employments.ts`).
      Adding the venue's currency code was considered (the review's optional note) and left out: the
      figure's unit is unknown either way.
-   - `decidedBy` and `authorizedBy` are the deciding or authorising person's current
-     `display_name`, or null when the column is null (decision 11).
+   - `decidedBy` is the deciding person's current `display_name`, or null while the absence or
+     swap is undecided (`decided_by_person_id` may be null:
+     `packages/workforce/src/schema/shift-swaps.ts:29`; absences at `packages/workforce/src/schema/absences.ts:30`). `authorizedBy` is the authorising person's current
+     `display_name` and is never null: `authorized_by_person_id` is `.notNull()`
+     (`packages/workforce/src/schema/attendance-responses.ts:24-26`) and the writer always sets it
+     (`attendance-response-commands.ts:272`); on her own answers it is usually her own name
+     (decision 11).
    - `location` is the shift's location's `name`; `rota` is its roster version's `status`
      (`draft`, `published`, `superseded`) or null for a shift on no version (`shifts.ts:22-24`;
      `roster-versions.ts:20`).
@@ -331,10 +354,12 @@ Left for later, on purpose:
    Reviewers may move a column; the defaults favour the person's own facts and leave out row
    references, which mean nothing outside the box.
 
-8. **What of another person appears, and a swap's shifts.** Another person appears only by current
-   display name, and only where the row is about the person and them: the other side of a swap
-   (`otherPerson`) and the decider of her absence, swap or attendance answer (decision 11). The
-   working-time record's author names are decision 6's.
+8. **What of another person appears, and a swap's shifts.** In the module files (the five
+   `.json` files of decision 1), another person appears only by current display name, and only
+   where the row is about the person and them: the other side of a swap (`otherPerson`) and the
+   decider of her absence, swap or attendance answer (decision 11). The working-time record is
+   the existing export unchanged and carries each entry's author by person id and name, as it did
+   before this slice (decision 6).
 
    **A swap's shift times are left out until the owner answers.** The coordinator's ruling was to
    include the times of the shifts a swap row names, labelled by their role in the swap, if the
@@ -380,8 +405,9 @@ Left for later, on purpose:
 11. **Who decided on the person's own rows is named.** The person's absences and swaps carry
     `decidedBy`, and her attendance answers `authorizedBy`: the current display name of the person
     in `absences.decided_by_person_id`, `shift_swaps.decided_by_person_id` and
-    `attendance_response_commands.authorized_by_person_id`, or null when the column is null. Never
-    their id or any other field of theirs. Why: the decision is about her row, and the
+    `attendance_response_commands.authorized_by_person_id`. `decidedBy` is null while undecided;
+    `authorizedBy` is never null (decision 7). Never their id or any other field of theirs, in the
+    module files. Why: the decision is about her row, and the
     working-time record in the same ZIP already names who made each correction and decision
     (`authorName`, `packages/workforce-es/src/record-export.ts:270`), so leaving these out would
     name the manager who approved a time correction but hide the one who approved her sick leave.
@@ -468,27 +494,30 @@ Left for later, on purpose:
 ## Review focus
 
 - **Whose data.** Each part selects by the subject's person id only; every task that adds a read
-  (Tasks 2 to 6) has an "only hers" case with a colleague who has distinct values in the same
+  (Tasks 2 to 5 and 6b) has an "only hers" case with a colleague who has distinct values in the same
   tables, and Task 9b repeats it end to end. The route's checks are unchanged (no query; the
   person id compared after building, S2a1 decision 7); only the subject gains `language`
   (decision 5), a contract change the pull request names.
-- **Other people in the files** (decisions 8 and 11): the other side of a swap and the decider of
-  her own rows appear by current display name only, never by id or any other field.
+- **Other people in the files** (decisions 6, 8 and 11): in the five module `.json` files, the
+  other side of a swap and the decider of her own rows appear by current display name only, never
+  by id or any other field. The working-time record carries each entry's author by person id and
+  name, as the existing export already did before this slice.
 - **A swap's shift times** are left out because no screen shows them to her; the owner's question
   and its example are in decision 8.
 - **Health data** (decision 9): this download sends sick leave and the note only to the person they
   are about; managers already see absences elsewhere in the box.
 - **Draft shifts** (decision 10) are in the copy before publication.
 - **The working-time record is the existing export**, called through the same seat with the same
-  arguments the own export route passes; Task 6 compares the CSV byte for byte with that route's
+  arguments the own export route passes; Task 6b compares the CSV byte for byte with that route's
   answer. Its period rule, the closure hash and the authors' names are decision 6.
-- **The locked read**: Task 6 step 2's number (whole-history read inside the write lock, 30 staff,
-  48 closes), and what was done about it if over 250 ms (decision 6).
+- **The locked read**: Task 6a's number (whole-history read inside the write lock, 30 staff,
+  48 closes), which read dominates, and, if over 250 ms, Task 6c's narrowing and its proof against
+  the saved pre-narrowing CSV (decision 6).
 - **Rendering cost**: 650 ms for the PDF of a synthetic 1,000-session record on a Mac (the claim
   check's repeat: 724 to 733 ms), on the thread that serves sales; not measured on a box. The same
   cost is reachable through the existing export.
 - **Single primary and mirrors** (decision 6): the part runs wherever the route does.
-- **Every README sentence against its source** (Task 7's table). A sentence that claims more than
+- **Every README sentence against its source** (Task 7a's table). A sentence that claims more than
   its row is a defect: for example "deleted" where a row is only ended, or a statement about which
   day `weekday` 0 is.
 - **The guards** (decision 14): what the foreign-key reach misses.
@@ -528,7 +557,7 @@ assertions at `apps/server/src/personal-data-export-api.test.ts:166-168`, `:270`
 
 Files: `packages/workforce/src/personal-data.ts` (new), `packages/workforce/src/personal-data.test.ts`
 (new), `packages/workforce/src/index.ts` (export `WORKFORCE_PERSONAL_DATA`). Not wired into
-`ALL_MODULES` yet (Task 8), so no README words are needed until Task 7.
+`ALL_MODULES` yet (Task 8), so no README words are needed until Task 7a.
 
 Interface: `export const WORKFORCE_PERSONAL_DATA: ModulePersonalData` with
 `files: ["employment.json", "rota.json", "absences.json", "attendance.json"]` declared now (a part
@@ -539,7 +568,10 @@ the first and third. `prepare` runs one query per table, each awaited in turn, k
 1. Tests first (`useVenueDb` with core, identity and workforce migrations; helpers from
    `packages/workforce/test/fixtures.ts`, whose `insert*` helpers are at `:82-235`; its
    `seedEmployment` (`:65-80`) fixes `contractType: "full_time"`, `payRate: 1500` and
-   `startDate`, so the employments here are direct inserts with the values below):
+   `startDate`, so the employments here are direct inserts with the values below; `insertAbsence`
+   (`:131-153`) takes no decider, so the decided absence's `decided_by_person_id` and an explicit
+   `decided_at` are written by a direct insert, or an update after the helper. The helpers are not
+   changed: other suites use them):
    - **Fixture.** Marta with two employments (one ended, pay rate `1234` cents, distinct contract
      types and minutes) and three absences: a `sick_leave` with a note, an approved `holiday`
      decided by a manager, a `requested` `unpaid` with no note; every row with a distinct explicit
@@ -573,7 +605,11 @@ Files: `packages/workforce/src/personal-data.ts`, `packages/workforce/src/person
      on no version; one shift in summer time and one in winter time (offsets `120` and `60`), and
      one whose start is `2026-01-02T00:30:00.000Z` with offset `-120`, so its local start reads
      `2026-01-01T22:30:00-02:00`. Two availability windows, one ending at minute `1440`. Three
-     swaps (`insertShiftSwap`, `packages/workforce/test/fixtures.ts:207`): one she asked for (her
+     swaps (`insertShiftSwap`, `packages/workforce/test/fixtures.ts:207-226`, which takes no
+     decider; the approved swap's `decided_by_person_id` and an explicit `decided_at` are written by
+     a direct insert or an update after the helper, not through `decideSwap`, which requires
+     `accepted` and stamps the current time, `shift-swaps.ts:95-101`, against the rule that every
+     row has a distinct explicit time): one she asked for (her
      shift to the colleague, two-sided), one the colleague offered her as a give-away (no
      `to_shift`) that a manager approved, one offered to her two-sided and still requested. The
      manager is a third person whose display name differs from Marta's and the colleague's. A
@@ -635,7 +671,9 @@ The part reads `attendance_questions`, `attendance_mail` (joined through its que
    Run the focused command; watch them fail.
 2. Add the reads and the file.
 3. Omission controls: drop the question join's person condition on the email read → "only hers"
-   fails; write `claim_token` into `reminderEmail` → "no secret" fails.
+   fails; write `claim_token` into `reminderEmail` → "no secret" fails; write the authoriser's id
+   instead of the name → "only hers" fails (the manager's id must be nowhere) and "exact file"
+   fails.
 4. Run the whole package's suite once, `pnpm --filter @waitron/workforce exec vitest run`, and
    `typecheck`. Read the count.
 
@@ -663,7 +701,46 @@ assignment (decision 3).
    read only departments (no station join) → "exact file" fails.
 4. Run the focused file and `pnpm --filter @waitron/staffing typecheck`.
 
-## Task 6 — the server's working-time part
+## Task 6a — time the locked read (dispatched before Task 6b)
+
+Files: none committed. A throwaway `apps/server/src/zz-s2b-locked-read.test.ts`, deleted at the
+end (`git status --short` shows nothing of it). Its outcome decides whether Task 6c is added
+(decision 6). The threshold is decided now: 250 ms on this Mac for the reading done inside the
+write-lock turn.
+
+1. The fixture, with `useVenueDb` and every set migrated: one location and node; 30 staff; four
+   years of shifts worked for each (about 20 a month, clocked in and out through
+   `WorkforceBackend`); 48 monthly pay-period closes through the module's own close
+   (`closePayPeriod`, `packages/workforce/src/pay-period-close.ts:76`), so each closure carries a
+   real whole-venue snapshot. Each close needs pay-period settings on the right cadence, a
+   ruleset, a clock, an origin that is not a device and a `now` after the close
+   (`pay-period-close.ts:76-110`); read the module's own close tests for the arguments. Give the
+   file a per-test timeout above the fixture's build time (the package default would end it). If
+   building takes more than about ten minutes, build a smaller fixture, say so, and say how the
+   number was scaled.
+2. **The control, taken first**: before the 48 closes are made (same entries, no closures), time,
+   inside `db.withWriteLock`, the first/last local day query of decision 6 and
+   `selectTimeRecordExport(ALL_MODULES).prepare(db, { locationId, personId, period,
+   audience: "standard", locale: "en" })` for one person present the whole four years, over the
+   whole-history period. Five runs; median and range.
+3. Make the 48 closes, then time the same two reads the same way. Also time `readClosures` on its
+   own over the same period (`packages/workforce/src/pay-period-reads.ts:7-27`). Report which read
+   dominates: the entries read and projection (present in both runs) or the closures (the
+   difference). A one-month period is not used as the control: the entries read takes no period
+   (`readRecordedEntries`, `packages/workforce/src/record-reads.ts:65-79`) and the projection runs
+   over all her entries before the period cut (`record-reads.ts:41`), so a month would still read
+   four years of her entries.
+4. Separately time the build (format, PDF, CSV) after the turn, so the numbers are not mixed.
+5. **Save, for Task 6c if it runs**: the long-serving person's `time-record.csv` built with the code
+   as it is (call `prepare`, then the returned function, then `renderAttendanceCsv`), and the
+   closures section's rows, written to
+   `/Users/clintongormley/waitron-campaign-b/a980-s2b-locked-read/`, with the fixture recipe (the
+   file's text, copied there before it is deleted).
+6. Hand back: the numbers (control, with closes, closures alone, build), which read dominates, and
+   whether the with-closes read is over 250 ms. The driver adds Task 6c only if it is. The numbers
+   go in the pull request and the Review focus.
+
+## Task 6b — the server's working-time part
 
 Files: `apps/server/src/personal-data-time-record.ts` (new),
 `apps/server/src/personal-data-time-record.test.ts` (new).
@@ -700,41 +777,43 @@ export function timeRecordPersonalData(modules: readonly WaitronModule[]): Perso
      does not throw.
    Run `pnpm --filter @waitron/server exec vitest run src/personal-data-time-record.test.ts`;
    watch it fail.
-2. **Time the locked read, before writing the module** (decision 6; the review's finding 3). The
-   threshold is decided now: 250 ms on this Mac for the reading done inside the write-lock turn.
-   - A throwaway `apps/server/src/zz-s2b-locked-read.test.ts`, never committed, with `useVenueDb`
-     and every set migrated: one location and node; 30 staff; four years of shifts worked for each
-     (about 20 a month, clocked in and out through `WorkforceBackend`); 48 monthly pay-period closes
-     through the module's own close (`closePayPeriod`, `packages/workforce/src/pay-period-close.ts:76`),
-     so each closure carries a real whole-venue snapshot. Read the module's own close tests for the
-     arguments. If building the fixture takes more than about ten minutes, build a smaller one, say
-     so, and say how the number was scaled.
-   - Time, inside `db.withWriteLock`, exactly what the part will read: the first/last local day
-     query of decision 6 and `selectTimeRecordExport(ALL_MODULES).prepare(db, { locationId,
-     personId, period, audience: "standard", locale: "en" })` for one person present the whole
-     four years. Five runs; record the median and the range. As a control, time the same
-     `prepare` call over a one-month period; it should be far smaller, and if it is not, the
-     fixture is not doing what this step says.
-   - Separately time the build (format, PDF, CSV) after the turn, so the two numbers are not
-     mixed.
-   - Record both numbers in the pull request and the plan's Review focus line. Delete the file
-     (`git status --short` shows nothing of it).
-   - **Over 250 ms**: stop and hand back to the driver; the narrowing is dispatched as its own task.
-     It narrows the read inside the export's own read path (`readClosures` /
-     `readTimeRecord`, `packages/workforce/src/pay-period-reads.ts:7-27`,
-     `packages/workforce/src/record-reads.ts:20-62`) so that one person's export reads less while
-     giving the same document: every existing workforce, workforce-es and attendance-export test
-     passes unedited, and this task's byte-for-byte case stays green. If that cannot be done without
-     a second copy of the export's logic, it records the number and adds a backlog point instead.
-     Nothing leaves out any of the person's record.
-   - **At or under 250 ms**: record the number and carry on.
-3. Write the module.
-4. Omission controls: take the period's start from the UTC date (`substr(event_at, 1, 10)`) →
+2. Write the module.
+3. Omission controls: take the period's start from the UTC date (`substr(event_at, 1, 10)`) →
    "the period" fails; pass `audience: "representatives"` → "the same bytes" fails; drop the
    `workforce` check → the workforce-es-alone case throws or returns a part, and fails.
-5. Run `pnpm --filter @waitron/server typecheck`.
+4. Run `pnpm --filter @waitron/server typecheck`.
 
-## Task 7 — the README's words for every new file, and the guard on the server's files
+## Task 6c — narrow the locked read (only if Task 6a found it over 250 ms)
+
+Files: `packages/workforce/src/pay-period-reads.ts` and/or `packages/workforce/src/record-reads.ts`,
+and a new case in `packages/workforce/src/record-reads.test.ts` (or the file that already tests
+`readTimeRecord`; read the package first).
+
+The aim (decision 6): one person's export reads less inside the write lock and gives exactly the
+same document. The own-export route calls the same `readTimeRecord`, so Task 6b's byte-for-byte
+case would stay green whether or not the narrowing changed the record; it is not the proof here.
+
+1. Tests first:
+   - **A committed case**: a pay-period close whose snapshot holds two people's sessions and
+     entries. For one of them, the narrowed `readTimeRecord` result `toEqual`s the result computed
+     in the same test from the full read with the person filter applied in JavaScript, exactly as
+     `record-reads.ts:42-60` does today. Write the case against today's code first and see it pass
+     (it is the reference), then keep it while narrowing.
+   - **The saved CSV**: with Task 6a's fixture recipe (rebuilt as a throwaway file again), the
+     long-serving person's `time-record.csv` after narrowing equals, byte for byte, the CSV Task 6a
+     saved before any narrowing, and so do the closures section's rows. Delete the throwaway file
+     after.
+2. Narrow the read inside the export's own read path. No period limit and no other ceiling that
+   leaves out any of the person's record.
+3. Time the narrowed read with Task 6a's step 3 and record the before and after numbers.
+4. Run every workforce, workforce-es and attendance-export test, unedited:
+   `pnpm --filter @waitron/workforce exec vitest run`, `pnpm --filter @waitron/workforce-es exec vitest run`,
+   `pnpm --filter @waitron/server exec vitest run src/attendance-export-api.test.ts src/personal-data-time-record.test.ts`,
+   and `typecheck` in both packages. Read each count.
+5. If narrowing cannot be done without a second copy of the export's logic, stop, restore the code,
+   and instead record the number and add the backlog point (Task 12).
+
+## Task 7a — the README's words for every new file, and the guard on the server's files
 
 Files: `apps/server/src/i18n/personal-data-readme.ts`, `apps/server/src/personal-data-readme.test.ts`.
 
@@ -818,7 +897,7 @@ and fixes the sentence, not the row, where they disagree; a sentence with no row
 | --- | --- |
 | employment holds | decision 7's `employment.json` shape; `employments.ts:15-23` |
 | employment use | design §2.1 row s8 ("employment, payroll"); the contracted minutes are "the overtime baseline" (`employments.ts:16`), read at `packages/workforce/src/clocking.ts:646` and `pay-period-close.ts:147-150` |
-| employment sentTo | workforce's configuration transfer carries `employments` and `availability` (`packages/workforce/src/configuration-transfer.ts:1-9`), and staffing's `person_staff_roles` (`packages/staffing/src/configuration-transfer.ts:3-11`), each declared with no leave-behind setting; the exporter reads each declared table with `select *` and leaves out only rows a declared setting excludes (`packages/provisioning/src/configuration-transfer.ts:249-290`; `leaveBehindWhenSet` and `leaveBehindWhenFalse` are declared only in `packages/db/src/configuration-transfer.ts` and `packages/venue-service/src/configuration-transfer.ts`, grep 2026-10-25, tests excluded), so a former employee's rows are exported (read by the review and the claim check; the implementer confirms with a run: a configuration export of a box holding a suspended person with an employment, availability and a staff role, decrypted in the test, holds all three). The export route needs `system.manage` (`apps/server/src/configuration-export-api.ts:46-49`), which managers hold (`packages/identity/src/permissions.ts:55-62`) and admins hold with every permission (`:76`, `:82`) |
+| employment sentTo | workforce's configuration transfer carries `employments` and `availability` (`packages/workforce/src/configuration-transfer.ts:1-9`), and staffing's `person_staff_roles` (`packages/staffing/src/configuration-transfer.ts:3-11`), each declared with no leave-behind setting; the exporter reads each declared table with `select *` (`packages/provisioning/src/configuration-transfer.ts:286-290`) and leaves rows out in two steps (`:249-309`): first a row a declared leave-behind setting excludes (the filter at `:296-307`), then, by `leaveBehindReferences` (`:309`, described at `:249-250`), every row whose foreign key names a row left behind. Neither applies to these three tables: they declare no setting, and `persons` and `staff_roles`, which they point at, declare none either ( `leaveBehindWhenSet` and `leaveBehindWhenFalse` are declared only in `packages/db/src/configuration-transfer.ts` and `packages/venue-service/src/configuration-transfer.ts`, grep 2026-10-25, tests excluded), so a former employee's rows are exported (read by the review, the claim check and the round-3 check; Task 7b confirms it with a run, including an ended contract). The export route needs `system.manage` (`apps/server/src/configuration-export-api.ts:46-49`), which managers hold (`packages/identity/src/permissions.ts:55-62`) and admins hold with every permission (`:76`, `:82`) |
 | employment kept | no product code deletes, inserts or updates an employment: the delete grep below printed three lines, none for `employments`, and `grep -rn "insert(employments)\|update(employments)\|into employments\|update employments"`, tests excluded, finds nothing (claim check T74); rows arrive only by the configuration import. So the sentence says only that nothing deletes one, not how one ends. The grep: `grep -rnE "delete\s+from\s+\"?(shifts\|absences\|availability\|employments\|shift_swaps\|attendance_[a-z_]+\|person_staff_roles\|shift_assignments\|roster_versions)\b\|\.delete\((shifts\|absences\|availability\|employments\|shiftSwaps\|attendance[A-Za-z]+\|personStaffRoles\|shiftAssignments\|rosterVersions)\b" packages apps --include='*.ts'`, test, `testing/` and `test/` paths excluded, run 2026-10-25, printed `clocking.ts:479` (a shift), `staff-roles.ts:199` (a role's holders) and `attendance-discovery.ts:222` (`attendance_source_state`, which names no person); with tests included it printed 22 (the claim check's control). The configuration import's run-time table names are S2a2's caveat (setup only, `packages/provisioning/src/configuration-transfer.ts:698-704`) |
 | rota holds | decision 7's `rota.json` shape; "who decided them" is `decidedBy` (decision 11) |
 | rota use | design §2.1 row s9 ("planning") |
@@ -834,7 +913,7 @@ and fixes the sentence, not the row, where they disagree; a sentence with no row
 | staff-roles holds | decision 7's `staff-roles.json` shape |
 | staff-roles use | design §2.1 row s7 (staff roles: "permissions", "while employed"); the roles fill the rota's areas (`staffing.ts:147`) |
 | staff-roles sentTo | staffing's configuration transfer carries `person_staff_roles` (`packages/staffing/src/configuration-transfer.ts:7`); permission as the employment row |
-| staff-roles kept | replacing a role's holders deletes and re-inserts them (`packages/staffing/src/staff-roles.ts:183-201`); deleting a role deletes its holders (`person_staff_roles_role_fk`, `cascade`, `staffing.ts:54-58`); a shift's assignment goes with the shift (`shift_assignments_shift_fk`, `cascade`, `staffing.ts:157-161`). The assignment's keys to its department and station also cascade (`:162-171`), but no product code deletes a department or a kitchen station: deleting a department sets it inactive (`packages/venue-service/src/service-delete.ts:344-345`), and the delete grep over `departments` and `kitchen_stations`, tests excluded, run 2026-10-25, printed nothing. So the sentence does not name that path (the review's finding 8 asked for it; the claim check's T79 found it unreachable) |
+| staff-roles kept | replacing a role's holders deletes and re-inserts them (`packages/staffing/src/staff-roles.ts:183-201`); deleting a role deletes its holders (`person_staff_roles_role_fk`, `cascade`, `staffing.ts:54-58`); a shift's assignment goes with the shift (`shift_assignments_shift_fk`, `cascade`, `staffing.ts:157-161`). The assignment's keys to its department and station also cascade (`:162-171`), but no product code deletes a department or a kitchen station: deleting a department sets it inactive (`packages/venue-service/src/service-delete.ts:344-345`), and the delete grep over `departments` and `kitchen_stations`, tests excluded, run 2026-10-25, printed nothing. So the sentence does not name that path. The review's finding 8 asked for it; the claim check's T79 and the round-3 check found it unreachable, and the coordinator accepted leaving the sentence as it is (round 3, finding 10) |
 | time-record holds | the export's sections (`record-export.ts:130-143`, titles) |
 | time-record use | design §2.1 row s11 ("the legal daily record"); the README does not name the law, because Spain-only legal wording belongs in a country pack (design §5.3) |
 | time-record sentTo | the manager route needs `report.export` (`attendance-export-api.ts:45-55`), in the manager set (`permissions.ts:68`) and held by admins (`:76`, `:82`); the record lists its access holders (`record-export.ts:24-28`, `:333-350`) |
@@ -854,18 +933,28 @@ and fixes the sentence, not the row, where they disagree; a sentence with no row
      export reports…" line appears exactly once.
    Run `pnpm --filter @waitron/server exec vitest run src/personal-data-readme.test.ts`; watch it
    fail.
-1b. The configuration-export probe for the three "including after you leave" sentences (the
-   employment sentTo row). A throwaway test, never committed, using the configuration export's
-   own test setup (read `apps/server/src/configuration-transfer.test.ts`): a suspended person with
-   an employment, an availability window and a staff role; export, decrypt, and check all three
-   rows are in the bundle. As a control, the same export with the person's rows deleted holds
-   none. Record the result in the pull request; if a row is missing, narrow that sentence. Delete
-   the file.
 2. Add the words.
 3. Omission control: delete `time-record.csv`'s Spanish entry → the server-files case fails (and
    the existing same-keys check too); put the time record's `sentTo` on the CSV as well → "once"
    fails.
 4. Run `pnpm --filter @waitron/server typecheck`.
+
+## Task 7b — the configuration-export probe for "including after you leave"
+
+Files: none committed. A throwaway test, deleted at the end (`git status --short` shows nothing of
+it), using the configuration export's own test setup (read
+`apps/server/src/configuration-transfer.test.ts`), with staffing enabled. It checks the three
+"including after you leave" sentences of Task 7a (employment, rota, staff roles), whose source row
+rests on reading the exporter.
+
+1. A person who has left, in both senses the words could mean: suspended (`persons.status`,
+   `packages/identity/src/schema/persons.ts:9`), with an **ended** employment (an `end_date` in the
+   past) as well as a current one, an availability window and a staff role. Export, decrypt, and
+   check that the bundle holds both employments, the availability and the staff role.
+2. Control: the same export after deleting the person's rows holds none of them, so the check can
+   tell the two answers apart.
+3. Record the result in the pull request. If a row is missing, narrow the matching Task 7a sentence
+   in both languages before Task 8 wires the modules.
 
 ## Task 8 — wire both modules, and the completeness guards
 
@@ -902,7 +991,7 @@ Files: `packages/composition/src/modules.ts` (workforce's entry gains
    `shift_assignments` and fails.
 4. Run `pnpm --filter @waitron/composition exec vitest run`, then
    `pnpm --filter @waitron/server exec vitest run src/personal-data-readme.test.ts` (the S2a2
-   module-files guard now sees the new files and must pass with Task 7's words), and from the
+   module-files guard now sees the new files and must pass with Task 7a's words), and from the
    repository root `pnpm exec vitest run scripts/module-seams.test.ts scripts/english-only.test.ts scripts/workspace-cycles.test.ts`.
 
 ## Task 9a — mount the working-time part
@@ -926,13 +1015,15 @@ once), `apps/server/src/me-api.personal-data-export.test.ts`,
      review's finding 7, the claim check's N15). Its mount today calls
      `mountPersonalDataExportApi` with `ALL_MODULES`, `nodeId: "no-node"` and no `serverParts`
      (`:306-310`), so the module parts read on a full disk but the working-time part is not
-     mounted at all. The mount gains `serverParts: timeRecordPersonalData(ALL_MODULES)` and the id
-     of a node row at a location (use the location the file already seeds, if it has one;
-     otherwise seed one and the node in its setup). The personal-data case
-     (`:386-402`) writes one clock-in for the signed-in person before `small.fill(0)`, and gains one
-     assertion: the ZIP holds `time-record.csv`. Its existing assertions (200, the content type,
-     the unchanged last-seen time, the waiting change still there) are unedited; the pull request
-     names the setup change.
+     mounted at all. The file seeds a location (`"Main"`, `:236-238`) but no `nodes` row. In
+     `beforeAll`, after `seedPerson`, seed a node row at "Main" and write the signed-in manager's
+     clock-in there; pass that node's id to the mount, which gains
+     `serverParts: timeRecordPersonalData(ALL_MODULES)`. The clock-in goes in `beforeAll`, not in
+     the case: the case inserts the waiting change `bs3` first and asserts later that it is still
+     there (`:388-401`), and a clock-in written through `withTransaction` between the two would
+     deliver it ("would deliver a change left waiting", `:332`). The personal-data case
+     (`:386-402`) is unedited except for one new assertion: the ZIP holds `time-record.csv`. The
+     pull request names the setup change.
    Run `pnpm --filter @waitron/server exec vitest run src/me-api.personal-data-export.test.ts src/boot.personal-data-export.test.ts`
    and `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts -t "personal-data"`
    (on macOS it makes its own small disk with `hdiutil`); watch the new assertions fail.
@@ -961,10 +1052,14 @@ case. Fixture code stays in this test file (Global constraints).
      entries are, in order, `README.txt`, `profile.json`, `sign-in.json`, `employment.json`,
      `rota.json`, `absences.json`, `attendance.json`, `staff-roles.json`, `time-record.pdf`,
      `time-record.csv`. Each of Marta's distinct values is found in some unzipped file; none of the
-     colleague's is, except the colleague's display name as `rota.json`'s `otherPerson`; the
-     manager's display name appears only as `decidedBy` or `authorizedBy`, and the manager's id
-     and email nowhere; the README is `toBe` `personalDataReadme(...)` over exactly those nine file
-     names.
+     colleague's is, except the colleague's display name as `rota.json`'s `otherPerson`; in the
+     five module `.json` files, the manager's display name appears only as `decidedBy` or
+     `authorizedBy`, and the manager's id and email in none of them; the README is `toBe`
+     `personalDataReadme(...)` over exactly those nine file names. The working-time record is not
+     held to the manager check: it carries each entry's author by person id and name, as the
+     existing export does (decision 6). It is held instead to the existing export: in English, as
+     in Spanish below, `time-record.csv` equals the own-export route's answer for the same period,
+     byte for byte.
    - **No secret, end to end.** Marta's PIN hash, the asking session's token hash, the attendance
      email's `claim_token` and one of her time entries' `entry_hash` are in no unzipped file; her
      email address is (positive control).
@@ -973,8 +1068,9 @@ case. Fixture code stays in this test file (Global constraints).
    Run `pnpm --filter @waitron/server exec vitest run src/personal-data-export-api.workforce.test.ts`;
    it should pass at once, because Tasks 2 to 9a built what it reads. Its proof is step 2.
 2. Omission controls, each run and reverted: drop `serverParts` from the mount → the entry list
-   fails; put a time entry's `entry_hash` into the CSV's cells (a one-line change in the part's
-   build) → "no secret" fails; give the colleague Marta's absence note → "the whole ZIP" fails on
+   fails; read one of her `entry_hash` values in the working-time part's `prepare` and append it to
+   the CSV in its build (the build itself does not touch the database, and the exported document
+   carries no entry hash, `record-export.ts:93-119`) → "no secret" fails; give the colleague Marta's absence note → "the whole ZIP" fails on
    the colleague check.
 3. Run `pnpm --filter @waitron/server typecheck`.
 
@@ -1028,7 +1124,9 @@ and `/Users/clintongormley/waitron-campaign-b/a980-s2b-shots/`. Nothing here is 
    `unzip -p` the README of each into the shots folder; read both READMEs whole, every JSON file
    and `time-record.csv`; open `time-record.pdf` with the Read tool. Look for: each file named in
    the README once, in ZIP order; the time-record lines once; no sentence that claims a file the
-   ZIP lacks; local times showing the offset; nothing of the colleague except the swap name.
+   ZIP lacks; local times showing the offset; nothing of the colleague except the swap name;
+   the manager only as decider in the `.json` files (the working-time record names authors by id
+   and name, decision 6).
 2. A throwaway browser look test built like S2a2 Task 6a (`profile-screen.a11y.test.ts:85-88`
    style): the Profile row with help on and the "?" opened, English and Spanish, light and dark,
    1280 and 390 px; check the longer help text wraps inside the tooltip at 390 px. Deleted after.
@@ -1051,8 +1149,8 @@ Files: `docs/backlog/data-protection.md` (the A980 S2 point), `docs/backlog.md` 
      give-away, approved, shows Marta no time) and the alternative (`fromShift` / `toShift`).
    - **The working-time record of a box with more than one location**: only this node's location
      is exported (decision 6).
-   - **Measure the working-time part on a box**: the read inside the write lock (Task 6 step 2's
-     number on the Mac) and the whole-history PDF (650 ms on the Mac). If Task 6 step 2 found the
+   - **Measure the working-time part on a box**: the read inside the write lock (Task 6a's
+     number on the Mac) and the whole-history PDF (650 ms on the Mac). If Task 6a found the
      read over 250 ms and narrowing it needed a second copy of the export's logic, this point also
      carries that number.
    The "Mount the own download from `boot.ts`" point stays and gains: `mountMeApi` now also builds
