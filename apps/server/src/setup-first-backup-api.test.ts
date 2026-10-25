@@ -2,12 +2,17 @@ import { archiveHost, key, root, clock, node, suite } from "../test/hour-recover
 import { createHash, randomBytes } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { copyFile, readFile, writeFile } from "node:fs/promises";
+import { copyFile, lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { createFirstSetupBackupWorkspace } from "@waitron/provisioning";
+import {
+  createFirstSetupBackupWorkspace,
+  firstSetupFrozenDigest,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
+} from "@waitron/provisioning";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
@@ -776,5 +781,63 @@ it.each(["open", "commit", "start-again"] as const)(
       appendSpy.mockRestore();
       exclusionSpy?.mockRestore();
     }
+  },
+);
+
+async function folderTree(dir: string): Promise<Record<string, string>> {
+  const tree: Record<string, string> = {};
+  for (const entry of (await readdir(dir, { recursive: true })).sort()) {
+    if (/^venue\.(lock|holder)/.test(entry)) continue;
+    const path = join(dir, entry);
+    tree[entry] = (await lstat(path)).isDirectory()
+      ? "/"
+      : createHash("sha256")
+          .update(await readFile(path))
+          .digest("hex");
+  }
+  return tree;
+}
+
+it.each([
+  ["prepare", { action: "compare-clocks", browser: null }],
+  ["commit", {}],
+])(
+  "a session opened before a Start again marker is refused at %s, and nothing is written",
+  async (step, value) => {
+    const f = await fixture(true);
+    const opened = await f.app.request(
+      `https://localhost${prefix}/open`,
+      { method: "POST", body: f.upload() },
+      tls(),
+    );
+    expect(opened.status).toBe(200);
+    const session = await opened.json();
+    const state = (await f.host.store.read())!;
+    await writeStartAgainMarker(
+      f.roots,
+      await startAgainMarkerFor(f.roots, {
+        attemptId: state.frozen.attemptId,
+        frozenDigest: firstSetupFrozenDigest(state),
+      }),
+    );
+    const journal = await f.workspace.read();
+    const before = {
+      venue: await folderTree(f.roots.venueDir),
+      state: await folderTree(f.roots.stateDir),
+    };
+    const response = await f.post(step, {
+      sessionId: session.sessionId,
+      [step === "prepare" ? "proposal" : "input"]: value,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.start_again_incomplete", params: {} },
+    });
+    expect(await f.workspace.read()).toEqual(journal);
+    expect({
+      venue: await folderTree(f.roots.venueDir),
+      state: await folderTree(f.roots.stateDir),
+    }).toEqual(before);
+    expect(f.restart).not.toHaveBeenCalled();
   },
 );

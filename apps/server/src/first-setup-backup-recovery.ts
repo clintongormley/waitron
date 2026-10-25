@@ -248,6 +248,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
       await drop();
       ownerRequired();
     }
+    await assertNoStartAgainDeletion(options.venueDir);
     if (
       !isDeepStrictEqual(await observation(), entry.request.observation) ||
       (await options.workspace.inspect(entry.session.recoveryId)) !== entry.originalsDigest ||
