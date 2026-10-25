@@ -1986,3 +1986,60 @@ describe("backup-screen fields", () => {
     expect(field.closest("label")).toBeNull();
   });
 });
+
+describe("backup-key configuration refusal", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const operation of ["apply", "rotate"] as const) {
+      it(`${operation} names the administrator next step and keeps the key status after a mismatch in ${locale}`, async () => {
+        const before = currentLocale();
+        setLocale(locale);
+        try {
+          const refusal = { code: "backup.effective_mismatch" };
+          const write = vi.fn().mockRejectedValueOnce(refusal).mockResolvedValue(ENABLED);
+          const initial = operation === "apply" ? { ...OFF, recoveryKeySet: true } : ENABLED;
+          const api = stubApi(
+            operation === "apply" ? { applyBackup: write } : { rotateBackupKey: write },
+            initial,
+          );
+          const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+          await flush(el);
+          if (operation === "apply") {
+            setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+          } else {
+            q(el, "[data-test=show-old-key]")!.click();
+            await flush(el);
+            tickCheckbox(el, "[data-test=saved-it]");
+          }
+          await el.updateComplete;
+          const selector =
+            operation === "apply" ? "[data-test=apply]" : "[data-test=rotate-confirm]";
+          const action = q(el, selector) as HTMLElementTagNameMap["wt-button"];
+          expect(action.disabled).toBe(false);
+          action.click();
+          await vi.waitFor(() => expect(alertText(el)?.trim()).toBe(codeMessage(refusal.code)));
+          if (locale === "en-GB") {
+            expect(alertText(el)).toContain(
+              "Ask the box's administrator to check its backup configuration before trying again.",
+            );
+          }
+          expect(write).toHaveBeenCalledTimes(1);
+          expect(q(el, operation === "apply" ? ".off" : ".on")?.textContent?.trim()).toBe(
+            t(operation === "apply" ? "backup.status.off" : "backup.status.on"),
+          );
+          if (operation === "rotate") {
+            expect(el.shadowRoot!.textContent).toContain(ENABLED.keyFingerprint);
+            expect(q(el, "[data-test=old-key]")!.textContent).toBe("OLD-KEY-xyz789012345");
+          }
+          expect(action.disabled).toBe(false);
+          action.click();
+          await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+          await flush(el);
+          expect(alertText(el)).toBeUndefined();
+          expect(el.shadowRoot!.textContent).toContain(ENABLED.keyFingerprint);
+        } finally {
+          setLocale(before);
+        }
+      });
+    }
+  }
+});
