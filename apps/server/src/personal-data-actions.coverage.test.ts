@@ -2,7 +2,9 @@
 // matches the usual spellings, and the three explicit names (credited_to, owner_id, editor_id)
 // were found by reading each `*_id`/`*_to` column's schema comment and the A664 audit (plan
 // decision 2), so a person column under any other name is missed until someone reads it. It reads
-// `@waitron/db`'s schema alone; other modules' actor columns are in the backlog point, not here.
+// `@waitron/db`'s schema alone: the tables its root exports, and, for the three it does not, the
+// newest drizzle snapshot's columns. Other modules' actor columns are in the backlog point headed
+// The rest of "who did what" in the download, in docs/backlog/data-protection.md, not here.
 // And it proves a column was classified, not that the actions part honours the classification
 // (personal-data-actions.test.ts does that).
 import { readFileSync, readdirSync } from "node:fs";
@@ -26,7 +28,8 @@ const READ = [
   "drawer_opens.authorized_by",
 ];
 
-const NOT_YET_REASON = "not in the download yet: backlog, who did what";
+const NOT_YET_REASON =
+  'not in the download yet: backlog, The rest of "who did what" in the download';
 
 const NOT_YET: Record<string, string> = Object.fromEntries(
   [
@@ -141,12 +144,11 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
       "opened_at",
       "sale_id",
       "bill_payment_id",
-      "tender_refund_id",
       "via_override",
       "person_id",
       "authorized_by",
     ],
-    out: ["id", "device_id", "printer_id"],
+    out: ["id", "device_id", "printer_id", "tender_refund_id"],
   },
 };
 
@@ -156,16 +158,19 @@ const tables = Object.values(db).flatMap((value) =>
   is(value, SQLiteTable) ? [getTableConfig(value)] : [],
 );
 
-function newestSnapshotTables(): string[] {
+function newestSnapshot(): { name: string; columns: string[] }[] {
   const meta = new URL("../../../packages/db/drizzle/meta/", import.meta.url);
   const newest = readdirSync(meta)
     .filter((name) => /^\d+_snapshot\.json$/.test(name))
     .sort()
     .at(-1)!;
   const snapshot = JSON.parse(readFileSync(new URL(newest, meta), "utf8")) as {
-    tables: Record<string, { name: string }>;
+    tables: Record<string, { name: string; columns: Record<string, { name: string }> }>;
   };
-  return Object.values(snapshot.tables).map((table) => table.name);
+  return Object.values(snapshot.tables).map((table) => ({
+    name: table.name,
+    columns: Object.values(table.columns).map((column) => column.name),
+  }));
 }
 
 describe("actions personal-data classification", () => {
@@ -183,10 +188,23 @@ describe("actions personal-data classification", () => {
 
   it("walks every table of the newest core snapshot the root exports", () => {
     const walked = tables.map((config) => config.name).sort();
-    const expected = newestSnapshotTables()
+    const expected = newestSnapshot()
+      .map((table) => table.name)
       .filter((name) => !ROOT_UNEXPORTED.includes(name))
       .sort();
     expect(walked).toEqual(expected);
+  });
+
+  it("finds no actor column in the tables the root does not export", () => {
+    const unexported = newestSnapshot().filter((table) => ROOT_UNEXPORTED.includes(table.name));
+    expect(unexported.map((table) => table.name).sort()).toEqual([...ROOT_UNEXPORTED].sort());
+    expect(
+      unexported.flatMap((table) =>
+        table.columns
+          .filter((column) => ACTOR_COLUMN.test(column))
+          .map((column) => `${table.name}.${column}`),
+      ),
+    ).toEqual([]);
   });
 
   it.each(Object.keys(COLUMNS))("classifies every column of %s exactly once", (name) => {
