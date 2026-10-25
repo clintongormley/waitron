@@ -26,7 +26,7 @@ export interface HeldAlertSink {
   handle(
     tx: Transaction,
     input: { id: string; personId: string | null; handledAt: Date },
-  ): Promise<void>;
+  ): Promise<unknown>;
 }
 
 /**
@@ -64,13 +64,13 @@ export async function refreshHeldAlert(
   return false;
 }
 
-function handle(
+async function handle(
   tx: Transaction,
   sink: HeldAlertSink,
   incident: HeldAlertIncident,
   input: { now: Date; by: string | null },
 ): Promise<void> {
-  return sink.handle(tx, { id: incident.id, personId: input.by, handledAt: input.now });
+  await sink.handle(tx, { id: incident.id, personId: input.by, handledAt: input.now });
 }
 
 function raise(
