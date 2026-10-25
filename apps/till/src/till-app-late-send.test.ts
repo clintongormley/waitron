@@ -11,6 +11,7 @@ import { menuOfferToTillProduct } from "./api/client.js";
 import type {
   DraftSubmission,
   MenuState,
+  RecalledDraftLine,
   TillApi,
   TillMenuOffer,
   ZoneOfferCatalogue,
@@ -18,6 +19,15 @@ import type {
 import type { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import {
+  addDish as addSteak,
+  dialog as allergyDialog,
+  mountApp as mountAllergyApp,
+  openTable as openAllergyTable,
+  resetAllergyFixture,
+  server as allergyServer,
+  tableOrder as allergyOrder,
+} from "../test/allergy-app-fixture.js";
 
 interface Menu {
   id: string;
@@ -299,9 +309,9 @@ const windowDishes = (el: TillApp) =>
 const names = () => store.lines.map((line) => line.product.name);
 const submissions = () => api.submitDraft!.mock.calls.map((call) => call[2] as DraftSubmission);
 
-/** Seats table 2 under Breakfast, orders an Omelette and a Coffee from Desayunos, then lets Lunch
- * start: the Omelette is marked "Breakfast ended", the Coffee is not, because Lunch sells it too. */
-async function lateTable(overrides: Record<string, unknown> = {}): Promise<TillApp> {
+/** Seats table 2 under Breakfast and orders an Omelette and a Coffee from Desayunos; no poll has
+ * yet told the till that Breakfast ended, so nothing is marked. */
+async function breakfastTable(overrides: Record<string, unknown> = {}): Promise<TillApp> {
   current = catalogue("breakfast");
   const { el } = await mountApp(overrides);
   await flush(el);
@@ -320,6 +330,13 @@ async function lateTable(overrides: Record<string, unknown> = {}): Promise<TillA
   for (const product of ["Omelette", "Coffee"])
     store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS, product), "v1"), "1");
   await flush(el);
+  return el;
+}
+
+/** As `breakfastTable`, then lets Lunch start: the Omelette is marked "Breakfast ended", the Coffee
+ * is not, because Lunch sells it too. */
+async function lateTable(overrides: Record<string, unknown> = {}): Promise<TillApp> {
+  const el = await breakfastTable(overrides);
   current = catalogue("lunch");
   await poll(el);
   expect(store.lines.map((line) => line.endedPeriod)).toEqual([
@@ -524,5 +541,215 @@ describe("a table's send from the marks", () => {
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
     expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+});
+
+/** The server's 409 for dishes it finds late that the till had not marked (D21's params). */
+function refusal(periods: readonly { menuId: string; periodName: string }[], items: string[]) {
+  return {
+    code: "menu_period.ended",
+    status: 409,
+    departmentId: "department-restaurant",
+    menus: periods,
+    menuItemIds: items,
+    needsManager: false,
+  };
+}
+const BREAKFAST_ENDED = refusal(
+  [{ menuId: DESAYUNOS.id, periodName: "Breakfast" }],
+  [offerId(DESAYUNOS, "Omelette")],
+);
+
+/** An Omelette sent earlier and recalled into Ana's draft on table 2. */
+function seedRecalledOmelette(): void {
+  const line: RecalledDraftLine["source"]["line"] = {
+    changesAfterSending: null,
+    id: "sent-omelette",
+    name: "Omelette",
+    productId: "Omelette",
+    parentProductId: null,
+    menuItemId: offerId(DESAYUNOS, "Omelette"),
+    lineNo: 1,
+    parentLineNo: null,
+    quantity: "1",
+    priceQuantity: "1",
+    unitPrecision: 0,
+    unitPriceGross: "3.00",
+    listUnitPriceGross: "3.00",
+    servedAt: null,
+    courseId: null,
+    sentAt: null,
+    firedAt: null,
+    state: null,
+    stationId: null,
+    movable: true,
+    groupId: null,
+    note: null,
+    listId: null,
+  };
+  drafts.drafts.push({
+    id: "draft-recalled",
+    partyId: "party-a",
+    billId: "wo-7",
+    ownerId: "p1",
+    ownerName: "Ana",
+    revision: 2,
+    takenOverFrom: null,
+    lines: [
+      {
+        id: "reference-sent-omelette",
+        sourceLineId: "sent-omelette",
+        source: { line, extras: [], netAmount: "2.48" },
+        quantity: "1",
+        note: null,
+        courseId: null,
+        makeAt: null,
+        noMerge: true,
+        unavailable: false,
+        slot: 0,
+        joinGroupId: null,
+        afterGroupId: null,
+      },
+    ],
+  });
+}
+
+const heading = (el: TillApp) => windowOf(el)!.shadowRoot!.querySelector("wt-dialog")!.heading;
+
+describe("a table's send from the refusal", () => {
+  it("opens the window from a refusal the till had not marked, and Kitchen agreed sends the refused menu", async () => {
+    const el = await breakfastTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(BREAKFAST_ENDED),
+    });
+    expect(store.lines.map((line) => line.endedPeriod)).toEqual([undefined, undefined]);
+
+    await act(el, "send-all");
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(heading(el)).toBe("Breakfast has ended");
+    expect(submissions()).toHaveLength(1);
+    expect(submissions()[0]).not.toHaveProperty("lateSend");
+    expect(store.sending).toBe(false);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(submissions()).toHaveLength(2);
+    expect(submissions()[1]!.lateSend).toEqual({ menuIds: [DESAYUNOS.id] });
+  });
+
+  it("opens the window again from a second refusal naming another period", async () => {
+    const el = await breakfastTable({
+      submitDraft: vi
+        .fn(drafts.submitDraft)
+        .mockRejectedValueOnce(BREAKFAST_ENDED)
+        .mockRejectedValueOnce(
+          refusal([{ menuId: "brunch", periodName: "Brunch" }], [offerId(DESAYUNOS, "Omelette")]),
+        ),
+    });
+    await act(el, "send-all");
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(heading(el)).toBe("Brunch has ended");
+    await choose(el, "data-late-agreed");
+    expect(submissions().map((each) => each.lateSend)).toEqual([
+      undefined,
+      { menuIds: [DESAYUNOS.id] },
+      { menuIds: ["brunch"] },
+    ]);
+  });
+
+  it("neither lists nor removes a recalled dish on the refused offer", async () => {
+    seedRecalledOmelette();
+    const el = await breakfastTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(BREAKFAST_ENDED),
+    });
+    expect(store.lines.map((line) => line.source?.line.id)).toEqual([
+      "sent-omelette",
+      undefined,
+      undefined,
+    ]);
+    await act(el, "send-all");
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+
+    await choose(el, "data-late-remove");
+
+    expect(windowOf(el)).toBeNull();
+    expect(store.lines.map((line) => line.source?.line.id ?? line.product.name)).toEqual([
+      "sent-omelette",
+      "Coffee",
+    ]);
+    expect(submissions()).toHaveLength(1);
+  });
+
+  it("shows the code's sentence when the refusal names none of the sent dishes", async () => {
+    const el = await breakfastTable({
+      submitDraft: vi
+        .fn(drafts.submitDraft)
+        .mockRejectedValueOnce(
+          refusal([{ menuId: DESAYUNOS.id, periodName: "Breakfast" }], ["offer-elsewhere"]),
+        ),
+    });
+
+    await act(el, "send-all");
+
+    expect(windowOf(el)).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("Breakfast has ended");
+    expect(names()).toEqual(["Omelette", "Coffee"]);
+    expect(store.sending).toBe(false);
+  });
+
+  it("opens the same window on a handheld's Send", async () => {
+    const handheld = { ...till, formFactor: "phone-portrait" as FormFactor };
+    const el = await breakfastTable({
+      getTill: vi.fn().mockResolvedValue(handheld),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "till-dev", name: "Móvil", formFactor: "phone-portrait" }),
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(BREAKFAST_ENDED),
+    });
+    expect(
+      el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!.handheld,
+    ).toBe(true);
+
+    await act(el, "send-all");
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    await choose(el, "data-late-agreed");
+    expect(submissions().map((each) => each.lateSend)).toEqual([
+      undefined,
+      { menuIds: [DESAYUNOS.id] },
+    ]);
+  });
+});
+
+describe("an allergy party's send refused for an ended period", () => {
+  beforeEach(() => resetAllergyFixture());
+
+  it("closes the allergy dialog and opens the late-send window", async () => {
+    const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
+    const { el } = await mountAllergyApp({
+      submitDraft: vi
+        .fn<TillApi["submitDraft"]>()
+        .mockRejectedValueOnce(lunchEnded)
+        .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet)),
+    });
+    await openAllergyTable(el);
+    await addSteak(el);
+    await userEvent.click(
+      allergyOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
+
+    await userEvent.click(
+      allergyDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!,
+    );
+
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+    expect(allergyDialog(el)).toBeNull();
+    expect(windowDishes(el)).toEqual(["1× Steak"]);
+    expect(heading(el)).toBe("Lunch has ended");
   });
 });

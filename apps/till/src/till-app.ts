@@ -13,7 +13,12 @@ import {
 } from "./widgets/party-allergy-dialog.js";
 import type { BillEditExpected, BillUnsent, LateSend, Tender } from "./api/client.js";
 import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
-import { endedPeriodOf, type EndedPeriod } from "./state/late-send.js";
+import {
+  endedPeriodOf,
+  lateSendRefusalOf,
+  refusedLines,
+  type EndedPeriod,
+} from "./state/late-send.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
@@ -520,7 +525,25 @@ type DraftFollowUp =
   | "mark-unsellable"
   | "recheck-dead-ends"
   | { landedOn: string }
+  | { lateSend: LateSendAsked }
   | undefined;
+
+/** The window a `menu_period.ended` refusal asks for: the request's new lines it names, and its menus. */
+interface LateSendAsked {
+  listed: OrderLine[];
+  periods: readonly [EndedPeriod, ...EndedPeriod[]];
+}
+
+/** Undefined when the refusal carries no usable params or names none of `lines` (D41). */
+function lateSendAsked(error: unknown, lines: readonly OrderLine[]): LateSendAsked | undefined {
+  const refusal = lateSendRefusalOf(error);
+  if (refusal === undefined) return undefined;
+  const [head, ...tail] = refusal.menus;
+  const listed = refusedLines(lines, refusal);
+  return head === undefined || listed.length === 0
+    ? undefined
+    : { listed, periods: [head, ...tail] };
+}
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
  * when its read failed. Undefined when the operator session it was opened in has ended. */
@@ -3865,7 +3888,8 @@ export class TillApp extends LitElement {
           (refusal !== undefined &&
             (DRAFT_REFUSALS.has(refusal.refused) ||
               UNSELLABLE_LINE_REFUSALS.has(refusal.refused) ||
-              refusal.refused === "station.no_replacement"))
+              refusal.refused === "station.no_replacement" ||
+              refusal.refused === "menu_period.ended"))
         ) {
           this.#closeAllergyDialog(false, prepared.key);
           throw error;
@@ -11524,6 +11548,16 @@ export class TillApp extends LitElement {
       store.sending = false;
     }
     if (followUp === undefined) return;
+    if (typeof followUp === "object" && "lateSend" in followUp) {
+      this.#openLateSend(
+        followUp.lateSend.listed,
+        followUp.lateSend.periods,
+        "send",
+        (confirmed) => this.#sendDraft(detail, confirmed),
+        (listed) => this.#removeDraftLines(store, listed),
+      );
+      return;
+    }
     if (followUp === "mark-unsellable") {
       await this.#markUnsellable(store);
       return;
@@ -11779,6 +11813,8 @@ export class TillApp extends LitElement {
       submitted = written.value;
     } catch (error) {
       if (!live()) return;
+      const asked = lateSendAsked(error, sent);
+      if (asked !== undefined) return { lateSend: asked };
       if (isVersionRefusal(error)) {
         const outcome = await this.#refreshRound(sync.store);
         if (!live()) return;
