@@ -598,10 +598,14 @@ not captured. It was not reproduced. **Next action:** reproduce it under load an
 
 ## Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935)
 
+2026-10-25 (A1100): artifact uploads now have
+[two bounded attempts](../developers/ci-and-gates.md#every-artifact-upload-is-bounded).
+The setup-node, cache, Docker and CodeQL steps below still wait on their job limits.
+
 List them with
 
 ```sh
-grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache|upload-artifact)|docker/|github/codeql-action)' .github/workflows/*.yml
+grep -n -E '^\s*-?\s*uses: (actions/(setup-node|cache)|docker/|github/codeql-action)' .github/workflows/*.yml
 ```
 
 On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`,

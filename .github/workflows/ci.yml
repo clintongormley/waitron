@@ -825,7 +825,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the db coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -1008,7 +1008,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the server coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -1115,7 +1115,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the stream tests' coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -1283,7 +1283,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the fiscal-verifactu coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -1543,7 +1543,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the till coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -1704,7 +1704,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the dashboard coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -1950,7 +1950,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the venue-service coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -1983,7 +1983,7 @@ jobs:
           path: ${{ runner.temp }}/shard-diagnostics/
           retention-days: 14
 
-      - name: Retry keep the failed shard's start-up record
+      - name: Retry artifact upload
         if: always() && steps.upload_diagnostics.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -2491,7 +2491,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Retry upload the provisioning coverage blob
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1

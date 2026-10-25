@@ -178,6 +178,10 @@ hook, or how tests are scheduled:
   second; only the first failure is tolerated.** Guard: the artifact-download cases in
   `scripts/ci-workflow.test.mjs`, weaker than their name: read workflow text, never run it.
   Receipt and limits: [ci-and-gates.md](docs/developers/ci-and-gates.md#every-artifact-download-is-bounded).
+- **Every artifact upload has two bounded attempts; only a failed first attempt runs the retry,
+  with `overwrite: true`, and a second failure fails the job.** Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text, never runs an upload.
+  Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md#every-artifact-upload-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
 - **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS. Both

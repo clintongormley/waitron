@@ -116,7 +116,7 @@ jobs:
           path: packages/ui-core/reports/mutation/
           retention-days: 30
 
-      - name: Retry upload mutation report
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -269,7 +269,7 @@ jobs:
           path: packages/ui/reports/mutation/
           retention-days: 30
 
-      - name: Retry upload mutation report
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1
@@ -441,7 +441,7 @@ jobs:
           path: packages/db/reports/mutation/
           retention-days: 30
 
-      - name: Retry upload mutation report
+      - name: Retry artifact upload
         if: always() && steps.upload_blob.outcome == 'failure'
         uses: actions/upload-artifact@v7
         timeout-minutes: 1

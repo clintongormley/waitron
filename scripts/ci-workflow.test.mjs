@@ -30,7 +30,7 @@ import {
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one case
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
-// two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-download cases reading every
+// two apt cases, a `--with-deps` case, the pnpm-setup, checkout and artifact-transfer cases reading every
 // .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
 // the workflow. Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
@@ -3988,7 +3988,7 @@ describe("the workflows' artifact uploads", () => {
       "an unconditional retry",
       first + second.replace("        if: always() && steps.upload.outcome == 'failure'\n", ""),
     ],
-    ["an unconditional first upload", first.replace("if: always()", "if: true") + second],
+    ["an unrecognised first-upload condition", first.replace("if: always()", "if: true") + second],
     ["another action version", first + second.replace("@v7", "@v6")],
     [
       "a tolerated retry failure",
