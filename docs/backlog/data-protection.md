@@ -70,30 +70,72 @@ answered all ten questions on 2026-10-22 (design §8). The open slices, by the d
 by the answers):
 
 - **S2** — a staff member downloads their own data from their profile; an admin downloads another
-  person's under a new admin-only permission, `personal_data.export`. The server route for a
-  person's own download exists (`GET /management-api/me/personal-data/export`, a ZIP of their
-  profile and sign-in details with a `README.txt` first, in the person's own language, English or
-  Spanish), the Profile page has a **Download** button beside **Copy of your data**, and the Users
-  guide has a "Download your data" section (`{#own-data}`) in English and Spanish. When the
-  workforce module is on, the download also holds `employment.json`, `rota.json`, `absences.json`
-  and `attendance.json`, and when the staffing module is on, `staff-roles.json`. When workforce and
-  a working-time exporter (today `workforce-es`) are both on, it also holds the working-time record
-  (`time-record.pdf`, `time-record.csv`), but only if the person has an entry at this box's
-  location (`apps/server/src/personal-data-time-record.ts:26`, `:42`). Left:
-  - **S2c** — the counts of voids, refunds and drawer openings (`actions.csv`) and an admin's
-    download of another person's data. Its `authorize` returns a README language too, and it adds
-    README words for `actions.csv`. It also widens the guide section's and the Profile help text's
-    list of contents (the `own-data` section of
-    `apps/server/src/guide/{en,es}/staff.md` and `profile.data_copy_help` in
-    `apps/dashboard/src/i18n/strings.ts`) for `actions.csv`, and adds guide text for an admin's
-    download of another person's data.
-
-  A new section in the Users guide (`apps/server/src/guide/<language>/staff.md`) also goes into
-  that page's section-id list in `apps/server/src/guide-content.test.ts`.
+  person's under a new admin-only permission, `personal_data.export`. Built: the server route for a
+  person's own download (`GET /management-api/me/personal-data/export`, a ZIP of their profile and
+  sign-in details with a `README.txt` first, in the person's own language, English or Spanish), the
+  Profile page's **Download** button beside **Copy of your data**, and the Users guide's "Download
+  your data" section (`{#own-data}`) in English and Spanish. When the workforce module is on, the
+  download also holds `employment.json`, `rota.json`, `absences.json` and `attendance.json`, and
+  when the staffing module is on, `staff-roles.json`. When workforce and a working-time exporter
+  (today `workforce-es`) are both on, it also holds the working-time record (`time-record.pdf`,
+  `time-record.csv`), but only if the person has an entry at this box's location
+  (`apps/server/src/personal-data-time-record.ts:26`, `:42`). Since S2c
+  ([its plan](../superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md)) it also holds
+  `actions.json` when the person has at least one such action: the whole sales already recorded
+  whose void they authorised, the refunds they asked for, authorised or recorded the outcome of,
+  and the cash-drawer openings they made or authorised, with how many of each, the invoice number
+  and amount where there is one, when, and their part in each refund and opening
+  (`apps/server/src/personal-data-actions.ts`). No product path records a whole-sale void yet, so
+  the voids list is empty on every box until one does (S2c decision 3). An admin downloads another
+  person's data, a disabled person's included, from **Download their data** in the person's row
+  menu on **Users** (`GET /management-api/staff/:id/personal-data/export`), with the README in that
+  person's language, else the venue's, and the Users guide's "Download another person's data"
+  section (`{#person-data}`) says how. What is left of S2 is in the points below.
 - **A manager's own copy of what they decided about others** — the absences and swaps they
   decided, the rotas they published and the attendance answers they authorised: the design's "who
   did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer
   openings (S2b decision 11).
+- **The rest of "who did what" in the download** (design §2.1 row s12). S2c's `actions.json` holds
+  only whole-sale voids, refunds and cash-drawer openings (S2c decisions 2 and 3). What is left:
+  - **S2d, line voids, comps and discounts — the next slice.** What the till's line menu calls
+    **Void…** (`table.void_line`, `apps/till/src/i18n/strings.ts`) and the dashboard's **Voids and
+    comps** page records: the adjustments module's `requested_by` and `approved_by`
+    (`packages/adjustments/src/schema/adjustments.ts`) and core's
+    `line_service_cancellations.actor_id` (written by `apps/server/src/line-cancel.ts`). The till's
+    line **Void…** is the only void staff do today: the only caller of `recordVoid`, the one writer
+    of `sale_voids`, outside `packages/core` is the test harness
+    `apps/server/src/testing/order-venue.ts` (`git grep -n "recordVoid" -- 'apps/*/src/**'
+    'packages/*/src/**' ':!*.test.ts'` on 2026-10-25, less the fiscal backends' own `recordVoid`
+    and the payments packages' unrelated provider void). Worked example: Marta, a cashier, cancels
+    three lines on table 4's bill with **Void…**, asks for one cash refund a supervisor authorises,
+    and rings two cash sales that each open the drawer. Her `actions.json` lists the refund and the
+    two openings, `counts.voids` is 0, and the three lines are not there. **Open decision for the
+    owner** (S2c decision 3, built with S2d as the next slice): should line voids, comps and
+    discounts have joined S2c instead?
+  - **The 28 core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
+    lists as not in the download yet, by table: `sales` (`operator_id`, who rang a sale;
+    `authorized_by`, who authorised a corrective invoice); `unpaid_departures` (`authorized_by`,
+    `recorded_by`); `receipt_reprints.person_id`; `invoice_pdf_downloads.person_id`;
+    `invoice_deliveries.person_id`; `bill_payments` (`requested_by`, `attested_by`);
+    `order_amendments.actor_id`; `ticket_item_moves.moved_by_person_id`; `order_drafts.owner_id`;
+    `order_draft_events` (`actor_id`, `from_person`, `to_person`); `order_group_events.actor_id`;
+    `order_groups` (`fired_by`, `submitted_by`); `working_order_lines.credited_to`, whose sale a
+    line counts as; `bill_edit_states.editor_id`, who is editing a bill; `parties` (`opened_by`,
+    `closed_by`); `daily_closes.closed_by`; `incidents.acknowledged_by`; `membership_clearances` and
+    `membership_removals` (`person_id`); `pass_item_marks.done_by_person_id`; and
+    `line_service_cancellations.actor_id`, which is S2d's. The guard knows a column by its name;
+    `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
+    them (S2c decision 2).
+  - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment holds
+    and resolutions, department transfers, allergy answers and service steps. The S2c guard reads
+    core's tables only.
+- **An administrator's sign-in that keeps the current session**, offered in place on a permission
+  refusal. Today the dashboard has none (S2c decision 12), so when a person who has lost
+  `personal_data.export` presses **Download their data**, the refusal's **Sign in as an
+  administrator** signs them out first. The server already checks an administrator's credentials
+  for one request without replacing the session — `checkManagerPassword`, then `loginManagerById`
+  → `authorizeManager` → `endManagementSession` in one transaction
+  (`apps/server/src/management-api.ts:1065-1078`) — which is the pattern to reuse.
 - **Owner question: the times of the shifts a swap names.** Today a swap in the download carries
   no shift (S2b decision 8). Example: Ana offers Marta her Saturday 18:00–02:00 shift as a
   give-away; Marta accepts and Luis approves. Approving moves no shift, so the shift stays Ana's
@@ -102,13 +144,24 @@ by the answers):
   Include them, yes or no?
 - **The working-time record of a box with more than one location** — only this node's location is
   exported (S2b decision 6). Today provisioning refuses a second, different location.
-- **Measure the working-time part on a box.** On a Mac, with 48 closed pay periods × 30 staff,
-  Task 6a's run timed the read inside the write lock at 669.7 ms. Task 6c, measuring its own
+- **Measure the working-time and actions parts on a box.** On a Mac, with 48 closed pay periods ×
+  30 staff, Task 6a's run timed the read inside the write lock at 669.7 ms. Task 6c, measuring its own
   before-figure on the same Mac at 590.2 ms median, moved the person cut to read time, with one
   copy of the export's logic, and brought it to 213.8 ms median with an identical CSV. The
   whole-history PDF for 4 years × about 20 shifts a month rendered in 2.6 s (4.0 MB) on the Mac
   (Task 6a); the plan's 650 ms estimate was for 1,000 sessions. The PDF renders on the thread that
   serves sales, which is why the box's figure matters. Measure both on a box.
+  The actions part (S2c) reads in write-lock turns of its own while the files are built, after the
+  turn that reads the other parts. S2c's Task 3 measured them on the Mac, with 1,000,000 drawer
+  openings and 20,000 whole-sale voids, for a person with 33,677 openings: medians of 12 builds, in
+  each of two freshly loaded databases, of row turn 1 (voids and refunds) about 7 ms; row turn 2
+  (drawer openings) 105 and 125 ms (single builds 97–196 ms); each of the 83 invoice-number turns
+  (up to 500 sales a turn) about 2 ms; one bill-payment turn under 1 ms; the whole build about
+  0.3 s over 86 turns. `actions.json` was 7.07 MB. The two row turns scan their whole tables,
+  because none of the person columns they select on has an index, so they grow with the venue's
+  whole history, not only the person's (S2c decision 4). A control with indexes on those columns,
+  not shipped, brought row turn 2 to 61 and 75 ms; the rest of its cost is sorting and mapping the
+  person's rows. Repeat the turns and the file's size on a box.
 - **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
   badge sits over the last letter of "Copy of your data" / "Copia de tus datos". The placement
   came from S2a2 (#2049), whose test in
@@ -124,6 +177,8 @@ by the answers):
   (`apps/server/src/me-api.ts`). #1990 has since landed, so the next step is for `boot.ts` to pass
   its module list (`setsToMigrate`) and `now`, as it does for the attendance export, and to delete
   `modulesNamed` and `MeApiDeps.now`.
+  The admin's download of another person (S2c) is mounted by the same function,
+  `mountPersonalDataExportApi`, so the move takes both routes.
 - **S3** — an admin finds an invoice customer by tax number and downloads what the box holds.
 - **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
   checklist.

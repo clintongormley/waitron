@@ -210,9 +210,12 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    writes** (README lines, Profile help, the guide's own-data and admin sections, both languages)
    names exactly what `actions.json` holds and the person's part in each, in words that cannot be
    read as the till's line **Void…**, and with the same roles the README's `holds` names (Task 5):
-   "whole sales voided after they were recorded that you authorised" / «ventas completas anuladas
-   después de registrarse que autorizaste» (`voided_by` is the authoriser, decision 2), refunds you
-   asked for or authorised, cash-drawer openings you made or authorised. "Took part in" is not used:
+   "the whole sales already recorded whose void you authorised" / «las ventas completas ya
+   registradas cuya anulación autorizaste» (`voided_by` is the authoriser, decision 2), the refunds
+   you asked for, authorised or recorded the outcome of, the cash-drawer openings you made or
+   authorised. (2026-10-25: these are the words Task 5 shipped, after review, in place of "whole
+   sales voided after they were recorded that you authorised" and "refunds you asked for or
+   authorised"; the README also says "invoice number", not "sale number".) "Took part in" is not used:
    a cashier who rang a sale a manager later voided took part in it, and who rang a sale
    (`sales.operator_id`) is not in the file. "When there are any" keeps each text true while the
    voids list is empty. No text promises a later addition. **Open decision for the owner** (FYI
@@ -910,6 +913,12 @@ Files: `apps/server/src/i18n/personal-data-readme.ts`, `apps/server/src/personal
 Words (shape `holds`, `use`, optional `sentTo`, `kept`, `i18n/personal-data-readme.ts:1-8`), in
 decision 3's terms:
 
+2026-10-25: the `holds` words below are the first draft. What shipped
+(`apps/server/src/i18n/personal-data-readme.ts`, commit a94f937a2) says "the whole sales already
+recorded whose void you authorised" / «las ventas completas ya registradas cuya anulación
+autorizaste», "the invoice number" / «el número de factura», and "your part" only for each refund
+and opening.
+
 | Key | English | Spanish |
 | --- | --- | --- |
 | `holds` | `the whole sales voided after they were recorded that you authorised, the refunds you asked for, authorised or recorded the outcome of, and the cash-drawer openings you made or authorised: how many of each and, for each one, the sale number where there is one, the amount where there is one, when it happened and your part in it.` | `las ventas completas anuladas después de registrarse que autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste: cuántas hay de cada una y, de cada una, el número de venta si lo tiene, el importe si lo tiene, cuándo ocurrió y qué parte tuviste tú.` |
@@ -1202,6 +1211,12 @@ Files: `apps/server/src/guide/en/staff.md`, `apps/server/src/guide/es/staff.md`,
 
 Every sentence names what `actions.json` holds in decision 3's words, and none promises a later
 addition.
+
+2026-10-25: the guide and help text below are the first draft. What shipped uses Task 5's shipped
+words (decision 3's note): "the whole sales already recorded whose void you authorised" and "the
+refunds you asked for, authorised or recorded the outcome of", in both languages
+(`apps/server/src/guide/{en,es}/staff.md`, `profile.data_copy_help` in
+`apps/dashboard/src/i18n/strings.ts`).
 
 The own-data section (`en/staff.md:30-38`, `es/staff.md:33-43`) gains, after the working-time
 sentence: "It also holds `actions.json`, when there are any: the whole sales voided after they were

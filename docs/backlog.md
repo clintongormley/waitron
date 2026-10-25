@@ -4205,6 +4205,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
+- **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
+  [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
+
 - **A1076. Spanish names the three late flags three ways**.
   Left open by A756 PR 5.
   [Detail](backlog/languages.md#a1076-spanish-names-the-three-late-flags-three-ways)
