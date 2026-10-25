@@ -4808,8 +4808,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   in the browser's time zone**, while the section's tables and the adviser's file write each sale's
   time at its stored offset: the sentence is the shared `alertMessage` wording. Left open by A1088.
 
-- **An open list of wrongly dated sales whose list read failed shows Mark handled but no
-  Download** until a later read of the lists answers. Left open by A1088.
+- **An open list of wrongly dated sales whose list read failed shows no Download** until a later
+  read of the lists answers. A list the box restarted during still shows its sentence and Mark
+  handled; a plain one shows neither. Left open by A1088.
 
 - **The Box status page's Handled lists fold reads every handled list when opened, with no
   limit** (A1088 decision 1); page it if a venue gathers many. Left open by A1088.
@@ -5749,9 +5750,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the current rule and planning files stay in place until then.
   [Detail](backlog/architecture.md#go-live-day-steps).
 
-- **A query with tens of thousands of bound values crashes in the store's adapter**:
-  `packages/store/src/node-sqlite-adapter.ts` passes every bound value as its own argument
-  (`stmt.all(...bind(params))`), and an `inArray` over 60,000 ids answered `RangeError: Maximum
+- **A query with tens of thousands of bound values crashes before it reaches the database**: drizzle's
+  session (`drizzle-orm/better-sqlite3/session.js`) and the store's adapter
+  (`packages/store/src/node-sqlite-adapter.ts`, `stmt.all(...bind(params))`) each pass every bound
+  value as a separate argument, and an `inArray` over 60,000 ids answered `RangeError: Maximum
   call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
   size). Found by A1088's review, whose own query no longer names ids; any other query that binds
   one value per row can still meet it.

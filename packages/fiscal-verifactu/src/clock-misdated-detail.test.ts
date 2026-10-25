@@ -359,8 +359,8 @@ describe("misdatedDetail", () => {
   });
 
   it("answers every record of a list longer than one query can name by id, row for row", async () => {
-    // A query naming every listed id overflowed the stack at 60,000 ids and not at 57,500 (macOS,
-    // Node 26); the bound depends on the stack, so the size leaves room above it.
+    // Above where one bound value per id overflowed the stack: docs/backlog.md, "A query with tens
+    // of thousands of bound values".
     const size = 65_536;
     await sale(X + H);
     const columns = suite.db.all<{ name: string }>(sql`pragma table_info(registros_facturacion)`);

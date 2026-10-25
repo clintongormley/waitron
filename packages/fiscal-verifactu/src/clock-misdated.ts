@@ -135,7 +135,7 @@ export async function misdatedRecords(
 }
 
 /** `misdatedRecords`' list with each record's kind, stored issue date and stored amount, and the
- * closing's own values. Reads only, in two selects whose size does not grow with the list: the
+ * closing's own values. Reads only, in at most two selects, neither growing with the list: the
  * confirmation's and the records'. Null when no confirmation has the id. */
 export async function misdatedDetail(
   tx: Transaction,

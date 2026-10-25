@@ -502,6 +502,8 @@ trimmed, `""` → no note, over 500 characters → `management.request_invalid` 
 `note` any other type, or a body that is not an object → `{ field: "note" }`. A note is taken only
 for a `clock.records_misdated` incident: a note on any other code → 404 `alert.not_found` (no
 screen shows another code's note, round 3 m7); without a note every code is handled as today.
+(2026-10-25, finish review: a body that is not an object now answers `{ field: "body" }`,
+81060d0b5.)
 Then `markIncidentHandled`; when it answers false and a note was given → `alert.already_handled`
 `{ id }`. `STATUS` gains `"management.request_invalid": 400` and
 `"alert.already_handled": 409`. `errors.ts` declares `alert.already_handled` beside `alert.not_found`
@@ -542,7 +544,7 @@ then `addIncidentNote`: "added" → 204; "note_exists" → 409 `alert.note_exist
 "not_handled" → 409 `alert.not_handled` `{ id }`; "not_found" → 404 `alert.not_found`. Both codes
 declared in `errors.ts` and worded in `codes.ts` ("This alert already has a note." / "This alert has
 not been marked handled yet.", and Spanish). `MisdatedHandled` gains `note: string | null`, read in
-`readMisdatedHandled`.
+`readMisdatedHandled`. (2026-10-25, finish review: both refusals now name a next step, d9e076793.)
 
 1. Failing cases: the note is added to a handled incident (by a person, and by the box: null
    handler) and read back; a second answers 409 `alert.note_exists` with the first kept; an open
@@ -594,6 +596,8 @@ through; otherwise one select of `clock_confirmations` left-joined to `clock_che
 person id, confirmed at, `proof`, the check's `detail`) and, when the list is not empty, one select
 of `registros_facturacion` (`id`, `tipo_registro`, `fecha_expedicion_factura`, `importe_total`) with
 `inArray` over the listed ids, awaited in turn, joined in JavaScript in the list's order.
+(2026-10-25, finish review: superseded; `misdatedDetail` selects through the list's own bound in
+`misdatedSelection`, with no lookup by id, 0ef38735b.)
 `tipo_registro` `alta` → `issue`, `anulacion` → `cancellation`. `correctedStart` and `partial` come
 from `proof.closing`; `startOffsetMinutes` from the check's `detail.offsetMinutes` when it is a
 number.
