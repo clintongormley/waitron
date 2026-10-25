@@ -122,7 +122,13 @@ import {
   topTabKind,
   type MapKind,
 } from "../state/floor-look.js";
-import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
+import {
+  readyByStation,
+  readyTables,
+  signalOf,
+  type ReadyTable,
+  type StationReady,
+} from "../state/table-signals.js";
 import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { stepChip, stepChipStyles } from "../widgets/step-chip.js";
 import { currentStep, nextStepDueAt } from "../state/service-steps.js";
@@ -794,6 +800,33 @@ export class TillFloorScreen extends LitElement {
         min-width: 0;
         overflow-wrap: anywhere;
       }
+
+      .ready-bar {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-success);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .ready-bar h2 {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .ready-tables {
+        display: flex;
+        flex: 1;
+        gap: var(--wt-space-2);
+        min-width: 0;
+        overflow-x: auto;
+      }
     `,
   ];
 
@@ -814,6 +847,8 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) canOpenStation = false;
   /** Mounted inside a card host, which supplies the header; the view toggle stays. */
   @property({ type: Boolean }) embedded = false;
+  /** On a handheld, which draws the Ready bar in place of the stations' summary. */
+  @property({ type: Boolean }) handheld = false;
   /**
    * `undefined` checks the live `prefers-reduced-motion` query on every render; a test injects a value.
    *
@@ -2408,7 +2443,7 @@ export class TillFloorScreen extends LitElement {
         }
         ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
         ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()}
-        ${this.#renameWindow()} ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#renameWindow()} ${this.#billChoice()} ${this.#joinWith()} ${this.#readyBar()}
       </section>
     `;
   }
@@ -2916,8 +2951,10 @@ export class TillFloorScreen extends LitElement {
     return marks;
   }
 
-  /** Every zone's tables, not only the zone on screen: a station serves the whole floor. */
+  /** Every zone's tables, not only the zone on screen: a station serves the whole floor. A handheld
+   * draws the Ready bar instead. */
   #stationSummary(): TemplateResult | typeof nothing {
+    if (this.handheld) return nothing;
     const stations = readyByStation(this.tables);
     if (stations.length === 0) return nothing;
     return html`<section class="stations" data-station-summary aria-labelledby="stations-title">
@@ -2926,6 +2963,50 @@ export class TillFloorScreen extends LitElement {
         ${stations.map((station) => this.#stationRow(station))}
       </ul>
     </section>`;
+  }
+
+  /** The tables with food ready in the zones this Floor shows; Open opens the first listed. */
+  #readyBar(): TemplateResult | typeof nothing {
+    if (!this.handheld) return nothing;
+    const ready = readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)));
+    const first = ready[0];
+    if (first === undefined) return nothing;
+    return html`<section
+      class="ready-bar help-anchor"
+      data-ready-bar
+      aria-labelledby="ready-bar-title"
+    >
+      <h2 id="ready-bar-title">
+        <wt-icon name="floor-ready" size="sm"></wt-icon>${t("floor.ready_title")}
+      </h2>
+      <div class="ready-tables">${ready.map((entry) => this.#readyEntry(entry))}</div>
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-ready-open
+        aria-label=${t("floor.ready_bar_open_label").replace("{table}", () => first.name)}
+        @click=${() => this.#openReady(first)}
+        >${t("floor.ready_bar_open")}</wt-button
+      >
+      ${helpBadge("help.floor.ready_bar", t("floor.ready_title"))}
+    </section>`;
+  }
+
+  #readyEntry(entry: ReadyTable): TemplateResult {
+    return html`<wt-button
+      size="sm"
+      variant="secondary"
+      data-ready-table=${entry.tableId}
+      @click=${() => this.#openReady(entry)}
+      >${t("floor.ready_bar_table")
+        .replace("{table}", () => entry.name)
+        .replace("{n}", String(entry.count))}</wt-button
+    >`;
+  }
+
+  #openReady(entry: ReadyTable): void {
+    const table = this.tables.find((candidate) => candidate.id === entry.tableId);
+    if (table !== undefined) this.#openTable(table);
   }
 
   #stationRow(station: StationReady): TemplateResult {
