@@ -559,15 +559,28 @@ A987's design does not change the route
   the original CI delay remains unmeasured.
   [Test timing guidance](../developers/testing-guide.md#a-deadline-test-must-separate-timer-ordering-from-filesystem-speed).
 
+## Authenticated server-certificate recovery
+
+The public connection page can retry managed certificate repair, reread its inspection and stop
+this browser attempt. It cannot replace a separately supplied certificate or diagnose every
+persistent certificate-file refusal. A successful reinspection does not establish that a
+separately supplied certificate has been replaced: its HTTPS address must open without warnings.
+
+Build a secure owner-authenticated repair route with sign-in at the action, cause-specific
+choices and a safe Stop before replacement. Keep keys and filesystem details off the public
+HTTP page; do not add password entry there. Cover persistent refusal and separately supplied
+certificate replacement through their real startup paths. Linked-layout repair is the separate
+entry below. These workflows remain open after the A1089 public-page rework.
+
 ## Public TLS repair refuses linked layouts.
 
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
   but a damaged linked folder or managed file cannot be repaired through the public guide.
   Decide whether to support links contained within the state folder while retaining archive,
   exclusion and path-containment checks; cover the restored-layout startup and repair path.
-  The public refusal now directs you to the installer after a repeated failure (A1089); support
-  for repairing linked layouts remains open. Found by A733's whole-branch review; see the server
-  README's secure-connection section.
+  The public page offers retry, read-only Check again and Stop (A1089); support for repairing
+  linked layouts remains open. Found by A733's whole-branch review; see the server README's
+  secure-connection section.
 
 ## On a full disk, a box whose kept certificates cannot be used shows the connection set-up page, with no word of the full disk.
 

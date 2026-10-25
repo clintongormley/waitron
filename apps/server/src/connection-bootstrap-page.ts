@@ -51,6 +51,8 @@ details { border: 1px solid var(--wt-color-border); border-radius: var(--wt-radi
 summary { cursor: pointer; font-weight: 600; }
 li { margin-block: var(--wt-space-2); }
 .note { color: var(--wt-color-text-muted); }
+#connection-choices { display: flex; flex-wrap: wrap; gap: var(--wt-space-3); }
+.secondary { background: var(--wt-color-border); color: var(--wt-color-text); }
 #connection-error { color: var(--wt-color-danger); }
 #connection-fingerprint { overflow-wrap: anywhere; font-family: var(--wt-font-family); }
 :focus-visible { outline: 2px solid var(--wt-color-focus); outline-offset: var(--wt-space-1); }
@@ -99,9 +101,24 @@ const retainCertificate = (pem) => {
 retainCertificate(${JSON.stringify(input.caCertificate ?? null).replaceAll("<", "\\u003c")});
 const status = document.getElementById("connection-status");
 const error = document.getElementById("connection-error");
+const check = document.getElementById("connection-check");
+const stop = document.getElementById("connection-stop");
+if (button) button.hidden = false;
+check.hidden = false;
+stop.hidden = false;
+check.addEventListener("click", () => { location.reload(); });
+stop.addEventListener("click", () => {
+  document.getElementById("connection-work").hidden = true;
+  stop.hidden = true;
+  error.textContent = "";
+  status.textContent = words.stopped;
+  status.focus();
+});
 button?.addEventListener("click", async () => {
   if (button.disabled) return;
   button.disabled = true;
+  check.disabled = true;
+  stop.disabled = true;
   status.textContent = words.busy;
   error.textContent = "";
   try {
@@ -140,7 +157,7 @@ button?.addEventListener("click", async () => {
   } catch {
     error.textContent = words.failed;
     status.textContent = healthy && continuationRequired ? words.certificateReady : words.needed;
-  } finally { button.disabled = false; }
+  } finally { button.disabled = false; check.disabled = false; stop.disabled = false; }
 });`;
   return `<!doctype html><html lang="${locale}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -153,11 +170,17 @@ button?.addEventListener("click", async () => {
 <h1>${words.title}</h1><p>${words.intro}</p><p class="note">${words.publicOnly}</p>
 <p id="connection-status" role="status" tabindex="-1">${operator ? words.operator : ready ? (retry ? words.certificateReady : words.ready) : status.state === "refused" ? words.failed : words.needed}</p>
 <p id="connection-error" role="alert"></p>
-${!ready && !operator ? `<button id="connection-repair" type="button">${words.repair}</button><noscript><p>${words.failed}</p></noscript>` : ""}
+<noscript><p>${words.javascript}</p></noscript>
+<div id="connection-work">
+${!ready && !operator ? `<button id="connection-repair" type="button" hidden>${words.repair}</button>` : ""}
 <section${hidden(!operator)}><div id="trust-retained"${hidden(status.trust === "retained")}><h2>${words.retained}</h2><p>${words.retainedHelp}</p></div>
 <div id="trust-new"${hidden(status.trust === "new-required")}><h2>${words.newTrust}</h2><p>${words.newTrustHelp}</p></div>
 <div id="connection-download"${hidden(status.caAvailable)}><p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>
 <div id="connection-help"${hidden(status.caAvailable)}><h2>${words.install}</h2><p class="note">${words.managed}</p>${details}</div></section>
-<section id="connection-actions">${ready && retry && !operator ? `<button id="connection-reconnect" type="button">${words.reconnect}</button>` : ""}<p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}" target="_blank" rel="noopener noreferrer"${hidden((ready && !retry) || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
+<section id="connection-actions">${ready && retry && !operator ? `<button id="connection-reconnect" type="button" hidden>${words.reconnect}</button>` : ""}<p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}" target="_blank" rel="noopener noreferrer"${hidden((ready && !retry) || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
+</div>
+<p id="connection-choice-help" class="note">${words.choiceHelp}</p>
+<div id="connection-choices"><button id="connection-check" class="secondary" type="button" hidden>${words.check}</button>
+<button id="connection-stop" class="secondary" type="button" hidden>${words.stop}</button></div>
 </main><script>${script}</script></body></html>`;
 }

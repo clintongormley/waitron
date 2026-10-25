@@ -160,7 +160,7 @@ it("gives operator-certificate guidance without referring to missing instruction
   const html = renderTrustPage({ ...base, caAvailable: false });
   expect(html).not.toContain("4. Open Waitron");
   expect(html).not.toContain("The instructions above include replacement");
-  expect(html).toContain("whoever installed");
+  expect(html).toContain("This page cannot replace a separately installed certificate.");
   expect(html).not.toContain("Using a different device?");
   expect(html).not.toContain("Remove any old Waitron certificate");
 });
@@ -176,4 +176,13 @@ it("does not describe a plain HTTP recovery destination as secure", () => {
   expect(html).toContain('href="http://waitron.local">Continue to Waitron</a>');
   expect(html).not.toContain("secure site");
   expect(html).not.toContain("Install the certificate on that device first");
+});
+
+it("gives a safe device alternative when certificate removal or installation is blocked", () => {
+  const html = renderTrustPage({ ...base, device: "linux" });
+  expect(html).toContain(
+    "If you cannot identify the old Waitron entry, stop and use another venue device.",
+  );
+  expect(html).toContain("If installation is blocked, use a venue device that permits it.");
+  expect(html).not.toMatch(/ask whoever|an administrator may have to/);
 });

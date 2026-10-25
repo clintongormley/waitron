@@ -14,9 +14,14 @@ export const CONNECTION_TEXT = {
     certificateReady: "Certificate ready. Follow the instructions, then reconnect.",
     open: "Open Waitron below.",
     failed:
-      "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection.",
+      "The connection could not be set up. Choose Set up secure connection to retry. If it keeps failing, stop here: this page cannot fix every certificate problem.",
     operator:
-      "This server uses an installer-supplied certificate. Ask whoever installed it to check the certificate and address.",
+      "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate.",
+    javascript: "Enable JavaScript in your browser, then reload this page to use these choices.",
+    check: "Check again",
+    stop: "Stop",
+    stopped: "Stopped. You can close this tab, or check the connection again.",
+    choiceHelp: "Check again rereads the connection without repairing it. Stop ends this attempt.",
     retained: "Keep your installed Waitron certificate.",
     retainedHelp:
       "If this device already trusts it, continue below. Otherwise, download and install it on this device.",
@@ -27,7 +32,7 @@ export const CONNECTION_TEXT = {
     downloadHelp: "If your browser asks, keep the downloaded file.",
     install: "Installation help",
     remove: "Remove the old Waitron certificate only when replacing it.",
-    managed: "On a managed device, ask your administrator if installation is restricted.",
+    managed: "If this device blocks certificate installation, use a venue device that allows it.",
     continue: "Continue to Waitron",
     warning: "Check the page that opens: continue only when HTTPS shows no certificate warning.",
     fingerprint: "Public certificate fingerprint",
@@ -47,9 +52,15 @@ export const CONNECTION_TEXT = {
     certificateReady: "Certificado listo. Sigue las instrucciones y reconecta.",
     open: "Abre Waitron abajo.",
     failed:
-      "No se ha podido configurar la conexión. Inténtalo de nuevo; si sigue fallando, pide a quien instaló el servidor que revise su conexión segura.",
+      "No se ha podido configurar la conexión. Elige Configurar conexión segura para reintentar. Si sigue fallando, detente aquí: esta página no puede reparar todos los problemas de certificados.",
     operator:
-      "Este servidor usa un certificado del instalador. Pídele que compruebe el certificado y la dirección.",
+      "Este servidor usa un certificado instalado por separado. Comprueba la dirección HTTPS de abajo. Si muestra un aviso del certificado, detente: esta página no puede sustituirlo.",
+    javascript: "Activa JavaScript en tu navegador y recarga esta página para usar estas opciones.",
+    check: "Comprobar de nuevo",
+    stop: "Detener",
+    stopped: "Intento detenido. Puedes cerrar esta pestaña o comprobar la conexión de nuevo.",
+    choiceHelp:
+      "Comprobar de nuevo vuelve a leer la conexión sin repararla. Detener finaliza este intento.",
     retained: "Conserva el certificado de Waitron que ya tienes instalado.",
     retainedHelp:
       "Si este dispositivo ya confía en él, continúa abajo. Si no, descárgalo e instálalo en este dispositivo.",
@@ -61,7 +72,7 @@ export const CONNECTION_TEXT = {
     install: "Ayuda para instalar",
     remove: "Elimina el certificado antiguo de Waitron solo si vas a sustituirlo.",
     managed:
-      "En un dispositivo administrado, pide ayuda a tu administrador si no puedes instalarlo.",
+      "Si este dispositivo bloquea la instalación del certificado, usa uno del local que la permita.",
     continue: "Continuar a Waitron",
     warning:
       "Comprueba la página que se abre: continúa solo si HTTPS no muestra avisos del certificado.",
@@ -92,7 +103,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     summary: "Windows: Edge, Chrome y Firefox",
     removal: [
       "Busca Administrar certificados de usuario en Inicio. En Entidades de certificación raíz de confianza, Certificados, elimina la entrada antigua de Waitron.",
-      "Un administrador debe eliminar las copias instaladas para todo el equipo.",
+      "Para eliminar una copia instalada para todo el equipo, inicia sesión en Windows con una cuenta de administrador.",
     ],
     install: [
       "Abre el archivo descargado y elige Instalar certificado y Usuario actual.",
@@ -117,6 +128,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     ],
     notes: [
       "Instala el archivo en cada navegador que uses. Firefox en Linux tiene su propia lista; sigue sus instrucciones.",
+      "Si este dispositivo bloquea la instalación del certificado, usa uno del local que la permita.",
     ],
   },
   chromeos: {
@@ -129,6 +141,9 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
       "Busca Administrar certificados en la configuración de Chrome, o abre <code>chrome://certificate-manager</code>.",
       "Importa el archivo en Certificados personalizados, Certificados de confianza. Si aparece Autoridades, permite identificar sitios web.",
       "Cierra por completo Chrome y vuelve a abrir esta página.",
+    ],
+    notes: [
+      "Si este dispositivo bloquea la instalación del certificado, usa uno del local que la permita.",
     ],
   },
   android: {

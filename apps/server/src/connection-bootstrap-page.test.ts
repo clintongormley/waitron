@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright";
 import { renderTrustPage, type TrustPageInput } from "./trust-page.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
-import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
+import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 
 let browser: Browser | undefined;
@@ -94,7 +94,7 @@ it.each([403, 503])(
       await expect
         .poll(() => page.locator("#connection-error").textContent())
         .toBe(
-          "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection.",
+          "The connection could not be set up. Choose Set up secure connection to retry. If it keeps failing, stop here: this page cannot fix every certificate problem.",
         );
       expect(await page.locator("body").textContent()).not.toContain("private filesystem details");
       expect(await page.locator("#connection-repair").isEnabled()).toBe(true);
@@ -164,7 +164,7 @@ it("does not call a nonhealthy reply a completed connection", async () => {
     await expect
       .poll(() => page.locator("#connection-error").textContent())
       .toBe(
-        "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection.",
+        "The connection could not be set up. Choose Set up secure connection to retry. If it keeps failing, stop here: this page cannot fix every certificate problem.",
       );
     expect(await page.locator("#connection-continue").isVisible()).toBe(false);
     expect(await page.locator("#connection-repair").isEnabled()).toBe(true);
@@ -251,13 +251,13 @@ it("a reloaded healthy bootstrap retains its public certificate before reconnect
 });
 
 it.each(["en", "es"] as const)(
-  "a refused layout gives an installer next step before and after another refusal (%s)",
+  "a refused layout explains the repair limit before and after another refusal (%s)",
   async (locale) => {
     const page = await browser!.newPage();
     try {
       const guidance =
         locale === "en"
-          ? "The connection could not be set up. Try again; if it still fails, ask whoever installed the server to check its secure connection."
+          ? "The connection could not be set up. Choose Set up secure connection to retry. If it keeps failing, stop here: this page cannot fix every certificate problem."
           : CONNECTION_TEXT.es.failed;
       await open(
         page,
@@ -273,6 +273,205 @@ it.each(["en", "es"] as const)(
       expect(await page.locator("#connection-continue").isVisible()).toBe(false);
       expect(await page.locator("body").textContent()).not.toContain("private filesystem details");
       expect(await page.locator("input,form,textarea,select").count()).toBe(0);
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "a refused repair can be stopped and checked again without another repair (%s)",
+  async (locale) => {
+    const page = await browser!.newPage();
+    try {
+      let writes = 0;
+      await open(
+        page,
+        { state: "refused", trust: "retained", caAvailable: false },
+        async () => {
+          writes++;
+          return { status: 503, body: { error: "private filesystem details" } };
+        },
+        { locale },
+      );
+      await page.goto(`http://waitron.local:8080/setup/connection?lang=${locale}`);
+      await page.locator("#connection-repair").click();
+      await expect
+        .poll(() => page.locator("#connection-error").textContent())
+        .toBe(CONNECTION_TEXT[locale].failed);
+      expect(await page.locator("#connection-choice-help").isVisible()).toBe(true);
+      expect(await page.locator("#connection-check").count()).toBe(1);
+      expect(await page.locator("#connection-stop").count()).toBe(1);
+      await page.locator("#connection-stop").press("Enter");
+      expect(await page.locator("#connection-work").isVisible()).toBe(false);
+      expect(await page.locator("#connection-error").textContent()).toBe("");
+      expect(await page.locator("#connection-status").textContent()).toBe(
+        locale === "en"
+          ? "Stopped. You can close this tab, or check the connection again."
+          : CONNECTION_TEXT.es.stopped,
+      );
+      expect(
+        await page
+          .locator("#connection-status")
+          .evaluate((node) => node === document.activeElement),
+      ).toBe(true);
+      expect(writes).toBe(1);
+      const rechecks: import("playwright").Request[] = [];
+      await page.unroute("http://waitron.local:8080/**");
+      await page.route("http://waitron.local:8080/**", async (route) => {
+        rechecks.push(route.request());
+        await route.fulfill({
+          contentType: "text/html",
+          body: renderTrustPage({
+            ...base,
+            locale,
+            connection: { ...retained, state: "healthy" },
+          }),
+        });
+      });
+      await Promise.all([page.waitForEvent("load"), page.locator("#connection-check").click()]);
+      expect(new URL(page.url()).searchParams.get("lang")).toBe(locale);
+      expect(await page.locator("#connection-work").isVisible()).toBe(true);
+      expect(await page.locator("#connection-status").textContent()).toBe(
+        locale === "en" ? "Certificate ready." : CONNECTION_TEXT.es.ready,
+      );
+      expect(
+        rechecks.filter((request) => new URL(request.url()).pathname === "/setup/connection"),
+      ).toHaveLength(1);
+      expect(rechecks.map((request) => request.method())).not.toContain("POST");
+      expect(writes).toBe(1);
+      expect(await page.locator("input,form,textarea,select").count()).toBe(0);
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "a separately supplied certificate offers address checking and a local stop (%s)",
+  async (locale) => {
+    const page = await browser!.newPage();
+    try {
+      let writes = 0;
+      await open(
+        page,
+        retained,
+        async () => {
+          writes++;
+          return { status: 403, body: { error: "private" } };
+        },
+        { locale, connection: { ...retained, repairAllowed: false } },
+      );
+      expect(await page.locator("#connection-status").textContent()).toBe(
+        locale === "en"
+          ? "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate."
+          : CONNECTION_TEXT.es.operator,
+      );
+      expect(await page.locator("#connection-repair").count()).toBe(0);
+      expect(await page.locator("#connection-continue").isVisible()).toBe(true);
+      expect(await page.locator("#connection-continue").getAttribute("href")).toBe(base.httpsUrl);
+      expect(await page.locator("#connection-stop").count()).toBe(1);
+      await page.locator("#connection-stop").click();
+      expect(await page.locator("#connection-continue").isVisible()).toBe(false);
+      expect(await page.locator("#connection-check").isEnabled()).toBe(true);
+      expect(writes).toBe(0);
+      expect(await page.locator("input,form,textarea,select").count()).toBe(0);
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+it.each(["repair", "reconnect"] as const)(
+  "waits for a pending %s before allowing check or stop",
+  async (action) => {
+    const page = await browser!.newPage();
+    let release: () => void = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await open(
+        page,
+        retained,
+        async () => {
+          await pending;
+          return { status: 503, body: { error: "private" } };
+        },
+        action === "reconnect"
+          ? { connection: { ...retained, state: "healthy", continuationRequired: true } }
+          : {},
+      );
+      expect(await page.locator("#connection-check").count()).toBe(1);
+      expect(await page.locator("#connection-stop").count()).toBe(1);
+      const actionButton = page.locator(`#connection-${action}`);
+      await actionButton.click();
+      await expect.poll(() => actionButton.isDisabled()).toBe(true);
+      expect(await page.locator("#connection-check").isDisabled()).toBe(true);
+      expect(await page.locator("#connection-stop").isDisabled()).toBe(true);
+      release();
+      await expect
+        .poll(() => page.locator("#connection-error").textContent())
+        .toBe(CONNECTION_TEXT.en.failed);
+      expect(await page.locator("#connection-check").isEnabled()).toBe(true);
+      expect(await page.locator("#connection-stop").isEnabled()).toBe(true);
+    } finally {
+      release();
+      await page.close();
+    }
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "certificate installation help offers a venue-device alternative to restricted import (%s)",
+  async (locale) => {
+    const page = await browser!.newPage();
+    try {
+      await open(page, { ...retained, state: "healthy" }, undefined, { locale, device: "linux" });
+      const help = await page.locator("#connection-help").textContent();
+      expect(help).not.toMatch(/ask (them|your administrator)/);
+      expect(help).toContain(
+        locale === "en"
+          ? "If this device blocks certificate installation, use a venue device that allows it."
+          : CONNECTION_TEXT.es.managed,
+      );
+      for (const device of ["linux", "chromeos"] as const) {
+        const summary =
+          locale === "en"
+            ? device === "linux"
+              ? "Linux — Chrome, Chromium and Edge"
+              : "ChromeOS — Chrome"
+            : CONNECTION_DEVICE_ES[device].summary;
+        const detail = page
+          .locator("details")
+          .filter({ has: page.getByText(summary, { exact: true }) });
+        expect(await detail.textContent()).toContain(
+          locale === "en"
+            ? "If importing or removing is blocked, use a venue device that permits it."
+            : CONNECTION_TEXT.es.managed,
+        );
+      }
+      expect(await page.locator("#connection-certificate").getAttribute("download")).toBe(
+        "waitron-ca.crt",
+      );
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "without JavaScript, connection choices explain how to enable them (%s)",
+  async (locale) => {
+    const page = await browser!.newPage({ javaScriptEnabled: false });
+    try {
+      await open(page, retained, undefined, { locale });
+      expect(await page.locator("button:visible").count()).toBe(0);
+      expect(await page.locator("noscript").textContent()).toBe(
+        locale === "en"
+          ? "Enable JavaScript in your browser, then reload this page to use these choices."
+          : CONNECTION_TEXT.es.javascript,
+      );
     } finally {
       await page.close();
     }

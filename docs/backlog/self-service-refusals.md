@@ -805,6 +805,26 @@ connection-repair choice, including the installer-supplied certificate and manag
 instructions. Keep the linked-layout refusal and public-page privacy; any substantial missing
 authenticated repair workflow remains a separate backlog entry.
 
+**2026-10-25 self-service rework:** the public page offers Check again, which reloads its
+inspection without running repair, and Stop, which hides the current attempt’s actions without
+sending another request. Both wait while a repair is pending. A refused repair explains its limit;
+a separately supplied certificate points to the existing HTTPS address and says to stop on a
+warning. Device-installation restrictions suggest a venue device that permits installation.
+The EN/ES backup-recovery guides follow these choices. Public passwords and private server
+error details remain absent in the exercised browser cases.
+
+The substantial [authenticated server-certificate recovery](box.md#authenticated-server-certificate-recovery)
+workflow and [linked-layout repair](box.md#public-tls-repair-refuses-linked-layouts) remain OPEN.
+This slice does not qualify replacement of an external certificate or repair of a linked layout.
+The earlier audit and milestone above retain their historical wording.
+
+The same rework also removes the older `/setup/trust` page’s installer and administrator
+referrals. It offers another venue device if you cannot identify the old certificate or install
+its replacement; a separately supplied certificate keeps its HTTPS-address choice and explicit
+replacement limit. Linux and Chromebook notes carry the device alternative in both languages.
+Without JavaScript, the connection page hides its script-only actions and explains how to enable
+them. Tests cover a changed inspection after Check again and both pending repair and Reconnect.
+
 ### boot-recovery
 
 **Boot recovery must offer choices instead of an installer referral.** Recheck the cause-specific

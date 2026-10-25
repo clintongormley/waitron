@@ -8,8 +8,12 @@ node recovery key. The old attempt and its files stay in their own folders; open
 does not give you access to those local records.
 
 Use the box's secure connection. If your browser does not trust it, choose **Set up secure
-connection** on the repair page first. If the connection still cannot be set up after retrying,
-ask whoever installed the server to check its secure connection.
+connection** on the repair page first. **Check again** rereads the connection without running
+a repair. **Stop** ends this attempt; you can close the tab or check again. If repair keeps
+failing, stop here. This page cannot repair every saved certificate layout or replace a separately
+installed certificate. For a separately installed certificate, check the server’s HTTPS address
+and stop if it shows a warning. If your device blocks certificate installation, use a venue
+device that allows it. Enter passwords and recovery keys only after HTTPS opens without warnings.
 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.

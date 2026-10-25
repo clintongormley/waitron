@@ -8,8 +8,13 @@ del nodo indicada en la copia elegida. El intento anterior y sus archivos se con
 carpetas; abrir una copia no da acceso a esos registros locales.
 
 Usa la conexión segura del equipo. Si el navegador no confía en ella, elige primero **Configurar
-conexión segura** en la página de reparación. Si sigue sin poder configurarse después de
-reintentarlo, pide a quien instaló el servidor que revise su conexión segura.
+conexión segura** en la página de reparación. **Comprobar de nuevo** vuelve a leer la conexión
+sin repararla. **Detener** finaliza este intento; puedes cerrar la pestaña o comprobar de nuevo.
+Si la reparación sigue fallando, detente aquí. Esta página no puede reparar todos los archivos
+de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
+por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
+dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
+contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
 
 Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 

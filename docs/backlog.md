@@ -4491,10 +4491,11 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 ### The box: backups, upgrades and recovery
 
-- **A1089: rework the public connection refusal without an installer referral (#2055).** Offer
-  an applicable connection-repair choice, preserving linked-layout checks and public-page privacy.
-  Record a substantial missing authenticated repair workflow separately.
-  [Correction](backlog/self-service-refusals.md#tls-repair).
+- **A1089: authenticated server-certificate recovery is missing from the public connection page.**
+  Add a secure, owner-authenticated way to diagnose persistent certificate-file failures and
+  replace a separately supplied certificate, with in-place sign-in and a safe Stop. The public
+  page offers retry, read-only Check again and Stop, but cannot complete these repairs.
+  [Detail](backlog/box.md#authenticated-server-certificate-recovery).
 
 - **A1089: rework the backup-key refusal without an administrator referral (#2058).** Give a way
   to inspect and correct effective configuration, with any needed sign-in there. Keep both key
@@ -4528,8 +4529,7 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
   but a damaged linked folder or managed file cannot be repaired through the public guide. The
-  refusal still names the installer after a repeated failure, which A1089 must replace with a
-  self-service choice. Linked-layout repair remains open.
+  public page offers retry, Check again and Stop; repairing a damaged linked layout remains open.
   [Detail](backlog/box.md#public-tls-repair-refuses-linked-layouts)
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).

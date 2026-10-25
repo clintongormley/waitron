@@ -97,7 +97,7 @@ it("trust page notes the operator-cert case instead of a download when no box CA
   const d = await mkdtemp(join(tmpdir(), "disc-noca3-"));
   dirs.push(d);
   const html = await (await appFor(d).request("/setup/trust")).text();
-  expect(html).toMatch(/own certificate|installer supplied/i);
+  expect(html).toContain("This page cannot replace a separately installed certificate.");
 });
 
 // A box with no LAN address has a null `qrTarget`, so the trust page omits the QR section entirely,
