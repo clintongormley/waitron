@@ -31,7 +31,12 @@ const START = "2026-01-01";
 const END = "2026-03-21";
 const COLLEAGUE_NAME = "Colleague Canary";
 const logger = vi.fn();
-let locationId: string, martaId: string, colleagueId: string, loneId: string, cookie: string;
+let locationId: string,
+  otherLocationId: string,
+  martaId: string,
+  colleagueId: string,
+  loneId: string,
+  cookie: string;
 
 beforeEach(async () => {
   await seedTenant(suite.db);
@@ -45,6 +50,16 @@ beforeEach(async () => {
     })
     .returning();
   locationId = location!.id;
+  const [other] = await suite.db
+    .insert(locations)
+    .values({
+      name: "Other venue",
+      invoiceLocales: ["es"],
+      operationDescription: "Sale on premises",
+      timeZone: "Europe/Madrid",
+    })
+    .returning();
+  otherLocationId = other!.id;
   const nodeId = await seedNode(suite.db, brandLocationId(locationId));
   const [marta, colleague, lone] = await suite.db
     .insert(persons)
@@ -59,18 +74,31 @@ beforeEach(async () => {
   loneId = lone!.id;
   const backend = new WorkforceBackend();
   const origin = jobOrigin("dashboard");
-  const event = (personId: string, at: string, offsetMinutes: number) => ({
+  const event = (personId: string, at: string, offsetMinutes: number, where = locationId) => ({
     nodeId,
-    locationId,
+    locationId: where,
     personId,
     offsetMinutes,
     origin,
     at,
   });
-  const shift = async (personId: string, from: string, to: string, offset: number) => {
-    await withTransaction(suite.db, (tx) => backend.clockIn(tx, event(personId, from, offset)));
-    await withTransaction(suite.db, (tx) => backend.clockOut(tx, event(personId, to, offset)));
+  const shift = async (
+    personId: string,
+    from: string,
+    to: string,
+    offset: number,
+    where = locationId,
+  ) => {
+    await withTransaction(suite.db, (tx) =>
+      backend.clockIn(tx, event(personId, from, offset, where)),
+    );
+    await withTransaction(suite.db, (tx) =>
+      backend.clockOut(tx, event(personId, to, offset, where)),
+    );
   };
+  // At the other location only: Marta earlier than her first day here, the lone person at all.
+  await shift(martaId, "2025-12-15T09:00:00.000Z", "2025-12-15T17:00:00.000Z", 60, otherLocationId);
+  await shift(loneId, "2026-01-04T09:00:00.000Z", "2026-01-04T17:00:00.000Z", 60, otherLocationId);
   await shift(martaId, "2026-01-02T00:30:00.000Z", "2026-01-02T06:00:00.000Z", -120);
   await shift(colleagueId, "2026-01-03T10:07:00.000Z", "2026-01-03T18:43:00.000Z", 60);
   await shift(martaId, "2026-02-10T09:00:00.000Z", "2026-02-10T17:00:00.000Z", 60);
@@ -106,6 +134,10 @@ function named(list: readonly PersonalDataFile[], name: string) {
   if (file === undefined) throw new Error(`no ${name}`);
   return file.content;
 }
+const csvBytes = (list: readonly PersonalDataFile[]) => {
+  const content = named(list, "time-record.csv");
+  return typeof content === "string" ? new TextEncoder().encode(content) : new Uint8Array(content);
+};
 const text = (content: string | Uint8Array) =>
   typeof content === "string" ? content : new TextDecoder().decode(content);
 async function existingExport(from: string, before: string, locale: "en" | "es") {
@@ -127,7 +159,7 @@ async function existingExport(from: string, before: string, locale: "en" | "es")
     headers: { cookie },
   });
   expect(response.status).toBe(200);
-  return response.text();
+  return new Uint8Array(await response.arrayBuffer());
 }
 async function pdfText(content: string | Uint8Array) {
   const data = typeof content === "string" ? new TextEncoder().encode(content) : content;
@@ -158,9 +190,9 @@ describe("the server's working-time part", () => {
     for (const language of ["en", "es"] as const) {
       const built = await files({ language });
       expect(built.map((f) => f.name)).toEqual(["time-record.pdf", "time-record.csv"]);
-      expect(text(named(built, "time-record.csv"))).toBe(
-        await existingExport(START, END, language),
-      );
+      const csv = csvBytes(built);
+      expect(csv.subarray(0, 3)).toEqual(new Uint8Array([0xef, 0xbb, 0xbf]));
+      expect(csv).toEqual(await existingExport(START, END, language));
       const pdf = named(built, "time-record.pdf");
       expect(pdf).toBeInstanceOf(Uint8Array);
       expect(text(pdf).startsWith("%PDF-")).toBe(true);
@@ -168,19 +200,18 @@ describe("the server's working-time part", () => {
   });
 
   it("starts at her first local day and ends the day after her last entry", async () => {
-    const csv = text(named(await files(), "time-record.csv"));
-    expect(csv).toBe(await existingExport("2026-01-01", END, "en"));
-    expect(csv).not.toBe(await existingExport("2026-01-02", END, "en"));
-    expect(csv).not.toBe(await existingExport(START, "2026-03-20", "en"));
-    expect(csv).toContain("2026-03-20");
+    const csv = csvBytes(await files());
+    expect(csv).toEqual(await existingExport("2026-01-01", END, "en"));
+    expect(csv).not.toEqual(await existingExport("2026-01-02", END, "en"));
+    expect(csv).not.toEqual(await existingExport(START, "2026-03-20", "en"));
+    expect(csv).not.toEqual(await existingExport("2025-12-15", END, "en"));
+    expect(text(csv)).toContain("2026-03-20");
   });
 
   it("runs to the day after the venue's date when that is later than her last entry", async () => {
-    const csv = text(
-      named(await files({ at: new Date("2026-05-01T12:00:00Z") }), "time-record.csv"),
-    );
-    expect(csv).toBe(await existingExport(START, "2026-05-02", "en"));
-    expect(csv).not.toBe(await existingExport(START, END, "en"));
+    const csv = csvBytes(await files({ at: new Date("2026-05-01T12:00:00Z") }));
+    expect(csv).toEqual(await existingExport(START, "2026-05-02", "en"));
+    expect(csv).not.toEqual(await existingExport(START, END, "en"));
   });
 
   it("holds only her record", async () => {
@@ -202,7 +233,7 @@ describe("the server's working-time part", () => {
     expect(await files({ locationId: null })).toEqual([]);
   });
 
-  it("builds no files for a person with no entry at the location", async () => {
+  it("builds no files for a person whose only entries are at another location", async () => {
     expect(await files({ personId: loneId })).toEqual([]);
   });
 
