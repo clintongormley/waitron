@@ -22,8 +22,12 @@ import type {
 import type { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import type { AllergySendTarget } from "@waitron/module";
 import {
   addDish as addSteak,
+  allergyView,
+  api as allergyApi,
+  catalogue as allergyCatalogue,
   dialog as allergyDialog,
   draft as allergyDraft,
   mountApp as mountAllergyApp,
@@ -787,6 +791,35 @@ describe("an allergy party's send refused for an ended period", () => {
   });
 });
 
+describe("an allergy party's rerun reads the party again", () => {
+  beforeEach(() => resetAllergyFixture());
+
+  it("asks nothing and sends the party's latest revision when the party needs no question", async () => {
+    const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(lunchEnded)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    const previewPartyAllergy = vi.fn(async (_id: string, target: AllergySendTarget) =>
+      allergyView("none", target),
+    );
+    const { el } = await mountAllergyApp({ submitDraft, previewPartyAllergy });
+    await openAllergyTable(el);
+    await addSteak(el);
+    await userEvent.click(
+      allergyOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+    );
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+
+    await choose(el, "data-late-agreed");
+
+    await vi.waitFor(() => expect(submitDraft).toHaveBeenCalledTimes(2));
+    expect(previewPartyAllergy).toHaveBeenCalledTimes(2);
+    expect(allergyDialog(el)).toBeNull();
+    expect(submitDraft.mock.calls.map((call) => call[2].allergy)).toEqual([undefined, undefined]);
+  });
+});
+
 /** Sends, and answers the allergy question with one guest, `who`, allergic to milk. */
 async function sendWithAllergy(el: TillApp, who: string): Promise<void> {
   await userEvent.click(
@@ -851,6 +884,7 @@ async function managerAsked(...answers: unknown[]): Promise<TillApp> {
   });
   await act(el, "send-all");
   await choose(el, "data-late-agreed");
+  await vi.waitFor(() => expect(approval(el)).not.toBeNull());
   return el;
 }
 
@@ -1054,6 +1088,94 @@ describe("an allergy party's send that needs a manager's PIN", () => {
   });
 });
 
+describe("an allergy party's PIN rerun", () => {
+  beforeEach(() => resetAllergyFixture());
+
+  async function pinAsked(
+    submitDraft: ReturnType<typeof vi.fn<TillApi["submitDraft"]>>,
+    overrides: Record<string, unknown> = {},
+  ): Promise<TillApp> {
+    const { el } = await mountAllergyApp({
+      submitDraft,
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+      ...overrides,
+    });
+    await openAllergyTable(el);
+    await addSteak(el);
+    await sendWithAllergy(el, "Blue shirt");
+    await vi.waitFor(() => expect(windowOf(el)).not.toBeNull());
+    await choose(el, "data-late-agreed");
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    return el;
+  }
+
+  it("keeps the answer through a silent menu version change, and shows a wrong PIN in the PIN's dialog", async () => {
+    const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(lunchEnded)
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockRejectedValueOnce({
+        code: "menu.version_changed",
+        status: 409,
+        menus: [{ menuId: "lunch", liveVersionId: "v2" }],
+      })
+      .mockRejectedValueOnce(WRONG_PIN)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    const el = await pinAsked(submitDraft);
+    allergyApi.listZoneOffers!.mockResolvedValue(allergyCatalogue("v2"));
+
+    await authorize(el, "0123");
+
+    await vi.waitFor(() => expect(approvalText(el, ".error")).toBe("Wrong PIN, try again"));
+    expect(allergyDialog(el)).toBeNull();
+    expect(submitDraft).toHaveBeenCalledTimes(4);
+    const packets = submitDraft.mock.calls.map((call) => call[2]);
+    for (const rerun of packets.slice(2)) {
+      expect(rerun.lateSend).toEqual({
+        menuIds: ["lunch"],
+        override: { personId: MARTA.personId, pin: "0123" },
+      });
+      expect(rerun.allergy).toEqual(packets[0]!.allergy);
+      expect(rerun.expectedPartyRevision).toBe(packets[0]!.expectedPartyRevision);
+    }
+  });
+
+  it("asks again with the PIN's dialog closed when the dishes changed, and shows a wrong PIN on the app's line", async () => {
+    const lunchEnded = refusal([{ menuId: "lunch", periodName: "Lunch" }], ["offer-steak"]);
+    const submitDraft = vi
+      .fn<TillApi["submitDraft"]>()
+      .mockRejectedValueOnce(lunchEnded)
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockRejectedValueOnce(WRONG_PIN)
+      .mockImplementation((id, did, packet) => allergyServer.submitDraft(id, did, packet));
+    let reads = 0;
+    const previewPartyAllergy = vi.fn(async (_id: string, target: AllergySendTarget) => {
+      const view = allergyView(null, target);
+      if (++reads >= 3)
+        view.dishes = view.dishes.map((dish) => ({ ...dish, allergens: { milk: {} } }));
+      return view;
+    });
+    const el = await pinAsked(submitDraft, { previewPartyAllergy });
+
+    await authorize(el, "0123");
+
+    await vi.waitFor(() => expect(allergyDialog(el)).not.toBeNull());
+    expect(approval(el)).toBeNull();
+    await answerAllergy(el, "Blue shirt");
+
+    await vi.waitFor(() => expect(submitDraft).toHaveBeenCalledTimes(3));
+    await flush(el, 6);
+    expect(allergyDialog(el)).toBeNull();
+    expect(approval(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(t("pin.invalid"));
+    expect(submitDraft.mock.calls[2]![2].lateSend).toEqual({
+      menuIds: ["lunch"],
+      override: { personId: MARTA.personId, pin: "0123" },
+    });
+  });
+});
+
 describe("an allergy party's send the till marked, that needs a manager's PIN", () => {
   beforeEach(() => resetAllergyFixture());
 
@@ -1092,6 +1214,7 @@ describe("an allergy party's send the till marked, that needs a manager's PIN", 
       expect.objectContaining({ who: "Blue shirt", allergens: { milk: {} } }),
     ]);
     expect(rerun!.allergy).toEqual(first!.allergy);
+    expect(rerun!.expectedPartyRevision).toBe(first!.expectedPartyRevision);
     expect(rerun!.lateSend).toEqual({
       menuIds: ["lunch"],
       override: { personId: MARTA.personId, pin: "0123" },
