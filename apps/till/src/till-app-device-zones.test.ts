@@ -1720,6 +1720,30 @@ describe("a handheld's zones", () => {
       },
     );
 
+    it.each([false, true])(
+      "a zone tab tapped after the return keeps its zone across a language change (saved %s)",
+      async (saved) => {
+        const { el } = await mountTables(selection(all, "room", saved));
+        await openFromBar(el, "table-garden");
+        await tapFloor(el);
+        expect(await activeTab(el)).toBe("garden");
+        await showZone(el, "room");
+        const before = floor(el);
+        shell(el).dispatchEvent(
+          new CustomEvent("wt-locale-selected", {
+            detail: { code: "es-ES" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await vi.waitFor(() => expect(currentLocale()).toBe("es-ES"));
+        await vi.waitFor(() => expect(floor(el)).not.toBe(before));
+        await floor(el).updateComplete;
+        expect(await activeTab(el)).toBe("room");
+        expect(location.pathname).toBe("/tabs/floor/zone/room");
+      },
+    );
+
     it("Back and Forward between two Floor zones after a table keep each entry's zone", async () => {
       const { el } = await mountTables(selection(all, "room"));
       await openFromBar(el, "table-garden");

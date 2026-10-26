@@ -18441,8 +18441,12 @@ export class TillApp extends LitElement {
             : this.zones.filter((zone) => navigation.floorZoneIds.includes(zone.id))
         }
         .selectedZoneId=${
+          // After a table, the move onto the Floor wrote its zone into the address (#setActiveTab),
+          // so the Floor reads the address, and a remount keeps a zone tapped since.
           this.formFactor !== "till"
-            ? (this.#floorReturnZone() ?? navigation?.startingZoneId ?? undefined)
+            ? this.#floorReturnZone() === undefined
+              ? (navigation?.startingZoneId ?? undefined)
+              : undefined
             : navigation?.floorZoneIds.includes(this.deviceZoneSelection?.startingZoneId ?? "")
               ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
               : undefined
