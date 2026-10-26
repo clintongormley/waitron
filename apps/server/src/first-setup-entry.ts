@@ -14,7 +14,8 @@ import {
   finishStartAgainDeletion,
   isEmptiedTombstone,
 } from "@waitron/provisioning";
-import { AppError } from "@waitron/shared";
+import { AppError, sqliteFailureOf } from "@waitron/shared";
+import { errnoOf } from "./errno.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
@@ -123,6 +124,8 @@ async function emptyDiscardedRecovery(roots: FirstSetupRoots, log: Logger) {
     if (await isEmptiedTombstone(roots, id)) return;
     await emptyAbandonedBackupRecovery(roots, id);
   } catch (error) {
+    const errno = errnoOf(error);
+    const errcode = sqliteFailureOf(error)?.errcode;
     log("warn", "setup.recovery_cleanup_refused", {
       reason:
         error instanceof AppError
@@ -131,6 +134,8 @@ async function emptyDiscardedRecovery(roots: FirstSetupRoots, log: Logger) {
               roots.venueDir,
               ...(target === undefined ? [] : [target]),
             ]),
+      ...(errno === undefined ? {} : { errno }),
+      ...(errcode === undefined ? {} : { errcode }),
       ...(path === undefined ? {} : { path }),
     });
   }

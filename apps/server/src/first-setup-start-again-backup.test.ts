@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   access,
   chmod,
@@ -1392,11 +1393,10 @@ it("a power cut after the confirmation and before the abandon: the next start se
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const first = await startAgainOver(f, f.service);
-  // The run seals once while it finds the recovery, and again just before the abandon.
+  // The first seal after the confirmation is written is the one just before the abandon.
   const seal = f.service.sealLapsed.bind(f.service);
-  let seals = 0;
   vi.spyOn(f.service, "sealLapsed").mockImplementation(() => {
-    if (++seals === 2) throw POWER_CUT();
+    if (existsSync(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))) throw POWER_CUT();
     seal();
   });
   await expect(first.run()).rejects.toThrow("power cut");
@@ -1494,10 +1494,11 @@ it("a file in the discarded recovery that cannot be deleted: Start again's refus
     await access(join(stuck, "leftover"));
   } finally {
     await chmod(stuck, 0o700);
+    await f.service.dispose();
   }
 });
 
-it("an emptying refused at the start, a symlink in the recovery: the repair page is served, the refusal is logged with its reason, and nothing is deleted", async () => {
+it("a symlink in a discarded recovery at the start: the read-only check for an already emptied recovery refuses it, the repair page is served, the refusal is logged with its reason, and nothing is deleted", async () => {
   const f = await placementFailed();
   const outside = join(dirname(f.roots.stateDir), "outside");
   await writeFile(outside, "outside");
@@ -1530,6 +1531,29 @@ it("a second process holding the box's venue lock at the start: the recovery is 
     });
   } finally {
     await holder.stop();
+  }
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(false);
+  await access(join(f.record.target.target.venueDir, "venue.db"));
+});
+
+it("an abandoned recovery whose journal cannot be read at the start: the refusal is logged as unknown with the file system's errno and no path, and the start goes on", async () => {
+  const f = await placementFailed();
+  await cutAfterAbandon(f);
+  const journal = join(
+    f.roots.stateDir,
+    "first-setup-resolutions",
+    "backup-recovery",
+    f.session.recoveryId,
+  );
+  await chmod(journal, 0o000);
+  try {
+    const { lines } = await nextStart(f);
+    expect(lines).toContainEqual({
+      event: "setup.recovery_cleanup_refused",
+      fields: { reason: "unknown", errno: "EACCES" },
+    });
+  } finally {
+    await chmod(journal, 0o700);
   }
   expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(false);
   await access(join(f.record.target.target.venueDir, "venue.db"));
@@ -1598,7 +1622,7 @@ it("a disk that fills after the abandon, before the target's lock: Start again a
   expect(lines).toContainEqual({
     event: "setup.start_again_incomplete",
     fields: expect.objectContaining({
-      logReason: `emptying failed: provisioning.database_unreachable ERR_SQLITE_ERROR ${await realpath(path)}`,
+      logReason: `emptying failed: provisioning.database_unreachable ERR_SQLITE_ERROR errcode 14 ${await realpath(path)}`,
     }),
   });
   await vi.waitFor(() => expect(restarts).toHaveBeenCalledTimes(1));

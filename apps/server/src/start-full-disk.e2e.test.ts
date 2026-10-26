@@ -743,7 +743,7 @@ describe("a start on a real full disk", () => {
     expect(vi.mocked(full.log).mock.calls).toContainEqual([
       "warn",
       "setup.recovery_cleanup_refused",
-      { reason: "storage.disk_full", path: discarded.path },
+      { reason: "storage.disk_full", errno: "ERR_SQLITE_ERROR", errcode: 14, path: discarded.path },
     ]);
     expect(statSync(discarded.database).size).toBe(4 * 1024 * 1024);
     expect(await isEmptiedTombstone(discarded.anchor, DISCARDED_ID)).toBe(false);

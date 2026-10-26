@@ -1,4 +1,4 @@
-import { AppError } from "@waitron/shared";
+import { AppError, sqliteFailureOf } from "@waitron/shared";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -465,7 +465,14 @@ export function createFirstSetupResolutionActions(
                   found.id,
                 );
                 const code = await startFailureCode(error, [box.venueDir, box.stateDir]);
-                const reason = ["emptying failed:", code, errnoOf(error), path];
+                const errcode = sqliteFailureOf(error)?.errcode;
+                const reason = [
+                  "emptying failed:",
+                  code,
+                  errnoOf(error),
+                  errcode === undefined ? undefined : `errcode ${errcode}`,
+                  path,
+                ];
                 throw new AppError(
                   "setup.start_again_incomplete",
                   {},
