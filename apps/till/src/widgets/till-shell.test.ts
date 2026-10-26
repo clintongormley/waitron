@@ -964,10 +964,17 @@ describe("a handheld's More", () => {
       const more = menuOf(el)!;
       expect(more.querySelector(".operator")).toBeNull();
       expect(contents(more)).toEqual([
+        "Pass",
+        "Kitchen",
         "Find a bill",
+        "My schedule",
+        "Profile",
+        "transfers count",
+        "Transfers",
         "—",
         "[Settings",
         "Zones on this device",
+        "Equipment",
         "language",
         "theme",
         "]",
@@ -1563,12 +1570,20 @@ describe("till-shell at phone width", () => {
     });
   });
 
-  it("draws the wide handheld header with Find a bill in More and every other button in priority order", async () => {
+  it("draws the wide handheld header with the name, Help and More on the bar and every other entry in More", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", full);
       expect(moreItems(el)).toEqual([
+        "wt-count-badge",
+        "expo",
+        "station",
         "find-bill",
+        "schedule",
+        "profile",
+        "department-transfers",
+        "wt-button",
         "zones",
+        "equipment",
         "wt-language-chooser",
         "theme-choices",
         "logout",
@@ -1583,18 +1598,7 @@ describe("till-shell at phone width", () => {
               (c.hasAttribute("data-open-transfers") ? "data-open-transfers" : c.className)) ||
             c.localName,
         ),
-      ).toEqual([
-        "expo",
-        "station",
-        "schedule",
-        "profile",
-        "equipment",
-        "department-transfers",
-        "data-open-transfers",
-        "operator",
-        "help-switch",
-        "more-menu",
-      ]);
+      ).toEqual(["operator", "help-switch", "more-menu"]);
       for (const button of session.querySelectorAll(":scope > wt-button")) {
         expect(button.getAttribute("variant")).toBe("secondary");
       }
@@ -1609,8 +1613,16 @@ describe("till-shell at phone width", () => {
       await page.viewport(ROOMY_WIDTH, 844);
       await vi.waitFor(() =>
         expect(moreItems(el)).toEqual([
+          "wt-count-badge",
+          "expo",
+          "station",
           "find-bill",
+          "schedule",
+          "profile",
+          "department-transfers",
+          "wt-button",
           "zones",
+          "equipment",
           "wt-language-chooser",
           "theme-choices",
           "logout",
