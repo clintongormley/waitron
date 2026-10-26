@@ -304,6 +304,7 @@ import type {
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
+import { barTables, type BarTable } from "./state/bar-tables.js";
 import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
 import type {
   AdjustmentAsk,
@@ -425,6 +426,9 @@ export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 type Screen = "lock" | "counter" | "floor" | "station";
 
 type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
+
+/** A till draws no table buttons; one shared list, so the shell never sees a new one. */
+const NO_BAR_TABLES: BarTable[] = [];
 
 type RefreshList = "held" | "station" | "waiting";
 
@@ -2448,6 +2452,13 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** The order screen is showing a table whose open has not finished. */
   @state() private tableOpening = false;
+  /** D13: the table {@link #openTableFromEvent} is opening, highlighted on the bar while it loads. */
+  @state() private openingTableId?: string;
+  /** The last floor read that answered: a failed {@link #reloadTables} empties `tables`, not the bar. */
+  @state() private barFloor: TableState[] = [];
+  /** Kept while its contents are unchanged: a new array makes the shell step back and refit. */
+  #barTableList: BarTable[] = NO_BAR_TABLES;
+  #barTableJson = "[]";
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
   /** An enrolled handheld: its menu browser shows the menu's handheld display. */
@@ -3744,6 +3755,7 @@ export class TillApp extends LitElement {
     )
       throw { code: "party.out_of_date" };
     this.tables = tables;
+    this.barFloor = tables;
     this.orderParty = party;
     this.tabGroups = groups.groups;
     this.currentOrders = orders;
@@ -10491,14 +10503,18 @@ export class TillApp extends LitElement {
   /** A read's answer replaces the tables unless a read that started after it was applied first, so
    * a poll answering late never undoes an action's newer read. An answer equal to the tables shown
    * still counts as applied, but keeps the list shown. */
-  #applyTables(read: TablesRead, tables: TableState[]): void {
+  #applyTables(read: TablesRead, tables: TableState[], answered = true): void {
     if (read.number <= this.#tablesApplied) return;
     this.#tablesApplied = read.number;
     this.tablesReadAt = read.startedAt;
     const json = JSON.stringify(tables);
-    if (json === this.#tablesJson) return;
+    if (json === this.#tablesJson) {
+      if (answered) this.barFloor = this.tables;
+      return;
+    }
     this.#tablesJson = json;
     this.tables = tables;
+    if (answered) this.barFloor = tables;
     const party = this.orderParty;
     const latest = tables.find((row) => row.id === this.activeTableId)?.party;
     if (
@@ -10601,7 +10617,10 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     this.#tableOpensPending++;
     const session = this.#operatorSession;
-    if (showAtOnce) this.#showOrderScreen();
+    if (showAtOnce) {
+      this.#showOrderScreen();
+      this.openingTableId = tableId;
+    }
     try {
       const leaving = this.#draftSync;
       if (
@@ -10623,7 +10642,10 @@ export class TillApp extends LitElement {
     } finally {
       unlock?.();
       this.#tableOpensPending--;
-      if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;
+      if (offerRequest === this.#tableOfferRequest) {
+        this.tableOpening = false;
+        this.openingTableId = undefined;
+      }
     }
   }
 
@@ -11077,6 +11099,79 @@ export class TillApp extends LitElement {
       this.#groupsReadFor === party
       ? sync.store
       : null;
+  }
+
+  /** The handheld bar's buttons (D4, D13), the same array while they are unchanged. */
+  #barTables(): BarTable[] {
+    if (this.formFactor === "till") return NO_BAR_TABLES;
+    const tables = this.barFloor;
+    const opening = this.#orderScreenShown() ? this.openingTableId : undefined;
+    let held = this.#heldBill();
+    if (opening !== undefined) {
+      // The party the read lists there, not `orderParty`, which an open sets before it is done.
+      const partyId = tables.find((table) => table.id === opening)?.party?.id ?? null;
+      const same =
+        held !== null &&
+        (partyId === null
+          ? held.partyId === null && held.tableId === opening
+          : held.partyId === partyId);
+      if (!same)
+        held = {
+          partyId,
+          tableId: opening,
+          billId: null,
+          lines: 0,
+          takenByOther: false,
+          onScreen: true,
+        };
+    }
+    const next = barTables(tables, this.#sessionPersonId, { held, released: [] });
+    const json = JSON.stringify(next);
+    if (json !== this.#barTableJson) {
+      this.#barTableJson = json;
+      this.#barTableList = next;
+    }
+    return this.#barTableList;
+  }
+
+  /** D4: the held table's bill, judged by its store's lines and whether another person took it. */
+  #heldBill(): Parameters<typeof barTables>[2]["held"] {
+    const tableId = this.activeTableId;
+    if (tableId === undefined) return null;
+    const party = this.orderParty;
+    const sync =
+      party !== null && this.#draftSync?.partyId === party.id ? this.#draftSync : undefined;
+    const editorId = sync?.edit?.editorId ?? null;
+    return {
+      partyId: party?.id ?? null,
+      tableId,
+      billId: party === null ? null : (this.activeTabId ?? null),
+      // A failed save reloads the store from the box and keeps this device's lines as the candidate.
+      lines: (this.#tableDraft()?.lines.length ?? 0) || (sync?.candidate?.lines.length ?? 0),
+      takenByOther: editorId !== null && editorId !== sync?.personId,
+      onScreen: this.#orderScreenShown(),
+    };
+  }
+
+  /** D9: the held table's button returns to it as the Order tab did; any other opens its table as a
+   * Floor tap does. Both close an open overlay first. */
+  #onOpenBarTable(tableId: string): void {
+    if (tableId === this.activeTableId && (this.openingTableId ?? tableId) === tableId) {
+      if (
+        this.#activeTab() === this.#tableOrderTabKey() &&
+        this.drill === undefined &&
+        this.counterOrderList === null
+      )
+        return;
+      this.#requestLeave(() => this.#onTabSelect("order"));
+      return;
+    }
+    this.#requestLeave(() => {
+      if (this.drill !== undefined) this.#popDrill();
+      return this.#onOpenTable(
+        new CustomEvent("open-table", { detail: { tableId, seated: true } }),
+      );
+    });
   }
 
   async #openDraft(session: number): Promise<OpenedDraft> {
@@ -11605,6 +11700,7 @@ export class TillApp extends LitElement {
         return true;
       }
       this.tables = tables;
+      this.barFloor = tables;
       this.orderParty = party;
       this.tabGroups = groups.groups;
       this.currentOrders = orders;
@@ -14410,7 +14506,7 @@ export class TillApp extends LitElement {
     try {
       this.#applyTables(read, await this.api.getTablesState());
     } catch {
-      this.#applyTables(read, []);
+      this.#applyTables(read, [], false);
     }
   }
 
@@ -19264,6 +19360,9 @@ export class TillApp extends LitElement {
                           .hoursBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true}
                           .clockError=${this.#attendanceMessage()}
                           .affordances=${this.#affordanceList}
+                          .barTables=${this.#barTables()}
+                          @open-bar-table=${(event: CustomEvent<{ tableId: string }>) =>
+                            this.#onOpenBarTable(event.detail.tableId)}
                           .kiosk=${this.deviceMode}
                           .canSwitchProfile=${this.approvedProfiles.length > 1}
                           .transferAvailable=${this.transferSnapshot !== undefined}
