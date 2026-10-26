@@ -436,6 +436,20 @@ it("during an edit an untouched draft follows a live read", async () => {
   expect(saveButton(el).variant).toBe("secondary");
 });
 
+it("after an untouched draft follows a live read, Save sends only the field typed next", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  await edit(el);
+  r.state.stored = { ...STORED };
+  r.liveData.invalidate([{ type: "tenants" }]);
+  await expect.poll(() => input(el, "privacyNoticeUrl")!.value).toBe("https://example.com/privacy");
+  await type(el, "privacyEmail", "typed@example.com");
+  await save(el);
+  await expect
+    .poll(() => r.api.putVenuePrivacy.mock.calls)
+    .toEqual([[{ privacyEmail: "typed@example.com" }]]);
+});
+
 it("during an edit a changed draft keeps what was typed when a live read arrives", async () => {
   const r = rig();
   const el = await mount(r.api);
