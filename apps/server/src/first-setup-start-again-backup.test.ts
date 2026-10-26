@@ -11,6 +11,7 @@ import {
   readStartAgainMarker,
   readStartAgainNote,
 } from "@waitron/provisioning";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { clock } from "../test/hour-recovery-host.js";
 import {
   barrier,
@@ -441,11 +442,79 @@ it.each([
   },
 );
 
-it.each([
-  ["named nothing", null],
+// Appends a later record of the same recovery, carrying `input`.
+async function appendInput(f: Pick<Repair, "workspace" | "record">, input: unknown) {
+  const { version, sequence, previousRecordDigest, recordedAt, ...last } = f.record;
+  void version;
+  void sequence;
+  void previousRecordDigest;
+  void recordedAt;
+  await f.workspace.append({ ...last, input });
+}
+
+// The same recorded input, naming the minute `minutes` after its own.
+function laterInput(input: unknown, minutes: number) {
+  const later = structuredClone(input) as {
+    allocation: {
+      installationIdentity: string;
+      issuedAt: string;
+      series: { code: string; purpose: string }[];
+    };
+  };
+  const ms = Date.parse(later.allocation.issuedAt) + minutes * 60_000;
+  const identity = encodeMinuteIdentity(ms);
+  later.allocation.series = later.allocation.series.map((series) => ({
+    ...series,
+    code: series.code.replace(later.allocation.installationIdentity, identity),
+  }));
+  later.allocation.installationIdentity = identity;
+  later.allocation.issuedAt = new Date(ms).toISOString();
+  return { input: later, identity };
+}
+
+it("a later name in a stopped recovery's journal wins over an older name in its own copy's picks", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  await access(join(f.record.target.target.stateDir, "module-preparation-state.json"));
+  const later = laterInput(f.selected.input, 5);
+  expect(later.identity).not.toBe(f.selected.identity);
+  await appendInput(f, later.input);
+  const { owner, ids } = await signedIn(f.host);
+  const { actions } = repairApp(f);
+  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toMatchObject({
+    lastName: later.identity,
+  });
+});
+
+it("a stopped recovery that never chose a name, and whose copy holds no picks file, is named with no name", async () => {
+  const f = await preparedRepair();
+  expect(f.record).toMatchObject({ phase: "prepared", input: null });
+  await f.service.close(f.session.sessionId);
+  await removeTargetPicks(f);
+  const stopped = (await f.service.liveness())!;
+  expect(stopped.state).toBe("stopped");
+  const { owner, ids } = await signedIn(f.host);
+  const { actions } = repairApp(f);
+  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+    startedAt: stopped.startedAt,
+    lastActiveAt: stopped.lastActiveAt,
+    lastActiveSource: "memory",
+    lastName: null,
+    failed: false,
+    cloud: false,
+  });
+});
+
+const PICKS_NAMING_NOTHING = (binding: unknown) =>
+  JSON.stringify({ version: 1, revisions: [{ binding, value: { version: 1, entries: [] } }] });
+
+it.each<[string, string, unknown, ((binding: unknown) => string) | null]>([
+  ["named nothing", "cannot be read", null, () => "unreadable"],
+  ["named nothing", "name nothing", null, PICKS_NAMING_NOTHING],
   [
     // A valid minute name, one minute after the time the input says it was chosen.
     "recorded a name its own time disagrees with",
+    "are missing",
     {
       allocation: {
         version: 1,
@@ -472,23 +541,22 @@ it.each([
         incidentEvidence: "hour/restore",
       },
     },
+    null,
   ],
 ])(
-  "a stopped recovery whose copy holds no picks and whose journal %s refuses the summary setup.not_ready, and nothing is written",
-  async (_name, input) => {
+  "a stopped recovery whose journal %s and whose copy's picks %s refuses the summary setup.not_ready, and nothing is written",
+  async (_name, _picks, input, picksOf) => {
     const f = await preparedRepair();
     expect(f.record).toMatchObject({ phase: "prepared", input: null });
     await f.service.close(f.session.sessionId);
-    if (input !== null) {
-      const { version, sequence, previousRecordDigest, recordedAt, ...last } = f.record;
-      void version;
-      void sequence;
-      void previousRecordDigest;
-      void recordedAt;
-      await f.workspace.append({ ...last, input });
-    }
+    if (input !== null) await appendInput(f, input);
     expect((await f.workspace.read()).at(-1)).toMatchObject({ phase: "prepared", input });
     await removeTargetPicks(f);
+    if (picksOf !== null)
+      await writeFile(
+        join(f.record.target.target.stateDir, "module-preparation-state.json"),
+        picksOf(f.record.binding),
+      );
     expect((await f.service.liveness())?.state).toBe("stopped");
     const { owner, ids } = await signedIn(f.host);
     const { actions } = repairApp(f);
@@ -523,6 +591,143 @@ it("a stopped recovery whose module has no start-again seat refuses the summary 
   await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
     code: "setup.not_ready",
   });
+});
+
+it("after a restart, a stopped recovery is named with its saved steps' times", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  await f.service.dispose();
+  const restarted = recovery(f.options);
+  const records = await f.workspace.read();
+  const { owner, ids } = await signedIn(f.host);
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    backupRecovery: restarted,
+  });
+  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+    startedAt: records[0]!.recordedAt,
+    lastActiveAt: records.at(-1)!.recordedAt,
+    lastActiveSource: "saved-step",
+    lastName: f.selected.identity,
+    failed: false,
+    cloud: false,
+  });
+});
+
+it("a recovery that failed after it was restored is named as failed", async () => {
+  const f = await selectedRepair();
+  vi.spyOn(f.workspace, "select").mockRejectedValueOnce(new Error("selection interrupted"));
+  await expect(f.service.commit(f.session.sessionId, f.selected.input, client)).rejects.toThrow(
+    "selection interrupted",
+  );
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("restored");
+  const { owner, ids } = await signedIn(f.host);
+  const { actions } = repairApp(f);
+  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+    startedAt: expect.any(String),
+    lastActiveAt: expect.any(String),
+    lastActiveSource: "memory",
+    lastName: f.selected.identity,
+    failed: true,
+    cloud: false,
+  });
+});
+
+it("a stopped recovery that is not the journal's latest refuses the summary setup.not_ready", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const { owner, ids } = await signedIn(f.host);
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    backupRecovery: {
+      ...f.service,
+      liveness: async () => ({ ...(await f.service.liveness())!, recoveryId: "another" }),
+    },
+  });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+});
+
+it("a stopped recovery on a host that lists no modules refuses the summary setup.not_ready", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const { owner, ids } = await signedIn(f.host);
+  const { modules, ...host } = f.host;
+  expect(modules.length).toBeGreaterThan(0);
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host,
+    backupRecovery: f.service,
+  });
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+});
+
+const UNKNOWN_ROUTE = "https://box.test/setup-api/first-setup/resolution/no-such-route";
+
+it.each([
+  [
+    "from another site",
+    { Origin: "https://evil.test", "Content-Type": "text/plain" },
+    403,
+    { code: "setup.owner_required", params: {} },
+  ],
+  [
+    "marked cross-site",
+    { "Sec-Fetch-Site": "cross-site", "Content-Type": "application/json" },
+    403,
+    { code: "setup.owner_required", params: {} },
+  ],
+  [
+    "not sent as JSON",
+    { "Content-Type": "text/plain" },
+    400,
+    { code: "setup.request_invalid", params: { field: "body" } },
+  ],
+])(
+  "a POST %s is refused by the fence, uncached, and does not seal a lapsed recovery",
+  async (_name, headers, status, error) => {
+    const f = await selectedRepair();
+    const { app } = repairApp(f);
+    clock.advance(LEASE + 1);
+    expect(f.service.runningInMemory()).toBe(false);
+    const refused = await app.request(
+      UNKNOWN_ROUTE,
+      { method: "POST", headers, body: "{}" },
+      tls(),
+    );
+    expect(refused.status).toBe(status);
+    expect(refused.headers.get("Cache-Control")).toBe("no-store");
+    expect(await refused.json()).toEqual({ error });
+    expect(() => f.service.renew(f.session.sessionId)).not.toThrow();
+  },
+);
+
+it("a same-site JSON POST seals a lapsed recovery, even on a route that does not exist", async () => {
+  const f = await selectedRepair();
+  const { app } = repairApp(f);
+  clock.advance(LEASE + 1);
+  const answered = await app.request(
+    UNKNOWN_ROUTE,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    tls(),
+  );
+  expect(answered.status).toBe(404);
+  expect(() => f.service.renew(f.session.sessionId)).toThrow(
+    expect.objectContaining({ code: "setup.owner_required" }),
+  );
+});
+
+it("the fence's refusal of a write while a recovery runs is not cached", async () => {
+  const f = await selectedRepair();
+  const { app } = repairApp(f);
+  const refused = await passwordStep(app, f.host);
+  expect(refused.status).toBe(409);
+  expect(refused.headers.get("Cache-Control")).toBe("no-store");
 });
 
 it("after a discard, the summary names no recovery", async () => {

@@ -641,7 +641,8 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
     { ...recovery, startedAt: "yesterday" },
     { ...recovery, lastActiveAt: 5 },
     { ...recovery, lastActiveSource: "disk" },
-    { ...recovery, lastName: null },
+    { ...recovery, lastName: undefined },
+    { ...recovery, lastName: 5 },
     { ...recovery, lastName: "" },
     { ...recovery, lastName: "A".repeat(65) },
     { ...recovery, failed: "false" },
@@ -652,10 +653,12 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
       error: { code: "setup.request_invalid", params: { field: "body" } },
     });
   }
-  // A well-formed recovery reaches the action, which finds none on this box.
-  const passed = await send(recovery);
-  expect(passed.status).toBe(409);
-  expect(await passed.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
+  // A well-formed recovery, with a name or with none, reaches the action, which finds none here.
+  for (const shown of [recovery, { ...recovery, lastName: null }]) {
+    const passed = await send(shown);
+    expect(passed.status).toBe(409);
+    expect(await passed.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
+  }
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });

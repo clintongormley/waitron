@@ -21,7 +21,7 @@ export type StartAgainRecoveryShown = {
   readonly startedAt: string;
   readonly lastActiveAt: string;
   readonly lastActiveSource: "memory" | "saved-step";
-  readonly lastName: string;
+  readonly lastName: string | null;
   readonly failed: boolean;
   readonly cloud: boolean;
 };
@@ -62,7 +62,8 @@ const invalid = () => new AppError("setup.attempt_invalid", {});
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
-const instant = (value: unknown): value is string =>
+/** An instant written exactly as `toISOString()` writes it. */
+export const isCanonicalInstant = (value: unknown): value is string =>
   typeof value === "string" &&
   Number.isFinite(Date.parse(value)) &&
   new Date(Date.parse(value)).toISOString() === value;
@@ -70,10 +71,10 @@ const instant = (value: unknown): value is string =>
 function recoveryShown(value: unknown): StartAgainRecoveryShown {
   if (
     !object(value) ||
-    !instant(value.startedAt) ||
-    !instant(value.lastActiveAt) ||
+    !isCanonicalInstant(value.startedAt) ||
+    !isCanonicalInstant(value.lastActiveAt) ||
     !["memory", "saved-step"].includes(value.lastActiveSource as string) ||
-    !text(value.lastName) ||
+    (value.lastName !== null && !text(value.lastName)) ||
     typeof value.failed !== "boolean" ||
     typeof value.cloud !== "boolean"
   )
@@ -82,7 +83,7 @@ function recoveryShown(value: unknown): StartAgainRecoveryShown {
     startedAt: value.startedAt,
     lastActiveAt: value.lastActiveAt,
     lastActiveSource: value.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
-    lastName: value.lastName,
+    lastName: value.lastName as string | null,
     failed: value.failed,
     cloud: value.cloud,
   };
@@ -94,7 +95,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     unknown
   >;
   if (
-    !instant(at) ||
+    !isCanonicalInstant(at) ||
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
     database !== "missing" ||

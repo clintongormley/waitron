@@ -261,13 +261,23 @@ it("a confirmation that showed a stopped backup recovery keeps it, and only its 
   ]);
 });
 
+it("a confirmation that showed a stopped backup recovery with no name keeps it with no name", async () => {
+  const dir = await stateDir();
+  const shown = { ...record.shown, recovery: { ...recovery, lastName: null } };
+  await writeStartAgainConfirmation(dir, { ...record, shown } as typeof record);
+  expect(
+    JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
+  ).toEqual({ version: 1, ...record, shown });
+});
+
 it.each([
   ["not an object", null],
   ["a start time not in canonical form", { ...recovery, startedAt: "2026-10-24T13:40:00Z" }],
   ["an unparseable last activity", { ...recovery, lastActiveAt: "soon" }],
   ["an unknown activity source", { ...recovery, lastActiveSource: "disk" }],
   ["an empty last name", { ...recovery, lastName: "" }],
-  ["no last name", { ...recovery, lastName: null }],
+  ["a missing last name", { ...recovery, lastName: undefined }],
+  ["a last name other than text", { ...recovery, lastName: 5 }],
   ["a failed other than a boolean", { ...recovery, failed: "no" }],
   ["a missing Cloud flag", { ...recovery, cloud: undefined }],
 ])(

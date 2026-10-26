@@ -1278,31 +1278,45 @@ it("a commit held 6 minutes with no renewal closes the repair page's fence, and 
   mountFirstSetupResolutionFence(app, f.service, () => {});
   mountFirstSetupBackupApi(app, f.service, () => {});
   mountFirstSetupResolutionApi(app, f.options.host, () => {});
+  let passwordStep: Promise<Response> | undefined;
   try {
     const attempt = join(f.roots.stateDir, "first-setup.json");
     const before = await readFile(attempt);
     const inspected = await f.options.host.resolution.inspectFirstSetupResolution();
-    const refused = await app.request(
-      "https://box.test/setup-api/first-setup/resolution/recover",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inspectionId: inspected.inspectionId,
-          revision: inspected.revision,
-          ownerGeneration: inspected.ownerGeneration,
-          clientClaimNonce: randomBytes(32).toString("base64url"),
-          password: PASSWORD,
-        }),
-      },
-      tls(),
+    // Not awaited: a step let through would queue behind A's held turn, so it is raced instead.
+    passwordStep = Promise.resolve(
+      app.request(
+        "https://box.test/setup-api/first-setup/resolution/recover",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inspectionId: inspected.inspectionId,
+            revision: inspected.revision,
+            ownerGeneration: inspected.ownerGeneration,
+            clientClaimNonce: randomBytes(32).toString("base64url"),
+            password: PASSWORD,
+          }),
+        },
+        tls(),
+      ),
     );
-    expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({ error: { code: "setup.recovery_in_progress" } });
+    let timer: NodeJS.Timeout | undefined;
+    const settled = await Promise.race([
+      passwordStep,
+      new Promise<"still waiting">((resolve) => {
+        timer = setTimeout(() => resolve("still waiting"), 2_000);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    if (settled === "still waiting") expect.fail("B's password step was still waiting after 2 s");
+    expect(settled.status).toBe(409);
+    expect(await settled.json()).toMatchObject({ error: { code: "setup.recovery_in_progress" } });
     expect(await readFile(attempt)).toEqual(before);
+    expect(f.service.runningInMemory()).toBe(true);
   } finally {
     takeBack();
     f.gate.resolve();
+    await passwordStep?.catch(() => {});
   }
   await f.commit;
   expect((await f.workspace.read()).at(-1)!.phase).toBe("selected");

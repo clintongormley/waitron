@@ -1,5 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 import {
   assertNoLegacyFirstSetupWorkspace,
   createFirstSetupBackupWorkspace,
@@ -187,19 +189,35 @@ export function createFirstSetupResolutionActions(
         ? undefined
         : initialSetupFor(host.modules, module)?.startAgainFloor;
     if (seat === undefined) unavailable();
-    const named = (input: Partial<Parameters<typeof seat>[0]>) => {
+    const picksPath = join(last.target.target.stateDir, "module-preparation-state.json");
+    const recoveryInputs = records.map((record) => record.input);
+    const floor = (preparations: readonly unknown[]) => {
       try {
-        return seat({ attempts: [], preparations: [], publicEvidence: [], ...input })?.lastName;
+        return seat({ attempts: [], preparations, publicEvidence: [], recoveryInputs });
       } catch {
         return undefined;
       }
     };
-    const lastName =
-      (await readModulePreparationHistory(last.target.target, module).then(
-        (preparations) => named({ preparations }),
-        () => undefined,
-      )) ?? named({ recoveryInputs: records.map((record) => record.input) });
-    if (lastName === undefined) unavailable();
+    // One call over both sources, so a later name in the journal wins over an older pick. The
+    // module names nothing for an input it cannot read, so a refusal comes from the picks, which
+    // are then left out.
+    const picks = await readModulePreparationHistory(last.target.target, module).catch(() => []);
+    const named = floor(picks);
+    const lastName = (named === undefined ? floor([]) : named)?.lastName ?? null;
+    // A chosen name is written to the copy's picks before the journal records its input, and reaches
+    // the page or a commit only after that record (`prepare` and `commit` in
+    // first-setup-backup-recovery.ts), so with neither, no name was taken.
+    if (
+      lastName === null &&
+      !(
+        recoveryInputs.every((input) => input === null) &&
+        (await lstat(picksPath).then(
+          () => false,
+          (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+        ))
+      )
+    )
+      unavailable();
     return {
       startedAt: activity.startedAt,
       lastActiveAt: activity.lastActiveAt,

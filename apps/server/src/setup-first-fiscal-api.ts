@@ -12,7 +12,11 @@ import type { Context, Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
-import type { StartAgainRecoveryShown, VenueRequest } from "@waitron/provisioning";
+import {
+  isCanonicalInstant,
+  type StartAgainRecoveryShown,
+  type VenueRequest,
+} from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -102,17 +106,14 @@ function shownRecovery(value: unknown): StartAgainRecoveryShown {
     "failed",
     "cloud",
   ]);
-  const instant = (time: unknown) =>
-    typeof time === "string" &&
-    Number.isFinite(Date.parse(time)) &&
-    new Date(Date.parse(time)).toISOString() === time;
   if (
-    !instant(recovery.startedAt) ||
-    !instant(recovery.lastActiveAt) ||
+    !isCanonicalInstant(recovery.startedAt) ||
+    !isCanonicalInstant(recovery.lastActiveAt) ||
     !["memory", "saved-step"].includes(recovery.lastActiveSource as string) ||
-    typeof recovery.lastName !== "string" ||
-    recovery.lastName.length < 1 ||
-    recovery.lastName.length > 64 ||
+    (recovery.lastName !== null &&
+      (typeof recovery.lastName !== "string" ||
+        recovery.lastName.length < 1 ||
+        recovery.lastName.length > 64)) ||
     typeof recovery.failed !== "boolean" ||
     typeof recovery.cloud !== "boolean"
   )
@@ -121,7 +122,7 @@ function shownRecovery(value: unknown): StartAgainRecoveryShown {
     startedAt: recovery.startedAt as string,
     lastActiveAt: recovery.lastActiveAt as string,
     lastActiveSource: recovery.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
-    lastName: recovery.lastName,
+    lastName: recovery.lastName as string | null,
     failed: recovery.failed,
     cloud: recovery.cloud,
   };
@@ -650,8 +651,9 @@ export function mountSetupFirstFiscalApi(
 
 /**
  * While a backup recovery runs, every write of the repair page except the recovery's own is refused;
- * otherwise a lapsed recovery is sealed before the write goes on. Decided synchronously, so nothing
- * can renew between the check and the seal.
+ * otherwise a lapsed recovery is sealed before the write goes on. A request the routes would refuse
+ * for its origin or content type is refused here first, so it seals nothing. Decided synchronously,
+ * so nothing can renew between the check and the seal.
  */
 export function mountFirstSetupResolutionFence(
   app: Hono,
@@ -664,6 +666,14 @@ export function mountFirstSetupResolutionFence(
   const root = "/setup-api/first-setup/resolution";
   app.use(`${root}/*`, (c, next) => {
     if (c.req.method !== "POST" || c.req.path.startsWith(`${root}/backup/`)) return next();
+    c.header("Cache-Control", "no-store");
+    try {
+      assertFirstFiscalRequest(c);
+    } catch (error) {
+      return boundary(c, log, async () => {
+        throw error;
+      });
+    }
     if (recovery.runningInMemory()) {
       // `liveness()` answers a running recovery before its first await, so these are this moment's.
       const activity = recovery.liveness();

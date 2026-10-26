@@ -167,6 +167,7 @@ export {
 } from "./first-setup-start-again-note.js";
 export {
   START_AGAIN_CONFIRMATIONS_DIR,
+  isCanonicalInstant,
   startAgainSummary,
   writeStartAgainConfirmation,
   type StartAgainConfirmation,
