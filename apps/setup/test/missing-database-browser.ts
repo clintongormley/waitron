@@ -5,9 +5,11 @@ import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "../src/first-setup-session.js";
 import type {
+  BackupRepairActivity,
   BackupRepairStatus,
   FirstSetupInspection,
   FirstSetupState,
+  StartAgainRecoveryShown,
   StartAgainSummary,
 } from "../src/api/first-setup-types.js";
 import { initialOwnerStrings } from "../src/screens/initial-owner-strings.js";
@@ -21,12 +23,45 @@ export async function click(app: SetupApp, name: string) {
 }
 export const namedSummary: StartAgainSummary = { reached: "named", lastName: "0CNQT" };
 export const damagedSummary: StartAgainSummary = { ...namedSummary, recoveryRecordDamaged: true };
+/** 25 Oct 2026 at 14:35 and 14:41 in the browser's own zone, so the shown times are fixed. */
+export const recoveryStartedAt = new Date(2026, 9, 25, 14, 35).toISOString();
+export const recoveryLastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
+export const shownTimes = {
+  en: { started: "25 Oct 2026, 14:35", last: "25 Oct 2026, 14:41" },
+  es: { started: "25 oct 2026, 14:35", last: "25 oct 2026, 14:41" },
+} as const;
+export const runningActivity: BackupRepairActivity = {
+  state: "running",
+  startedAt: recoveryStartedAt,
+  lastActiveAt: recoveryLastActiveAt,
+};
+export const stoppedActivity: Extract<BackupRepairActivity, { state: "stopped" }> = {
+  state: "stopped",
+  startedAt: recoveryStartedAt,
+  lastActiveSource: "memory",
+  lastActiveAt: recoveryLastActiveAt,
+  phase: "prepared",
+  recoveryId: "r".repeat(32),
+  failed: false,
+  cloud: false,
+};
+export const stoppedRecovery: StartAgainRecoveryShown = {
+  startedAt: recoveryStartedAt,
+  lastActiveAt: recoveryLastActiveAt,
+  lastActiveSource: "memory",
+  lastName: "0CNQT",
+  failed: false,
+  cloud: false,
+};
+export const stoppedSummary: StartAgainSummary = { ...namedSummary, recovery: stoppedRecovery };
 export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
     recoveredStatus?: FirstSetupState["status"];
     summary?: StartAgainSummary;
     backupPhase?: BackupRepairStatus["phase"];
+    /** What `/backup/activity` answers, read again on every request; `null` by default. */
+    activity?: BackupRepairActivity | null | (() => BackupRepairActivity | null);
     sameTab?: boolean;
     theme?: "light" | "dark";
     locale?: "en-GB" | "es-ES";
@@ -75,6 +110,13 @@ export async function missingDatabaseFixture(
           proofRequired: true,
         } satisfies BackupRepairStatus);
       if (path.endsWith("/start-again")) return Response.json({ restarting: true });
+      if (path.endsWith("/backup/activity"))
+        return Response.json({
+          activity:
+            typeof options.activity === "function"
+              ? options.activity()
+              : (options.activity ?? null),
+        });
     },
   });
   if (options.sameTab)
@@ -100,7 +142,7 @@ export async function missingDatabaseFixture(
     },
     options.theme,
   );
-  await expect.poll(() => q(app, "resume-password")).not.toBeNull();
+  await expect.poll(() => q(app, "resume-password") ?? q(app, "recovery-running")).not.toBeNull();
   return { app, host, ...fixture };
 }
 export async function recoverMissing(app: SetupApp) {

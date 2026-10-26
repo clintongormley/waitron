@@ -1072,3 +1072,43 @@ it("a refused Start again at the warning keeps its own reason when the fresh ins
     requests.slice(refusal).filter((r) => r.path.endsWith("/first-setup/resolution")),
   ).toHaveLength(1);
 });
+
+it.each([
+  { locale: "en-GB", strings: "en" },
+  { locale: "es-ES", strings: "es" },
+] as const)(
+  "with the database present, while another device runs a recovery, draws no Start again, no Recover from backup and no password field ($locale)",
+  async ({ locale, strings }) => {
+    const startedAt = new Date(2026, 9, 25, 14, 35).toISOString();
+    const lastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
+    const shown = {
+      en: { started: "25 Oct 2026, 14:35", last: "25 Oct 2026, 14:41" },
+      es: { started: "25 oct 2026, 14:35", last: "25 oct 2026, 14:41" },
+    }[strings];
+    const { app, requests } = await mount({
+      intercept(path) {
+        if (path.endsWith("/backup/activity"))
+          return Response.json({ activity: { state: "running", startedAt, lastActiveAt } });
+      },
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    const t = initialOwnerStrings[strings];
+    await expect
+      .poll(() => app.shadowRoot!.querySelector("[data-test=recovery-running]"))
+      .not.toBeNull();
+    expect(
+      [...q(app, "recovery-running").querySelectorAll("p")].map((p) => p.textContent!.trim()),
+    ).toEqual([
+      t.recoveryRunning.replace("{started}", shown.started),
+      t.recoveryLastActive.replace("{at}", shown.last),
+      t.recoveryRunningNext,
+    ]);
+    const shadow = app.shadowRoot!;
+    expect(shadow.querySelector("[data-test=start-again]")).toBeNull();
+    expect(shadow.querySelector("[data-test=recover-backup]")).toBeNull();
+    expect(shadow.querySelector("[data-test=resume-password]")).toBeNull();
+    expect(shadow.querySelector("[data-test=resume]")).toBeNull();
+    expect(requests.some((r) => /\/(recover|start-again|summary)$/.test(r.path))).toBe(false);
+  },
+);

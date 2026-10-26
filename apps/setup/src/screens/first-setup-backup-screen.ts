@@ -53,7 +53,7 @@ const empty = (): Draft => ({
   sole: false,
 });
 
-function shownAt(iso: string): string {
+export function shownAt(iso: string): string {
   const at = new Date(iso);
   return Number.isNaN(at.getTime())
     ? iso

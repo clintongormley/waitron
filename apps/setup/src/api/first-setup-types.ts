@@ -122,10 +122,20 @@ export interface BackupRepairSession {
   binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
   input?: unknown;
 }
+/** A stopped backup recovery that Start again would discard, as the summary names it. */
+export interface StartAgainRecoveryShown {
+  startedAt: string;
+  lastActiveAt: string;
+  lastActiveSource: "memory" | "saved-step";
+  lastName: string | null;
+  failed: boolean;
+  cloud: boolean;
+}
 export interface StartAgainSummary {
   reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
   lastName: string | null;
   recoveryRecordDamaged?: true;
+  recovery?: StartAgainRecoveryShown;
 }
 export interface BackupRepairStatus {
   phase: "unstarted" | "prepared" | "placement-started" | "restored" | "selected" | "uncertain";

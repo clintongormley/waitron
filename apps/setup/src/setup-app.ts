@@ -2,13 +2,14 @@ import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { draftScopeFor } from "@waitron/ui";
 import { FirstSetupSession } from "./first-setup-session.js";
 import type {
+  BackupRepairActivity,
   BackupRepairStatus,
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
   StartAgainSummary,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
-import "./screens/first-setup-backup-screen.js";
+import { shownAt } from "./screens/first-setup-backup-screen.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import {
   LeaveController,
@@ -201,7 +202,11 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
   "setup.start_again_incomplete": "shell.first_setup.start_again_incomplete",
   "setup.workspace_unsupported": "shell.first_setup.workspace_unsupported",
+  "setup.recovery_in_progress": "shell.first_setup.recovery_in_progress",
+  "setup.recovery_discarded": "shell.first_setup.recovery_discarded",
 };
+const ACTIVITY_REREAD_MS = 30_000;
+const STOPPED_BACKUP_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
@@ -597,6 +602,8 @@ export class SetupApp extends LitElement {
     this.firstMissingSummary = undefined;
     this.firstDamagedRecord = undefined;
     this.firstBackupPhase = undefined;
+    this.#stopActivityWatch();
+    this.firstActivity = undefined;
     this.#firstPasswordScope?.dispose();
     this.#firstPasswordScope = undefined;
     ++this.#cloudRecoveryAttempt;
@@ -1036,6 +1043,9 @@ export class SetupApp extends LitElement {
   /** With the database present, a damaged recovery-key record: the password step, then the warning. */
   @state() private firstDamagedRecord?: "password" | "confirm";
   @state() private firstBackupPhase?: BackupRepairStatus["phase"];
+  /** Read with every signed-out inspection, so nothing is offered while a recovery runs elsewhere. */
+  @state() private firstActivity?: BackupRepairActivity | null;
+  #activityTimer?: ReturnType<typeof setInterval>;
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
   #firstReplacing = false;
@@ -1063,9 +1073,45 @@ export class SetupApp extends LitElement {
     }
     if ((inspect || session.recoveryRequired) && !session.state) {
       const inspection = await this.api.inspectFirstSetupResolution();
-      if (this.isConnected && this.#firstSession === session) this.firstInspection = inspection;
+      const activity = await this.#readActivity();
+      if (this.isConnected && this.#firstSession === session) {
+        this.firstActivity = activity;
+        this.firstInspection = inspection;
+        this.#watchActivity();
+      }
     }
     return session;
+  }
+  async #readActivity(): Promise<BackupRepairActivity | null> {
+    const { activity } = (await this.api.firstSetupBackupActivity()) ?? {};
+    if (activity === null) return null;
+    if (
+      (activity?.state === "running" || activity?.state === "stopped") &&
+      typeof activity.startedAt === "string" &&
+      typeof activity.lastActiveAt === "string"
+    )
+      return activity;
+    throw new Error("The backup recovery's activity could not be read.");
+  }
+  #watchActivity(): void {
+    this.#stopActivityWatch();
+    if (this.firstActivity?.state !== "running") return;
+    const timer = setInterval(() => {
+      // A failed read keeps the running view; the next tick asks again.
+      void this.#readActivity().then(
+        (activity) => {
+          if (this.#activityTimer !== timer) return;
+          this.firstActivity = activity;
+          if (activity?.state !== "running") this.#stopActivityWatch();
+        },
+        () => undefined,
+      );
+    }, ACTIVITY_REREAD_MS);
+    this.#activityTimer = timer;
+  }
+  #stopActivityWatch(): void {
+    clearInterval(this.#activityTimer);
+    this.#activityTimer = undefined;
   }
   #acceptFirstIdentity(): void {
     const state = this.#firstSession!.state!;
@@ -1195,6 +1241,8 @@ export class SetupApp extends LitElement {
             "uncertain",
           ].includes(backup.phase)
         )
+          throw { code: "setup.attempt_invalid" };
+        if (summary.recovery !== undefined && !STOPPED_BACKUP_PHASES.includes(backup.phase))
           throw { code: "setup.attempt_invalid" };
         this.firstMissingSummary = summary;
         this.firstBackupPhase = backup.phase;
@@ -1362,6 +1410,8 @@ export class SetupApp extends LitElement {
       this.firstMissingSummary = undefined;
       this.firstDamagedRecord = undefined;
       this.firstBackupPhase = undefined;
+      this.#stopActivityWatch();
+      this.firstActivity = undefined;
       await this.#openFirstSession();
       const session = this.#firstSession!;
       let inspect = false;
@@ -1374,8 +1424,11 @@ export class SetupApp extends LitElement {
       }
       if ((inspect || session.recoveryRequired) && !session.state) {
         const inspection = await this.api.inspectFirstSetupResolution();
+        const activity = await this.#readActivity();
         if (!this.isConnected || generation !== this.#firstGeneration) return;
+        this.firstActivity = activity;
         this.firstInspection = inspection;
+        this.#watchActivity();
       }
       if (!this.isConnected || generation !== this.#firstGeneration) return;
       if (!inspect && !session.state && !session.recoveryRequired) {
@@ -2190,8 +2243,16 @@ export class SetupApp extends LitElement {
     const ask = authenticatedMissing ? this.firstMissingSummary : undefined;
     // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
     const recoveryStarted = this.firstBackupPhase !== "unstarted";
+    const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
+    const stopped = ask?.recovery;
+    const offersStartAgain = !recoveryStarted || stopped !== undefined;
+    const lastActive = (at: string, source?: "memory" | "saved-step") =>
+      (source === "saved-step" ? t.recoveryLastSaved : t.recoveryLastActive).replace(
+        "{at}",
+        shownAt(at),
+      );
     const canRestart =
-      (ask !== undefined && !recoveryStarted) ||
+      (ask !== undefined && offersStartAgain) ||
       (inspection?.emptyDatabase === true &&
         state === undefined &&
         inspection.password === "checkable" &&
@@ -2295,6 +2356,15 @@ export class SetupApp extends LitElement {
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
       ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
       ${missing ? html`<p data-test="missing-database">${t.missingDatabase}</p>` : nothing}
+      ${
+        running
+          ? html`<div data-test="recovery-running">
+              <p>${t.recoveryRunning.replace("{started}", shownAt(running.startedAt))}</p>
+              <p>${lastActive(running.lastActiveAt)}</p>
+              <p>${t.recoveryRunningNext}</p>
+            </div>`
+          : nothing
+      }
       ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
       ${
         damaged === "password" && !this.firstOwnerBusy
@@ -2321,6 +2391,7 @@ export class SetupApp extends LitElement {
       }
       ${
         ((!terminal && !authenticatedMissing) || this.#firstSession?.recoveryRequired) &&
+        !running &&
         (damaged === undefined || warningClosed) &&
         !this.firstOwnerBusy &&
         !this.firstRestarting &&
@@ -2340,7 +2411,7 @@ export class SetupApp extends LitElement {
           : nothing
       }
       ${
-        inspection && !this.firstRestarting
+        inspection && !this.firstRestarting && !running
           ? damaged && !warningClosed
             ? damaged === "confirm"
               ? startAgainConfirm
@@ -2363,16 +2434,26 @@ export class SetupApp extends LitElement {
                           : nothing
                     }
                   </ul>
-                  <p>${t.missingBackup}</p>
-                  <div class="missing-actions" data-test="missing-actions">
-                    ${recoverBackup}${recoveryStarted ? nothing : startAgain}
-                  </div>
                   ${
-                    recoveryStarted
-                      ? nothing
-                      : html`<p data-test="recover-backup-note">${t.recoverBackupNote}</p>
-                          ${startAgainConfirm}`
-                  }`
+                    stopped
+                      ? html`<div data-test="recovery-stopped">
+                          <p>
+                            ${t.recoveryStopped.replace("{started}", shownAt(stopped.startedAt))}
+                          </p>
+                          <p>${lastActive(stopped.lastActiveAt, stopped.lastActiveSource)}</p>
+                          ${stopped.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
+                        </div>`
+                      : html`${
+                            this.firstBackupPhase === "uncertain"
+                              ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
+                              : nothing
+                          }
+                          <p>${t.missingBackup}</p>`
+                  }
+                  <div class="missing-actions" data-test="missing-actions">
+                    ${stopped ? nothing : recoverBackup}${offersStartAgain ? startAgain : nothing}
+                  </div>
+                  ${offersStartAgain ? startAgainConfirm : nothing}`
               : html`${startAgain}
                 ${!canRestart && !authenticatedMissing ? html`<p>${t.startUnavailable}</p>` : nothing}
                 ${startAgainConfirm} ${recoverBackup}

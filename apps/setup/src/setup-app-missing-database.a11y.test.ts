@@ -11,6 +11,9 @@ import {
   damagedSummary,
   missingDatabaseFixture,
   recoverMissing,
+  runningActivity,
+  stoppedActivity,
+  stoppedSummary,
 } from "../test/missing-database-browser.js";
 
 afterEach(async () => {
@@ -86,6 +89,50 @@ for (const locale of ["en-GB", "es-ES"] as const)
               await page.screenshot({
                 path: `__screenshots__/a679-missing/${locale}-${theme}-${width}-${state}.png`,
               });
+          } finally {
+            await page.viewport(previous[0]!, previous[1]!);
+          }
+        });
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280])
+      for (const state of ["running", "stopped"] as const)
+        it(`${locale} ${theme} ${width} ${state}: accessible backup-recovery lines`, async () => {
+          const previous = [innerWidth, innerHeight];
+          try {
+            await page.viewport(width, 1200);
+            const { app, host } = await missingDatabaseFixture({
+              locale,
+              theme,
+              ...(state === "running"
+                ? { activity: runningActivity }
+                : {
+                    backupPhase: "prepared" as const,
+                    activity: { ...stoppedActivity, cloud: true },
+                    summary: {
+                      ...stoppedSummary,
+                      recovery: { ...stoppedSummary.recovery!, cloud: true },
+                    },
+                  }),
+            });
+            if (state === "stopped") await recoverMissing(app);
+            await app.updateComplete;
+            expect(
+              q(app, state === "running" ? "recovery-running" : "recovery-stopped"),
+            ).not.toBeNull();
+            await expectNoA11yViolations(host);
+            expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+            const section = q<HTMLElement>(app, "screen-first-owner")!;
+            expect(section.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            const button = q<WtButton>(
+              app,
+              state === "running" ? "reconnect-first" : "start-again",
+            )!;
+            const native = button.shadowRoot!.querySelector("button")!;
+            native.focus();
+            expect(button.shadowRoot!.activeElement).toBe(native);
+            expect(native.getBoundingClientRect().width).toBeGreaterThan(0);
           } finally {
             await page.viewport(previous[0]!, previous[1]!);
           }

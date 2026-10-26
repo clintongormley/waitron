@@ -61,17 +61,39 @@ function publicState(value: unknown): value is FirstSetupState {
   );
 }
 const SUMMARY_REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"];
+const RECOVERY_KEYS = [
+  "startedAt",
+  "lastActiveAt",
+  "lastActiveSource",
+  "lastName",
+  "failed",
+  "cloud",
+];
+function readableRecovery(value: unknown): boolean {
+  return (
+    object(value) &&
+    Object.keys(value).length === RECOVERY_KEYS.length &&
+    RECOVERY_KEYS.every((key) => key in value) &&
+    typeof value.startedAt === "string" &&
+    typeof value.lastActiveAt === "string" &&
+    ["memory", "saved-step"].includes(value.lastActiveSource as string) &&
+    (value.lastName === null || (typeof value.lastName === "string" && value.lastName !== "")) &&
+    typeof value.failed === "boolean" &&
+    typeof value.cloud === "boolean"
+  );
+}
 function summaryOf(value: unknown): StartAgainSummary {
   const summary = value as Partial<Record<keyof StartAgainSummary, unknown>> | null;
   if (
     summary === null ||
     typeof summary !== "object" ||
     Object.keys(summary).some(
-      (key) => !["reached", "lastName", "recoveryRecordDamaged"].includes(key),
+      (key) => !["reached", "lastName", "recoveryRecordDamaged", "recovery"].includes(key),
     ) ||
     !SUMMARY_REACHED.includes(summary.reached as string) ||
     !(summary.lastName === null || (typeof summary.lastName === "string" && summary.lastName)) ||
-    !(summary.recoveryRecordDamaged === undefined || summary.recoveryRecordDamaged === true)
+    !(summary.recoveryRecordDamaged === undefined || summary.recoveryRecordDamaged === true) ||
+    !(summary.recovery === undefined || readableRecovery(summary.recovery))
   )
     failure("setup.attempt_invalid");
   return summary as StartAgainSummary;
@@ -79,7 +101,15 @@ function summaryOf(value: unknown): StartAgainSummary {
 const sameSummary = (a: StartAgainSummary, b: StartAgainSummary) =>
   a.reached === b.reached &&
   a.lastName === b.lastName &&
-  a.recoveryRecordDamaged === b.recoveryRecordDamaged;
+  a.recoveryRecordDamaged === b.recoveryRecordDamaged &&
+  (a.recovery === undefined
+    ? b.recovery === undefined
+    : b.recovery !== undefined &&
+      RECOVERY_KEYS.every(
+        (key) =>
+          a.recovery![key as keyof typeof a.recovery] ===
+          b.recovery![key as keyof typeof b.recovery],
+      ));
 function failure(
   code:
     | "setup.owner_required"
