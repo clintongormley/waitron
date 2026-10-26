@@ -8,7 +8,7 @@ import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "..
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // A gross-1.50 espresso at the general rate.
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -20,7 +20,7 @@ const cafe: TillProduct = {
 };
 
 // A weight product priced per kg: 10.00/kg gross at the reduced rate.
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
@@ -36,7 +36,9 @@ describe("WorkingOrderStore", () => {
     "does not fold a split family while %s holds the saved outbox",
     (gate) => {
       const store = new WorkingOrderStore();
-      store.loadFrom("draft", [{ product: { ...cafe, menuItemId: "offer-cafe" }, quantity: "2" }]);
+      store.loadFrom("draft", [
+        { product: { ...coffee, menuItemId: "offer-cafe" }, quantity: "2" },
+      ]);
       store.splitLine(0);
       const before = [...store.lines];
       store.markPersisted();
@@ -56,7 +58,7 @@ describe("WorkingOrderStore", () => {
 
   it("does not fold an ordinary row with no split family", () => {
     const store = new WorkingOrderStore();
-    store.loadFrom("draft", [{ product: cafe, quantity: "2" }]);
+    store.loadFrom("draft", [{ product: coffee, quantity: "2" }]);
     const line = store.lines[0]!;
     let changes = 0;
     store.subscribe(() => changes++);
@@ -72,7 +74,9 @@ describe("WorkingOrderStore", () => {
     "keeps remaining dishes unchanged when a %s target has disappeared",
     (action) => {
       const store = new WorkingOrderStore();
-      store.loadFrom("draft", [{ product: cafe, quantity: "2", place: { kind: "new", slot: 1 } }]);
+      store.loadFrom("draft", [
+        { product: coffee, quantity: "2", place: { kind: "new", slot: 1 } },
+      ]);
       const line = store.lines[0]!;
       let changes = 0;
       store.subscribe(() => changes++);
@@ -94,14 +98,14 @@ describe("WorkingOrderStore", () => {
 
   it("appends already-chosen lines as one unsaved edit, merging none of them", () => {
     const store = new WorkingOrderStore();
-    store.loadFrom("draft", [{ product: cafe, quantity: "1" }]);
+    store.loadFrom("draft", [{ product: coffee, quantity: "1" }]);
     expect(store.dirty).toBe(false);
     let changes = 0;
     store.subscribe(() => changes++);
     const total = store.total;
     store.appendLines([
-      { product: cafe, quantity: "2", note: "decaf", courseId: "mains", noMerge: true },
-      { product: cafe, quantity: "1" },
+      { product: coffee, quantity: "2", note: "decaf", courseId: "mains", noMerge: true },
+      { product: coffee, quantity: "1" },
     ]);
     expect(
       store.lines.map(({ quantity, note, courseId, noMerge }) => ({
@@ -129,7 +133,7 @@ describe("WorkingOrderStore", () => {
       else store.lockEdits();
       let changes = 0;
       store.subscribe(() => changes++);
-      store.appendLines([{ product: cafe, quantity: "1" }]);
+      store.appendLines([{ product: coffee, quantity: "1" }]);
       expect(store.lines).toEqual([]);
       expect(store.dirty).toBe(false);
       expect(changes).toBe(0);
@@ -151,14 +155,14 @@ describe("WorkingOrderStore", () => {
     store.subscribe(() => changes++);
     const lines: OrderLine[] = [
       {
-        product: cafe,
+        product: coffee,
         quantity: "2",
         note: "decaf",
         courseId: "mains",
         noMerge: true,
         place: { kind: "new", slot: 2 },
       },
-      { product: cafe, quantity: "1", place: { kind: "fire" } },
+      { product: coffee, quantity: "1", place: { kind: "fire" } },
     ];
     store.appendLines(lines);
     expect(
@@ -200,7 +204,7 @@ describe("WorkingOrderStore", () => {
       else store.lockEdits();
       let changes = 0;
       store.subscribe(() => changes++);
-      store.appendLines([{ product: cafe, quantity: "1" }]);
+      store.appendLines([{ product: coffee, quantity: "1" }]);
       expect(store.lines).toEqual([]);
       expect(store.dirty).toBe(false);
       expect(changes).toBe(0);
@@ -210,9 +214,9 @@ describe("WorkingOrderStore", () => {
   it("moves selected lines together, shifts later slots and emits one change", () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [
-      { product: cafe, quantity: "1", place: { kind: "fire" } },
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 2, afterGroupId: "g3" } },
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 4 } },
+      { product: coffee, quantity: "1", place: { kind: "fire" } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 2, afterGroupId: "g3" } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 4 } },
     ]);
     let changes = 0;
     store.subscribe(() => changes++);
@@ -229,9 +233,9 @@ describe("WorkingOrderStore", () => {
   it("inserts a slot after Fire now, or an existing slot, keeping group anchors", () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g3" } },
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 2 } },
-      { product: cafe, quantity: "1", place: { kind: "join", groupId: "g3" } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g3" } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 2 } },
+      { product: coffee, quantity: "1", place: { kind: "join", groupId: "g3" } },
     ]);
     let changes = 0;
     store.subscribe(() => changes++);
@@ -259,7 +263,7 @@ describe("WorkingOrderStore", () => {
     store.loadFrom(
       "draft",
       [1, 2, 3].map((slot) => ({
-        product: cafe,
+        product: coffee,
         quantity: "1",
         place: { kind: "new" as const, slot, afterGroupId: "g3" },
       })),
@@ -280,7 +284,7 @@ describe("WorkingOrderStore", () => {
 
   it("keeps a split line's place and moves one split without moving its siblings", () => {
     const store = new WorkingOrderStore();
-    store.loadFrom("draft", [{ product: cafe, quantity: "3", place: { kind: "new", slot: 2 } }]);
+    store.loadFrom("draft", [{ product: coffee, quantity: "3", place: { kind: "new", slot: 2 } }]);
     store.splitLine(0);
     expect(store.lines.map((line) => line.place)).toEqual([
       { kind: "new", slot: 2 },
@@ -322,8 +326,8 @@ describe("WorkingOrderStore", () => {
   ])("moves slot %s to %s at the destination's held-group anchor", (from, to, places) => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g1" } },
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 2, afterGroupId: "g3" } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g1" } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 2, afterGroupId: "g3" } },
     ]);
     store.moveSlot(from as number, to as number);
     expect(store.lines.map((line) => line.place)).toEqual(places);
@@ -331,7 +335,7 @@ describe("WorkingOrderStore", () => {
 
   it("keeps placement edits out while sending", () => {
     const store = new WorkingOrderStore();
-    store.loadFrom("draft", [{ product: cafe, quantity: "1", place: { kind: "new", slot: 1 } }]);
+    store.loadFrom("draft", [{ product: coffee, quantity: "1", place: { kind: "new", slot: 1 } }]);
     store.sending = true;
     let changes = 0;
     store.subscribe(() => changes++);
@@ -346,8 +350,8 @@ describe("WorkingOrderStore", () => {
   it("can move an anchored slot to a group after all held groups", () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g1" } },
-      { product: cafe, quantity: "1", place: { kind: "new", slot: 2 } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g1" } },
+      { product: coffee, quantity: "1", place: { kind: "new", slot: 2 } },
     ]);
     store.moveSlot(1, 2);
     expect(store.lines.map((line) => line.place)).toEqual([
@@ -362,19 +366,19 @@ describe("WorkingOrderStore", () => {
       const store = new WorkingOrderStore();
       let selectable = true;
       store.canSelectProduct = () => selectable;
-      store[method](cafe, "1");
+      store[method](coffee, "1");
       selectable = false;
       const refusals: unknown[] = [];
       store.on("refused", (value) => refusals.push(value));
-      store[method](cafe, "1");
-      expect(store.lines).toEqual([{ product: cafe, quantity: "1" }]);
+      store[method](coffee, "1");
+      expect(store.lines).toEqual([{ product: coffee, quantity: "1" }]);
       expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
     },
   );
 
   it("period selection refuses increases but keeps decreases, unchanged quantity and removal", () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     store.canSelectProduct = () => false;
     const refusals: unknown[] = [];
     store.on("refused", (value) => refusals.push(value));
@@ -391,26 +395,26 @@ describe("WorkingOrderStore", () => {
 
   it("adds an each line and previews the total via priceBasket", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "2");
+    s.addProduct(coffee, "2");
     expect(s.total).toBe("3.00");
     expect(s.lines).toHaveLength(1);
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "2" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "2" });
   });
 
   it("prices a weight line by its kg quantity", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(jamon, "0.320"); // 10.00 × 0.320 = 3.20
+    s.addProduct(ham, "0.320"); // 10.00 × 0.320 = 3.20
     expect(s.total).toBe("3.20");
   });
 
   it("rejects an invalid unit quantity before changing basket state", () => {
     const s = new WorkingOrderStore();
-    expect(() => s.addProduct(cafe, "0.5")).toThrowError(
+    expect(() => s.addProduct(coffee, "0.5")).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
     );
     expect(s.lines).toEqual([]);
 
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     expect(() => s.setLineQuantity(0, "1.5")).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
     );
@@ -420,16 +424,16 @@ describe("WorkingOrderStore", () => {
 
   it("attaches a per-line note carried on the selection", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", { note: "no mayo" });
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "no mayo" });
+    s.addProduct(coffee, "1", { note: "no mayo" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1", note: "no mayo" });
   });
 
   it("omits the note key when the selection is absent or names nothing", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1");
-    s.addProduct(cafe, "1", {});
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
-    expect(s.lines[1]).toEqual({ product: cafe, quantity: "1" });
+    s.addProduct(coffee, "1");
+    s.addProduct(coffee, "1", {});
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1" });
+    expect(s.lines[1]).toEqual({ product: coffee, quantity: "1" });
   });
 
   it("previews an empty basket as a zero total with no VAT bands", () => {
@@ -441,8 +445,8 @@ describe("WorkingOrderStore", () => {
 
   it("groups vatBreakdown by rate across a mixed-rate basket", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "2"); // general (21.00)
-    s.addProduct(jamon, "0.320"); // reduced (10.00)
+    s.addProduct(coffee, "2"); // general (21.00)
+    s.addProduct(ham, "0.320"); // reduced (10.00)
     const rates = s.vatBreakdown.map((b) => b.rate).sort();
     expect(rates).toEqual(["10.00", "21.00"]);
     // Every band's base + tax reconstructs its gross slice, and the bands sum to the preview total.
@@ -456,7 +460,7 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     let n = 0;
     s.subscribe(() => n++);
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     s.clear();
     expect(n).toBe(2);
     expect(s.lines).toHaveLength(0);
@@ -466,17 +470,17 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     let n = 0;
     s.subscribe(() => n++);
-    s.addProduct(cafe, "1");
-    s.addProduct(jamon, "0.100");
+    s.addProduct(coffee, "1");
+    s.addProduct(ham, "0.100");
     s.removeLine(0);
     expect(s.lines).toHaveLength(1);
-    expect(s.lines[0]?.product).toBe(jamon);
+    expect(s.lines[0]?.product).toBe(ham);
     expect(n).toBe(3); // two adds + one remove
   });
 
   it("setLineQuantity updates the line's quantity, re-prices the total, marks dirty and notifies", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline, total 1.50
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]); // clean baseline, total 1.50
     expect(s.total).toBe("1.50");
     expect(s.dirty).toBe(false);
     let n = 0;
@@ -490,7 +494,7 @@ describe("WorkingOrderStore", () => {
 
   it("setLineQuantity is a true no-op for an out-of-range index — no mutation, no notification", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]); // clean baseline
     let n = 0;
     s.subscribe(() => n++);
     s.setLineQuantity(-1, "5");
@@ -504,63 +508,63 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     let n = 0;
     s.subscribe(() => n++);
-    s.addProduct(cafe, "1");
-    s.addProduct(jamon, "0.100");
+    s.addProduct(coffee, "1");
+    s.addProduct(ham, "0.100");
     const notificationsAfterAdds = n;
 
     s.removeLine(-1); // splice(-1, 1) would otherwise drop the LAST line
     s.removeLine(5); // past the end
 
     expect(s.lines).toHaveLength(2);
-    expect(s.lines[0]?.product).toBe(cafe);
-    expect(s.lines[1]?.product).toBe(jamon);
+    expect(s.lines[0]?.product).toBe(coffee);
+    expect(s.lines[1]?.product).toBe(ham);
     expect(n).toBe(notificationsAfterAdds);
   });
 
   it("setLineExtras attaches a note to a fast-added line, marks dirty and notifies", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]); // clean baseline
     expect(s.dirty).toBe(false);
     let n = 0;
     s.subscribe(() => n++);
     s.setLineExtras(0, { note: "no onion" });
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "no onion" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1", note: "no onion" });
     expect(s.dirty).toBe(true);
     expect(n).toBe(1);
   });
 
   it("setLineExtras touches only the keys the caller names, leaving an unnamed note alone", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", { note: "keep me" });
+    s.addProduct(coffee, "1", { note: "keep me" });
     // The update is keyed on the PRESENCE of `note`: an absent key means "unchanged".
     s.setLineExtras(0, {});
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "keep me" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1", note: "keep me" });
   });
 
   it("setLineExtras trims a whitespace-only note away (omission discipline)", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", { note: "old note" });
+    s.addProduct(coffee, "1", { note: "old note" });
     s.setLineExtras(0, { note: "   " });
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1" });
   });
 
   it("setLineExtras is a true no-op for an out-of-range index — no mutation, no notification", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]); // clean baseline
     let n = 0;
     s.subscribe(() => n++);
     s.setLineExtras(-1, { note: "x" });
     s.setLineExtras(3, { note: "x" }); // past the end
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1" });
     expect(s.dirty).toBe(false);
     expect(n).toBe(0);
   });
 
   it("setLineExtras with the note key present but undefined clears the stored note", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", { note: "no sugar" });
+    s.addProduct(coffee, "1", { note: "no sugar" });
     s.setLineExtras(0, { note: undefined });
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1" });
   });
 
   it("setLineModifiers replaces the line's whole answer set, marks dirty and notifies", () => {
@@ -572,7 +576,7 @@ describe("WorkingOrderStore", () => {
       price: "0.50",
       quantity: 1,
     };
-    s.loadFrom("held-1", [{ product: cafe, quantity: "2", extras: [pick], note: "hot" }]);
+    s.loadFrom("held-1", [{ product: coffee, quantity: "2", extras: [pick], note: "hot" }]);
     let n = 0;
     s.subscribe(() => n++);
     const frozen = {
@@ -589,7 +593,7 @@ describe("WorkingOrderStore", () => {
     });
     // The picks the new selection does not name are gone; the note is not an answer, so it stays.
     expect(s.lines[0]).toEqual({
-      product: cafe,
+      product: coffee,
       quantity: "2",
       note: "hot",
       options: [{ listId: "list-size", labelId: "label-large" }],
@@ -602,12 +606,12 @@ describe("WorkingOrderStore", () => {
 
   it("setLineModifiers is a true no-op for an out-of-range index — no mutation, no notification", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]);
     let n = 0;
     s.subscribe(() => n++);
     s.setLineModifiers(-1, { options: [{ listId: "l", labelId: "x" }] });
     s.setLineModifiers(3, { options: [{ listId: "l", labelId: "x" }] });
-    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.lines[0]).toEqual({ product: coffee, quantity: "1" });
     expect(s.dirty).toBe(false);
     expect(n).toBe(0);
   });
@@ -616,9 +620,9 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     let n = 0;
     const unsubscribe = s.subscribe(() => n++);
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     unsubscribe();
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     expect(n).toBe(1);
   });
 
@@ -628,7 +632,7 @@ describe("WorkingOrderStore", () => {
     let b = 0;
     s.subscribe(() => a++);
     s.subscribe(() => b++);
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     expect(a).toBe(1);
     expect(b).toBe(1);
   });
@@ -637,21 +641,21 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     const seen: TillProduct[] = [];
     s.on("product-selected", (p) => seen.push(p as TillProduct));
-    s.emit("product-selected", cafe);
-    expect(seen).toEqual([cafe]);
+    s.emit("product-selected", coffee);
+    expect(seen).toEqual([coffee]);
     // Selecting a product is a broadcast, not a mutation: it must not touch the basket.
     expect(s.lines).toHaveLength(0);
   });
 
   it("emitting an event with no listeners is a no-op", () => {
     const s = new WorkingOrderStore();
-    expect(() => s.emit("product-selected", cafe)).not.toThrow();
+    expect(() => s.emit("product-selected", coffee)).not.toThrow();
   });
 
   it("is a plain store with no session coupling — instances are independent", () => {
     const a = new WorkingOrderStore();
     const b = new WorkingOrderStore();
-    a.addProduct(cafe, "1");
+    a.addProduct(coffee, "1");
     expect(a.lines).toHaveLength(1);
     expect(b.lines).toHaveLength(0);
   });
@@ -667,7 +671,7 @@ describe("WorkingOrderStore", () => {
   it("clear() mints a fresh id and empties the lines", () => {
     const s = new WorkingOrderStore();
     const before = s.id;
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     s.clear();
     expect(s.id).not.toBe(before); // a cleared basket is a new working order
     expect(s.id).toMatch(UUID_RE);
@@ -676,13 +680,13 @@ describe("WorkingOrderStore", () => {
 
   it("loadFrom replaces the basket — id, lines, total and label", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(jamon, "0.100"); // a pre-existing line that loadFrom must drop
+    s.addProduct(ham, "0.100"); // a pre-existing line that loadFrom must drop
     // Read total BEFORE loadFrom so the cache is populated; otherwise the re-price assertion below
     // could not see a missing invalidation.
     expect(s.total).toBe("1.00");
     const lines: OrderLine[] = [
-      { product: cafe, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
-      { product: jamon, quantity: "0.320" }, // 10.00 × 0.320 = 3.20 (reduced)
+      { product: coffee, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
+      { product: ham, quantity: "0.320" }, // 10.00 × 0.320 = 3.20 (reduced)
     ];
     s.loadFrom("held-123", lines, "Mesa 4");
     expect(s.id).toBe("held-123");
@@ -693,8 +697,8 @@ describe("WorkingOrderStore", () => {
 
   it("keeps the loaded id when a product is added after loadFrom — only clear() re-mints", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-abc", [{ product: cafe, quantity: "1" }]);
-    s.addProduct(jamon, "0.100");
+    s.loadFrom("held-abc", [{ product: coffee, quantity: "1" }]);
+    s.addProduct(ham, "0.100");
     expect(s.id).toBe("held-abc");
     expect(s.lines).toHaveLength(2);
   });
@@ -703,14 +707,14 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     let n = 0;
     s.subscribe(() => n++);
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }], "Barra");
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }], "Barra");
     expect(n).toBe(1);
   });
 
   it("loadFrom without a label clears any prior label", () => {
     const s = new WorkingOrderStore();
     s.label = "old";
-    s.loadFrom("held-2", [{ product: cafe, quantity: "1" }]);
+    s.loadFrom("held-2", [{ product: coffee, quantity: "1" }]);
     expect(s.label).toBeUndefined();
   });
 
@@ -740,7 +744,7 @@ describe("WorkingOrderStore", () => {
 
   it("loadFrom marks the store persisted — a retrieved order already exists server-side", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]);
     expect(s.persisted).toBe(true);
   });
 
@@ -758,9 +762,9 @@ describe("WorkingOrderStore", () => {
 
   it("addProduct and removeLine mark the basket dirty", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     expect(s.dirty).toBe(true);
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // reset to a clean retrieved state
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]); // reset to a clean retrieved state
     expect(s.dirty).toBe(false);
     s.removeLine(0);
     expect(s.dirty).toBe(true);
@@ -768,25 +772,25 @@ describe("WorkingOrderStore", () => {
 
   it("loadFrom starts a retrieved basket CLEAN, even over a prior edit", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(jamon, "0.100"); // a prior edit → dirty
+    s.addProduct(ham, "0.100"); // a prior edit → dirty
     expect(s.dirty).toBe(true);
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }], "Mesa 4");
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }], "Mesa 4");
     expect(s.dirty).toBe(false);
   });
 
   it("a label change is NOT a line edit — it does not mark the basket dirty", () => {
     const s = new WorkingOrderStore();
-    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]);
     s.label = "Mesa 9";
     expect(s.dirty).toBe(false);
   });
 
   it("markPersisted and clear reset dirty to false", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     s.markPersisted(); // a just-parked basket matches the server → clean
     expect(s.dirty).toBe(false);
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     s.clear(); // a fresh empty basket is clean
     expect(s.dirty).toBe(false);
   });
@@ -794,14 +798,14 @@ describe("WorkingOrderStore", () => {
   describe("a basket refreshed against a new menu version", () => {
     it("adoptLines replaces the named lines, re-prices the total, marks dirty and notifies", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "2");
-      s.addProduct(jamon, "0.500");
+      s.addProduct(coffee, "2");
+      s.addProduct(ham, "0.500");
       s.markPersisted();
       let notified = 0;
       s.subscribe(() => notified++);
-      s.adoptLines(new Map([[0, { product: { ...cafe, unitPrice: "1.20" }, quantity: "2" }]]));
+      s.adoptLines(new Map([[0, { product: { ...coffee, unitPrice: "1.20" }, quantity: "2" }]]));
       expect(s.lines[0]!.product.unitPrice).toBe("1.20");
-      expect(s.lines[1]!.product).toBe(jamon);
+      expect(s.lines[1]!.product).toBe(ham);
       expect(s.total).toBe("7.40");
       expect(s.dirty).toBe(true);
       expect(notified).toBe(1);
@@ -809,19 +813,19 @@ describe("WorkingOrderStore", () => {
 
     it("adoptLines keeps each line's identity, so what is keyed on a line survives", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "1");
+      s.addProduct(coffee, "1");
       const [line] = s.lines;
-      s.adoptLines(new Map([[0, { product: { ...cafe, unitPrice: "1.20" }, quantity: "1" }]]));
+      s.adoptLines(new Map([[0, { product: { ...coffee, unitPrice: "1.20" }, quantity: "1" }]]));
       expect(s.lines[0]).toBe(line);
       expect(line!.product.unitPrice).toBe("1.20");
     });
 
     it("removeLines takes out exactly the named lines, whatever was added since", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "1");
-      s.addProduct(jamon, "0.500");
+      s.addProduct(coffee, "1");
+      s.addProduct(ham, "0.500");
       const sent = s.lines.slice(0, 1);
-      s.addProduct(cafe, "2");
+      s.addProduct(coffee, "2");
       let notified = 0;
       s.subscribe(() => notified++);
       s.removeLines(sent);
@@ -834,17 +838,17 @@ describe("WorkingOrderStore", () => {
 
     it("refuses every staff edit while it is being sent, and takes them again once it is not", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "1", { note: "sin azúcar" });
+      s.addProduct(coffee, "1", { note: "sin azúcar" });
       let notified = 0;
       s.subscribe(() => notified++);
       s.sending = true;
       expect(notified).toBe(1);
-      s.addProduct(jamon, "0.500");
+      s.addProduct(ham, "0.500");
       s.setLineQuantity(0, "2");
       s.setLineExtras(0, { note: "con hielo" });
       s.setLineModifiers(0, { options: [{ listId: "l", labelId: "x" }] });
       s.removeLine(0);
-      expect(s.lines).toEqual([{ product: cafe, quantity: "1", note: "sin azúcar" }]);
+      expect(s.lines).toEqual([{ product: coffee, quantity: "1", note: "sin azúcar" }]);
       s.sending = false;
       s.setLineQuantity(0, "2");
       expect(s.lines[0]!.quantity).toBe("2");
@@ -852,8 +856,8 @@ describe("WorkingOrderStore", () => {
 
     it("setBlocked marks and clears lines, notifying only when a mark changed, never marking dirty", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "1");
-      s.addProduct(jamon, "0.500");
+      s.addProduct(coffee, "1");
+      s.addProduct(ham, "0.500");
       s.markPersisted();
       let notified = 0;
       s.subscribe(() => notified++);
@@ -870,7 +874,7 @@ describe("WorkingOrderStore", () => {
 
     it("setBlocked without notify marks the line and tells no listener", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "1");
+      s.addProduct(coffee, "1");
       let notified = 0;
       s.subscribe(() => notified++);
       s.setBlocked(["unavailable"], false);
@@ -891,7 +895,7 @@ describe("WorkingOrderStore", () => {
 
     it("addProduct stores the picks on the line and totals them into the running line price", () => {
       const s = new WorkingOrderStore();
-      const cortado: TillProduct = { ...cafe, id: "cortado", unitPrice: "2.50" };
+      const cortado: TillProduct = { ...coffee, id: "cortado", unitPrice: "2.50" };
       s.addProduct(cortado, "1", { extras: [oatMilk] });
       expect(s.lines).toHaveLength(1);
       expect(s.lines[0]?.extras).toEqual([oatMilk]);
@@ -902,15 +906,15 @@ describe("WorkingOrderStore", () => {
 
     it("multiplies the dish gross and every pick by the line quantity", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "2", { extras: [oatMilk] }); // (1.50 + 0.50) × 2 = 4.00
+      s.addProduct(coffee, "2", { extras: [oatMilk] }); // (1.50 + 0.50) × 2 = 4.00
       expect(lineGross(s.lines[0]!)).toBe("4.00");
     });
 
     it("the grand total includes the picks — a +0.50 pick lifts it by 0.50", () => {
       const withOption = new WorkingOrderStore();
-      withOption.addProduct(cafe, "1", { extras: [oatMilk] }); // dish 1.50 + pick 0.50
+      withOption.addProduct(coffee, "1", { extras: [oatMilk] }); // dish 1.50 + pick 0.50
       const without = new WorkingOrderStore();
-      without.addProduct(cafe, "1"); // dish 1.50 only
+      without.addProduct(coffee, "1"); // dish 1.50 only
       expect(without.total).toBe("1.50");
       // priceBasket sees only the dishes, so a total taken from it alone would stay 1.50.
       expect(withOption.total).toBe("2.00");
@@ -918,15 +922,15 @@ describe("WorkingOrderStore", () => {
 
     it("the extras-aware total multiplies each pick by the line quantity", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "2", { extras: [oatMilk] }); // (1.50 + 0.50) × 2 = 4.00
+      s.addProduct(coffee, "2", { extras: [oatMilk] }); // (1.50 + 0.50) × 2 = 4.00
       expect(s.total).toBe("4.00");
     });
 
     it("with no picks the line is unchanged — no extras key, price identical to before", () => {
       const s = new WorkingOrderStore();
-      s.addProduct(cafe, "2");
+      s.addProduct(coffee, "2");
       // The strict toEqual pins that a no-pick add carries NO extras key.
-      expect(s.lines[0]).toEqual({ product: cafe, quantity: "2" });
+      expect(s.lines[0]).toEqual({ product: coffee, quantity: "2" });
       expect(s.lines[0]?.extras).toBeUndefined();
       expect(lineGross(s.lines[0]!)).toBe("3.00"); // 1.50 × 2
     });
@@ -939,8 +943,8 @@ describe("WorkingOrderStore", () => {
     function loaded(): WorkingOrderStore {
       const s = new WorkingOrderStore();
       s.loadFrom("held-1", [
-        { product: cafe, quantity: "2", notOfferedExtras: [milk] },
-        { product: cafe, quantity: "1" },
+        { product: coffee, quantity: "2", notOfferedExtras: [milk] },
+        { product: coffee, quantity: "1" },
       ]);
       return s;
     }
@@ -951,7 +955,7 @@ describe("WorkingOrderStore", () => {
     });
 
     it.each([
-      ["addProduct", (s: WorkingOrderStore) => s.addProduct(cafe, "1")],
+      ["addProduct", (s: WorkingOrderStore) => s.addProduct(coffee, "1")],
       ["setLineQuantity", (s: WorkingOrderStore) => s.setLineQuantity(1, "2")],
       ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(1, {})],
       ["setLineExtras", (s: WorkingOrderStore) => s.setLineExtras(1, { note: "sin azúcar" })],
@@ -1045,7 +1049,7 @@ describe("WorkingOrderStore: the VAT preview takes each class's rate today", () 
 
 describe("WorkingOrderStore.addMerging (D10)", () => {
   const product = (menuItemId: string, over: Partial<TillProduct> = {}): TillProduct => ({
-    ...cafe,
+    ...coffee,
     id: `p-${menuItemId}`,
     name: menuItemId,
     menuItemId,
@@ -1145,17 +1149,17 @@ describe("WorkingOrderStore.addMerging (D10)", () => {
 
   it("appends a product that names no menu item, as addProduct does", () => {
     const s = new WorkingOrderStore();
-    s.addMerging(cafe, "1");
-    s.addMerging(cafe, "1");
+    s.addMerging(coffee, "1");
+    s.addMerging(coffee, "1");
     expect(s.lines).toEqual([
-      { product: cafe, quantity: "1" },
-      { product: cafe, quantity: "1" },
+      { product: coffee, quantity: "1" },
+      { product: coffee, quantity: "1" },
     ]);
   });
 
   it("adds nothing into a kept line that names no menu item", () => {
     const s = new WorkingOrderStore();
-    s.addMerging(cafe, "1");
+    s.addMerging(coffee, "1");
     s.addMerging(beer, "1");
     expect(rows(s)).toEqual(["Café ×1", "beer ×1"]);
   });
@@ -1184,7 +1188,7 @@ describe("WorkingOrderStore.addMerging (D10)", () => {
 describe("WorkingOrderStore.setLineCourse", () => {
   it("sets and clears a line's course override, marking the line changed", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     s.markPersisted();
     let notified = 0;
     s.subscribe(() => (notified += 1));
@@ -1200,7 +1204,7 @@ describe("WorkingOrderStore.setLineCourse", () => {
 
   it("keeps the picked course's name on the line, and drops it with the pick", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     const mains = { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true };
     s.setLineCourse(0, "mains", mains);
     expect(s.lines[0]!.course).toEqual(mains);
@@ -1211,7 +1215,7 @@ describe("WorkingOrderStore.setLineCourse", () => {
 
   it("takes no change while the order is being sent, or for a line that is not there", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     s.markPersisted();
     let notified = 0;
     s.subscribe(() => (notified += 1));
@@ -1228,7 +1232,7 @@ describe("WorkingOrderStore.setLineCourse", () => {
 
 describe("WorkingOrderStore.lastAdded", () => {
   const product = (menuItemId: string): TillProduct => ({
-    ...cafe,
+    ...coffee,
     id: `p-${menuItemId}`,
     name: menuItemId,
     menuItemId,
@@ -1249,7 +1253,7 @@ describe("WorkingOrderStore.lastAdded", () => {
     s.addMerging(beer, "1");
     expect(s.lastAdded).toBe(s.lines[0]);
     expect(s.lastAdded!.quantity).toBe("2");
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     expect(s.lastAdded).toBe(s.lines[2]);
   });
 
@@ -1279,7 +1283,7 @@ describe("WorkingOrderStore.lastAdded", () => {
 
 describe("WorkingOrderStore.lastAdded when the order's lines are replaced", () => {
   const product = (menuItemId: string): TillProduct => ({
-    ...cafe,
+    ...coffee,
     id: `p-${menuItemId}`,
     name: menuItemId,
     menuItemId,
@@ -1334,7 +1338,7 @@ describe("WorkingOrderStore.lastAdded when the order's lines are replaced", () =
 
 describe("WorkingOrderStore.splitLine (Split quantity)", () => {
   const product = (menuItemId: string, over: Partial<TillProduct> = {}): TillProduct => ({
-    ...cafe,
+    ...coffee,
     id: `p-${menuItemId}`,
     name: menuItemId,
     menuItemId,
@@ -1439,11 +1443,11 @@ describe("WorkingOrderStore.splitLine (Split quantity)", () => {
 describe("WorkingOrderStore.lockEdits", () => {
   it("takes no edit while locked, and takes edits again once unlocked", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     const unlock = s.lockEdits();
 
     expect(s.editsLocked).toBe(true);
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     s.setLineQuantity(0, "3");
     expect(s.lines.map((line) => line.quantity)).toEqual(["1"]);
 
@@ -1458,11 +1462,11 @@ describe("WorkingOrderStore.lockEdits", () => {
     s.lockEdits();
     s.clear();
     expect(s.editsLocked).toBe(false);
-    s.addProduct(cafe, "1");
+    s.addProduct(coffee, "1");
     expect(s.lineCount).toBe(1);
 
     s.lockEdits();
-    s.loadFrom("wo-2", [{ product: cafe, quantity: "2" }]);
+    s.loadFrom("wo-2", [{ product: coffee, quantity: "2" }]);
     expect(s.editsLocked).toBe(false);
     s.setLineQuantity(0, "3");
     expect(s.lines[0]!.quantity).toBe("3");
@@ -1472,8 +1476,8 @@ describe("WorkingOrderStore.lockEdits", () => {
     const s = new WorkingOrderStore();
     const first = s.loadGeneration;
 
-    s.loadFrom("wo-2", [{ product: cafe, quantity: "1" }]);
-    s.loadFrom("wo-2", [{ product: cafe, quantity: "1" }]);
+    s.loadFrom("wo-2", [{ product: coffee, quantity: "1" }]);
+    s.loadFrom("wo-2", [{ product: coffee, quantity: "1" }]);
     expect(s.loadGeneration).toBe(first + 2);
     s.setLineQuantity(0, "2");
     s.label = "Mesa 4";
@@ -1497,7 +1501,12 @@ describe("WorkingOrderStore.lockEdits", () => {
 
 describe("WorkingOrderStore — the simplified-invoice limit", () => {
   // 1,000.00 a unit, so three make 3,000.00 and the limit below sits 10.00 above that.
-  const banquete: TillProduct = { ...cafe, id: "banquete", name: "Banquete", unitPrice: "1000.00" };
+  const banquete: TillProduct = {
+    ...coffee,
+    id: "banquete",
+    name: "Banquete",
+    unitPrice: "1000.00",
+  };
   const extra: SelectedExtra = {
     listId: "l",
     productId: "salsa",
@@ -1519,13 +1528,13 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
   it("adds a line up to the limit, and refuses one past it, leaving the basket as it was", () => {
     const { store, refusals } = limited();
     store.addProduct(banquete, "3");
-    store.addProduct({ ...cafe, unitPrice: "10.00" }, "1");
+    store.addProduct({ ...coffee, unitPrice: "10.00" }, "1");
     expect(store.total).toBe("3010.00");
     expect(refusals).toEqual([]);
 
     const changes: unknown[] = [];
     store.subscribe(() => changes.push(true));
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     expect(store.total).toBe("3010.00");
     expect(store.lines).toHaveLength(2);
     expect(store.dirty).toBe(true);
@@ -1575,13 +1584,13 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
 describe("whole-order kitchen note", () => {
   it("tracks note edits separately from saved lines and their locked prices", () => {
     const store = new WorkingOrderStore();
-    store.loadFrom("order-a", [{ product: cafe, quantity: "2", note: "Dish only" }], "Label", 3);
+    store.loadFrom("order-a", [{ product: coffee, quantity: "2", note: "Dish only" }], "Label", 3);
     expect(store.kitchenNote).toBeNull();
     store.kitchenNote = "  Train at 14:30  ";
     expect(store.kitchenNote).toBe("Train at 14:30");
     expect(store.kitchenNoteDirty).toBe(true);
     expect(store.dirty).toBe(false);
-    expect(store.lines).toEqual([{ product: cafe, quantity: "2", note: "Dish only" }]);
+    expect(store.lines).toEqual([{ product: coffee, quantity: "2", note: "Dish only" }]);
     expect(store.total).toBe("3.00");
     store.kitchenNote = null;
     expect(store.kitchenNoteDirty).toBe(false);
