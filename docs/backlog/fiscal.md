@@ -22,17 +22,18 @@ fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 se
 
 ## A444. A full invoice for a meal past midnight should carry the day the meal ends
 
-- **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
-  the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
-  a service at its end (V1476-13, by analogy); asked as [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
-  Fiscal: the owner lands it.
+A231's provisional rule uses the day the bill was opened. The 2026-10-09 research found a binding
+ruling dating a service at its end (V1476-13, by analogy); asked as
+[S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
+Fiscal: the owner lands it.
 
 ## A445. A free item on a bill with mixed VAT rates should take a share of the price paid
 
-- **A445. A free item on a bill with mixed VAT rates should take a share of the price paid**, by
-  value, instead of being set to €0 (V0555-17, binding). Only bills mixing rates are affected (the
-  deli's 4%, 10% and 21%). A table given everything free may be self-supply taxed at cost
-  (V2347-24). Asked as [S10](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); decide before going live. Fiscal: the owner lands it.
+Allocate by value instead of setting the item to €0 (V0555-17, binding). Only bills mixing rates
+are affected (the deli's 4%, 10% and 21%). A table given everything free may be self-supply taxed at
+cost (V2347-24). Asked as
+[S10](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); decide before going live.
+Fiscal: the owner lands it.
 
 ## A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the invoice that follows
 
@@ -41,15 +42,14 @@ and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as 
 
 ## A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice
 
-- **A447. A guest's part-payment taken before the table is fully served may need its own
-  advance-payment invoice** (LIVA 75.Dos, RD 1619/2012 art. 2.1). The server (#721) holds such money
-  with no invoice until the bill is paid. Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
+See LIVA 75.Dos, RD 1619/2012 art. 2.1. The server (#721) holds such money with no invoice until the
+bill is paid. Asked as
+[S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
 
 ## The till offers no way back to a simplified invoice for a bill already saved as a full one
 
-- **The till offers no way back to a simplified invoice for a bill already saved as a full one** —
-  left open by A741 (#1774). The bill still shows its Full invoice line and payment refuses it; the server
-  accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
+Left open by A741 (#1774). The bill still shows its Full invoice line and payment refuses it; the
+server accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
 
 ## Adviser confirmation: supplier invoice numbers by issue year
 
@@ -73,30 +73,28 @@ nor the dashboard shows it, so staff see only the attempt's earlier outcome. Lef
 
 ## A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop
 
-- **A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop**, in the
-  till and the dashboard, in English and Spanish (`apps/till/src/i18n/codes.ts`,
-  `apps/dashboard/src/i18n/codes.ts`). A wording decision left open by A231q.
+A wording decision left open by A231q, in the till and the dashboard, in English and Spanish
+(`apps/till/src/i18n/codes.ts`, `apps/dashboard/src/i18n/codes.ts`).
 
 ## `FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records
 
-- **`FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records**, as it leaves out held
-  (`detenido`) ones, so neither counts as unconfirmed there. It has no production caller yet (see
-  [the `pendingCount` note](#two-sql-comments-inside-a-sql-string-in-packagesfiscalsrctestingfake-backendts-are-code-not-comments)); decide what "unconfirmed" includes before anything reads it.
-  Left open by #1596.
+It also leaves out held (`detenido`) records, so neither counts as unconfirmed there. It has no
+production caller yet (see
+[the `pendingCount` note](#two-sql-comments-inside-a-sql-string-in-packagesfiscalsrctestingfake-backendts-are-code-not-comments));
+decide what "unconfirmed" includes before anything reads it. Left open by #1596.
 
 ## The reconcile sweep may raise a second "accepted with errors" warning
 
-- **The reconcile sweep may raise a second "accepted with errors" warning** when it corrects a
-  record the drain is still sending (`packages/fiscal-verifactu/src/reconcile.ts`); only one case
-  opens, as cases are one per record. Found by reading in #1596's review, not run; nothing runs the
-  sweep yet, so check it when the sweep is scheduled.
+This can happen when it corrects a record the drain is still sending
+(`packages/fiscal-verifactu/src/reconcile.ts`);
+only one case opens, as cases are one per record. Found by reading in #1596's review, not run;
+nothing runs the sweep yet, so check it when the sweep is scheduled.
 
 ## The test "does not send a successor past a cancellation held for its original"
 
-- **The test "does not send a successor past a cancellation held for its original"**
-  (`packages/fiscal-verifactu/src/drain.test.ts`) still reads like the old hold. It is true for the
-  first pass it checks, but since #1596 a cancellation of a refused original is set aside and holds
-  nothing: retitle it on the next touch.
+In `packages/fiscal-verifactu/src/drain.test.ts`, the title still reads like the old hold. It is
+true for the first pass it checks, but since #1596 a cancellation of a refused original is set
+aside and holds nothing: retitle it on the next touch.
 
 ## Should `packages/fiscal-verifactu` have a mutation floor?
 
@@ -155,8 +153,8 @@ No stored fiscal row is to be rewritten.
 
 ## No sale over €3,000 can be made at all
 
-- **No sale over €3,000 can be made at all**: Waitron issues only simplified invoices and no screen
-  accepts a customer's tax ID, so a full invoice is not offered. Spain's legal ceiling for a
+- Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full
+  invoice is not offered. Spain's legal ceiling for a
   simplified invoice in hospitality is €3,000 (RD 1619/2012 art. 4.2, quoted in
   [verifactu-findings.md](../compliance/verifactu-findings.md) and the
   [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)).
@@ -256,8 +254,8 @@ recipient support remains outside that build; `recordSubstitution` still has no 
 
 ## `packages/fiscal-verifactu` restates rules the validator owns
 
-- **`packages/fiscal-verifactu` restates rules the validator owns** — `venue-fields.ts` its venue-field
-  patterns and caps — kept honest by drift guards (`record-limits.test.ts` compares the recipient
+- `venue-fields.ts` repeats the venue-field patterns and caps, kept honest by drift guards
+  (`record-limits.test.ts` compares the recipient
   name cap with the validator's verdict). `backend.ts`'s simplified-invoice limit no longer restates
   the validator's rule: it is the owner's €3,000 (A741), and `record-limits.test.ts` checks our
   verdict against the validator's at six totals.
@@ -975,8 +973,7 @@ donated to non-profits; the 0% on basic foods ended on 30 September 2024.
 From **The product editor and catalogue (#345, #379, #387) — what is left open.**
 [Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
 
-- **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
-  filing.** The selector shows the catalogue's zero-rate class under that name; pricing puts the
+- The selector shows the catalogue's zero-rate class under that name; pricing puts the
   whole gross in the base with zero VAT, and Veri\*Factu files it as `S1` — taxable, not exempt — at
   a 0.00 rate. AEAT separately requires a _non-subject_ operation to record its cause (`N1`,
   Articles 7, 14 and others; `N2`, place-of-supply rules), and nothing established that any of this
