@@ -1,9 +1,9 @@
 # A980 slice S3: find an invoice customer by tax number, and download what the box holds about them
 
-**Status: plan, 2026-10-26, round 1 of review folded. Nothing was built when this was written.**
-The review, the claim check and the runner's rulings are in
+**Status: plan, 2026-10-26, rounds 1 and 3 of review folded. Nothing was built when this was
+written.** The reviews, the claim check and the runner's rulings are in
 `/Users/clintongormley/waitron-campaign-b/a980-s3-plan-review/` (`round1-review.md`,
-`round1-claims.md`, `round1-rulings.md`). Design:
+`round1-claims.md`, `round1-rulings.md`, `round3-review.md`, `round3-rulings.md`). Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §2.2 (the
 customer rows c1 and c2, and "Customer data that exists today"), §4.2 (the worked example "invoice
 customer": Jordi Puig, NIF 12345678Z), §4.3(b), §5.3 row S3 (its tests: "sole-trader fixture;
@@ -19,7 +19,15 @@ nothing written, the refusal that offers an administrator's sign-in) and
 [S2d](2026-10-25-a980-s2d-line-voids.md) (this plan's shape). Branch
 `feat/a980-s3-invoice-customer-download`, from `main` at `5edf18143`.
 
-**No migration.** No index is added (decision 7). If the timing in Task 3 is over its bar, the slice
+**Built for the day full invoices are switched on.** Today no box can issue one: the till's start
+read sends `fullInvoices: false` (`apps/server/src/till-setup.ts:109-111`), a request for a full
+invoice is refused `sale.full_invoice_unavailable` (`apps/server/src/till-sale.ts:535`), and so is
+paying a bill saved as one (`refuseUnavailableFullInvoice`, `apps/server/src/working-order.ts:4142-4154`,
+called at `bill-payments.ts:1087`, `till-sale.ts:719`, `:1188`, `:2228`, `working-order.ts:6696`).
+So on every box today the search finds nothing, as S2c's voids list is empty on every box until a
+void route lands. Decision 21 says what that means and offers the owner the alternative.
+
+**No migration.** No index is added (decision 7). If the timing in Tasks 3a and 3b is over a bar, the slice
 stops and the owner is asked; an index would be a later slice of its own, and that one a migration.
 **FULL review**: personal data, a permission, and a read of other people's records found by a value
 the caller types are risk triggers. Per-task reviews run, then `/finish-branch`, which runs two Codex
@@ -36,7 +44,10 @@ and `packages/fiscal-verifactu/src/inmutabilidad.test.ts` must pass **unedited**
   is held in `sales.counterparty_tax_id`, `counterparty_legal_name`, `counterparty_country_code` and
   `counterparty_address`, all empty on a simplified invoice
   (`packages/db/src/schema/sales.ts:98-104`). `sales` is append-only: the box refuses to change or
-  delete a row (`appendOnly("sales", …)`, `packages/db/src/classification.ts:17`).
+  delete a row (`appendOnly("sales", …)`, `packages/db/src/classification.ts:17`). No box issues
+  a full invoice today (decision 21); the tests write them through `recordSale` directly, as
+  `apps/server/src/orders-invoice-pdf.test.ts:22-23` says its own do ("public F1 issuance stays
+  disabled").
 - The **NIF** is Spain's tax identification number. The **"ES" prefix** is how Spain's NIF is written
   as an EU VAT number (`ES12345678Z`). This plan calls the NIF a **tax number** in English text.
 - To **normalise** a tax number is to rewrite it in one standard spelling (decision 3), so that
@@ -54,8 +65,8 @@ and `packages/fiscal-verifactu/src/inmutabilidad.test.ts` must pass **unedited**
   for. `sales` has no index on any `counterparty_*` column: its indexes and unique keys are on the
   series and number, the issue time, the filing state, the corrected sale and the order
   (`sales.ts:118-153`).
-- A **mirror** is a read-only copy of the venue's box whose dashboard signs everyone in as an admin
-  (S2c's words; `apps/server/src/mirror-session.ts`).
+- A **mirror** is a read-only copy of the venue's box whose dashboard signs everyone who reaches it
+  in as an admin (`apps/server/src/mirror-session.ts:28`).
 
 ## What this slice builds, and what it leaves
 
@@ -82,7 +93,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
   does not hold them.
 - **A foreign customer's tax number** (decision 4): none can be stored today; when AEAT's question
   on foreign recipients is answered (asesor Q17(a)), the search's rule is revisited.
-- **An index** on the customer's tax number, only if Task 3 or a box asks for one (decision 7).
+- **An index** on the customer's tax number, only if Tasks 3a and 3b or a box ask for one (decision 7).
 
 ## Decisions this plan makes that the design does not
 
@@ -130,8 +141,14 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
    Unicode-aware `\s`, so a tab and a no-break space go too), every full stop, every hyphen, the
    hyphen and dash look-alikes U+2010 to U+2015 (a non-breaking hyphen and an en dash among them)
    and the zero-width characters U+200B to U+200D and U+FEFF, which a number pasted from a PDF or a
-   word processor can carry; upper-case; then remove one leading `ES`. The typed value and every
-   stored value go through the same function, so the two sides cannot disagree.
+   word processor can carry; upper-case; remove one leading `ES`; then, if what is left is seven
+   digits and a letter, put a `0` in front. The typed value and every stored value go through the
+   same function, so the two sides cannot disagree.
+   - **Why pad a seven-digit DNI.** The checker stores a DNI as exactly eight digits and a letter
+     (`packages/country-es/src/spain.ts:44`), so a number under 10,000,000 is stored as `01234567L`,
+     and people often write it `1234567L`. No form the checker accepts is seven digits and a letter
+     (`spain.ts:44-84`: the other forms start with a letter), so the padding cannot make two stored
+     numbers equal. It runs after the `ES` strip, so `es 1234567l` pads too.
    - **How stored values are written today.** Every product path to a full invoice validates the
      tax number with Spain's checker whatever the country, then refuses any country but Spain:
      `checkedInvoiceRecipient` (`apps/server/src/invoice-selection.ts:35-85`; the checker at `:47`,
@@ -215,7 +232,8 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      order, each reading that invoice's document with the existing reader
      (`readInvoiceDocument`, `apps/server/src/invoice-document.ts:32-161`), whether the backend holds
      a filed record of it (`backend.filedReceiptFor(db, brandSaleId(saleId))`,
-     `packages/fiscal/src/backend.ts:423`, which takes a branded id) and its email deliveries
+     `packages/fiscal/src/backend.ts:423`, which takes a branded id: `saleId` from `@waitron/shared`,
+     imported as `brandSaleId` as `apps/server/src/invoice-document.ts:18` does) and its email deliveries
      (`invoice_deliveries` where `sale_id` is the invoice and `medium = 'email'`, ordered by
      `created_at`, then id; three of the table's four unique indexes start with `sale_id`,
      `packages/db/src/schema/invoice-deliveries.ts:108-112`, the fourth is on `print_job_id`); then
@@ -234,13 +252,30 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      (`/Users/clintongormley/waitron-campaign-b/a980-s3-plan-review/probe/loop.mjs`, round 1
      review, C1). Default: `await nextTurn()` (`setImmediate` from `node:timers/promises`, imported
      under that name as `apps/server/src/working-order.ts:89` does and used at `:4644`) after the
-     first turn, after every invoice turn, after every render, and before the re-check. The longest
-     block a sale can wait behind is then one lock turn or one render, not the download; Task 4a
-     pins it with a case that fails without the yields, and Task 3 measures it. No cap on the
-     number of invoices: with the yields the count lengthens the request, not any one block. Task 3
-     reports the per-invoice cost and the ZIP's size, and the pull request states, from them, the
-     invoice count at which the request would pass 60 seconds and the ZIP 100 MB (all of it is held
-     in memory until sent).
+     first turn, after every invoice turn, after every render, between ZIP entries (below), and
+     before the re-check. Task 4a pins the turns' yields with a case that fails without them, and
+     Task 3b measures the stall.
+   - **The ZIP is built entry by entry, with a turn between entries.** S2's `zipArchive` calls
+     fflate's `zipSync` once over every file (`apps/server/src/download-archive.ts:48-57`), one
+     synchronous block that grows with the total size: the round 3 review measured 131 ms for 300
+     entries of 242 KB and 611 ms for 1,000 (`probe/round3/zip.mjs` beside the review), 242 KB being
+     one page with the largest logo. Default: a new `zipArchiveInTurns(files, at)` in the same file,
+     used only by S3, built on fflate's streaming `Zip` (a `ZipPassThrough` per PDF, a `ZipDeflate`
+     at level 6 for the JSON and README, the same modification time `zipArchive` gives,
+     `download-archive.ts:42-46`), with `await nextTurn()` after each entry, and the output chunks
+     joined once with `Buffer.concat`. S2's `zipArchive` is not changed and its tests run unedited.
+     A probe on 2026-10-26 (`node /Users/clintongormley/waitron-campaign-b/a980-s3-plan-probe/zip-stream.mjs
+     apps/server`, run from the worktree; fflate 0.8.3, the version `apps/server/package.json:79`
+     allows and the worktree installs; output in `zip-stream.out` beside it): over 300 entries of
+     242 KB the longest single entry took 0.44 ms against `zipSync`'s 131.9 ms; over 1,000, 0.69 ms
+     against 428.3 ms; every entry unzipped back. The longest block a sale can wait behind is then
+     the largest of one lock turn, one render, one ZIP entry and the final `Buffer.concat` (a copy
+     of the whole ZIP, which Task 3b times), not the download.
+   - **No cap on the number of invoices**: with the yields the count lengthens the request, not any
+     one block, except the final copy. Task 3b reports the per-invoice cost and the ZIP's size, and
+     the pull request states, from them, the invoice counts at which the request would pass 60
+     seconds and the ZIP 100 MB (all of it is held in memory until sent). At about 242 KB a page
+     with the largest logo, 300 invoices make about 73 MB, so 100 MB comes at about 410.
    - **Consistency.** An email recorded between the first turn and an invoice's turn may appear:
      harmless, it happened before the copy was sent (S2c decision 4's reasoning). No invoice can
      disappear between turns: `sales` refuses deletes (`classification.ts:17`).
@@ -271,14 +306,14 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      every number already normalised, so it says nothing about the normaliser's correctness; that is
      Task 2's raw-stored case.
 
-7. **The timing and its stop rules** (Task 3, before any route or screen). The fixture: 1,000,000
+7. **The timing and its stop rules** (Tasks 3a and 3b, before any route or screen). The fixture: 1,000,000
    sales, about six years of a venue ringing 450 sales a day, the size S2c timed its turns at
    (S2c Task 3). Nobody has measured what share of a restaurant's sales are full invoices; one in
    twenty (50,000) is taken as a generous share for a busy venue, and one in five (200,000) as a
    stress case to show how the cost grows. The searched customer, a business that takes an invoice
    every week for six years, is on 300 invoices, each issued through the real filing code, most with
    three lines and one in ten with thirty, half of them emailed; the venue's receipt logo is the
-   largest the logo store accepts, every dot set (Task 3). Default, on this Mac, median of at least
+   largest the logo store accepts, every dot set (Task 3a). Default, on this Mac, median of at least
    12 runs:
    - **The search turn** (caller's check, normalising, the scan, the matched rows' columns) over
      **250 ms** at one in twenty: **stop**.
@@ -293,8 +328,12 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      timer turn has run (the review's model, round 1, I1). The control is the same download with the
      yields removed, which must show a stall about as long as the whole download. The PDF renderer
      lays a page out synchronously, on the thread that serves sales (`invoice-pdf.ts:18-29`; the
-     backlog's measure-on-a-box point records a 2.6 s working-time PDF on that thread), so one
-     render is the longest block the yields leave.
+     backlog's measure-on-a-box point records a 2.6 s working-time PDF on that thread); one render
+     with the largest logo took about 35 ms in the round 3 review's probe (`probe/round3/logo.mjs`).
+     Task 3b reports the longest block at 300 invoices and, by loading more, at 1,000.
+   - **A `SCAN` in an invoice turn** on any table that grows with sales (Task 3b step 2's query
+     plans): **stop**, reported with the options below; the bulk fills only some of the tables an
+     invoice turn reads, so on the others only the plan shows a missing index.
    - **The one-in-five arm** is recorded and reported in the pull request, with no stop: it is a
      stress figure, not a busy venue's history. If it is over 250 ms, that goes in the PR's FYI for
      the owner.
@@ -348,8 +387,10 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
      and the search reads every node, and two codes that differ only in a replaced character give one
      name too. `zipArchive` would silently keep only the last (`download-archive.ts:54` assigns
      `entries[file.name]`), and a refusal would fail that customer's download every time. Default:
-     the second and later invoices with one name get `-2`, `-3`, … before `.pdf`, in issue order,
-     and each `pdf` in `invoices.json` names its real entry (Task 4b pins it).
+     in issue order, an invoice whose name is already taken gets the first of `-2`, `-3`, … before
+     `.pdf` that no earlier name in the ZIP holds (a series code is any non-empty text,
+     `series.ts:45`, and `-` survives the name rule, so `F_A-1-2.pdf` is also series `F_A-1`'s
+     invoice 2), and each `pdf` in `invoices.json` names its real entry (Task 4b pins it).
    - No row, no ZIP: a download with no matching invoice is refused (decision 13).
 
 9. **The PDFs come from the existing reader and renderer, not the existing route.** The route,
@@ -407,7 +448,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
       undefined`, read in its invoice turn. `readInvoiceDocument` already calls it once
       (`invoice-document.ts:85`) and does not return the answer; the second read is accepted rather
       than change the shared reader, because it is one indexed statement (`registros_sale_idx`,
-      `packages/fiscal-verifactu/src/schema/registros.ts:125`) and Task 3 times the turn with it; the README's line is written only when at least one invoice has it: "For each
+      `packages/fiscal-verifactu/src/schema/registros.ts:125`) and Task 3b times the turn with it; the README's line is written only when at least one invoice has it: "For each
       invoice marked "taxRecord": true in invoices.json, the box keeps a tax record that it sends to
       the tax authority (in Spain, the Agencia Tributaria); that record holds your name and tax
       number, not your address." A commented decision at the site says what the flag rests on and
@@ -425,8 +466,9 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
     manager opens bill F/2 on **Orders** and sees no PDF download. The design's §4.5 says the box can
     tell "who downloaded an invoice PDF"; after S3 that is true only of the Orders page's own button.
 
-13. **The routes, their checks in order, and their refusals.** Both routes run, inside their first
-    turn, in this order, S2c's order (decision 8 of that plan):
+13. **The routes, their checks in order, and their refusals.** Both routes first refuse on a mirror
+    (403 `node.read_only`, decision 14), then run, inside their first turn, in this order, S2c's
+    order (decision 8 of that plan):
     1. `authorizeManager(db, { managementSessionId, permission: "personal_data.export", touch:
        false })` (`packages/identity/src/manager-login.ts:162-175`): no cookie 401
        `management_session.required` (before the turn), ended or idle 401, a disabled caller 403
@@ -445,7 +487,8 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
       it means a fault (decision 16).
     - The download sets `Content-Type: application/zip`, the file name, `Cache-Control: no-store`
       and `X-Content-Type-Options: nosniff`, as S2c's does (`personal-data-export-api.ts:99-105`).
-    - Both use `withPersonalDataErrors` (`:35-45`), which gains `"invoice_customer.not_found": 404`;
+    - Both use `withPersonalDataErrors` (`:35-45`), which gains `"invoice_customer.not_found": 404`
+      and `"node.read_only": 403`;
       a missing entry would answer 400, the boundary's default (`error-boundary.ts:42`).
     - The re-check repeats step 1 only; an admin demoted while the PDFs render gets 403 and no file.
     - **The tax number travels in a GET query string.** The box itself does not log it (the request
@@ -456,7 +499,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
       accepted as the cost of using GETs, the only verb the read-only gate passes on a mirror
       (`read-only-gate.ts:17`, `:34`).
 
-14. **Mounted from `boot.ts`, beside the Orders routes; on a mirror it answers.** The download needs
+14. **Mounted from `boot.ts`, beside the Orders routes; on a mirror both routes refuse.** The download needs
     the fiscal backend and the till's configuration for `readInvoiceDocument`, which
     `mountOrdersApi` already receives (`apps/server/src/orders-api.ts:134-142`, called at
     `apps/server/src/boot.ts:2114-2124`) and `mountMeApi`, where S2c's routes live, does not
@@ -466,8 +509,24 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
     config.privacyNoticeUrl, now }`. `dataNodeId` is the node whose data the read paths show, the
     origin's on a mirror (`boot.ts:1650-1663`); it is used only for the time zone. `mountOrdersApi`
     is called outside the `!fencedOrMirror` block (`boot.ts:1894-1975`), so on a mirror the new
-    routes are mounted and, being GETs, pass the read-only gate (`apps/server/src/read-only-gate.ts:17`,
-    `:32-38`), as S2c's admin route does (S2c decision 9). Task 7 pins it with one mirror case.
+    routes are mounted and, being GETs, would pass the read-only gate
+    (`apps/server/src/read-only-gate.ts:17`, `:32-38`), which refuses by verb only.
+    - **On a mirror both routes refuse**, a deliberate departure from S2c's admin route (S2c
+      decision 9): a mirror signs in as an admin everyone who reaches it
+      (`mirror-session.ts:28`), and a lookup by a typed tax number is wider than one person's
+      download by id. The owner asked why that is so and approved A1111, real per-person sign-in on
+      a mirror, which "will decide what the S2c mirror test becomes"
+      (`/Users/clintongormley/waitron-campaign-b/questions.md:4369-4371`). Default, until A1111
+      lands: the deps gain `onMirror: () => boolean`, passed from boot as `() =>
+      holders.mode.current === "mirror"` (the same reading `isReadOnly` makes, `boot.ts:1620`, read
+      per request so a live promotion opens the routes, as the gate's own comment requires,
+      `read-only-gate.ts:20-21`); each route, before the caller's check, refuses 403 `node.read_only`
+      with empty params (an existing code, `apps/server/src/errors.ts:137-141`, whose comment gains
+      that it also closes these two reads on a mirror). Not mounting them was considered and
+      rejected: an unclaimed GET falls to the dashboard's catch-all (`apps/server/src/spa-api.ts:56`,
+      `:90`), whose answer the plan could not pin without running it, and a live promotion would
+      leave the routes missing until a restart. Task 7's mirror case pins the refusal; the dialog
+      words it (decision 16). A fenced node is not a mirror and answers normally.
     `venuePlace` and `toLanguage` (`personal-data-export-api.ts:47`, `:49-57`) are exported for
     reuse, not copied.
 
@@ -506,7 +565,12 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
       (`dashboard-app.ts:2558`); `invoice_customer.not_found` on a download reads "The box listed
       these invoices a moment ago and now finds none. That is a fault in Waitron." / «La caja
       mostró estas facturas hace un momento y ahora no encuentra ninguna. Es un fallo de Waitron.»
-      (S2c decision 12's «la caja»); anything else shows `codeMessage(code)`.
+      (S2c decision 12's «la caja»); `node.read_only` (decision 14, a mirror) reads "This is a
+      read-only copy of the box, where anyone who reaches it is signed in as an administrator, so
+      finding a customer by tax number is switched off here. Do it on the box itself." / «Esta es una
+      copia de solo lectura de la caja, donde cualquiera que llegue entra como administrador, así que
+      aquí no se puede buscar a un cliente por NIF. Hazlo en la propia caja.»; anything else shows
+      `codeMessage(code)`.
     - `apps/dashboard/src/i18n/codes.ts` gains `invoice_customer.not_found`, both languages ("No full
       invoice names that tax number." / «Ninguna factura completa lleva ese NIF.»), as its header
       asks (`codes.ts:4`).
@@ -536,10 +600,15 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
     printer bytes of a printed full invoice (`print_jobs.payload`, `packages/db/src/schema/print-jobs.ts:50`;
     design §2.2 c3). Default: not in this slice's download; the README says so in plain words
     (Task 5's `notFound`), and a backlog point records them. **Open decision for the owner** (FYI,
-    built with this default). Worked example: staff typed Jordi's details on a bill on 3 March and
-    the customer then paid with a simplified receipt instead; that bill still holds his name, NIF
-    and address, and his download does not show it; the README tells him the venue holds such
-    details and to ask for them.
+    built with this default). **Today the staged copy is the only place a customer's tax number
+    could be** (decision 21): the server still accepts a full-invoice choice with a customer on an
+    open bill (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts:4199-4218`, routed at
+    `apps/server/src/till-api.ts:2050`), though the till offers no **Full invoice** while full
+    invoices are off (`apps/till/src/screens/till-table-order-screen.bill-payments.test.ts:133`), and
+    paying such a bill is refused. Worked example, on the day full invoices are switched on: staff
+    type Jordi's details on a bill on 3 March, and he then pays with a simplified receipt instead;
+    that bill still holds his name, NIF and address, his download does not show it, and the README
+    tells him the venue holds such details and to ask for them.
 
 20. **An invoice carrying the number goes in, whatever name is on it.** The box keys the copy by tax
     number, and the name printed on an invoice is part of that invoice. Design §4.2 says the copy
@@ -551,15 +620,31 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
     and sending sale ids that the server checks again against the tax number, would be a later
     slice.
 
+21. **S3 is built now, ready for the day full invoices are switched on.** On every box today the
+    search finds nothing and the download is refused for want of an invoice (the opening paragraph
+    gives the receipts; `docs/backlog.md:284`, "Waitron issues only simplified invoices and no screen
+    accepts a customer's tax ID", and `:356`, "PUBLIC F1 DISABLED"). Default: build it, as S2c
+    built its voids list while no product path records a whole-sale void, so the rights tool exists
+    before the first full invoice does; its tests write full invoices through `recordSale` or raw
+    inserts. The Orders button is drawn whenever the session holds the permission, full invoices on
+    or off. **Open decision for the owner** (FYI, built with this default). The alternative: park
+    S3 until full invoices exist, and build it then against real invoices. Worked example: today an
+    admin types a customer's NIF and always reads "No full invoice names this tax number", which is
+    true; the customer's details could sit only on a bill (decision 19).
+
 ## Open decisions for the owner (FYI, built with the default)
 
 - **The README's language** (decision 10): the venue's, not the language of the customer's newest
   invoice. With its worked example.
 - **No record of who downloaded a customer's copy** (decision 12): the order's PDF-download list does
   not show S3's copies. With its worked example.
-- **On a mirror the search and the download answer** (decision 14), as S2c's admin route does.
-  Worked example: the owner opens the mirror on the office laptop and, signed in as the mirror's
-  admin, finds Jordi by tax number and downloads his invoices.
+- **On a mirror both routes refuse** (decision 14), unlike S2c's admin route, until A1111 (real
+  per-person sign-in on a mirror) decides. Worked example: the owner opens the mirror on the office
+  laptop; anyone who reaches that address is signed in as an admin, so if the routes answered,
+  any of them could type a NIF and download that customer's invoices; with the default they read
+  that this is a read-only copy and to do it on the box itself.
+- **S3 built before full invoices exist** (decision 21): the search finds nothing until they are
+  switched on. Alternative: park S3 until then.
 - **The one-in-five timing figure** (decision 7), if it is over 250 ms.
 - **What the box keeps with the tax number outside issued sales** (decision 19): not in the
   download. With its worked example.
@@ -623,7 +708,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 - **The turns, the yields and the timing** (decisions 6 and 7): no `ORDER BY` in the scan; one
   turn per invoice; PDFs rendered outside any turn; `nextTurn()` after every turn and render, and
   Task 4a's case that fails without it; the stall measured by interval ticks with a no-yield
-  control; Task 3's numbers and stop rules; the full-disk case (Task 7).
+  control; Tasks 3a's and 3b's numbers and stop rules; the full-disk case (Task 7).
 - **What is left out, and others' names** (decisions 19 and 20): the README's `notFound` says what
   the copy does not hold; an invoice with another person's name on the number goes in.
 - **The PDFs** (decision 9): the existing reader and renderer, no download row written, whole
@@ -632,7 +717,9 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 - **The tax-record sentence** (decision 11): per invoice, regime-neutral flag, "sends" while a record
   may still wait.
 - **Nothing recorded** (decision 12), and the README's language (decision 10): both FYI to the owner.
-- **The mount** (decision 14): `boot.ts`, beside Orders; answers on a mirror.
+- **The mount** (decision 14): `boot.ts`, beside Orders; refuses on a mirror, read per request.
+- **The ZIP** (decision 6): built entry by entry with a turn between, S2's `zipArchive` untouched.
+- **Built before full invoices exist** (decision 21).
 - **Every README and guide sentence against its source** (Task 5's and Task 10's tables).
 - **Codex run-it seat**: two reviews, the second told to set this plan aside.
 
@@ -689,7 +776,8 @@ export function requiredInvoiceTaxId(raw: string | undefined): string;
      dash), `12345678z​` (a zero-width space) → `12345678Z`; `E12345674`, `ESE12345674`,
      `es e1234567-4` → `E12345674`; `X1234567L`, `esx1234567l` → `X1234567L`; `B76543214` →
      `B76543214`; `ESES12345678Z` → `ES12345678Z` (one prefix only); `12345678` → `12345678`
-     (nothing added); twenty `A`s → twenty `A`s.
+     (nothing added); twenty `A`s → twenty `A`s; `1234567L`, `01234567L` and `es 1234567l` →
+     `01234567L` (decision 3's padding).
    - **Refuse**, each with params exactly `{ field: "taxId" }`: `undefined`, `""`, `"   "`, `"ES"`, a
      65-character string, `"12345678Ñ"`, `"1234/5678Z"`, twenty-one `A`s, `"eſ12345678z"` (a long
      s, which upper-cases to `S`), `"ı234"` (a dotless i, which upper-cases to `I`).
@@ -710,7 +798,11 @@ export function requiredInvoiceTaxId(raw: string | undefined): string;
      and zero-width rows;
    - check letters and digits after upper-casing → fails the refusals of `eſ12345678z` and
      `ı234`;
-   - put the raw value in the refusal's params → fails every refusal row that has a value.
+   - put the raw value in the refusal's params → fails every refusal row that has a value;
+   - no zero padding → fails `1234567L` and `es 1234567l`;
+   - pad before removing `ES` → fails `es 1234567l`.
+   (Re-run with the padding on 2026-10-26; the rule failed no row, and every control failed exactly
+   the rows listed.)
 4. Run `pnpm --filter @waitron/server typecheck`.
 
 ## Task 2 — the search read
@@ -728,8 +820,10 @@ export interface InvoiceCustomerSale {
 /** Decision 6's search: one statement over the sales naming a customer, filtered by
  * `normaliseInvoiceTaxId`, then their columns by key. Call it inside a write-lock turn. */
 export async function findInvoiceCustomerSales(
-  db: Database, taxId: string, options?: { chunk?: number },
+  tx: Transaction, taxId: string, options?: { chunk?: number },
 ): Promise<InvoiceCustomerSale[]>;
+// Typed `Transaction` so Task 2's recording proxy (`planningEveryStatement` returns one) fits; the
+// route passes its `db`, as `sendPersonalData` does (`personal-data-export-api.ts:70-72`).
 ```
 
 1. Tests first (`useVenueDb`, `resetPerTest: false`, every set migrated, the fixture above; each case
@@ -757,21 +851,24 @@ export async function findInvoiceCustomerSales(
    `includes` → the partial case fails.
 4. Run `pnpm --filter @waitron/server typecheck`. Read each count.
 
-## Task 3 — time the search, the first turn, the invoice turns and the PDFs, before anything else is built
+## Task 3a — the timing fixture, the search turn and the first turn, before anything else is built
 
 Files: none committed. A throwaway `apps/server/src/zz-s3-timing.test.ts`, deleted at the end (`git
-status --short` shows nothing of it). Results and the loader's text go to
-`/Users/clintongormley/waitron-campaign-b/a980-s3-timing/`.
+status --short` shows nothing of it). The loader's text, its run log and the results go to
+`/Users/clintongormley/waitron-campaign-b/a980-s3-timing/`, where Task 3b copies the loader from.
 
 1. **The fixture**, in a `useVenueDb` folder with every set migrated (it opens a real directory under
    the system's temporary folder, `packages/db/src/testing/venue-db.ts:160`), a per-test timeout
    above the load:
    - `provisionOrderVenue`, an admin with a management session;
-   - **the venue's receipt logo at the largest size the logo store accepts**, every dot set: as wide
-     as `safeWidthDots` gives for the paper (`packages/printing/src/layout.ts:18`) and
-     `LOGO_MAX_HEIGHT_DOTS` (160) high (`packages/printing/src/dither.ts:2`; the store checks both,
-     `packages/layouts/src/receipt-store.ts:86`), so the renderer draws one rectangle per dot,
-     `invoice-pdf.ts:31-40`, its slowest case;
+   - **the venue's receipt logo at the largest size the logo store accepts for the invoice**, every
+     dot set: 504 × 160 dots. `readInvoiceDocument` resolves the logo at `"80mm"` whatever the
+     printer (`apps/server/src/invoice-document.ts:114`); 80 mm is 42 columns of 12 dots
+     (`packages/printing/src/layout.ts:8`, `:11`, `:18-20`), and `LOGO_MAX_HEIGHT_DOTS` is 160
+     (`packages/printing/src/dither.ts:2`); the store checks both
+     (`packages/layouts/src/receipt-store.ts:85-86`). The renderer draws one rectangle per dot
+     (`invoice-pdf.ts:31-40`), its slowest case: about 35 ms and 242 KB a page in the round 3
+     review's probe (`probe/round3/logo.mjs`);
    - **the customer's 300 invoices** through `recordSale`, as the fixture above does: three lines
      each, except one in ten with thirty lines; half with one sent email and one in ten with a failed
      email first; the clock advanced between sales;
@@ -785,9 +882,9 @@ status --short` shows nothing of it). Results and the loader's text go to
    - **the tables an invoice turn reads, filled so an unindexed read would show**: for the bulk's
      named sales, one email delivery in `invoice_deliveries` for every second one and a receipt
      delivery for every fifth; three `sale_lines` rows per bulk sale; and one `registros_facturacion`
-     `alta` row per bulk sale if its triggers allow a raw insert with foreign keys off (if a trigger
-     refuses, load as many records as the real `recordSale` path writes in ten minutes, and say how
-     many). Record each table's row count.
+     `alta` row per bulk sale with foreign keys off (the round 3 review found no insert trigger on
+     `registros_facturacion` by grep; if an insert is refused anyway, load as many records as the
+     real `recordSale` path writes in ten minutes, and say how many). Record each table's row count.
    - **Load with a timer turn between batches.** The venue watchdog kills the worker after
      `WATCHDOG_KILL_MS = 120_000` with no timer turn (`packages/store/src/venue-liveness.ts:19-23`),
      and `useVenueDb` yields one only after each test (home CLAUDE.md §4), so the loader awaits
@@ -795,45 +892,64 @@ status --short` shows nothing of it). Results and the loader's text go to
      and after every tenth `recordSale`. Insert in batches of 500 rows through
      `db.insert(<table>).values(…)`, a few batches to a turn; foreign keys may be switched off for the
      load with `pragma foreign_keys = off` outside any turn and back on after (S2c Task 3's note).
-     Expected: the probe's raw `node:sqlite` loader put 1,000,000 sales in 26 s (the planner's run)
-     and 10.4 s (the claim check's); through drizzle, with the other tables, expect several minutes
-     (not measured). Record the load time; if it passes about fifteen minutes, halve the bulk and say
-     how the figures were scaled.
+     Expected: the claim check's raw `node:sqlite` loader put 1,000,000 sales in 10.4 s and 10.3 s
+     (`round1-claims.md`, experiment 4; the planner's own load time was not recorded); through
+     drizzle, with the other tables, expect several minutes (not measured). Record the load time;
+     if it passes about fifteen minutes, halve the bulk and say how the figures were scaled.
    - Then, in a second folder or by loading more, **the one-in-five arm**: 200,000 named rows.
    Copy the probe's loader (`/Users/clintongormley/waitron-campaign-b/a980-s3-plan-probe/load.mjs`)
    for the row shape.
-2. **Before running, write down what each failure prints**: each median over decision 7's bars; and
-   for the stall, a longest gap between interval ticks about as long as the whole download, which is
-   what the control in step 6 must print.
+2. **Before running, write down what each failure prints**: the search turn's and the first turn's
+   medians over 250 ms.
 3. **The search turn**, at least 12 runs: inside `db.withWriteLock`, `authorizeManager` (`touch:
    false`) then `findInvoiceCustomerSales(db, "12345678Z")`; median and range; `explain query plan`
    of the scan (expected `SCAN sales`).
 4. **The first turn**: the same, plus `venuePlace` and `readTenant`, composed as Task 6a will run
    them (`personal-data-export-api.ts:49-57` and `@waitron/db`; copy `venuePlace` into the throwaway
    if Task 6a has not exported it yet).
-5. **The invoice turns**, for the 300 invoices: each inside its own `db.withWriteLock`,
+5. **The one-in-five arm**: steps 3 and 4 again.
+6. **Stop rules** (decision 7): a bar crossed at one in twenty → stop, commit nothing further,
+   report every figure to the coordinator with decision 7's options. Otherwise the figures go in the
+   pull request and Task 12's backlog line.
+
+## Task 3b — the invoice turns, the PDFs, the ZIP and the stall
+
+Files: none committed. A throwaway `apps/server/src/zz-s3-timing-invoices.test.ts`, deleted at the
+end, loading Task 3a's fixture with Task 3a's saved loader. Results beside Task 3a's. This task runs
+after Tasks 4a and 4b, whose `buildInvoiceCustomerFiles` and `zipArchiveInTurns` it times; it runs
+before any route or screen (Tasks 6a onwards).
+
+1. **Before running, write down what each failure prints**: an invoice turn's median over 50 ms or
+   any one over 250 ms; a `SCAN` on a table that grows with sales; for the stall, a longest gap
+   between interval ticks over 250 ms, and for its control, a gap about as long as the whole
+   download.
+2. **The invoice turns**, for the 300 invoices: each inside its own `db.withWriteLock`,
    `readInvoiceDocument(venue.backend, db, venue.cfg, saleId)`,
    `venue.backend.filedReceiptFor(db, brandSaleId(saleId))` and the email read; median, range and
    slowest, separately for three-line and thirty-line invoices. Record `explain query plan` for
    every statement of one invoice turn with `planningEveryStatement` (Task 2's copy) and list any
-   line starting `SCAN`. If `readInvoiceDocument` throws "write lock: a body asked for the lock it is
-   already holding" (`packages/store/src/write-queue.ts:41-43`), stop and report: something inside
-   it takes the lock.
-6. **The PDFs and the stall**: render each outside any turn with `renderInvoicePdf({ ...document,
-   duplicate: true })`; median and slowest render, with the logo and, in a second pass with the logo
-   cleared, without; total bytes. Run the whole download's sequence (first turn, invoice turns,
-   renders, re-check, `zipArchive`) with Task 4a's `nextTurn()` after each turn and render, and a
-   10 ms real `setInterval` recording the longest gap between its ticks; that gap is the stall. The
-   control: the same sequence with the yields removed must show a gap about as long as the
-   sequence; if it does not, the measurement is broken, so say so and do not report a stall
-   figure. If `monitorEventLoopDelay` is also read, read it only after awaiting one
-   `setTimeout(resolve, 20)` (decision 7). Record the whole download's wall time, the `zipArchive`
-   call's own time, and, from the per-invoice cost and bytes, the invoice counts at which the
-   request would pass 60 s and the ZIP 100 MB.
-7. **The one-in-five arm**: steps 3 and 4 again.
-8. **Stop rules** (decision 7): any bar crossed at one in twenty → stop, commit nothing further,
-   report every figure to the coordinator with decision 7's options. Otherwise the figures go in the
-   pull request and Task 12's backlog line.
+   line starting `SCAN`; a `SCAN` on any table that grows with sales is a stop (decision 7). If
+   `readInvoiceDocument` throws "write lock: a body asked for the lock it is already holding"
+   (`packages/store/src/write-queue.ts:41-43`), stop and report: something inside it takes the lock.
+3. **The PDFs**: render each outside any turn with `renderInvoicePdf({ ...document, duplicate: true
+   })`; median and slowest render, with the logo and, in a second pass with the logo cleared,
+   without; total bytes.
+4. **The stall**: run the whole download's sequence (first turn, `buildInvoiceCustomerFiles`, the
+   re-check, `zipArchiveInTurns`) with a 10 ms real `setInterval` recording the longest gap between
+   its ticks; that gap is the stall. The control: the same sequence with the yields removed (the
+   build's and the ZIP's) must show a gap about as long as the sequence; if it does not, the
+   measurement is broken, so say so and report no stall figure. If `monitorEventLoopDelay` is also
+   read, read it only after awaiting one `setTimeout(resolve, 20)` (decision 7). Record the whole
+   download's wall time, the longest single ZIP entry, the final `Buffer.concat`'s own time, and,
+   for comparison, S2's `zipArchive` (`zipSync`) over the same files.
+5. **At 1,000 invoices**: load 700 more of the customer's invoices (the same loader, the same
+   timer turns) and repeat step 4; report the longest block, which must stay under 250 ms
+   (decision 6: no block grows with the customer, the final copy apart).
+6. From the per-invoice cost and bytes, state the invoice counts at which the request would pass
+   60 s and the ZIP 100 MB.
+7. **Stop rules** (decision 7): any bar crossed → stop, commit nothing further, report every figure to
+   the coordinator with decision 7's options. Otherwise the figures go in the pull request and
+   Task 12's backlog line.
 
 ## Task 4a — invoices.json: the invoice turns, the emails, the tax-record flag, and the yields
 
@@ -876,27 +992,33 @@ Task 4b covers the real renderer.
      `undefined` for j1 only, j1's `taxRecord` is false and the others true; with one answering
      `undefined` for all, `anyTaxRecord` is false.
    - **Turns**: a `db` wrapper counting `withWriteLock` calls sees one per invoice, and none is open
-     while `render` runs (the stub calls `withWriteLock` itself and resolves, which it could not do
-     inside a turn: the lock is not re-entrant, `write-queue.ts:41-43`).
-   - **A turn of the event loop between invoices** (decision 6): start a 10 ms real `setInterval`
-     counting `ticks`; give `render` a stub that busy-waits 5 ms; record `ticks` at the start of each
-     invoice turn (through the `db` wrapper); require the recorded values to increase strictly
-     across the three turns. Without the yields the interval never fires during the build and every
-     recorded value is the same.
+     while `render` runs (the stub calls the **unwrapped** `suite.db.withWriteLock` itself and
+     resolves, which it could not do inside a turn: the lock is not re-entrant,
+     `write-queue.ts:41-43`; calling the wrapper would count two turns per invoice).
+   - **A turn of the event loop after every invoice turn** (decision 6), checked without timing:
+     inside each counted `withWriteLock` body, the wrapper queues a `setImmediate` that records that
+     turn's index; at the start of each later turn and at the start of each render, every earlier
+     index must have been recorded. With the yields the recorded lists are `[]`, `[0]`, `[0, 1]` at
+     the three turns; without them every list is empty, because nothing returns to the event loop
+     between awaited lock turns (the round 3 review's `probe/round3/ticks.mjs` printed exactly
+     these). A 10 ms interval was rejected for this case: with turns of 1 to 3 ms it recorded the
+     same values with and without the yields.
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data.files.test.ts`; watch
    it fail.
 2. Write the reads, the turns and the yields (`import { setImmediate as nextTurn } from
    "node:timers/promises"`, as `working-order.ts:89`).
 3. Omission controls, each run and reverted: read the deliveries without `medium = 'email'` → the
    exact file fails on j1's receipt delivery; render inside the turn → the turns case fails; delete
-   the `nextTurn()` calls → the event-loop case fails with every recorded value equal.
+   the `nextTurn()` calls → the event-loop case fails at the second turn with an empty list.
 4. Run `pnpm --filter @waitron/server typecheck`. From the root: `pnpm exec vitest run
    scripts/module-seams.test.ts` (no regime import).
 
 ## Task 4b — the PDFs: the real renderer, their names, and a failure
 
 Files: `apps/server/src/invoice-customer-data.ts`, `apps/server/src/invoice-customer-data.pdfs.test.ts`
-(new), `apps/server/src/orders-invoice-pdf.ts` (`invoicePdfFileName`).
+(new), `apps/server/src/orders-invoice-pdf.ts` (`invoicePdfFileName`),
+`apps/server/src/download-archive.ts` (`zipArchiveInTurns`, decision 6),
+`apps/server/src/download-archive.test.ts`.
 
 1. Tests first (the fixture above, the real renderer):
    - **The PDFs**: three files at `invoices.json`'s paths, each starting `%PDF-`; read one with
@@ -904,21 +1026,29 @@ Files: `apps/server/src/invoice-customer-data.ts`, `apps/server/src/invoice-cust
      its text, and the copy marking.
    - **Only his, in the PDFs**: the extracted text of every PDF contains none of the strings Task 4a
      names.
-   - **Two invoices with one file name** (decision 8): two series whose codes differ only in `/` and
-     `_` (`F/A` and `F_A`), one invoice each with the same number for Jordi → two distinct entries,
-     the later-issued one ending `-2.pdf`, and each `pdf` in `invoices.json` naming its own entry.
+   - **Two invoices with one file name** (decision 8): series `F/A` and `F_A`, each with an invoice
+     numbered 1 for Jordi, and series `F_A-1` with an invoice numbered 2 for Jordi, issued in that
+     order → `invoices/F_A-1.pdf`, `invoices/F_A-1-2.pdf` (the second, its own name taken) and
+     `invoices/F_A-1-2-2.pdf` (the third, whose own name the second now holds); each `pdf` in
+     `invoices.json` names its own entry, and `unzipSync` returns three PDFs.
    - **An invoice that cannot be made** (decision 9): with a `readDocument` that throws an `AppError`
      (`invoice_delivery.not_found`) for j2, the call rejects with an error that is not an `AppError`
      and whose `cause` is the original; the log received exactly one `invoice_customer.pdf_failed`
      with `{ saleId: <j2> }`; the same with a `render` that throws for j2. With a `readDocument` that
      throws a full-disk error, `diskFullIn` (`@waitron/shared`) still finds it in the rejection.
-   Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data.pdfs.test.ts`; watch
-   it fail.
+   - **`zipArchiveInTurns`**, in `download-archive.test.ts` beside S2's cases (which stay unedited):
+     over a README, a JSON file and three PDF-sized byte arrays, `unzipSync` of its output gives the
+     same names and the same bytes as `unzipSync` of `zipArchive`'s over the same files, the same
+     modification time, the PDFs stored at level 0; and, with decision 6's `setImmediate` marker
+     check, a marker queued before each entry has run before the next entry is added.
+   Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data.pdfs.test.ts
+   src/download-archive.test.ts`; watch the new cases fail.
 2. Write it; move the file-name expression into `invoicePdfFileName` and use it in
    `readInvoiceForDownload` too.
 3. Omission controls, each run and reverted: rethrow the original error unwrapped → the failure case
-   fails (it is an `AppError`); catch and skip a failed PDF → the failure case fails; drop the `-2`
-   suffix → the two-names case fails.
+   fails (it is an `AppError`); catch and skip a failed PDF → the failure case fails; drop the
+   suffix → the two-names case fails; add `-2` without checking it is free → the two-names case
+   finds two PDFs, not three; drop the yield between ZIP entries → the marker check fails.
 4. Run `pnpm --filter @waitron/server exec vitest run src/orders-invoice-pdf.test.ts` unedited, and
    `pnpm --filter @waitron/server typecheck`.
 
@@ -1000,7 +1130,8 @@ Files: `apps/server/src/invoice-customer-data-api.ts` (new),
 `apps/server/src/invoice-customer-data-api.test.ts` (new), `apps/server/src/errors.ts`
 (`"invoice_customer.not_found": Record<string, never>`, with a one-line comment),
 `apps/server/src/personal-data-export-api.ts` (export `venuePlace` and `toLanguage`; the boundary
-gains `"invoice_customer.not_found": 404`).
+gains `"invoice_customer.not_found": 404` and `"node.read_only": 403`), and the `node.read_only`
+comment in `apps/server/src/errors.ts:137-141` (decision 14).
 
 Interface:
 
@@ -1010,6 +1141,8 @@ export interface InvoiceCustomerDataDeps {
   venueLocale: string; privacyNoticeUrl?: string; now?: () => Date;
   render?: InvoiceCustomerFilesDeps["render"];
   readDocument?: InvoiceCustomerFilesDeps["readDocument"];
+  /** Read per request; true refuses both routes (decision 14). */
+  onMirror: () => boolean;
 }
 export function mountInvoiceCustomerDataApi(app: Hono, deps: InvoiceCustomerDataDeps, log: Logger): void;
 ```
@@ -1030,8 +1163,11 @@ export function mountInvoiceCustomerDataApi(app: Hono, deps: InvoiceCustomerData
    - **Session refusals**: no cookie 401 `management_session.required`; an ended session 401; a
      disabled admin's live session 403 `person.suspended`.
    - **The download with no match**: 404 `invoice_customer.not_found` `{}`.
+   - **On a mirror** (decision 14): with `onMirror` returning true, both routes answer 403
+     `{ error: { code: "node.read_only", params: {} } }` for the admin, before any other check; with
+     it returning false they answer as above.
    - **Nothing written**: copy S2c's case (`personal-data-export-api.staff.test.ts:340-356`): a
-     search and a download leave `total_changes()`, the admin's `lastSeenAt` and a waiting
+     search and a download of `12345678Z` (so every invoice turn runs) leave `total_changes()`, the admin's `lastSeenAt` and a waiting
      `change_log` row unchanged, and `invoice_pdf_downloads` empty.
    - **The README's language**: with `venueLocale` `es-ES` the README's first line is the Spanish
      title; with `en-GB`, English; with an admin whose own saved locale differs, the README still
@@ -1043,12 +1179,13 @@ export function mountInvoiceCustomerDataApi(app: Hono, deps: InvoiceCustomerData
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data-api.test.ts`; watch
    it fail.
 2. Write both routes in full: the search, and the download's first turn, `buildInvoiceCustomerFiles`,
-   the re-check, the README and the ZIP through `zipArchive` and `archiveFileName`
+   the re-check, the README and the ZIP through `zipArchiveInTurns` (Task 4b) and `archiveFileName`
    (`download-archive.ts:36-57`), with `nextTurn()` after the first turn and before the re-check
    (decision 6). Task 6b adds the download's end-to-end cases.
 3. Proof by deletion, each run and reverted: check the query before the permission → the
    permission-before-query case fails; drop `touch: false` → the last-seen assertion fails; take
-   `invoice_customer.not_found` out of the boundary map → the 404 case gets 400; remove the
+   `invoice_customer.not_found` out of the boundary map → the 404 case gets 400; drop the mirror
+   check → the mirror case gets 200; remove the
    re-check → the demotion case sends a file; use the admin's locale → the language case fails.
 4. Run `pnpm --filter @waitron/server typecheck`; from the root `pnpm exec vitest run
    scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/english-only.test.ts
@@ -1071,8 +1208,11 @@ Files: `apps/server/src/invoice-customer-data-api.ts`,
    - **An invoice that cannot be made** (decision 9): with a `readDocument` that throws the
      `AppError` `invoice_delivery.not_found` for j2, the answer is 500 `{ error: { code:
      "server.internal" } }`, not 400, and no file.
-   - **No secret, no staff**: the ZIP's text holds no staff member's id or name from the fixture's
-     deliveries or sales, and not the admin's session token hash.
+   - **No secret, no staff**: unzip, then search `README.txt`, `invoices.json` and each PDF's text
+     as `pdfjs-dist` extracts it (the ZIP deflates the JSON and pdfkit compresses page content, so
+     the raw bytes would hide anything): none holds a staff member's id or name from the fixture's
+     deliveries or sales, nor the admin's session token hash. Positive control: "Jordi Puig" is
+     found in the same text.
    Run `pnpm --filter @waitron/server exec vitest run src/invoice-customer-data-api.export.test.ts`.
    These cases are written after the code they test (6a built the download), so they may pass at
    once; that is not evidence. **Run each omission control in step 3 before claiming its case**,
@@ -1097,27 +1237,34 @@ Files: `apps/server/src/boot.ts` (one call after `mountOrdersApi`, `:2114-2124`)
      `{ taxId: "12345678Z", invoices: [] }` from the search and 404 `invoice_customer.not_found` from
      the download; the manager's gets 403 from both. (The venue there issues no full invoice; the
      ZIP itself is Task 6b's.)
-   - In `boot.mirror.test.ts`, in the mirror boot S2c's Task 8b used: the ambient viewer's cookie
-     gets 200 from the search (decision 14's default, pinned).
+   - In `boot.mirror.test.ts`, in S2c's case "serves dashboard reads, another person's download among
+     them, via the ambient viewer and refuses writes" (`:179`, its admin download at `:199-207`): the ambient viewer's cookie gets 403 `{ error: { code: "node.read_only", params:
+     {} } }` from both the search and the download (decision 14's default, pinned).
    - **On a full disk** (the routes take decision 6's write-lock exception, so they are pinned as
      S2c's are): in `start-full-disk.e2e.test.ts`, beside S2c's three cases (`:477`, `:507`,
      `:534`), copying `:507`'s "an admin's personal-data download of another person answers on a
      full disk with a change waiting, and writes nothing": "an admin's invoice-customer search and
      download answer on a full disk with a change waiting, and write nothing". Mount
-     `mountInvoiceCustomerDataApi` as the file mounts S2c's routes (`:74-76` import them); issue one
-     full invoice for a customer the way the file's drawer case seeds its sale (`:534`), through
-     `recordSale` with a counterparty if the file's venue can; fill the disk; the search answers
-     200 with that invoice, the download 200 with a ZIP holding `invoices.json`, the admin's
-     `lastSeenAt` and the waiting `change_log` row are unchanged. If the file's venue cannot issue a
-     full invoice, the case asserts the search's 200 `[]` and the download's 404 on the full disk
-     instead, and the pull request says so. On macOS the file makes its own small disk with
+     `mountInvoiceCustomerDataApi` as the file mounts S2c's routes (`:74-76` import them). The
+     file's venue is seeded raw in `beforeAll` (`:255-314`: `seedTenant`, a location, a node, a
+     series coded `FD`, and Paula's sale as a raw `db.insert(sales)`), with a `FakeFiscalBackend`
+     (`:367`) and no `TillConfig`. Beside Paula's sale, insert one more sale the same raw way with
+     the four `counterparty_*` columns set (customer `12345678Z`), the next invoice number in `FD`
+     and `working_order_id` null. Mount with `backend: new FakeFiscalBackend(db)`, `onMirror: () =>
+     false` and a `TillConfig` literal of its required fields (`apps/server/src/till-config.ts:15-47`:
+     the file's `nodeId` and location, `locale` and `invoiceLocales` as the file's location
+     declares, `tipsEnabled: false`, `simplifiedInvoiceLimit: null`; the typecheck names any other). Fill the disk; the search answers 200 with that one invoice;
+     the download answers 200 with a ZIP holding `README.txt`, `invoices.json` and one PDF; the
+     admin's `lastSeenAt` and the waiting `change_log` row are unchanged. If `readInvoiceDocument`
+     cannot read the raw sale (it reads lines, the tenant, the location's receipt settings), stop
+     and report rather than weaken the case. On macOS the file makes its own small disk with
      `hdiutil` (home CLAUDE.md §4).
    Run `pnpm --filter @waitron/server exec vitest run src/boot.personal-data-export.test.ts
    src/boot.mirror.test.ts` and `pnpm --filter @waitron/server exec vitest run
    src/start-full-disk.e2e.test.ts -t "invoice-customer"`; watch them fail.
-2. Add the mount.
-3. Omission controls, each run and reverted: change the search's path in the mount → both new cases
-   fail with 404; skip the mount when the node is a mirror → the mirror case fails; wrap the
+2. Add the mount, passing `onMirror: () => holders.mode.current === "mirror"`.
+3. Omission controls, each run and reverted: change the search's path in the mount → the real-start
+   case fails with 404; pass `onMirror: () => false` → the mirror case gets 200; wrap the
    download's first turn in `withTransaction` instead of `withWriteLock` → the full-disk case fails
    (the drain is refused).
 4. Run `pnpm --filter @waitron/server typecheck`. Before committing, check no open pull request
@@ -1189,8 +1336,9 @@ Files: `apps/dashboard/src/widgets/invoice-customer-dialog.ts`,
      second press while out does nothing.
    - **Refusals**: `authorization.not_permitted` shows decision 16's sentence and the sign-in button,
      whose press dispatches one `admin-sign-in` that crosses the shadow root; `invoice_customer.not_found`
-     shows the fault sentence; `server.internal` shows `codeMessage("server.internal")`; none
-     disables **Download**.
+     shows the fault sentence; `node.read_only`, from either **Find** or **Download**, shows decision
+     16's mirror sentence; `server.internal` shows `codeMessage("server.internal")`; none disables
+     its action.
    - **Closing while a download is out** drops its answer (no anchor click after the dialog closes).
    - **Unsaved** (`invoice-customer-dialog.unsaved.test.ts`, following
      `attendance-export-dialog.unsaved.test.ts:1-60`): a typed, unsearched number asks before
@@ -1289,7 +1437,7 @@ and `/Users/clintongormley/waitron-campaign-b/a980-s3-shots/`, named
 1. **The Orders page and the dialog**: a throwaway browser test built like S2c's look shots
    (`/Users/clintongormley/waitron-campaign-b/a980-s2c-scripts/zz-staff-data-copy.look.test.ts`):
    Orders with the button; the dialog empty, with an invalid value, with zero results, with three
-   results, while downloading, and with the permission refusal; English and Spanish × light and dark
+   results, while downloading, with the permission refusal and with the mirror refusal; English and Spanish × light and dark
    × 1280 and 390 px.
 2. **The guide section**: write `/help/en/staff` and `/help/es/staff` as the server renders them to
    HTML and screenshot `#invoice-customer-data` at 1280 and 390 px, light and dark, with the
@@ -1322,9 +1470,12 @@ Files: `docs/backlog/data-protection.md`, `docs/backlog.md` (the A980 entry, onl
    download, their paths, the permission, the dialog on **Orders**, the ZIP's three kinds of file,
    the README's language, nothing recorded; then new short points: **what the box keeps with a tax
    number outside issued sales** (decision 19: `working_orders.recipient_*` and `invoice_delivery`
-   on bills, invoiced or never issued, and `print_jobs.payload`), not in the download; foreign
-   customers and Q17(a); the index, if Task 3 or a box asks for one; and the four owner FYIs
-   (decisions 10, 12, 19 and 20) until answered. The "Measure … on a box" point gains Task
+   on bills, invoiced or never issued, and `print_jobs.payload`), not in the download, noting that
+   while full invoices are off the staged copy on a bill is the only place a customer's tax number
+   can be (decision 21); foreign
+   customers and Q17(a); the index, if Tasks 3a and 3b or a box ask for one; the mirror refusal
+   until A1111 decides (decision 14); and the owner FYIs (decisions 10, 12, 14, 19, 20 and 21) until
+   answered. The "Measure … on a box" point gains Task
    3's figures. `docs/backlog.md`'s A980 entry is edited only if a sentence in it became false.
 4. In the overview's status paragraph, after the S2d sentence, a dated pointer: "2026-10-2x: S3 is
    built ([its plan](2026-10-26-a980-s3-invoice-customer-download.md)): an admin finds an invoice
