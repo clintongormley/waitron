@@ -429,7 +429,7 @@ type Screen = "lock" | "counter" | "floor" | "station";
 type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
 
 /** A till draws no table buttons; one shared list, so the shell never sees a new one. */
-const NO_BAR_TABLES: BarTable[] = [];
+const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
 
 interface ReleasedBill {
   sync: DraftSync;
@@ -2483,7 +2483,7 @@ export class TillApp extends LitElement {
   /** The last floor read that answered: a failed {@link #reloadTables} empties `tables`, not the bar. */
   @state() private barFloor: TableState[] = [];
   /** Kept while its contents are unchanged: a new array makes the shell step back and refit. */
-  #barTableList: BarTable[] = NO_BAR_TABLES;
+  #barTableList: readonly BarTable[] = NO_BAR_TABLES;
   #barTableJson = "[]";
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
@@ -11195,7 +11195,7 @@ export class TillApp extends LitElement {
   }
 
   /** The handheld bar's buttons (D4, D13), the same array while they are unchanged. */
-  #barTables(): BarTable[] {
+  #barTables(): readonly BarTable[] {
     if (this.formFactor === "till") return NO_BAR_TABLES;
     const opening = this.openingTableId;
     const next = barTables(this.barFloor, this.#sessionPersonId, {

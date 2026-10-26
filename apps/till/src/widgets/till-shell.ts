@@ -1020,13 +1020,13 @@ export class TillShell extends LitElement {
     return screen === "kitchen" ? "" : t(`tab.${screen}`);
   }
 
-  #barTable(table: BarTable, current: boolean): TemplateResult {
+  #barTable(table: BarTable): TemplateResult {
     return html`<button
       type="button"
       class="bar-table"
       role="tab"
       data-bar-table=${table.tableId}
-      aria-selected=${current ? "true" : "false"}
+      aria-selected=${table.current ? "true" : "false"}
       aria-label=${table.unsent ? t("shell.table_unsent").replace("{table}", () => table.name) : nothing}
       @click=${() => this.#emit("open-bar-table", { tableId: table.tableId, held: table.held })}
     >
@@ -1081,7 +1081,7 @@ export class TillShell extends LitElement {
               </button>
             `,
       )}
-      ${tables.map((table) => this.#barTable(table, table.current))}
+      ${tables.map((table) => this.#barTable(table))}
     </nav>`;
   }
 
