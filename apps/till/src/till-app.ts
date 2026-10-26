@@ -3793,6 +3793,7 @@ export class TillApp extends LitElement {
     if (!current() || view.partyId !== this.orderParty?.id) throw { code: "party.out_of_date" };
     if (view.snapshot.revision === this.orderParty.revision) return;
     if (view.snapshot.revision < this.orderParty.revision) throw { code: "party.out_of_date" };
+    const tablesRead = this.#startTablesRead();
     const [tables, groups, orders] = await this.#allergyRequest((signal) =>
       Promise.all([
         api.getTablesState({ signal }),
@@ -3809,7 +3810,7 @@ export class TillApp extends LitElement {
       orders.revision !== party.revision
     )
       throw { code: "party.out_of_date" };
-    this.#setTables(tables, true);
+    this.#applyTables(tablesRead, tables);
     this.orderParty = party;
     this.tabGroups = groups.groups;
     this.currentOrders = orders;
@@ -11737,6 +11738,7 @@ export class TillApp extends LitElement {
       this.activeTabId === billId;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
+      const tablesRead = this.#startTablesRead();
       const refreshed = await Promise.race([
         Promise.all([
           this.api.getTablesState(),
@@ -11809,7 +11811,7 @@ export class TillApp extends LitElement {
           outcome === "failed" ? "table.draft_recovery_failed" : { code: outcome.refused };
         return true;
       }
-      this.#setTables(tables, true);
+      this.#applyTables(tablesRead, tables);
       this.orderParty = party;
       this.tabGroups = groups.groups;
       this.currentOrders = orders;

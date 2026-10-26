@@ -2226,6 +2226,30 @@ describe("till-app: sending the draft", () => {
       },
     );
 
+    it("keeps the Floor on the repair's newer floor when a floor read started before it answers last", async () => {
+      const { el, detail, store } = await raced("submit");
+      let answerOlder!: (tables: TableState[]) => void;
+      api.getTablesState!.mockImplementationOnce(
+        () => new Promise((resolve) => (answerOlder = resolve)),
+      );
+      const reads = api.getTablesState!.mock.calls.length;
+      emit(floor(el)!, "floor-refresh", { poll: true });
+      await flush(el);
+      expect(api.getTablesState!.mock.calls.length).toBe(reads + 1);
+
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await vi.waitFor(() => expect(banner(el)?.textContent).toContain("Group 7"));
+      expect(api.getTablesState!.mock.calls.length).toBe(reads + 2);
+      const t4Revision = () =>
+        floor(el)!.tables.find((each) => each.id === "t4")?.party?.revision ?? null;
+      expect(t4Revision()).toBe(4);
+
+      answerOlder([mesa4, mesa7]);
+      await flush(el, 6);
+      expect(t4Revision()).toBe(4);
+    });
+
     it.each(["getTablesState", "listGroups", "readCurrentOrders", "listDrafts"] as const)(
       "retains the candidate without another save or send when recovery %s fails",
       async (read) => {
