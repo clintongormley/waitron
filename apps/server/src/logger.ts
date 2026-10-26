@@ -1,5 +1,5 @@
 import type { Logger, LogLevel } from "@waitron/server-kit";
-import { maskPersonalData } from "./log-personal-data.js";
+import { stringifyMasked } from "./log-personal-data.js";
 export type { Logger, LogLevel };
 
 export const LOG_LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
@@ -19,8 +19,6 @@ export function createLogger(
 ): Logger {
   return (level, event, fields) => {
     if (LOG_LEVELS[level] < LOG_LEVELS[getThreshold()]) return;
-    sink(
-      `${JSON.stringify({ ...fields, at: now().toISOString(), level, event }, maskPersonalData)}\n`,
-    );
+    sink(`${stringifyMasked({ ...fields, at: now().toISOString(), level, event })}\n`);
   };
 }
