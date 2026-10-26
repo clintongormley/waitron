@@ -4229,7 +4229,7 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
   type Editor = Record<string, unknown> & { variants: { id: string; name: string }[] };
   const editor = async (app: Hono, id: string) =>
     (await (await send(app, "GET", `/management-api/products/${id}/editor`)).json()) as Editor;
-  const copa = (active: boolean) => ({
+  const glassVariant = (active: boolean) => ({
     name: "Copa",
     customerName: null,
     kitchenName: null,
@@ -4243,7 +4243,7 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
     const app = mountApp();
     const parentId = await createNamedProductVia(app, `Wine ${crypto.randomUUID()}`);
     const created = await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-      body: { ...(await editor(app, parentId)), variants: [copa(true)] },
+      body: { ...(await editor(app, parentId)), variants: [glassVariant(true)] },
     });
     expect(created.status).toBe(200);
     const variantId = ((await created.json()) as Editor).variants[0]!.id;
@@ -4282,32 +4282,32 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
 
   it("answers 409 extras.product_has_variants to a list naming a product with an Active variant, on create and on update", async () => {
     const app = mountApp();
-    const pan = await createNamedProductVia(app, `Bread ${crypto.randomUUID()}`);
-    const vino = await createNamedProductVia(app, `Vino ${crypto.randomUUID()}`);
-    const withVariant = await send(app, "PUT", `/management-api/products/${vino}/editor`, {
-      body: { ...(await editor(app, vino)), variants: [copa(true)] },
+    const breadId = await createNamedProductVia(app, `Bread ${crypto.randomUUID()}`);
+    const wineId = await createNamedProductVia(app, `Vino ${crypto.randomUUID()}`);
+    const withVariant = await send(app, "PUT", `/management-api/products/${wineId}/editor`, {
+      body: { ...(await editor(app, wineId)), variants: [glassVariant(true)] },
     });
     expect(withVariant.status).toBe(200);
     const refusal = {
       error: {
         code: "extras.product_has_variants",
-        params: { field: "items.1.productId", productId: vino },
+        params: { field: "items.1.productId", productId: wineId },
       },
     };
 
     const created = await send(app, "POST", "/management-api/modifiers/extras", {
-      body: { name: "Acompañamientos", items: [{ productId: pan }, { productId: vino }] },
+      body: { name: "Acompañamientos", items: [{ productId: breadId }, { productId: wineId }] },
     });
     expect(created.status).toBe(409);
     expect(await created.json()).toEqual(refusal);
 
     const list = await send(app, "POST", "/management-api/modifiers/extras", {
-      body: { name: "Acompañamientos", items: [{ productId: pan }] },
+      body: { name: "Acompañamientos", items: [{ productId: breadId }] },
     });
     expect(list.status).toBe(201);
     const { extraList } = (await list.json()) as { extraList: ExtraList };
     const updated = await send(app, "PATCH", `/management-api/modifiers/extras/${extraList.id}`, {
-      body: { name: "Acompañamientos", items: [{ productId: pan }, { productId: vino }] },
+      body: { name: "Acompañamientos", items: [{ productId: breadId }, { productId: wineId }] },
     });
     expect(updated.status).toBe(409);
     expect(await updated.json()).toEqual(refusal);
@@ -4315,17 +4315,17 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
 
   it("answers 409 product.offered_as_extra to an Active variant on a product a list offers, naming the list", async () => {
     const app = mountApp();
-    const cerveza = await createNamedProductVia(app, `Cerveza ${crypto.randomUUID()}`);
+    const beerId = await createNamedProductVia(app, `Cerveza ${crypto.randomUUID()}`);
     const list = await send(app, "POST", "/management-api/modifiers/extras", {
-      body: { name: "ES drinks extra", items: [{ productId: cerveza }] },
+      body: { name: "ES drinks extra", items: [{ productId: beerId }] },
     });
     expect(list.status).toBe(201);
     const { extraList } = (await list.json()) as { extraList: ExtraList };
     const extraLists = [{ id: extraList.id, name: "ES drinks extra" }];
-    const parent = await editor(app, cerveza);
+    const parent = await editor(app, beerId);
 
-    const fromParent = await send(app, "PUT", `/management-api/products/${cerveza}/editor`, {
-      body: { ...parent, variants: [copa(true)] },
+    const fromParent = await send(app, "PUT", `/management-api/products/${beerId}/editor`, {
+      body: { ...parent, variants: [glassVariant(true)] },
     });
     expect(fromParent.status).toBe(409);
     expect(await fromParent.json()).toEqual({
@@ -4335,8 +4335,8 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
       },
     });
 
-    const inactive = await send(app, "PUT", `/management-api/products/${cerveza}/editor`, {
-      body: { ...parent, variants: [copa(false)] },
+    const inactive = await send(app, "PUT", `/management-api/products/${beerId}/editor`, {
+      body: { ...parent, variants: [glassVariant(false)] },
     });
     expect(inactive.status).toBe(200);
     const variantId = ((await inactive.json()) as Editor).variants[0]!.id;
