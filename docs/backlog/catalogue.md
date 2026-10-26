@@ -58,14 +58,6 @@ failure #485 met.
 
 ## Menus list Changes column and top-aligned rows (W87, #1191): left open
 
-**Menus list Changes column and top-aligned rows — DONE (W87, #1191, owner 2026-10-04).** The Menus list
-has a Changes column when the list is wide enough, holding an "Unpublished changes" link to the
-menu's Preview tab.
-The list takes one of three layouts by its own
-width. From 50rem it has four columns and the name wraps so that they fit without sideways
-scrolling, even for a long name. Between 30rem and 50rem it has Name, Status and Actions, with the
-link on its own line under the state, so the link stays in view beside a long name. At 30rem or less
-the state and then the link stack under the name.
 Left open by W87: between 30rem
 and 50rem a long menu name can still make the table wider than its box (measured in Chromium,
 2026-10-04: by 20 px in English and 29 px in Spanish, at a 600 px window with hyphenated, spaced and
@@ -78,7 +70,6 @@ that link on a highlighted row is fixed (A306, #1336).
 
 ## A menu's Structure tab is one tree (W88, #1209): not checked
 
-**A menu's Structure tab is one tree — DONE (W88, #1209, main `21b57d280`, 2026-10-05; owner 2026-10-04).**
 Not checked: a drag with a touch pointer or on a
 real touch screen; a drag does not scroll the page near its edge (nor does Products'); in Spanish at
 390 px the Type column scrolls partly under the pinned Actions column, which is the table's own
@@ -89,8 +80,7 @@ against the other states.
 
 ## A menu's prices are one editable Price overrides field per row (W89, #1239): left open
 
-**A menu's prices are one editable Price overrides field per row — DONE (W89, #1239,
-2026-10-05; owner 2026-10-04).** Not checked:
+Not checked:
 the tab on the running dev stack — the product page opening from a Status link, a real save and
 the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
 only). (2026-10-08, A348: the Status link is gone; a row's ⋮ Edit product opens the product instead.)
@@ -115,11 +105,6 @@ Left open:
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.
-- **Done (A292, #1310, 2026-10-06) — W92a's four look points.** A sold-out painted tile's stripe is
-  `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
-  palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
-  dark theme's sold-out tile sits at the page's own level (`--wt-color-surface-sunken`); and the
-  labels are centred (products.md, _Colour_).
 - A292's look is the owner's to judge (#1310's "Looks for the owner to judge"; screenshots in lane
   C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter than a
   sold-out one, and in the light theme a pale stripe shows mostly through the dark line beside it.
@@ -153,7 +138,7 @@ Left open:
 
 ## Two copies of the tree pointer drag — OPEN (W88)
 
-**Two copies of the tree pointer drag — OPEN (W88).** W88 moved what Products and the Menus tree
+W88 moved what Products and the Menus tree
 draw during a drag into `apps/dashboard/src/widgets/tree-drag.ts` (the ghost, the row and gap marks,
 the click blocked after a release), but each widget still has its own copy of the drag itself: the
 press, the 5 px start, the target under the pointer, Escape, the release and the clean-up
@@ -218,17 +203,7 @@ are now part of A653 ([dashboard.md](dashboard.md#a653--every-long-dashboard-tab
 
 ## Products: Filters and Select at the start of the table's toolbar (W83, #1193): left open
 
-**Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner
-2026-10-04); left open:** While the table is at least 768px wide, Filters opens a panel beside the
-rows at their left; narrower, it opens full screen. One existing test assertion changed, for the
-owner to review: the catalogue browser's toolbar-order test pinned the old order (search, Filters,
-Expand all, Select, Customise) and now pins the new one (Filters, Select, search, Expand all,
-Customise). Left open: on a phone the search is drawn under Expand all
-and Customise while Tab reaches it before them (two reviewers judged this not a WCAG 1.3.2 or 2.4.3
-failure, by stepping through with the keyboard and reading Chromium's accessibility tree; what a
-screen reader says was not checked) _(2026-10-05, W85d: this now happens wherever the list is 40rem
-wide or less, desktop windows with the sidebar showing included; those two reviewers judged it when
-the layout existed only at phone width, #1193)_; and a desktop window narrow enough to leave the table under
+A desktop window narrow enough to leave the table under
 768px gets the full-screen panel — at which window width that happens with the sidebar shown was
 not measured. Also left open by W83's review, none started: (1) the table's Customise columns
 button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
@@ -238,9 +213,6 @@ through, and the Structure tab's Reorder and Select toggles are hand-built icon 
 reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
 above the table's 440px narrow-tree width).
-
-_2026-10-08, A368: the search/Tab-order point above is closed. Search now follows Expand all
-and Customise in markup at both widths; the remaining W83 points stay open._
 
 ## Products at phone width: a long name runs under the pinned Actions column (W85b, W85c, W85e): left open
 
@@ -267,9 +239,6 @@ DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
 
 ## Catalogue: no two categories with one parent, and no two Active products, share a name (W72 to W72h): left open
 
-**Catalogue: no two categories with one parent, and no two Active products, share a name — DONE
-(W72, #1214; W72a, #1230; W72b, #1236; W72c, #1237; W72d, #1238; W72e, #1241; W72f, #1252; W72g, #1246;
-W72h, #1247); left open:**
 There is no unique index: each product row stores its folded staff name in `products.name_key`, and
 the product check looks other rows up by that key. There is no
 backfill: a row whose name has not been written since the column was added keeps a null key, and the
@@ -290,8 +259,7 @@ A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not l
 
 ## `joinCustomerPresentationText` passes the requested language where the default belongs — OPEN (found 2026-10-02 by A172, not measured)
 
-- **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
-  (found 2026-10-02 by A172, not measured).** It calls `resolveSnapshotText(variant, locale,
+- It calls `resolveSnapshotText(variant, locale,
 locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
   `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
   language alphabetically rather than the default. The order path freezes the variant's text in
@@ -313,8 +281,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
 
 ## Product folders, menus that include menus, and prep station routing: partly built (design approved 2026-09-30)
 
-**Product folders, menus that include menus, and prep station routing: partly built
-(design approved 2026-09-30).** The
+The
 [design](../superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
 1, 2, 3a, 3b ([#1024](https://github.com/clintongormley/waitron/pull/1024)), 3c-1, 3c-2 (PF6,
 [#1046](https://github.com/clintongormley/waitron/pull/1046)) and 3c-3 (PF7,
@@ -344,7 +311,7 @@ older build before using the new published document. Status and remaining work:
 
 ## Sales classification and the menus plan — what they left open
 
-**Sales classification and the menus plan — what they left open.** Both plans are complete (the
+Both plans are complete (the
 [menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) (§11 wins
 over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) and
 [plan](../superpowers/plans/2026-09-25-menus-categories-home-layouts.md); the
@@ -411,7 +378,6 @@ the 2026-09-30 folders design; what remains:
 
 ## Content languages and the image library (#339, #344) — what is left open
 
-**Content languages and the image library (#339, #344) — what is left open.**
 [Operator guide](../../apps/server/src/guide/en/content-and-images.md).
 
 - **A new picture consumer has to add a real database reference, not just store a filename.**
@@ -432,7 +398,6 @@ the 2026-09-30 folders design; what remains:
 
 ## Extras and Options — deliberate limits, and what is left open
 
-**Extras and Options — deliberate limits, and what is left open.**
 [integration contract](../developers/modifiers.md).
 
 - **The Options list's rows centre their contents rather than lining up by text baseline (D6).**
@@ -566,10 +531,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 ## Left open by #1188's review, none started (the pricing unit dialog, W66)
 
-**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE (#1188).**
-The price field's unit button, and on a product with variants the unit button in the
-variants table's Price heading, open one Pricing unit dialog holding the unit dropdown and Add unit.
-Detail: design-system.md, the `wt-price-input` note under the product editor.
 Left open by #1188's review, none started: (1) one kind of unit refusal reads "The server rejected
 this value…", and on the price field after a price message "this value" reads as the price — a
 unit-specific sentence needs the owner's wording; (2) the price field's own unit button does not
@@ -663,7 +624,7 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 ## Translate all: shared collect-page test vectors
 
-- **Translate all: shared collect-page test vectors.** The fake Cloud's paging
+- The fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) follows Cloud's
   `packages/translation/src/collect-page.ts`, but nothing in either repository compares them; the
   shared translation vector (`apps/server/test/cloud-translation-vector.json`) covers submit
@@ -707,8 +668,7 @@ focus to the "Scheduled versions" heading, which may no longer be there.
 
 ## Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud can still hold it
 
-- **Translate all: a job the box ends itself is marked released without a call to Cloud, and
-  Cloud can still hold it.** The box ends a job without asking Cloud when the job's own 24-hour
+- The box ends a job without asking Cloud when the job's own 24-hour
   clock runs out, when `translationService()` is no longer `on` (Cloud's last configuration reply
   no longer lists the service `ready`, or the connection is revoked), when a status or collect
   call is refused as a request Cloud will never accept, and when a job's last page leaves an item
@@ -748,15 +708,11 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
   do, `packages/dashboard-kit/src/request.ts`).
 
-  **2026-10-20, A682:** the multilingual editor replaces the former default-page dropped-row
-  and language-scoped partial-Discard behavior. The old three-limit receipt is historical; the
-  unanswered delete-request limit remains open above.
-
 ## Open test gap from A201b (#1091)
 
 - **Open test gap from A201b** (#1091): removing `#closeLostList()` from `#includeMenu` in a
   disposable checkout left `pnpm --filter @waitron/dashboard exec vitest run
-  src/screens/menus-screen.test.ts` green (207/207, 2026-10-03). The suite does not establish
+  src/screens/menus-screen.test.ts` green. The suite does not establish
   whether that guard catches a list disappearing between the last read and selection. Check that
   race with a focused test, or remove the guard if the path cannot occur; its reachability remains
   unverified.
@@ -818,7 +774,7 @@ was the separate A434 ruling.
 
 ## A670 — printed menus (owner, 2026-10-14; open, not designed)
 
-**A670 — printed menus (owner, 2026-10-14; open, not designed).** Waitron prints no menu today.
+Waitron prints no menu today.
 A printed menu carries each dish's allergen icons after its name and a key on the page naming
 every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
 online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
@@ -866,7 +822,6 @@ should go deeper (a shared table rule, so the Products tree changes too).
 
 ## Menu-root enabled-language fallback when content languages are unset (A420 review)
 
-**Menu-root enabled-language fallback when content languages are unset (A420 review).**
 `updateMenuDetails` checks map keys using English as its fallback; section and include-folder
 writers use their supplied venue fallback. Decide whether the menu-root writer should take
 that fallback too. `content-translations.test.ts`, “menu, section and folder writes keep enabled
@@ -884,8 +839,7 @@ everywhere; entered customer text is optional).
 
 ## A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is being saved
 
-**A Home page shortcut's bin button stays live while a shortcut reorder or a display setting is
-being saved.** It is greyed only while a shortcut is added or removed: `#moveShortcut`
+It is greyed only while a shortcut is added or removed: `#moveShortcut`
 (`apps/dashboard/src/screens/menus-screen.ts`) leaves the screen's `busy` flag unset so a
 keyboard user's focus stays on the grip, and display saves use their own flag. A815 asked for the
 button "greyed while a save is out"; decide whether a remove during a reorder save should wait,
@@ -911,15 +865,13 @@ the form stays open, and whether saving it then writes the first menu's section.
 
 ## "Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88)
 
-**"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
+The
 other items in the tree's row menus are greyed out while a change is out; the link to the included
 menu's own editor is not marked `aria-disabled="true"` then, so it stays live (marked so,
 `wt-row-actions` would grey it out and cancel a click or middle-click on it). (A322 renamed it
 from "Edit <menu>", so that the include's own Edit could sit beside it.)
 
 ## Loose ends left by A380 (#1385)
-
-**Loose ends left by A380 (#1385).**
 
 - A configuration import stores a fixed folder name as given, spaces included, where a save
   through the dialog or the route trims it. A name of spaces only shows as no name either way.
@@ -929,16 +881,14 @@ from "Edit <menu>", so that the include's own Edit could sit beside it.)
 
 ## Translate all: an Edit translations dialog left open anywhere clears the "Translations ready" notice
 
-**Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
-notice.** The dialog's live reload reads the suggestions, and that read marks the run opened
+The dialog's live reload reads the suggestions, and that read marks the run opened
 (`apps/server/src/content-suggestions-api.ts`), so a dialog forgotten on another device means
 nobody sees the notice. Seen in the Santet run (A689-21). Working as built; the owner decides
 whether it should change.
 
 ## Category authoring serialises across the whole database, and nobody has measured what that costs
 
-**Category authoring serialises across the whole database, and nobody has measured what that
-costs.** `withTransaction` admits one write transaction per venue file
+`withTransaction` admits one write transaction per venue file
 (`packages/catalogue/src/categories.ts`, above `listCategories`). **Next action:** measure it
 before anyone widens category authoring to more concurrent editors. Left open by product
 categories (#340, [API and integration guide](../developers/product-categories.md)).
@@ -953,8 +903,6 @@ A330 (variant rows show their photo, #1354).
 
 ## Loose ends left by A347 (#1392)
 
-**Loose ends left by A347 (#1392).**
-
 - An imported bundle may carry priced menu rows for a product no menu reaches, and adding the
   product back to a menu revives those prices (found in A347's review, believed to predate it).
   Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
@@ -967,7 +915,7 @@ A330 (variant rows show their photo, #1354).
 
 ## A category's naming square does not announce the inherited colour's source
 
-**A category's naming square does not announce the inherited colour's source.** While you add or
+While you add or
 rename a category, its square says only "Choose the colour" even when its dashed border marks an
 inherited colour. The at-rest row names the source. Decide how the naming square should announce
 that source, including a category whose new name has not been saved, and check the English and
@@ -987,8 +935,6 @@ repository).
 
 ## Loose ends left by A663 Part 2d (#1779)
 
-**Loose ends left by A663 Part 2d (#1779).**
-
 - The dashboard lets a manager attach an extras list to a product sold in a unit with decimals,
   on a scale or with the measure switch on, and the till then offers no extras for it, with no
   word to the manager. Refuse it, or say so, in the product editor (`writeProductModifiers`,
@@ -1005,7 +951,7 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
 
 ## Retire the product editor's required-translation refusal mapping
 
-**Retire the product editor's required-translation refusal mapping.** Customer names are
+Customer names are
 optional, but `catalogue-screen.ts` still handles `content.translation_required` through
 `productEditorTranslationField`. Trace the product routes before removing that branch and its
 tests. Media still validates required image names and translates its refusal to
@@ -1013,16 +959,13 @@ tests. Media still validates required image names and translates its refusal to
 
 ## A928. The Courses list may move its rows under a held drag (found by A758-2's review, not tested)
 
-**A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
-tested).** `apps/dashboard/src/widgets/course-list.ts` holds an incoming list only while a move
+`apps/dashboard/src/widgets/course-list.ts` holds an incoming list only while a move
 is unsaved (`#readDropped = this.#movesOut > 0`), and a pointer drag saves only on drop, so a live
 list arriving mid-drag looks to be applied under the finger. A758-2 fixed the same shape on the
 Voids and comps page by holding the list while `ReorderController.dragging` is true. Write the
 failing test first.
 
 ## Loose ends left by A343 (a menu's Price overrides tab tidied, #1368)
-
-**Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).**
 
 - The Price overrides tab's save message comes after the whole table in tab order, so a keyboard
   user cannot reach Undo from a field within its 5 seconds (decided as built, not tested with a
@@ -1036,9 +979,6 @@ failing test first.
 
 ## Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and Edit product, #1408)
 
-**Loose ends left by A346 + A348 (a price this menu sets stands out, an Available column, and
-Edit product, #1408).**
-
 - At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides tab.
 - In the real dashboard at a 390px window the table is 358px wide (read once in the dashboard's
   test browser; no test pins it). Whether one-word names keep their line there while no field
@@ -1051,6 +991,12 @@ Edit product, #1408).**
   [Detail](catalogue.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
 
 ## Decisions and deliberate limits
+
+- **Sold-out tiles (A292, #1310, 2026-10-06).** A sold-out painted tile's stripe is
+  `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
+  palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
+  dark theme's sold-out tile sits at the page's own level (`--wt-color-surface-sunken`); and the
+  labels are centred (products.md, _Colour_).
 
 - **Translate all's joint fault proof is recorded on pinned candidates (D85, 2026-10-20).**
   Cloud [PR #247](https://github.com/waitron-io/waitron-cloud/pull/247), commit

@@ -861,9 +861,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   spaces included, where a save through the dialog or the route trims it.
   [Detail](backlog/catalogue.md#loose-ends-left-by-a380-1385)
 
-- **Loose ends left by W83 (#1193).** A desktop window narrow enough to leave the Products table
-  under 768px gets the full-screen Filters panel — at which window width that happens with the
-  sidebar shown was not measured.
+- **Loose ends left by W83 (#1193).**
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
 - **Not covered by W85b: while a category is being renamed, its count and asterisk follow the name
