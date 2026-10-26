@@ -276,8 +276,12 @@ function artifactUploadStep(body) {
     .filter((line) => !line.trim().startsWith("#"));
 }
 
-/** The blob artifact's base name from a `download-artifact` `pattern: <base>-*`. */
+/** The blob artifact's base name from the download action or coverage helper. */
 function artifactDownloadBase(body) {
+  const helper = body.find((candidate) =>
+    candidate.includes("run: node scripts/download-coverage-blobs.mjs"),
+  );
+  if (helper !== undefined) return /download-coverage-blobs.mjs '(\S+?)-\*'/.exec(helper)?.[1];
   const line = body.find((candidate) => /^ {10}pattern: \S+-\*\s*$/.test(candidate));
   return line === undefined ? undefined : /pattern: (\S+?)-\*/.exec(line)?.[1];
 }
@@ -3729,8 +3733,23 @@ describe("the workflows' checkouts", () => {
   });
 });
 
+function isArtifactDownload(step) {
+  return (
+    (step?.uses?.startsWith("actions/download-artifact@") ?? false) ||
+    (step?.command?.includes("scripts/download-coverage-blobs.mjs") ?? false)
+  );
+}
+
+function artifactDownloadInputs(step) {
+  if (step?.uses?.startsWith("actions/download-artifact@")) return step.with;
+  const match =
+    /^node scripts\/download-coverage-blobs\.mjs '([a-z][a-z-]+-blob-\*)' '([\w./-]+)'$/.exec(
+      step?.command?.trim() ?? "",
+    );
+  return match ? { pattern: match[1], path: match[2] } : {};
+}
+
 function downloadAttempts(text) {
-  const isDownload = (step) => step?.uses?.startsWith("actions/download-artifact@") ?? false;
   const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
   const sameInputs = (a, b) =>
     JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
@@ -3739,14 +3758,16 @@ function downloadAttempts(text) {
     const steps = workflowSteps(lines.join("\n"));
     for (let at = 0; at < steps.length; at += 1) {
       const [first, clear, second] = steps.slice(at, at + 3);
-      if (!isDownload(first)) continue;
+      if (!isArtifactDownload(first)) continue;
       const failed = `steps.${first.id}.outcome == 'failure'`;
-      const path = first.with.path;
+      const inputs = artifactDownloadInputs(first);
+      const path = inputs.path;
       const valid =
         first.id !== undefined &&
         first.if === undefined &&
         bounded(first) &&
         first.continueOnError === "true" &&
+        (first.uses !== undefined || first.env.GH_TOKEN === "${{ github.token }}") &&
         /^[\w./-]+$/.test(path ?? "") &&
         path !== "." &&
         !path.startsWith("/") &&
@@ -3755,13 +3776,15 @@ function downloadAttempts(text) {
         clear.timeoutMinutes === "1" &&
         clear.continueOnError !== "true" &&
         clear.command.trim() === `rm -rf -- "${path}"` &&
+        isArtifactDownload(second) &&
         second?.uses === first.uses &&
         second.if === failed &&
         bounded(second) &&
         second.continueOnError !== "true" &&
-        sameInputs(first.with, second.with);
+        sameInputs(inputs, artifactDownloadInputs(second)) &&
+        sameInputs(first.env, second.env);
       attempts.push({ job, bounded: Boolean(valid) });
-      if (isDownload(second) && second.if === failed) at += 2;
+      if (isArtifactDownload(second) && second.if === failed) at += 2;
     }
   }
   return attempts;
@@ -3796,6 +3819,55 @@ describe("the workflows' artifact downloads", () => {
     expect(downloadAttempts(workflow(first + clear + second))).toEqual([
       { job: "a", bounded: true },
     ]);
+  });
+
+  const helper = (step) =>
+    step
+      .replace(
+        "uses: actions/download-artifact@v8",
+        "run: node scripts/download-coverage-blobs.mjs 'service-blob-*' 'packages/service/.vitest-reports'",
+      )
+      .replace(
+        / {8}with:\n(?: {10}.*\n)+/,
+        "        env:\n          GH_TOKEN: ${{ github.token }}\n",
+      );
+
+  it("accepts the authenticated coverage helper with the same bounds and cleanup", () => {
+    expect(downloadAttempts(workflow(helper(first) + clear + helper(second)))).toEqual([
+      { job: "a", bounded: true },
+    ]);
+  });
+
+  it.each([
+    ["missing retry", (text) => text.replace(helper(second), "")],
+    [
+      "missing authentication",
+      (text) => text.replaceAll("          GH_TOKEN: ${{ github.token }}\n", ""),
+    ],
+    ["no first bound", (text) => text.replace("        timeout-minutes: 1\n", "")],
+    [
+      "wrong cleanup",
+      (text) => text.replace('rm -rf -- "packages/service/.vitest-reports"', 'rm -rf -- "other"'),
+    ],
+    [
+      "different retry pattern",
+      (text) =>
+        text.replaceAll("service-blob-*", "other-blob-*").replace("other-blob-*", "service-blob-*"),
+    ],
+    [
+      "unsafe output path",
+      (text) => text.replaceAll("packages/service/.vitest-reports", "../reports"),
+    ],
+  ])("refuses the coverage helper with %s", (_label, change) => {
+    const found = downloadAttempts(workflow(change(helper(first) + clear + helper(second))));
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every(({ bounded }) => bounded)).toBe(false);
+  });
+
+  it("gives the server's REST download read access to artifacts and the checked-out code", () => {
+    const body = job("test-server-merge").body.join("\n");
+    expect(body).toContain("    permissions:\n      contents: read\n      actions: read");
+    expect(artifactDownloadBase(job("test-server-merge").body)).toBe("server-blob");
   });
 
   it("ignores commented downloads", () => {
@@ -3878,7 +3950,7 @@ describe("the workflows' artifact downloads", () => {
     const found = workflowFiles.flatMap((name) =>
       jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
         const steps = workflowSteps(lines.join("\n"));
-        const at = steps.findIndex((step) => step.uses?.startsWith("actions/download-artifact@"));
+        const at = steps.findIndex(isArtifactDownload);
         if (at === -1) return [];
         const downloadBudget = steps
           .slice(at, at + 3)

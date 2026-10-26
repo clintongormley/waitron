@@ -75,6 +75,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ],
   ["scripts/dev-server-proxy.ts", ["apps/dashboard", "apps/setup", "apps/till"]],
   ["scripts/npm-bundle-notices.mjs", ["apps/dashboard", "apps/setup", "apps/till"]],
+  ["scripts/download-coverage-blobs.mjs", ["apps/server"]],
   ["scripts/setup-litestream.mjs", ["apps/server"]],
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
   ["scripts/vitest-duration-sequencer.mjs", ["apps/server"]],

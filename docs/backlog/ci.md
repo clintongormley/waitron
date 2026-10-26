@@ -974,3 +974,12 @@ Capture the concurrent path's per-case and file progress, pending browser operat
 and process tree on recurrence, under `scripts/run-with-deadline.mjs`. Keep that
 qualification separate from a serial pass; neither a cause nor a repair has been
 established.
+
+## Coverage download actions and refused response bodies
+
+The A1132 local probe reproduced an open 503 response keeping `actions/download-artifact@v8`
+alive after its retry had finished all downloads. The server merge uses the response-closing
+helper; other merge jobs still use that action. Audit those jobs separately and qualify their
+report naming and coverage merge before adopting the helper. Preserve their bounded retry and
+cleanup rules. The original main runner's socket state was not captured; the link to that
+historical timeout remains an inference. See [the developer receipt](../developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).

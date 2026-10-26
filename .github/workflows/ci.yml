@@ -1134,6 +1134,9 @@ jobs:
   # from the blobs. It gates on the SAME `server` output as its shards.
   test-server-merge:
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     needs: [changes, test-server, test-server-stream]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
@@ -1170,13 +1173,11 @@ jobs:
 
       - id: download
         name: Download the server coverage blobs
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'
         timeout-minutes: 1
         continue-on-error: true
-        with:
-          pattern: server-blob-*
-          path: apps/server/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Clear the partial artifact download
         if: steps.download.outcome == 'failure'
@@ -1185,12 +1186,10 @@ jobs:
 
       - name: Download the server coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'
         timeout-minutes: 1
-        with:
-          pattern: server-blob-*
-          path: apps/server/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Merge the server coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/server" test:merge

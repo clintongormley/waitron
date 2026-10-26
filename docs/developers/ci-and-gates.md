@@ -986,7 +986,7 @@ from `GLOBAL_ROOT_FILES`, a file there is no such reporter, or one is also in
 text, so in a member file only a relative `../scripts/…` spelling counts, a path built from parts
 is invisible to it, and a comment spelling the path counts as a reference; in ci.yml, and no other
 workflow, only a line starting `node scripts/…` counts, in a job that tests a member through one
-quoted `pnpm --filter "<name>" test:shard` or `test:coverage` — so a script fed from a pipe does
+quoted `pnpm --filter "<name>" test:shard`, `test:coverage` or `test:merge` — so a script fed from a pipe does
 not count, and a step an `if:` switches off does; a reporter counts only in a `--reporter=` flag
 on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
 root `scripts/` is scanned.
@@ -3309,22 +3309,58 @@ A connection reset can leave only part of the shard reports on disk. In main run
 `Failed to ListArtifacts: Unable to make request: ECONNRESET` (job `120280838159`).
 The reason that connection reset is unverified.
 
-Each `actions/download-artifact` site in the workflow files uses two attempts. The first has
-`timeout-minutes: 1` and `continue-on-error: true`. Only its failed outcome runs the next two
-steps: remove that download's directory, then repeat the download with identical inputs and a
-second one-minute limit. The removal has a one-minute limit; its failure and the second download's
-failure fail the job. A healthy first attempt skips both extra steps. The jobs keep their
-five-minute limit. One minute per download leaves room for setup and merging; healthy downloads
-in comparison run `39909983919` took one to two seconds. The job's deadline remains an outer
-limit; stalls in other steps can still consume the time available for recovery. The merge and
-score commands, shard-count checks and thresholds are unchanged.
+Each artifact download has two attempts. The first has `timeout-minutes: 1` and
+`continue-on-error: true`. Only its failed outcome runs the next two steps: remove that
+download's directory, then repeat the download with identical inputs and a second one-minute
+limit. The removal has a one-minute limit; its failure and the second download's failure fail
+the job. A healthy first attempt skips both extra steps. The jobs keep their five-minute limit.
+The job's deadline remains an outer limit; stalls in other steps can consume the time available
+for recovery. Merge commands, shard-count checks and coverage thresholds stay in place.
+
+The server merge uses `scripts/download-coverage-blobs.mjs`. It lists the current run's artifacts
+through GitHub's REST API, keeps the highest-id copy of each name, checks the archive digest and extracts each expected report with the
+host's `unzip`. The job grants `actions: read` alongside `contents: read`; the token goes only to
+the API requests, not to the storage URL. A refused response's body is cancelled before the helper
+throws. Its server consumer entry in `ROOT_SCOPE_CONSUMERS` selects the server jobs when this helper
+changes; the consumer guard recognises `test:merge` jobs as well as test shards. Other download sites still use `actions/download-artifact`.
 
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
-read workflow text, never execute a workflow. They also check the cleanup limit and that the job
-budget exceeds the download and cleanup limits combined. They recognise literal action names, step fields and
-relative directory paths, not composite actions, external reusable workflows, expressions naming
-an action, YAML anchors or alternative shell cleanup commands. A matching cleanup string does not
-prove that it ran or removed a file. Runtime controls and timing measurements belong in the PR.
+read workflow text, never execute a workflow. They check the action and helper forms, matching
+inputs and authentication, cleanup limit and a job budget larger than both attempts plus cleanup.
+They recognise literal action names, step fields and the helper's quoted command arguments, not
+composite actions, external reusable workflows, YAML anchors or alternative shell commands.
+A matching cleanup string does not prove that it ran or removed a file.
+
+### A completed transfer can still leave the download action alive
+
+On 26 October 2026, main run `40349323088`, job `121693827853`, printed completion for all
+17 server artifacts at 16:17:29Z and again at 16:18:29Z. Each attempt then stayed active until
+its one-minute limit, at 16:18:22Z and 16:19:22Z. Extraction was already complete before the
+final action message. Waiting for a runner does not describe those executing steps; the reason
+for the separate runner queue delay is unverified.
+
+The jobs API for twelve preceding successful main runs measured eleven first downloads at one
+to three seconds. Run `40329021856` instead hit the first minute limit after printing completion,
+then its second attempt took two seconds. These measurements do not justify raising the bound.
+
+A local HTTP probe ran the unmodified v8 bundle from commit
+`9000827ccba6bdab643e8b6fd33ac0654aef8333`. A healthy 17-artifact control exited in 0.095 seconds.
+With one initial 503 response whose body stayed open, the action retried after five seconds and
+printed successful completion, but retained that response's TCP socket until the probe stopped
+it at twelve seconds. The original runner's socket state was not captured, so attributing that
+CI occurrence to the same retained response remains an inference. The helper's in-process HTTP
+tests require the server to observe the refused connection closing. A separate process test checks
+natural failure exit; deleting cancellation did not break that exit check on Node v26.11.1. A real download
+from the failed run verified and extracted all 17 archives in 25.32 seconds on the development
+Mac; that is not a measurement of a GitHub-hosted runner.
+
+External provenance for this path:
+
+| Source | Source's words | What this establishes |
+| --- | --- | --- |
+| [Pinned v8 download source](https://github.com/actions/download-artifact/blob/9000827ccba6bdab643e8b6fd33ac0654aef8333/src/download-artifact.ts) | “Download artifact has finished successfully” | The final message follows awaited downloads and digest checks. `merge-multiple` selects their output directory; there is no later extraction phase in this function. |
+| [GitHub artifact REST API](https://docs.github.com/en/rest/actions/artifacts#download-an-artifact) | “Actions” repository permissions (read); “302” | The REST path uses read access and returns a storage redirect. |
+
 
 ## Every artifact upload is bounded
 

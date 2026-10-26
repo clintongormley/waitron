@@ -23,7 +23,7 @@ import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.
 // an optional `- run:`), so one run at the end of a pipe, or any other way, is not counted — the
 // pipe is what leaves out `scripts/changed-packages.mjs runnable`, which several test jobs run
 // before their tests. A member counts only on a line where one quoted filter,
-// `pnpm --filter "<name>"`, is followed directly by `test:shard` or `test:coverage`, so a member a
+// `pnpm --filter "<name>"`, is followed directly by `test:shard`, `test:coverage` or `test:merge`, so a member a
 // job tests only through two filters, an unquoted filter or a variable, or with an option or `run`
 // between the filter and the script name, is attributed no script from that job.
 // The diagnostic deadline wrapper also counts every literal quoted filter in its test command.
@@ -106,12 +106,12 @@ function workflowJobs(text) {
 }
 
 const RUNS_ROOT_SCRIPT = /^(?:-\s+)?(?:run:\s+)?node (scripts\/[\w./-]+)/;
-const TESTS_MEMBER = /pnpm --filter "([^"]+)" test:(?:shard|coverage)\b/;
+const TESTS_MEMBER = /pnpm --filter "([^"]+)" test:(?:shard|coverage|merge)\b/;
 
 /**
  * `{ file: memberDirs[] }` of every root `scripts/` file a ci.yml job runs as a command of its own
  * (`node scripts/<file>` at the start of a line), attributed to each member that same job tests
- * with `pnpm --filter "<name>" test:shard` or `test:coverage`, the script name directly after that
+ * with `pnpm --filter "<name>" test:shard`, `test:coverage` or `test:merge`, the script name directly after that
  * one quoted filter. Full-line comments are skipped.
  */
 function ciRunReaders(text, members) {
@@ -343,6 +343,18 @@ describe("ciRunReaders", () => {
     );
     expect(ciRunReaders(text, members)).toEqual(
       new Map([["scripts/setup-x.mjs", ["apps/server"]]]),
+    );
+  });
+
+  it("attributes a coverage download helper to the member whose reports that job merges", () => {
+    const text = workflow(
+      "  test-server-merge:",
+      "    steps:",
+      "      - run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'",
+      '      - run: pnpm --filter "@waitron/server" test:merge',
+    );
+    expect(ciRunReaders(text, members)).toEqual(
+      new Map([["scripts/download-coverage-blobs.mjs", ["apps/server"]]]),
     );
   });
 
