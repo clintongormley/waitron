@@ -279,7 +279,7 @@ export class FloorPlanEditor extends LitElement {
       }
       .table-slot {
         /* Keep the list still across plain, joined and empty selections; errors scroll inside. */
-        block-size: calc(3 * var(--wt-field-height) + 4 * var(--wt-space-3));
+        block-size: calc(4 * var(--wt-field-height) + 5 * var(--wt-space-3));
         overflow-y: auto;
         flex: none;
       }

@@ -1350,6 +1350,29 @@ function counters(): FloorPlan {
   };
 }
 
+it.each([
+  [1280, 800],
+  [390, 844],
+])(
+  "a joined table's form fits its reserved area without scrolling, at %i px",
+  async (width, height) => {
+    await viewport(width, height);
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters()) }));
+    if (width < 600) await expect.poll(() => sheet(el)).not.toBeNull();
+    await fromCanvas(el, "wt-table-select", { key: "long" });
+    if (width < 600) {
+      await expandSheet(el);
+      await expect.poll(() => sheet(el)!.expanded).toBe(true);
+    }
+    const slot = el.shadowRoot!.querySelector<HTMLElement>(".table-slot")!;
+    const panel = slot.querySelector("floor-plan-table-panel")!;
+    await panel.updateComplete;
+    await expect.poll(() => panel.shadowRoot!.querySelector("[name=made-of]")).not.toBeNull();
+    expect(slot.clientHeight).toBeGreaterThan(0);
+    expect(slot.scrollHeight).toBeLessThanOrEqual(slot.clientHeight + 1);
+  },
+);
+
 it("placing Long table over its standing parts takes them off, and one Undo puts all three back", async () => {
   const apart: FloorPlan = {
     ...counters(),

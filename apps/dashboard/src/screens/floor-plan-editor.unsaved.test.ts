@@ -385,3 +385,64 @@ it("Discard clears refused text standing in a field when the editor stays open",
   expect(el.fieldError).toBeNull();
   expect(unload()).toBe(false);
 });
+
+async function shortNameOf(el: FloorPlanEditor) {
+  await page.viewport(1280, 800);
+  canvasOf(el)!.dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
+  await panel.updateComplete;
+  const shortName = panel.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+    "[name=short-name]",
+  )!;
+  return {
+    shortName,
+    type: async (text: string) => {
+      await chooseOption(shortName, text);
+      await el.updateComplete;
+      await panel.updateComplete;
+    },
+  };
+}
+
+function expectSaveQuiet(el: FloorPlanEditor) {
+  expect(button(el, "save").variant).toBe("secondary");
+  expect(button(el, "save").disabled).toBe(true);
+}
+
+it("a typed short name turns Save on, asks before Cancel, and typed back is clean again", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  onTestFinished(() => page.viewport(...before));
+  const { app } = await mount();
+  const el = editor(app);
+  const { shortName, type } = await shortNameOf(el);
+  const stored = shortName.value;
+  expectSaveQuiet(el);
+  await type("Win");
+  expect(button(el, "save").variant).toBe("primary");
+  expect(button(el, "save").disabled).toBe(false);
+  close(el);
+  await choose(app, "keep");
+  expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
+  await type(stored);
+  expectSaveQuiet(el);
+  close(el);
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(question(app).open).toBe(false);
+});
+
+it("Undo takes back a typed short name", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  onTestFinished(() => page.viewport(...before));
+  const { app } = await mount();
+  const el = editor(app);
+  const { shortName, type } = await shortNameOf(el);
+  const stored = shortName.value;
+  await type("Win");
+  expect(shortName.value).toBe("Win");
+  await undo(el);
+  await expect.poll(() => shortName.value).toBe(stored);
+  expectSaveQuiet(el);
+});
