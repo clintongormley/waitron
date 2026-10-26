@@ -4329,12 +4329,10 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
 - **A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's
-  design).** Read the start in force for each date instead, with a test that changes the start and
-  checks the painter and the Staffing month.
+  design).**
   [Detail](backlog/workforce.md#a851-staffing-reads-the-venues-first-business-day-start-not-the-one-in-force-found-by-a788s-design).
 
-- **A780. The staffing painters read holder names they never show (left open by #1828).** Give the
-  painters a read without the names, keeping the Staff roles list's.
+- **A780. The staffing painters read holder names they never show (left open by #1828).**
   [Detail](backlog/workforce.md#a780-the-staffing-painters-read-holder-names-they-never-show-left-open-by-1828).
 
 - **A763 point 9. The Staffing month's Monday "Rota for this week" link goes, and the Rota tab
@@ -4344,30 +4342,26 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A link look for `wt-button` (left open by #1841).**
   [Detail](backlog/workforce.md#a-link-look-for-wt-button-left-open-by-1841)
 
-- **Staffing's day box: each area's staff roles and times.** The box lists each area's number.
+- **Staffing's day box: each area's staff roles and times.**
   [Detail](backlog/workforce.md#staffings-day-box-each-areas-staff-roles-and-times)
 
 - **Wages / labour cost (SP16).** Gated on the labour advisor; not fiscal.
   [Detail](backlog/workforce.md#wages--labour-cost-sp16).
 
-- **Inspector remote access to working-time records.** Add authenticated read-only access when
-  Cloud can reach the box. Until then, download the record on request.
+- **Inspector remote access to working-time records.**
   [Detail](backlog/workforce.md#inspector-access-to-working-time-records).
 
-- **Have the labour advisor check working-time exports before go-live.** Confirm required fields,
-  the final applicable text and the representatives' minimisation policy.
+- **Have the labour advisor check working-time exports before go-live.**
   [Detail](backlog/workforce.md#advisor-review-of-the-working-time-export).
 
-- **Payroll export waits for the gestoría's import format.** Shift templates and availability also
-  still need features over their existing tables.
+- **Payroll export waits for the gestoría's import format.**
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
 - **Frozen-summary name collection needs a valid test case.** Check whether a supported closed
   snapshot can name someone only in its summary before testing the defensive name-collection path.
   [Detail](backlog/workforce.md#frozen-summary-name-collection).
 
-- **Choose readable PDF flags for working-time exports.** Decide how `null`, `true` and `false`
-  should read in each language while preserving CSV scalars.
+- **Choose readable PDF flags for working-time exports.**
   [Detail](backlog/workforce.md#pdf-boolean-and-empty-values).
 
 - **The Spanish working-time record prints English words and internal codes** (seen by A980
@@ -4378,10 +4372,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (tips frozen with the pay period) waits for one. Decide with the owner who closes a period and when.
   [Detail](backlog/workforce.md#nothing-in-the-product-closes-a-pay-period).
 
-- **Pay-period cadence changes need a rule after closure.** Changing monthly to weekly after
-  January closes makes 1 February resolve to 26 January–2 February, which closure refuses
-  for overlap. A future editor refuses changes after the first closed period until the owner
-  approves a transition rule (owner, 2026-10-15); leave it in the backlog until then.
+- **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
+  the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
+  in the backlog until then.
   [Receipt and next step](backlog/workforce.md#pay-period-changes-after-closure).
 
 - **Manager Hours needs a live-removal draft check.** Deleting the guard that keeps the
@@ -4396,8 +4389,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   seam should count staffing paint when you delete a season or special-day date. The approved
   A585 scope leaves that count out. [Detail](backlog/workforce.md#staffing-paint-in-calendar-delete-confirmations)
 
-- **Loose ends left by A585-7 (#1766).** Batch copied-shift assignment reads, reuse the rota
-  picker's baseline labour checks, and make the live-query guard refuse inline dependency lists.
+- **Loose ends left by A585-7 (#1766).**
   [Detail](backlog/workforce.md#loose-ends-left-by-a585-7-1766).
 
 - **Rota warnings: pin the outer query's local-date boundaries.** The offset-aware in-week filter
@@ -4410,24 +4402,20 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#roster-browser-entry-re-exports).
 
 - **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
-  formatting.** Next: move `stepMonth`, the limits and the copies A763 added into browser-safe
-  venue-service files and export them.
+  formatting.**
   [Detail](backlog/workforce.md#a699-the-staffing-month-keeps-its-own-copy-of-month-stepping-and-staffing-its-own-date-formatting)
 
-- **A700. A failed Opening hours read also hides the Calendar's other views.** Decide whether a
-  module view draws without the Opening hours model.
+- **A700. A failed Opening hours read also hides the Calendar's other views.**
   [Detail](backlog/workforce.md#a700-a-failed-opening-hours-read-also-hides-the-calendars-other-views).
 
 - **A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day.**
-  Hand the plan's holiday facts to the second read.
   [Detail](backlog/workforce.md#a701-opening-hours-month-reads-the-holiday-tables-twice-on-a-holiday-linked-special-day).
 
-- **A702. Opening hours' season chip is clipped on a season name that is one long word.** Wrap
-  the chip's text with `overflow-wrap: anywhere`.
+- **A702. Opening hours' season chip is clipped on a season name that is one long word.**
   [Detail](backlog/workforce.md#a702-opening-hours-season-chip-is-clipped-on-a-season-name-that-is-one-long-word).
 
 - **At 390 px the staff role dialog's open colour panel covers its own Colour field.** Left open
-  by A783. Picking a colour still works.
+  by A783.
   [Detail](backlog/workforce.md#at-390-px-the-staff-role-dialogs-open-colour-panel-covers-its-own-colour-field).
 
 - **A colour chooser left open while its window narrows may hide the chosen colour.** Read by
@@ -4442,7 +4430,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/workforce.md#the-rota-shift-routes-read-a-null-or-malformed-json-body-as-an-empty-object)
 
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
-  Place them above or beside the block instead.
   [Detail](backlog/workforce.md#a707-on-a-phone-a-paint-grids-block-menu-or-copy-to-chooser-can-cover-the-block-it-belongs-to).
 
 - **A708. The special-day staffing painter draws every date on the location's baseline changeover,
@@ -4473,8 +4460,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A587. Availability and personal preferences** (owner, 2026-10-22). After A586.
   [Detail](backlog/workforce.md#a587-availability-and-personal-preferences)
 
-- **A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)** fills A585's open slots from each person's staff roles, contract terms (A586), availability and
-  preferences (A587), for the manager to adjust. After A587.
+- **A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)**. After A587.
   [Detail](backlog/workforce.md#a588-a-solver-drafts-the-rota-as-a-paid-waitron-cloud-feature-owner-2026-10-22).
 
 ### Purchasing, recipes, stock and reports
