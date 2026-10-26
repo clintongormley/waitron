@@ -35,6 +35,18 @@ describe("the table error codes carry their declared params", () => {
     expect(error.code).toBe("table.label_taken");
     expect(error.params).toEqual(params);
   });
+
+  it("types table.label_taken's till shape as todayName, refusing a till's name under label", () => {
+    const today = new AppError("table.label_taken", { todayName: "Soler", field: "name" });
+    const saved = new AppError("table.label_taken", { label: "T1", takenBy: "Terrace 1" });
+    // @ts-expect-error the old shape that logged a guest's name
+    const old = new AppError("table.label_taken", { label: "Soler", field: "name" });
+    expect([today.params, saved.params, old.code]).toEqual([
+      { todayName: "Soler", field: "name" },
+      { label: "T1", takenBy: "Terrace 1" },
+      "table.label_taken",
+    ]);
+  });
 });
 
 describe("the station error codes carry their declared params", () => {

@@ -958,7 +958,7 @@ describe("today's name route", () => {
 
     expect(answers.map((a) => a.status).sort()).toEqual([200, 409]);
     expect(answers.find((a) => a.status === 409)!.body).toEqual({
-      error: { code: "table.label_taken", params: { label: name, field: "name" } },
+      error: { code: "table.label_taken", params: { todayName: name, field: "name" } },
     });
     const names = [
       (await todayRow(v, first.table.a!))?.name ?? null,

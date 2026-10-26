@@ -83,7 +83,7 @@ async function refuseInUse(
 ): Promise<void> {
   const selfTable = "tableId" in self ? self.tableId : null;
   const selfJoin = "joinId" in self ? self.joinId : null;
-  const taken = new AppError("table.label_taken", { label: name, field: "name" });
+  const taken = new AppError("table.label_taken", { todayName: name, field: "name" });
 
   const saved = await tx
     .select({ id: diningTables.id, label: diningTables.label })
