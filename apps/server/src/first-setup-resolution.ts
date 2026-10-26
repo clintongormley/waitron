@@ -146,6 +146,12 @@ type BackupRecovery = Pick<
   "liveness" | "runningInMemory" | "sealLapsed" | "discardInTurn"
 >;
 const STOPPED_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
+/** The attempt statuses Start again accepts with the venue database present. */
+const PRESENT_START_AGAIN_STATUSES: readonly string[] = [
+  "claimed",
+  "consumption-intent",
+  "abandoned",
+];
 type Floor = { floorMs: number; lastName: string; module: string };
 type FoundRecovery =
   | { kind: "stopped"; id: string; floor: Floor | null; shown: StartAgainRecoveryShown }
@@ -298,6 +304,12 @@ export function createFirstSetupResolutionActions(
           if (inspection.database !== "missing" && recovery === undefined) unavailable();
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
+          if (
+            inspection.database !== "missing" &&
+            (inspection.database !== "no-venue-rows" ||
+              !PRESENT_START_AGAIN_STATUSES.includes(retained.state.status))
+          )
+            unavailable();
           await assertRecoveredOwner(request.owner, retained.state);
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
@@ -342,8 +354,7 @@ export function createFirstSetupResolutionActions(
             // D3a: with the database missing, any status but complete, and only once confirmed.
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
               unavailable();
-          } else if (!["claimed", "consumption-intent", "abandoned"].includes(state.status))
-            unavailable();
+          } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
           if (!["no-venue-rows", "missing"].includes(inspection.database)) unavailable();
           const noOtherHistory = inspection.artifacts.every(
             (artifact) =>

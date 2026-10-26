@@ -1,6 +1,6 @@
 import { archiveHost, clock, external, key } from "../test/hour-recovery-host.js";
 import { randomBytes } from "node:crypto";
-import { access, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -9,6 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
   createFirstSetupBackupWorkspace,
+  isEmptiedTombstone,
   readStartAgainMarker,
   readStartAgainNote,
 } from "@waitron/provisioning";
@@ -157,11 +158,18 @@ it("with the database present, a damaged recovery-key record beside a stopped re
     recoveryRecordDamaged: true,
     recovery: { lastName: f.selected.identity },
   });
+  const targetLock = join(
+    (await f.workspace.readChain()).at(-1)!.target.target.venueDir,
+    "venue.lock",
+  );
+  const lock = await lstat(targetLock);
   await expect(f.start(true)).resolves.toBeUndefined();
   expect((await f.workspace.readChain()).at(-1)).toMatchObject({
     phase: "abandoned",
     target: { recoveryId: f.session.recoveryId },
   });
+  expect((await lstat(targetLock)).ino).toBe(lock.ino);
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
   await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });

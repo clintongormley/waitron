@@ -938,8 +938,11 @@ it("a stopped recovery beside trading.env: Start again refuses setup.not_ready, 
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
 });
 
-/** The inspection reads the venue database as present and empty. */
-function databasePresent(host: Host): Host {
+/** The inspection reads the venue database as present: empty unless `database` says it holds rows. */
+function databasePresent(
+  host: Host,
+  database: "no-venue-rows" | "occupied" = "no-venue-rows",
+): Host {
   const inspect = host.resolution.inspectFirstSetupResolution;
   return {
     ...host,
@@ -947,9 +950,28 @@ function databasePresent(host: Host): Host {
       ...host.resolution,
       inspectFirstSetupResolution: async () => ({
         ...(await inspect()),
-        database: "no-venue-rows" as const,
-        emptyDatabase: true,
+        database,
+        emptyDatabase: database === "no-venue-rows",
       }),
+    },
+  };
+}
+
+type AttemptStatus = NonNullable<
+  Awaited<ReturnType<Host["store"]["readForRepair"]>>
+>["state"]["status"];
+
+/** The attempt's record reads as having reached `status`. */
+function attemptAt(host: Host, status: AttemptStatus): Host {
+  const read = host.store.readForRepair;
+  return {
+    ...host,
+    store: {
+      ...host.store,
+      readForRepair: async () => {
+        const retained = await read();
+        return retained === null ? null : { ...retained, state: { ...retained.state, status } };
+      },
     },
   };
 }
@@ -1084,34 +1106,85 @@ it("with the database present and no recovery, the summary refuses setup.not_rea
   await expectNothingWritten(f, before);
 });
 
-it("with the database present, the fence refuses Start again while the recovery runs, and nothing changes", async () => {
+it.each([
+  ["the venue database holds rows", (host: Host) => databasePresent(host, "occupied")],
+  [
+    "the attempt reached activation",
+    (host: Host) => attemptAt(databasePresent(host), "activation-started"),
+  ],
+] as const)(
+  "with the database present and a stopped recovery, the summary refuses setup.not_ready when %s, as Start again would",
+  async (_label, present) => {
+    const f = await selectedRepair();
+    await f.service.close(f.session.sessionId);
+    const { owner, ids } = await signedIn(f.host);
+    const actions = createFirstSetupResolutionActions({
+      ...f.roots,
+      host: present(f.host),
+      backupRecovery: f.service,
+    });
+    await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+  },
+);
+
+it("with the database present, the fence refuses a well-formed discard while the recovery runs, before it reaches Start again, and nothing changes", async () => {
   const f = await selectedRepair();
-  const { app } = repairApp({ ...f, host: databasePresent(f.host) });
+  const host = databasePresent(f.host);
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host,
+    backupRecovery: f.service,
+  });
+  const startAgain = vi.fn(actions.startAgainFirstSetup);
+  const appWith = (fenced: boolean) => {
+    const app = new Hono();
+    if (fenced) mountFirstSetupResolutionFence(app, f.service, () => {});
+    mountFirstSetupResolutionApi(app, host, () => {}, { startAgain });
+    return app;
+  };
   const { owner, ids } = await signedIn(f.host);
   const activity = (await f.service.liveness())!;
   expect(activity.state).toBe("running");
-  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-  const refused = await app.request(
-    "https://box.test/setup-api/first-setup/resolution/start-again",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Waitron-Setup-Owner": owner.capability,
-        "X-Waitron-Setup-Attempt": owner.attemptId,
-        "X-Waitron-Setup-Revision": String(owner.revision),
-        "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
-      },
-      body: JSON.stringify({
-        ...ids,
-        confirmRecoveryDiscard: { shown: { reached: "claimed", lastName: null } },
-      }),
+  const shown: StartAgainSummary = {
+    reached: "claimed",
+    lastName: null,
+    recovery: {
+      startedAt: activity.startedAt,
+      lastActiveAt: activity.lastActiveAt,
+      lastActiveSource: "memory",
+      lastName: null,
+      failed: false,
+      cloud: false,
     },
-    tls(),
-  );
+  };
+  const send = (app: Hono) =>
+    app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Waitron-Setup-Owner": owner.capability,
+          "X-Waitron-Setup-Attempt": owner.attemptId,
+          "X-Waitron-Setup-Revision": String(owner.revision),
+          "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
+        },
+        body: JSON.stringify({ ...ids, confirmRecoveryDiscard: { shown } }),
+      },
+      tls(),
+    );
+  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  const refused = await send(appWith(true));
   expect(refused.status).toBe(409);
   expect(await refused.json()).toMatchObject({ error: { code: "setup.recovery_in_progress" } });
+  expect(startAgain).not.toHaveBeenCalled();
   await expectNothingWritten(f, before);
+  // Control: with no fence, the route's shape check passes the same body on to Start again.
+  startAgain.mockResolvedValueOnce(undefined);
+  await send(appWith(false));
+  expect(startAgain).toHaveBeenCalledTimes(1);
 });
 
 it("a summary read before the recovery stopped, naming no recovery, refuses Start again setup.attempt_conflict, and nothing is written", async () => {
