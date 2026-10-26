@@ -87,32 +87,23 @@ by the answers):
   and amount where there is one, when, and their part in each refund and opening
   (`apps/server/src/personal-data-actions.ts`); the README inside the download lists every field
   (`apps/server/src/i18n/personal-data-readme.ts`). No product path records a whole-sale void yet, so
-  the voids list is empty on every box until one does (S2c decision 3). An admin downloads another
-  person's data, a disabled person's included, from **Download their data** in the person's row
-  menu on **Users** (`GET /management-api/staff/:id/personal-data/export`), with the README in that
-  person's language, else the venue's, and the Users guide's "Download another person's data"
-  section (`{#person-data}`) says how. What is left of S2 is in the points below.
+  the voids list is empty on every box until one does (S2c decision 3). Since S2d
+  ([its plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md)) it also holds
+  `adjustments.json` when the person made or approved an adjustment: the voids, comps and
+  discounts on a bill that they made giving a reason, or approved for someone else, from the
+  adjustments module's own part (`packages/adjustments/src/personal-data.ts`; S2d decision 4). An
+  admin downloads another person's data, a disabled person's included, from **Download their
+  data** in the person's row menu on **Users** (`GET /management-api/staff/:id/personal-data/export`),
+  with the README in that person's language, else the venue's, and the Users guide's "Download
+  another person's data" section (`{#person-data}`) says how. What is left of S2 is in the points
+  below.
 - **A manager's own copy of what they decided about others** — the absences and swaps they
   decided, the rotas they published and the attendance answers they authorised: the design's "who
   did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer
   openings (S2b decision 11).
 - **The rest of "who did what" in the download** (design §2.1 row s12). S2c's `actions.json` holds
-  only whole-sale voids, refunds and cash-drawer openings (S2c decisions 2 and 3). What is left:
-  - **S2d, line voids, comps and discounts — the next slice.** What the till's line menu calls
-    **Void…** (`table.void_line`, `apps/till/src/i18n/strings.ts`) and the dashboard's **Voids and
-    comps** page records: the adjustments module's `requested_by` and `approved_by`
-    (`packages/adjustments/src/schema/adjustments.ts`) and core's
-    `line_service_cancellations.actor_id` (written by `apps/server/src/line-cancel.ts`). The till's
-    line **Void…** is the only void staff do today: the only caller of `recordVoid`, the one writer
-    of `sale_voids`, outside `packages/core` is the test harness
-    `apps/server/src/testing/order-venue.ts` (`git grep -n "recordVoid" -- 'apps/*/src/**'
-    'packages/*/src/**' ':!*.test.ts'` on 2026-10-25, less the fiscal backends' own `recordVoid`
-    and the payments packages' unrelated provider void). Worked example: Marta, a cashier, cancels
-    three lines on table 4's bill with **Void…**, asks for one cash refund a supervisor authorises,
-    and rings two cash sales that each open the drawer. Her `actions.json` lists the refund and
-    three openings (`["opened"]`) — the cash refund opened the drawer too — `counts.voids` is 0, and the three lines are not there. **Open decision for the
-    owner** (S2c decision 3, built with S2d as the next slice): should line voids, comps and
-    discounts have joined S2c instead?
+  only whole-sale voids, refunds and cash-drawer openings (S2c decisions 2 and 3), and S2d's
+  `adjustments.json` the line voids, comps and discounts. What is left:
   - **The core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
     lists as not in the download yet, by table: `sales` (`operator_id`, who rang a sale;
     `authorized_by`, who authorised a corrective invoice); `unpaid_departures` (`authorized_by`,
@@ -123,13 +114,25 @@ by the answers):
     `order_groups` (`fired_by`, `submitted_by`); `working_order_lines.credited_to`, whose sale a
     line counts as; `bill_edit_states.editor_id`, who is editing a bill; `parties` (`opened_by`,
     `closed_by`); `daily_closes.closed_by`; `incidents.acknowledged_by`; `membership_clearances` and
-    `membership_removals` (`person_id`); `pass_item_marks.done_by_person_id`; and
-    `line_service_cancellations.actor_id`, which is S2d's. The guard knows a column by its name;
+    `membership_removals` (`person_id`); and `pass_item_marks.done_by_person_id`. Core's
+    `line_service_cancellations.actor_id` is covered by `adjustments.json`: every value of it is
+    also an adjustment's requester (S2d decision 3). The guard knows a column by its name;
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
     them (S2c decision 2).
   - **Other modules' actor columns**: bookings, menu publication, fiscal operations, payment holds
-    and resolutions, department transfers, allergy answers and service steps. The S2c guard reads
-    core's tables only.
+    and resolutions, department transfers, allergy answers and service steps, and the adjustments
+    module's `credited_to`, whose sale the item counted as. The S2c guard reads core's tables only;
+    since S2d the adjustments module's columns are held by its own guard,
+    `packages/adjustments/src/personal-data.coverage.test.ts`.
+  - **The invoice number of an adjusted bill in `adjustments.json`.** The file gives the order
+    number only, which is what the Adjustment report shows of each entry. The invoice number of the
+    sale later filed from the bill could be found through `sales.working_order_id`, but formatting
+    it needs `formatInvoiceNumber` from `@waitron/core`, a new dependency for the adjustments
+    package, and one more lookup per row inside the snapshot turn (S2d decision 9).
+  - **The table in `adjustments.json`.** An adjustment records the bill, not a table, and a bill's
+    table is not one column: a party's bill reaches its tables through its party, a counter order
+    names the table it is delivered to in `delivery_table_id`, and the bill's `label` is operator
+    text that filing overwrites with the frozen table grouping (S2d decision 9).
 - **An administrator's sign-in that keeps the current session**, offered in place on a permission
   refusal. Today the dashboard has none (S2c decision 12), so when a person who has lost
   `personal_data.export` presses **Download their data**, the refusal's **Sign in as an
@@ -162,6 +165,19 @@ by the answers):
   because none of the person columns they select on has an index, so they grow with the venue's
   whole history, not only the person's (S2c decision 4). A control with indexes on those columns,
   not shipped, brought row turn 2 to 61 and 75 ms. Repeat the turns and the file's size on a box.
+  The adjustments part (S2d) reads in the first turn. S2d's Task 3a timed it on the Mac with
+  200,000 adjustments over 100,000 bills: medians of 15 reads, for a person named on 6,667 rows,
+  31.4 ms with the two indexes of adjustments migration 0009 and 52.5 ms with them dropped; for a
+  person named on 50 rows, 0.26 ms and 30.8 ms. The heavy person's `adjustments.json` was 2.6 MB.
+  Task 3b timed the whole first turn, every part, for a person heavy in both the working-time
+  history (48 closed pay periods × 30 staff) and the adjustments: a median of 238.2 ms over 12
+  runs (234.5 ms on a repeat; 213.1 ms without the adjustments part, which itself took about
+  24 ms), with the route's own single-row reads left out. Repeat both on a box.
+- **The first snapshot turn is close to S2b's 250 ms bar for a person heavy in every history.**
+  S2d's Task 3b measured 238.2 ms median on the Mac, its slowest run 249.9 ms, and about 89% of it
+  is the working-time read (about 213 ms). A slower box, or a longer history, would cross it.
+  Options: give a module's part write-lock turns of its own, as the actions part has, or narrow the
+  working-time read further.
 - **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
   badge sits over the last letter of "Copy of your data" / "Copia de tus datos". The placement
   came from S2a2 (#2049), whose test in
@@ -198,6 +214,14 @@ by the answers):
   at the command why not.
 
 ## Decisions and deliberate limits
+
+- **A980 S2d, 2026-10-26:** line voids, comps and discounts are in the download as their own
+  `adjustments.json`, from the adjustments module's part, not in `actions.json`; that settles in
+  practice the S2c question the owner left open (should they have joined S2c?). An item taken off
+  with **Remove** before its preparation started is not in the file: no row records who removed
+  the line (an `order_group_events` row names the person only when the removal empties a held
+  group, and that column is not in the download yet). See the
+  [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md)'s decisions 4 and 14.
 
 - **A664, 2026-10-17:** you adopted the revised retention proposal for specialist review.
   Six years remains the discussion baseline. Q48 is yours to send; all product/report code
