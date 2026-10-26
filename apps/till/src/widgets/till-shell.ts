@@ -56,7 +56,7 @@ type BarItem =
   | "equipment"
   | "operator";
 
-/** First to leave the bar first: the lowest priority first, and who is signed in last. `#items`
+/** First to leave the bar first: the lowest priority first, and who is signed in last. `#barItems`
  * draws the others in the reverse order, so the rightmost of them leaves first. */
 const LEAVE_ORDER: readonly BarItem[] = [
   "transfers",
@@ -359,6 +359,25 @@ export class TillShell extends LitElement {
 
       .head.phone .session {
         gap: var(--wt-space-2);
+      }
+
+      .settings-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+
+      .settings-heading {
+        padding: var(--wt-space-1) var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .menu-rule {
+        align-self: stretch;
+        margin: 0;
+        border: 0;
+        border-block-start: 1px solid var(--wt-color-border);
       }
 
       wt-row-actions > span {
@@ -730,8 +749,14 @@ export class TillShell extends LitElement {
     >`;
   }
 
-  /** The bar's items in the bar's order, those in More when `inMore`, else those on the bar. */
-  #items(moved: ReadonlySet<BarItem>, inMore: boolean): TemplateResult {
+  /** Each bar item, drawn when it is in More (`inMore`) or on the bar (not `inMore`). */
+  #items(
+    moved: ReadonlySet<BarItem>,
+    inMore: boolean,
+  ): Record<
+    Exclude<BarItem, "operator" | "transfers"> | "transfer-count" | "transfer-button",
+    TemplateResult | typeof nothing
+  > {
     const variant: ActionVariant = inMore ? "ghost" : "secondary";
     const here = (item: BarItem) => moved.has(item) === inMore;
     const button = (
@@ -760,47 +785,55 @@ export class TillShell extends LitElement {
       help?: HelpKey,
     ) =>
       here(item) && this.affordances.includes(item) ? button(item, type, label, help) : nothing;
-    return html`${affordance("find-bill", "find-bill", t("find_bill.open"))}${affordance(
-      "expo",
-      "show-expo",
-      t("expo.open"),
-      "help.more.pass",
-    )}${affordance("station", "show-station", t("station.open"))}${affordance(
-      "schedule",
-      "show-schedule",
-      t("schedule.open"),
-    )}${
-      here("profile") && this.canSwitchProfile
-        ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
-        : nothing
-    }${here("zones") ? button("zones", "open-device-zones", t("device_zones.title"), "help.more.zones") : nothing}${here("equipment") ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment") : nothing}${
-      here("transfers") && this.transferCount !== undefined
-        ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
-            >${this.#transferText()}</span
-          >`
-        : nothing
-    }${
-      here("transfers") && this.transferAvailable
-        ? button(
-            nothing,
-            "open-transfers",
-            t("department_transfer.short"),
-            "help.more.transfers",
-            true,
-          )
-        : nothing
-    }`;
+    return {
+      "find-bill": affordance("find-bill", "find-bill", t("find_bill.open")),
+      expo: affordance("expo", "show-expo", t("expo.open"), "help.more.pass"),
+      station: affordance("station", "show-station", t("station.open")),
+      schedule: affordance("schedule", "show-schedule", t("schedule.open")),
+      profile:
+        here("profile") && this.canSwitchProfile
+          ? button("profile", "open-profile", t("profile.open"), "help.more.profile")
+          : nothing,
+      zones: here("zones")
+        ? button("zones", "open-device-zones", t("device_zones.title"), "help.more.zones")
+        : nothing,
+      equipment: here("equipment")
+        ? button("equipment", "open-equipment", t("equipment.open"), "help.more.equipment")
+        : nothing,
+      "transfer-count":
+        here("transfers") && this.transferCount !== undefined
+          ? html`<span data-test="department-transfers" role=${inMore ? nothing : "status"}
+              >${this.#transferText()}</span
+            >`
+          : nothing,
+      "transfer-button":
+        here("transfers") && this.transferAvailable
+          ? button(
+              nothing,
+              "open-transfers",
+              t("department_transfer.short"),
+              "help.more.transfers",
+              true,
+            )
+          : nothing,
+    };
   }
 
-  #operatorAndLogout(variant: ActionVariant): TemplateResult {
-    if (variant === "ghost") return html`${this.#operatorName()}${this.#operatorActions(variant)}`;
+  /** The items on the bar, in the bar's order. */
+  #barItems(moved: ReadonlySet<BarItem>): TemplateResult {
+    const items = this.#items(moved, false);
+    return html`${items["find-bill"]}${items.expo}${items.station}${items.schedule}${items.profile}${items.zones}${items.equipment}${items["transfer-count"]}${items["transfer-button"]}`;
+  }
+
+  /** The name and its menu on the bar. A handheld's Theme and Log out are in More instead. */
+  #operatorMenu(): TemplateResult {
     return html`<wt-row-actions
       class="operator-menu"
       align="end"
       label=${`${this.operatorName}${this.clockAvailable ? `: ${this.#clockLabel()}` : ""}`}
     >
       <span slot="trigger">${this.#operatorName()}</span>
-      ${this.#operatorActions(variant, this.formFactor !== "till")}
+      ${this.#operatorActions(this.formFactor === "till")}
     </wt-row-actions>`;
   }
 
@@ -826,7 +859,7 @@ export class TillShell extends LitElement {
     >`;
   }
 
-  #operatorActions(variant: ActionVariant, logout = true): TemplateResult {
+  #operatorActions(theme: boolean): TemplateResult {
     const state = this.clockState;
     const foreign =
       state !== null &&
@@ -884,24 +917,29 @@ export class TillShell extends LitElement {
             )}
           `
         : nothing
-    }${
-      logout
-        ? html`<wt-button
-            class="logout"
-            variant=${variant}
-            align=${variant === "ghost" ? "start" : nothing}
-            @click=${() => this.#emit("logout")}
-            >${t("shell.logout")}</wt-button
-          >`
-        : nothing
-    }${themeChoices({
+    }${theme ? this.#themeChoices() : nothing}`;
+  }
+
+  #themeChoices(): TemplateResult {
+    return themeChoices({
       active: currentThemeChoice(),
       labels: themeLabels(),
       onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
-    })}`;
+    });
   }
 
+  /** A handheld's More, in the design's order: the name's group, the screens, Settings, Log out. */
   #menu(moved: ReadonlySet<BarItem>): TemplateResult {
+    const items = this.#items(moved, true);
+    const screens = [
+      items.expo,
+      items.station,
+      items["find-bill"],
+      items.schedule,
+      items.profile,
+      items["transfer-count"],
+      items["transfer-button"],
+    ];
     const pending =
       moved.has("transfers") && this.transferCount !== undefined && this.transferCount > 0;
     return html`<wt-row-actions
@@ -924,9 +962,26 @@ export class TillShell extends LitElement {
             ></wt-count-badge>`
           : nothing
       }
-      ${this.#items(moved, true)}
-      ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
-      ${this.#chooser("group")}
+      ${
+        moved.has("operator")
+          ? html`${this.#operatorName()}${this.#operatorActions(false)}
+              <hr class="menu-rule" />`
+          : nothing
+      }
+      ${
+        screens.some((screen) => screen !== nothing)
+          ? html`${screens}
+              <hr class="menu-rule" />`
+          : nothing
+      }
+      <div class="settings-group" role="group" aria-labelledby="settings-heading">
+        <span id="settings-heading" class="settings-heading">${t("device_zones.settings")}</span>
+        ${items.zones}${items.equipment}${this.#chooser("group")}${this.#themeChoices()}
+      </div>
+      <hr class="menu-rule" />
+      <wt-button class="logout" variant="ghost" align="start" @click=${() => this.#emit("logout")}
+        >${t("shell.logout")}</wt-button
+      >
     </wt-row-actions>`;
   }
 
@@ -1065,7 +1120,7 @@ export class TillShell extends LitElement {
                       : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
                   }
                   <div class="session">
-                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${this.#helpSwitch()}${this.#menu(moved)}`}
+                    ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorMenu()}${this.#tillMenu()}` : html`${this.#barItems(moved)}${moved.has("operator") ? nothing : this.#operatorMenu()}${this.#helpSwitch()}${this.#menu(moved)}`}
                   </div>
                   ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
                 </header>

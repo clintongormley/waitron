@@ -188,7 +188,7 @@ describe("till-shell's Help switch", () => {
       ["schedule", ".schedule"],
       ["station", ".station"],
       ["expo", ".expo"],
-      ["operator", ".logout"],
+      ["operator", ".operator"],
     ] as const;
     const failures: string[] = [];
     for (let width = 660; width <= 1500; width += 40) {

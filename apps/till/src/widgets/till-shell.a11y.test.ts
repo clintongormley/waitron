@@ -169,11 +169,28 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     await vi.waitFor(() =>
       expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
     );
-    const chooser = menu.querySelector(":scope > wt-language-chooser")!;
+    const chooser = menu.querySelector(":scope > .settings-group > wt-language-chooser")!;
     await vi.waitFor(() => {
       expect(chooser.shadowRoot!.querySelector('[role="group"]')).not.toBeNull();
     });
     await expectNoA11yViolations(host);
+  });
+
+  it("a handheld's open More, with its Settings group, has no violations", async () => {
+    await atViewport(390, 844, async () => {
+      const { el, host } = await mountWidget<TillShell>(
+        "till-shell",
+        { ...full, formFactor: "tablet-landscape", activeScreen: "floor" },
+        theme,
+      );
+      const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+      expect(menu.querySelector(".zones")!.closest('[role="group"]')?.parentElement).toBe(menu);
+      menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+      await vi.waitFor(() =>
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+      );
+      await expectNoA11yViolations(host);
+    });
   });
 
   it.each(["en-GB", "es-ES"] as const)(

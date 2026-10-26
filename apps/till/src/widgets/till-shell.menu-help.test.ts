@@ -143,9 +143,9 @@ describe("till-shell's menu badges", () => {
       [
         "expo.open",
         "profile.open",
+        "department_transfer.short",
         "device_zones.title",
         "equipment.open",
-        "department_transfer.short",
       ],
       ["find_bill.open", "schedule.open", "station.open", "shell.logout"],
     ],
@@ -280,9 +280,9 @@ describe("till-shell's menu badges", () => {
     expect(await badged(more)).toEqual([
       t("expo.open"),
       t("profile.open"),
+      t("department_transfer.short"),
       t("device_zones.title"),
       t("equipment.open"),
-      t("department_transfer.short"),
     ]);
 
     const profile = option(more, t("profile.open"));

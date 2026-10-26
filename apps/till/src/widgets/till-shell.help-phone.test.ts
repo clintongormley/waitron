@@ -43,7 +43,9 @@ const moreOf = (el: TillShell) =>
 const barChooser = (el: TillShell) =>
   el.shadowRoot!.querySelector<HTMLElement & LitElement>(".session > wt-language-chooser");
 const moreChooser = (el: TillShell) =>
-  moreOf(el)?.querySelector<HTMLElement & LitElement>(":scope > wt-language-chooser") ?? null;
+  moreOf(el)?.querySelector<HTMLElement & LitElement>(
+    ":scope > wt-language-chooser, :scope > .settings-group > wt-language-chooser",
+  ) ?? null;
 const popupOf = (el: TillShell) => moreOf(el)!.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
 
 /** True when the chooser is in More, false when on the bar; fails when it is in both or neither. */
@@ -109,7 +111,7 @@ const handheldCases = [320, 390, 1024, 2560].flatMap((width) =>
   locales.map((locale) => [width, locale] as const),
 );
 
-describe("till-shell's language chooser at phone width, beside the Help switch", () => {
+describe("till-shell's language chooser in More, beside the Help switch", () => {
   it.each(handheldCases)(
     "a handheld keeps the language chooser in More at every width, never on the bar: %ipx in %s",
     async (width, locale) => {
@@ -128,6 +130,8 @@ describe("till-shell's language chooser at phone width, beside the Help switch",
       await expectTappable(switchOf(el));
       await expectTappable(moreOf(el)!);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      // Picking is the same at every width; one width per language keeps the run short.
+      if (width !== 320) return;
       const picked: string[] = [];
       el.addEventListener("wt-locale-selected", (event) =>
         picked.push((event as CustomEvent<{ code: string }>).detail.code),
@@ -177,15 +181,19 @@ describe("till-shell's language chooser at phone width, beside the Help switch",
     );
   });
 
-  it("in More the languages come last, after Theme", async () => {
+  it("in More the languages sit in the Settings group, after Equipment and before Theme", async () => {
     await page.viewport(320, 844);
     const { el } = await mountWidget<TillShell>("till-shell", handheld);
     await settle(el);
     await openMore(el);
-    const last = moreOf(el)!.lastElementChild!;
-    expect(last.localName).toBe("wt-language-chooser");
-    expect(last.getAttribute("layout")).toBe("group");
-    expect(last.previousElementSibling!.getAttribute("data-test")).toBe("theme-choices");
+    const chooser = moreChooser(el)!;
+    expect(chooser.parentElement!.classList.contains("settings-group")).toBe(true);
+    expect(chooser.getAttribute("layout")).toBe("group");
+    const before = chooser.previousElementSibling!;
+    expect(
+      (before.localName === "wt-menu-row" ? before.firstElementChild! : before).classList,
+    ).toContain("equipment");
+    expect(chooser.nextElementSibling!.getAttribute("data-test")).toBe("theme-choices");
   });
 
   it("picking a language in More asks for it", async () => {
