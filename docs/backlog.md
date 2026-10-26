@@ -5211,7 +5211,8 @@ For package distribution and the four-minute target, use the
 
 - **A local four-file till browser run ended without a completed-file report.**
   Capture per-case and file progress plus a process snapshot on recurrence; a serial pass does
-  not qualify the concurrent path. [Detail](backlog/ci.md#local-multi-file-till-browser-interruption).
+  not qualify the concurrent path. The standalone parties suite also reaches its local
+  deadline; the cause is unknown. [Detail](backlog/ci.md#local-multi-file-till-browser-interruption).
 
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).

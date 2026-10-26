@@ -967,6 +967,10 @@ The serial diagnostic completed three files and was still reporting passing case
 in the larger parties suite when its four-minute outer deadline stopped it. That
 run establishes no serial stall.
 
+A standalone `src/till-app-parties.test.ts` run also reaches the local outer
+deadline. Capture per-case progress and the pending browser operation for this
+path too; no common cause with the multi-file interruption is established.
+
 Capture the concurrent path's per-case and file progress, pending browser operation
 and process tree on recurrence, under `scripts/run-with-deadline.mjs`. Keep that
 qualification separate from a serial pass; neither a cause nor a repair has been
