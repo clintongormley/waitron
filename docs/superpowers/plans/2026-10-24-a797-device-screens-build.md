@@ -5,8 +5,8 @@
 **Goal:** Build design §8's slices one pull request at a time. This plan outlines every slice and
 gives **slice 4 — Zones on this device on a handheld**, **slice 5 — The Ready bar and remembered
 List/Map**, **slice 1 — Short names, data**, **slice 2 — Short names, dashboard**, **slice 3 —
-The handheld's bar** and **slice 6 — Ready warning time, data** in full tasks; each other slice is
-expanded into tasks when it starts.
+The handheld's bar**, **slice 6 — Ready warning time, data** and **slice 7 — The Ready bar's
+warning** in full tasks; each other slice is expanded into tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
 argues from it). Pictures: `docs/backlog/mockups/a797-device-screens/`.
@@ -202,7 +202,7 @@ column name; whether the station editor's existing three fields keep their order
 …", «Listo 4 min»), judged per station against that station's own minutes; nothing moves under
 reduced motion. **Dependencies:** slices 5 and 6. **Migration:** no. **Risks:** the clock is
 `ready_at`, not the waiting clock's `queued_at` (design §5); a fake-timer browser test must advance
-the awaited animation frame (CLAUDE.md §4).
+the awaited animation frame (CLAUDE.md §4). _Expanded into tasks below (2026-10-26)._
 
 ### Slice 8 — Kitchen group cards (LIGHT)
 
@@ -5294,6 +5294,530 @@ have the keys (Task 5); the words (Task 6); the editor's fourth field (Task 7); 
   slice 7 the field has no effect).
 - After merge: delete the branch local and remote and check the remote one is gone; update the
   ledger; then slice 7.
+
+---
+
+## Slice 7 — The Ready bar's warning (one PR, branch `feat/a797-7-ready-bar-warning`)
+
+**What it changes.** On a handheld's Floor, once food at a table has stood ready at the pass longer
+than its station's **Ready warning** time (slice 6; 3 minutes unless changed), the Ready bar turns
+amber and pulses slowly, says how long the food has waited, and puts that table first: "🍽 Ready
+4 min · T5 · 2 · T9 · 1 · Open ›" («Listo 4 min · …», design §3.1, §4 example 2, §10 (g)). Each
+station's dishes are judged against that station's own minutes (Q51 (c): a salad from Cold at 6
+minutes and a secreto from the grill at 3 are judged apart). Open › now opens the first table the
+bar lists, which is the one whose food has waited longest (it opened the first in the floor read's
+order until now, slice 5 D4). The minutes keep counting between floor reads. Under reduced motion
+nothing moves and the amber stays. A till's "Ready" summary does not change.
+
+**Review path: LIGHT.** No server read, route, schema or shared type changes: the bar reads the two
+facts slice 6 put on each `ready` entry (`oldestReadyAt`, `readyWarningAfterMinutes`,
+`packages/shared/src/table-signals.ts:38-46`, read). The changed files are under `apps/till/src/`,
+two token comments in `packages/ui-core/src/tokens/`, the guides and the docs. None of the risk
+triggers applies. **Migration: none.** No venue reset.
+
+How claims are marked in this section: **(ran)** means run on 2026-10-26 against `main` at
+`28ab55247` (this worktree's base); **(read)** means read in the code at that commit. The probe ran
+in a throwaway worktree (`git worktree add --detach /tmp/a797-7-probe.Bz8k/wt 28ab55247`), removed
+afterwards; its whole diff and logs stay in `/tmp/a797-7-probe.Bz8k/` (`probe.diff`, `run1.txt`,
+`run2.txt`, `tsc.txt`). None of the probe code is in this branch.
+
+### Every reader and writer this slice touches (ran: grep; each line read)
+
+From `grep -rn "readyTables\|ReadyTable\b\|oldestReadyAt\|readyWarningAfterMinutes" apps/till/src`
+(ran; outside the test builders that set `oldestReadyAt: null, readyWarningAfterMinutes: 3`, the
+only readers are below), `grep -n "ready\|pulse\|reduced\|now" apps/till/src/screens/till-floor-screen.ts`
+(ran) and `grep -rn "warning-pulse-dim\|pulse-slow" apps packages` (ran), each line read:
+
+| Where | What it does today | In this slice |
+| --- | --- | --- |
+| `apps/till/src/state/table-signals.ts:51-56` `ReadyTable`, `:58-74` `readyTables` | one entry per party with food ready in a shown zone, in the floor read's order; reads only each station's `count` | each entry also carries the party's longest wait and the moment it first warns (D1) |
+| `apps/till/src/state/table-signals.ts:76-99` `groupTables` | groups tables by party and names them | unchanged |
+| `apps/till/src/screens/till-floor-screen.ts:2998-3023` `#readyBar`, `:3025-3035` `#readyEntry`, `:3037-3040` `#openReady` | draws "Ready", the entries, Open › (its `aria-label` "Open {table}" names `ready[0]`) and the help badge, on a handheld only (`:3000`) | order, minutes, the warning flags (D2, D3, D7) |
+| same file `:816-858` | the bar's styles: sticky, `border: 1px solid var(--wt-color-success)`, `background: var(--wt-color-surface-raised)` | the warning's edge, pulse and amber (D6, D7) |
+| same file `:887-889` `now`, `:958-959` `#drawnAt` (set in `willUpdate`, `:1023`), `:1079-1096` `#watchReminders` | one `setTimeout` to the next moment a reminder falls due, a held countdown's minute changes, or a step falls due; none while `now` is injected (`:1083`) | also the next moment the bar changes (D5) |
+| same file `:879-886` `reducedMotion`, `:2709-2711` `#prefersReducedMotion` | the injectable reduced-motion answer, else the live media query; read for the zone tabs' pulses (`:2679-2687`) | read for the bar's pulse (D6) |
+| same file `:2984-2996` `#stationSummary` | a till's per-station "Ready" list | unchanged (D9) |
+| `apps/till/src/till-app.ts:18437-18470` | the one floor mount; passes `.handheld` (`:18463`) and no `now` (ran: `grep -n "<till-floor-screen" -A26 apps/till/src/till-app.ts \| grep now` → nothing) | unchanged: the real app runs on the floor's own clock (Task 5 pins it) |
+| `apps/till/src/till-app.ts:1787-1801` | lifts the Sent and Served toasts above the bar by the bar's height cap | unchanged: the warning does not change the bar's height (D6) |
+| `apps/till/src/i18n/strings.ts` en `:1018-1021`, es `:2754-2757` | `floor.ready_title` "Ready" «Listo», `floor.ready_bar_table`, `floor.ready_bar_open`, `floor.ready_bar_open_label` | one new key (D8) |
+| `apps/till/src/i18n/help-strings.ts:29-30`, `:77-78` | `help.floor.ready_bar`: "…; Open opens the first." «…; Abrir abre la primera.» (no test pins it: ran `grep -rn "help.floor.ready_bar\|Open opens the first" apps --include='*.ts'` → only the badge call and the string) | reworded (D8) |
+| `apps/till/src/widgets/till-shell.ts:208-221` | A738's Waiting tab: `border-color: var(--wt-color-warning)`, keyframe `waiting-attention` at 50% `border-color: var(--wt-color-warning-pulse-dim)` over `--wt-duration-pulse-slow`, `animation: none` under `prefers-reduced-motion` | the pattern D6 reuses; unchanged |
+| `packages/ui/src/floor-ring.ts:71-84`, `:89-112` | A757's rings: the pulse class only while `moving`, and a CSS `prefers-reduced-motion` rule as well | the two-gate pattern D6 reuses; unchanged |
+| `packages/ui-core/src/tokens/colors.css:120-121` (comment), `:26`/`:162` `--wt-color-warning`, `:124`/`:253` `--wt-color-warning-pulse-dim`; `structure.css:50-51` (comment), `--wt-duration-pulse-slow: 2000ms` | the comments name who uses the dim colours and the slow pulse (floor rings, the till bar's Waiting tab) | the comments gain the Ready bar's warning (D10) |
+| `apps/till/src/widgets/sent-orders.ts:483-487`, `apps/till/src/widgets/fired-ago.ts:21-24`, `apps/till/src/state/release-reminder.ts:12-29` | the Sent box's "Ready n min", "Fired n min ago" and the held countdown: each compares a box timestamp with the device's `Date.now()` | the precedent for D4; unchanged |
+
+### Plan decisions for slice 7
+
+- **D1. Each Ready bar entry carries its party's wait.** `ReadyTable` gains
+  `oldestReadyAt: number | null` — the earliest readable `oldestReadyAt` over the party's `ready`
+  entries, in epoch milliseconds — and `warnsAt: number` — the earliest, over the entries that have
+  one, of `Date.parse(oldestReadyAt) + readyWarningAfterMinutes × 60 000`; `Number.POSITIVE_INFINITY`
+  when no entry has a readable time. So each station is judged by its own stamp and its own
+  minutes, and a table warns as soon as any one of its stations does (design §5, Q51 (c)). An
+  unreadable time counts as none, as `reminderDueAt` reads one (`release-reminder.ts:7-10`). A
+  party carries the same signals on each of its tables (`readyByStation`'s comment,
+  `table-signals.ts:30-33`, read), so the first table's are the party's. `readyTables` stays free of
+  the clock and in the floor read's order; the clock comes in with D2's `readyBar`.
+- **D2. The order: tables whose food warns first, then the rest; within each group, the longest
+  wait first.** A table with no readable time comes after every timed one in its group; ties keep
+  the floor read's order (a stable sort). Open › opens the first entry, as it does today
+  (`#openReady(first)`, `:3018`), so it now opens the longest-waiting table, which is what design
+  §3.1 asked of it and slice 5 D4 deferred. **Why warning first, not plain longest-first:** design
+  §3.1 says both "Open › opens the table whose food has waited longest" and, of the warning, "It
+  names the table waiting longest first". With every station at the same minutes (the 3-minute
+  default) the two orders are the same. They differ only when stations differ, as Q51 (c) allows:
+  T1's salad (Cold, 6 min) ready 5 minutes and T2's secreto (grill, 3 min) ready 4½ minutes. Plain
+  longest-first would draw an amber bar headed by the calm T1 and send Open › there; the warning is
+  about T2. Picture 01 (middle) draws the amber table first. The probe ran exactly this case:
+  entries `["T2", "T1", "T3"]` (T3 having no time), heading "Ready 4 min", and with T2 moved to
+  1 minute ready, calm, `["T1", "T2"]` (ran, `/tmp/a797-7-probe.Bz8k/probe.diff`'s
+  `zz-probe.test.ts`). **Alternative, for the owner:** plain longest-first, amber or not.
+- **D3. The minutes show only while the bar warns, and they are the first table's longest wait**,
+  whole minutes rounded down: "Ready 4 min" «Listo 4 min». The calm bar reads "Ready", as design §4
+  example 2 has it at 20:44 and picture 01 (left) draws it. A table warns from the moment
+  `now ≥ warnsAt`: §4 example 2 turns the bar amber when the croquetas "have been ready 3 minutes"
+  under the 3-minute default, and slice 6 D4 states the same "≥". A warning needs a readable time,
+  and a station's minutes are at least 1 at every door (slice 6 D3), so the shown number is at
+  least 1 for any station the product wrote.
+- **D4. The device's clock, as the rest of the till uses it.** The bar compares the box's stamp
+  with the device's `Date.now()` (through the floor's `#drawnAt`, `:1023`), exactly as the Sent box's
+  "Ready n min" (`sent-orders.ts:483-487`), "Fired n min ago" (`fired-ago.ts:21-24`) and the floor's
+  held countdown (`release-reminder.ts:12-20`, `till-floor-screen.ts:1079-1096`) already do. Nothing
+  in the till's source corrects for a difference between the two clocks (ran:
+  `grep -rn -iE "skew|clockOffset|serverNow|serverTime" apps/till/src --include='*.ts' | grep -v test`
+  → nothing). A device clock that runs ahead shows more minutes and warns early; one behind, fewer
+  and later; a stamp still ahead of the device's clock leaves the table calm until the clock reaches
+  `warnsAt`, never a negative count. Slice 6 D4 weighed sending the seconds already waited instead
+  and chose the timestamp so the count can run between reads.
+- **D5. What redraws the bar: the floor's one existing redraw timer.** `#watchReminders`
+  (`:1079-1096`) already keeps one `setTimeout` to the next moment the floor's own drawing changes
+  with no new read. On a handheld it also takes `nextReadyBarChange`: the earliest `warnsAt` still
+  ahead, and, while the bar warns, the next whole minute of the shown wait. No `TickingClock` and no
+  new interval: the floor's comment against one (`:880-884`) is about the server-judged bands and
+  stays true. The 15-second re-read (slice 5 D7) still replaces the data. A till schedules nothing
+  for the bar. With `now` injected the floor keeps no timer, as today (`:1083`). **Receipts (ran,
+  the probe):** under fake `setTimeout`, `clearTimeout` and `Date`, a table ready 2:30 at a 3-minute
+  station read "Ready", then after 30 s "Ready 3 min", 60 s "Ready 4 min", 60 s "Ready 5 min", with
+  one timer; **control:** the same case with the bar left out of `#watchReminders` read "Ready" all
+  four times.
+- **D6. The warning's look: A738's edge pulse, on a two-pixel edge that does not change the bar's
+  size.** While warning, the bar's `border-color` is `--wt-color-warning` and an inset
+  `box-shadow: inset 0 0 0 1px` of the same colour doubles the edge without moving anything; a
+  keyframe takes both to `--wt-color-warning-pulse-dim` at 50% over `--wt-duration-pulse-slow`, as
+  A738's Waiting tab does with its border (`till-shell.ts:208-221`). The heading ("Ready 4 min" and
+  its icon) is drawn in `--wt-color-warning`, as other till text in that colour is
+  (`till-table-order-screen.ts:907`, `bill-pay-dialog.ts:422`, read); the bar's background stays
+  `--wt-color-surface-raised` (slice 5). **Reduced motion, two gates, as A757's rings
+  (`floor-ring.ts:71-84`, `:89-112`):** the pulsing class is drawn only while
+  `!#prefersReducedMotion()` (so the floor's injected `reducedMotion` works in tests), and a CSS
+  `@media (prefers-reduced-motion: reduce)` rule stops it too; the amber edge and text stay.
+  **Receipts (ran, the probe):** the warning bar computed `animation-name: ready-warning`, `2s`,
+  `border-top-color: rgb(138, 83, 0)`; with `reducedMotion: true`, and with the browser's reduced
+  motion emulated and nothing injected, `animation-name: none` and the same border colour; the
+  calm and warning bars were both 50 px tall. Contrast (ran, a WCAG ratio script over the token
+  values): `--wt-color-warning` on `--wt-color-surface-raised` 6.33:1 light, 8.12:1 dark; on
+  `--wt-color-surface` 6.33:1 light, 9.14:1 dark. **Dark theme:** every colour is a token with a dark
+  value (`colors.css:162`, `:253`); Task 3's a11y case runs both themes.
+- **D7. A table whose food warns has its entry drawn amber too** (picture 01, middle: "T5 · 2"
+  amber, "T9 · 1" calm): `data-warning` on that `wt-button`, its text and border `--wt-color-warning`
+  through `::part(button)`, and on hover the border back to `--wt-color-primary-text`, the shared
+  cue an outside part rule would otherwise override (`docs/developers/design-system.md:618-621`;
+  secondary fill `--wt-color-surface`, `packages/ui-core/src/components/wt-button.ts:70-74`, read).
+  **What colour alone carries:** the warning itself is in words ("Ready 4 min") and in order
+  (warning tables first, D2), but where several tables warn, which of the later entries warn is
+  shown by colour only. **Owner FYI**, with the alternative: amber on the bar alone, entries
+  unchanged.
+- **D8. Words.** One new key, en / es: `floor.ready_bar_waited` "Ready {n} min" / «Listo {n} min»
+  — the owner's wording for "Ready 4 min" (design §10 (g), "already settled"), the same words the
+  Sent box uses under its own key (`table.row_ready_ago`, `strings.ts:1062`, `:2798`); the bar gets
+  its own key, as slice 5 gave it its own keys. "min" needs no plural in either language. Entries,
+  Open › and its label are unchanged; the label already names the table ("Open T5"), never "the
+  first". Help, reworded (`help.floor.ready_bar`): "Tables with food ready to take out, the one
+  waiting longest first. Tables in amber, whose food has waited longer than its station's Ready
+  warning time, go before the rest. Tap one to open it; Open opens the first." / «Mesas con comida
+  lista para llevar, primero la que más espera. Las mesas en ámbar, cuya comida ha esperado más que
+  el tiempo de Listo sin recoger de su estación, van antes que las demás. Toca una para abrirla;
+  Abrir abre la primera.» ("Ready warning" «Listo sin recoger» is the station field's name, slice 6
+  D5.) **No live region** (slice 5 D5: the bar changes on every read): the section is named by its
+  heading (`aria-labelledby`, `:3007`), so a screen reader that moves to it hears "Ready 4 min".
+- **D9. Where it shows: the Ready bar only, on a handheld at every width.** Design §3.2 says of a
+  tablet handheld "the Ready bar and its warning are as on a phone", and slice 5 D3 already draws
+  the bar on every handheld and the summary on every till. A till's summary gets no minutes and no
+  amber: the design puts the warning on the bar alone, and the summary is a per-station list
+  (`#stationSummary`, `:2984-2996`).
+- **D10. The token comments that list who uses the slow pulse and the amber dim colour gain the
+  Ready bar's warning** (`colors.css:120-121`, and its repeats beside each copy of
+  `--wt-color-warning-pulse-dim`; `structure.css:50`), and so do the design system's sentences
+  (`design-system.md:421-422`, `:614-616`, Task 6). A list of users that leaves one out is a claim
+  that has gone stale.
+
+### Changed test checks (from the probe; the implementer confirms each)
+
+**Probe (ran):** D1's two fields in `readyTables`, a crude D2–D3 `readyBar` drawn by `#readyBar`,
+D5's addition to `#watchReminders`, D6's styles. `pnpm typecheck` in `apps/till` → exit 0
+(`tsc.txt`). Then, with free memory at 82 % (ran `memory_pressure`), in `apps/till`:
+
+- `pnpm exec vitest run src/state/table-signals.test.ts src/screens/till-floor-screen src/screens/text-size.layout src/screens/device-screens src/widgets/till-shell.device-zones src/till-app-device-zones.test.ts`
+  → `Test Files 1 failed | 33 passed (34)`, `Tests 5 failed | 909 passed (914)` (`run1.txt`).
+- `pnpm exec vitest run src/till-app src/screens/till-counter-cleanup.look src/widgets/guide-sheet`
+  → `Test Files 44 passed (44)`, `Tests 4433 passed (4433)` (`run2.txt`).
+
+The five, all in `apps/till/src/state/table-signals.test.ts`, each a `toEqual` that pins whole
+`readyTables` entries; each expected entry gains `oldestReadyAt: null, warnsAt: Number.POSITIVE_INFINITY`
+(the builder at `:69-77` gives every station `oldestReadyAt: null`), every other value unchanged.
+Reason: D1.
+- "lists each party with food ready once, its count summed over its stations" (`:83`)
+- "names a party at one of today's joins by its tables' short names, once" (`:100`)
+- "names a party at two separate tables by both short names" (`:126`)
+- "names a party at two separate tables by both, and by the shown one only when a zone is hidden" (`:138`)
+- "uses the saved short name, not today's name or the party's" (`:167`)
+
+No floor-screen or app check changed: every existing case builds `oldestReadyAt: null` (slice 6
+D12), so it stays on the calm path, in the floor read's order. Any other failure, in any suite a
+task names, is a STOP.
+
+### Review focus (inputs the spec implies and today's tests may not pin)
+
+1. **Two stations at one table with different minutes** (Q51 (c)): Cold at 6 and the grill at 3,
+   both ready 4 minutes → warns (the grill); the salad alone → calm (Tasks 1, 2).
+2. **A calm table waiting longer than an amber one** → the amber one first, Open › opens it (D2;
+   Task 2).
+3. **Exactly at the limit**: ready 3:00 at a 3-minute station → amber; 2:59.999 → calm (D3; Task 1).
+4. **No time, or an unreadable one**: such a station never warns; a table with only such stations
+   comes after every timed table, and one with a timed station beside it uses that time (D1, D2;
+   Task 1).
+5. **A stamp ahead of the device's clock**: calm, no negative minutes, and it turns amber at
+   `warnsAt` (D4; Tasks 1, 4).
+6. **The count runs with no new read**, turns amber at the crossing with no new read, and keeps one
+   timer beside a held countdown (D5; Task 4).
+7. **The floor leaves the page** (a handheld opens a table on the Order tab) and comes back: the
+   minutes read now, not when it left (Task 4).
+8. **A re-read in which the oldest dish was served**: the order and minutes follow, and the bar
+   goes calm when nothing is past its time (Task 2).
+9. **Reduced motion, dark theme, Spanish, 390 and 1024 px**: nothing moves, amber stays, contrast
+   holds, «Listo 4 min» (Tasks 3, 7).
+10. **The bar's height and the toasts**: the warning does not change the bar's height, so the Sent
+    toast still sits above it (D6; Tasks 3, 7).
+
+---
+
+**Task order and why.** The pure order-and-wait logic first (Task 1); the floor draws it, with the
+words (Task 2); its look, reduced motion and accessibility (Task 3); the clock between reads
+(Task 4); the app's wiring (Task 5); the docs (Task 6); the LOOK (Task 7). Each leaves the tree green
+and is sized well under 100 tool calls.
+
+### Task 1: How long each Ready bar table has waited, and the bar's order
+
+**Files:**
+- Modify: `apps/till/src/state/table-signals.ts` (`ReadyTable` `:51-56` and `readyTables` `:58-74`,
+  D1; new `readyBar` and `nextReadyBarChange` after them)
+- Test: `apps/till/src/state/table-signals.test.ts` (five changed checks; new cases)
+
+**Interfaces:**
+- Produces:
+  ```ts
+  export interface ReadyTable {
+    partyId: string;
+    tableId: string;
+    name: string;
+    count: number;
+    /** The earliest readable ready time over the party's stations, epoch ms; null when none. */
+    oldestReadyAt: number | null;
+    /** The first moment one of its stations has waited its own ready warning time; never when none is timed. */
+    warnsAt: number;
+  }
+  export interface ReadyBarTable extends ReadyTable { warning: boolean }
+  export interface ReadyBar {
+    /** Warning tables first, then the rest; each group by `oldestReadyAt`, untimed last, ties in floor order. */
+    tables: ReadyBarTable[];
+    /** The first table's wait in whole minutes while it warns; null while the bar is calm. */
+    waitedMinutes: number | null;
+  }
+  export function readyBar(entries: readonly ReadyTable[], now: number): ReadyBar;
+  /** The next moment after `now` that `readyBar(entries, ·)` answers differently; never when none. */
+  export function nextReadyBarChange(entries: readonly ReadyTable[], now: number): number;
+  ```
+  `warning` is `now >= warnsAt`. `nextReadyBarChange` is the smallest of every `warnsAt > now` and,
+  when `readyBar(entries, now).waitedMinutes` is `m`, the first table's `oldestReadyAt + (m + 1) × 60 000`.
+  Consumed by Tasks 2 and 4.
+
+- [ ] **Step 1: Failing tests.** Extend the `ready` builder (`:69-77`) to take an optional fourth and
+  fifth tuple element, `oldestReadyAt` (default `null`) and `readyWarningAfterMinutes` (default 3),
+  so existing calls are unchanged. Change the five checks the changed-checks list names. New cases,
+  with `const now = Date.parse("2026-10-26T20:00:00.000Z")` and `ago(ms)` giving `now − ms` as ISO:
+  1. "carries the party's longest wait, and the moment its first station warns" — one party,
+     Cold `ago(5 min)` at 6 and Grill `ago(4 min)` at 3 → `oldestReadyAt: now − 5 min`,
+     `warnsAt: now − 1 min` (the grill's: its stamp + 3 min).
+  2. "leaves a station with no time or an unreadable one out of both" — `null` alone →
+     `null`/`Infinity`; `"not a time"` beside `ago(2 min)` → that station's time and its `warnsAt`.
+  3. "warns from the moment a station has waited its own minutes" — Grill at 3 ready exactly 3:00 →
+     `warning: true`, `waitedMinutes: 3`; at 2:59.999 → `false`, `null` (Review focus 3).
+  4. "judges each station against its own minutes" — Cold at 6 ready 4 min alone → calm; with Grill
+     at 3 ready 4 min beside it → warning, `waitedMinutes: 4` (Review focus 1).
+  5. "puts warning tables first, then the rest, each longest-waiting first, untimed last, ties in
+     floor order" — in floor order: T3 untimed, T1 Cold 6 ready 5 min, T2 Grill 3 ready 4½ min, T4
+     Grill 3 ready 1 min, T5 untimed, T6 Grill 3 ready 1 min → `["t2", "t1", "t4", "t6", "t3", "t5"]`
+     and `waitedMinutes: 4` (Review focus 2).
+  6. "a stamp ahead of the clock stays calm" — ready at `now + 2 min` → calm, `waitedMinutes: null`;
+     `nextReadyBarChange` → `now + 5 min` (Review focus 5).
+  7. "the next change: the next crossing, and the next minute while warning" — calm T1 at 3 ready
+     1:30 → `now + 1:30`; warning T2 ready 3:20 beside it → `now + 40 s` (its 4th minute), the
+     earlier of the two; no timed table → `Infinity`; no entries → `readyBar` gives `tables: []`,
+     `waitedMinutes: null`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/state/table-signals.test.ts`
+  (memory first: `memory_pressure | grep free`).
+- [ ] **Step 3: Implement** D1 in `readyTables`'s `pick` (the earliest of each station's
+  `Date.parse`, skipping `NaN`), then `readyBar` (a stable sort on `[warning ? 0 : 1, oldestReadyAt ?? Infinity]`)
+  and `nextReadyBarChange`.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count).
+- [ ] **Step 5:** `pnpm --filter @waitron/till typecheck`; `pnpm exec eslint apps/till/src/state/table-signals.ts apps/till/src/state/table-signals.test.ts`;
+  `pnpm format:check`; ledger (the five changed checks, reason D1);
+  `git commit -s -m "A797-7: how long each Ready bar table has waited, and the bar's order"`
+
+### Task 2: The Ready bar names the table waiting longest first, with its minutes
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (`#readyBar` `:2998-3023`, `#readyEntry`
+  `:3025-3035`: a private `#readyEntries()` builds `readyTables(this.tables, new Set(this.zones.map((zone) => zone.id)))`
+  for this task and Task 4; `readyBar(…, this.#drawnAt)` orders it; the heading reads
+  `floor.ready_bar_waited` while `waitedMinutes !== null`, else `floor.ready_title`; `data-warning`
+  on the section while warning and on each warning entry; the doc comment at `:2998` says Open
+  opens the first listed, the longest waiting), `apps/till/src/i18n/strings.ts` (`floor.ready_bar_waited`
+  beside `:1021` and `:2757`, D8), `apps/till/src/i18n/help-strings.ts` (`:29-30`, `:77-78`, D8)
+- Test: `apps/till/src/screens/till-floor-screen.ready-bar.test.ts` (new `describe` "the Ready bar's
+  warning"; its `ready` builder `:69-77` gains the same optional fourth and fifth elements as Task
+  1's; mount with the file's fixed `now`, `:20`)
+
+**Interfaces:** Consumes Task 1's `readyTables`, `readyBar`. Produces `[data-ready-bar][data-warning]`
+and `[data-ready-table][data-warning]`, read by Tasks 3–5.
+
+- [ ] **Step 1: Failing tests:**
+  1. "a calm bar reads Ready and lists the longest-waiting table first" — Table 2 ready 1 min,
+     Table 8 ready 2 min, both at 3 → heading "Ready", entries Table 8 then Table 2, no
+     `data-warning` anywhere; Open › emits `open-table` for `t8`, its label "Open Table 8".
+  2. "once food has waited its station's minutes, the bar warns and names that table first with
+     its minutes" — Table 2 ready 2 min (calm), Table 8 ready 4 min (at 3) → heading "Ready 4 min",
+     the section has `data-warning`, entries Table 8 (with `data-warning`) then Table 2 (without),
+     Open › opens `t8`.
+  3. "a salad waiting longer stays calm and comes after the warning table" — Table 2 Cold ready
+     5 min at 6, Table 8 Grill ready 4½ min at 3 → Table 8 first, "Ready 4 min", only Table 8's
+     entry warns (Review focus 2, D2).
+  4. "a re-read with the oldest dish served turns the bar calm" — from case 2, set `tables` to Table
+     8 with nothing ready and Table 2 at 2 min → "Ready", no `data-warning` (Review focus 8).
+  5. "says it in Spanish" — case 2 under `setLocale("es")` → «Listo 4 min», «Abrir ›» labelled
+     «Abrir Table 8» (the fixture's names); restore the language (CLAUDE.md §4) as the file's other
+     Spanish case does.
+  6. "the section is named by its heading, minutes included" — the section's accessible name (as
+     the a11y suite reads names, `till-floor-screen.a11y.test.ts:828-832`) is "Ready 4 min"; no
+     element in the bar has `aria-live` or `role="status"` (D8).
+  7. "a till's summary has no minutes and no warning" — `handheld` unset, case 2's tables → the
+     summary's heading "Ready", no `[data-warning]` in the floor (D9).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.ready-bar.test.ts`.
+- [ ] **Step 3: Implement** D2, D3, D7's attribute and D8's strings. No styles yet (Task 3).
+- [ ] **Step 4: Run; expect PASS**, then the floor suites:
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen src/screens/text-size.layout src/screens/device-screens src/widgets/till-shell.device-zones`
+  (probe: all passed with the bar ordered; a failure is a STOP), and
+  `pnpm exec vitest run scripts/english-only.test.ts`.
+- [ ] **Step 5:** typecheck till; eslint the changed files; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-7: the Ready bar names the table waiting longest first, with its minutes"`
+
+### Task 3: The warning's amber edge pulses slowly, and holds still under reduced motion
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (the bar's styles `:816-858`, D6 and D7: the
+  section's `pulsing` class only while warning and `!this.#prefersReducedMotion()`; keyframe
+  `ready-warning`; the `@media (prefers-reduced-motion: reduce)` rule; the warning entry's part
+  rules and hover cue), `packages/ui-core/src/tokens/colors.css` (the comment at `:120-121` and its
+  repeat beside each later copy of `--wt-color-warning-pulse-dim`, D10),
+  `packages/ui-core/src/tokens/structure.css` (the comment at `:50`, D10)
+- Test: `apps/till/src/screens/till-floor-screen.ready-bar.test.ts` (new cases in Task 2's
+  `describe`), `apps/till/src/screens/till-floor-screen.a11y.test.ts` (a new case beside "has no
+  violations with the Ready bar, on the list", `:792`, inside the light/dark `describe.each`, `:310`)
+
+- [ ] **Step 1: Failing tests** (A738's cases are the model: `till-shell.counter-cleanup.test.ts:124`,
+  `:159`, `:171`; `commands.emulateReducedMotion` is the till's own browser command,
+  `apps/till/vitest.config.ts:65`, typed as `till-shell.counter-cleanup.test.ts:118-122` does; always
+  reset it in `finally`):
+  1. "a warning bar pulses at the slow pulse token, 2 s by default" — `reducedMotion: false`:
+     the section's `animationName` is `ready-warning`, `animationDuration` `2s`; with
+     `--wt-duration-pulse-slow: 5000ms` set on the floor, `5s`. A calm bar: `animationName` `none`.
+  2. "its edge dims to the amber dim colour half-way" — set `--wt-color-warning` and
+     `--wt-color-warning-pulse-dim` to distinct `rgb(…)` values on the floor; pause the section's
+     animation; at `currentTime` 1000 the border colour and the box-shadow's colour are the dim one,
+     at 0 the warning one.
+  3. "under reduced motion nothing moves and the amber stays" — `reducedMotion: true`, and
+     separately nothing injected with `emulateReducedMotion(true)`: `animationName` `none`, border
+     colour `--wt-color-warning`'s, heading colour the same (probe: both `none`, `rgb(138, 83, 0)`).
+  4. "the warning entry is amber and keeps a hover cue; the calm entry is unchanged" — the warning
+     entry's `::part(button)` (read its native `button`) has `color` and `border-top-color` equal to
+     `--wt-color-warning`; hovered (`userEvent.hover`), its border reads `--wt-color-primary-text`;
+     the calm entry's colours equal a calm bar's.
+  5. "the warning does not change the bar's height" — in the file's layout helpers
+     (`inShell`, `:242`), at 390 and 1024 px: the bar's height with one warning table equals its
+     height calm (probe: 50 and 50), and stays within `oneLine(area)` (`test-helpers.ts:742`).
+  6. a11y, "has no violations with a warning Ready bar, in {en, es} at {390, 1024} px" — case 2's
+     tables, `reducedMotion: true` (a still frame for axe), in both themes: no violations, so the
+     amber text has the contrast axe requires on its fill (D6's ratios, ran).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.ready-bar.test.ts src/screens/till-floor-screen.a11y.test.ts`
+  — cases 1–4 (no styles yet); 5 and 6 may pass on arrival and stay.
+- [ ] **Step 3: Implement** D6 and D7 with `--wt-*` tokens only (CLAUDE.md §3; check by eye: no
+  hex, `rem` or `em`), and D10's comments.
+- [ ] **Step 4: Run; expect PASS**, then the floor suites (Task 2's Step 4 command),
+  `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`,
+  and `pnpm --filter @waitron/ui-core exec vitest run src/tokens` (the token files' own suites,
+  comments only; a failure is a STOP).
+- [ ] **Step 5:** typecheck till; eslint the changed `.ts` files; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-7: the Ready bar's warning pulses amber, and holds still under reduced motion"`
+
+### Task 4: The minutes keep counting between floor reads
+
+**Files:**
+- Modify: `apps/till/src/screens/till-floor-screen.ts` (`#watchReminders` `:1079-1096`: on a
+  handheld, `next = Math.min(next, nextReadyBarChange(this.#readyEntries(), this.#drawnAt))`; its
+  comment and the `now` property's comment, `:887-888`, gain "and when the Ready bar's minutes or
+  warning change")
+- Test: `apps/till/src/screens/till-floor-screen.ready-bar.test.ts` (a `describe` "on the screen's
+  own clock", modelled on `till-floor-screen.held.test.ts:216-279`:
+  `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` and `vi.setSystemTime`,
+  `vi.useRealTimers()` after each; mount with no `now`; advance with
+  `await vi.advanceTimersByTimeAsync(…)` then `await el.updateComplete`. Animation frames are not
+  faked, so nothing waits on a paused `requestAnimationFrame` (CLAUDE.md §4); the probe ran this
+  shape green.)
+
+- [ ] **Step 1: Failing tests:**
+  1. "counts the minutes up with no new floor read" — Table 2 ready 2:30 at 3: "Ready"; +30 s
+     "Ready 3 min" with `data-warning`; +60 s "Ready 4 min"; +60 s "Ready 5 min"; no `floor-refresh`
+     event (probe: exactly this; control without the change: "Ready" four times).
+  2. "turns amber at the crossing, judged per station" — Table 2 Cold ready 5 min at 6, Table 8
+     Grill ready 2 min at 3: calm, Table 2 first; +60 s: Table 8 first, "Ready 3 min"; +60 s: both
+     warn, Table 2 first, "Ready 7 min".
+  3. "keeps one timer beside a held countdown, however often the floor redraws" — a held table
+     (`till-floor-screen.held.test.ts`'s builder) and a warning one: `vi.getTimerCount()` is 1
+     before and after three redraws.
+  4. "keeps no timer for ready food with no time, nor on a till" — untimed ready food on a
+     handheld, and timed food on a till (`handheld` unset): no timer; advancing 5 min calls no
+     `requestUpdate`.
+  5. "reads the minutes now on coming back to the page" — "Ready 4 min"; remove the floor; advance
+     3 min; append it; `advanceTimersByTimeAsync(0)` → "Ready 7 min" (Review focus 7).
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.ready-bar.test.ts -t "own clock"`
+  — 1, 2 and 5 (no redraw); 3 and 4 pass on arrival and stay.
+- [ ] **Step 3: Implement** D5.
+- [ ] **Step 4: Run; expect PASS**, then the floor suites (Task 2's Step 4 command), which include
+  `till-floor-screen.held.test.ts` and `.steps.test.ts`, whose timer counts must not change.
+- [ ] **Step 5:** typecheck till; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-7: the Ready bar's minutes keep counting between floor reads"`
+
+### Task 5: In the app, a handheld's Ready bar warns on the device's clock
+
+**Files:**
+- Test only: `apps/till/src/till-app-device-zones.test.ts` (inside slice 5's Ready bar `describe`,
+  beside its `readyIn` builder, `:2349-2364`, which gains an optional ready time and minutes)
+
+The app passes the floor no `now` (the table above), so this pins that the real app's Floor draws
+the warning from its own clock; no source change is expected. If either case fails, STOP and report:
+it means the app hands the floor something the plan did not read.
+
+- [ ] **Step 1: Tests:**
+  1. "a handheld's Ready bar warns once food has waited its station's minutes" — on the real clock
+     (the file fakes only `setInterval`, `:221`, `:1887`; faking `Date` across a whole app mount is
+     not needed): two `room` tables, one ready at `Date.now() − 4.5 min` and one at
+     `Date.now() − 1 min`, both at 3: the bar reads "Ready 4 min", the first entry is the
+     4½-minute table and warns; tapping Open › opens it on the Order tab. The half minute keeps the
+     reading clear of a minute boundary during the run.
+  2. "a till's summary shows no warning" — the file's till `mount`, the same tables: the summary,
+     no `[data-warning]`.
+- [ ] **Step 2: Run; expect PASS** `pnpm --filter @waitron/till exec vitest run src/till-app-device-zones.test.ts`
+  (memory first). Confirm by deletion that case 1 can fail: in a scratch copy, make the floor's
+  `#readyBar` ignore `waitedMinutes`, rerun, and record the failing line in the ledger; restore.
+- [ ] **Step 3:** eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-7: the app's Ready bar warns on the device's clock"`
+
+### Task 6: Docs, the user guides and the backlog follow the code
+
+**Files:**
+- Modify: `apps/server/src/guide/en/table-service.md` (`## See which tables have food ready {#ready-bar}`,
+  `:164-172`), `apps/server/src/guide/es/table-service.md` (`{#ready-bar}`, `:170-178`),
+  `docs/developers/design-system.md` (`:990-996`, `:421-422`, `:614-616`), `docs/backlog.md` (the
+  A797 entry, `:120-133`), `docs/backlog/till.md` (A797's entry, `:1036-1050`),
+  `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (§3.1's warning bullet,
+  `:258-266`: a dated pointer)
+- Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
+
+- [ ] **Step 1: Guides.** English: replace "Tap a table to open it, or tap **Open ›** to open the
+  first table listed." with the order and the warning, in about three sentences: the table whose
+  food has waited longest comes first; once a ready dish has waited longer than its station's
+  **Ready warning** time (3 minutes unless changed in **Prep stations**; see the kitchen guide's
+  sentence, `kitchen-service.md:106-108`), the bar turns amber, pulses slowly and says how long,
+  such as **Ready 4 min · T5 · 2**, and tables whose food has waited too long come first, each
+  station judged by its own time; on a device set to reduce motion it stays amber without pulsing;
+  tap a table to open it, or **Open ›** for the first. Spanish the same, with «Listo 4 min · M5 · 2»,
+  «Listo sin recoger» and «Estaciones de preparación» (read both from `strings.ts`'s `es` blocks
+  before writing). Spanish only in the Spanish file.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
+  `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
+- [ ] **Step 3: design-system.md.** In the Ready bar paragraph (`:990-996`): "While a table's food
+  has waited past its station's ready warning time (`readyBar`, `apps/till/src/state/table-signals.ts`),
+  the bar's edge and heading turn `--wt-color-warning`, the edge pulsing at `--wt-duration-pulse-slow`
+  to `--wt-color-warning-pulse-dim` (still under reduced motion), the heading gains the minutes,
+  warning tables come first and their entries are amber; the floor's one reminder timer redraws it
+  each minute." At `:421-422` and `:614-616`: the Ready bar's warning edge also dims to
+  `--wt-color-warning-pulse-dim` and reads the slow duration.
+- [ ] **Step 4: Backlog.** Both A797 entries: slice 7 (the Ready bar's warning) in review, built from
+  the build plan's slice 7; next, slice 8 (kitchen group cards), which takes turns with lane G's
+  A773-2 on the station screen (design §7; the build order above). After the merge, a docs-only
+  commit on `main` says "landed in #N", as `28ab55247` did for slice 6. Open no new entry unless the
+  LOOK finds something this slice does not fix (its number from
+  `~/waitron-campaign-shared/next-item-number`: read it, use it, write the next back).
+- [ ] **Step 5: Design file** (a dated pointer; a design records what was decided when): after
+  §3.1's warning bullet, "_2026-10-26, slice 7: warning tables come first, then the rest, each
+  longest-waiting first, so Open › opens the first; the minutes show only while warning; the till
+  compares the box's ready time with its own clock; see the build plan's slice 7, D2–D4._"
+- [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
+  (wrap by hand); `pnpm format:check` for the guide files.
+- [ ] **Step 7: Commit** `git commit -s -m "docs: A797-7 — guides, design system and backlog for the Ready bar's warning"`
+
+### Task 7 (visual): LOOK at the Ready bar calm and warning
+
+- [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-7-ready-bar-warning`; `wa-wt ls`
+  for the URLs. Enrol a browser context on the Handheld profile («Móvil»), as slice 5's Task 8 did,
+  and sign in. In the dashboard's **Prep stations**, set one station's Ready warning to **1** and
+  leave another at 3 (so the per-station judgement shows within minutes).
+- [ ] **Step 2: Make food ready.** Seat two tables in one zone, send one a dish from the 1-minute
+  station and the other a dish from the 3-minute station, and mark both ready on the kitchen screen.
+- [ ] **Step 3: Look** with the workspace's Playwright Chromium (the script in
+  `/Users/clintongormley/waitron-campaign-c/a797-7-scripts/`, never in the worktree, its process id
+  recorded), at **390 px** and **1024 px**, **light and dark**, **English and Spanish**:
+  - the calm bar at once: "Ready", the table ready longest first;
+  - after a minute, with no reload: amber, "Ready 1 min" «Listo 1 min», the 1-minute station's table
+    first and its entry amber, the other calm; the count reaching 2 a minute later on its own;
+  - the pulse: two pictures about a second apart (its bright and dim moments), and the computed
+    `animation-name` in the ledger;
+  - a context with `reducedMotion: "reduce"`: amber, nothing moving (`animation-name: none`);
+  - the Sent toast after a send sits above the warning bar, not over it;
+  - help on at 390 px: the badge's text reads as D8 says, and "Ready 4 min" and Open › stay in view;
+  - serve the warning table's dish: the bar goes calm or away at the next read.
+- [ ] **Step 4: Save** each picture as a PNG under `/Users/clintongormley/waitron-campaign-c/a797-7-shots/`
+  (`<step>-<width>-<theme>-<lang>.png`), open each, and describe what was seen in the ledger and the
+  PR body. Set the station's Ready warning back to 3 in the demo afterwards.
+- [ ] **Step 5: Stop** what you started: the script's process by its recorded id, then
+  `wa-wt down waitron-feat-a797-7-ready-bar-warning`.
+
+### Closing slice 7
+
+- Focused runs per task as above; CI runs the till's package suites and coverage (and ui-core's,
+  for the comments). Read the `changes` job's outputs and the till's coverage or merge job on the
+  current head before calling the PR green.
+- `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read and one
+  Codex run-it review.
+- PR body. First line: no venue reset. Then: **What a person sees** (the warning, the order, Open ›
+  now opening the longest-waiting table; a till unchanged); **Decisions** D1–D10 in one line each;
+  **Changed test checks** (the five `readyTables` checks, reason D1, from the ledger); **LOOK**.
+- **Owner FYI** (one line each in the PR and the lane's questions file, not questions): D2 (amber
+  tables first, then longest-first; the alternative is plain longest-first), D4 (the device's clock,
+  as the Sent box's "Ready n min"), D7 (which later entries warn is shown by colour alone; the
+  alternative is amber on the bar only).
+- After merge: delete the branch local and remote and check the remote one is gone; the backlog's
+  "landed in #N" commit; update the ledger; then slice 8 when lane G's turn allows.
 
 ---
 
