@@ -1,8 +1,14 @@
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { lockVenueDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { StartAgainChoiceRecord } from "./first-setup-start-again-choice.js";
+import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
+import {
+  readStartAgainChoices,
+  type StartAgainChoiceRecord,
+} from "./first-setup-start-again-choice.js";
+import { readStartAgainMarker } from "./first-setup-start-again-deletion.js";
 import type { StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import { raiseStartAgainNote, readStartAgainNote } from "./first-setup-start-again-note.js";
@@ -46,7 +52,7 @@ const failed = (code: string, label: string) =>
 /**
  * Folders relative to their roots, for the choice record. Venue units go beside the state units
  * when both roots report one filesystem; otherwise into the venue folder's own set-aside folder,
- * whose path is the stem folder itself. `setAsideFolders` tells the two apart by that last segment.
+ * whose path is the stem folder itself. `setAsideFolderPaths` tells the two apart by that last segment.
  * Takes canonical roots.
  */
 export async function setAsideDestinations(
@@ -69,7 +75,10 @@ const destinationRoots = (roots: Roots, destinations: Destinations): Record<Root
 });
 
 /** The absolute destination folder for each root's units, from the record's relative ones. */
-function setAsideFolders(roots: Roots, destinations: Destinations): Record<Root, string> {
+export function setAsideFolderPaths(
+  roots: Roots,
+  destinations: Destinations,
+): Record<Root, string> {
   const under = destinationRoots(roots, destinations);
   return {
     state: join(under.state, destinations.state),
@@ -122,7 +131,7 @@ export async function prepareSetAside(
   destinations: Destinations,
   io: SetAsideIo = defaultIo,
 ): Promise<void> {
-  const folders = setAsideFolders(roots, destinations);
+  const folders = setAsideFolderPaths(roots, destinations);
   const used = (["state", "venue"] as const).filter((root) =>
     units.some((unit) => unit.root === root),
   );
@@ -190,28 +199,24 @@ function chain(top: string, bottom: string): string[] {
   return out;
 }
 
-/**
- * D4 steps 3 and 4: raises the note to the record's floor, then renames each unit's pieces, in
- * survey order and each unit's move order, into the record's folders. Never overwrites: a present
- * destination refuses. The caller holds the venue lock.
- */
-export async function moveStartAgainUnits(
+async function raiseNoteToRecord(stateDir: string, record: StartAgainChoiceRecord) {
+  if (record.noteFloorMs === null) return;
+  const note = await readStartAgainNote(stateDir);
+  if (note !== null)
+    await raiseStartAgainNote(stateDir, {
+      floorMs: record.noteFloorMs,
+      lastName: note.lastName,
+      module: note.module,
+    });
+}
+
+/** The record's destination folders, made if absent, each synced from its root down. */
+async function makeDestinationFolders(
   roots: Roots,
-  record: StartAgainChoiceRecord,
-  io: SetAsideIo = defaultIo,
-): Promise<void> {
-  if (record.choice !== "move" || record.setAside === null)
-    throw new AppError("setup.attempt_invalid", {});
-  const folders = setAsideFolders(roots, record.setAside);
-  if (record.noteFloorMs !== null) {
-    const note = await readStartAgainNote(roots.stateDir);
-    if (note !== null)
-      await raiseStartAgainNote(roots.stateDir, {
-        floorMs: record.noteFloorMs,
-        lastName: note.lastName,
-        module: note.module,
-      });
-  }
+  record: StartAgainChoiceRecord & { setAside: Destinations },
+  io: SetAsideIo,
+): Promise<Record<Root, string>> {
+  const folders = setAsideFolderPaths(roots, record.setAside);
   const under = destinationRoots(roots, record.setAside);
   for (const root of ["state", "venue"] as const) {
     if (!record.listed.units.some((unit) => unit.root === root)) continue;
@@ -224,27 +229,147 @@ export async function moveStartAgainUnits(
       throw failed(codeOf(error), `${at}/${record.setAside[root]}`);
     }
   }
+  return folders;
+}
+
+/** Renames one piece into its folder, never over anything, and syncs both parents. */
+async function movePiece(
+  roots: Roots,
+  folders: Record<Root, string>,
+  unit: StartAgainUnit,
+  piece: string,
+  io: SetAsideIo,
+): Promise<void> {
+  const from = join(rootDir(roots, unit.root), piece);
+  const to = join(folders[unit.root], piece);
+  try {
+    const present = await io.lstat(to).then(
+      () => true,
+      (error: unknown) => {
+        if (codeOf(error) === "ENOENT") return false;
+        throw error;
+      },
+    );
+    if (present) throw failed("EEXIST", `${unit.root}/${piece}`);
+    await io.mkdir(dirname(to), { recursive: true, mode: MODE });
+    await io.rename(from, to);
+    await syncFolder(dirname(from));
+    for (const folder of chain(folders[unit.root], dirname(to))) await syncFolder(folder);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw failed(codeOf(error), `${unit.root}/${piece}`);
+  }
+}
+
+/**
+ * D4 steps 3 and 4: raises the note to the record's floor, then renames each unit's pieces, in
+ * survey order and each unit's move order, into the record's folders. Never overwrites: a present
+ * destination refuses. The caller holds the venue lock.
+ */
+export async function moveStartAgainUnits(
+  roots: Roots,
+  record: StartAgainChoiceRecord,
+  io: SetAsideIo = defaultIo,
+): Promise<void> {
+  if (record.choice !== "move" || record.setAside === null)
+    throw new AppError("setup.attempt_invalid", {});
+  await raiseNoteToRecord(roots.stateDir, record);
+  const folders = await makeDestinationFolders(roots, { ...record, setAside: record.setAside }, io);
   for (const unit of record.listed.units)
-    for (const piece of unit.pieces) {
-      const label = `${unit.root}/${piece}`;
-      const from = join(rootDir(roots, unit.root), piece);
-      const to = join(folders[unit.root], piece);
-      try {
-        const present = await io.lstat(to).then(
-          () => true,
-          (error: unknown) => {
-            if (codeOf(error) === "ENOENT") return false;
-            throw error;
-          },
-        );
-        if (present) throw failed("EEXIST", label);
-        await io.mkdir(dirname(to), { recursive: true, mode: MODE });
-        await io.rename(from, to);
-        await syncFolder(dirname(from));
-        for (const folder of chain(folders[unit.root], dirname(to))) await syncFolder(folder);
-      } catch (error) {
-        if (error instanceof AppError) throw error;
-        throw failed(codeOf(error), label);
-      }
+    for (const piece of unit.pieces) await movePiece(roots, folders, unit, piece, io);
+}
+
+type Seen = {
+  path: string;
+  type: string;
+  ino: string;
+  size: string | null;
+  mtimeNs: string | null;
+};
+const byPath = (a: Seen, b: Seen) => (a.path < b.path ? -1 : 1);
+
+/** The piece and everything under it as the survey records entries; null when the piece is absent. */
+async function entriesAt(base: string, piece: string, io: SetAsideIo): Promise<Seen[] | null> {
+  const out: Seen[] = [];
+  const visit = async (path: string, top: boolean): Promise<boolean> => {
+    let info;
+    try {
+      info = await io.lstat(join(base, path), { bigint: true });
+    } catch (error) {
+      if (top && codeOf(error) === "ENOENT") return false;
+      throw error;
     }
+    const ino = info.ino.toString();
+    if (info.isFile())
+      out.push({
+        path,
+        type: "file",
+        ino,
+        size: info.size.toString(),
+        mtimeNs: info.mtimeNs.toString(),
+      });
+    else if (info.isDirectory()) {
+      out.push({ path, type: "folder", ino, size: null, mtimeNs: null });
+      for (const child of await fs.readdir(join(base, path)))
+        await visit(`${path}/${child}`, false);
+    } else out.push({ path, type: "other", ino, size: null, mtimeNs: null });
+    return true;
+  };
+  if (!(await visit(piece, true))) return null;
+  return out.sort(byPath);
+}
+
+const recordedFor = (unit: StartAgainUnit, piece: string): Seen[] =>
+  unit.entries
+    .filter((entry) => entry.path === piece || entry.path.startsWith(`${piece}/`))
+    .map((entry) => ({ ...entry }))
+    .sort(byPath);
+
+/**
+ * D4 "After a cut", at every start before the finisher: with a marker and a Move record for it
+ * (the latest), finishes that Move piece by piece into the folders the record names. A piece at
+ * its source exactly as recorded, with nothing at its destination, is renamed; one gone from its
+ * source and at its destination exactly as recorded is already moved; anything else stops,
+ * moving nothing more. Removes nothing but empty probe folders.
+ */
+export async function resumeStartAgainSetAside(
+  roots: Roots,
+  io: SetAsideIo = defaultIo,
+): Promise<"none" | "resumed" | "stopped"> {
+  const canonical = await canonicalFirstSetupRoots(roots);
+  const latestMove = async () => {
+    const marker = await readStartAgainMarker(canonical.venueDir);
+    if (marker === null) return null;
+    const records = await readStartAgainChoices(canonical.stateDir, marker);
+    const record = records.filter((each) => each.choice === "move").at(-1);
+    return record?.setAside ? { ...record, setAside: record.setAside } : null;
+  };
+  if ((await latestMove()) === null) return "none";
+  const hold = await lockVenueDatabase(canonical.venueDir);
+  try {
+    const record = await latestMove();
+    if (record === null) return "none";
+    await removeLeftoverProbes(canonical, io);
+    await raiseNoteToRecord(canonical.stateDir, record);
+    const folders = await makeDestinationFolders(canonical, record, io);
+    for (const unit of record.listed.units)
+      for (const piece of unit.pieces) {
+        const expected = JSON.stringify(recordedFor(unit, piece));
+        let source: Seen[] | null;
+        let destination: Seen[] | null;
+        try {
+          source = await entriesAt(rootDir(canonical, unit.root), piece, io);
+          destination = await entriesAt(folders[unit.root], piece, io);
+        } catch (error) {
+          throw failed(codeOf(error), `${unit.root}/${piece}`);
+        }
+        if (destination === null && JSON.stringify(source) === expected)
+          await movePiece(canonical, folders, unit, piece, io);
+        else if (source === null && JSON.stringify(destination) === expected) continue;
+        else return "stopped";
+      }
+    return "resumed";
+  } finally {
+    hold.release();
+  }
 }

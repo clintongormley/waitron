@@ -225,7 +225,9 @@ export {
 export {
   moveStartAgainUnits,
   prepareSetAside,
+  resumeStartAgainSetAside,
   setAsideDestinations,
+  setAsideFolderPaths,
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
 export {

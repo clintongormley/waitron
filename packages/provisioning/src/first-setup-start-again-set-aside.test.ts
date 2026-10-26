@@ -29,7 +29,9 @@ import { readStartAgainNote } from "./first-setup-start-again-note.js";
 import {
   moveStartAgainUnits,
   prepareSetAside,
+  resumeStartAgainSetAside,
   setAsideDestinations,
+  setAsideFolderPaths,
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
 
@@ -682,4 +684,406 @@ it("a venue destination in the venue folder that cannot be made refuses naming i
     }),
   ).rejects.toMatchObject({ reason: "set-aside failed: unknown venue/venue.db" });
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+/** A rename that throws on its `n`th call, as a cut there would leave the folders. */
+function cutAt(n: number): SetAsideIo {
+  let calls = 0;
+  return {
+    ...realIo,
+    rename: async (from, to) => {
+      if (++calls === n) throw errno("EIO");
+      await fs.rename(from, to);
+    },
+  };
+}
+
+async function cutMove(roots: Roots, record: StartAgainChoiceRecord, n: number) {
+  await expect(moveStartAgainUnits(roots, record, cutAt(n))).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+}
+
+const VENUE_FOUND = [".venue.db-litestream", "venue.db", "venue.db-wal", "venue.db-shm"];
+
+async function foundEverywhere(roots: Roots) {
+  const found = `${RECORDS}/${randomUUID()}`;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  await put(join(roots.stateDir, found, "step-000001", "step.json"), "{}");
+  await put(join(roots.venueDir, ".venue.db-litestream", "generations", "a.wal"), "one");
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  await writeFile(join(roots.venueDir, "venue.db-wal"), "found pages");
+  await writeFile(join(roots.venueDir, "venue.db-shm"), "found index");
+  return {
+    stateFound: ["trading.env", found],
+    state: await fingerprints(roots.stateDir, ["trading.env", found]),
+    venue: await fingerprints(roots.venueDir, VENUE_FOUND),
+  };
+}
+
+/** Everything found is in the record's folders, unchanged, gone from its source, in one stem folder. */
+async function expectAllAside(
+  roots: Roots,
+  record: StartAgainChoiceRecord,
+  before: Awaited<ReturnType<typeof foundEverywhere>>,
+) {
+  const folders = setAsideFolderPaths(roots, record.setAside!);
+  expect(await fingerprints(folders.state, before.stateFound)).toEqual(before.state);
+  expect(await fingerprints(folders.venue, VENUE_FOUND)).toEqual(before.venue);
+  for (const path of before.stateFound)
+    await expect(lstat(join(roots.stateDir, path))).rejects.toMatchObject({ code: "ENOENT" });
+  for (const path of VENUE_FOUND)
+    await expect(lstat(join(roots.venueDir, path))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR))).toEqual([stemOf(record)]);
+}
+
+it("setAsideFolderPaths resolves a record's folders: beside the state units on one filesystem, in the venue folder on two", () => {
+  const roots = { stateDir: "/s", venueDir: "/v" };
+  expect(
+    setAsideFolderPaths(roots, {
+      state: `${START_AGAIN_SET_ASIDE_DIR}/1-x/state`,
+      venue: `${START_AGAIN_SET_ASIDE_DIR}/1-x/venue`,
+    }),
+  ).toEqual({
+    state: `/s/${START_AGAIN_SET_ASIDE_DIR}/1-x/state`,
+    venue: `/s/${START_AGAIN_SET_ASIDE_DIR}/1-x/venue`,
+  });
+  expect(
+    setAsideFolderPaths(roots, {
+      state: `${START_AGAIN_SET_ASIDE_DIR}/1-x/state`,
+      venue: `${START_AGAIN_SET_ASIDE_DIR}/1-x`,
+    }),
+  ).toEqual({
+    state: `/s/${START_AGAIN_SET_ASIDE_DIR}/1-x/state`,
+    venue: `/v/${START_AGAIN_SET_ASIDE_DIR}/1-x`,
+  });
+});
+
+it("a cut after the record and before the first rename: the resume moves everything into the record's folder", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 1);
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+
+  await expectAllAside(roots, record, before);
+});
+
+it("a cut after a database's -wal moved: the resume moves -shm and venue.db into the same folder as the -wal, and the moved database opens with every row", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const work = await scratch();
+  const source = new DatabaseSync(join(work, "w.db"));
+  try {
+    source.exec("pragma journal_mode = wal; pragma wal_autocheckpoint = 0;");
+    source.exec("create table t (n integer)");
+    const insert = source.prepare("insert into t (n) values (?)");
+    for (let n = 0; n < 50; n++) insert.run(n);
+    for (const suffix of ["", "-wal", "-shm"])
+      await copyFile(join(work, `w.db${suffix}`), join(roots.venueDir, `venue.db${suffix}`));
+  } finally {
+    source.close();
+  }
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 2);
+  const aside = setAsideFolderPaths(roots, record.setAside!).venue;
+  expect(await readdir(aside)).toEqual(["venue.db-wal"]);
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+
+  expect((await readdir(aside)).sort()).toEqual(["venue.db", "venue.db-shm", "venue.db-wal"]);
+  for (const suffix of ["", "-wal", "-shm"])
+    await expect(lstat(join(roots.venueDir, `venue.db${suffix}`))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  const url = pathToFileURL(join(aside, "venue.db"));
+  url.searchParams.set("mode", "ro");
+  const db = new DatabaseSync(url, { readOnly: true });
+  try {
+    expect((db.prepare("select count(*) as n from t").get() as { n: number }).n).toBe(50);
+  } finally {
+    db.close();
+  }
+});
+
+// Six pieces in move order: the record folder, trading.env, .venue.db-litestream, -wal, -shm, venue.db.
+it.each([1, 2, 3, 4, 5, 6])(
+  "a cut at rename %i: the resume finishes the rest, into one folder",
+  async (n) => {
+    const attempt = await startAgainAttempt(await scratch());
+    const { roots } = attempt;
+    const before = await foundEverywhere(roots);
+    const record = await prepared(roots, attempt.administratorId);
+    await cutMove(roots, record, n);
+
+    expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+
+    await expectAllAside(roots, record, before);
+  },
+);
+
+it("a resume after a move that finished finds everything already moved and renames nothing", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  const record = await prepared(roots, attempt.administratorId);
+  await moveStartAgainUnits(roots, record);
+  const renames: string[] = [];
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      renames.push(from);
+      await fs.rename(from, to);
+    },
+  };
+
+  expect(await resumeStartAgainSetAside(roots, io)).toBe("resumed");
+
+  expect(renames).toEqual([]);
+  await expectAllAside(roots, record, before);
+});
+
+it("a cut before the note was raised: the resume raises it", async () => {
+  const attempt = await startAgainAttempt(await scratch(), {
+    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
+  });
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  const record = await prepared(roots, attempt.administratorId);
+  expect((await readStartAgainNote(roots.stateDir))!.floorMs).toBe(60_000);
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+
+  expect(await readStartAgainNote(roots.stateDir)).toEqual({
+    version: 1,
+    floorMs: record.noteFloorMs,
+    lastName: "0CNQT",
+    module: "probe",
+  });
+  expect(
+    await readFile(join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env"), "utf8"),
+  ).toBe("X=1\n");
+});
+
+it("the resume removes leftover probe folders a cut left", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  const record = await prepared(roots, attempt.administratorId);
+  const probe = join(
+    setAsideFolderPaths(roots, record.setAside!).state,
+    `${PROBE}${stemOf(record)}`,
+  );
+  await mkdir(probe);
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+
+  await expect(lstat(probe)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("a piece changed between the cut and the resume: the resume stops and moves nothing more", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  const record = await prepared(roots, attempt.administratorId);
+  // The record folder, trading.env, .venue.db-litestream and the -wal moved; -shm is next.
+  await cutMove(roots, record, 5);
+  await writeFile(join(roots.venueDir, "venue.db-shm"), "rewritten by someone");
+  const renames: string[] = [];
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      renames.push(from);
+      await fs.rename(from, to);
+    },
+  };
+
+  expect(await resumeStartAgainSetAside(roots, io)).toBe("stopped");
+
+  expect(renames).toEqual([]);
+  expect(await readFile(join(roots.venueDir, "venue.db-shm"), "utf8")).toBe("rewritten by someone");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+  expect(await readdir(setAsideFolderPaths(roots, record.setAside!).venue)).toEqual([
+    ".venue.db-litestream",
+    "venue.db-wal",
+  ]);
+});
+
+it("a moved piece changed in the set-aside folder, or present at both ends, stops the resume", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 2);
+  const folders = setAsideFolderPaths(roots, record.setAside!);
+  await writeFile(join(folders.state, "trading.env"), "rewritten");
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+
+  // The original back at its source and a copy at the destination: neither end is clear.
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a piece still at its source with something else at its destination stops the resume, and nothing is overwritten", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 1);
+  const occupied = join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env");
+  await writeFile(occupied, "someone else's");
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+
+  expect(await readFile(occupied, "utf8")).toBe("someone else's");
+  expect(await readFile(join(roots.stateDir, "trading.env"), "utf8")).toBe("X=1\n");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a piece gone from both ends, or one with an extra entry, stops the resume", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await put(join(roots.venueDir, ".venue.db-litestream", "generations", "a.wal"), "one");
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 1);
+  await writeFile(join(roots.venueDir, ".venue.db-litestream", "extra"), "new");
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+
+  await rm(join(roots.venueDir, ".venue.db-litestream"), { recursive: true });
+  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a piece replaced by a link stops the resume, and the link is not moved", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 1);
+  await rm(join(roots.stateDir, "trading.env"));
+  await fs.symlink(join(roots.venueDir, "venue.db"), join(roots.stateDir, "trading.env"));
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+
+  expect((await lstat(join(roots.stateDir, "trading.env"))).isSymbolicLink()).toBe(true);
+  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a rename that fails at the resume refuses setup.start_again_incomplete with reason set-aside failed: EXDEV venue/venue.db, and moves nothing more", async () => {
+  const base = await scratch();
+  const attempt = await startAgainAttempt(base);
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  const record = await prepared(roots, attempt.administratorId);
+  // trading.env moved; the cut came at venue.db, the last piece.
+  await cutMove(roots, record, 2);
+  const before = await snapshot(base);
+  const io: SetAsideIo = {
+    ...realIo,
+    rename: async (from, to) => {
+      if (from === join(roots.venueDir, "venue.db")) throw errno("EXDEV");
+      await fs.rename(from, to);
+    },
+  };
+
+  await expect(resumeStartAgainSetAside(roots, io)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: EXDEV venue/venue.db",
+  });
+  // The resume held the venue lock, whose file stays; nothing else changed.
+  const after = await snapshot(base);
+  expect(after.filter((line) => line.startsWith("venue/venue.lock:"))).toHaveLength(1);
+  expect(after.filter((line) => !line.startsWith("venue/venue.lock:"))).toEqual(before);
+  // The next start tries again.
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(
+    await readFile(join(setAsideFolderPaths(roots, record.setAside!).venue, "venue.db"), "utf8"),
+  ).toBe("found database");
+});
+
+it("a piece that cannot be looked at refuses naming it", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  const record = await prepared(roots, attempt.administratorId);
+  await mkdir(setAsideFolderPaths(roots, record.setAside!).state, { recursive: true });
+  const io: SetAsideIo = {
+    ...realIo,
+    lstat: (async (path: string, options?: unknown) => {
+      if (path.endsWith("trading.env")) throw errno("EACCES");
+      return fs.lstat(path, options as never);
+    }) as typeof fs.lstat,
+  };
+
+  await expect(resumeStartAgainSetAside(roots, io)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "set-aside failed: EACCES state/trading.env",
+  });
+});
+
+it("no move record, or only a keep record: none, and nothing touched", async () => {
+  const none = await startAgainAttempt(await scratch());
+  await rm(join(none.roots.venueDir, "first-setup-deleting.json"));
+  expect(await resumeStartAgainSetAside(none.roots)).toBe("none");
+
+  const base = await scratch();
+  const attempt = await startAgainAttempt(base, {
+    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
+  });
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  await mkdir(join(roots.stateDir, `${PROBE}1700000000000-${attempt.attemptId}`));
+  const before = await snapshot(base);
+  expect(await resumeStartAgainSetAside(roots)).toBe("none");
+  expect(await snapshot(base)).toEqual(before);
+
+  const survey = choiceOf(await surveyStartAgainLeftovers(roots));
+  await writeStartAgainChoice(roots.stateDir, {
+    at: new Date().toISOString(),
+    attemptId: survey.attemptId,
+    frozenDigest: survey.frozenDigest,
+    markerSha256: survey.markerSha256,
+    choice: "keep",
+    administrator: { administratorId: attempt.administratorId, ...START_AGAIN_ADMIN },
+    ownerGeneration: 0,
+    listed: { digest: survey.digest, units: survey.units },
+    setAside: null,
+    noteFloorMs: null,
+  });
+  const kept = await snapshot(base);
+  expect(await resumeStartAgainSetAside(roots)).toBe("none");
+  expect(await snapshot(base)).toEqual(kept);
+  expect((await readStartAgainNote(roots.stateDir))!.floorMs).toBe(60_000);
+});
+
+it("two move records: the latest is resumed, into its own folder", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  const record = await prepared(roots, attempt.administratorId, {
+    at: new Date(Date.now() - 60_000).toISOString(),
+  });
+  const later = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, later, 1);
+
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+
+  expect(
+    await readFile(join(setAsideFolderPaths(roots, later.setAside!).state, "trading.env"), "utf8"),
+  ).toBe("X=1\n");
+  await expect(
+    lstat(join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
