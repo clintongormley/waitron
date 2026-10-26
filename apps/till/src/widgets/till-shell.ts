@@ -471,6 +471,7 @@ export class TillShell extends LitElement {
   // Compared in `updated`, not taken from the controller's `onChange`: a host coming back to the
   // page redraws a changed logo with no `onChange`.
   #drawnLogo?: string;
+  #revealedTable?: string;
   #fittedWidth = 0;
   #fittedLocale?: string;
   #logoRetry?: ReturnType<typeof setTimeout>;
@@ -523,6 +524,26 @@ export class TillShell extends LitElement {
       void this.#fit();
     }
     this.#retryHiddenLogo();
+    void this.#revealSelectedTable();
+  }
+
+  /** Scrolls the strip, never the page, to show a newly selected table's button, once the bar's
+   * own elements have drawn and so given the strip its width. */
+  async #revealSelectedTable(): Promise<void> {
+    const tableId = this.barTables.find((table) => table.current)?.tableId;
+    if (tableId === this.#revealedTable) return;
+    this.#revealedTable = tableId;
+    if (tableId === undefined) return;
+    await this.#settled();
+    const button = this.renderRoot.querySelector<HTMLElement>(
+      `[data-bar-table="${CSS.escape(tableId)}"]`,
+    );
+    if (!button) return;
+    const strip = button.parentElement!;
+    const box = button.getBoundingClientRect();
+    const view = strip.getBoundingClientRect();
+    if (box.left < view.left) strip.scrollLeft -= view.left - box.left;
+    else if (box.right > view.right) strip.scrollLeft += box.right - view.right;
   }
 
   /** A failed logo's box retries only while it is on the page, so while the bar leaves the logo out

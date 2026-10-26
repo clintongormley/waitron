@@ -1208,6 +1208,80 @@ describe("a handheld's table buttons", () => {
       }
     });
   });
+
+  describe("the selected table's button is scrolled into the strip's view at 390", () => {
+    const tenTables = (current?: string): BarTable[] =>
+      Array.from({ length: 10 }, (_, i) => ({
+        tableId: `t${i + 1}`,
+        name: `T${i + 1}`,
+        unsent: true,
+        current: `t${i + 1}` === current,
+      }));
+    const stripOf = (el: TillShell) =>
+      el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
+    const expectInStrip = (el: TillShell, tableId: string) => {
+      const strip = stripOf(el).getBoundingClientRect();
+      const box = buttonOf(el, tableId).getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(strip.left - 0.5);
+      expect(box.right).toBeLessThanOrEqual(strip.right + 0.5);
+    };
+
+    it("when the shell first draws with the last table selected", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const pageScroll = window.scrollY;
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t10"),
+        });
+        await frame();
+        expect(stripOf(el).scrollWidth).toBeGreaterThan(stripOf(el).clientWidth);
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+        expect(window.scrollY).toBe(pageScroll);
+      });
+    });
+
+    it("when the selection moves to the last table, and not again on a redraw that keeps it", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "floor",
+          operatorName: "Ana",
+          barTables: tenTables(),
+        });
+        await frame();
+        expect(stripOf(el).scrollLeft).toBe(0);
+        el.activeScreen = "order";
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+        stripOf(el).scrollLeft = 0;
+        el.barTables = tenTables("t10");
+        await el.updateComplete;
+        await frame();
+        expect(stripOf(el).scrollLeft).toBe(0);
+      });
+    });
+
+    it("back towards the start when the selection moves from the last table to the first", async () => {
+      setLocale("en-GB");
+      await atViewport(390, async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "order",
+          operatorName: "Ana",
+          barTables: tenTables("t10"),
+        });
+        await vi.waitFor(() => expectInStrip(el, "t10"));
+        el.barTables = tenTables("t1");
+        await el.updateComplete;
+        await vi.waitFor(() => expectInStrip(el, "t1"));
+      });
+    });
+  });
 });
 
 describe("till-shell at phone width", () => {

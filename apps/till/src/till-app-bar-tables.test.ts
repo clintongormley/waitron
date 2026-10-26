@@ -660,6 +660,25 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(tableOrder(el)).not.toBeNull();
     expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
   });
+
+  it("opens the Floor screen when Floor is tapped on the Order screen with no table", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4With("p1"), mesa9]),
+    });
+    await flush(el);
+    await signIn(el);
+    await toFloor(el);
+    history.pushState(null, "", "/tabs/order");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(floor(el)).toBeNull();
+    shell(el).shadowRoot!.querySelector<HTMLButtonElement>("header .tab")!.click();
+    await flush(el);
+    expect(floor(el)).not.toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(location.pathname).toBe("/tabs/floor");
+    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+  });
 });
 
 describe("till-app: a till's bar", () => {
