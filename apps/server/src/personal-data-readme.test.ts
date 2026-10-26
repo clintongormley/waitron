@@ -597,8 +597,11 @@ ${ASK}
   });
 
   it("names the venue generically and ends at the ask line with no name and no notice", () => {
-    const { privacyNoticeUrl: _, ...noNotice } = jordi;
-    const lines = invoiceCustomerReadme({ ...noNotice, venue: null }).split("\n");
+    const lines = invoiceCustomerReadme({
+      ...jordi,
+      privacyNoticeUrl: undefined,
+      venue: null,
+    }).split("\n");
     expect(lines[0]).toBe("Your data held by the venue");
     expect(lines.at(-2)).toBe("Contact the venue to ask.");
   });
