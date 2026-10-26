@@ -516,6 +516,19 @@ record says was discarded. At this commit the record's `shown.recovery` holds th
 time, last activity and series name, not its id
 (`packages/provisioning/src/first-setup-start-again-confirmation.ts`, `StartAgainRecoveryShown`).
 
+## A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series name
+
+Left open by A1042; the behaviour predates it. Taking an invoice series name needs a second clock,
+a time reading from somewhere other than the box, and a reading more than 30 seconds older than the
+box's own counts as stale (`packages/fiscal-verifactu/src/hour-clock.ts:81`). A1042's U4a review
+held a Waitron Cloud recovery's commit step before its download in the test host
+`apps/server/test/hour-recovery-host.ts`, whose internet clock answers "offline" (`:111-115`), so
+the only second clock was the browser's reading. Held 29 seconds, the commit finished; held 31
+seconds, it was refused `sif.allocation_invalid` with reason `second_clock_missing`. The same run on
+main at 21d01dfac gave the same result. A Cloud download may run for up to 14 minutes
+(`apps/server/src/cloud-recovery.ts:121`). Not measured: whether a real box takes a fresh internet
+reading when it places the recovery. Next step: measure that on a box.
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database

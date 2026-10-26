@@ -379,6 +379,8 @@ Setup-app wording for the same two codes (`shell.ts`, through `FIRST_SETUP_ERROR
 | `setup.start_again_incomplete` | Start again has not finished. Restart the box, then try again. | «Empezar de nuevo» aún no ha terminado. Reinicia el equipo y vuelve a intentarlo. |
 | `setup.workspace_unsupported` | This box holds a first setup kept by an older Waitron. Reinstall Waitron on it. | Este equipo guarda una configuración inicial de una versión anterior de Waitron. Reinstala Waitron en él. |
 
+_2026-10-26: the built words differ from both tables above_ — the recovery page's in 7713ffb86 (owner, 2026-10-25: never "ask whoever installed") and 812e1d595, the setup app's `setup.start_again_incomplete` in U7d (882f4ced1, bbda87303) and its `setup.workspace_unsupported` in 7713ffb86. They live in `apps/server/src/recovery-surface.ts:458-481` and `apps/setup/src/i18n/strings/shell.ts:9-12` (English) and `:157-160` (Spanish).
+
 A damaged note is not a start refusal. It is read only when a name is chosen, so the setup or restore screen shows `setup.attempt_invalid`'s existing text. On a box with `waitron.sh` the way out is `waitron.sh reset --all` (Q4); on a box the USB stick installed, which has no `waitron.sh` (B3 design §17 item 3, `docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:1031-1033`), the way out is in "For the owner: what waits for approval", part 3.
 
 ## Review focus

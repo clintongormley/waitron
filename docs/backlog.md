@@ -479,6 +479,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   open by A1042.
   [Detail](backlog/setup.md#a-recovery-that-start-again-recorded-as-discarded-can-still-be-resumed-after-a-power-cut)
 
+- **A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series
+  name.** In a test host, a commit held 31 seconds failed `second_clock_missing`; same on main. Not
+  measured on a box. Left open by A1042.
+  [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
+
 - **Bound certificate password-derivation work before opening a file.** PKCS#12 files choose their
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
   Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
