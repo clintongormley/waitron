@@ -6,7 +6,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTotal } from "./total.js";
 import type { TillProduct } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -26,7 +26,7 @@ describe("till-total", () => {
 
   it("shows the total label and the store's formatted total", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillTotal>("till-total", { store });
     expect(el.shadowRoot!.textContent).toContain(t("label.total"));
     expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00", currentLocale()));
@@ -36,7 +36,7 @@ describe("till-total", () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTotal>("till-total", { store });
     expect(el.shadowRoot!.textContent).toContain(formatMoney("0", currentLocale()));
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00", currentLocale()));
   });
@@ -46,7 +46,7 @@ describe("till-total", () => {
     const { el, host } = await mountWidget<TillTotal>("till-total", { store });
     expect(el.shadowRoot!.textContent).toContain(formatMoney("0", currentLocale()));
     host.remove(); // disconnectedCallback → unsubscribe
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(formatMoney("0", currentLocale()));
   });
