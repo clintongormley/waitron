@@ -320,6 +320,7 @@ This records the built default (plans A756 PRs 6–8), not an owner ruling; owne
 station should offer more. Every other choice starts at its default and is changed in the station editor: one line for
 identical dishes, no held printing, MOVED slips printed, one item at a time on the screen, and
 changes allowed while held or waiting.
+**2026-10-26 (A797 slice 6):** Add station also sets the Ready warning time, 3 minutes by default.
 
 ### Changes after sending: every part of a dish decides, and removal is not gated (A756 PR 8, 2026-10-24)
 
