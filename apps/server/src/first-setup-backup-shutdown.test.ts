@@ -1,12 +1,13 @@
 import { archiveHost, key, root, clock } from "../test/hour-recovery-host.js";
-import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { request as ownerRequest } from "../test/first-fiscal.js";
 import { Agent } from "undici";
-import { expect, it, vi } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePorts } from "./testing/free-ports.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -20,6 +21,12 @@ import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { ALL_MODULES } from "@waitron/composition";
 
 const prefix = "/setup-api/first-setup/resolution/backup";
+// tsx caches its transforms under `os.tmpdir()/tsx-<euid>`; each case gives the child its own
+// TMPDIR, so without this shared cache every child compiles the whole server again before listening.
+let transformCache: string | undefined;
+afterAll(async () => {
+  if (transformCache !== undefined) await rm(transformCache, { recursive: true, force: true });
+});
 it.each([
   { level: "normal", signal: "SIGTERM" },
   { level: "normal", signal: "SIGINT" },
@@ -134,6 +141,11 @@ it.each([
     }
     const scratch = join(root, "child-tmp");
     await mkdir(scratch);
+    transformCache ??= await mkdtemp(join(tmpdir(), "backup-shutdown-transforms-"));
+    await symlink(
+      transformCache,
+      join(scratch, `tsx-${process.geteuid?.() ?? userInfo().username}`),
+    );
     const migrationsRoot = join(root, "migrations");
     await mkdir(migrationsRoot);
     const sets = manifestSets();
@@ -182,7 +194,7 @@ it.each([
         child.on("exit", (code, signal) => resolve({ code, signal }));
       },
     );
-    const deadline = setTimeout(() => child.kill("SIGKILL"), 30_000);
+    const deadline = setTimeout(() => child.kill("SIGKILL"), 75_000);
     const agent = new Agent({
       connect: { ca: await readFile(join(f.roots.stateDir, "tls/ca.crt")) },
     });
@@ -195,7 +207,7 @@ it.each([
           } as RequestInit);
           expect(status.status).toBe(200);
         },
-        { timeout: 15_000 },
+        { timeout: 45_000 },
       );
       const form = new FormData();
       form.set(
@@ -260,4 +272,5 @@ it.each([
       await agent.close();
     }
   },
+  120_000,
 );
