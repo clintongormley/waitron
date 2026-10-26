@@ -144,6 +144,14 @@ export const shellEn = {
     "The export has two categories named “{name}” in the same place. Rename one in the restaurant you exported from, export again, then load the new export.",
   "shell.configuration.product_name_taken":
     "The export has two active products or variants named “{name}”. Rename one in the restaurant you exported from, export again, then load the new export.",
+  "shell.configuration.privacy_notice_url_invalid":
+    "This export's privacy notice web page is not an address Waitron accepts. On the box you exported from, correct it on the Privacy card in Venue settings, export again, then load the new export.",
+  "shell.configuration.privacy_notice_url_too_long":
+    "This export's privacy notice web page is longer than Waitron accepts. On the box you exported from, shorten it on the Privacy card in Venue settings, export again, then load the new export.",
+  "shell.configuration.privacy_email_invalid":
+    "This export's privacy email is not an address Waitron accepts. On the box you exported from, correct it on the Privacy card in Venue settings, export again, then load the new export.",
+  "shell.configuration.privacy_email_too_long":
+    "This export's privacy email is longer than Waitron accepts. On the box you exported from, shorten it on the Privacy card in Venue settings, export again, then load the new export.",
 } as const;
 
 export const shellEs: Record<keyof typeof shellEn, string> = {
@@ -297,4 +305,12 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "La exportación tiene dos categorías llamadas «{name}» en el mismo lugar. Cambia el nombre de una en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.product_name_taken":
     "La exportación tiene dos productos o variantes activos llamados «{name}». Cambia el nombre de uno en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.privacy_notice_url_invalid":
+    "La página web del aviso de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígela en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.privacy_notice_url_too_long":
+    "La página web del aviso de privacidad de esta exportación es más larga de lo que Waitron acepta. En el equipo del que exportaste, acórtala en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.privacy_email_invalid":
+    "El correo de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígelo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+  "shell.configuration.privacy_email_too_long":
+    "El correo de privacidad de esta exportación es más largo de lo que Waitron acepta. En el equipo del que exportaste, acórtalo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
 };

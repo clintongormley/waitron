@@ -3039,6 +3039,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     ["setup.request_invalid", 12],
     ["setup.request_invalid", undefined],
     ["backup.artifact_invalid", "module:core"],
+    ["venue.detail_invalid", "legalName"],
   ])("keeps other configuration refusals generic (%s, %s)", async (code, field) => {
     const el = await mountSetupApp(
       stubApi({
@@ -3051,6 +3052,80 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       "The configuration export could not be opened. Check the file and passphrase.",
     );
   });
+
+  it.each([
+    [
+      "en-GB",
+      "privacyNoticeUrl",
+      "web_address",
+      "This export's privacy notice web page is not an address Waitron accepts. On the box you exported from, correct it on the Privacy card in Venue settings, export again, then load the new export.",
+    ],
+    [
+      "en-GB",
+      "privacyNoticeUrl",
+      "length",
+      "This export's privacy notice web page is longer than Waitron accepts. On the box you exported from, shorten it on the Privacy card in Venue settings, export again, then load the new export.",
+    ],
+    [
+      "en-GB",
+      "privacyEmail",
+      "email",
+      "This export's privacy email is not an address Waitron accepts. On the box you exported from, correct it on the Privacy card in Venue settings, export again, then load the new export.",
+    ],
+    [
+      "en-GB",
+      "privacyEmail",
+      "length",
+      "This export's privacy email is longer than Waitron accepts. On the box you exported from, shorten it on the Privacy card in Venue settings, export again, then load the new export.",
+    ],
+    [
+      "es-ES",
+      "privacyNoticeUrl",
+      "web_address",
+      "La página web del aviso de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígela en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    ],
+    [
+      "es-ES",
+      "privacyNoticeUrl",
+      "length",
+      "La página web del aviso de privacidad de esta exportación es más larga de lo que Waitron acepta. En el equipo del que exportaste, acórtala en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    ],
+    [
+      "es-ES",
+      "privacyEmail",
+      "email",
+      "El correo de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígelo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    ],
+    [
+      "es-ES",
+      "privacyEmail",
+      "length",
+      "El correo de privacidad de esta exportación es más largo de lo que Waitron acepta. En el equipo del que exportaste, acórtalo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    ],
+  ] as const)(
+    "explains a refused privacy contact in a configuration export (%s, %s, %s)",
+    async (locale, field, reason, sentence) => {
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            stageConfiguration: vi.fn().mockRejectedValue({
+              code: "venue.detail_invalid",
+              params: { field, reason },
+              status: 400,
+            }),
+          }),
+        );
+        setLocale(locale);
+        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+        expect(readDraft(el).configurationImport).toBeUndefined();
+        expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
 
   it.each([
     [

@@ -431,6 +431,17 @@ const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
 
 const isName = (value: unknown): value is string => typeof value === "string" && value !== "";
 
+const PRIVACY_CONTACT_MESSAGES: Record<string, { invalid: StringKey; tooLong: StringKey }> = {
+  privacyNoticeUrl: {
+    invalid: "shell.configuration.privacy_notice_url_invalid",
+    tooLong: "shell.configuration.privacy_notice_url_too_long",
+  },
+  privacyEmail: {
+    invalid: "shell.configuration.privacy_email_invalid",
+    tooLong: "shell.configuration.privacy_email_too_long",
+  },
+};
+
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
@@ -442,6 +453,13 @@ function describeConfigurationRefusal(error: unknown): Message {
       (params.field.startsWith("module:") && params.field.length > "module:".length))
   ) {
     return say("shell.configuration.incompatible_version");
+  }
+  if (code === "venue.detail_invalid" && typeof params?.field === "string") {
+    const privacy = Object.hasOwn(PRIVACY_CONTACT_MESSAGES, params.field)
+      ? PRIVACY_CONTACT_MESSAGES[params.field]
+      : undefined;
+    if (privacy !== undefined)
+      return say(params.reason === "length" ? privacy.tooLong : privacy.invalid);
   }
   const key = typeof code === "string" ? CONFIGURATION_NAME_MESSAGES[code] : undefined;
   const name = params?.name;
