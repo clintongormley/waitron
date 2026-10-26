@@ -3,9 +3,11 @@
 **Status:** APPROVED WITH CHANGES, owner 2026-10-26 ~12:15: “We don't need the configuration
 code. It's not a concern. The rest approved.” Revised by Lane F (B3r) to remove setup credentials,
 repeat the disk recovery key on every sheet, and replace the terminal unlock fallback with a
-Waitron preboot screen (§7.5). Q2 is answered. Only the preboot reachability/connection/attempt
-policy awaits ONE owner choice (§18); its external mechanics remain PROPOSED qualification
-requirements. Planning slices 1, 2, 3, 5, 6 and 8 is authorised; building is not.
+Waitron preboot screen (§7.5). Q2 is answered. The owner's 2026-10-26 ~13:45 and ~14:00 CET
+answers settle unlock reachability and the normal Wi-Fi boot copy (§18). Implementation details
+and the retained shared-backoff proposal remain PROPOSED requirements. Actual Android Chrome
+trust qualification is UNVERIFIED / NOT RUN today, with historical negative evidence and a release
+hold (§7.5). Planning slices 1, 2, 3, 5, 6 and 8 is authorised; building is not.
 Plan: [`2026-10-26-b3-usb-installer.md`](../plans/2026-10-26-b3-usb-installer.md).
 Backlog entry: `docs/backlog.md`, "B3. The bootable USB installer". Pictures:
 [`docs/backlog/mockups/b3-usb-installer/`](../../backlog/mockups/b3-usb-installer/).
@@ -79,7 +81,9 @@ wizard.
    disk key and recovery key, its name tag, the disk grown to fill the box, the print
    agent's AppArmor line, §7, §8, §12); CI builds the disk
    and installs it in a virtual machine before it is published.
-3. A stolen disk, or the box started from any other stick, shows only scrambled data (§7).
+3. A stolen disk, or the box started from another stick, cannot open encrypted venue data without
+   its key (§7's qualification). Startup files remain readable, including the accepted normal
+   Wi-Fi join copy and separate recovery leaf private key (§7.5).
 4. A stick left in, or put back into, a working box never erases it: the box keeps selling (§5).
 5. The box needs no terminal after install: its screen, its network and its maintenance are reached
    through Waitron (§9–§11).
@@ -367,7 +371,7 @@ encrypted part of a disk; **btrfs** is a Linux filesystem that can take instant 
 | Part | Holds | Why separate |
 | --- | --- | --- |
 | EFI system partition, 512 MiB, FAT, not encrypted | Debian's signed boot loader (§15), also at the fallback path (guard 1) | The firmware starts from it |
-| Boot partition, 1 GiB, ext4, not encrypted | The kernel and the startup image that unlocks the disk (§7.2) | The loader reads them before the disk is unlocked |
+| Boot partition, 1 GiB, ext4, not encrypted | The kernel and startup image (§7.2), plus separate recovery identity and minimal normal Wi-Fi join copy (§7.5) | The loader reads boot files before unlock; recovery data stays outside its measured file set |
 | LUKS2 container, rest of the disk, marked as Waitron's by its partition type and name and its "subsystem" field (§5.1 guard 3) | One btrfs filesystem, in five top-level subvolumes: | Encrypted (§7) |
 | `@rootfs` → `/` | Debian, Docker, the browser, the box's host service | Debian's own updates (§14) roll back separately from the venue |
 | `@images` → Docker's image and container store | The Waitron images | A950 keeps the old image by its tag, not in the snapshot (`docs/backlog/box.md:76`) |
@@ -376,7 +380,8 @@ encrypted part of a disk; **btrfs** is a Linux filesystem that can take instant 
 | `@host-state` → `/var/lib/waitron-host` | Retained disk-key record, physical recovery identity metadata, cutover handoff/phase and host audit | New 2026-10-26 storage call for retained recovery: outside both `@rootfs` and `@volumes` snapshots/rollback. It is not a venue backup/export source. |
 
 - **The kernel and startup image sit outside the encryption** because Debian's loader must read them
-  before anything is unlocked; neither holds venue data. Whether Debian's signed loader can read
+  before anything is unlocked; neither embeds venue data or Wi-Fi secrets. The separate boot copy
+  of normal Wi-Fi join fields is an accepted exception to encrypted credentials (§7.5). Whether Debian's signed loader can read
   them from inside the container instead, and whether that is worth its cost, is slice 1's to
   decide; the table above is the plain arrangement. **My call.**
 - **Encryption does not change what A950 snapshots.** btrfs runs on the unlocked container exactly
@@ -400,8 +405,10 @@ encrypted part of a disk; **btrfs** is a Linux filesystem that can take instant 
 ## 7. Disk encryption (the owner's, §18 Q4)
 
 **The whole venue lives on one encrypted container whose key the box's security chip (a TPM 2.0)
-gives only to the box's own start-up.** A normal start unlocks with no password; the disk taken out,
-or the box started from any other stick — this installer included — shows only scrambled data. A
+gives only to the box's own start-up.** A normal start is intended to unlock with no password;
+§7.2 qualifies refusal from another stick, this installer included. The container protects venue
+data, while unencrypted startup files expose the Wi-Fi join copy and recovery leaf private key
+described in §7.5. A
 **recovery key**, printed at setup on the venue's recovery sheet, opens it when the chip will not
 (§7.5).
 
@@ -523,7 +530,8 @@ The installer cannot seal the key to the box's own start-up — it is a differen
    **First start changes no file the boot loader reads** — those files are what the seal records
    (P36), and a change made after reading them would be sealed to the old ones — so the fresh machine
    identity and anything else first start writes stay out of the startup image; slice 1 checks it by
-   comparing the boot partition before and after first start. **My call.**
+   comparing every boot-loader-measured byte before and after first start, while separately
+   recording the recovery identity/Wi-Fi files staged outside that set (§7.5). **My call.**
 3. **Waitron does not start while an empty passphrase remains.** The first-start service refuses.
    This is the step that makes "no venue data on a disk anyone can open" true, so it is a check, not
    an order of steps. A box in that state holds no venue, and is simply reinstalled. **Where a
@@ -628,110 +636,186 @@ root. Disk-key rotation after compromise is not designed here. The USB never car
 
 **Preboot requirements, before root opens.** A separate minimal Waitron UI and unlock service run
 from the unencrypted startup image, in Spanish with English one tap away, on a local display and
-on the selected network connection for a headless box. They accept a disk key only through the
-local screen or an approved encrypted remote connection, never plain HTTP. The usual trusted
-normal-server certificate remains inside the locked disk and is unavailable here. No venue
-content, main Wi-Fi password, retained disk key or general host socket belongs in that image.
-Network discovery, TLS trust/bootstrap, graphics/input, QR entry and memory cleanup below are
-**PROPOSED qualification requirements**. The source/probe limits below do not establish Linux or
-phone support. The only remaining owner choice is the complete policy below, not a second
-approval of B3 or Q2.
+over cable or the saved normal Wi-Fi connection for a headless box. No terminal or emergency shell
+is offered. Accept a disk key only on the local screen or at the verified trusted HTTPS recovery
+hostname below. No plain-HTTP or untrusted-HTTPS key form, venue content, retained disk key or general
+host socket belongs here. These are proposed implementation and qualification requirements, not
+implemented Linux/browser behavior. The owner settled reachability and Wi-Fi; the exact backoff
+below is a retained plan proposal, not numbers explicitly chosen in those answers.
 
-**Recommended policy A, pending that choice:** wired LAN for remote preboot, plus the local screen;
-no preboot copy of the venue's main Wi-Fi profile and no recovery hotspot. A headless Wi-Fi-only
-box needs a cable to the router for recovery. Use a separate per-disk recovery leaf certificate, signed while the normal system is unlocked by
+**Approved reachability, 2026-10-26 ~13:45 CET.** While locked, `http://waitron.local` redirects
+straight to `https://unlock-<installation-id>.waitron.local`. `https://waitron.local` instead
+serves a deliberately untrusted redirect-only certificate, NOT signed by the box CA. The owner
+accepts clicking past that one warning solely to reach the redirect. Neither entry point accepts
+a key, sign-in or configuration change. The target is a fixed host-owned per-disk URL, never a
+request-supplied redirect or credential-bearing URL. You enter the key only after verifying the
+trusted recovery hostname against the sheet. The redirect is navigation, not proof of identity;
+no warning at the actual key form may be bypassed. Qualify both entry routes in the locked boot
+mode, and listener teardown/return to ordinary serving after unlock. Direct use of the sheet's
+full recovery URL remains available if a browser cannot proceed through the redirect warning.
+
+Use a separate per-disk recovery leaf certificate, signed while the normal system is unlocked by
 the box's existing local certificate authority (CA), the root certificate devices are asked to
-trust. The normal server leaf/private key and the CA signing key stay encrypted. Only the
-recovery leaf/private key and PUBLIC CA certificate are staged under `/boot/waitron-recovery/`,
-outside files read by the boot loader; do not rebuild the measured startup image on first start
-or expose the CA signing key. This extends today's certificate helper; it is not an existing
-preboot feature. A client that already trusts that CA should need no new root trust under the
-proposed design, subject to real-client qualification. A client using an operator's custom
-normal certificate may never have trusted the box CA and follows the new-client path.
+trust. The normal server certificate/private key and the CA signing key stay encrypted. Stage
+only the recovery leaf/private key, PUBLIC CA certificate, public disk identity metadata and the
+separate untrusted redirect-only certificate/private key under `/boot/waitron-recovery/`. None
+may contain the CA signing key. These files and the Wi-Fi copy below must stay outside files read
+and measured by the boot loader; do not rebuild the measured startup image on first start or on
+a network/identity update. This is an extension to build, not today's certificate helper behavior.
+A client already trusting that CA is the intended easy path, subject to actual-client qualification
+and the Android hold below. A client using an operator's custom normal certificate may never have
+trusted the box CA and follows the new-client path.
 
-Use `unlock-<installation-id>.waitron.local`, with an id independent of the venue name, on HTTPS
-port 443. The sheet prints that complete URL, the disk UUID, the PUBLIC CA SHA-256 fingerprint
-and the current recovery-leaf fingerprint. A new client first compares the downloaded CA's full
-fingerprint with the saved sheet or an already-trusted offline recovery pack, then installs it
-using the platform's trust procedure. The public HTTP help page carries only that CA and
-instructions, never a disk-key form. A fingerprint shown only by that untrusted page is not a
-check; never bypass an unexplained certificate warning. If the device cannot perform the
-fingerprint/trust step, use an already-trusting device or the local Waitron screen. This adds no
-setup code. Qualification must supply reproducible phone/desktop instructions; until then no
-phone-specific promise ships. Apple requires a separate manual TLS trust step for downloaded
-certificate profiles (P62).
+The recovery name is `unlock-<installation-id>.waitron.local`, independent of the venue name,
+on HTTPS port 443. The sheet keeps the complete URL, disk UUID, PUBLIC CA SHA-256 fingerprint,
+current recovery-leaf fingerprint and actual CA/leaf not-after dates. A new client compares the
+downloaded CA's full fingerprint with the saved sheet or already-trusted offline recovery pack,
+then installs explicit trust using qualified platform instructions. Public CA download/help is
+available without a key form; the plain `waitron.local` entry itself still redirects directly.
+A fingerprint shown only by an untrusted page is not a check. If the device cannot perform that
+step, use a qualified already-trusting device or the local Waitron screen. This grants no setup
+or sign-in authority. Apple requires a separate manual TLS trust step for downloaded certificate
+profiles (P62). No phone-specific safety promise ships before qualification.
+
+**Approved normal Wi-Fi copy, 2026-10-26 ~14:00 CET.** A Wi-Fi box keeps the normal network name
+(SSID) and password, plus only validated security/join fields actually needed by the qualified
+adapter, in the unencrypted boot partition. There is no separate recovery SSID and no unlock
+hotspot. Cable and local-display recovery remain available. The installer-only open hotspot in
+§5.3 stays separate. Anyone holding the box can extract this Wi-Fi password, including by removing
+the disk or starting from another signed Debian stick. The owner accepts that cost. The operator
+guide must say: **If a box is stolen, change the venue's Wi-Fi password.** Root-only permissions
+do not protect this copy against physical access. Copy no arbitrary network profile, other
+credentials, disk key, logs or credential-bearing URL into boot.
+
+**Proposed minimal-copy update contract (my call).** The running host alone owns a fixed
+`/boot/waitron-recovery/wifi.json`, a versioned record for one normal Wi-Fi connection. Network
+requests select validated join settings, never a destination path. Initial installer handoff and
+every Wi-Fi configuration change, including host-observed changes outside the dashboard, must
+reconcile this record; switching to cable-only
+or forgetting the selected Wi-Fi removes it. A cable temporarily plugged into a Wi-Fi-configured
+box is not itself a request to forget Wi-Fi. The host serializes network changes, records a durable
+encrypted pending operation on `@host-state`, applies/checks the authoritative normal configuration,
+and publishes only its resulting join fields. Do not report the whole change complete until the
+boot copy or its removal is durable; if the running connection changed but publication failed,
+report those two outcomes and recovery availability separately.
+
+For publication, verify the expected boot mount and root-owned directory, reject symlinks/non-regular
+files, validate bounded fields, write root-only `wifi.json.next` in the same directory, flush its
+bytes, atomically rename it to `wifi.json`, then flush the directory. Keep no boot-side backup or
+per-profile history. The fixed Wi-Fi cleanup allowlist is `wifi.json.next` plus, for cable-only,
+`wifi.json`; never scan/delete arbitrary boot paths. Remove obsolete staging copies, flush deletions,
+and retain the encrypted
+pending operation until reconciliation/cleanup completes. Cable-only cleanup removes the active
+copy as well. On an unlocked restart reconcile unfinished operations against authoritative settings;
+never replay an obsolete password over a newer configuration. Interrupted deletion can leave an old
+copy until reconciliation, so do not claim secure erasure or that a failed cleanup removed physical
+exposure. No general file-write RPC, arbitrary-path cleanup, secret audit fields or password-bearing
+command arguments/logs are allowed. Prove measured boot bytes unchanged across all updates and
+cleanup. Exact durability on the selected filesystem is a rig qualification, not a claim here.
+
+Before unlock, read only the validated active fixed-path record, never leftover temporary copies.
+A valid but stale password can fail to join; a missing/corrupt copy or unavailable adapter/network
+can leave the box unreachable. Bound retries and show the actual connection failure on the local
+screen; offer cable or local unlock, then repair/reconcile from the running host. Do not expose
+an unauthenticated network editor, invent a hotspot or promise Wi-Fi works after a reboot/power
+failure. Qualify password/SSID changes, cable-only removal, failure during publication/cleanup,
+reboot with old/new/missing/corrupt records, and an unjoinable network. A valid copy alone is not
+evidence of successful network reachability.
 
 While root is unlocked the host renews the recovery leaf under the same CA before expiry, keeps
 the old working pair until the new pair is checked, and writes it atomically outside the measured
 image. The CA fingerprint stays the sheet's trust anchor across leaf renewal; the printed leaf
-fingerprint is informational when renewal occurs. The host must refuse a leaf that outlives the
-CA and show the actual not-after dates on the sheet. An actually expired or unreadable recovery identity requires the local Waitron screen until
-the unlocked host can renew or repair it. A headless box then needs a display and input device
-plugged in; an already-trusting client cannot make an expired leaf valid. For a CLIENT clock or
-trust problem, use another correctly dated already-trusting device or the local screen. Discovery
-failure offers the sheet's certificate-matching address fallback or the local screen. Never
-downgrade to HTTP or disable certificate checks. Qualify each cause separately, including
-no-internet recovery and client certificate-expiry behavior.
-Reinstall creates a new CA/recovery identity and sheet; a restored venue must not replace that
-physical disk's preboot trust identity. A routine same-box cutover retains it. The preboot leaf
-key is readable with physical startup-disk access and can impersonate that recovery hostname;
-it is not the encrypted CA key and cannot prove untampered startup.
+fingerprint is informational when renewal occurs. Refuse a leaf that outlives the CA. An actually
+expired or unreadable recovery identity requires the local Waitron screen until the unlocked host
+can renew or repair it. A headless box then needs a display and input device plugged in; an already-
+trusting client cannot make an expired leaf valid. For a CLIENT clock or trust problem, use another
+correctly dated qualified already-trusting device or the local screen. Discovery failure offers
+the qualified certificate-matching address fallback or the local screen. Never downgrade the key
+form to HTTP or disable its certificate checks; the redirect-only warning exception does not apply
+to it. Qualify each cause separately, including no-internet recovery and expiry behavior.
+Reinstall creates a new CA/recovery identity and sheet; restoring a venue must not replace the
+physical disk's preboot identity. Same-box cutover retains it. Physical startup-disk access exposes
+the recovery leaf private key and permits impersonation of its recovery hostname. That leaf key
+is NOT the encrypted CA signing key and cannot mint other leaves. Do not infer broader impersonation
+from the historical CA-signed control below, or infer Android safety from keeping the CA key encrypted.
+Neither leaf nor CA trust proves untampered startup.
 
-**Narrow source and execution receipt, 2026-10-26.** Today's private CA permits the DNS subtrees
-`waitron.local` and `localhost` (`apps/server/src/self-signed-cert.ts:31-32`), and
-`reissueServerLeaf` signs a different leaf/key under the supplied CA (same file). A synthetic Node
-TLS probe using those real helpers accepted `unlock-a1b2.waitron.local` with the supplied CA,
-refused it without CA trust, and refused `waitron-unlock-a1b2.local` with “permitted subtree
-violation”, plus an untrusted-client control. This measures four Node handshakes, not initrd,
-mDNS, Chromium/Safari, device trust installation or expiry recovery. The public CA's current
-location and encrypted leaf paths are declared in `apps/server/src/box-secrets.ts:39-51`.
-Systemd documents a custom password-agent interface (P60); NetworkManager's early-boot generator
-only writes configuration and still needs a running network instance (P61). Those interfaces do
-not demonstrate the proposed preboot service.
+**Historical Node receipt and Android counter-evidence.** Today's CA permits the DNS subtrees
+`waitron.local` and `localhost` (`apps/server/src/self-signed-cert.ts:31-35`), and
+`reissueServerLeaf` signs a different leaf/key under the supplied CA (same file). The earlier
+2026-10-26 synthetic Node TLS probe using those helpers accepted `unlock-a1b2.waitron.local`
+with explicit CA trust, refused it without trust, and refused `waitron-unlock-a1b2.local` with
+“permitted subtree violation”, plus an untrusted-client control. Those four Node handshakes do not
+measure Android, initrd, mDNS, real browser trust installation, hostname-mismatch handling or expiry.
+The public CA and encrypted normal leaf paths are declared in `apps/server/src/box-secrets.ts:39-51`.
+Systemd's password-agent interface (P60) and NetworkManager's configuration-only early generator
+(P61) do not demonstrate the proposed preboot service either.
 
-Qualification must show collision detection and a certificate-matching private-address fallback
-with two boxes present; changing the address requires a leaf naming that address. An address
-learned from unauthenticated discovery is not proof of peer identity. Never silently reuse
-`waitron.local` or accept a similarly named peer. A public discovery page can say “disk locked” and give connection
-instructions, but accepts no key and exposes no venue data. Freeze the unlock target before
-listening: expected disk UUID plus expected layout/state. Wrong, missing or multiple matching
-disks, damaged metadata or a state requiring first-start repair offer Stop/reinstall guidance,
-not a key form or an automatic write. Public preboot metadata is not trusted evidence that the
-disk or startup is authentic.
+Commit `75f17f9e36125af3a620266a584507420e7197de` records an actual 2026-09-08 Android phone run:
+“a cert for a name OUTSIDE the root's permitted subtree” loaded with “a clean padlock (HTTPS 200)”.
+Its server log selected the outside-subtree leaf; the recorded method removed/reinstalled the root,
+closed Chrome and used fresh Incognito without warning bypass. Exact Android/Chrome versions were
+not captured. The current helper retains this pointer (`apps/server/src/self-signed-cert.ts:29-33`).
+This is historical negative evidence for CA name-constraint enforcement on one phone, not proof
+that the actual recovery leaf passes a hostname mismatch, and not current-device qualification.
+The removed historical spike document is recoverable from that literal commit, not a live file link.
 
-Proposed wrong-attempt policy for A: one verifier at a time across local and all remote clients.
-After each failed key, delay all clients by 2, 4, 8, 16, 32, then 60 seconds, capped at 60 seconds
-until a successful unlock or reboot. Malformed submissions cannot start concurrent verification
-or bypass the shared delay. Do not log submitted bytes. Keep key input only in process memory;
-never arguments, environment, files, swap, dumps, browser storage or access logs. Clear input and
-close listeners on success; clear on cancel/error and release buffers as soon as the open attempt
-ends. Actual memory lifetime, including browser/form retention and crash paths, needs measurement.
-A passer-by can see that recovery is waiting and cause delays by submitting wrong keys. A reboot
-resets this proposed in-memory backoff. It grants no setup, maintenance, network-change or admin
-access. Offline attacks on a stolen disk are outside this UI's rate limit.
+**Actual Android Chrome qualification: UNVERIFIED / NOT RUN, 2026-10-26.** The owner's claim that
+“any .local cert works for any domain” remains a claim to test. On the SAME actual device/build
+with explicit trust in the candidate box CA, require all three outcomes without click-through:
 
-**Alternatives for the same one choice:** B keeps the same TLS identity/trust flow and global delay
-but also loads a dedicated recovery Wi-Fi profile into preboot. It must be a separate restricted
-network credential, never the venue's normal Wi-Fi password. It exposes that recovery-network
-credential with the unencrypted startup files and needs a qualified provisioning/update flow.
-C keeps the wired path and offers a temporary unlock-only hotspot, uniquely named per disk, with
-a separate connection secret kept on the disk-key sheet and in preboot. It routes nothing, changes
-no venue connection and stops after unlock/cancel. It is not the installer's open hotspot and never
-runs alongside an unlocked venue. That secret controls the recovery network only; it is not a
-setup credential. C adds radio/hotspot and headless discovery qualification. Neither alternative
-makes an unsigned startup image trustworthy. These are proposed choices, not sourced claims of
-available Linux/browser behaviour.
+| Input served and requested name | Required outcome |
+| --- | --- |
+| Actual candidate recovery leaf served for `waitron.local`, with its SANs naming only the recovery identity | FAIL hostname verification; no trusted dashboard/key form |
+| Candidate-CA-signed control leaf naming an outside-permitted-subtree DNS name, requested at that matching name | FAIL CA name constraints, independently of hostname matching |
+| Actual candidate recovery leaf requested at its correct `unlock-<installation-id>.waitron.local` name | PASS with explicit CA trust, no warning |
 
-**Worked examples (illustrative, not measurements).** A: Marta's headless box refuses automatic
-unlock after a firmware change. She connects Ethernet, opens the sheet's recovery address on her
-laptop, verifies its preboot identity by the qualified sheet trust flow, sees the matching disk
-UUID and enters its disk key over TLS. Three wrong keys impose 2, 4 and 8 seconds globally. B: at
-a wireless-only site she uses the separate recovery SSID already provisioned for preboot; its
-profile is readable to someone with the startup disk. She still verifies TLS from the sheet.
-C: without a cable she joins the box-specific recovery network using the separate sheet secret,
-verifies TLS, unlocks, and that network closes. A passer-by's wrong attempts delay her on every
-route in all three policies. Choose A unless wireless recovery justifies the additional exposed
-network credential and qualification cost.
+Retain device/model, Android version/build/security patch, full Chrome version, trust-store type,
+installed CA fingerprint and clean trust/proceed-exception state; candidate source/image digests;
+served leaf/chain fingerprints, SANs, issuer, validity, CA constraints, requested URL/SNI, server
+selection/handshake evidence and visible browser result for each row. Use a controlled name inside
+no permitted DNS/IP subtree for the constraints row, with matching hostname and valid dates so a
+mismatch/expiry cannot masquerade as constraint enforcement. Keep the deliberately UNTRUSTED
+redirect-only certificate and its accepted warning as a separate fourth navigation check; never
+use it to satisfy either negative control. The positive control must pass on that same device,
+build and trust configuration or the negatives are inconclusive.
+
+The historical failure places the affected trust design and release on requalification hold. A
+failed negative control, failed positive control or missing actual-device result blocks release
+under this trust design. Retain the failure and seek an owner decision if review or Android results
+require changing approved behavior; never silently weaken hostname/CA checks, accept broad Android
+trust, substitute Node evidence or turn a warning bypass into a pass. This docs author ran no Android
+check and supplies no fresh result.
+
+Qualification must also show collision detection and a certificate-matching private-address fallback
+with two boxes present; changing the address requires a leaf naming it. Unauthenticated discovery
+and either redirect are not peer-identity evidence. `waitron.local` is redirect-only while locked,
+never an alias on the trusted recovery leaf. Freeze the unlock target before listening: expected
+disk UUID plus expected layout/state. Wrong, missing or multiple matching disks, damaged metadata
+or first-start-repair state offer Stop/reinstall guidance, not a key form or automatic write.
+Public preboot metadata is not trusted evidence that the disk/startup is authentic.
+
+**Retained wrong-attempt proposal (my call):** one verifier at a time across local and all remote
+clients. After each failed key, delay all clients by 2, 4, 8, 16, 32, then 60 seconds, capped at
+60 until successful unlock or reboot. These numbers were not explicitly chosen in the owner's
+reachability/Wi-Fi answers and do not create a new pending approval question. Malformed submissions
+cannot start concurrent verification or bypass the delay. Do not log submitted bytes. Keep key
+input only in process memory; never arguments, environment, files, swap, dumps, browser storage or
+access logs. Clear input and close listeners on success; clear on cancel/error and release buffers
+when the attempt ends. Actual memory lifetime, browser retention and crash paths need measurement.
+A passer-by can see recovery waiting and delay every route with wrong keys. Reboot resets the
+proposed in-memory backoff; it does not limit offline attacks on a stolen disk or grant setup,
+maintenance, network-change, sign-in or admin authority.
+
+**Worked example (illustrative, not a measurement).** Marta's Wi-Fi box refuses automatic unlock
+after a firmware change. If the saved normal profile still joins, she opens `http://waitron.local`
+and follows the direct redirect, or uses the full URL on the sheet. Opening `https://waitron.local`
+allows only the explicitly accepted untrusted redirect warning. At the actual trusted recovery
+hostname she verifies the connection and matching disk UUID before typing the disk key. Three
+wrong keys impose the proposed shared 2, 4 and 8 second waits. If Wi-Fi cannot join, she plugs in
+Ethernet or uses a local display/input device. If the box is stolen, the venue changes its Wi-Fi
+password because the boot copy was readable. No new sign-in, setup code or first-claim authority
+is involved.
 
 **Changed-startup warning and limits.** Show «Han cambiado los archivos de arranque» when the
 readable expected fingerprints differ, or say verification is unavailable when it is. Warn before
@@ -808,7 +892,7 @@ installer would add, such as the clock service (P23; inference, not built):
 - **The box's host service** (`waitron-box`), **my call**: one small service on the host, outside
   Docker, that does for Waitron what a container cannot — the box's settings (§10), the maintenance
   login (§11), the retained disk key's guarded delivery (§7.5), the name tag (§7.6), the durable
-  same-box configuration handoff (§12), the box's
+  same-box configuration handoff (§12), the minimal normal Wi-Fi boot copy's update/cleanup (§7.5), the box's
   screen (§9), the first-start failure page (§7.3), and the release check (§14), which is
   also the "small updater with access to Docker" A950 needs (`docs/backlog/box.md:93-96`). Waitron
   reaches it through a socket in a mounted folder; it accepts a fixed list of requests and nothing
@@ -983,6 +1067,12 @@ venue's PRIMARY"). So **a set-up box opens no network of its own**; its Wi-Fi ch
 **Red** above, from the box's screen or any device still on its network, or after plugging in a
 cable. **My call**; §17 lists the case it leaves (a wireless-only box with no screen whose router
 changes).
+
+_2026-10-26 ~14:00 CET: the owner accepted a minimal unencrypted copy of the NORMAL Wi-Fi
+join settings for preboot recovery (§7.5). Red's host operation updates it on every Wi-Fi change
+and removes it when you choose cable-only. This adds neither a recovery SSID nor an unlock hotspot.
+If the saved profile cannot join, cable/local display remains the fallback; no wireless recovery
+promise follows from merely saving the password._
 
 ## 11. Maintenance access (the owner's, §18 Q4, redesigned around the encryption)
 
@@ -1306,7 +1396,9 @@ new CI job:
    on first/later/restore/spare sheets, protected first delivery without a pre-existing admin,
    fresh admin proof for later copies, and key absence from logs/exports/backups/bucket. Exercise
    the approved preboot screen on local display and a headless LAN client, including shared
-   backoff, wrong-disk refusal, teardown, changed-startup warning and reseal refusal. These are
+   backoff, both redirect entry routes, trusted-only key entry, minimal normal Wi-Fi copy/update/
+   removal and failure fallback, wrong-disk refusal, teardown, changed-startup warning and reseal
+   refusal. Real Android Chrome controls in §7.5 remain a separate required release gate. These are
    acceptance requirements for the build, not experiments run by this docs revision.
 3. Attaches to the GitHub Release: the ready-made disk, its SHA-256, the signed release list (§14),
    the list of every Debian package and version in the disk, and the declaración responsable
@@ -1467,23 +1559,30 @@ terminal. The proposed retained-host-copy choice costs protection against privil
 compromise; it is not key erasure after handoff. Fresh admin reauthentication before destructive
 cutover is retained.
 
-**ONE question remains**, in [`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt):
-choose the preboot reachability, encrypted connection and global wrong-attempt policy together.
-§7.5 recommends A (wired LAN plus local display, separate preboot TLS identity verified from the
-sheet, shared 2-to-60-second delay), with B (dedicated recovery Wi-Fi) and C (temporary recovery-only
-hotspot) and a worked example each. The dated primary-source bounds and Node TLS controls
-in §7.5 define the proposal; real client/Linux qualification remains required before shipping.
-Do not reopen Q2 or ask for design/planning approval again.
+**Unlock policy answered, 2026-10-26 ~13:45 and ~14:00 CET.** The owner chose direct HTTP
+redirect from locked `waitron.local`, plus an intentionally untrusted HTTPS redirect-only entry
+there, with that single warning accepted. Key entry stays on the verified trusted per-disk unlock
+hostname, whose full URL and fingerprints stay on the sheet. The owner then answered “Yes that's
+fine” to copying the normal Wi-Fi SSID/password to unencrypted boot, with physical extraction risk
+accepted, a theft/password-change instruction and running-host update/cable-only removal (§7.5).
+Cable/local display remain; no separate recovery SSID or unlock hotspot. Receipt:
+`~/waitron-campaign-f/questions.md`, the two OWNER ANSWER sections beginning at line 886.
+These answers supersede the earlier A/B/C picker and its pending-policy language. The retained
+2/4/8/16/32/60-second shared backoff is a plan proposal, not an explicit numeric owner choice.
+[`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt) is now an FYI. Ask no new
+approval question unless review or Android results require changing the approved behavior.
 
-Planning slices 1, 2, 3, 5, 6 and 8 is authorised. Only unlock-specific execution waits for the
-owner's choice; the other planning proceeds. Building needs a separate go-ahead, and this revision
+Planning slices 1, 2, 3, 5, 6 and 8 is authorised. No unlock-policy answer is outstanding.
+Building needs a separate go-ahead, and this revision
 does not close A989, A1042/API binding, A940/release or actual Linux/TPM/firmware qualification gates.
+Android Chrome qualification is UNVERIFIED / NOT RUN, with historical negative evidence and the
+affected trust design/release held for requalification (§7.5); no Android safety claim is approved.
 
 ## 19. Build order, one pull request each
 
 1. **The ready-made disk** — `mkosi` build of §6, §7 and §8 in CI on every change to its inputs,
    with dracut, the hook of §7.2 item 3, the first start's sealing and test restart, the recovery
-   key's creation/root-only retained record, the conditional preboot UI (§7.5), and the name tag's format (§7.6; the host service that writes it is slice 3);
+   key's creation/root-only retained record, the preboot UI/redirects/minimal Wi-Fi reader (§7.5), and the name tag's format (§7.6; the host service that writes it is slice 3);
    booted in a virtual machine with a virtual TPM to `/setup-api/status` 200 and a screenshot. Runs
    §7.2's experiments (a), (b), (d), (f), (g), (i).
    Measures:
@@ -1498,7 +1597,7 @@ does not close A989, A1042/API binding, A940/release or actual Linux/TPM/firmwar
 3. **The box's screen, host service and network** — `cage` and Chromium (§9), the host service's
    socket (§8), the start-screen setting, «Usar esta pantalla como caja», «Panel» and «Volver a la
    caja», the traps of §9, the first-start failure page (§7.3), writing the name tag (§7.6), and
-   Settings → Red (§10) — in the
+   Settings → Red (§10), including the minimal Wi-Fi boot-copy update/removal (§7.5) — in the
    go-live minimum because a box installed over a phone's connection has no other way onto the
    venue's network but a cable (§5.3).
 4. **The rest of the box's settings and maintenance access** — §10's other rows and §11.
@@ -1528,8 +1627,9 @@ authentication check it needs even
 though the maintenance-login feature itself remains in slice 4. Slices 4 and 7 follow. Slice 8
 changes mode admission, disk-key delivery and removes practice data, so it takes the full review. This design
 authorises no change to Live fiscal writers; any such discovery is a separate fiscal gate.
-Planning is approved, not a build. The unlock UI/transport/backoff part of slices 1/6/8 remains
-conditional on §18's sole owner choice. Other planned deliveries need not wait for that answer.
+Planning is approved, not a build. Unlock reachability/Wi-Fi policy is settled (§18); the retained
+backoff remains a proposal. Slices 1/3/6/8 must qualify the concrete preboot paths and Android
+controls in §7.5 before release, preserving the historical failed constraint receipt.
 Docker is unavailable on the author's machine until 2026-11-03 (task constraint); real Linux/VM
 and hardware evidence remains a future gate, never replaced by mocked success or publication of
 an unqualified boot image.
@@ -1547,9 +1647,11 @@ an unqualified boot image.
   without reintroducing setup/resume credentials.
 - The exact protected first-disk-sheet integration before publication, later admin reauthentication
   and host storage implementation (§7.5), with the correct disk UUID on restore/spare.
-- §7.5's preboot network, TLS trust/bootstrap, disk identity/state checks, memory lifetime and
-  global attempt policy, pending the one owner answer and parent primary-source qualification.
-  Main Wi-Fi credentials and the normal encrypted TLS key are unavailable to that design.
+- §7.5's concrete preboot network, redirects, TLS trust/bootstrap, minimal Wi-Fi update/durability,
+  disk checks and memory lifetime need qualification under the settled owner policy. Shared
+  backoff numbers remain the retained proposal. The normal server key and CA signing key stay
+  encrypted; only the separate recovery/redirect leaf keys and minimal normal Wi-Fi join copy
+  are available before unlock. Android controls are UNVERIFIED / NOT RUN, with release held.
 - The host service's request list and its socket's permissions (§8).
 - How the image build reuses `waitron.sh`'s file-writing steps (§8).
 - The exact Docker version and image-store folders `@images` covers (§6).
@@ -1564,6 +1666,11 @@ P32–P55 and P58 were fetched for the revision, the same day, the same way; quo
 `~/waitron-campaign/b3-design/research-external-2.md`, finding numbers (R…) given. P56 and P57 were
 fetched by the revision's review and are quoted in `~/waitron-campaign/b3-design/review-r1.md`; P59
 by its second review, in `review-r2.md`.
+
+_2026-10-26 pointer: P1–P59 below retain their original source/provenance bodies as dated
+evidence, not fresh execution results. §7.5/§18 contain the current unlock/Wi-Fi policy and trust
+qualification limits wherever an earlier reading would imply only encrypted credentials or a
+qualified Android trust boundary._
 
 | # | Claim | Source (section of the research file) |
 | --- | --- | --- |
@@ -1636,3 +1743,9 @@ These quotes describe interfaces and trust steps, not a qualified Waitron recove
 | P60 | “Additional password agents may be implemented according to the systemd Password Agent Specification” | A graphical agent is an integration to build and qualify; a default terminal prompt is not the proposed UI. | [Debian 13 systemd-ask-password](https://manpages.debian.org/trixie/systemd/systemd-ask-password.1.en.html), retrieved 2026-10-26 |
 | P61 | “only writes configuration” | Early network configuration alone does not start networking; qualify the installed dracut/NetworkManager service combination. | [NetworkManager nm-initrd-generator](https://networkmanager.pages.freedesktop.org/NetworkManager/NetworkManager/nm-initrd-generator.html), retrieved 2026-10-26 |
 | P62 | “that certificate isn't automatically trusted for SSL” | The new-device iOS flow needs explicit trust installation; downloading a certificate does not demonstrate trust. | [Apple certificate-profile trust](https://support.apple.com/en-us/102390), retrieved 2026-10-26 |
+
+### Repository receipt retained for Android requalification
+
+| # | Receipt's own words | Current scope and consequence | Source |
+| --- | --- | --- | --- |
+| P63 | “a cert for a name OUTSIDE the root's permitted subtree”; “a clean padlock (HTTPS 200)” | One actual Android phone accepted the CA-signed outside-subtree control on 2026-09-08; versions were not captured. Historical negative evidence, not a hostname-mismatch result or current-device pass. §7.5 requires actual-device controls and holds the affected trust design/release. | Literal commit `75f17f9e36125af3a620266a584507420e7197de`, message and doc diff; current pointer `apps/server/src/self-signed-cert.ts:29-33`. No live link to the removed spike document. |

@@ -484,10 +484,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   wizard).**
   [Detail](backlog/setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)
 
-- **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
-  user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
-  the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
-  are still to measure. [Detail](backlog/box.md#box-image-constraints-b3)
+- **Android certificate trust needs real-device checks.** A September receipt records one phone
+  accepting a matching-name, outside-CA-subtree leaf, without captured device versions. It did not
+  measure the recovery leaf's hostname boundary. Actual Android controls, an iOS device and the
+  service-worker/PWA/WebAuthn trust cases remain unmeasured. [Detail](backlog/box.md#box-image-constraints-b3)
 
 - **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
   run. [Detail](backlog/setup.md#androidios-on-device-install-and-trust-rows)
@@ -4571,8 +4571,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **B3. The bootable USB installer** — design approved with changes; [six-slice plan](superpowers/plans/2026-10-26-b3-usb-installer.md), no build.
   No setup codes: the owner closed W60's first-claim concern as not a concern; production-mode restrictions stay.
-  Every sheet repeats the disk key; local/network Waitron unlock has one policy choice open.
-  Build/API and hardware gates remain. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
+  Every sheet repeats the disk key. Owner ~13:45/~14:00 answers settle locked redirects and the minimal unencrypted normal Wi-Fi copy, with theft/password-change guidance and cable/local fallback; no recovery SSID/hotspot.
+  Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 

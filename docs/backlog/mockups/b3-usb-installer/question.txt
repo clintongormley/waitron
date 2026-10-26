@@ -1,52 +1,61 @@
-B3 — how should you unlock a headless box when its security chip refuses?
+B3 FYI: unlock reachability and normal Wi-Fi policy are settled
 
-The installer design is approved with your changes. This is the only remaining choice; the
-six-slice plan is written. No setup code is made or requested, and every later recovery sheet
-repeats the disk key. Building still needs its own go-ahead.
+Your 26 October ~13:45 and ~14:00 CET answers are folded into design §7.5/§18 and the
+six-slice plan. This replaces the earlier A/B/C question; no policy answer is outstanding.
+Planning remains authorised; building still needs its own go-ahead. No setup code, new sign-in
+or first-claim authority is added. Pictures 6, 9 and 12 now illustrate these decisions in both languages/themes and widths.
 
-Recommendation A: use a cable for recovery, plus the box’s own Waitron screen when available.
-A headless box normally on Wi-Fi needs a cable to the router for this rare recovery step.
+While the box is locked, http://waitron.local redirects straight to the trusted per-disk
+https://unlock-<installation-id>.waitron.local address. HTTPS waitron.local instead uses a
+deliberately untrusted certificate NOT signed by the box CA. You accepted clicking past that
+one warning only to reach the redirect. Neither entry point has a key form. Enter the disk
+key only locally or at the verified trusted recovery hostname; the sheet keeps its full URL,
+disk UUID and fingerprints. Never bypass a warning on the actual key form.
 
-All choices use an encrypted recovery page at the box-specific address on its sheet, for
-example https://unlock-a1b2.waitron.local. A separate recovery certificate is signed while the
-normal system is unlocked; the normal server key and signing key remain encrypted. A device
-already trusting the box’s local certificate authority is the intended easy path. On a new
-device, compare the public authority certificate’s full fingerprint with the sheet before
-installing trust; never bypass an unexplained warning. If that device cannot do the check,
-use an already-trusting device or the local Waitron screen. Real phone/Linux qualification
-is still required. A genuinely expired or unreadable recovery certificate requires the local screen until the
-unlocked box can repair it; a headless box then needs a display and input device plugged in.
-An already-trusting device cannot make an expired certificate valid. A different correctly
-dated/trusting device helps only a client clock or trust problem. Never use an unencrypted key form.
+The normal server certificate/private key and CA signing key stay encrypted. A separate
+CA-signed recovery leaf private key and a separate untrusted redirect-only leaf key stay
+outside encryption. Physical access exposes the recovery leaf key; it is not the CA signing
+key and does not mint other certificates. The unsigned startup program still cannot prove
+itself honest. The screen warns when readable startup checks differ or cannot be made; after
+unlock the host checks its encrypted record before resealing.
 
-The startup image is unsigned: encryption of the connection cannot prove that the startup
-program has not been replaced. The screen warns when startup files differ or cannot be checked.
-After opening, the box checks against its encrypted record before resealing. Keeping the disk
-key inside the encrypted disk permits later sheets, at the cost that a privileged running-host
-compromise can obtain it. Reinstall produces a new key and sheet; same-box configuration cutover
-keeps the existing pair.
+A Wi-Fi box may keep the NORMAL Wi-Fi SSID/password and only necessary join fields in the
+unencrypted boot partition. Someone holding the box can read that password, including by
+taking out its disk or starting another signed Debian stick. You accepted that cost. The
+operator guide must say: if a box is stolen, change the venue's Wi-Fi password.
 
-A (recommended) — Cable or local screen. No recovery Wi-Fi credential in startup files and no
-recovery hotspot. Example: after a firmware change Marta connects the box to the router, opens
-the sheet’s address on her already-trusting phone or laptop, checks the disk UUID and enters
-the matching disk key. She needs a cable if the box normally uses Wi-Fi.
+The running host updates the minimal fixed-path copy whenever Wi-Fi settings change and
+removes it for cable-only use. Design §7.5/plan 3.1 propose restricted durable/atomic writes,
+obsolete-copy cleanup and interrupted-operation reconciliation without touching measured
+boot bytes. No arbitrary paths, logs, disk keys, other credentials or credential-bearing URL
+are copied. A stale/missing/corrupt copy, an unavailable network or a cut update may prevent
+joining; the fallback is cable or local display/input, not a promise of working Wi-Fi.
+There is no separate recovery SSID or unlock hotspot. The installer-only open hotspot stays.
 
-B — A plus a separately configured recovery Wi-Fi network. Example: at a wireless-only site
-Marta has already provided a separate restricted recovery SSID. The box joins it before unlock;
-she still checks the encrypted connection. Its Wi-Fi credential is readable from the startup
-disk. It must never be the venue’s normal Wi-Fi password and needs separate setup/rotation.
+The existing shared wrong-key backoff remains a plan proposal: 2, 4, 8, 16, 32, then 60 seconds,
+capped at 60 until success or reboot. Those numbers were not explicitly chosen in your two
+answers. A passer-by's wrong keys can delay local and remote recovery; reboot clears the
+memory-only delay, which does not limit offline attacks on a stolen disk.
 
-C — A plus the box’s temporary unlock-only Wi-Fi hotspot, with its own connection secret on
-the recovery sheet. Example: Marta joins that box-specific network, checks the encrypted
-connection and enters the disk key. The hotspot forwards nothing and closes after unlock or
-cancel. It adds a second paper secret and radio/discovery qualification; it is separate from
-the installer’s open hotspot and never runs alongside an unlocked venue.
+Android Chrome qualification is UNVERIFIED / NOT RUN today. Your Android claim is a check to
+run, not an assumed result. Historical commit 75f17f9e36125af3a620266a584507420e7197de records
+one Android phone accepting a CA-signed outside-subtree leaf on 8 September, without captured
+Android/Chrome versions. That is negative evidence for constraints, not proof a hostname
+mismatch passes and not current-device qualification. The affected trust design/release is
+held for requalification.
 
-For all three, one verifier serves the local screen and every network client. Wrong keys
-impose shared waits of 2, 4, 8, 16, 32, then 60 seconds, capped at 60 until success or reboot.
-Three wrong keys mean 2, 4 and 8 seconds. Someone on the network can see that recovery is
-waiting and delay you with wrong keys, but gets no admin, setup or network-change authority.
-A reboot clears this memory-only delay; it does not limit offline attacks on a stolen disk.
+On the same actual device/build with explicit candidate-CA trust, the actual recovery leaf
+served for waitron.local must FAIL hostname verification; a matching-name outside-subtree
+leaf must FAIL CA name constraints; the correct recovery hostname must PASS with no warning.
+Retain device/build/trust-store and served-leaf metadata. No click-through for these three
+controls; the deliberately untrusted redirect-only warning is a separate navigation check.
+Node TLS receipts do not qualify Android. Failed negatives or an inconclusive positive block
+release, never justify silently weaker checks. No new approval question is needed unless
+review or Android results require changing the approved behavior. No Android check ran here.
 
-Choose A, B or C, or describe a change. Only unlock-specific execution waits for this answer.
-See pictures 9 and 12 and design §7.5 for trust, expiry, wrong-disk and tamper limits.
+Every later sheet still repeats the correct disk key; restore/spare get the destination disk's
+page. Retained encrypted host storage permits later sheets at the cost that a privileged
+running-host compromise can obtain the key. Reinstall creates a new key/sheet; same-box
+Prepare-to-Live keeps the disk pair. Q2, the configuration-copy inventory and all other design
+decisions remain. A989, A1042/API binding, A940 releases, actual Linux/VM/TPM/firmware and
+client qualification remain gates. Nothing built in this documentation revision.

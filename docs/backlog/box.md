@@ -383,10 +383,13 @@ today); generalise archive entry routing off declared source ids when a second n
 
 - **A setup box's `/health` returns 503 by design** (no duty loop); a liveness probe must gate on
   `/setup-api/status` (200), or it restart-loops an unprovisioned box.
-- **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
-  user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
-  the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
-  are still to measure.
+- **Android certificate trust needs actual-device qualification.** The 2026-09-08 receipt
+  (`75f17f9e36125af3a620266a584507420e7197de`) records one Android phone accepting a matching-name,
+  outside-CA-subtree leaf; Android/Chrome versions were not captured. It did not measure the
+  recovery leaf's hostname boundary. The desktop receipt (`fb47efd683fa8aa2cf919fa012f66e580b9c4f28`)
+  records Chrome 152 and macOS SecTrust refusals; an iOS device and the service-worker/PWA/WebAuthn
+  trust cases remain unmeasured. [B3 §7.5](../superpowers/specs/2026-10-21-b3-usb-installer-design.md)
+  requires separate hostname/CA-subtree negatives and a same-device correct-name positive.
 - **The box image carries the WireGuard link.**
 - **The box image keeps its clock synchronised, with no terminal** (A798). The server's
   `timedatectl` probe reports "unavailable" where the command is absent
@@ -774,9 +777,36 @@ host channel without requiring a pre-existing admin; later copies require fresh 
 audit. The cost is that privileged running-host compromise can obtain the retained key; “kept”
 no longer erases it. Reinstall makes a new disk/key; configuration cutover keeps the old pair.
 The USB never carries it. §7.5 replaces the terminal fallback with a Spanish/English Waitron
-preboot screen, local and LAN-reachable. ONE owner choice remains for its reachability, encrypted
-connection and shared wrong-attempt delay. The proposal uses a separate CA-signed recovery certificate and verified new-client trust; no plain-HTTP disk-key entry, normal encrypted certificate dependency or claim that an
-unsigned startup image proves itself. Only unlock-specific execution waits on that answer.
+preboot screen, local and LAN-reachable. The owner's 2026-10-26 ~13:45/~14:00 CET answers settle
+reachability/Wi-Fi and supersede the A/B/C picker. Locked HTTP `waitron.local` redirects straight to
+trusted `https://unlock-<installation-id>.waitron.local`; locked HTTPS `waitron.local` uses a
+deliberately untrusted redirect-only certificate NOT signed by the box CA. The owner accepts
+that one warning only to reach the redirect, never a key form there. The actual disk key is entered
+only locally or at the verified trusted recovery hostname. Full URL and fingerprints stay on the
+sheet. Normal server certificate/private key and CA signing key stay encrypted; the separate
+CA-signed recovery leaf private key and untrusted redirect leaf key stay outside encryption.
+
+The minimal normal Wi-Fi SSID/password and required join fields may be copied unencrypted to
+boot; no separate recovery SSID or unlock hotspot. Accepted cost: someone holding the box can
+extract the Wi-Fi password. The operator guide must tell the venue to change it after theft.
+§7.5 proposes a host-owned fixed-path, durable/atomic update on every Wi-Fi change and cable-only
+removal/obsolete-copy cleanup, outside boot-loader-measured bytes. No arbitrary paths, logs, disk
+keys, other credentials or credential-bearing URLs. Missing/stale/corrupt/unjoinable copies,
+failed updates and power cuts offer honest cable/local-display fallback, not a working-Wi-Fi
+promise. The shared 2/4/8/16/32/60-second delay, cap 60 and reboot reset remain the plan proposal,
+not numbers explicitly chosen by those owner answers. No sign-in or first-claim authority is added.
+
+Actual Android Chrome qualification is **UNVERIFIED / NOT RUN**. Literal commit
+`75f17f9e36125af3a620266a584507420e7197de` records one Android phone accepting a CA-signed
+outside-subtree leaf on 2026-09-08, without Android/Chrome versions. That is historical negative
+evidence, not proof the recovery leaf passes a hostname mismatch or a current-device pass. The
+affected trust design/release is held for requalification: same-device/build explicit-CA-trust
+controls must reject the actual recovery leaf at `waitron.local`, reject a matching outside-subtree
+leaf, and accept the correct recovery hostname. Retain device/build/trust-store and actual leaf
+metadata; Node TLS probes do not qualify Android. Failed negatives block release and any changed
+approved behavior needs an owner decision, never silently weaker checks. No new approval question
+is pending unless review/Android changes approved behavior. An unsigned startup image still cannot
+prove itself honest. [FYI](mockups/b3-usb-installer/question.txt) replaces the policy question.
 
 §12 retains the full copy/reconnect inventory, suspended staff, stripped credentials, inactive
 printers and missing device enrolments. A989's required-language/import readiness must pass before
