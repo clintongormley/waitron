@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { invoiceSeries } from "@waitron/db";
+import { getCountryPack } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import {
   AppError,
@@ -86,8 +87,9 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
 const startsAsPdf = (bytes: Uint8Array) =>
   new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-";
 
-/** A full invoice for Jordi under `01234567L`, a number no fixture row holds, in `seriesId`. */
-async function jordiInvoiceIn(seriesId: string): Promise<string> {
+/** A full invoice in Jordi's name under `taxId`, a number no fixture row holds, in `seriesId`. */
+async function jordiInvoiceIn(seriesId: string, taxId = "01234567L"): Promise<string> {
+  expect(getCountryPack("ES")!.taxIdentifier!.validate(taxId).valid).toBe(true);
   const { venue } = fixture;
   const billId = await parked(venue, "Caña");
   const { saleId } = await inTx(venue, (tx) =>
@@ -98,7 +100,7 @@ async function jordiInvoiceIn(seriesId: string): Promise<string> {
       workingOrderId: brandWorkingOrderId(billId),
       locale: venue.cfg.locale,
       invoiceLocales: venue.cfg.invoiceLocales,
-      counterparty: { taxId: "01234567L", legalName: "Jordi Puig", countryCode: "ES" },
+      counterparty: { taxId, legalName: "Jordi Puig", countryCode: "ES" },
       recipientAddress: "12 Harbour Road, 46023 Valencia",
       total: "3.00",
       lines: [
@@ -167,6 +169,7 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
           { nodeId: venue.cfg.nodeId, code: "F/A", purpose: "full" },
           { nodeId: venue.cfg.nodeId, code: "F_A", purpose: "full" },
           { nodeId: venue.cfg.nodeId, code: "F_A-1", purpose: "full", nextNumber: 2 },
+          { nodeId: venue.cfg.nodeId, code: "F/A-1", purpose: "full", nextNumber: 2 },
         ])
         .returning({ id: invoiceSeries.id, code: invoiceSeries.code }),
     );
@@ -174,22 +177,52 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
     await jordiInvoiceIn(idOf("F/A"));
     await jordiInvoiceIn(idOf("F_A"));
     await jordiInvoiceIn(idOf("F_A-1"));
+    await jordiInvoiceIn(idOf("F/A-1"));
 
     const found = await search("01234567L");
-    expect(found.map((sale) => sale.invoice)).toEqual(["F/A/1", "F_A/1", "F_A-1/2"]);
+    expect(found.map((sale) => sale.invoice)).toEqual(["F/A/1", "F_A/1", "F_A-1/2", "F/A-1/2"]);
     const built = await buildInvoiceCustomerFiles(deps(), "01234567L", found);
-    const names = ["invoices/F_A-1.pdf", "invoices/F_A-1-2.pdf", "invoices/F_A-1-2-2.pdf"];
+    // The fourth's own name and its -2 are both held, so it takes -3.
+    const names = [
+      "invoices/F_A-1.pdf",
+      "invoices/F_A-1-2.pdf",
+      "invoices/F_A-1-2-2.pdf",
+      "invoices/F_A-1-2-3.pdf",
+    ];
     expect(invoicesFile(built.files).invoices.map((invoice) => invoice.pdf)).toEqual(names);
     const pdfs = pdfsOf(built.files);
     expect([...pdfs.keys()]).toEqual(names);
     // Each name holds its own invoice, not a neighbour's.
-    const printed = ["F/A/1", "F_A/1", "F_A-1/2"];
+    const printed = ["F/A/1", "F_A/1", "F_A-1/2", "F/A-1/2"];
     for (const [index, name] of names.entries()) {
       expect(await pdfText(pdfs.get(name)!)).toContain(printed[index]);
     }
     const zipped = unzipSync(zipArchive(built.files, new Date()));
     expect(Object.keys(zipped).filter((name) => name.endsWith(".pdf"))).toEqual(names);
     for (const name of names) expect(startsAsPdf(zipped[name]!)).toBe(true);
+  });
+
+  it("treats a name differing only in letter case as taken", async () => {
+    // A case-insensitive disk (macOS, Windows) would unpack fa-1.pdf and FA-1.pdf as one file.
+    const { venue } = fixture;
+    const created = await inTx(venue, (tx) =>
+      tx
+        .insert(invoiceSeries)
+        .values([
+          { nodeId: venue.cfg.nodeId, code: "fa", purpose: "full" },
+          { nodeId: venue.cfg.nodeId, code: "FA", purpose: "full" },
+        ])
+        .returning({ id: invoiceSeries.id, code: invoiceSeries.code }),
+    );
+    for (const code of ["fa", "FA"]) {
+      await jordiInvoiceIn(created.find((row) => row.code === code)!.id, "87654321X");
+    }
+    const found = await search("87654321X");
+    expect(found.map((sale) => sale.invoice)).toEqual(["fa/1", "FA/1"]);
+    const built = await buildInvoiceCustomerFiles(deps(), "87654321X", found);
+    const names = ["invoices/fa-1.pdf", "invoices/FA-1-2.pdf"];
+    expect(invoicesFile(built.files).invoices.map((invoice) => invoice.pdf)).toEqual(names);
+    expect([...pdfsOf(built.files).keys()]).toEqual(names);
   });
 
   describe("an invoice that cannot be made", () => {

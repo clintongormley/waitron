@@ -95,12 +95,16 @@ export interface InvoiceCustomerFilesDeps {
 }
 
 /** Decision 8: an invoice whose file name an earlier one holds takes the first free `-2`, `-3`, …
- * before `.pdf`; a suffixed name can be another invoice's own, so each is checked. */
+ * before `.pdf`; a suffixed name can be another invoice's own, so each is checked. Names are
+ * compared ignoring letter case, because a case-insensitive disk unpacks `fa-1.pdf` and
+ * `FA-1.pdf` as one file. */
 function uniquePdfPath(taken: Set<string>, code: string, number: number): string {
   const stem = invoicePdfFileName(code, number).slice(0, -".pdf".length);
   let path = `invoices/${stem}.pdf`;
-  for (let suffix = 2; taken.has(path); suffix++) path = `invoices/${stem}-${suffix}.pdf`;
-  taken.add(path);
+  for (let suffix = 2; taken.has(path.toLowerCase()); suffix++) {
+    path = `invoices/${stem}-${suffix}.pdf`;
+  }
+  taken.add(path.toLowerCase());
   return path;
 }
 

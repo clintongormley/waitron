@@ -136,18 +136,20 @@ describe("zipArchive", () => {
 
 /** Each entry's compression method and DOS date, read from the central directory: a streamed
  * ZIP's local headers carry size 0 and the sizes follow the data. */
-function centralEntries(zip: Uint8Array): Record<string, { method: number; date: number }> {
+function centralEntries(
+  zip: Uint8Array,
+): Record<string, { method: number; time: number; date: number }> {
   const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
   const end = zip.length - 22;
   expect(view.getUint32(end, true)).toBe(0x06054b50);
   const count = u16(zip, end + 10);
   let at = view.getUint32(end + 16, true);
-  const found: Record<string, { method: number; date: number }> = {};
+  const found: Record<string, { method: number; time: number; date: number }> = {};
   for (let index = 0; index < count; index++) {
     expect(view.getUint32(at, true)).toBe(0x02014b50);
     const nameLength = u16(zip, at + 28);
     const name = strFromU8(zip.subarray(at + 46, at + 46 + nameLength));
-    found[name] = { method: u16(zip, at + 10), date: u16(zip, at + 14) };
+    found[name] = { method: u16(zip, at + 10), time: u16(zip, at + 12), date: u16(zip, at + 14) };
     at += 46 + nameLength + u16(zip, at + 30) + u16(zip, at + 32);
   }
   return found;
@@ -175,22 +177,23 @@ describe("zipArchiveInTurns", () => {
     expect(Object.keys(ours)).toEqual(files.map((file) => file.name));
     expect(ours).toEqual(unzipSync(whole));
     const date = ((AT.getFullYear() - 1980) << 9) | ((AT.getMonth() + 1) << 5) | AT.getDate();
+    const time = (AT.getHours() << 11) | (AT.getMinutes() << 5) | (AT.getSeconds() >> 1);
     expect(centralEntries(streamed)).toEqual({
-      "README.txt": { method: 8, date },
-      "invoices.json": { method: 8, date },
-      "invoices/FF-1.pdf": { method: 0, date },
-      "invoices/FF-3.pdf": { method: 0, date },
-      "invoices/FF-6.pdf": { method: 0, date },
+      "README.txt": { method: 8, time, date },
+      "invoices.json": { method: 8, time, date },
+      "invoices/FF-1.pdf": { method: 0, time, date },
+      "invoices/FF-3.pdf": { method: 0, time, date },
+      "invoices/FF-6.pdf": { method: 0, time, date },
     });
-    expect(centralEntries(whole)["README.txt"]!.date).toBe(date);
+    expect(centralEntries(streamed)).toEqual(centralEntries(whole));
   });
 
   it("dates its entries inside 1980-2099 as zipArchive does", async () => {
     const at = new Date("1970-01-01T00:00:00Z");
     const one = [{ name: "a.json", content: "{}" }];
-    expect(centralEntries(await zipArchiveInTurns(one, at))["a.json"]!.date).toBe(
-      dosDate(zipArchive(one, at)),
-    );
+    const streamed = centralEntries(await zipArchiveInTurns(one, at))["a.json"]!;
+    expect(streamed).toEqual(centralEntries(zipArchive(one, at))["a.json"]);
+    expect(streamed.date).toBe((1 << 5) | 1);
   });
 
   it("refuses an entry fflate refuses, as zipArchive does", async () => {
