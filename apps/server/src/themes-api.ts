@@ -9,6 +9,7 @@ import {
   prepareThemeSave,
   renameCustomTheme,
   saveCustomTheme,
+  encodeLogoRaster,
   setThemeInUse,
   type ReceiptLogoRasters,
   type StoredTheme,
@@ -20,9 +21,18 @@ import {
   requireNullableString,
   requireString,
 } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import {
+  imageExists,
+  readCurrentImageMetadata,
+  readImageBytes,
+  renderRendition,
+  renditionUrl,
+} from "@waitron/media";
+import { safeWidthDots } from "@waitron/printing";
+import { AppError, MEDIA_FILENAME } from "@waitron/shared";
 import { deriveThemeFrom, type ThemeChoices, type ThemeWarning } from "@waitron/ui-core/theme";
 import type { Logger } from "./logger.js";
+import { countBlackDots, createLogoCache, drawPreviewLogo } from "./receipt-logo.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 import { printedLogoFor, recheckThemeLogo, snapshotThemeLogo } from "./theme-logo.js";
 import { readVenueThemeSource, venueThemeAnswer } from "./venue-theme.js";
@@ -59,6 +69,28 @@ export function themeAnswerOf(stored: StoredTheme): ThemeAnswer {
   }
   const { light, dark, warnings } = deriveThemeFrom(SERVER_THEME_DEFAULTS, choices);
   return { id, name, updatedAt, choices, light, dark, warnings };
+}
+
+export interface ThemeLogoPrint {
+  /** The paper's printable dots across: `safeWidthDots("80mm")`. */
+  readonly paperDots: number;
+  /** The 80 mm picture, stored form; `null` when the image is gone or will not decode. */
+  readonly picture: {
+    readonly widthDots: number;
+    readonly heightDots: number;
+    readonly data: string;
+  } | null;
+  /** Set dots in `picture`; 0 means the logo prints blank. */
+  readonly blackDots: number;
+}
+
+function requireImageQuery(queries: Record<string, string[]>): string {
+  const keys = Object.keys(queries);
+  const values = queries.image;
+  if (keys.length !== 1 || values?.length !== 1 || !MEDIA_FILENAME.test(values[0]!)) {
+    throw new AppError("management.request_invalid", { field: "image" });
+  }
+  return values[0]!;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -106,6 +138,8 @@ async function saveWithLogo<T>(
 }
 
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
+  const logoCache = createLogoCache();
+
   // Deliberately unauthenticated: the answer is the theme in use's stylesheet, its hash and its
   // logo's public rendition addresses, and carries no secrets.
   app.get("/api/theme", (c) =>
@@ -123,6 +157,39 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
         return listCustomThemes(tx);
       });
       return c.json({ themes: list.themes.map(themeAnswerOf), inUse: list.inUse }, 200);
+    }),
+  );
+
+  app.get("/management-api/theme-logo-print", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const image = requireImageQuery(c.req.queries());
+      const current = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId, permission: "venue.view" });
+        return readCurrentImageMetadata(tx, image);
+      });
+      // Drawn outside the transaction: sharp must not run holding the write lock.
+      const raster =
+        current === null
+          ? null
+          : await drawPreviewLogo(
+              logoCache,
+              renditionUrl(current.sourceFilename, "display", current.framing),
+              "80mm",
+              {
+                exists: () => imageExists(deps.db, image),
+                bytes: async () => {
+                  const source = await readImageBytes(deps.db, current.sourceFilename);
+                  return source ? renderRendition(source.bytes, "display", current.framing) : null;
+                },
+              },
+            );
+      const answer: ThemeLogoPrint = {
+        paperDots: safeWidthDots("80mm"),
+        picture: raster === null ? null : encodeLogoRaster(raster),
+        blackDots: raster === null ? 0 : countBlackDots(raster),
+      };
+      return c.json(answer, 200);
     }),
   );
 

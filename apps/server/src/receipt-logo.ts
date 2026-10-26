@@ -83,3 +83,13 @@ export async function drawPreviewLogo(
   cache.set(identity, paperWidth, raster);
   return raster;
 }
+
+/** Set dots inside `widthDots` on each row; a row's padding bits are not dots. */
+export function countBlackDots(raster: MonoRaster): number {
+  const stride = Math.ceil(raster.widthDots / 8);
+  let count = 0;
+  for (let y = 0; y < raster.heightDots; y++)
+    for (let x = 0; x < raster.widthDots; x++)
+      if ((raster.bits[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) !== 0) count++;
+  return count;
+}

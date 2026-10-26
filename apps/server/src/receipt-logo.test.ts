@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { decodeLogoGreyscale } from "@waitron/media";
 import { sampleImage } from "@waitron/media/testing/sample-image.js";
 import { LOGO_MAX_HEIGHT_DOTS, type MonoRaster } from "@waitron/printing";
-import { createLogoCache, drawLogoRasters, drawPreviewLogo } from "./receipt-logo.js";
+import {
+  countBlackDots,
+  createLogoCache,
+  drawLogoRasters,
+  drawPreviewLogo,
+} from "./receipt-logo.js";
 
 vi.mock("@waitron/media", async (importOriginal) => {
   const media = await importOriginal<typeof import("@waitron/media")>();
@@ -145,5 +150,17 @@ describe("createLogoCache", () => {
     expect(cache.get(FILE_A, "80mm")).toBeUndefined();
     expect(cache.get(FILE_A, "58mm")?.widthDots).toBe(8);
     expect(cache.get(FILE_B, "58mm")?.widthDots).toBe(24);
+  });
+});
+
+describe("countBlackDots", () => {
+  it("counts set dots inside the picture's width only", () => {
+    const bits = (bytes: number[]): MonoRaster => ({
+      widthDots: 10,
+      heightDots: 2,
+      bits: Uint8Array.from(bytes),
+    });
+    expect(countBlackDots(bits([0xff, 0xff, 0x80, 0x00]))).toBe(11);
+    expect(countBlackDots(bits([0, 0, 0, 0]))).toBe(0);
   });
 });
