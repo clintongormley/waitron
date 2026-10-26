@@ -9,6 +9,7 @@ import { centsToDecimal, saleId as brandSaleId } from "@waitron/shared";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { normaliseInvoiceTaxId } from "./invoice-customer-tax-id.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
+import { invoicePdfFileName } from "./orders-invoice-pdf.js";
 import type { Logger } from "./logger.js";
 import { SALE_LOOKUP_CHUNK } from "./personal-data-actions.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -19,6 +20,8 @@ export const INVOICE_CUSTOMER_FILE = "invoices.json";
 export interface InvoiceCustomerSale {
   saleId: string;
   invoice: string;
+  code: string;
+  number: number;
   issuedAt: string;
   name: string;
   taxId: string;
@@ -65,6 +68,8 @@ export async function findInvoiceCustomerSales(
       found.push({
         saleId: row.id,
         invoice: formatInvoiceNumber(row.code, row.number),
+        code: row.code,
+        number: row.number,
         issuedAt: row.issuedAt,
         name: row.name ?? "",
         taxId: row.taxId ?? "",
@@ -89,10 +94,14 @@ export interface InvoiceCustomerFilesDeps {
   readDocument?: typeof readInvoiceDocument;
 }
 
-/** `formatInvoiceNumber`'s inverse: a code may hold `/`, the number never does. */
-function splitInvoice(invoice: string): [code: string, number: string] {
-  const at = invoice.lastIndexOf("/");
-  return [invoice.slice(0, at), invoice.slice(at + 1)];
+/** Decision 8: an invoice whose file name an earlier one holds takes the first free `-2`, `-3`, …
+ * before `.pdf`; a suffixed name can be another invoice's own, so each is checked. */
+function uniquePdfPath(taken: Set<string>, code: string, number: number): string {
+  const stem = invoicePdfFileName(code, number).slice(0, -".pdf".length);
+  let path = `invoices/${stem}.pdf`;
+  for (let suffix = 2; taken.has(path); suffix++) path = `invoices/${stem}-${suffix}.pdf`;
+  taken.add(path);
+  return path;
 }
 
 interface InvoiceRead {
@@ -127,6 +136,7 @@ export async function buildInvoiceCustomerFiles(
   // its closing change-log drain is a write a full disk refuses.
   const tx = deps.db;
   const read: InvoiceRead[] = [];
+  const taken = new Set<string>();
   for (const sale of sales) {
     read.push(
       await made(sale.saleId, () =>
@@ -149,10 +159,9 @@ export async function buildInvoiceCustomerFiles(
               and(eq(invoiceDeliveries.saleId, sale.saleId), eq(invoiceDeliveries.medium, "email")),
             )
             .orderBy(asc(invoiceDeliveries.createdAt), asc(invoiceDeliveries.id));
-          const [code, number] = splitInvoice(sale.invoice);
           return {
             sale,
-            pdf: `invoices/${code.replace(/[^A-Za-z0-9_.-]/g, "_")}-${number}.pdf`,
+            pdf: uniquePdfPath(taken, sale.code, sale.number),
             document: { ...document, duplicate: true },
             taxRecord,
             emails: deliveries.map((row) => ({

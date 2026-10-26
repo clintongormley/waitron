@@ -44,6 +44,8 @@ describe("findInvoiceCustomerSales", () => {
       {
         saleId: j1,
         invoice: "FF/1",
+        code: "FF",
+        number: 1,
         issuedAt: await issuedAt(j1),
         name: "Jordi Puig",
         taxId: "12345678Z",
@@ -54,6 +56,8 @@ describe("findInvoiceCustomerSales", () => {
       {
         saleId: j2,
         invoice: "FF/3",
+        code: "FF",
+        number: 3,
         issuedAt: await issuedAt(j2),
         name: "Jordi Puig Electrician",
         taxId: "12345678Z",
@@ -64,6 +68,8 @@ describe("findInvoiceCustomerSales", () => {
       {
         saleId: j3,
         invoice: "FF/6",
+        code: "FF",
+        number: 6,
         issuedAt: await issuedAt(j3),
         name: "Jordi Puig Electrician",
         taxId: "12345678Z",
