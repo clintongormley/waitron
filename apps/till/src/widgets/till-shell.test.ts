@@ -2051,6 +2051,7 @@ describe("till-shell above phone width", () => {
       await settle(el);
       expectOneRow(el);
       expect(menuOf(el)).not.toBeNull();
+      expect(moreItems(el)).toEqual(everyEntry);
       await expectEachActionOnce(el);
       Object.assign(el, few);
       await settle(el);

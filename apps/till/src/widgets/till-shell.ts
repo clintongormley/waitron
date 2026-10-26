@@ -46,8 +46,7 @@ const BRAND = "Waitron";
 export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
 
 /** Properties whose change owes a step-back, so may let the brand mark or the name come back to
- * the bar. A change of
- * `transferCount` alone does not owe one. */
+ * the bar. A change of `transferCount` alone does not owe one. */
 const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "formFactor",
   "counterZones",
