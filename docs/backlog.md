@@ -3888,7 +3888,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   phone width (owner, 2026-10-17: keep as a check).**
   [Detail](backlog/dashboard.md#a625-check-whether-a-row-menu-still-wraps-its-two-word-items-after-the-window-is-resized-to-phone-width-owner-2026-10-17-keep-as-a-check)
 
-- **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** — approved; next: slice 5.
+- **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** — approved; kitchen screens and monitors, payment help after A739, and the remaining shared-help follow-ups stay open.
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**

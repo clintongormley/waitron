@@ -108,7 +108,7 @@ current target grants on reactivation. None is implemented or runtime-verified h
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
-- **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** On
+On
   Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`) a real Escape
   during a save closed the editor although its keydown handler called `preventDefault()` and
   `stopPropagation()`; the screen now sets `wt-modal`'s `dismissible` to false while busy, and
@@ -127,8 +127,7 @@ current target grants on reactivation. None is implemented or runtime-verified h
 
 ## The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN
 
-- **The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN.**
-  A325's independent review deleted the app's scroll correction: the new lower-header check
+A325's independent review deleted the app's scroll correction: the new lower-header check
   failed by 128px, while "keeps the clicked group header … when collapsing …" still passed.
   The older test and its existing assertions were retained. Find a collapse-only case that
   needs the app's correction before changing or retiring that test.
@@ -159,8 +158,7 @@ printer keys.
 
 ## A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left open
 
-- **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
-  open:** three dialogs still draw their own refusal because none has a `wt-form-actions` row in its
+Three dialogs still draw their own refusal because none has a `wt-form-actions` row in its
   footer to hand it to: the menus screen's add-products window has its row inside the
   `section-add-products` component, and `packages/bookings/src/dashboard/booking-form.ts` and
   `apps/till/src/widgets/supervisor-override-dialog.ts` put bare `wt-button`s in the footer slot. A
@@ -169,7 +167,7 @@ printer keys.
 
 ## A form in a modal stops at `--wt-form-max-width` (C105, #965) — left open
 
-- **A form in a modal stops at `--wt-form-max-width` (C105, #965) — left open:** a
+A
   `wt-disclosure`'s heading row (the product editor's Kitchen, Descriptors and Nutrition sections,
   among others) and a screen's own paragraphs still run the modal's full width; and forms built in
   `wt-dialog` rather than `wt-modal` (the ingredient form, the till's party name dialog, among
@@ -212,8 +210,7 @@ printer keys.
 
 ## Request refusals that still land in the bottom message, or under a field in generic words — OPEN (left by C54, #853).
 
-- **Request refusals that still land in the bottom message, or under a field in generic words —
-  OPEN (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
+In the forms C54 surveyed (the dashboard, the setup wizard, and the
   adjustments, venue-service and media module screens) it kept the action working after a request's
   refusal and put a refusal naming a shown field under that field. What it left:
   (1) the product editor and the venue operations editors put a refused field's message under it in
@@ -238,7 +235,6 @@ printer keys.
   (`submitOnEnter`, which design-system.md → "Submit ordinary forms with Enter" asks for and
   `stream-settings-panel.ts` binds on its whole form); and no test covers only the second box being invalid, or where
   focus lands after a failed check on the Save form;
-  (5) FIXED (A310): the closed phone drawer no longer shows in the page's 24 px margin;
   (6) the setup live-source screen's refusals go through a catch-all in
   `#onConfigurationRequested` that drops the code, so a wrong passphrase cannot be placed under its
   field;
@@ -304,8 +300,7 @@ printer keys.
 
 ## The profile's "Current password" fills the signed-in person's saved password (C98, #934) — still open:
 
-- **The profile's "Current password" fills the signed-in person's saved password (C98, #934) —
-  still open:** the sign-in page keeps its three inline copies of the hidden username field
+The sign-in page keeps its three inline copies of the hidden username field
   (`apps/dashboard/src/screens/login-screen.ts`); moving them onto the `autofillUsername` helper
   (`apps/dashboard/src/widgets/autofill-username.ts`) needs at least a `name` parameter (the
   sign-in page's tests pin `email`; the profile's field is named `username`), the
@@ -317,16 +312,14 @@ printer keys.
 
 ## A new passkey is listed under the person's email, with their name as its display name (C99, #939) — still open:
 
-- **A new passkey is listed under the person's email, with their name as its display name (C99,
-  #939) — still open:** the result has not yet been seen in a password manager. The dashboard calls
+The result has not yet been seen in a password manager. The dashboard calls
   `PublicKeyCredential.signalCurrentUserDetails`, where the browser has it, after every sign-in and
   after a passkey is added or removed (C101), but not after the email or display name is changed on
   the Profile screen; nobody has yet seen whether a real password manager then shows the new names.
 
 ## The passkey list says when each passkey was last used and which password manager holds it (C100, #945) — known limits:
 
-- **The passkey list says when each passkey was last used and which password manager holds it
-  (C100, #945) — known limits:** neither the "Last used" behaviour after a passkey is deleted in the
+Neither the "Last used" behaviour after a passkey is deleted in the
   password manager nor the password-manager naming was tried with a real browser (the tests stand in
   for the WebAuthn library). A browser following the older WebAuthn Level 2 rules zeroes the
   authenticator identifier under `@simplewebauthn/server`'s default "none" attestation preference,
@@ -338,8 +331,7 @@ printer keys.
 
 ## The browser's password manager is told which passkeys Waitron still accepts (C101, #948) — still open:
 
-- **The browser's password manager is told which passkeys Waitron still accepts (C101, #948) —
-  still open:** not observed in a real password manager — the tests replace the browser's methods,
+Not observed in a real password manager — the tests replace the browser's methods,
   and Chrome's feature entry says it acts "Initially ... only for Google Password Manager (GPM)
   credentials", which a test browser does not hold. The browser's own methods are called directly
   rather than through `@simplewebauthn/browser`'s `sendSignal()`, which adds only renamed errors and
@@ -353,8 +345,7 @@ printer keys.
 
 ## A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):
 
-- **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner 2026-10-08: take it from here when a lane has room):**
-  1. **Remove the passkey name field.** Each passkey already shows which password manager holds it
+1. **Remove the passkey name field.** Each passkey already shows which password manager holds it
      (C100, #945), so a name typed by the person is no longer needed. The field is in two places:
      the Add passkey dialog on the Profile screen (`apps/dashboard/src/screens/profile-screen.ts`)
      and the one-time passkey offer after a password sign-in
@@ -462,8 +453,7 @@ consumers and storage. See [A7](#roles-the-admin-can-edit-a7) for the remaining 
 
 ## Typed values are only partly checked — a generic phone-format check landed, a country-specific one has not.
 
-- **Typed values are only partly checked — a generic phone-format check landed, a country-specific
-  one has not.** `isValidTelephone` in `@waitron/shared` runs on both the browser forms and the
+`isValidTelephone` in `@waitron/shared` runs on both the browser forms and the
   server write paths (`person.telephone_invalid`), and a number is kept exactly as typed. Still open:
   the country-pack seat (`CountryPack.telephone`, filled by `validateSpanishPhone`) is still not
   called, so a Spanish mobile that fails the national rule but passes the generic one is still
@@ -473,8 +463,7 @@ consumers and storage. See [A7](#roles-the-admin-can-edit-a7) for the remaining 
 
 ## Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117); two blocking derivations and one stale-answer window remain OPEN
 
-**Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117);
-two blocking derivations and one stale-answer window remain OPEN.** Nothing makes a NEW route
+Nothing makes a NEW route
 derive its key before the transaction opens or take turns (`docs/developers/conventions-data.md`).
 **Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN or
 password stops the event loop. The `deriveKey` callers are tracked under
@@ -486,7 +475,7 @@ renamed `verifySecret` (optional).
 
 ## Ongoing — the dashboard UI overhaul, screen by screen
 
-**Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
+Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](../developers/design-system.md). That
 document is the contract, and it grows as we go: each screen tends to raise a question the rules do
 not answer yet, and the answer is written down there in the same change rather than left in the
@@ -538,8 +527,7 @@ settle this first, because every screen after it inherits the answer.
 
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 
-- **The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25).**
-  Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
+Safari was not tried, so what it draws with no colour chosen, and whether the ring and the
   rim-free fill hold there, is unknown; and whether choosing black in the browser's picker from the
   no-colour state registers was not run. With a palette colour chosen, the Custom square shows that
   colour too, beside the ringed swatch (pinned in `apps/dashboard/src/widgets/color-field.test.ts`,
@@ -548,8 +536,7 @@ settle this first, because every screen after it inherits the answer.
 
 ## Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03 while checking lane A's W18) — OPEN
 
-**Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
-while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
+While its read is failing, Payments still says "No card
 readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
 failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
 Roster and Planned vs actual.
@@ -622,7 +609,7 @@ The historical catalogue-only warning was not reproduced.
 
 ## Text size after A179 (#988)
 
-**Text size after A179 (#988).** The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
+The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
 system font, for the dashboard, setup and the till (owner: _"yes for now, then we can revisit
 later"_). Open: page headings follow the Typography roles table in
 `docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part — setup's and
@@ -636,7 +623,7 @@ the usual remedy is to keep field text at 16px on small screens only.
 
 ## Dragging a row (A180, #994 and #1003) — two things seen, left as they were
 
-**Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
+A lifted row in a
 reorder list (`ReorderController`, `packages/ui/src/reorder-table.ts`) shows a faint line at
 each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its list
 has its shadow cut off where the table ends. Whether A180's lifting (`position: relative`,
@@ -670,6 +657,9 @@ plans to retire the editor.
   `pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker.unsaved.test.ts -t "combined line edits"`.
 
 ## Decisions and deliberate limits
+
+- The owner's answer to Q41 (B): signed in, the language choices are in the account menu after
+  Theme, and the banner's controls add no height to it.
 
 - **A human account keeps its email (owner, 2026-10-21).** Keep the existing rule:
   there is no remove-email action.
@@ -911,9 +901,6 @@ help about anything you want very quickly."
   shows a small circled "?" beside it. Clicking one shows a short help text in a popover, or opens
   the matching documentation page when the help is longer.
 - **While off.** Nothing is added to the page; normal use is unobstructed.
-- **Open points for the plan:** where the help texts live and how they are translated (EN/ES, like
-  the screens' strings); how a screen declares which of its parts have help, so a shared `wt-*`
-  primitive can carry it rather than every screen drawing its own marker; whether the mode stays on across pages and sessions; keyboard and screen-reader use.
 - **Documentation.** Three user guides, Products, Modifiers and Languages and photos, are in
   `apps/server/src/guide/en/` with Spanish twins in `apps/server/src/guide/es/`, and the box serves
   them at `/help/<en|es>/<page>`. Where they live and how they are served:
@@ -923,48 +910,16 @@ help about anything you want very quickly."
   The owner approved it on 2026-10-18 with one change: on a till or handheld there is no Help row
   in More, because the "?" stays in the bar at the top right at every width. With help on, an open
   menu shows a blue "?" beside each option that has help.
-- **Slice 1 landed (#1846, 2026-10-18).** `packages/ui` has the help switch's state
-  (`packages/ui/src/help-mode.ts`), `wt-help-tooltip`'s `mode="help-mode"` badge (hidden while help
-  is off, hanging over its box's top trailing corner while on), and `help` slots on
-  `wt-price-input`, `wt-number-stepper`, `wt-file-input`, `wt-disclosure`, `wt-dialog` and
-  `wt-modal`. Plan: [2026-10-18-a582-1-help-badge.md](../superpowers/plans/2026-10-18-a582-1-help-badge.md).
-- **Slice 2a landed (#1848, 2026-10-18).** `packages/ui` has `wt-menu-row` (a menu option with its
-  help badge in its own tap-sized square beside it), `wt-help-switch` (the "?" button that turns
-  help on and off, pressed while on), `help` on `wt-data-table` columns (the badge over the
-  heading's label) and on `wt-tabs` items (drawn outside the tab strip; hidden, with its box
-  closed, while its tab is scrolled out of view). `wt-row-actions` keeps its menu open for a
-  `data-keep-open` element inside a slotted element's shadow root, and places an open menu again
-  when its size changes. Plan:
-  [2026-10-18-a582-2-dashboard-help.md](../superpowers/plans/2026-10-18-a582-2-dashboard-help.md)
-  (PR 2a is Tasks 1–6).
+- [Help badge plan](../superpowers/plans/2026-10-18-a582-1-help-badge.md).
+- [Dashboard help plan](../superpowers/plans/2026-10-18-a582-2-dashboard-help.md).
 - **Left open by 2a:** `wt-help-tooltip` is not in `packages/ui/src/tap-target-and-focus.test.ts`'s
   interactive set; a throwaway check in #1848's review showed it would fail that guard's focus
   check, because focus on the element does not pass to its inner button. Decide whether it should
   delegate focus, then add it to the set.
-- **Slice 2b landed (#1851, 2026-10-18).** Signed in, the dashboard banner has a "?" switch
-  between the alerts bell and the account menu; help stays on across screens and goes off whenever
-  the dashboard returns to the sign-in screen. The five existing "?" (two in a device profile's
-  editor, one each on the staff screen, the unit form and SumUp's affiliate fields, SumUp's in a
-  positioned box of its own) show only while help is on,
-  and `scripts/help-tooltip-mode.test.ts` keeps every new one outside `apps/setup` in help mode.
-  Products has help on the price, VAT, default course, the Variants section and the list's
-  Availability column; the account menu's Account settings and a variant's Keep carry a badge.
-  The owner's answer to Q41 (B): signed in, the language choices are in the account menu after
-  Theme, and the banner's controls add no height to it. Slice 2 is complete: 2a #1848, 2b #1851.
-- **Slice 3 landed (#1871, 2026-10-19).** The guides moved from `docs/` to
-  `apps/server/src/guide/en/`, with a `{#id}` on every section, and gained Spanish twins of all
-  three in `apps/server/src/guide/es/`. `apps/server/src/guide-markdown.ts` renders the small subset
-  they use, refuses the other shapes it checks for, and lets the rest through unrefused; `apps/server/src/guide-catalogue.ts` lists the
-  languages and pages; the route `apps/server/src/guide-pages.ts` is mounted in every `bootServer`
-  branch. The image carries `dist/guide` as `/app/guide`, and image smoke fetches a Spanish page.
-  Root guards: `scripts/guide-page-tokens.test.ts` (the page's token copies) and
-  `scripts/guide-links.test.ts` (the dashboard's links). `wt-help-tooltip` has `guide-href` and
-  `guide-label` for a "Read more in the guide" link; `apps/dashboard/src/help-guide.ts` builds the
-  dashboard's links; Products' price, default course and Variants badges link to their sections;
-  and the dashboard's Vite server sends `/help` to the server. The guides' move from the design's
-  docs/guide/ is explained in [conventions-ui.md](../developers/conventions-ui.md), "Why they are not
-  under `docs/`". Plan: [2026-10-18-a582-3-guide-pages.md](../superpowers/plans/2026-10-18-a582-3-guide-pages.md).
+- [Guide pages plan](../superpowers/plans/2026-10-18-a582-3-guide-pages.md).
 - **Left open by 3:**
+  - `apps/server/src/guide-markdown.ts` renders the small subset
+    they use, refuses the other shapes it checks for, and lets the rest through unrefused.
   - A `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
     guide link.
   - Products' VAT and Availability badges have no guide link.
@@ -973,26 +928,9 @@ help about anything you want very quickly."
     `escapeHtml` to a file of its own would end that; a reviewer called it optional.
   - The failed-start recovery page (started from `apps/server/src/node-entry.ts`, outside
     `bootServer`) does not serve the guides.
-- **Slice 4a landed (#1907).** The till's bar has the Help switch (on a till first in the session
-  row, before the person's menu; on a handheld after the language chooser), never in More and never
-  on the kitchen display, kiosk mode or the lock screen. On a handheld at phone width, when the bar
-  does not fit, the language chooser moves to the end of More, after Theme. Help goes off whenever
-  the till shows its lock screen. With help on, six menu options carry a badge: Profile, Settings,
-  Equipment, Transfers, Pass and Fix my hours. The texts are in `apps/till/src/i18n/help-strings.ts`.
-  Plan: [2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md)
-  (PR 4a is Tasks 1–5).
+- [Till help plan](../superpowers/plans/2026-10-20-a582-4-till-help.md).
 - **Left open by 4a:** on a till at phone width the "?" leaves the tab strip 8 px wide at 320 px
   with a long name; whether the person's name should give room is the owner's question, A921.
-- **Slice 4b landed (#1911).** With help on, the till's screens carry badges: Counter's Park, Guests
-  field and Parked orders and Waiting orders headings; the dishes' search field on Counter and Order,
-  whose box links to the Products guide's "Read a dish's nutrition at the till"; Floor's tables
-  toolbar, layout banner and Needs moving window; Order's Fire / Send all group. A guide link opens
-  in a full-screen sheet over the till with a Close button: `wt-help-tooltip` sends a cancelable
-  `wt-guide-open`, which `till-shell` cancels, and the till's Vite server sends `/help` to the
-  server. `wt-modal`'s side padding and `wt-disclosure`'s top padding are at least half the badge's
-  square, so the till's 32 px badge fits inside them. Plan:
-  [2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md) (PR 4b is
-  Tasks 6–12). Slice 4 is complete: 4a #1907, 4b #1911.
 - **Left open by 4b:** help on Counter's payment buttons waits for A739, which is redesigning the
   payment window (plan, decision 11); once A739 lands, add it there.
 - **Left open by 4b:** `till-shell` does not clear its guide when it is removed; the sheet closes on
@@ -1072,8 +1010,7 @@ still asks, and a full page's own Cancel leaves without asking too.
 
 ## A refused early dashboard payment authorization may become allowed before the PIN transaction — UNVERIFIED (A530 review)
 
-- **A refused early dashboard payment authorization may become allowed before the PIN transaction —
-  UNVERIFIED (A530 review).** `managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
+`managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
   credential when its read refuses; `pinGated` then opens the transaction without a turn. If the
   permission changes to allowed between those reads, a text PIN may derive under the write lock
   outside the attempt queue. The same fallback is present at base `c704ac0dc`; no race was run.
@@ -1138,9 +1075,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A901. The shared reorder announcement misreads an item name holding `$&` or `{index}` (found in A757 slice 7's review, 2026-10-19).
 
-- **A901. The shared reorder announcement misreads an item name holding `$&` or `{index}` (found in
-  A757 slice 7's review, 2026-10-19).**
-  `ReorderController.#announce` (`packages/ui/src/reorder-table.ts:307-310`) fills `{item}`,
+`ReorderController.#announce` (`packages/ui/src/reorder-table.ts:307-310`) fills `{item}`,
   `{index}` and `{total}` with chained `String.replace`, so on every list that reorders through it
   a name holding `$&` is read back with the placeholder in its place
   (`"{item} is now".replace("{item}", "Mains $& x")` prints `Mains {item} x is now`), and a name
@@ -1152,8 +1087,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A905. The department dialog can take back another manager's older copy of the venue after a save (found in A757 slice 7's review, 2026-10-19).
 
-- **A905. The department dialog can take back another manager's older copy of the venue after a
-  save (found in A757 slice 7's review, 2026-10-19).** The dialog orders the copies it receives by
+The dialog orders the copies it receives by
   content alone (`willUpdate`, `packages/venue-service/src/dashboard/department-settings.ts`), and
   the save route answers 204. So when another manager's live change crosses this form's save, a copy
   from before the save can replace what was just saved: seen in temporary browser tests on slice 7's
@@ -1168,8 +1102,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look, 2026-10-19).
 
-- **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
-  2026-10-19).** The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)
+The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)
   and a dialog's background is `--wt-color-surface-raised` (`packages/ui/src/components/wt-dialog.ts:57`).
   Computed with the WCAG contrast formula from the values declared in
   `packages/ui-core/src/tokens/colors.css`: dark `#333945` on `#22262e` is 1.31:1 (1.47:1 on
@@ -1186,8 +1119,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by #1828).
 
-- **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
-  #1828).** `wt-colour-chooser` copies the panel placement (which since A783 also picks two or four
+`wt-colour-chooser` copies the panel placement (which since A783 also picks two or four
   columns) and the arrow-key handling that other `wt-*` components (`wt-combobox` among them)
   each carry their own copy of;
   `wt-language-chooser` and `wt-theme-chooser` already share theirs through
@@ -1197,8 +1129,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## The box's trust page and the favicon still follow the device's setting, not the Theme choice (left open by A681).
 
-- **The box's trust page and the favicon still follow the device's setting, not the Theme choice
-  (left open by A681).** The trust page (`apps/server/src/trust-page.ts`, its logo in
+The trust page (`apps/server/src/trust-page.ts`, its logo in
   `trust-page-logo.ts`) is rendered by the server with no script, so it never reads the choice
   saved in the browser; it is the only server-rendered page under `apps/server/src` that reads the
   device's setting at all. The favicon (`packages/ui/brand/public/favicon.svg`) is drawn by the
@@ -1207,7 +1138,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Five tidy-ups A681's review left for later (#1842, 2026-10-17).
 
-- **Five tidy-ups A681's review left for later (#1842, 2026-10-17).** None is a defect; each
+None is a defect; each
   reshapes working code. (1) Draw the dashboard logo as a token-coloured inline image, as setup's
   is, instead of swapping two images by `media`. (2) One shared "redraw when this changes" helper
   for the theme and the language. (3) Move more of the two choosers' repeated open and close steps
@@ -1218,8 +1149,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A625. Check whether a row menu still wraps its two-word items after the window is resized to phone width (owner, 2026-10-17: keep as a check).
 
-- **A625. Check whether a row menu still wraps its two-word items after the window is resized to
-  phone width (owner, 2026-10-17: keep as a check).** Seen on the Staff roles page (A585-1's look):
+Seen on the Staff roles page (A585-1's look):
   after a desktop window was narrowed to 390 px, "Move up" and "Move down" broke onto two centred
   lines and the menu touched the screen's edge; loaded directly at 390 px it was one line per item,
   three times out of three. Believed to be the shared `wt-row-actions` popover, not that page; not
@@ -1230,8 +1160,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).
 
-- **Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).**
-  - After a box reset, the reset page's own banner still shows the old venue's name. By reading,
+- After a box reset, the reset page's own banner still shows the old venue's name. By reading,
     not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName`
     that `getMe` set, and the locale read meant to replace it repeats the old name once made, since
     it is kept for the page's life (`#localesPromise`, `apps/dashboard/src/api/client.ts`).
@@ -1247,8 +1176,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Loose ends left by A501 (#1552).
 
-- **Loose ends left by A501 (#1552).**
-  - A dashboard tab on the Backup screen learns of a box reset late. Setup mode answers only
+- A dashboard tab on the Backup screen learns of a box reset late. Setup mode answers only
     `/management-api/*` with `node.reset` (`mountSetup`, `apps/server/src/setup-api.ts`); the Backup
     screen and the content-languages read use `/api/...` paths, which setup mode answers with a 404
     with no code (or, without the built wizard, the placeholder page), so such a tab shows the reset
@@ -1262,8 +1190,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A398 — device-profile editor heading remains to align with the sub-page pattern.
 
-- **A398 — device-profile editor heading remains to align with the sub-page pattern.**
-  The editor repeats the list title and has no parent link above the heading
+The editor repeats the list title and has no parent link above the heading
   (`apps/dashboard/src/screens/device-profiles-screen.ts`, `#renderEditor`). Deferred from lane E's
   canvas-heading change because lane A's A366-5A changes that screen. Re-check its landed editor,
   then apply the parent link and one item-name `h1` while retaining the unsaved-changes check.
@@ -1271,8 +1198,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Loose ends left by W79 (#1186, the Menus list).
 
-- **Loose ends left by W79 (#1186, the Menus list).**
-  - `docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
+- `docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
     table heading, while Menus, Staff and Units put a text Add button at the heading row's
     trailing edge; the doc only names the exceptions, and whether the rule itself changes is the
     owner's call.
@@ -1282,8 +1208,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Loose ends left by A629 (#1684).
 
-- **Loose ends left by A629 (#1684).**
-  - The browser's "Open link in new tab" on a link marked `aria-disabled="true"` in a ⋮ menu
+- The browser's "Open link in new tab" on a link marked `aria-disabled="true"` in a ⋮ menu
     (`wt-row-actions`) has not been tried. No screen marks one disabled yet; W88's busy-tree point
     would be the first.
   - A middle-click on a dashboard link marked `aria-disabled="true"` outside a ⋮ menu may still
@@ -1295,8 +1220,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Loose ends left by W83's review (#1193), not started.
 
-- **Loose ends left by W83's review (#1193), not started.**
-  - The table's Customise columns button is icon-only beside Filters and Select but has neither
+- The table's Customise columns button is icon-only beside Filters and Select but has neither
     their look nor a tooltip.
   - The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not
     a `wt-icon-button` component — the Products table's Select is a native `<button>` because
@@ -1307,8 +1231,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A895. A dialog footer's long form message: the field it hides, its scroll cue and its name.
 
-- **A895. A dialog footer's long form message: the field it hides, its scroll cue and its name.**
-  Left open by A849 (#1882), which moved a `wt-dialog` footer row's message into the footer and
+Left open by A849 (#1882), which moved a `wt-dialog` footer row's message into the footer and
   lets a message too long for the dialog scroll inside itself. Seen in its LOOK at 390×500 (scratch
   browser test): a 14-sentence message shrinks the body until the form's only field is cut off; at
   21 sentences the message scrolls, but the headless browser draws no scrollbar, so the only cue is
@@ -1321,8 +1244,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A903. Check that the course list's row menus stay on screen at 390 px (left open by A827).
 
-- **A903. Check that the course list's row menus stay on screen at 390 px (left open by A827).**
-  `apps/dashboard/src/widgets/course-list.ts` also puts a `wt-row-actions` in a plain table. Its
+`apps/dashboard/src/widgets/course-list.ts` also puts a `wt-row-actions` in a plain table. Its
   390 px cases in `course-list.test.ts` check only that a row's menu sits on the first line of a
   wrapping name, or level with the rename field, never where the menu ends. Done when it has a
   390 px case holding every row menu's right edge to the screen's and to the box around its
@@ -1331,8 +1253,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## A904. Correct the list of users in `--wt-cell-name-max-width`'s comment (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).
 
-- **A904. Correct the list of users in `--wt-cell-name-max-width`'s comment
-  (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).** It names "the modifier
+It names "the modifier
   form's choices" as a cap and "the options list form" as a floor, but on main `c11e3572c` no
   modifier form and not `option-list-form.ts` read the token (`grep -rln wt-cell-name-max-width apps
   packages`), while `orders-screen.ts`, `page-printers-panel.ts` and venue-service's
@@ -1352,7 +1273,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Left in the dashboard Orders plan and spec after #1034 landed beside C126:
 
-- **Left in the dashboard Orders plan and spec after #1034 landed beside C126:** their banners still
+Their banners still
   say C126 "is to" credit the bill (it is built); the plan's owner-answers row 7 still says "Task 2,
   as written" for the dropped mark; its Task 1 voided-bill case still lists `invoiceNotCredited:
   false` with no pointer to the drop; and #1034 did not write its planned test that a cancelled bill
@@ -1362,8 +1283,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).
 
-- **What C38 left as it was (a generated display name is the first given name and first surname,
-  #827, owner decision 2026-09-28).** Left as they were, from #827's review: unlike the two staff
+Left as they were, from #827's review: unlike the two staff
   forms, the profile screen keeps a taken-name message beside the display name when a first- or
   last-name change regenerates that name (`apps/dashboard/src/screens/profile-screen.ts` drops only
   the changed field's refusal); and the two staff forms turn the refusal into a field message
@@ -1372,8 +1292,7 @@ A775 kept the button and named it by its label and its chosen value instead (des
 
 ## Loose ends left by C47 (#838/#839/#840/#841).
 
-- **Loose ends left by C47 (#838/#839/#840/#841).**
-  - `wt-form-error-summary` is deleted once nothing uses it. Besides its own files and exports in
+- `wt-form-error-summary` is deleted once nothing uses it. Besides its own files and exports in
     `packages/ui-core` and `packages/ui`, the `packages/ui` workbench demo
     (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
     which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it.
