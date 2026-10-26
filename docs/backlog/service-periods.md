@@ -48,14 +48,14 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## Smaller notes from the Hours reviews
 
-- Smaller notes: nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
-  read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
+Nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
+read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
 ## Smaller notes from the public holidays reviews
 
-- **Smaller notes from the reviews:** there is no control to clear a chosen area back to "not
-  chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
-  Arán" are Spanish data labels shown untranslated in English.
+There is no control to clear a chosen area back to "not
+chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
+Arán" are Spanish data labels shown untranslated in English.
 
 ## The Business day start dialog repeats the server's conflict-counting rule
 
@@ -259,7 +259,7 @@ of their own.
 
 ## Two holidays with one name in one year's list
 
-**Two holidays with one name in one year's list** (retro review of #1603). The holiday dates a
+The holiday dates a
 save reads keep only each name's first date in the year (`readHolidayDates`,
 `packages/venue-service/src/holidays.ts`), so a repeating date saved on the second is stored with
 no holiday name, unless another holiday shares that day, and repeats on its month and day; in
@@ -340,7 +340,7 @@ code, not run again here.
 
 ## A897. Sales by department
 
-**A897. Sales by department** (left open by #297; found by A825). Each sale stores one
+Each sale stores one
 department, which cannot be changed afterwards (`sale_receipt_headers`,
 `packages/venue-service/src/schema/service.ts`), but a sold line stores none (`sale_lines`,
 `packages/db/src/schema/sales.ts`), and no report groups sales by department
@@ -459,12 +459,12 @@ review.
 
 ## A1083. The department delete preview says "Removes 1 floor plan sets."
 
-- **A1083. The department delete preview says "Removes 1 floor plan sets."** Each
-  `venue.delete_item_*` line with `{count}` in `packages/venue-service/src/dashboard/strings.ts`
-  has one plural wording in English and Spanish, filled by `serviceDeleteCopy`
-  (`service-delete-copy.ts`), so a count of 1 reads wrongly — seen, 2026-10-24 (A789 slice 2's
-  look), for `delete_item_floor_plan_sets`, `delete_item_staff_menus` and
-  `delete_item_department_policy`. Fix: a singular wording for a count of 1.
+Each
+`venue.delete_item_*` line with `{count}` in `packages/venue-service/src/dashboard/strings.ts`
+has one plural wording in English and Spanish, filled by `serviceDeleteCopy`
+(`service-delete-copy.ts`), so a count of 1 reads wrongly — seen, 2026-10-24 (A789 slice 2's
+look), for `delete_item_floor_plan_sets`, `delete_item_staff_menus` and
+`delete_item_department_policy`. Fix: a singular wording for a count of 1.
 
 ## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for
 
@@ -848,16 +848,14 @@ late-send PIN only. Read in the code, not run. Left open by A789 slice 4.
 
 ## A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table without signing out
 
-- **A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table
-  without signing out**, and a send's refusal can open the window after the waiter has left the
-  table; Kitchen agreed then answers "table.error" (`#sendDraft`, `apps/till/src/till-app.ts`). Close
-  both when the table changes, and open the refusal's window only on the table that sent.
-  Reproduced in a browser test by the slice 4 review (#2057). Left open by A789 slice 4.
+A send's refusal can open the window after the waiter has left the
+table; Kitchen agreed then answers "table.error" (`#sendDraft`, `apps/till/src/till-app.ts`). Close
+both when the table changes, and open the refusal's window only on the table that sent.
+Reproduced in a browser test by the slice 4 review (#2057). Left open by A789 slice 4.
 
 ## A1095. The till's refusal "A dish's period has ended." names no next step
 
-- **A1095. The till's refusal "A dish's period has ended." names no next step**
-  (`menu_period.ended`, `apps/till/src/i18n/codes.ts`). The till shows it when the box refuses a
-  late dish the till cannot match to any dish it sent, so no late-send window opens; sending again
-  meets the same refusal. Word what the waiter can do (for example, remove the dish or reopen the
-  table so the till marks it). Left open by A789 slice 4, #2057; the wording came with slice 3.
+(`menu_period.ended`, `apps/till/src/i18n/codes.ts`). The till shows it when the box refuses a
+late dish the till cannot match to any dish it sent, so no late-send window opens; sending again
+meets the same refusal. Word what the waiter can do (for example, remove the dish or reopen the
+table so the till marks it). Left open by A789 slice 4, #2057; the wording came with slice 3.
