@@ -10,16 +10,15 @@ their full text.
 
 ## A696. Invoice issue dates and record offsets follow the process zone
 
-- **A696. Invoice issue dates and record offsets follow the process zone.**
-  Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
-  DST included; old records stay unchanged. The owner approved the
-  [startup design](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
-  on 21 October, including the minimal A166 country-zone list and creation/import checks first.
-  Follow the [implementation plan](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md):
-  validate before trading, check every saved-zone writer and let a manager confirm only a
-  missing/invalid zone. Implementation and runtime acceptance remain open; the separate FULL
-  fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 separate.
-  [Detail](fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
+Every new invoice date/offset, ordinary receipt and till must use the saved venue zone,
+DST included; old records stay unchanged. The owner approved the
+[startup design](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
+on 21 October, including the minimal A166 country-zone list and creation/import checks first.
+Follow the [implementation plan](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md):
+validate before trading, check every saved-zone writer and let a manager confirm only a
+missing/invalid zone. Implementation and runtime acceptance remain open; the separate FULL
+fiscal PR finishes green for the owner to land. Keep wider A166 work and A444 separate.
+[Detail](fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
 
 ## A444. A full invoice for a meal past midnight should carry the day the meal ends
 
@@ -37,9 +36,8 @@ their full text.
 
 ## A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the invoice that follows
 
-- **A446. When the pre-bill is built, each printed pre-bill is stored as printed and linked to the
-  invoice that follows.** AEAT's FAQ calls a system without that link «susceptible de sanción»,
-  and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).
+AEAT's FAQ calls a system without that link «susceptible de sanción»,
+and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).
 
 ## A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice
 
@@ -55,23 +53,23 @@ their full text.
 
 ## Adviser confirmation: supplier invoice numbers by issue year
 
-- **Adviser confirmation: supplier invoice numbers by issue year.** Confirm the owner's A981
-  rule in [Q18(b)](../compliance/asesor-questions.md): the same supplier's number is refused within
-  one issue year and accepted in another with a warning. The receipt date still sets the VAT
-  reporting period.
+Confirm the owner's A981
+rule in [Q18(b)](../compliance/asesor-questions.md): the same supplier's number is refused within
+one issue year and accepted in another with a warning. The receipt date still sets the VAT
+reporting period.
 
 ## A554. Should any screen show the address an invoice email went to?
 
-- **A554. Should any screen show the address an invoice email went to?** An owner question, open
-  point 1 of the [A231q plan](../superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md). Until
-  it is answered none does: the delivery status the till and the dashboard read carries no address,
-  and both email forms open empty. Left open by A231q.
+An owner question, open
+point 1 of the [A231q plan](../superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md). Until
+it is answered none does: the delivery status the till and the dashboard read carries no address,
+and both email forms open empty. Left open by A231q.
 
 ## A557. A success reported after an attempt had ended is not shown
 
-- **A557. A success reported after an attempt had ended is not shown.** The delivery status marks
-  such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
-  nor the dashboard shows it, so staff see only the attempt's earlier outcome. Left open by A231q.
+The delivery status marks
+such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
+nor the dashboard shows it, so staff see only the attempt's earlier outcome. Left open by A231q.
 
 ## A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop
 
@@ -102,9 +100,9 @@ their full text.
 
 ## Should `packages/fiscal-verifactu` have a mutation floor?
 
-- **Should `packages/fiscal-verifactu` have a mutation floor?** It has no Stryker config, so the
-  minute-name rules A947 slice 4a added are covered by tests and hand-run deletions only (the
-  plan's Mutation section lists them). Decide whether it joins the mutation-tested packages.
+It has no Stryker config, so the
+minute-name rules A947 slice 4a added are covered by tests and hand-run deletions only (the
+plan's Mutation section lists them). Decide whether it joins the mutation-tested packages.
 
 ## Walk-up invoice dates follow the server process time zone
 
@@ -852,11 +850,10 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
 
 ## "the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it reproduces itself.
 
-- **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it
-  reproduces itself.** Two compliance-track documents carry the same shape about tips
-  (`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`); their tip
-  claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
-  compliance track widens those two sentences.
+Two compliance-track documents carry the same shape about tips
+(`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`); their tip
+claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
+compliance track widens those two sentences.
 
 ## Uncertain receipt delivery
 
@@ -916,28 +913,28 @@ job count as a physical exactly-once printing guarantee.
 
 ## VAT at line add (M7v, A68)
 
-- **VAT at line add (M7v, A68).** Asesor Q26 (the rate on the day of issue) is open. Owner rulings
-  at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
-  box holding order lines is reset rather than given data-migration code; and every invoice path
-  reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
-  copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
-  a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
+Asesor Q26 (the rate on the day of issue) is open. Owner rulings
+at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
+box holding order lines is reset rather than given data-migration code; and every invoice path
+reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
+copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
+a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
 
 ## Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT error on an issued simplified invoice
 
-- **Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT
-  error on an issued simplified invoice.** `recordCorrection` exists
-  (`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5);
-  the whole-order cancel route calls it for a credit of the whole invoice. No route issues a
-  correction for part of one. The remaining script callers are `daily-close-demo.ts` and
-  `modelo-303-demo.ts` under `apps/server/scripts/`. The owner also needs a way to
-  correct an issued invoice when a customer spots an error after payment, regardless of the future
-  Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
-  designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
-  VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
-  should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
-  today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
-  asesor Q31 (2026-09-30), not decided.
+`recordCorrection` exists
+(`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5);
+the whole-order cancel route calls it for a credit of the whole invoice. No route issues a
+correction for part of one. The remaining script callers are `daily-close-demo.ts` and
+`modelo-303-demo.ts` under `apps/server/scripts/`. The owner also needs a way to
+correct an issued invoice when a customer spots an error after payment, regardless of the future
+Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
+designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
+VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
+should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
+today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
+asesor Q31 (2026-09-30), not decided.
+
 - **A802: design approved 2026-10-21; implementation remains open.** The
   [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
   covers paid-receipt corrections, their money-back workflow and A758's same-step correction.
@@ -991,8 +988,6 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).
 
-**Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
-
 - A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
   matches the cancellation's (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
   `fiscal.duplicado_anulado`). The TEST-service retry in A985 returned `Correcto`, with a
@@ -1005,8 +1000,7 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## A556. A full invoice that later replaces a bill's simplified one would not be delivered through the bill.
 
-**A556. A full invoice that later replaces a bill's simplified one would not be delivered through
-the bill.** The dashboard's order detail reaches a bill's invoice as the sale carrying that bill's
+The dashboard's order detail reaches a bill's invoice as the sale carrying that bill's
 id; a replacing full invoice (an F3) is a separate sale, and whether it would carry the bill's id
 was not checked (A231q's review, read, not run). Nothing issues an F3 today: no route calls
 `recordSubstitution`.
@@ -1585,7 +1579,7 @@ did not test physical power loss, a physical printer or remote incident storage.
 
 ## Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases
 
-**Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
+A refusal
 that applies to every later record (one about the taxpayer's identity, say) opens one case per
 record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
 The successor probes are finished: W41s-1c's [receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
@@ -1610,16 +1604,15 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
 
 ## Asesor questions to send
 
-- **Asesor questions to send:**
-  [Q27](../compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
-  (money before the invoice, then a split; printing the invoice first),
-  [Q28](../compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
-  (unpaid departure; built on the owner's decision, asked to confirm) and
-  [Q29](../compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
-  (how a discount or comp appears on the invoice), and
-  [Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
-  (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
-  open.
+[Q27](../compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
+(money before the invoice, then a split; printing the invoice first),
+[Q28](../compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
+(unpaid departure; built on the owner's decision, asked to confirm) and
+[Q29](../compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
+(how a discount or comp appears on the invoice), and
+[Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
+(a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
+open.
 
 ## A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).
 
