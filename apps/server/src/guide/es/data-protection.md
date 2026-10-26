@@ -164,13 +164,13 @@ busca la tarjeta **Privacidad**. Elige **Editar**, rellena uno o los dos y elige
 
 - **Página web del aviso de privacidad** lleva la dirección completa de la página, que empieza por
   `https://` o `http://`, como `https://ejemplo.es/privacidad`. Waitron rechaza una dirección que
-  no empiece así, que tenga un espacio o que lleve un nombre de usuario o una contraseña.
-- **Correo de privacidad** lleva un correo electrónico, como `privacidad@ejemplo.es`.
+  no empiece así, que tenga un espacio dentro o que lleve un nombre de usuario o una contraseña.
+- **Correo de privacidad** lleva un solo correo electrónico, como `privacidad@ejemplo.es`.
 
 Para quitar uno, vacía su campo y elige **Guardar**. Un encargado o un administrador puede
 cambiarlos, y un supervisor puede verlos. Una exportación de la configuración no los incluye, así
-que, si preparas una caja nueva a partir de una, vuelve a escribirlos. Por ahora Waitron solo los
-guarda aquí: nada más en la caja los muestra.
+que, si preparas un equipo nuevo a partir de una, vuelve a escribirlos. Por ahora Waitron solo los
+guarda aquí: nada más en el equipo los muestra.
 
 ## Tu registro de actividades de tratamiento {#record}
 

@@ -157,7 +157,7 @@ card. Choose **Edit**, fill in either or both, and choose **Save**.
 
 - **Privacy notice web page** takes the page's full address, starting with `https://` or
   `http://`, such as `https://example.com/privacy`. Waitron refuses an address without that start,
-  with a space in it, or with a user name or password in it.
+  with a space inside it, or with a user name or password in it.
 - **Privacy email** takes one email address, such as `privacy@example.com`.
 
 To remove one, empty its field and choose **Save**. A manager or an admin can change them, and a
