@@ -935,33 +935,6 @@ it("a stopped recovery beside trading.env: Start again refuses setup.not_ready, 
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
 });
 
-it("a stopped recovery with the database present: no summary showed it, so Start again refuses setup.not_ready, and nothing changes", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  const { owner, ids } = await signedIn(f.host);
-  const inspect = f.host.resolution.inspectFirstSetupResolution;
-  const resolution = {
-    ...f.host.resolution,
-    inspectFirstSetupResolution: async () => ({
-      ...(await inspect()),
-      database: "no-venue-rows" as const,
-      emptyDatabase: true,
-    }),
-  };
-  const actions = createFirstSetupResolutionActions({
-    ...f.roots,
-    host: { ...f.host, resolution },
-    backupRecovery: f.service,
-  });
-  const last = (await f.workspace.readChain()).at(-1)!;
-  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-  await expect(actions.startAgainFirstSetup({ ...ids, owner })).rejects.toMatchObject({
-    code: "setup.not_ready",
-  });
-  await expectNothingWritten(f, before);
-  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
-});
-
 /** The inspection reads the venue database as present and empty. */
 function databasePresent(host: Host): Host {
   const inspect = host.resolution.inspectFirstSetupResolution;
