@@ -33,6 +33,7 @@ import "@waitron/ui/src/components/wt-count-badge.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
+import "@waitron/ui/src/components/wt-powered-by.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
@@ -362,6 +363,10 @@ export class TillShell extends LitElement {
       }
 
       wt-row-actions > span {
+        padding: var(--wt-space-2) var(--wt-space-4);
+      }
+
+      .powered-by {
         padding: var(--wt-space-2) var(--wt-space-4);
       }
 
@@ -965,7 +970,17 @@ export class TillShell extends LitElement {
       <wt-button class="logout" variant="ghost" align="start" @click=${() => this.#emit("logout")}
         >${t("shell.logout")}</wt-button
       >
+      ${this.#poweredBy()}
     </wt-row-actions>`;
+  }
+
+  /** Shown while the venue's own logo is drawn, as on the sign-in screen. */
+  #poweredBy(): TemplateResult | typeof nothing {
+    const state = this.#venueLogo.state;
+    return state.kind === "logo" && !state.failed
+      ? html`<hr class="menu-rule" />
+          <wt-powered-by class="powered-by" label=${t("login.powered_by")}></wt-powered-by>`
+      : nothing;
   }
 
   #tillMenu(): TemplateResult {

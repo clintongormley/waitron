@@ -303,6 +303,43 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     }
   });
 
+  it("a handheld's open More with a venue logo, Powered by at its foot, has no violations", async () => {
+    localStorage.setItem(
+      VENUE_THEME_STORAGE_KEY,
+      JSON.stringify({ ...FIXTURE_ANSWER, logo: { light: png(120, 40), dark: null } }),
+    );
+    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    try {
+      await atViewport(390, 844, async () => {
+        const { el, host } = await mountWidget<TillShell>(
+          "till-shell",
+          {
+            ...full,
+            formFactor: "phone-portrait",
+            activeScreen: "floor",
+            legalName: "Bar Pepe SL",
+          },
+          theme,
+        );
+        const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+        const line = menu.querySelector("wt-powered-by")!;
+        expect(line).not.toBeNull();
+        menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+        await vi.waitFor(() =>
+          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+        );
+        const lockup = line.shadowRoot!.querySelector<HTMLImageElement>('[part="lockup"]')!;
+        await vi.waitFor(() => expect(lockup.complete && lockup.naturalWidth > 0).toBe(true));
+        await expectNoA11yViolations(host);
+      });
+    } finally {
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+    }
+  });
+
   it("the bar with a selected table button and an unsent one has no violations", async () => {
     const { el, host } = await mountWidget<TillShell>(
       "till-shell",
