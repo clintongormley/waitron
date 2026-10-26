@@ -2,9 +2,17 @@ import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import type { Database } from "@waitron/db";
 import { personalDataParts } from "@waitron/module";
-import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
+import {
+  INVOICE_CUSTOMER_README_WORDS,
+  PERSONAL_DATA_README_WORDS,
+} from "./i18n/personal-data-readme.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
-import { personalDataReadme, type PersonalDataReadmeInput } from "./personal-data-readme.js";
+import {
+  invoiceCustomerReadme,
+  personalDataReadme,
+  type InvoiceCustomerReadmeInput,
+  type PersonalDataReadmeInput,
+} from "./personal-data-readme.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
 const base: PersonalDataReadmeInput = {
@@ -463,6 +471,147 @@ ${ASK}
     expect(adjustments.kept).toHaveLength(1);
     expect(personalDataReadme({ ...base, language: "es", files: ADJUSTMENTS_FILES_SET })).toBe(
       spanishReadme(ADJUSTMENTS_FILES_SET),
+    );
+  });
+});
+
+const jordi: InvoiceCustomerReadmeInput = {
+  language: "en",
+  venue: "Example Bar S.L.",
+  customer: "Jordi Puig",
+  date: "2026-10-26",
+  privacyNoticeUrl: "https://examplebar.example/privacy",
+  anyTaxRecord: true,
+  anyEmail: true,
+};
+
+const INVOICE_TAX_RECORD =
+  '- For each invoice marked "taxRecord": true in invoices.json, the box keeps a tax record that it sends to the tax authority (in Spain, the Agencia Tributaria); that record holds your name and tax number, not your address.';
+const INVOICE_EMAIL =
+  "- Invoices emailed to you are sent through the email service the venue set up.";
+
+describe("invoiceCustomerReadme", () => {
+  it("writes every section in English", () => {
+    expect(invoiceCustomerReadme(jordi)).toBe(`Your data held by Example Bar S.L.
+Prepared for Jordi Puig on 2026-10-26.
+
+What each file holds
+- invoices.json: the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and every address the box emailed it to or tried to, with when the email was asked for, whether it went and when, and the result recorded for each attempt and when. Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.
+- invoices/: a copy of each of those invoices as a PDF, marked as a copy.
+${MACHINE}
+This copy holds your full invoices and a record of every attempt to email them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking or an invoice you sent the venue, is not in this copy; ask the venue for it.
+
+Where it came from
+Staff at the venue entered your name, tax number and address when you asked for a full invoice; the rest was recorded as each invoice was issued and sent.
+
+Who else receives it
+${BACKUP}
+${INVOICE_TAX_RECORD}
+${INVOICE_EMAIL}
+
+How long it is kept
+- Nothing in the box deletes or changes an issued invoice: the box refuses to.
+- Nothing in the box deletes the record of an invoice email.
+${DECIDES}
+
+${RIGHTS}
+${ASK}
+`);
+  });
+
+  it("writes every section in Spanish from the Spanish words", () => {
+    const w = PERSONAL_DATA_README_WORDS.es;
+    const own = INVOICE_CUSTOMER_README_WORDS.es;
+    const venue = "Example Bar S.L.";
+    const lines = [
+      w.title.replace("{venue}", () => venue),
+      w.prepared.replace("{name}", () => "Jordi Puig").replace("{date}", () => "2026-10-26"),
+      "",
+      w.filesHeading,
+      `- invoices.json: ${own.holds} ${own.use}`,
+      `- invoices/: ${own.pdfs}`,
+      w.machineReadable,
+      own.notFound,
+      "",
+      w.originHeading,
+      own.origin,
+      "",
+      w.sentToHeading,
+      `- ${w.backup}`,
+      `- ${own.taxRecord}`,
+      `- ${own.email}`,
+      "",
+      w.keptHeading,
+      ...own.kept.map((s) => `- ${s}`),
+      `- ${w.decides}`,
+      "",
+      w.rightsHeading,
+      w.rights,
+      `${w.ask.replace("{venue}", () => venue)} ${w.notice.replace("{url}", () => "https://examplebar.example/privacy")}`,
+    ];
+    expect(own.kept).toHaveLength(2);
+    expect(invoiceCustomerReadme({ ...jordi, language: "es" })).toBe(`${lines.join("\n")}\n`);
+  });
+
+  it("leaves out the tax-record and email lines when no invoice has either", () => {
+    for (const language of ["en", "es"] as const) {
+      const own = INVOICE_CUSTOMER_README_WORDS[language];
+      const lines = invoiceCustomerReadme({
+        ...jordi,
+        language,
+        anyTaxRecord: false,
+        anyEmail: false,
+      }).split("\n");
+      const sentTo = lines.indexOf(PERSONAL_DATA_README_WORDS[language].sentToHeading);
+      expect(lines.slice(sentTo, sentTo + 3)).toEqual([
+        PERSONAL_DATA_README_WORDS[language].sentToHeading,
+        `- ${PERSONAL_DATA_README_WORDS[language].backup}`,
+        "",
+      ]);
+      expect(lines).not.toContain(`- ${own.taxRecord}`);
+      expect(lines).not.toContain(`- ${own.email}`);
+    }
+  });
+
+  it("prints only the tax-record line when no invoice was emailed", () => {
+    const text = invoiceCustomerReadme({ ...jordi, anyEmail: false });
+    expect(text).toContain(`${BACKUP}\n${INVOICE_TAX_RECORD}\n\nHow long it is kept`);
+  });
+
+  it("prints only the email line when no invoice has a tax record", () => {
+    const text = invoiceCustomerReadme({ ...jordi, anyTaxRecord: false });
+    expect(text).toContain(`${BACKUP}\n${INVOICE_EMAIL}\n\nHow long it is kept`);
+  });
+
+  it("puts the venue and customer in literally, replacement patterns included", () => {
+    const lines = invoiceCustomerReadme({
+      ...jordi,
+      venue: "Bar $& $1 S.L.",
+      customer: "Jordi $& Puig",
+    }).split("\n");
+    expect(lines[0]).toBe("Your data held by Bar $& $1 S.L.");
+    expect(lines[1]).toBe("Prepared for Jordi $& Puig on 2026-10-26.");
+    expect(lines.at(-2)).toBe(
+      "Contact Bar $& $1 S.L. to ask. Its privacy notice: https://examplebar.example/privacy",
+    );
+  });
+
+  it("names the venue generically and ends at the ask line with no name and no notice", () => {
+    const lines = invoiceCustomerReadme({
+      ...jordi,
+      privacyNoticeUrl: undefined,
+      venue: null,
+    }).split("\n");
+    expect(lines[0]).toBe("Your data held by the venue");
+    expect(lines.at(-2)).toBe("Contact the venue to ask.");
+  });
+
+  it("has the same words in both languages", () => {
+    expect(Object.keys(INVOICE_CUSTOMER_README_WORDS.es).sort()).toEqual(
+      Object.keys(INVOICE_CUSTOMER_README_WORDS.en).sort(),
+    );
+    expect(INVOICE_CUSTOMER_README_WORDS.es.kept).toHaveLength(
+      INVOICE_CUSTOMER_README_WORDS.en.kept.length,
     );
   });
 });

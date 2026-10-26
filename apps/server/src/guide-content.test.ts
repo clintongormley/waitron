@@ -159,6 +159,7 @@ it.each(GUIDE_LANGUAGES)(
       "own-account",
       "own-data",
       "person-data",
+      "invoice-customer-data",
       "delete-staff-role",
     ]);
   },
@@ -172,6 +173,17 @@ it.each(GUIDE_LANGUAGES)(
     expect(start).toBeGreaterThanOrEqual(0);
     const section = html.slice(start, html.indexOf("</section>", start));
     expect(section).toContain("adjustments.json");
+  },
+);
+
+it.each(GUIDE_LANGUAGES)(
+  "the staff guide's invoice-customer-data section in %s names invoices.json",
+  (lang) => {
+    const html = rendered(lang, "staff")!.html;
+    const start = html.indexOf('<section id="invoice-customer-data"');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const section = html.slice(start, html.indexOf("</section>", start));
+    expect(section).toContain("invoices.json");
   },
 );
 

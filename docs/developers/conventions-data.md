@@ -2636,6 +2636,16 @@ drawer opening looks its sale number up on a full disk", all in
 `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one `withTransaction`
 per route.
 
+Since A980 S3, an admin's invoice-customer search and download
+(`GET /management-api/invoice-customers/personal-data` and its `/export`, in
+`apps/server/src/invoice-customer-data-api.ts`) read in `withWriteLock` turns with no drain — the
+search in one; the download in a first turn, one turn per invoice and a last turn that checks the
+caller again, with a turn of the event loop between them — and resolve the session with `touch:
+false`, so they answer on a full disk with a change waiting. The case is "an admin's
+invoice-customer search and download answer on a full disk with a change waiting, and write
+nothing" in `apps/server/src/start-full-disk.e2e.test.ts`. This is a stated exception to one
+`withTransaction` per route.
+
 Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
 one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
 `apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain. The cases are

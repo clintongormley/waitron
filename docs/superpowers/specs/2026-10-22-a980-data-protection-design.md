@@ -443,6 +443,12 @@ their data** in the person's row menu on **Users** (the S2c plan's decisions 3, 
 2026-10-26: S2d adds `adjustments.json`: the voids, comps and discounts the person made giving a
 reason, or approved (the S2d plan's decisions 2 and 4).
 
+2026-10-26: S3 builds _Orders → Find a customer by tax number_. Instead of one line for every
+invoice, the export marks each invoice with whether the box keeps a tax record of it
+(`taxRecord` in `invoices.json`), and the README's line about the Tax Agency, written only when at
+least one invoice is marked, says that record holds the name and NIF, not the address (the S3
+plan's decisions 1, 8 and 11).
+
 `time-record` reuses the existing export (`apps/server/src/attendance-export-api.ts:77-80`).
 `actions.csv` lists sale numbers and amounts, never another person's data. The JSON files are the
 Article 20 copy. Waitron keeps no list of requests (O7); the venue notes the request and its
@@ -457,6 +463,9 @@ invoices. The export holds the three invoice PDFs (the existing route,
 `apps/server/src/orders-api.ts:364-383`), the name, NIF and address on each, the email addresses
 they were sent to and when, and one line: "sent to the Agencia Tributaria as part of each invoice
 record". Bookings are found separately by phone or name, because a booking holds no NIF.
+2026-10-26: as built, S3 makes the PDFs with the Orders PDF's reader and renderer, not its route,
+and records no download (the S3 plan's decisions 9 and 12); `invoices.json` lists every attempt to
+email an invoice, whatever came of it.
 
 ### 4.3 Erasure
 
@@ -532,6 +541,9 @@ always the venue's; Waitron's material offers the questions, never a verdict.
 receipt, who opened the drawer ([audit](2026-10-16-a664-personal-data-audit.md#core-88-tables)).
 **What it cannot tell:** who looked at a booking, a customer or a staff record, who downloaded a
 configuration export, and from which address. No read is recorded and no IP is stored.
+2026-10-26: after S3, "who downloaded an invoice PDF" holds only for the Orders page's own PDF
+button; the invoices in an invoice customer's download are not recorded (the S3 plan's decision
+12).
 
 **Worked example.** On a Saturday night a till tablet is stolen. The manager revokes it
 (_Devices → Revoke_, `apps/server/src/device-api.ts:743`, which ends its open sign-ins,

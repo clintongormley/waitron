@@ -18,7 +18,8 @@ export function countOf(
     | "kitchen.delete_course_products"
     | "kitchen.delete_course_service_steps"
     | "kitchen.delete_course_seated_steps"
-    | "appearance.hard_to_read_count",
+    | "appearance.hard_to_read_count"
+    | "invoice_customer.count",
   count: number,
 ): string {
   return t(count === 1 ? `${key}_one` : key).replace("{count}", String(count));

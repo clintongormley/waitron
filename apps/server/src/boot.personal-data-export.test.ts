@@ -113,6 +113,30 @@ describe("the personal-data downloads in a real start", () => {
           params: { permission: "personal_data.export" },
         },
       });
+
+      const invoiceCustomers = `http://127.0.0.1:${port}/management-api/invoice-customers/personal-data`;
+      const search = `${invoiceCustomers}?taxId=12345678Z`;
+      const download = `${invoiceCustomers}/export?taxId=12345678Z`;
+      const adminCookie = { cookie: `${MANAGEMENT_COOKIE}=${adminSession.token}` };
+      const found = await fetch(search, { headers: adminCookie });
+      expect(found.status).toBe(200);
+      expect(await found.json()).toEqual({ taxId: "12345678Z", invoices: [] });
+      const missing = await fetch(download, { headers: adminCookie });
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({
+        error: { code: "invoice_customer.not_found", params: {} },
+      });
+      const managerCookie = { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` };
+      for (const target of [search, download]) {
+        const managerRefused = await fetch(target, { headers: managerCookie });
+        expect(managerRefused.status).toBe(403);
+        expect(await managerRefused.json()).toEqual({
+          error: {
+            code: "authorization.not_permitted",
+            params: { permission: "personal_data.export" },
+          },
+        });
+      }
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });

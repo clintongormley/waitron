@@ -1,6 +1,8 @@
 import { strFromU8, strToU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { archiveFileName, zipArchive } from "./download-archive.js";
+import { setImmediate as nextTurn } from "node:timers/promises";
+import type { PersonalDataFile } from "@waitron/module";
+import { archiveFileName, zipArchive, zipArchiveInTurns } from "./download-archive.js";
 
 const AT = new Date("2026-10-04T22:30:00Z");
 
@@ -129,5 +131,93 @@ describe("zipArchive", () => {
     const flag = (name: string) => u16(zipArchive([{ name, content: "x" }], AT), 6) & (1 << 11);
     expect(flag("café.txt")).not.toBe(0);
     expect(flag("profile.json")).toBe(0);
+  });
+});
+
+/** Each entry's compression method and DOS date, read from the central directory: a streamed
+ * ZIP's local headers carry size 0 and the sizes follow the data. */
+function centralEntries(
+  zip: Uint8Array,
+): Record<string, { method: number; time: number; date: number }> {
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const end = zip.length - 22;
+  expect(view.getUint32(end, true)).toBe(0x06054b50);
+  const count = u16(zip, end + 10);
+  let at = view.getUint32(end + 16, true);
+  const found: Record<string, { method: number; time: number; date: number }> = {};
+  for (let index = 0; index < count; index++) {
+    expect(view.getUint32(at, true)).toBe(0x02014b50);
+    const nameLength = u16(zip, at + 28);
+    const name = strFromU8(zip.subarray(at + 46, at + 46 + nameLength));
+    found[name] = { method: u16(zip, at + 10), time: u16(zip, at + 12), date: u16(zip, at + 14) };
+    at += 46 + nameLength + u16(zip, at + 30) + u16(zip, at + 32);
+  }
+  return found;
+}
+
+describe("zipArchiveInTurns", () => {
+  const pdf = (seed: number) => {
+    const bytes = new Uint8Array(250_000);
+    for (let index = 0; index < bytes.length; index++) bytes[index] = (index * seed) & 0xff;
+    bytes.set(strToU8("%PDF-"), 0);
+    return bytes;
+  };
+  const files: PersonalDataFile[] = [
+    { name: "README.txt", content: "Prepared for Jordi Puig Electrician\n".repeat(20) },
+    { name: "invoices.json", content: JSON.stringify({ invoices: [1, 2, 3] }) },
+    { name: "invoices/FF-1.pdf", content: pdf(7) },
+    { name: "invoices/FF-3.pdf", content: pdf(11) },
+    { name: "invoices/FF-6.pdf", content: pdf(13) },
+  ];
+
+  it("holds what zipArchive holds, dated alike, the PDFs stored as they are", async () => {
+    const streamed = await zipArchiveInTurns(files, AT);
+    const whole = zipArchive(files, AT);
+    const ours = unzipSync(streamed);
+    expect(Object.keys(ours)).toEqual(files.map((file) => file.name));
+    expect(ours).toEqual(unzipSync(whole));
+    const date = ((AT.getFullYear() - 1980) << 9) | ((AT.getMonth() + 1) << 5) | AT.getDate();
+    const time = (AT.getHours() << 11) | (AT.getMinutes() << 5) | (AT.getSeconds() >> 1);
+    expect(centralEntries(streamed)).toEqual({
+      "README.txt": { method: 8, time, date },
+      "invoices.json": { method: 8, time, date },
+      "invoices/FF-1.pdf": { method: 0, time, date },
+      "invoices/FF-3.pdf": { method: 0, time, date },
+      "invoices/FF-6.pdf": { method: 0, time, date },
+    });
+    expect(centralEntries(streamed)).toEqual(centralEntries(whole));
+  });
+
+  it("dates its entries inside 1980-2099 as zipArchive does", async () => {
+    const at = new Date("1970-01-01T00:00:00Z");
+    const one = [{ name: "a.json", content: "{}" }];
+    const streamed = centralEntries(await zipArchiveInTurns(one, at))["a.json"]!;
+    expect(streamed).toEqual(centralEntries(zipArchive(one, at))["a.json"]);
+    expect(streamed.date).toBe((1 << 5) | 1);
+  });
+
+  it("refuses an entry fflate refuses, as zipArchive does", async () => {
+    const long = [{ name: `${"a".repeat(70_000)}.json`, content: "{}" }];
+    expect(() => zipArchive(long, AT)).toThrow("filename too long");
+    await expect(zipArchiveInTurns(long, AT)).rejects.toThrow("filename too long");
+  });
+
+  it("gives the event loop a turn between entries", async () => {
+    // Each file, when its content is read, checks that the marker the previous file queued has
+    // run, then queues its own. With no turn between entries no marker runs until the end.
+    const ran: number[] = [];
+    const seen: number[][] = [];
+    const watched = files.map((file, index): PersonalDataFile => ({
+      name: file.name,
+      get content() {
+        seen.push([...ran]);
+        setImmediate(() => ran.push(index));
+        return file.content;
+      },
+    }));
+    await zipArchiveInTurns(watched, AT);
+    await nextTurn();
+    expect(seen).toEqual([[], [0], [0, 1], [0, 1, 2], [0, 1, 2, 3]]);
+    expect(ran).toEqual([0, 1, 2, 3, 4]);
   });
 });

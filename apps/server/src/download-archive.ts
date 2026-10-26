@@ -1,4 +1,5 @@
-import { strToU8, zipSync, type Zippable } from "fflate";
+import { setImmediate as nextTurn } from "node:timers/promises";
+import { strToU8, Zip, ZipDeflate, ZipPassThrough, zipSync, type Zippable } from "fflate";
 import type { PersonalDataFile } from "@waitron/module";
 import { civilDateOf } from "@waitron/reporting";
 
@@ -54,4 +55,34 @@ export function zipArchive(files: readonly PersonalDataFile[], at: Date): Uint8A
     entries[file.name] = [data, { mtime, level: /\.pdf$/i.test(file.name) ? 0 : 6 }];
   }
   return zipSync(entries);
+}
+
+/** `zipArchive`'s ZIP built one entry at a time with a turn of the event loop after each, so the
+ * longest block while adding is one entry; the final join still copies the whole archive once.
+ * Each `content` is read only when its entry is added. */
+export async function zipArchiveInTurns(
+  files: readonly PersonalDataFile[],
+  at: Date,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const chunks: Uint8Array[] = [];
+  let failure: Error | null = null;
+  const zip = new Zip((error, chunk) => {
+    if (error) failure = error;
+    else chunks.push(chunk);
+  });
+  const mtime = zipTime(at);
+  for (const file of files) {
+    const content = file.content;
+    const data = typeof content === "string" ? strToU8(content) : content;
+    const entry = /\.pdf$/i.test(file.name)
+      ? new ZipPassThrough(file.name)
+      : new ZipDeflate(file.name, { level: 6 });
+    entry.mtime = mtime;
+    zip.add(entry);
+    entry.push(data, true);
+    if (failure) throw failure;
+    await nextTurn();
+  }
+  zip.end();
+  return Buffer.concat(chunks);
 }

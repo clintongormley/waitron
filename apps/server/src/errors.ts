@@ -31,6 +31,8 @@ declare module "@waitron/shared" {
     "invoice_delivery.receipt_invalid": Record<string, never>;
     "invoice_delivery.active": Record<string, never>;
     "invoice_delivery.not_found": Record<string, never>;
+    /** The invoice customer download's tax number is on no issued invoice. */
+    "invoice_customer.not_found": Record<string, never>;
     "invoice_delivery.full_invoice_required": Record<string, never>;
     /** Paper instead of A4 would print nowhere: the till resolves no receipt printer. */
     "invoice_delivery.receipt_unavailable": Record<string, never>;
@@ -136,7 +138,8 @@ declare module "@waitron/shared" {
     "node.not_found": { id: string };
     /**
      * A write reached a node running as a read-only MIRROR (`node_roles.mode = 'mirror'`): the
-     * read-only gate (`read-only-gate.ts`) refuses every non-GET. Cleared by promotion, read live.
+     * read-only gate (`read-only-gate.ts`) refuses every non-GET, and the invoice customer search
+     * and download refuse their GETs too. Cleared by promotion, read live.
      */
     "node.read_only": Record<string, never>;
     /**

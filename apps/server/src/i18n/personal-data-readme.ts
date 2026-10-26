@@ -280,3 +280,53 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
     unnamedVenue: "el local",
   },
 };
+
+/** The invoice-customer download's own lines; the shared ones come from `PERSONAL_DATA_README_WORDS`. */
+export interface InvoiceCustomerReadmeWords {
+  readonly holds: string;
+  readonly use: string;
+  readonly pdfs: string;
+  readonly notFound: string;
+  readonly origin: string;
+  readonly taxRecord: string;
+  readonly email: string;
+  readonly kept: readonly string[];
+}
+
+export const INVOICE_CUSTOMER_README_WORDS: Record<"en" | "es", InvoiceCustomerReadmeWords> = {
+  en: {
+    holds:
+      "the full invoices the venue issued to your tax number: for each one, its number, when it was issued, the name, tax number, country and address on it, its total, the PDF copy in this download, whether the box keeps a tax record of it, and every address the box emailed it to or tried to, with when the email was asked for, whether it went and when, and the result recorded for each attempt and when.",
+    use: "Kept because an invoice must name its customer and the venue must keep a copy of each invoice it issues.",
+    pdfs: "a copy of each of those invoices as a PDF, marked as a copy.",
+    notFound:
+      "This copy holds your full invoices and a record of every attempt to email them. The box also keeps the details staff typed for an invoice on the bill itself and in printer records; ask the venue for those. Anything else the venue holds about you, such as a booking or an invoice you sent the venue, is not in this copy; ask the venue for it.",
+    origin:
+      "Staff at the venue entered your name, tax number and address when you asked for a full invoice; the rest was recorded as each invoice was issued and sent.",
+    taxRecord:
+      'For each invoice marked "taxRecord": true in invoices.json, the box keeps a tax record that it sends to the tax authority (in Spain, the Agencia Tributaria); that record holds your name and tax number, not your address.',
+    email: "Invoices emailed to you are sent through the email service the venue set up.",
+    kept: [
+      "Nothing in the box deletes or changes an issued invoice: the box refuses to.",
+      "Nothing in the box deletes the record of an invoice email.",
+    ],
+  },
+  es: {
+    holds:
+      "las facturas completas que el local emitió a tu NIF: de cada una, su número, cuándo se emitió, el nombre, el NIF, el país y la dirección que lleva, su total, la copia en PDF de esta descarga, si el servidor Waitron del local guarda un registro fiscal de ella, y todas las direcciones de correo a las que se envió o se intentó enviar, con cuándo se pidió el envío, si salió y cuándo, y el resultado registrado de cada intento y cuándo.",
+    use: "Se guarda porque una factura debe identificar a su destinatario y el local debe conservar una copia de cada factura que emite.",
+    pdfs: "una copia en PDF de cada una de esas facturas, marcada como copia.",
+    notFound:
+      "Esta copia contiene tus facturas completas y un registro de cada intento de enviarlas por correo. El servidor Waitron del local también guarda los datos que el personal escribió para una factura en la propia cuenta y en los registros de impresión; pídeselos al local. Cualquier otro dato tuyo que tenga el local, como una reserva o una factura que enviaste al local, no está en esta copia; pídeselo al local.",
+    origin:
+      "El personal del local introdujo tu nombre, tu NIF y tu dirección cuando pediste una factura completa; el resto se registró al emitir y enviar cada factura.",
+    taxRecord:
+      'De cada factura marcada con "taxRecord": true en invoices.json, el servidor Waitron del local guarda un registro fiscal que envía a la administración tributaria (en España, la Agencia Tributaria); ese registro contiene tu nombre y tu NIF, no tu dirección.',
+    email:
+      "Las facturas que se te enviaron por correo salen a través del servicio de correo que configuró el local.",
+    kept: [
+      "Nada en el servidor Waitron del local borra ni cambia una factura emitida: el servidor no lo permite.",
+      "Nada en el servidor Waitron del local borra el registro del envío de una factura por correo.",
+    ],
+  },
+};

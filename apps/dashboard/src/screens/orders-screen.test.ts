@@ -614,4 +614,35 @@ describe("dashboard Orders", () => {
     await table.updateComplete;
     expect(table.shadowRoot!.textContent).toContain("Left without paying on");
   });
+
+  describe("finding a customer by tax number", () => {
+    const findButton = (el: OrdersScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=find-invoice-customer]");
+    const dialog = (el: OrdersScreen) =>
+      el.shadowRoot!.querySelector("dashboard-invoice-customer-dialog")!;
+
+    it("offers no button without the personal-data export permission", async () => {
+      const { el } = await loaded();
+      expect(findButton(el)).toBeNull();
+      expect(dialog(el).open).toBe(false);
+    });
+
+    it("opens the dialog from the button, and closes it when the dialog closes", async () => {
+      const { el, api } = await loaded();
+      el.canExportPersonalData = true;
+      await el.updateComplete;
+      const button = findButton(el)!;
+      expect(button.textContent).toBe("Find a customer by tax number");
+      expect(dialog(el).open).toBe(false);
+
+      button.click();
+      await el.updateComplete;
+      expect(dialog(el).open).toBe(true);
+      expect(dialog(el).api).toBe(api);
+
+      dialog(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      expect(dialog(el).open).toBe(false);
+    });
+  });
 });

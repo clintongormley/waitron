@@ -7,6 +7,12 @@ import { readInvoiceDocument } from "./invoice-document.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import type { TillConfig } from "./till-config.js";
 
+/** A series code may hold `/`; anything outside this set is replaced so the name stays one path
+ * segment and needs no escaping inside a quoted header value. */
+export function invoicePdfFileName(code: string, number: number): string {
+  return `${code.replace(/[^A-Za-z0-9_.-]/g, "_")}-${number}.pdf`;
+}
+
 /** The bill's full invoice as a duplicate, with the download recorded; writes no delivery row. */
 export async function readInvoiceForDownload(
   tx: Transaction,
@@ -24,8 +30,6 @@ export async function readInvoiceForDownload(
   await tx.insert(invoicePdfDownloads).values({ saleId: sale.id, personId });
   return {
     document: { ...document, duplicate: true },
-    // A series code may hold `/`; anything outside this set is replaced so the name stays one
-    // path segment and needs no escaping inside the quoted header value.
-    fileName: `${sale.code.replace(/[^A-Za-z0-9_.-]/g, "_")}-${sale.number}.pdf`,
+    fileName: invoicePdfFileName(sale.code, sale.number),
   };
 }

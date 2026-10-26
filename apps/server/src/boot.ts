@@ -241,6 +241,7 @@ import { mountCatalogueApi, translationContextFor } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
+import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { mountOrdersApi } from "./orders-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountManagementAttendanceApi } from "./management-attendance-api.js";
@@ -2120,6 +2121,20 @@ async function bootServer(
       till,
       devMode: config.devMode,
       invoiceEmailAvailable,
+    },
+    log,
+  );
+  mountInvoiceCustomerDataApi(
+    app,
+    {
+      db,
+      backend: tillBackend,
+      till,
+      nodeId: dataNodeId,
+      venueLocale,
+      privacyNoticeUrl: config.privacyNoticeUrl,
+      onMirror: () => holders.mode.current === "mirror",
+      now,
     },
     log,
   );

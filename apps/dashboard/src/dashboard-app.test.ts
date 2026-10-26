@@ -8738,6 +8738,41 @@ it("signs out through the leave coordinator when the staff screen asks for an ad
   expect(staff(el)).toBeNull();
 });
 
+const ordersScreen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-orders-screen");
+
+it.each([false, true])(
+  "passes the personal-data export permission to the Orders screen (%s)",
+  async (canExport) => {
+    history.replaceState(null, "", "/manage/orders");
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        permissions: ["report.view", canExport ? "personal_data.export" : "report.export"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(ordersScreen(el)!.canExportPersonalData).toBe(canExport);
+  },
+);
+
+it("signs out when the Orders screen asks for an administrator", async () => {
+  history.replaceState(null, "", "/manage/orders");
+  const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await flush(el);
+  expect(ordersScreen(el)).not.toBeNull();
+
+  ordersScreen(el)!.dispatchEvent(
+    new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+  );
+
+  await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+  await expect.poll(() => login(el)).toBeTruthy();
+  expect(ordersScreen(el)).toBeNull();
+});
+
 describe("the Users screen's administrator sign-in, pressed for real", () => {
   const marta: PersonSummary = {
     personId: "p2",
