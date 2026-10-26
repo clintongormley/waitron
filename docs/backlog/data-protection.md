@@ -215,6 +215,26 @@ by the answers):
   sign-in details with its own SQL rather than identity's shared helper (left out of S4, #2032),
   and does not delete pending passkey challenges. Next action: route it through the helper, or say
   at the command why not.
+- **S10 follow-ups (from #2094's review, not taken there):**
+  - **Rename the SumUp merchant's `name` to `merchantName`.** That removes the log mask's one path
+    rule (`merchants[].name`, `apps/server/src/log-personal-data.ts`) and the guard's array check
+    that goes with it. Touches `packages/payments-sumup` and the dashboard's connect form, which
+    S10 kept out of scope.
+  - **`account_email.send_failed` has two shapes.** The profile route logs
+    `{ purpose, errorCode }`; the invitation route (`deliverAccountAction`,
+    `apps/server/src/management-api.ts`) logs `{ purpose, personId }` and no error code, so a
+    refused invitation does not say why. Next action: log the code there too.
+  - **The profile route's `errorCode` holds values no registry declares** (`email.send_refused`,
+    `email.unconfigured`, from `AccountEmailFailure`). Register them or rename the field.
+  - **Smaller tidy-ups:** read registries with TypeScript's parser instead of text in
+    `scripts/personal-log-params.test.ts` (its header lists what text reading misses); merge its
+    three similar allow-list checks; reuse the existing fake mail server in
+    `apps/server/src/recovery-page-personal-data.test.ts` and drop its two attendance cases that
+    repeat an existing test; merge `boot.ts`'s two identical `sendAccountEmail` wrappers (older
+    than S10).
+  - **Owner choices on the partial mask** are listed under the S10 plan's decision 14 and in lane
+    B's questions file; one worth a look: the ending after an email's last dot is kept whole, so a
+    mistyped `jordi@puig.ferrer` logs as `j***i@p***g.ferrer`.
 
 ## Decisions and deliberate limits
 
