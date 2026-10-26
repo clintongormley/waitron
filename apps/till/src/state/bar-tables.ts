@@ -61,14 +61,14 @@ export interface BarLocal {
   held: HeldBill | null;
   /** Later records of one bill win over earlier ones. */
   released: readonly LocalBill[];
-  /** The table being opened, and whether the order screen shows it yet. */
+  /** The table being opened, and whether the order screen is still shown. */
   opening?: { tableId: string; onScreen: boolean };
 }
 
 /**
  * The tables a handheld's bar gives a button (D3, D4, D13): each open party where `personId` has
- * something unsent, and the held party, or a held table whose party the read does not list, while it
- * is on screen, in `tables`' order.
+ * something unsent, and the party at the held table (its own, or one seated there since), or a held
+ * table whose party the read does not list, while it is on screen, in `tables`' order.
  * Per bill the held answer wins, then a released one, then the floor read. A button opens the held
  * table only while the read seats its party there, so it never opens a table it does not name.
  */

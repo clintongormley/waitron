@@ -5416,7 +5416,7 @@ and a checked list for several, and Floor contains only selected table zones. A 
 Counter, so its Floor contains every selected zone, counter zones included. A handheld opens on its
 "Opens first" zone only once a choice is saved (the zones read's `saved`); before that it opens
 where it always has, on the URL's zone or the first tab. Once a table has been opened, Floor
-opens on that table's zone instead, as "Navigation and language controls" above says. A handheld whose zones read fails at
+opens on that table's zone instead when this device shows that zone, as "Navigation and language controls" above says. A handheld whose zones read fails at
 sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
 Floor's pills disappear with one zone. The pills, List/Map and zone menu share one toolbar,
 including at phone width. A till with no permitted zones shows an explanation, Settings and Retry. A

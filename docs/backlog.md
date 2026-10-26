@@ -2070,7 +2070,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   2026-10-17).** On a handheld, since A797 slice 3, Log out is last in ☰, after the Settings group
   (design §3.1), so with every entry offered it sits below the menu's bottom edge at 360×640 (759 px
   against a 632 px menu in Spanish, the build plan's slice 3 D6, probe B), and nothing says the
-  menu scrolls. Decide whether More should show that it scrolls, or hold fewer items on a short
+  menu scrolls. First seen at 320×568 by A681's look (625 px of content in 552 px). Decide whether
+  More should show that it scrolls, or hold fewer items on a short
   screen.
 
 - **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
@@ -2835,8 +2836,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
   bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
-  can make. Each should reach the order screen by the table's bar button or `/tabs/order`, or be
-  shown to run on a counter till (table-service, parties, menu-refresh, drafts, boot-and-counter).
+  can make. Each should reach the order screen by the table's bar button or `/tabs/order`; on a counter
+  till, where `order` resolves to Counter, drop the emit or replace it with the tap the test means
+  (table-service, parties, menu-refresh, drafts, boot-and-counter).
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
   - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when

@@ -3752,6 +3752,7 @@ first" zone, and one without returns to the address's zone, the zone viewed befo
   (a line's removal, or Discard, `#onDiscardDraft` at `:12382`; neither calls either); **another
   person taking the bill** (D4); and **opening a table with nothing of this person's unsent**. (A
   partial send keeps ✎: lines remain, `:11754`.) Task 5a pins the first two. Task 6 opens the backlog entry for slice 10.
+  _2026-10-26: `#showOrderScreen` sets it and `#endTableOpening` clears it with `tableOpening`; the stand-in is `shownBill` in bar-tables.ts._
 - **D14. Each button is a tab.** In the bar's `role="tablist"`, a `button` with `role="tab"`,
   `aria-selected` "true" on the table on screen (as the screen tabs, `:1044-1053`), the class
   `bar-table` (not `tab`, so the many checks that count `.tab` keep counting screens) with the
@@ -3764,6 +3765,7 @@ first" zone, and one without returns to the address's zone, the zone viewed befo
   bar button carries none, design-system.md:2322). The selected look is today's selected tab
   (`:271-275`), not picture 01's filled blue. When the buttons do not fit, the strip scrolls
   sideways as it does today (`.tabs`, `:176-184`).
+  _2026-10-26: the event also carries `held`, decided by `goesBack` in bar-tables.ts._
 - **D15. The brand mark stays at step 0 on a wide handheld**, before Floor. Picture 06 draws none,
   but the spec says nothing of it and it is the venue's logo (design-system.md:5335-5340); with
   the other items gone it shows whenever everything fits. Owner FYI.

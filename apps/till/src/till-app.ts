@@ -18221,7 +18221,7 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Inside the shell only a till reaches this: a handheld's order tab is `embedded` and emits no
+   * Inside the shell only a till reaches this: a handheld's order screen is `embedded` and emits no
    * `back-to-floor`.
    */
   #onBackToFloor(): void {
