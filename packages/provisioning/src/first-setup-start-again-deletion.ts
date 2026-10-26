@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
-import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import {
@@ -350,13 +350,26 @@ export async function startAgainMarkerFor(
 }
 
 export async function readStartAgainMarker(venueDir: string): Promise<StartAgainMarker | null> {
-  let value: unknown;
+  return (await readMarkerAndHash(venueDir))?.marker ?? null;
+}
+
+async function readMarkerAndHash(
+  venueDir: string,
+): Promise<{ marker: StartAgainMarker; markerSha256: string } | null> {
+  let read: Awaited<ReturnType<typeof readDurableHostJsonWithBytes>>;
   try {
-    value = await readDurableHostJson(join(venueDir, START_AGAIN_MARKER_FILE), MARKER_LIMIT);
+    read = await readDurableHostJsonWithBytes(
+      join(venueDir, START_AGAIN_MARKER_FILE),
+      MARKER_LIMIT,
+    );
   } catch {
     throw incomplete("marker unreadable");
   }
-  return value === null ? null : parseMarker(value);
+  if (read === null) return null;
+  return {
+    marker: parseMarker(read.value),
+    markerSha256: createHash("sha256").update(read.bytes).digest("hex"),
+  };
 }
 
 export async function assertNoStartAgainDeletion(venueDir: string): Promise<void> {
@@ -514,16 +527,11 @@ export async function collectStartAgainFindings(roots: Roots): Promise<{
   blocker: AppError | null;
 } | null> {
   const canonical = await canonicalFirstSetupRoots(roots);
-  const marker = await readStartAgainMarker(canonical.venueDir);
-  if (marker === null) return null;
+  const read = await readMarkerAndHash(canonical.venueDir);
+  if (read === null) return null;
+  const { marker, markerSha256 } = read;
   if (marker.venueDir !== canonical.venueDir || marker.stateDir !== canonical.stateDir)
     throw incomplete("marker folders differ");
-  let markerSha256: string;
-  try {
-    markerSha256 = (await sha256(join(canonical.venueDir, START_AGAIN_MARKER_FILE))).sha256;
-  } catch {
-    throw incomplete("marker unreadable");
-  }
   const findings: StartAgainFinding[] = [];
   let blocker: AppError | null = null;
   try {

@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { verifyPassword } from "@waitron/identity";
 import { START_AGAIN_ADMIN_PASSWORD, startAgainAttempt } from "../test/start-again-attempt.js";
 import {
@@ -11,6 +11,8 @@ import {
   finishStartAgainDeletion,
 } from "./first-setup-start-again-deletion.js";
 import { parseState } from "./first-setup-state.js";
+
+vi.mock("node:fs/promises", { spy: true });
 
 const dirs: string[] = [];
 async function scratch() {
@@ -111,6 +113,13 @@ it("a link among the attempt's files is a blocker, after the findings before it"
   ]);
   expect(collected!.blocker).toMatchObject({ code: "setup.start_again_incomplete" });
   expect(collected!.blocker!.reason).toMatch(/^layout unexpected:/);
+
+  const before = await snapshot(roots);
+  await expect(finishStartAgainDeletion(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "refused artifact present: state/trading.env",
+  });
+  expect(await snapshot(roots)).toEqual(before);
 });
 
 it("the finisher still refuses with the first finding's reason", async () => {
@@ -121,4 +130,52 @@ it("the finisher still refuses with the first finding's reason", async () => {
     reason: "refused artifact present: state/trading.env",
   });
   expect(await snapshot(roots)).toEqual(before);
+});
+
+it("the collector refuses a marker naming other folders", async () => {
+  const { roots } = await startAgainAttempt(await scratch());
+  const path = join(roots.venueDir, "first-setup-deleting.json");
+  const marker = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...marker, stateDir: await scratch() }));
+  await expect(collectStartAgainFindings(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "marker folders differ",
+  });
+});
+
+it.skipIf(process.getuid?.() === 0)("the collector refuses a marker it cannot read", async () => {
+  const { roots } = await startAgainAttempt(await scratch());
+  await fs.chmod(join(roots.venueDir, "first-setup-deleting.json"), 0o000);
+  await expect(collectStartAgainFindings(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason: "marker unreadable",
+  });
+});
+
+it("the marker's hash is of the bytes its marker was parsed from, even when the file is replaced after its first read", async () => {
+  const { roots } = await startAgainAttempt(await scratch());
+  const path = join(roots.venueDir, "first-setup-deleting.json");
+  const original = await readFile(path);
+  const replacement = JSON.stringify(JSON.parse(original.toString("utf8")), null, 2);
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  let reads = 0;
+  const replaceAfterFirstRead = async (target: unknown) => {
+    if (!String(target).endsWith("/first-setup-deleting.json")) return;
+    if (++reads === 2) await actual.writeFile(path, replacement);
+  };
+  vi.mocked(fs.open).mockImplementation(async (...args) => {
+    await replaceAfterFirstRead(args[0]);
+    return actual.open(...args);
+  });
+  vi.mocked(fs.readFile).mockImplementation(async (...args) => {
+    await replaceAfterFirstRead(args[0]);
+    return actual.readFile(...(args as Parameters<typeof actual.readFile>));
+  });
+  try {
+    const collected = await collectStartAgainFindings(roots);
+    expect(collected!.markerSha256).toBe(sha(original));
+  } finally {
+    vi.mocked(fs.open).mockReset();
+    vi.mocked(fs.readFile).mockReset();
+  }
 });
