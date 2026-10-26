@@ -1,24 +1,28 @@
 import "./errors.js";
-import { AppError, DEFAULT_STATION_THRESHOLDS, compareStationNames } from "@waitron/shared";
-import type { StationThresholds } from "@waitron/shared";
+import {
+  AppError,
+  DEFAULT_READY_WARNING_AFTER_MINUTES,
+  DEFAULT_STATION_THRESHOLDS,
+  compareStationNames,
+} from "@waitron/shared";
+import type { StationThresholds, StationTiming } from "@waitron/shared";
 
 const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 
-export type StationTimingPatch = Partial<StationThresholds>;
+export type StationTimingPatch = Partial<StationTiming>;
+
+function isWholeMinutes(value: unknown): value is number {
+  return (
+    typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 2_147_483_647
+  );
+}
 
 export function parseStationTimingPatch(body: Record<string, unknown>): StationTimingPatch {
   const patch: StationTimingPatch = {};
-  for (const field of fields) {
+  for (const field of [...fields, "readyWarningAfterMinutes"] as const) {
     const value = body[field];
     if (value === undefined) continue;
-    if (
-      typeof value !== "number" ||
-      !Number.isInteger(value) ||
-      value < 1 ||
-      value > 2_147_483_647
-    ) {
-      throw new AppError("management.request_invalid", { field });
-    }
+    if (!isWholeMinutes(value)) throw new AppError("management.request_invalid", { field });
     patch[field] = value;
   }
   return patch;
@@ -29,11 +33,15 @@ export function assertStationTiming(
   base: StationThresholds,
   station: { id?: string; name: string },
 ): void {
-  const field = invalidTimingField({
-    warmAfterMinutes: patch.warmAfterMinutes ?? base.warmAfterMinutes,
-    overdueAfterMinutes: patch.overdueAfterMinutes ?? base.overdueAfterMinutes,
-    forgottenAfterMinutes: patch.forgottenAfterMinutes ?? base.forgottenAfterMinutes,
-  });
+  const field =
+    invalidTimingField({
+      warmAfterMinutes: patch.warmAfterMinutes ?? base.warmAfterMinutes,
+      overdueAfterMinutes: patch.overdueAfterMinutes ?? base.overdueAfterMinutes,
+      forgottenAfterMinutes: patch.forgottenAfterMinutes ?? base.forgottenAfterMinutes,
+    }) ??
+    (patch.readyWarningAfterMinutes === undefined || isWholeMinutes(patch.readyWarningAfterMinutes)
+      ? undefined
+      : "readyWarningAfterMinutes");
   if (field !== undefined) {
     throw new AppError("station.thresholds_invalid", {
       field,
@@ -49,8 +57,7 @@ function invalidTimingField(
   const minutes = {} as StationThresholds;
   for (const field of fields) {
     const value = timing[field];
-    if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 2_147_483_647)
-      return field;
+    if (!isWholeMinutes(value)) return field;
     minutes[field] = value;
   }
   if (minutes.overdueAfterMinutes <= minutes.warmAfterMinutes) return "overdueAfterMinutes";
@@ -78,7 +85,13 @@ export function assertImportedStationTimings(rows: readonly Record<string, unkno
       const value = row[columns[field]];
       timing[field] = value === undefined ? DEFAULT_STATION_THRESHOLDS[field] : value;
     }
-    const field = invalidTimingField(timing);
+    const readyWarning =
+      row.ready_warning_after_minutes === undefined
+        ? DEFAULT_READY_WARNING_AFTER_MINUTES
+        : row.ready_warning_after_minutes;
+    const field =
+      invalidTimingField(timing) ??
+      (isWholeMinutes(readyWarning) ? undefined : "readyWarningAfterMinutes");
     if (field !== undefined) throw new AppError("station.thresholds_invalid", { field, name });
   }
 }

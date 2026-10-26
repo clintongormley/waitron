@@ -111,3 +111,73 @@ it("assertImportedStationTimings names a station with no text name by an empty n
       }),
     );
 });
+
+it("parseStationTimingPatch reads a ready warning with the late flags", () => {
+  expect(parseStationTimingPatch({ readyWarningAfterMinutes: 20 })).toEqual({
+    readyWarningAfterMinutes: 20,
+  });
+  expect(parseStationTimingPatch({})).toEqual({});
+});
+
+it.each([0, 1.5, "3", null, 2_147_483_648])(
+  "parseStationTimingPatch refuses a ready warning of %j, naming it",
+  (value) => {
+    expect(() => parseStationTimingPatch({ readyWarningAfterMinutes: value })).toThrow(
+      expect.objectContaining({
+        code: "management.request_invalid",
+        params: { field: "readyWarningAfterMinutes" },
+      }),
+    );
+  },
+);
+
+it("assertStationTiming holds the ready warning in range but in no order", () => {
+  const lateFlags = { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 };
+  expect(() =>
+    assertStationTiming({ readyWarningAfterMinutes: 20 }, lateFlags, {
+      id: "station",
+      name: "Grill",
+    }),
+  ).not.toThrow();
+  expect(() =>
+    assertStationTiming({ readyWarningAfterMinutes: 0 }, lateFlags, {
+      id: "station",
+      name: "Grill",
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: "station.thresholds_invalid",
+      params: { field: "readyWarningAfterMinutes", stationId: "station", name: "Grill" },
+    }),
+  );
+});
+
+it("assertImportedStationTimings reads a missing ready warning as 3, and refuses one out of range", () => {
+  expect(() => assertImportedStationTimings([{ id: "a", name: "Grill" }])).not.toThrow();
+  for (const value of [0, 1.5, null])
+    expect(() =>
+      assertImportedStationTimings([
+        { id: "a", name: "Grill", ready_warning_after_minutes: value },
+      ]),
+    ).toThrow(
+      expect.objectContaining({
+        code: "station.thresholds_invalid",
+        params: { field: "readyWarningAfterMinutes", name: "Grill" },
+      }),
+    );
+  expect(() =>
+    assertImportedStationTimings([
+      { id: "a", name: "Grill", ready_warning_after_minutes: 20, forgotten_after_minutes: 15 },
+    ]),
+  ).not.toThrow();
+  expect(() =>
+    assertImportedStationTimings([
+      { id: "a", name: "Grill", warm_after_minutes: 10, ready_warning_after_minutes: 0 },
+    ]),
+  ).toThrow(
+    expect.objectContaining({
+      code: "station.thresholds_invalid",
+      params: { field: "overdueAfterMinutes", name: "Grill" },
+    }),
+  );
+});

@@ -2472,6 +2472,51 @@ it("transfers each station's bump mode", async () => {
   ]);
 });
 
+it("transfers each station's ready warning time", async () => {
+  const source = await applyVenue(planVenue(venue("B13572960"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values([
+      { locationId: source.locationId, name: "Grill", readyWarningAfterMinutes: 6 },
+      { locationId: source.locationId, name: "Cold" },
+    ]),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-26T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_stations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "Grill", ready_warning_after_minutes: 6 }),
+      expect.objectContaining({ name: "Cold", ready_warning_after_minutes: 3 }),
+    ]),
+  );
+  await applyVenue(planVenue(venue("B97531960"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({
+      name: kitchenStations.name,
+      readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes,
+    })
+    .from(kitchenStations)
+    .where(inArray(kitchenStations.name, ["Grill", "Cold"]))
+    .orderBy(kitchenStations.name);
+  expect(imported).toEqual([
+    { name: "Cold", readyWarningAfterMinutes: 3 },
+    { name: "Grill", readyWarningAfterMinutes: 6 },
+  ]);
+});
+
 it.each(["ticket", "line"] as const)(
   "exports no venue bump mode, and an import leaves the target's column alone (target %s)",
   async (targetMode) => {
@@ -5003,6 +5048,86 @@ it.each([
       .from(kitchenStations)
       .where(eq(kitchenStations.name, "Invalid imported timing")),
   ).toEqual([]);
+});
+
+it("refuses an imported ready warning of 0 before writing anything", async () => {
+  const source = await applyVenue(planVenue(venue("B13572961"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await suite.db
+    .insert(kitchenStations)
+    .values({ locationId: source.locationId, name: "Invalid imported ready warning" });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-26T12:00:00Z"),
+    versions,
+  );
+  transferred.tables.kitchen_stations!.find(
+    (row) => row.name === "Invalid imported ready warning",
+  )!.ready_warning_after_minutes = 0;
+  const target = venue("B97531961");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "station.thresholds_invalid",
+    params: { name: "Invalid imported ready warning", field: "readyWarningAfterMinutes" },
+  });
+  expect(
+    (
+      await targetSuite.db.execute<{ count: number }>(
+        sql`select count(*) as count from tenants where tax_id = ${target.taxId}`,
+      )
+    ).rows[0]!.count,
+  ).toBe(0);
+  expect(
+    await targetSuite.db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, "Invalid imported ready warning")),
+  ).toEqual([]);
+});
+
+it("imports a station row with no ready warning as 3", async () => {
+  const source = await applyVenue(planVenue(venue("B13572962"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await suite.db.insert(kitchenStations).values({
+    locationId: source.locationId,
+    name: "Older file station",
+    readyWarningAfterMinutes: 8,
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-26T12:00:00Z"),
+    versions,
+  );
+  delete transferred.tables.kitchen_stations!.find((row) => row.name === "Older file station")!
+    .ready_warning_after_minutes;
+  await applyVenue(planVenue(venue("B97531962"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  expect(
+    await targetSuite.db
+      .select({ readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.name, "Older file station")),
+  ).toEqual([{ readyWarningAfterMinutes: 3 }]);
 });
 
 it("exports no service settings", async () => {
