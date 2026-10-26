@@ -210,7 +210,7 @@ import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
-import { createAccountEmailSender } from "./account-email.js";
+import { AccountEmailFailure, createAccountEmailSender } from "./account-email.js";
 import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
@@ -2019,7 +2019,8 @@ async function bootServer(
           resolveAccountEmail(),
           readVenueTimeZone(db, { locationId: till.locationId }),
         ]);
-        if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+        if (delivery.mode === "unconfigured")
+          throw new AccountEmailFailure("email.unconfigured", undefined, false);
         await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
       },
     },
@@ -2179,7 +2180,8 @@ async function bootServer(
           resolveAccountEmail(),
           readVenueTimeZone(db, { locationId: till.locationId }),
         ]);
-        if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+        if (delivery.mode === "unconfigured")
+          throw new AccountEmailFailure("email.unconfigured", undefined, false);
         await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
       },
     },
