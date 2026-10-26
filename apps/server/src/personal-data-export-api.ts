@@ -39,14 +39,16 @@ export const withPersonalDataErrors = createErrorBoundary(
     "person.suspended": 403,
     "authorization.not_permitted": 403,
     "person.not_found": 404,
+    "invoice_customer.not_found": 404,
+    "node.read_only": 403,
     "module.config_invalid": 500,
   },
   "personal_data.failed",
 );
 
-const toLanguage = (locale: string): "en" | "es" => (locale.startsWith("es-") ? "es" : "en");
+export const toLanguage = (locale: string): "en" | "es" => (locale.startsWith("es-") ? "es" : "en");
 
-async function venuePlace(tx: Transaction, nodeId: string) {
+export async function venuePlace(tx: Transaction, nodeId: string) {
   const [row] = await tx
     .select({ locationId: nodes.locationId, timeZone: locations.timeZone })
     .from(nodes)

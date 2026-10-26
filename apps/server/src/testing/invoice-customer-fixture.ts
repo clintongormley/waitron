@@ -3,6 +3,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { getCountryPack } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import { invoiceDeliveries, invoiceSeries, sales, tenants } from "@waitron/db";
+import { persons, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
@@ -23,10 +25,20 @@ export interface InvoiceCustomerSaleIds {
   s1: string;
 }
 
+/** Dashboard people beyond the venue's own administrator, supervisor and staff member. */
+export interface InvoiceCustomerPeople {
+  /** A second administrator, whose saved language is `es-ES`. */
+  otherAdminId: string;
+  otherAdminDashboard: string;
+  managerId: string;
+  managerDashboard: string;
+}
+
 export interface InvoiceCustomerVenue {
   venue: OrderVenue;
   fullSeriesId: string;
   sales: InvoiceCustomerSaleIds;
+  people: InvoiceCustomerPeople;
 }
 
 interface Customer {
@@ -197,7 +209,24 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
   await emails(c1, [{ recipient: "board@mainstreet.example.test", status: "queued" }]);
   const j3 = await sale("23.95", { name: "Jordi Puig Electrician", ...jordi });
   const s1 = await sale("9.90", null);
-  return { venue, fullSeriesId, sales: { j1, p1, j2, a1, c1, j3, s1 } };
+  const people = await inTx(venue, async (tx) => {
+    const [otherAdmin, manager] = await tx
+      .insert(persons)
+      .values([
+        { displayName: "Otto Admin", role: "admin", locale: "es-ES" },
+        { displayName: "Mia Manager", role: "manager" },
+      ])
+      .returning({ id: persons.id });
+    const session = async (personId: string) =>
+      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId })).token}`;
+    return {
+      otherAdminId: otherAdmin!.id,
+      otherAdminDashboard: await session(otherAdmin!.id),
+      managerId: manager!.id,
+      managerDashboard: await session(manager!.id),
+    };
+  });
+  return { venue, fullSeriesId, sales: { j1, p1, j2, a1, c1, j3, s1 }, people };
 }
 
 /**

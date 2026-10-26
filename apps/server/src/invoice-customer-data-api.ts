@@ -1,0 +1,152 @@
+import "./errors.js";
+import { setImmediate as nextTurn } from "node:timers/promises";
+import type { Context, Hono } from "hono";
+import { readTenant, type Database } from "@waitron/db";
+import type { FiscalBackend } from "@waitron/fiscal";
+import { authorizeManager } from "@waitron/identity";
+import { civilDateOf } from "@waitron/reporting";
+import { AppError, resolveActiveLocale } from "@waitron/shared";
+import { requireManagementSession } from "@waitron/server-kit";
+import { archiveFileName, zipArchiveInTurns } from "./download-archive.js";
+import {
+  buildInvoiceCustomerFiles,
+  findInvoiceCustomerSales,
+  type InvoiceCustomerFilesDeps,
+} from "./invoice-customer-data.js";
+import { requiredInvoiceTaxId } from "./invoice-customer-tax-id.js";
+import type { Logger } from "./logger.js";
+import { toLanguage, venuePlace, withPersonalDataErrors } from "./personal-data-export-api.js";
+import { invoiceCustomerReadme } from "./personal-data-readme.js";
+import type { TillConfig } from "./till-config.js";
+
+export interface InvoiceCustomerDataDeps {
+  db: Database;
+  backend: FiscalBackend;
+  till: TillConfig;
+  /** The node whose time zone dates the download. */
+  nodeId: string;
+  venueLocale: string;
+  privacyNoticeUrl?: string;
+  now?: () => Date;
+  render?: InvoiceCustomerFilesDeps["render"];
+  readDocument?: InvoiceCustomerFilesDeps["readDocument"];
+  /** Read per request; true refuses both routes (decision 14). */
+  onMirror: () => boolean;
+}
+
+const SEARCH_PATH = "/management-api/invoice-customers/personal-data";
+const DOWNLOAD_PATH = "/management-api/invoice-customers/personal-data/export";
+
+/** The query's one `taxId`, normalised. The URL is parsed here rather than by the router so a
+ * repeated key is seen. */
+function queriedTaxId(c: Context): string {
+  const query = new URL(c.req.url).searchParams;
+  const keys = [...query.keys()];
+  if (keys.some((key) => key !== "taxId") || query.getAll("taxId").length > 1)
+    throw new AppError("management.request_invalid", { field: "query" });
+  return requiredInvoiceTaxId(query.get("taxId") ?? undefined);
+}
+
+export function mountInvoiceCustomerDataApi(
+  app: Hono,
+  deps: InvoiceCustomerDataDeps,
+  log: Logger,
+): void {
+  // Lock turns read through the database itself, not `withTransaction`: nothing is written, and
+  // its closing change-log drain is a write a full disk refuses.
+  const tx = deps.db;
+  const authorize = (token: string) =>
+    authorizeManager(tx, {
+      managementSessionId: token,
+      permission: "personal_data.export",
+      touch: false,
+    });
+  // A mirror signs everyone in as an administrator, and a lookup by a typed tax number is wider
+  // than one person's download, so both routes stay closed there (decision 14).
+  const refuseOnMirror = () => {
+    if (deps.onMirror()) throw new AppError("node.read_only", {});
+  };
+
+  app.get(SEARCH_PATH, (c) =>
+    withPersonalDataErrors(c, log, async () => {
+      refuseOnMirror();
+      const token = requireManagementSession(c);
+      const found = await deps.db.withWriteLock(async () => {
+        // Permission before the query: a refused caller gets one answer whatever they typed.
+        await authorize(token);
+        const taxId = queriedTaxId(c);
+        return { taxId, sales: await findInvoiceCustomerSales(tx, taxId) };
+      });
+      c.header("Cache-Control", "no-store");
+      return c.json({
+        taxId: found.taxId,
+        invoices: found.sales.map(({ invoice, issuedAt, name, total }) => ({
+          invoice,
+          issuedAt,
+          name,
+          total,
+        })),
+      });
+    }),
+  );
+
+  app.get(DOWNLOAD_PATH, (c) =>
+    withPersonalDataErrors(c, log, async () => {
+      refuseOnMirror();
+      const token = requireManagementSession(c);
+      const at = (deps.now ?? (() => new Date()))();
+      const first = await deps.db.withWriteLock(async () => {
+        const { authorizedBy } = await authorize(token);
+        const taxId = queriedTaxId(c);
+        const place = await venuePlace(tx, deps.nodeId);
+        const tenant = await readTenant(tx);
+        const sales = await findInvoiceCustomerSales(tx, taxId);
+        return { authorizedBy, taxId, place, tenant, sales };
+      });
+      const newest = first.sales.at(-1);
+      if (newest === undefined) throw new AppError("invoice_customer.not_found", {});
+      await nextTurn();
+      const built = await buildInvoiceCustomerFiles(
+        {
+          db: deps.db,
+          backend: deps.backend,
+          till: deps.till,
+          log,
+          render: deps.render,
+          readDocument: deps.readDocument,
+        },
+        first.taxId,
+        first.sales,
+      );
+      await nextTurn();
+      // Building outlives the first turn, so authority is checked again before any bytes go.
+      await deps.db.withWriteLock(async () => {
+        const again = await authorize(token);
+        if (again.authorizedBy !== first.authorizedBy)
+          throw new Error("invoice customer authorisation named a different person after building");
+      });
+      const readme = invoiceCustomerReadme({
+        // A customer has no saved language, so the venue's (decision 10).
+        language: toLanguage(resolveActiveLocale(null, deps.venueLocale)),
+        venue: first.tenant?.legalName ?? null,
+        customer: newest.name,
+        date: civilDateOf(at, first.place.timeZone),
+        privacyNoticeUrl: deps.privacyNoticeUrl,
+        anyTaxRecord: built.anyTaxRecord,
+        anyEmail: built.anyEmail,
+      });
+      const body = await zipArchiveInTurns(
+        [{ name: "README.txt", content: readme }, ...built.files],
+        at,
+      );
+      c.header("Content-Type", "application/zip");
+      c.header(
+        "Content-Disposition",
+        `attachment; filename="${archiveFileName(newest.name, at, first.place.timeZone)}"`,
+      );
+      c.header("Cache-Control", "no-store");
+      c.header("X-Content-Type-Options", "nosniff");
+      return c.body(body);
+    }),
+  );
+}
