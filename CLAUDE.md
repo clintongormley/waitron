@@ -602,6 +602,10 @@ browser test** — most of these rules exist because a test passed while proving
 - **A fiscal fixture must not be over a minute ahead of a later recording write's clock.**
   In a shared database, every write and helper takes its clock from the latest record time;
   otherwise give the case its own database. Nothing guards it.
+- **A suite that sends a room's revision to a today's-floor write route pins the API's clock at its
+  own fixed time and seeds at that time**, or a run across the venue's day change can be refused
+  `floor_today.out_of_date`. Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second

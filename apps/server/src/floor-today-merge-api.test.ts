@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { TrustedClock } from "@waitron/fiscal";
 import { floorZones, diningTables, floorTodayTables, locations } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -24,6 +25,7 @@ let v: PartyVenue;
 let app: Hono;
 let cookie: string;
 
+const NOW = new Date("2026-10-10T12:00:00Z");
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
 useVenueDb({
@@ -36,13 +38,16 @@ useVenueDb({
 });
 
 beforeAll(async () => {
+  // Fixed so a run across the venue's 05:00 day change keeps the room it read:
+  // docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change
+  const clock: TrustedClock = { ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) };
   app = new Hono();
   mountTillApi(
     app,
     {
       db: v.db,
       backend: v.backend,
-      clock: v.clock,
+      clock,
       cfg: v.cfg,
       tableRemovals: REMOVALS,
       secureCookies: false,
@@ -88,14 +93,14 @@ async function floorToday(tableId: string): Promise<FloorToday> {
 }
 
 /** A at (0, 0) and B at (20, 0), both 8 × 8 and free. */
-async function twoTables(now?: Date) {
+async function twoTables() {
   const { table, zoneId, master } = await plannedZone(
     v,
     [
       { key: "a", place: { x: 0, y: 0 } },
       { key: "b", place: { x: 20, y: 0 } },
     ],
-    now,
+    NOW,
   );
   return { a: table.a!, b: table.b!, zoneId, master };
 }
@@ -138,7 +143,7 @@ describe("merging free tables", () => {
     await inTx(v, (tx) =>
       tx
         .update(diningTables)
-        .set({ needsClearingSince: new Date().toISOString() })
+        .set({ needsClearingSince: NOW.toISOString() })
         .where(eq(diningTables.id, clearing.a)),
     );
     expect(

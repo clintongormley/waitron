@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { TrustedClock } from "@waitron/fiscal";
 import {
   diningTables,
   floorResetTables,
@@ -31,6 +32,7 @@ let v: PartyVenue;
 let app: Hono;
 let cookie: string;
 
+const NOW = new Date("2026-10-10T12:00:00Z");
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
 useVenueDb({
@@ -43,13 +45,16 @@ useVenueDb({
 });
 
 beforeAll(async () => {
+  // Fixed so a run across the venue's 05:00 day change keeps the room it read:
+  // docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change
+  const clock: TrustedClock = { ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) };
   app = new Hono();
   mountTillApi(
     app,
     {
       db: v.db,
       backend: v.backend,
-      clock: v.clock,
+      clock,
       cfg: v.cfg,
       tableRemovals: REMOVALS,
       secureCookies: false,
@@ -109,17 +114,21 @@ async function needsClearing(tableId: string): Promise<void> {
   await inTx(v, (tx) =>
     tx
       .update(diningTables)
-      .set({ needsClearingSince: new Date().toISOString() })
+      .set({ needsClearingSince: NOW.toISOString() })
       .where(eq(diningTables.id, tableId)),
   );
 }
 
 async function threeTables(fixed = false) {
-  const { table } = await plannedZone(v, [
-    { key: "a", place: { x: 0, y: 0 }, fixed },
-    { key: "b", place: { x: 20, y: 0 }, fixed },
-    { key: "c", place: { x: 40, y: 0 }, fixed },
-  ]);
+  const { table } = await plannedZone(
+    v,
+    [
+      { key: "a", place: { x: 0, y: 0 }, fixed },
+      { key: "b", place: { x: 20, y: 0 }, fixed },
+      { key: "c", place: { x: 40, y: 0 }, fixed },
+    ],
+    NOW,
+  );
   return { a: table.a!, b: table.b!, c: table.c! };
 }
 
@@ -217,11 +226,15 @@ describe("seating at a merge, which table a refusal names", () => {
 
 describe("seating one party at several tables", () => {
   it("seats at a fixed table and every member of a free merge named together", async () => {
-    const { table } = await plannedZone(v, [
-      { key: "f", place: { x: 0, y: 0 }, fixed: true },
-      { key: "b", place: { x: 20, y: 0 } },
-      { key: "c", place: { x: 40, y: 0 } },
-    ]);
+    const { table } = await plannedZone(
+      v,
+      [
+        { key: "f", place: { x: 0, y: 0 }, fixed: true },
+        { key: "b", place: { x: 20, y: 0 } },
+        { key: "c", place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
     const [f, b, c] = [table.f!, table.b!, table.c!];
     await merge(b, c, "right");
 
@@ -380,7 +393,7 @@ async function markReadyToMove(tableId: string): Promise<void> {
 
 describe("seating a table that needs moving", () => {
   it("refuses it with table.needs_moving, as the till shows it, and seats nobody", async () => {
-    const { tableId } = await needingMoving(v);
+    const { tableId } = await needingMoving(v, NOW);
     const state = await app.request("/api/tables/state", { headers: { cookie } });
     const tables = (await state.json()) as { id: string; today: { needsMoving: boolean } }[];
     expect(tables.find((t) => t.id === tableId)!.today.needsMoving).toBe(true);

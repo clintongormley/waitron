@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { TrustedClock } from "@waitron/fiscal";
 import {
   diningTables,
   floorResetTables,
@@ -67,13 +68,16 @@ useVenueDb({
 });
 
 beforeAll(async () => {
+  // Fixed so a run across the venue's 05:00 day change keeps the room it read:
+  // docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change
+  const clock: TrustedClock = { ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) };
   app = new Hono();
   mountTillApi(
     app,
     {
       db: v.db,
       backend: v.backend,
-      clock: v.clock,
+      clock,
       cfg: v.cfg,
       tableRemovals: enabledTableRemovals(ALL_MODULES),
       secureCookies: false,
@@ -1071,7 +1075,7 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
       { key: "c5", label: "Counter 5", seats: 4, place: null },
       { key: "long", label: "Long table", seats: 10, place: long, partKeys: ["c4", "c5"] },
     ],
-    v.clock.now().instant,
+    NOW,
   );
   const { zoneId, master } = zone;
   await giveKeptSize(v, master.c3!, { width: 2, height: 2 });
@@ -1094,10 +1098,10 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
       REMOVALS,
       await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables },
-      v.clock.now().instant,
+      NOW,
     );
   });
-  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant, "due"));
+  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
   return zone;
 }
 
@@ -1280,7 +1284,7 @@ describe("Reset table and the room's reset", () => {
     await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
     const before = (await zoneRevisionOf(v, zoneId))!;
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant, "due"));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
     expect(await zoneRevisionOf(v, zoneId)).toBe(before + 1);
 
     await settles(() => reset(table.long!, [table.c4!, table.c5!], 8), zoneId);

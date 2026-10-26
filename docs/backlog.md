@@ -5151,10 +5151,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **Investigate the joined-table reset test's revision refusal.** The expected occupied-table
-  refusal became `floor_today.out_of_date` on A1114's post-merge run; the cause is unknown.
-  [Detail](backlog/ci.md#the-joined-table-reset-test-received-a-revision-refusal).
-
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
 

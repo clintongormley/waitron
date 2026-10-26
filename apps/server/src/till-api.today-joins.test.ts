@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { TrustedClock } from "@waitron/fiscal";
 import { saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import {
@@ -39,6 +40,7 @@ let v: PartyVenue;
 let app: Hono;
 let cookie: string;
 
+const NOW = new Date("2026-10-10T12:00:00Z");
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
 useVenueDb({
@@ -51,13 +53,16 @@ useVenueDb({
 });
 
 beforeAll(async () => {
+  // Fixed so a run across the venue's 05:00 day change keeps the room it read:
+  // docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change
+  const clock: TrustedClock = { ...v.clock, now: () => ({ ...v.clock.now(), instant: NOW }) };
   app = new Hono();
   mountTillApi(
     app,
     {
       db: v.db,
       backend: v.backend,
-      clock: v.clock,
+      clock,
       cfg: v.cfg,
       tableRemovals: REMOVALS,
       secureCookies: false,
@@ -143,6 +148,7 @@ async function tables(...entries: { key: string; x: number; fixed?: boolean }[])
   const { table } = await plannedZone(
     v,
     entries.map((e) => ({ key: e.key, place: { x: e.x, y: 0 }, fixed: e.fixed ?? false })),
+    NOW,
   );
   return table as Record<string, string>;
 }
@@ -648,11 +654,15 @@ describe("moving guests off their merge entirely", () => {
 describe("a party change that changes a room answers its revision", () => {
   /** Three ordinary tables in a fresh room. */
   async function room() {
-    const { zoneId, table } = await plannedZone(v, [
-      { key: "a", place: { x: 0, y: 0 } },
-      { key: "b", place: { x: 20, y: 0 } },
-      { key: "c", place: { x: 40, y: 0 } },
-    ]);
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 20, y: 0 } },
+        { key: "c", place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
     return { zoneId, a: table.a!, b: table.b!, c: table.c! };
   }
 
@@ -744,11 +754,15 @@ describe("a party change that changes a room answers its revision", () => {
       table,
       master,
       revision: planRevision,
-    } = await plannedZone(v, [
-      { key: "a", place: { x: 0, y: 0 } },
-      { key: "b", place: { x: 20, y: 0 } },
-      { key: "c", place: { x: 40, y: 0 } },
-    ]);
+    } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 20, y: 0 } },
+        { key: "c", place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
     const [a, b, c] = [table.a!, table.b!, table.c!];
     const p = await seat(a);
     const q = await seat(c);
@@ -764,14 +778,21 @@ describe("a party change that changes a room answers its revision", () => {
       partKeys: [],
     });
     await inTx(v, async (tx) =>
-      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
-        revision: planRevision,
-        tables: [
-          entry("a", labels[0]!, 0),
-          entry("b", labels[1]!, 20),
-          entry("c", `${label} b`, 40),
-        ],
-      }),
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        {
+          revision: planRevision,
+          tables: [
+            entry("a", labels[0]!, 0),
+            entry("b", labels[1]!, 20),
+            entry("c", `${label} b`, 40),
+          ],
+        },
+        NOW,
+      ),
     );
     await ok(post(`/api/zones/${zoneId}/today/reset`, {}));
     expect((await tableRow(v, c)).label).toBe(label);
