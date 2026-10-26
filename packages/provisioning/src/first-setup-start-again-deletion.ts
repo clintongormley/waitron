@@ -226,16 +226,22 @@ async function entries(path: string): Promise<{ name: string; folder: boolean }[
  */
 async function backupRecoveryKept(roots: Roots, { discarding }: Options): Promise<boolean> {
   try {
-    const found = (await entries(join(roots.stateDir, RECORDS, BACKUP)))!;
-    const ids = found.filter((entry) => entry.name !== POINTER);
-    const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1)!;
-    const named = last.target.recoveryId;
-    if (discarding === undefined ? last.phase !== "abandoned" : named !== discarding) return false;
-    for (const { name } of ids)
-      if (!(name === discarding || (await isEmptiedTombstone(roots, name)))) return false;
+    const found = await entries(join(roots.stateDir, RECORDS, BACKUP));
+    if (found === null || !found.some((entry) => entry.name === POINTER && !entry.folder))
+      return false;
+    const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1);
+    if (last === undefined) return false;
+    if (
+      discarding === undefined ? last.phase !== "abandoned" : last.target.recoveryId !== discarding
+    )
+      return false;
+    for (const { name } of found)
+      if (name !== POINTER && name !== discarding && !(await isEmptiedTombstone(roots, name)))
+        return false;
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof AppError) return false;
+    throw error;
   }
 }
 
@@ -288,14 +294,13 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     items.push({ kind: "folder", path: join(roots.stateDir, DOCUMENTS) });
   await file("state", "first-setup-node-key.json");
   await file("state", "module-operation-public.json");
+  const kept = await backupRecoveryKept(roots, options);
+  if (options.discarding !== undefined && !kept)
+    throw incomplete(`layout unexpected: ${RECORDS}/${BACKUP}`);
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
-    let kept = false;
     for (const record of records) {
-      if (record.folder && record.name === BACKUP && (await backupRecoveryKept(roots, options))) {
-        kept = true;
-        continue;
-      }
+      if (kept && record.name === BACKUP) continue;
       if (!record.folder || !isUuid(record.name))
         throw incomplete(`layout unexpected: ${RECORDS}/${record.name}`);
       const relative = `${RECORDS}/${record.name}`;

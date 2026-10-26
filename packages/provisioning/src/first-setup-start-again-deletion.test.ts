@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
@@ -138,7 +138,7 @@ it("accepts an emptied tombstone, leaves it off the marker and keeps it through 
   expect(await exists(join(roots.stateDir, RECORDS))).toBe(true);
 });
 
-it("refuses a discarded recovery that still holds its database", async () => {
+it("refuses a discarded recovery not yet emptied: the venue pointer stops the disk check, the unemptied folder the marker", async () => {
   const roots = await box();
   await abandoned(roots);
   expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
@@ -254,23 +254,26 @@ it("refuses a pointer to a journal that is not abandoned, even with its folder d
   });
 });
 
-it.each<[string, (roots: Roots) => Promise<unknown>]>([
+it.each<[string, boolean, (roots: Roots) => Promise<unknown>]>([
   [
     "an empty recovery folder",
+    false,
     (roots) => mkdir(join(roots.stateDir, NAMESPACE), { recursive: true }),
   ],
-  ["a tombstone with no pointer", (roots) => rm(statePointer(roots))],
+  ["a tombstone with no pointer", true, (roots) => rm(statePointer(roots))],
   [
     "a stray file beside the pointer",
+    true,
     (roots) => writeFile(join(roots.stateDir, NAMESPACE, "x"), ""),
   ],
   [
     "a folder that is not a recovery id",
+    true,
     (roots) => mkdir(join(roots.stateDir, NAMESPACE, "not-an-id")),
   ],
-])("refuses a recovery folder holding %s", async (_, change) => {
+])("refuses a recovery folder holding %s", async (_, withTombstone, change) => {
   const roots = await box();
-  if (!_.startsWith("an empty")) await tombstone(roots);
+  if (withTombstone) await tombstone(roots);
   await change(roots);
   expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
     code: "setup.not_ready",
@@ -308,4 +311,78 @@ it("finishes an interrupted deletion beside a tombstone and keeps the tombstone"
   expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(false);
   expect(await exists(statePointer(roots))).toBe(true);
   expect((await readdir(base)).some((name) => /^\d+\.json$/.test(name))).toBe(true);
+});
+
+it("with discarding, refuses a venue pointer when the state folder holds no recovery records", async () => {
+  const roots = await box();
+  await prepared(roots);
+  await rm(join(roots.stateDir, RECORDS), { recursive: true });
+  expect(await exists(venuePointer(roots))).toBe(true);
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots, { discarding: recoveryId }))).toEqual({
+    code: "setup.not_ready",
+    reason: layout,
+  });
+  expect(await refusal(startAgainMarkerFor(roots, attempt, { discarding: recoveryId }))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: layout,
+  });
+});
+
+it("with discarding, refuses a venue pointer to another recovery when the state folder's recovery folder is gone", async () => {
+  const roots = await box();
+  await prepared(roots, laterId);
+  await rm(join(roots.stateDir, NAMESPACE), { recursive: true });
+  expect(await exists(venuePointer(roots))).toBe(true);
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots, { discarding: recoveryId }))).toEqual({
+    code: "setup.not_ready",
+    reason: layout,
+  });
+  expect(await refusal(startAgainMarkerFor(roots, attempt, { discarding: recoveryId }))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: layout,
+  });
+});
+
+it("with discarding, refuses a recovery whose state folder lost its pointer, though the venue folder's remains", async () => {
+  const roots = await box();
+  await prepared(roots);
+  await rm(statePointer(roots));
+  expect(await exists(venuePointer(roots))).toBe(true);
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots, { discarding: recoveryId }))).toEqual({
+    code: "setup.not_ready",
+    reason: layout,
+  });
+  expect(await refusal(startAgainMarkerFor(roots, attempt, { discarding: recoveryId }))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: layout,
+  });
+});
+
+it("refuses a tombstone holding a file whose name only begins with a lock file's name", async () => {
+  const roots = await box();
+  const { targetVenue } = await tombstone(roots);
+  await writeFile(join(targetVenue, "venue.lock.db"), "restored database");
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+    code: "setup.not_ready",
+    reason: layout,
+  });
+  expect(await refusal(startAgainMarkerFor(roots, attempt))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: layout,
+  });
+});
+
+it("reports a recovery folder it cannot read as a failed check, naming the error and the path", async () => {
+  const roots = await box();
+  const { base } = await tombstone(roots);
+  const target = join(base, "target");
+  await chmod(target, 0o000);
+  try {
+    expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+      code: "setup.not_ready",
+      reason: `check failed: EACCES ${target}`,
+    });
+  } finally {
+    await chmod(target, 0o700);
+  }
 });

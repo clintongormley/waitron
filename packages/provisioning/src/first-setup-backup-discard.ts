@@ -14,8 +14,10 @@ type Lock = (directory: string) => Promise<{ release(): void }>;
 
 const NAMESPACE = join("first-setup-resolutions", "backup-recovery");
 const RECORD = /^\d+\.json$/;
-// never unlinked: CLAUDE.md §3; a lock taken beside its holder is no lock.
-const KEPT_IN_TARGET = /^(venue\.lock|venue\.holder\.json|migrations\.lock|recovery\.lock)/;
+// never unlinked: CLAUDE.md §3; a lock taken beside its holder is no lock. A held lock has a
+// `-journal` beside it, and the holder file is written through `.partial`.
+const KEPT_IN_TARGET =
+  /^((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json(\.partial)?)$/;
 
 const missing = (error: unknown) =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";

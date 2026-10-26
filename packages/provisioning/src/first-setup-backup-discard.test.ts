@@ -56,7 +56,7 @@ const NAMESPACE = join("first-setup-resolutions", "backup-recovery");
 const recoveryId = "f063ea32-8c34-4b43-8ffc-5a319ec8c895";
 const laterId = "0d2b6b62-4a3e-4a4f-9b56-6a0f1f7d1c11";
 const MUST_STAY = ["venue.lock", "migrations.lock"];
-const KEPT = /^(venue\.lock|venue\.holder\.json|migrations\.lock|recovery\.lock)/;
+const KEPT = /^((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json(\.partial)?)$/;
 // Taking a venue lock writes these and its release deletes them, whoever asks for the lock.
 const LOCK_OWNED = /^(venue\.holder\.json|venue\.lock-journal)/;
 
@@ -415,6 +415,23 @@ it("still reads an older tombstone as emptied once a later recovery's pointer re
     await writeFile(venuePointer(f), JSON.stringify(unreadable));
     expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(false);
   }
+});
+
+it("empties a file whose name only begins with a lock file's name, and keeps the lock", async () => {
+  const f = await abandoned();
+  await writeFile(join(f.venue, "venue.lock.db"), "restored database");
+  await provision.emptyAbandonedBackupRecovery(f.anchor, recoveryId);
+  expect(await exists(join(f.venue, "venue.lock.db"))).toBe(false);
+  expect(await exists(join(f.venue, "venue.lock"))).toBe(true);
+  expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(true);
+});
+
+it("reads a recovery as emptied while its target holds a held lock's journal and a holder's half-written file", async () => {
+  const f = await abandoned();
+  await provision.emptyAbandonedBackupRecovery(f.anchor, recoveryId);
+  for (const name of ["venue.lock-journal", "migrations.lock-journal", "venue.holder.json.partial"])
+    await writeFile(join(f.venue, name), "");
+  expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(true);
 });
 
 it("reads a folder that still holds anything outside the keep set as not emptied", async () => {
