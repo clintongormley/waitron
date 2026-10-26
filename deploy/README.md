@@ -409,7 +409,7 @@ It is the way to put a branch on a test box whose database that branch cannot us
 
 ```bash
 sudo bash waitron.sh --reset install <branch-or-ref>
-sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate
+sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate and the start-again note
 ```
 
 The full form is `waitron.sh --reset [--all] [--yes] [--force-production] install [ref]`. The script

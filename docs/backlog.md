@@ -433,7 +433,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: a different-environment partial setup needs an applicable fresh-start route.** Distinguish this from the authenticated half-adopt reset. Establish the safe fresh-server/reinstall action before offering it.
   [Audit](backlog/self-service-refusals.md#setup-environment).
 
-- **A1089: setup state refusals need a usable resume or recovery route.** Recheck A1042 S7l on main first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
   [Audit](backlog/self-service-refusals.md#setup-state).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).

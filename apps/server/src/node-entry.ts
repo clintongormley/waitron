@@ -281,7 +281,7 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  *    creates a missing `venue.db`.
  * 6. Below the floor, the start deletes what it can make again before first-setup resolution, whose
  *    inspection opens the database.
- * 7. Still below it, or below it in the folders first-setup resolution chose instead, the start
+ * 7. Still below it, or below it in the folders a selected backup recovery runs from, the start
  *    writes the count back unchanged before resolution's app or the page is served: a finished
  *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
  *    admission takes the venue lock before the count.

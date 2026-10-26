@@ -160,7 +160,7 @@ the venue network. Choose **Set up secure connection**, follow its public certif
 then choose **Reconnect** and reopen HTTPS without warnings. HTTP stays available during the
 certificate step. The page preserves usable existing trust; it explicitly asks
 for a new installation when the old authority cannot be reused. Certificate repair does not restore
-records, select a workspace or activate a fiscal identity. Continue the protected recovery procedure
+records or activate a fiscal identity. Continue the protected recovery procedure
 only after HTTPS works. See [the server connection guide](../../apps/server/README.md#repairing-the-secure-connection).
 
 ## Qualification and limits, 2026-10-14
