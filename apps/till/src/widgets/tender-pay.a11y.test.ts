@@ -7,7 +7,7 @@ import type { TillProduct } from "../api/client.js";
 import { page } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -18,7 +18,7 @@ const cafe: TillProduct = {
   allergens: null,
 };
 
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
@@ -39,7 +39,7 @@ describe.each(["en-GB", "es-ES"])("A738 Park dialog %s", (locale) => {
       setLocale(locale);
       try {
         const store = new WorkingOrderStore();
-        store.addProduct({ ...cafe, name: "Staff coffee" }, "1");
+        store.addProduct({ ...coffee, name: "Staff coffee" }, "1");
         const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
         el.shadowRoot!.querySelector<HTMLElement>(".hold")!.click();
         await el.updateComplete;
@@ -113,14 +113,14 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations in the idle Pay view", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
     await expectNoA11yViolations(host);
   });
 
   it("has no violations in the idle Pay view with the guests field", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, asksGuests: true, receiptGuests: 4 },
@@ -131,7 +131,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations with the guests field empty", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, asksGuests: true, receiptGuests: null },
@@ -142,7 +142,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations with the guests field marked invalid", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, asksGuests: true, receiptGuests: null },
@@ -163,7 +163,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations on the cash screen", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
     el.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
     await el.updateComplete;
@@ -172,7 +172,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations in the idle Pay view on a device that does not take cash", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, takesCash: false },
@@ -184,14 +184,14 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
   it("has no violations on the weigh screen", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
-    store.emit("product-selected", jamon);
+    store.emit("product-selected", ham);
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 
   it("has no violations on the hold label prompt", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
     el.shadowRoot!.querySelector<HTMLElement>(".hold")!.click();
     await el.updateComplete;
@@ -200,7 +200,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations on the card screen (operation-number field has an accessible name)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
     el.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
     await el.updateComplete;
@@ -209,7 +209,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations in the idle Pay view with Place order (Modes I/T, order stage)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, mode: "ticket_then_pay", stage: "order" },
@@ -220,7 +220,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations in the idle Collect view (Modes I/T, collect stage)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, mode: "ticket_then_pay", stage: "collect" },
@@ -231,7 +231,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations on the collecting screen (integrated card, entered via a real Card tap)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, cardProvider: "stripe_terminal" },
@@ -266,7 +266,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations on the idle screen with the tip field and offline-consent toggle shown", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, cardProvider: "stripe_on_device", tipsEnabled: true },
@@ -282,7 +282,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations on the idle screen with the reader name + change-reader control shown", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, cardProvider: "stripe_terminal", activeReaders: readers, defaultReaderId: "r1" },
@@ -293,7 +293,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
 
   it("has no violations with the reader picker dialog open, including an offline-marked reader", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
       { store, cardProvider: "stripe_terminal", activeReaders: readers, defaultReaderId: "r1" },

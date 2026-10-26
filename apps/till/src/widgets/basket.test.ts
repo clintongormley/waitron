@@ -77,7 +77,7 @@ function pick(listId: string, item: OfferedExtraItem, quantity = 1): SelectedExt
   return { listId, productId: item.productId, name: item.name, price: item.price, quantity };
 }
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -88,7 +88,7 @@ const cafe: TillProduct = {
   allergens: null,
 };
 
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
@@ -115,7 +115,7 @@ describe("till-basket", () => {
         {
           workingOrderLineId: "stored-line",
           product: {
-            ...cafe,
+            ...coffee,
             name: "Pan de pueblo",
             customerName: { "en-GB": "Hogaza", ca: "Hogaza" },
           },
@@ -133,7 +133,7 @@ describe("till-basket", () => {
       ]);
       store.addProduct(
         {
-          ...cafe,
+          ...coffee,
           id: "fresh",
           name: "Bread",
           customerName: { "en-GB": "Pa de pagès", ca: "Pa de pagès" },
@@ -161,7 +161,7 @@ describe("till-basket", () => {
       const store = new WorkingOrderStore();
       store.addProduct(
         {
-          ...cafe,
+          ...coffee,
           variantId: "large",
           variantName: "Large",
           variantCustomerName: { es: "Taza grande", "es-ES": "Taza grande" },
@@ -188,7 +188,7 @@ describe("till-basket", () => {
 
   it("renders a row per line with name, quantity and gross line total", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows).toHaveLength(1);
@@ -200,7 +200,7 @@ describe("till-basket", () => {
 
   it("labels a weight line's quantity in kg and prices it by weight", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(jamon, "0.320");
+    store.addProduct(ham, "0.320");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const row = el.shadowRoot!.querySelector(".line")!;
     expect(row.textContent).toContain("0.320");
@@ -213,27 +213,27 @@ describe("till-basket", () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.textContent).toContain(t("basket.empty"));
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".line")).toHaveLength(1);
   });
 
   it("a remove control drops its own line from the basket", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
-    store.addProduct(jamon, "0.100");
+    store.addProduct(coffee, "1");
+    store.addProduct(ham, "0.100");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const removeButtons = el.shadowRoot!.querySelectorAll<HTMLElement>(".remove");
     expect(removeButtons).toHaveLength(2);
     removeButtons[0]!.click();
     await el.updateComplete;
     expect(store.lines).toHaveLength(1);
-    expect(store.lines[0]!.product).toBe(jamon);
+    expect(store.lines[0]!.product).toBe(ham);
   });
 
   it("period selection disables plus while keeping decrease and remove usable", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     store.canSelectProduct = () => false;
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const plus = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".step-inc")!;
@@ -249,7 +249,7 @@ describe("till-basket", () => {
 
   it("an each line renders a −/count/+ stepper and + increments the line quantity via the store", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const row = el.shadowRoot!.querySelector(".line")!;
     expect(row.querySelector(".count")!.textContent).toContain("2");
@@ -261,7 +261,7 @@ describe("till-basket", () => {
 
   it("the − step decrements the line quantity but is DISABLED at quantity 1 (delete is via ×, not −)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const dec = () =>
       el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".step-dec")!;
@@ -276,7 +276,7 @@ describe("till-basket", () => {
 
   it("a weight line keeps the static kg label and shows no stepper (a measured weight has no +/-)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(jamon, "0.320");
+    store.addProduct(ham, "0.320");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const row = el.shadowRoot!.querySelector(".line")!;
     expect(row.textContent).toContain("0.320");
@@ -287,7 +287,7 @@ describe("till-basket", () => {
 
   it("keeps a custom fractional unit static even without a hardware mapping", async () => {
     const portion: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "portion",
       unit: {
         staffName: "Staff unit",
@@ -312,7 +312,7 @@ describe("till-basket", () => {
     const cheese = offeredItem("p-cheese", "Extra queso", "0.50");
     const noOnion = offeredItem("p-noonion", "Sin cebolla", "0.00"); // a FREE pick
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
@@ -354,7 +354,7 @@ describe("till-basket", () => {
     const shot = offeredItem("p-shot", "Extra chupito", "0.50");
     const plain = offeredItem("p-plain", "Sin cebolla", "0.00");
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
@@ -378,7 +378,7 @@ describe("till-basket", () => {
   it("removing the parent dish removes its picks with it", async () => {
     const cheese = offeredItem("p-cheese", "Extra queso", "0.50");
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
@@ -387,7 +387,7 @@ describe("till-basket", () => {
     };
     const store = new WorkingOrderStore();
     store.addProduct(burger, "1", { extras: [pick("list-extras", cheese)] });
-    store.addProduct(cafe, "1"); // a second, plain line
+    store.addProduct(coffee, "1"); // a second, plain line
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(1);
 
@@ -397,7 +397,7 @@ describe("till-basket", () => {
 
     // The whole line — dish and its pick — is gone; only the plain café line remains.
     expect(store.lines).toHaveLength(1);
-    expect(store.lines[0]!.product).toBe(cafe);
+    expect(store.lines[0]!.product).toBe(coffee);
     expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(0);
   });
 
@@ -406,7 +406,7 @@ describe("till-basket", () => {
   it("shows the dish's OWN allergens, ignoring a gluten-free bun picked as an extra", async () => {
     const bun = offeredItem("p-gf-bun", "Pan sin gluten", "0.00");
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
@@ -441,7 +441,7 @@ describe("till-basket", () => {
       suitableFor: ["halal"], // the PICK's own positive diet claim
     });
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
@@ -483,7 +483,7 @@ describe("till-basket", () => {
   it("renders no per-pick nutrition chrome for a pick that declares neither", async () => {
     const bun = offeredItem("p-plain-bun", "Pan normal", "0.00");
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
@@ -509,7 +509,7 @@ describe("till-basket", () => {
       suitableFor: ["kosher"],
     });
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
@@ -535,7 +535,7 @@ describe("till-basket", () => {
       addAllergens: { milk: {} },
     });
     const burger: TillProduct = {
-      ...cafe,
+      ...coffee,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
@@ -553,15 +553,15 @@ describe("till-basket", () => {
   });
 
   it("shows the as-served set for a plain dish that carries allergens even with no modifiers", async () => {
-    const tostada: TillProduct = {
-      ...cafe,
+    const toast: TillProduct = {
+      ...coffee,
       id: "tostada",
       name: "Tostada",
       customerName: { es: "Tostada para el cliente" },
       allergens: { gluten: { kinds: ["wheat" as const] } },
     };
     const store = new WorkingOrderStore();
-    store.addProduct(tostada, "1");
+    store.addProduct(toast, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
 
     const asServed = el.shadowRoot!.querySelector(`.line > .name .nutrition-icons`);
@@ -580,7 +580,7 @@ describe("till-basket", () => {
 
   it("renders NO allergen row for a plain no-allergen line (avoids noise)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // allergens: null, no options
+    store.addProduct(coffee, "1"); // allergens: null, no options
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelector(`.line > .name .nutrition-icons`)).toBeNull();
   });
@@ -591,8 +591,8 @@ describe("till-basket", () => {
     const cheese = offeredItem("p-real-cheese", "Extra queso", "0.50", {
       addAllergens: { milk: {} },
     });
-    const tostada: TillProduct = {
-      ...cafe,
+    const toast: TillProduct = {
+      ...coffee,
       id: "tostada-stale",
       name: "Tostada",
       customerName: { es: "Tostada para el cliente" },
@@ -608,7 +608,7 @@ describe("till-basket", () => {
       price: "0.00",
       quantity: 1,
     };
-    store.addProduct(tostada, "1", { extras: [stale] });
+    store.addProduct(toast, "1", { extras: [stale] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
 
     const asServed = el.shadowRoot!.querySelector(`.line > .name .nutrition-icons`);
@@ -638,7 +638,7 @@ describe("till-basket", () => {
     store.loadFrom("held", [
       {
         workingOrderLineId: "stored-cafe",
-        product: cafe,
+        product: coffee,
         quantity: "2",
         notOfferedExtras: [
           { productId: "p-oat", name: "Leche de avena", price: "0.40", quantity: 2 },
@@ -646,7 +646,7 @@ describe("till-basket", () => {
       },
       {
         workingOrderLineId: "stored-gone",
-        product: { ...cafe, id: "gone", name: "Cortado" },
+        product: { ...coffee, id: "gone", name: "Cortado" },
         quantity: "1",
         notOffered: true,
       },
@@ -670,10 +670,10 @@ describe("till-basket", () => {
     try {
       setLocale("en-GB");
       const store = new WorkingOrderStore();
-      store.addProduct(cafe, "1");
-      store.addProduct({ ...cafe, id: "burger", name: "Burger" }, "1");
-      store.addProduct({ ...cafe, id: "wine", name: "Wine" }, "1");
-      store.addProduct({ ...cafe, id: "soup", name: "Soup" }, "1");
+      store.addProduct(coffee, "1");
+      store.addProduct({ ...coffee, id: "burger", name: "Burger" }, "1");
+      store.addProduct({ ...coffee, id: "wine", name: "Wine" }, "1");
+      store.addProduct({ ...coffee, id: "soup", name: "Soup" }, "1");
       store.setBlocked([undefined, "unavailable", "removed", "extra_unavailable"]);
       const { el } = await mountWidget<TillBasket>("till-basket", { store });
       const names = [...el.shadowRoot!.querySelectorAll(".line > .name")].map((name) =>
@@ -695,8 +695,8 @@ describe("till-basket", () => {
     try {
       setLocale("en-GB");
       const store = new WorkingOrderStore();
-      store.addProduct({ ...cafe, id: "soup", name: "Soup" }, "1");
-      store.addProduct({ ...cafe, id: "toast", name: "Toast" }, "1");
+      store.addProduct({ ...coffee, id: "soup", name: "Soup" }, "1");
+      store.addProduct({ ...coffee, id: "toast", name: "Toast" }, "1");
       const breakfast = { menuId: "breakfast", periodName: "Breakfast" };
       store.setEndedPeriods([breakfast, breakfast]);
       store.setBlocked(["extra_removed", undefined]);
@@ -721,7 +721,7 @@ describe("till-basket", () => {
     const previousLocale = currentLocale();
     try {
       const store = new WorkingOrderStore();
-      store.addProduct({ ...cafe, id: "bacon", name: "Bacon" }, "1");
+      store.addProduct({ ...coffee, id: "bacon", name: "Bacon" }, "1");
       store.setBlocked(["not_sold_separately"]);
       const said = async (locale: string) => {
         setLocale(locale);
@@ -766,7 +766,7 @@ describe("till-basket", () => {
       const store = new WorkingOrderStore();
       store.addProduct(
         {
-          ...cafe,
+          ...coffee,
           allergens: {},
           dietDerivation: { origins, pending } as NonNullable<TillProduct["dietDerivation"]>,
           dietOverride: override as TillProduct["dietOverride"],
@@ -790,7 +790,7 @@ describe("till-basket", () => {
     const store = new WorkingOrderStore();
     store.addProduct(
       {
-        ...cafe,
+        ...coffee,
         allergens: {},
         dietaryDeclarations: ["vegan"],
         offeredModifiers: [offeredExtras("list-extras", "Extras", [bacon])],
@@ -810,7 +810,7 @@ describe("till-basket", () => {
 
   it("shows no diet icons for a product carrying no diet data", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelector(".nutrition-icons")).toBeNull();
   });
@@ -829,7 +829,7 @@ describe("till-basket", () => {
     return box;
   }
   const steak: TillProduct = {
-    ...cafe,
+    ...coffee,
     id: "steak",
     name: "Filete",
     customerName: { es: "Filete para el cliente" },
@@ -837,7 +837,7 @@ describe("till-basket", () => {
     diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
   };
   const seabass: TillProduct = {
-    ...cafe,
+    ...coffee,
     id: "seabass",
     name: "Lubina",
     customerName: { es: "Lubina para el cliente" },
@@ -847,14 +847,14 @@ describe("till-basket", () => {
 
   it("shows a Note affordance on EVERY line, including a plain no-modifier fast-added product", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // fast-added, no options, no diet
+    store.addProduct(coffee, "1"); // fast-added, no options, no diet
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(noteButton(el, 0)).not.toBeNull();
   });
 
   it("opens the shared editor for that line and records a typed note via setLineExtras", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     // Closed until the Note button is tapped.
     expect(noteBox(el)).toBeNull();
@@ -871,7 +871,7 @@ describe("till-basket", () => {
 
   it("takes the kitchen note in the shared multi-line field, capped at the server's 200 characters", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1", { note: "no foam" });
+    store.addProduct(coffee, "1", { note: "no foam" });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     noteButton(el, 0)!.click();
     await el.updateComplete;
@@ -903,18 +903,14 @@ describe("till-basket", () => {
 
   it("renders NO extras sub-row for a line with no note (avoids noise)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelector(`[data-test="line-extras-0"]`)).toBeNull();
   });
 
   it("follows the open editor to its line when an EARLIER line is removed (note lands on the right dish)", async () => {
-    // Basket [cafe, steak, seabass]. Open the MIDDLE line's (steak) editor, then remove the FIRST line
-    // (cafe). Every later line slides down one slot, so the editor must follow steak to its new index —
-    // otherwise a typed note (which can carry allergy info, per the placeholder) lands on seabass, the
-    // line that slid into steak's old slot.
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // A — index 0
+    store.addProduct(coffee, "1"); // A — index 0
     store.addProduct(steak, "1"); // B — index 1, the one we edit
     store.addProduct(seabass, "1"); // C — index 2
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
@@ -924,7 +920,6 @@ describe("till-basket", () => {
     await el.updateComplete;
     expect(noteBox(el)).not.toBeNull();
 
-    // Remove A (cafe) via its remove control → lines become [steak, seabass].
     el.shadowRoot!.querySelectorAll<HTMLElement>(".remove")[0]!.click();
     await el.updateComplete;
     expect(store.lines.map((l) => l.product)).toEqual([steak, seabass]);
@@ -943,7 +938,7 @@ describe("till-basket", () => {
 
   it("closes the open editor when the edited line ITSELF is removed", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1"); // index 0
+    store.addProduct(coffee, "1"); // index 0
     store.addProduct(steak, "1"); // index 1 — edited then removed
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     noteButton(el, 1)!.click();
@@ -961,7 +956,7 @@ describe("till-basket", () => {
     // whole-basket swap: the lines under an open editor are gone and its index is meaningless. The basket
     // watches store.id and closes the editor, so a re-filled basket never opens an editor uninvited.
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     noteButton(el, 0)!.click();
     await el.updateComplete;
@@ -979,7 +974,7 @@ describe("till-basket", () => {
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.textContent).toContain(t("basket.empty"));
     host.remove(); // disconnectedCallback → unsubscribe
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
     // Still empty: a disconnected basket never heard the change.
     expect(el.shadowRoot!.querySelectorAll(".line")).toHaveLength(0);
@@ -1031,8 +1026,8 @@ function answered(labelId: string, labelName: string) {
 
 it("keeps each line's own answer through a quantity edit, and shows it in STAFF wording", async () => {
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1", answered("label-fino", "Fino"));
-  store.addProduct(cafe, "1", answered("label-grueso", "Grueso"));
+  store.addProduct(coffee, "1", answered("label-fino", "Fino"));
+  store.addProduct(coffee, "1", answered("label-grueso", "Grueso"));
   const { el } = await mountWidget<TillBasket>("till-basket", { store });
   store.setLineQuantity(0, "2");
   await el.updateComplete;
@@ -1052,10 +1047,10 @@ it("offers no Edit on a line whose only question was its variant", async () => {
   // line, which hand the picker's variant-resolved product to `addProduct`.
   const store = new WorkingOrderStore();
   const product: TillProduct = {
-    ...cafe,
+    ...coffee,
     variants: [
       {
-        ...sellingValuesOf(cafe),
+        ...sellingValuesOf(coffee),
         id: "v-large",
         name: "Grande",
         unitPrice: "2.00",
@@ -1075,7 +1070,7 @@ it("offers no Edit on a weighed line whose dish offers only extras", async () =>
   // The server refuses extras on a dish not sold in whole portions (`extras.unsupported_product`).
   const store = new WorkingOrderStore();
   const product: TillProduct = {
-    ...jamon,
+    ...ham,
     offeredModifiers: [
       offeredExtras("list-extras", "Extras", [offeredItem("p-cheese", "Queso", "1.00")]),
     ],
@@ -1088,7 +1083,7 @@ it("offers no Edit on a weighed line whose dish offers only extras", async () =>
 it("reopens a weighed line's picker on its options list without its extras list", async () => {
   const store = new WorkingOrderStore();
   const product: TillProduct = {
-    ...jamon,
+    ...ham,
     offeredModifiers: [
       offeredExtras("list-extras", "Extras", [offeredItem("p-cheese", "Queso", "1.00")]),
       cutList,
@@ -1110,7 +1105,7 @@ it("reopens a weighed line's picker on its options list without its extras list"
 
 it("reopens the picker on one line's answer and changes only that line", async () => {
   const store = new WorkingOrderStore();
-  const product: TillProduct = { ...cafe, offeredModifiers: [cutList] };
+  const product: TillProduct = { ...coffee, offeredModifiers: [cutList] };
   for (let index = 0; index < 2; index++)
     store.addProduct(product, "1", answered("label-fino", "Fino"));
   const { el } = await mountWidget<TillBasket>("till-basket", { store });
@@ -1143,7 +1138,7 @@ it("hands the open picker ONE seed object, not a fresh one per basket render", a
   // Lit's reactive-property `hasChanged` is an identity check, so a seed rebuilt inside `render()`
   // would re-render the open dialog on every basket render — note keystrokes included.
   const store = new WorkingOrderStore();
-  const product: TillProduct = { ...cafe, offeredModifiers: [cutList] };
+  const product: TillProduct = { ...coffee, offeredModifiers: [cutList] };
   store.addProduct(product, "1", answered("label-fino", "Fino"));
   const { el } = await mountWidget<TillBasket>("till-basket", { store });
   el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
@@ -1165,7 +1160,7 @@ it("shows a retrieved line's frozen options answers in the STAFF wording", async
   const store = new WorkingOrderStore();
   store.loadFrom("wo-1", [
     {
-      product: cafe,
+      product: coffee,
       quantity: "1",
       workingOrderLineId: "wol-1",
       optionSnapshots: [
@@ -1209,7 +1204,7 @@ describe("till-basket: a line name's language", () => {
     store.loadFrom("held", [
       {
         workingOrderLineId: "stored-gone",
-        product: { ...cafe, id: "gone", name: "Flat white" },
+        product: { ...coffee, id: "gone", name: "Flat white" },
         quantity: "1",
         notOffered: true,
       },
@@ -1229,7 +1224,7 @@ describe("till-basket: a line name's language", () => {
   it("the name's language follows a change of the content languages", async () => {
     setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
     await el.updateComplete;
@@ -1239,7 +1234,7 @@ describe("till-basket: a line name's language", () => {
   it("an English venue's names break as with no language set", async () => {
     setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
     const store = new WorkingOrderStore();
-    store.addProduct({ ...cafe, id: "long", name: "Strawberries" }, "1");
+    store.addProduct({ ...coffee, id: "long", name: "Strawberries" }, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     el.style.width = "70px";
     await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -1258,12 +1253,12 @@ describe("till-basket: a line name's language", () => {
 });
 
 describe("till-basket: a subset of the order's lines", () => {
-  const flan: TillProduct = { ...cafe, id: "flan", name: "Flan" };
+  const flan: TillProduct = { ...coffee, id: "flan", name: "Flan" };
 
   it("shows only the lines it is given, each by its place in the order", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
-    store.addProduct(jamon, "0.100");
+    store.addProduct(coffee, "1");
+    store.addProduct(ham, "0.100");
     store.addProduct(flan, "2");
     const { el } = await mountWidget<TillBasket>("till-basket", { store, lineIndexes: [2, 0] });
     const names = [...el.shadowRoot!.querySelectorAll(".line .name")].map((name) =>
@@ -1283,14 +1278,14 @@ describe("till-basket: a subset of the order's lines", () => {
 
   it("skips a place the order no longer has", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store, lineIndexes: [0, 3] });
     expect(el.shadowRoot!.querySelectorAll(".line")).toHaveLength(1);
   });
 
   it("puts what is slotted as lead-<n> in place of line n's name, and after-<n> under line n", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     store.addProduct(flan, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const lead = document.createElement("button");
@@ -1320,7 +1315,7 @@ describe("till-basket: a subset of the order's lines", () => {
 describe("till-basket: stacked", () => {
   async function rowOf(stacked: boolean) {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     const { el } = await mountWidget<TillBasket>("till-basket", { store, stacked });
     const name = el.shadowRoot!.querySelector(".line .name")!.getBoundingClientRect();
     const stepper = el.shadowRoot!.querySelector(".line .stepper")!.getBoundingClientRect();
@@ -1350,7 +1345,7 @@ describe("till-basket: the ended-period mark", () => {
       setLocale("es-ES");
       const store = new WorkingOrderStore();
       for (const name of ["Croquettes", "Prawns", "Beer"])
-        store.addProduct({ ...cafe, id: name, name }, "1");
+        store.addProduct({ ...coffee, id: name, name }, "1");
       const open = { menuId: "open", periodName: "Open" };
       store.setEndedPeriods([open, open, open]);
       const { el } = await mountWidget<TillBasket>("till-basket", {
@@ -1380,7 +1375,7 @@ describe("till-basket: the ended-period mark", () => {
 });
 
 describe("till-basket: the note editor keeps to its line", () => {
-  const flan: TillProduct = { ...cafe, id: "flan", name: "Flan" };
+  const flan: TillProduct = { ...coffee, id: "flan", name: "Flan" };
 
   async function typeNote(el: TillBasket, text: string): Promise<void> {
     const box = el
@@ -1393,9 +1388,9 @@ describe("till-basket: the note editor keeps to its line", () => {
 
   it("writes the note to the line it was opened on, wherever that line now is", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     store.addProduct(flan, "1");
-    store.addProduct(jamon, "0.100");
+    store.addProduct(ham, "0.100");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-1"]')!.click();
     await el.updateComplete;
@@ -1423,7 +1418,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
           for (const name of ["Seagrams Gin", "London Gin"])
             store.addProduct(
               {
-                ...cafe,
+                ...coffee,
                 id: name,
                 name,
                 customerName: { en: `Customer ${name}` },
@@ -1456,7 +1451,7 @@ describe("A668 nutrition beside the dish name", () => {
   it("shows declared allergen and diet icons in the name instead of the As served and Diet rows", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(
-      { ...cafe, allergens: { nuts: { kinds: ["almonds"] } }, dietaryDeclarations: ["no_fish"] },
+      { ...coffee, allergens: { nuts: { kinds: ["almonds"] } }, dietaryDeclarations: ["no_fish"] },
       "1",
     );
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
@@ -1470,7 +1465,7 @@ describe("A668 nutrition beside the dish name", () => {
   });
   it("an unreviewed dish shows no icons even when a diet is declared", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct({ ...cafe, allergens: null, dietaryDeclarations: ["vegan"] }, "1");
+    store.addProduct({ ...coffee, allergens: null, dietaryDeclarations: ["vegan"] }, "1");
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelector(".nutrition-icons")).toBeNull();
   });
