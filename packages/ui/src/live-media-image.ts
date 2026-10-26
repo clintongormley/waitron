@@ -159,7 +159,13 @@ export function watchMediaImage(
   listener: (address: string | undefined) => void,
 ): () => void {
   if (!MEDIA_FILENAME.test(reference)) return () => {};
-  return subscribe(reference, () => listener(entries.get(reference)!.value?.[shape]));
+  let unsubscribe: (() => void) | undefined = subscribe(reference, () =>
+    listener(entries.get(reference)!.value?.[shape]),
+  );
+  return () => {
+    unsubscribe?.();
+    unsubscribe = undefined;
+  };
 }
 
 class LiveMediaImage extends AsyncDirective {

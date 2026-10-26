@@ -383,6 +383,10 @@ it("unsubscribing a watcher stops the calls and the poll", async () => {
   invalidateMediaImages();
   await vi.waitFor(() => expect(src()).toBe("/media/after-square.webp"));
   expect(listener).toHaveBeenCalledTimes(1);
+  const polled = network.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(15_000);
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(polled + 1));
+  expect(listener).toHaveBeenCalledTimes(1);
   render(nothing, host);
   const calls = network.mock.calls.length;
   await vi.advanceTimersByTimeAsync(60_000);
@@ -413,4 +417,17 @@ it("a name that is not a library name subscribes nothing", async () => {
   expect(network).not.toHaveBeenCalled();
   expect(listener).not.toHaveBeenCalled();
   stop();
+});
+it("a watcher's stop called twice leaves another consumer of the same image subscribed", async () => {
+  const stop = watchMediaImage(a, "display", () => {});
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(1));
+  stop();
+  render(html`<img src=${liveMediaImage(a, "square")} />`, host);
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+  stop();
+  network.mockResolvedValueOnce(reply({ [a]: entry("still") }));
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(src()).toBe("/media/still-square.webp"));
+  await vi.advanceTimersByTimeAsync(15_000);
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(4));
 });
