@@ -501,7 +501,6 @@ until A977).
   naming sites remain in the till's boot/counter, parties and drafts suites;
   the payment widget's idle-choice and main suites,
   the server's till API tests and shared station fixtures.
-  Shared current-order helper exports (`croquetas`, `tarta`) and their consumers still need English names.
   Shared equipment fixture exports and their other consumers still need English names.
   String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
   Developer/demo script names remain A975's. Low priority.
