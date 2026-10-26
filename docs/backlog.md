@@ -5344,11 +5344,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Investigate the stopped-printer polling test's CI failure.**
-  `apps/print-agent/src/ipp-print.test.ts:910` observed five polls before the printer query where
-  it requires more than five. The cause is unknown; reproduce it before changing the check.
-  [Failed main run](https://github.com/clintongormley/waitron/actions/runs/40287944882).
-
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
