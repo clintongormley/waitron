@@ -15,7 +15,7 @@ import { helpBadgeLabel, helpEn, helpEs, type HelpKey } from "../i18n/help-strin
 import type { StringKey } from "../i18n/strings.js";
 import type { CounterWaitingOrder, HeldOrderSummary, TillProduct } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "p1",
   catalogueId: "cat-default",
   name: "Café",
@@ -71,7 +71,7 @@ afterEach(() => {
 const mount = (over: Partial<TillCounterScreen> = {}) =>
   mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
-    products: [cafe],
+    products: [coffee],
     menus: servedMenus(
       [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
       [],
@@ -236,7 +236,7 @@ describe("Counter's help badges", () => {
 
   it("Park still parks with help on", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const { el } = await mount({ store });
     const owner = tender(el);
     const parks: unknown[] = [];

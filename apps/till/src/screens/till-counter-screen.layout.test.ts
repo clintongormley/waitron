@@ -44,8 +44,8 @@ function product(key: string, name: string, unitPrice: string): TillProduct {
   };
 }
 
-const cafe = product("cafe", "Café solo", "1.50");
-const croquetasDish = product("croquetas", "Croquetas", "7.80");
+const coffee = product("cafe", "Café solo", "1.50");
+const croquettesDish = product("croquetas", "Croquetas", "7.80");
 // Two stations, so each line offers Make at… as it does on a venue with a kitchen and a bar.
 const stations: Station[] = [
   {
@@ -71,28 +71,27 @@ const stations: Station[] = [
 ];
 const menus: TillZoneMenu[] = servedMenus(
   [{ id: "drinks", name: "Drinks", isDefault: true, versionId: "drinks-v1" }],
-  [cafe, croquetasDish].map((each) => ({
+  [coffee, croquettesDish].map((each) => ({
     id: each.menuItemId!,
     menuId: "drinks",
     productId: each.id,
   })),
 );
 
-/** `croquetas` of fifteen make a three-digit line total; `scale` is the text size, as `pageAt`. */
 async function mountCounter(
   width: number,
   height: number,
-  croquetas = "15",
+  croquetteQuantity = "15",
   scale = 100,
 ): Promise<HTMLElement> {
   await pageAt(width, height, scale);
   expect(window.innerWidth).toBe(width);
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
-  store.addProduct(croquetasDish, croquetas);
+  store.addProduct(coffee, "1");
+  store.addProduct(croquettesDish, croquetteQuantity);
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store,
-    products: [cafe, croquetasDish],
+    products: [coffee, croquettesDish],
     menus,
     selectedMenuId: "drinks",
     makeAtStations: stations,
@@ -474,8 +473,8 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
           { ...menus[0]!, id: "drinks-extra", name: "Drinks and cocktails", isDefault: false },
         ];
         counter.products = [
-          { ...cafe, diet: { vegan: "yes", vegetarian: "yes", contains: [] } },
-          croquetasDish,
+          { ...coffee, diet: { vegan: "yes", vegetarian: "yes", contains: [] } },
+          croquettesDish,
         ];
         const { el: shell, host } = await mountWidget<TillShell>(
           "till-shell",
@@ -586,7 +585,7 @@ describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) =
         await page.viewport(1024, 768);
         setLocale(locale);
         const store = new WorkingOrderStore();
-        store.addProduct(cafe, "1");
+        store.addProduct(coffee, "1");
         const { el, host } = await mountWidget<TillTenderPay>(
           "till-tender-pay",
           { store, mode, fullInvoices: true },
@@ -618,7 +617,7 @@ describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) =
         await page.viewport(1024, 768);
         setLocale(locale);
         const store = new WorkingOrderStore();
-        store.addProduct(cafe, "1");
+        store.addProduct(coffee, "1");
         const { el, host } = await mountWidget<TillTenderPay>(
           "till-tender-pay",
           { store, mode },
@@ -648,7 +647,7 @@ describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) =
 
 it("keeps the cash-at-till explanation across the payment card", async () => {
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
+  store.addProduct(coffee, "1");
   const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", {
     store,
     takesCash: false,
