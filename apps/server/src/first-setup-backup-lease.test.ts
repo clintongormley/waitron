@@ -4,8 +4,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { access, readFile, readdir, writeFile } from "node:fs/promises";
 import * as filesystem from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 
-import { expect, it, vi } from "vitest";
+import { Hono } from "hono";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { emptyAbandonedBackupRecovery, isEmptiedTombstone } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
@@ -25,6 +28,11 @@ import {
 } from "../test/first-setup-backup-cloud-fixture.js";
 import { PASSWORD } from "../test/first-fiscal.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
+import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
+import {
+  mountFirstSetupResolutionApi,
+  mountFirstSetupResolutionFence,
+} from "./setup-first-fiscal-api.js";
 
 vi.mock("./backup-verification-target.js", { spy: true });
 vi.mock("./state-secrets.js", { spy: true });
@@ -1251,4 +1259,74 @@ it("answers owner-required for an unknown session when nothing was discarded", a
   expect(() => f.service.renew("unknown")).toThrow(refused);
   await expect(f.service.close("unknown")).rejects.toEqual(refused);
   await expect(f.service.commit("unknown", {}, client)).rejects.toEqual(refused);
+});
+
+const sockets: TLSSocket[] = [];
+afterEach(() => {
+  for (const socket of sockets.splice(0)) socket.destroy();
+});
+function tls() {
+  const socket = new TLSSocket(new Socket());
+  sockets.push(socket);
+  return { incoming: { socket } };
+}
+
+it("a commit held 6 minutes with no renewal closes the repair page's fence, and then reaches selected", async () => {
+  const f = await heldCloudCommit();
+  const takeBack = advanceMonotonic(6 * 60_000);
+  const app = new Hono();
+  mountFirstSetupResolutionFence(app, f.service, () => {});
+  mountFirstSetupBackupApi(app, f.service, () => {});
+  mountFirstSetupResolutionApi(app, f.options.host, () => {});
+  try {
+    const attempt = join(f.roots.stateDir, "first-setup.json");
+    const before = await readFile(attempt);
+    const inspected = await f.options.host.resolution.inspectFirstSetupResolution();
+    const refused = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/recover",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inspectionId: inspected.inspectionId,
+          revision: inspected.revision,
+          ownerGeneration: inspected.ownerGeneration,
+          clientClaimNonce: randomBytes(32).toString("base64url"),
+          password: PASSWORD,
+        }),
+      },
+      tls(),
+    );
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: "setup.recovery_in_progress" } });
+    expect(await readFile(attempt)).toEqual(before);
+  } finally {
+    takeBack();
+    f.gate.resolve();
+  }
+  await f.commit;
+  expect((await f.workspace.read()).at(-1)!.phase).toBe("selected");
+});
+
+it("answers a discarded recovery's late step through the route as 409, with when it was discarded", async () => {
+  const f = await preparedSession();
+  const at = await discard(f, f.session.recoveryId);
+  const app = new Hono();
+  mountFirstSetupBackupApi(app, f.service, () => {});
+  const late = await app.request(
+    "https://box.test/setup-api/first-setup/resolution/backup/prepare",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: f.session.sessionId,
+        proposal: { action: "clock-challenge" },
+      }),
+    },
+    tls(),
+  );
+  expect(late.status).toBe(409);
+  expect(await late.json()).toEqual({
+    error: { code: "setup.recovery_discarded", params: { discardedAt: at } },
+  });
 });

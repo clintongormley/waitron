@@ -2,6 +2,7 @@ import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import {
   assertNoLegacyFirstSetupWorkspace,
+  createFirstSetupBackupWorkspace,
   firstSetupModuleContext,
   raiseStartAgainNote,
   readModulePreparationHistory,
@@ -17,6 +18,8 @@ import {
   writeStartAgainMarker,
   START_AGAIN_MARKER_LIMIT,
   type StartAgainSummary,
+  type StartAgainRecoveryShown,
+  type BackupRepairRecord,
   type RegisterAnswer,
   type FirstSetupState,
 } from "@waitron/provisioning";
@@ -26,6 +29,7 @@ import { readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
+import type { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
 
@@ -122,10 +126,20 @@ async function gatherStartAgainFloor(
 function summaryOf(
   state: FirstSetupState,
   gathered: Awaited<ReturnType<typeof gatherStartAgainFloor>>,
+  recovery: StartAgainRecoveryShown | undefined,
 ): StartAgainSummary {
   const summary = startAgainSummary(state, gathered.floor?.lastName ?? null);
-  return gathered.recoveryRecordDamaged ? { ...summary, recoveryRecordDamaged: true } : summary;
+  return {
+    ...summary,
+    ...(gathered.recoveryRecordDamaged && { recoveryRecordDamaged: true as const }),
+    ...(recovery !== undefined && { recovery }),
+  };
 }
+type BackupRecovery = Pick<
+  ReturnType<typeof createFirstSetupBackupRecovery>,
+  "liveness" | "runningInMemory" | "sealLapsed" | "discardInTurn"
+>;
+const STOPPED_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
     host: Pick<FirstFiscalHost, "resolution" | "owner" | "store" | "coordinator"> & {
@@ -136,10 +150,56 @@ export function createFirstSetupResolutionActions(
     remove?: (path: string, kind: "file" | "folder") => Promise<void>;
     /** Tests only: the deletion marker's size limit. */
     markerLimit?: number;
+    /**
+     * The box's backup recovery. Without it, a journal that is not abandoned is refused by Start
+     * again's disk check, and the summary does not look at it.
+     */
+    backupRecovery?: BackupRecovery;
   },
 ) {
   const { host } = options;
   const roots = { stateDir: options.stateDir, venueDir: options.venueDir };
+  /** A running recovery refuses; a lapsed one is sealed first; a stopped one is what the summary names. */
+  const stoppedRecovery = async (): Promise<StartAgainRecoveryShown | undefined> => {
+    const backup = options.backupRecovery;
+    if (backup === undefined) return undefined;
+    if (!backup.runningInMemory()) backup.sealLapsed();
+    const activity = await backup.liveness();
+    if (activity?.state === "running")
+      throw new AppError("setup.recovery_in_progress", {
+        startedAt: activity.startedAt,
+        lastActiveAt: activity.lastActiveAt,
+      });
+    // `liveness()` reads a journal it cannot read as no recovery, so the chain is read here too.
+    let records: BackupRepairRecord[];
+    try {
+      records = await createFirstSetupBackupWorkspace(roots).readChain();
+    } catch {
+      return unavailable();
+    }
+    const last = records.at(-1);
+    if (activity === null) return undefined;
+    if (!STOPPED_PHASES.includes(activity.phase) || last?.target.recoveryId !== activity.recoveryId)
+      unavailable();
+    const module = last.binding.module;
+    const seat =
+      host.modules === undefined
+        ? undefined
+        : initialSetupFor(host.modules, module)?.startAgainFloor;
+    if (seat === undefined) unavailable();
+    const lastName = await readModulePreparationHistory(last.target.target, module)
+      .then((preparations) => seat({ attempts: [], preparations, publicEvidence: [] })?.lastName)
+      .catch(() => undefined);
+    if (lastName === undefined) unavailable();
+    return {
+      startedAt: activity.startedAt,
+      lastActiveAt: activity.lastActiveAt,
+      lastActiveSource: activity.lastActiveSource,
+      lastName,
+      failed: activity.failed,
+      cloud: activity.cloud,
+    };
+  };
   const assertRecoveredOwner = async (
     owner: FirstSetupOwnerAttempt | undefined,
     state: FirstSetupState,
@@ -181,6 +241,7 @@ export function createFirstSetupResolutionActions(
         host.coordinator.run(async () => {
           exactKeys(request, ["inspectionId", "revision", "ownerGeneration", "owner"]);
           await assertNoLegacyFirstSetupWorkspace(options);
+          const recovery = await stoppedRecovery();
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
           if (inspection.database !== "missing") unavailable();
@@ -195,7 +256,7 @@ export function createFirstSetupResolutionActions(
             snapshot.originals,
             host.modules,
           );
-          return summaryOf(retained.state, gathered);
+          return summaryOf(retained.state, gathered, recovery);
         }),
       );
     },
@@ -212,6 +273,7 @@ export function createFirstSetupResolutionActions(
             "recoveryRecordDamagedShown",
           ]);
           await assertNoLegacyFirstSetupWorkspace(options);
+          const recovery = await stoppedRecovery();
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
           const retained = await host.store.readForRepair();
@@ -284,7 +346,7 @@ export function createFirstSetupResolutionActions(
           const floor = gathered.floor;
           const confirmation = request.confirmMissingDatabase;
           if (missing) {
-            const shown = summaryOf(state, gathered);
+            const shown = summaryOf(state, gathered, recovery);
             if (
               confirmation?.nothingFiledOrSold !== true ||
               !isDeepStrictEqual(confirmation.shown, shown)

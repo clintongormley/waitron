@@ -14,7 +14,10 @@ import { AppError } from "@waitron/shared";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
-import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
+import {
+  mountFirstSetupResolutionApi,
+  mountFirstSetupResolutionFence,
+} from "./setup-first-fiscal-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 import { readBoxPublicCa } from "./box-tls-repair.js";
@@ -180,6 +183,7 @@ async function resolutionApp(
   });
   const app = new Hono();
   const backup = firstSetupBackupRecoveryFor(roots, environment, host, log);
+  mountFirstSetupResolutionFence(app, backup, log);
   mountFirstSetupBackupApi(app, backup, log, requestRestart);
   app.get("/setup-api/status", async (c) => {
     const pair = await host.store.readResumable().catch(() => null);
@@ -214,7 +218,7 @@ async function resolutionApp(
   app.get("/setup-api/first-setup/status", (c) =>
     c.json({ claimed: true, resolution: true }, 200, { "Cache-Control": "no-store" }),
   );
-  const actions = createFirstSetupResolutionActions({ ...roots, host });
+  const actions = createFirstSetupResolutionActions({ ...roots, host, backupRecovery: backup });
   mountFirstSetupResolutionApi(app, host, log, {
     startAgain: actions.startAgainFirstSetup,
     summary: actions.startAgainSummary,

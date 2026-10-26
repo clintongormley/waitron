@@ -22,6 +22,7 @@ const boundary = createErrorBoundary(
     "setup.attempt_uncertain": 409,
     "setup.start_again_incomplete": 409,
     "setup.workspace_unsupported": 409,
+    "setup.recovery_discarded": 409,
     "promotion.break_glass_invalid": 422,
     "recovery.passphrase_invalid": 422,
     "backup.artifact_invalid": 422,

@@ -230,3 +230,56 @@ it.each([false, "yes"])(
     expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
   },
 );
+
+const recovery = {
+  startedAt: "2026-10-24T13:40:00.000Z",
+  lastActiveAt: "2026-10-24T13:44:00.000Z",
+  lastActiveSource: "memory" as const,
+  lastName: "0CNQW",
+  failed: false,
+  cloud: true,
+};
+
+it("a confirmation that showed a stopped backup recovery keeps it, and only its keys", async () => {
+  const dir = await stateDir();
+  const shown = { ...record.shown, recovery };
+  await writeStartAgainConfirmation(dir, {
+    ...record,
+    shown: { ...shown, recovery: { ...recovery, extra: 1 } },
+  } as typeof record);
+  const stored = JSON.parse(
+    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+  ) as { shown: { recovery: object } };
+  expect(stored).toEqual({ version: 1, ...record, shown });
+  expect(Object.keys(stored.shown.recovery)).toEqual([
+    "startedAt",
+    "lastActiveAt",
+    "lastActiveSource",
+    "lastName",
+    "failed",
+    "cloud",
+  ]);
+});
+
+it.each([
+  ["not an object", null],
+  ["a start time not in canonical form", { ...recovery, startedAt: "2026-10-24T13:40:00Z" }],
+  ["an unparseable last activity", { ...recovery, lastActiveAt: "soon" }],
+  ["an unknown activity source", { ...recovery, lastActiveSource: "disk" }],
+  ["an empty last name", { ...recovery, lastName: "" }],
+  ["no last name", { ...recovery, lastName: null }],
+  ["a failed other than a boolean", { ...recovery, failed: "no" }],
+  ["a missing Cloud flag", { ...recovery, cloud: undefined }],
+])(
+  "a shown recovery with %s is refused setup.attempt_invalid and writes nothing",
+  async (_label, value) => {
+    const dir = await stateDir();
+    await expect(
+      writeStartAgainConfirmation(dir, {
+        ...record,
+        shown: { ...record.shown, recovery: value },
+      } as unknown as typeof record),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
+    expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
+  },
+);

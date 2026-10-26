@@ -12,7 +12,7 @@ import type { Context, Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
-import type { VenueRequest } from "@waitron/provisioning";
+import type { StartAgainRecoveryShown, VenueRequest } from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -34,6 +34,7 @@ const boundary = createErrorBoundary(
     "setup.attempt_uncertain": 409,
     "setup.start_again_incomplete": 409,
     "setup.workspace_unsupported": 409,
+    "setup.recovery_in_progress": 409,
   },
   "setup.provision_failed",
 );
@@ -69,8 +70,9 @@ function registerAnswer(value: unknown): import("@waitron/provisioning").Registe
 
 function missingDatabaseConfirmation(value: unknown) {
   const body = exact(value, ["nothingFiledOrSold", "shown"]);
-  const shown = exact(body.shown, ["reached", "lastName"], ["recoveryRecordDamaged"]);
+  const shown = exact(body.shown, ["reached", "lastName"], ["recoveryRecordDamaged", "recovery"]);
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
+  const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
   if (
     body.nothingFiledOrSold !== true ||
     (damaged && shown.recoveryRecordDamaged !== true) ||
@@ -87,7 +89,41 @@ function missingDatabaseConfirmation(value: unknown) {
       reached: shown.reached as "claimed" | "named" | "fiscal-started" | "fiscal-finished",
       lastName: shown.lastName as string | null,
       ...(damaged && { recoveryRecordDamaged: true as const }),
+      ...(recovery !== undefined && { recovery }),
     },
+  };
+}
+function shownRecovery(value: unknown): StartAgainRecoveryShown {
+  const recovery = exact(value, [
+    "startedAt",
+    "lastActiveAt",
+    "lastActiveSource",
+    "lastName",
+    "failed",
+    "cloud",
+  ]);
+  const instant = (time: unknown) =>
+    typeof time === "string" &&
+    Number.isFinite(Date.parse(time)) &&
+    new Date(Date.parse(time)).toISOString() === time;
+  if (
+    !instant(recovery.startedAt) ||
+    !instant(recovery.lastActiveAt) ||
+    !["memory", "saved-step"].includes(recovery.lastActiveSource as string) ||
+    typeof recovery.lastName !== "string" ||
+    recovery.lastName.length < 1 ||
+    recovery.lastName.length > 64 ||
+    typeof recovery.failed !== "boolean" ||
+    typeof recovery.cloud !== "boolean"
+  )
+    invalid();
+  return {
+    startedAt: recovery.startedAt as string,
+    lastActiveAt: recovery.lastActiveAt as string,
+    lastActiveSource: recovery.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
+    lastName: recovery.lastName,
+    failed: recovery.failed,
+    cloud: recovery.cloud,
   };
 }
 function assertFirstFiscalRequest(c: Context): void {
@@ -610,6 +646,35 @@ export function mountSetupFirstFiscalApi(
       }),
     ),
   );
+}
+
+/**
+ * While a backup recovery runs, every write of the repair page except the recovery's own is refused;
+ * otherwise a lapsed recovery is sealed before the write goes on. Decided synchronously, so nothing
+ * can renew between the check and the seal.
+ */
+export function mountFirstSetupResolutionFence(
+  app: Hono,
+  recovery: Pick<
+    ReturnType<typeof import("./first-setup-backup-recovery.js").createFirstSetupBackupRecovery>,
+    "runningInMemory" | "sealLapsed" | "liveness"
+  >,
+  log: Logger,
+): void {
+  const root = "/setup-api/first-setup/resolution";
+  app.use(`${root}/*`, (c, next) => {
+    if (c.req.method !== "POST" || c.req.path.startsWith(`${root}/backup/`)) return next();
+    if (recovery.runningInMemory()) {
+      // `liveness()` answers a running recovery before its first await, so these are this moment's.
+      const activity = recovery.liveness();
+      return boundary(c, log, async () => {
+        const { startedAt, lastActiveAt } = (await activity)!;
+        throw new AppError("setup.recovery_in_progress", { startedAt, lastActiveAt });
+      });
+    }
+    recovery.sealLapsed();
+    return next();
+  });
 }
 
 export function mountFirstSetupResolutionApi(

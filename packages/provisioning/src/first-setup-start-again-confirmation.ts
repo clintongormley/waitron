@@ -13,6 +13,17 @@ export type StartAgainSummary = {
   readonly reached: (typeof REACHED)[number];
   readonly lastName: string | null;
   readonly recoveryRecordDamaged?: true;
+  readonly recovery?: StartAgainRecoveryShown;
+};
+
+/** A stopped backup recovery that Start again would discard, as the summary showed it. */
+export type StartAgainRecoveryShown = {
+  readonly startedAt: string;
+  readonly lastActiveAt: string;
+  readonly lastActiveSource: "memory" | "saved-step";
+  readonly lastName: string;
+  readonly failed: boolean;
+  readonly cloud: boolean;
 };
 
 export interface StartAgainConfirmation {
@@ -51,6 +62,31 @@ const invalid = () => new AppError("setup.attempt_invalid", {});
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
+const instant = (value: unknown): value is string =>
+  typeof value === "string" &&
+  Number.isFinite(Date.parse(value)) &&
+  new Date(Date.parse(value)).toISOString() === value;
+
+function recoveryShown(value: unknown): StartAgainRecoveryShown {
+  if (
+    !object(value) ||
+    !instant(value.startedAt) ||
+    !instant(value.lastActiveAt) ||
+    !["memory", "saved-step"].includes(value.lastActiveSource as string) ||
+    !text(value.lastName) ||
+    typeof value.failed !== "boolean" ||
+    typeof value.cloud !== "boolean"
+  )
+    throw invalid();
+  return {
+    startedAt: value.startedAt,
+    lastActiveAt: value.lastActiveAt,
+    lastActiveSource: value.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
+    lastName: value.lastName,
+    failed: value.failed,
+    cloud: value.cloud,
+  };
+}
 
 function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgainConfirmation {
   const { at, attemptId, database, administrator, ownerGeneration, shown } = value as Record<
@@ -58,9 +94,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     unknown
   >;
   if (
-    typeof at !== "string" ||
-    !Number.isFinite(Date.parse(at)) ||
-    new Date(Date.parse(at)).toISOString() !== at ||
+    !instant(at) ||
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
     database !== "missing" ||
@@ -86,6 +120,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
       reached: shown.reached as StartAgainSummary["reached"],
       lastName: shown.lastName as string | null,
       ...(shown.recoveryRecordDamaged === true && { recoveryRecordDamaged: true as const }),
+      ...(Object.hasOwn(shown, "recovery") && { recovery: recoveryShown(shown.recovery) }),
     },
   };
 }
