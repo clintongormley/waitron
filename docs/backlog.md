@@ -5700,6 +5700,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**
   [Detail](backlog/ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes).
 
+- **A till late-send PIN test failed once and then passed, twice in two days, in local combined
+  runs (A1126)**: "shows a wrong PIN on the app's line when the dialog was closed while it was
+  sent, and asks afresh next time". **Next action:** reproduce it under load, keep the failure
+  output, and fix at the root. [Detail](backlog/ci.md#a-till-late-send-pin-test-failed-once-twice-in-two-days-a1126)
+
 - **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
   person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
   other half — a matrix that varies two things separately and never crosses them proves less than
