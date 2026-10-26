@@ -3318,7 +3318,7 @@ The job's deadline remains an outer limit; stalls in other steps can consume the
 for recovery. Merge commands, shard-count checks and coverage thresholds stay in place.
 
 The server merge uses `scripts/download-coverage-blobs.mjs`. It lists the current run's artifacts
-through GitHub's REST API, checks the archive digest and extracts each expected report with the
+through GitHub's REST API, keeps the highest-id copy of each name, checks the archive digest and extracts each expected report with the
 host's `unzip`. The job grants `actions: read` alongside `contents: read`; the token goes only to
 the API requests, not to the storage URL. A refused response's body is cancelled before the helper
 throws. Other download sites still use `actions/download-artifact`.
@@ -3347,8 +3347,9 @@ A local HTTP probe ran the unmodified v8 bundle from commit
 With one initial 503 response whose body stayed open, the action retried after five seconds and
 printed successful completion, but retained that response's TCP socket until the probe stopped
 it at twelve seconds. The original runner's socket state was not captured, so attributing that
-CI occurrence to the same retained response remains an inference. The helper's real HTTP tests
-check response closure and natural command exit against this open-body refusal. A real download
+CI occurrence to the same retained response remains an inference. The helper's in-process HTTP
+tests require the server to observe the refused connection closing. A separate process test checks
+natural failure exit; deleting cancellation did not break that exit check on Node v26.11.1. A real download
 from the failed run verified and extracted all 17 archives in 25.32 seconds on the development
 Mac; that is not a measurement of a GitHub-hosted runner.
 

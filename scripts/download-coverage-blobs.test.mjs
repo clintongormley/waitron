@@ -13,6 +13,11 @@ writeFileSync(join(scratch, "blob-1.json"), '{"coverage":1}\n');
 execFileSync("zip", ["-q", "report.zip", "blob-1.json"], { cwd: scratch });
 const archive = readFileSync(join(scratch, "report.zip"));
 const digest = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
+writeFileSync(join(scratch, "blob-1.json"), '{"coverage":2}\n');
+execFileSync("zip", ["-q", "report-new.zip", "blob-1.json"], { cwd: scratch });
+const newerArchive = readFileSync(join(scratch, "report-new.zip"));
+const newerDigest = `sha256:${createHash("sha256").update(newerArchive).digest("hex")}`;
+writeFileSync(join(scratch, "blob-1.json"), '{"coverage":1}\n');
 writeFileSync(join(scratch, "outside.json"), "unexpected");
 execFileSync("zip", ["-q", "wrong.zip", "outside.json"], { cwd: scratch });
 execFileSync("zip", ["-q", "multiple.zip", "blob-1.json", "outside.json"], { cwd: scratch });
@@ -53,13 +58,18 @@ async function fixture(mode = "healthy") {
         if (mode === "bad-digest") artifact.digest = "sha256:" + "0".repeat(64);
         if (mode === "missing-digest") delete artifact.digest;
         if (mode === "duplicate") entries.push(artifact);
+        if (mode === "rerun-old-first") entries.push({ ...artifact, id: 2, digest: newerDigest });
+        if (mode === "rerun-new-first")
+          entries.unshift({ ...artifact, id: 2, digest: newerDigest });
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify({ artifacts: entries, total_count: entries.length }));
       }
     } else if (request.url.endsWith("/zip")) {
       response.writeHead(
         mode === "no-redirect" ? 200 : 302,
-        mode === "missing-location" ? {} : { location: `${base}/storage.zip` },
+        mode === "missing-location"
+          ? {}
+          : { location: `${base}/storage${request.url.includes("/2/") ? "-new" : ""}.zip` },
       );
       response.end();
     } else if (mode === "blob-failure") {
@@ -67,7 +77,13 @@ async function fixture(mode = "healthy") {
       response.write("retry later");
       response.once("close", cancelled);
     } else {
-      response.end(mode === "corrupt" ? Buffer.from("corrupt") : bytes);
+      response.end(
+        request.url === "/storage-new.zip"
+          ? newerArchive
+          : mode === "corrupt"
+            ? Buffer.from("corrupt")
+            : bytes,
+      );
     }
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -138,7 +154,6 @@ describe("coverage artifact downloads", () => {
     "bad-id",
     "bad-digest",
     "missing-digest",
-    "duplicate",
     "no-redirect",
     "missing-location",
     "corrupt",
@@ -155,6 +170,50 @@ describe("coverage artifact downloads", () => {
       await rig.close();
     }
   });
+
+  it.each(["duplicate", "rerun-old-first", "rerun-new-first"])(
+    "uses only the newest report for %s names",
+    async (mode) => {
+      const { downloadCoverageBlobs } = await import("./download-coverage-blobs.mjs");
+      const rig = await fixture(mode);
+      try {
+        await downloadCoverageBlobs(rig.options);
+        const newest = mode === "duplicate" ? 1 : 2;
+        expect(readFileSync(join(rig.directory, "blob-1.json"), "utf8")).toBe(
+          `{"coverage":${newest}}\n`,
+        );
+        expect(
+          rig.requests.filter(({ path }) => path.endsWith("/zip")).map(({ path }) => path),
+        ).toEqual([`/repos/waitron/restaurant/actions/artifacts/${newest}/zip`]);
+      } finally {
+        await rig.close();
+      }
+    },
+  );
+
+  it.each([undefined, ""])(
+    "uses GitHub's API default when the URL is unset (%s)",
+    async (apiUrl) => {
+      const { downloadCoverageBlobs } = await import("./download-coverage-blobs.mjs");
+      const rig = await fixture();
+      const nativeFetch = globalThis.fetch;
+      const requested = [];
+      const routing = vi.spyOn(globalThis, "fetch").mockImplementation((url, options) => {
+        requested.push(url);
+        return nativeFetch(url.replace("https://api.github.com", rig.options.apiUrl), options);
+      });
+      try {
+        await downloadCoverageBlobs({ ...rig.options, apiUrl });
+        expect(requested[0]).toBe(
+          "https://api.github.com/repos/waitron/restaurant/actions/runs/42/artifacts?per_page=100&page=1",
+        );
+        expect(readFileSync(join(rig.directory, "blob-1.json"), "utf8")).toBe('{"coverage":1}\n');
+      } finally {
+        routing.mockRestore();
+        await rig.close();
+      }
+    },
+  );
 
   it("finds the matching report after a full page of other artifacts", async () => {
     const { downloadCoverageBlobs } = await import("./download-coverage-blobs.mjs");

@@ -19,7 +19,7 @@ async function readResponse(url, token, status, consume) {
       throw new Error(`Artifact request refused (${response.status})`);
     return await consume(response);
   } finally {
-    // A refused body can remain open after its headers arrive; it must not hold the attempt alive.
+    // Close a refused connection even when its server never finishes the response body.
     if (!response.bodyUsed) await response.body?.cancel();
   }
 }
@@ -41,6 +41,7 @@ export async function downloadCoverageBlobs({
   ) {
     throw new Error("Invalid coverage download inputs");
   }
+  apiUrl ||= "https://api.github.com";
   const prefix = pattern.slice(0, -1);
   const artifacts = [];
   for (let page = 1; ; page += 1) {
@@ -54,20 +55,18 @@ export async function downloadCoverageBlobs({
     if (listing.artifacts.length < 100) break;
   }
   if (artifacts.length === 0) throw new Error("No matching coverage artifacts");
-  const names = new Set();
-  const reports = artifacts.map((artifact) => {
+  const latest = new Map();
+  for (const artifact of artifacts) {
+    if (!Number.isSafeInteger(artifact.id) || artifact.id < 1)
+      throw new Error("Invalid coverage artifact id");
+    const previous = latest.get(artifact.name);
+    if (!previous || artifact.id > previous.id) latest.set(artifact.name, artifact);
+  }
+  const reports = [...latest.values()].map((artifact) => {
     const suffix = new RegExp(`^${prefix}([1-9]\\d*|stream)$`).exec(artifact.name)?.[1];
-    if (
-      !suffix ||
-      names.has(artifact.name) ||
-      artifact.expired ||
-      !Number.isSafeInteger(artifact.id) ||
-      artifact.id < 1 ||
-      !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? "")
-    ) {
+    if (!suffix || artifact.expired || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? "")) {
       throw new Error("Invalid coverage artifact metadata");
     }
-    names.add(artifact.name);
     return { ...artifact, reportName: `blob-${suffix}.json` };
   });
   for (const artifact of reports) {
