@@ -60,6 +60,10 @@ it.each(cases)("Privacy card: $locale / $theme", async ({ theme, locale }) => {
       await expect.poll(() => badge.hasAttribute("data-help-on")).toBe(true);
     }
     await expectNoA11yViolations(host);
+    await page.screenshot({
+      element: host,
+      path: `__screenshots__/look/a980-privacy-${locale}-${theme}-${state}.png`,
+    });
     host.remove();
   }
 });
