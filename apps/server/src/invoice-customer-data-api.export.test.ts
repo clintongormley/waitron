@@ -7,7 +7,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jsonFile } from "@waitron/module";
 import { hashSessionToken, registerModulePermissions } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { civilDateOf } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import {
   mountInvoiceCustomerDataApi,
@@ -15,7 +14,6 @@ import {
 } from "./invoice-customer-data-api.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
-import { venuePlace } from "./personal-data-export-api.js";
 import { invoiceCustomerReadme } from "./personal-data-readme.js";
 import {
   expectedJordiFile,
@@ -35,7 +33,11 @@ const suite = useVenueDb({
 
 const DOWNLOAD = "/management-api/invoice-customers/personal-data/export";
 const logger = vi.fn();
-const at = new Date();
+// 00:30 on 27 October in the venue's Europe/Madrid, still 26 October in UTC: a download dated
+// by any zone but the venue's gets the wrong day. Nothing on the download path compares this
+// time with the records' times.
+const at = new Date("2026-10-26T23:30:00Z");
+const VENUE_DATE = "2026-10-27";
 
 function ask(taxId: string, patch: Partial<InvoiceCustomerDataDeps> = {}) {
   const app = new Hono();
@@ -78,12 +80,6 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
   }
 }
 
-const venueDate = async () =>
-  civilDateOf(
-    at,
-    (await suite.db.withWriteLock(() => venuePlace(suite.db, fixture.venue.cfg.nodeId))).timeZone,
-  );
-
 beforeAll(() => {
   registerModulePermissions(ALL_MODULE_PERMISSIONS);
 });
@@ -97,9 +93,8 @@ describe("the invoice customer download, end to end", () => {
     const response = await ask("ES 12345678 z");
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/zip");
-    const date = await venueDate();
     expect(response.headers.get("content-disposition")).toBe(
-      `attachment; filename="jordi-puig-electrician-${date}.zip"`,
+      `attachment; filename="jordi-puig-electrician-${VENUE_DATE}.zip"`,
     );
     const files = await unzipped(response);
     expect(Object.keys(files).sort()).toEqual(
@@ -120,7 +115,7 @@ describe("the invoice customer download, end to end", () => {
         language: "es",
         venue: "Tarjetas SL",
         customer: "Jordi Puig Electrician",
-        date,
+        date: VENUE_DATE,
         anyTaxRecord: expected.invoices.some((invoice) => invoice.taxRecord),
         anyEmail: expected.invoices.some((invoice) => invoice.emails.length > 0),
       }),
@@ -151,9 +146,10 @@ describe("the invoice customer download, end to end", () => {
     expect(response.status).toBe(500);
     expect(response.headers.get("content-disposition")).toBeNull();
     expect(await response.json()).toEqual({ error: { code: "server.internal" } });
-    expect(logger).toHaveBeenCalledWith("error", "invoice_customer.pdf_failed", {
-      saleId: fixture.sales.j2,
-    });
+    expect(logger.mock.calls).toEqual([
+      ["error", "invoice_customer.pdf_failed", { saleId: fixture.sales.j2 }],
+      ["error", "personal_data.failed", { errorCode: "unknown", requestId: undefined }],
+    ]);
   });
 
   it("holds no staff member's id or name and no session secret, in any file's text", async () => {
@@ -177,7 +173,6 @@ describe("the invoice customer download, end to end", () => {
       token,
       hashSessionToken(token),
     ];
-    // Staff names as whole words: "Ana" is also the start of the customer "Ana Garcia".
     const staffNames = [/\bAna\b/u, /\bAdministradora\b/u, /\bSofía\b/u, /\bOtto\b/u, /\bMia\b/u];
     for (const text of texts) {
       for (const value of forbidden) expect(text).not.toContain(value);
