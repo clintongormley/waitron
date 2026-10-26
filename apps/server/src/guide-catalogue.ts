@@ -12,6 +12,7 @@ export const GUIDE_PAGES = [
   "aeat-certificate",
   "table-service",
   "staff",
+  "data-protection",
   "purchases",
   "till-notices",
   "box-status",

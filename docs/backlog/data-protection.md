@@ -202,10 +202,25 @@ by the answers):
     holds Maria's name and address.
   - **S3 built before full invoices exist** (decision 21): the alternative was to park S3 until
     they are switched on.
-- **S6** — English and Spanish help-guide templates: privacy notices, record of processing, breach
-  checklist.
 - **S1** — a dashboard setting for the address of the venue's own privacy-notice page, replacing an
   environment setting a box cannot set. Adds a migration.
+  The help guide's data-protection page (S6, `apps/server/src/guide/<language>/data-protection.md`)
+  has no dashboard entry point of its own: S1a's setting gets a "?" to
+  `data-protection#staff-notice`, and S1b updates that page's `staff-notice` and `full-notice`
+  sections once the setting exists.
+- **Reset login resets nothing within a minute of an earlier invitation** (found while planning S6;
+  confirmed on 2026-10-26 by a throwaway route test: `/invitation`, refused with 409, then
+  `/reset-login` answered `200 {"invitationSent":false}`, the person still active, the PIN hash
+  unchanged and no email sent). The route checks the invitation cooldown before it resets anything
+  (`apps/server/src/management-api.ts`, the `reset-login` route: `acceptInvitation(personId)` returns
+  early with `invitationSent: false`), and the cooldown is 60 seconds per person
+  (`apps/server/src/account-rate-limit.ts`). So a press within a minute of an invitation, a reset or
+  **Enable and send invitation** for the same person leaves the PIN, password, two-factor secret, passkeys, recovery codes, Google link and
+  open sign-ins in place, which matters when the reset answers a stolen account (the guide's breach
+  section, which for now tells an admin to choose it again after a minute). Next action: a failing
+  route test first, then reset before the cooldown, and drop the guide's workaround sentences, in
+  the stolen-phone and misused-account paragraphs of both languages, and the "or it changes
+  nothing" pointer in each language's Users guide (`staff.md`, `#account-access`).
 - **S9** — erase a booking guest's details on request. Waits for the privacy specialist (A664 G3).
 - **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
   migration; waits for the labour and privacy specialists (A664 G2, G3).

@@ -12,6 +12,7 @@ import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
 import { TILL_NOTICES_GUIDE_TITLE } from "./i18n/till-notices-guide.js";
 import { BACKUP_RECOVERY_GUIDE_TITLE } from "./i18n/backup-recovery-guide.js";
 import { BOX_STATUS_GUIDE_TITLE } from "./i18n/box-status-guide.js";
+import { DATA_PROTECTION_GUIDE_TITLE } from "./i18n/data-protection-guide.js";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
 type GuidePage = (typeof GUIDE_PAGES)[number];
@@ -77,6 +78,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       "aeat-certificate": GUIDE_CERTIFICATE_TITLE.en,
       "table-service": TABLE_SERVICE_GUIDE_TITLE.en,
       staff: STAFF_GUIDE_TITLE.en,
+      "data-protection": DATA_PROTECTION_GUIDE_TITLE.en,
       purchases: PURCHASES_GUIDE_TITLE.en,
       "till-notices": TILL_NOTICES_GUIDE_TITLE.en,
       "box-status": BOX_STATUS_GUIDE_TITLE.en,
@@ -98,6 +100,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
       "aeat-certificate": GUIDE_CERTIFICATE_TITLE.es,
       "table-service": TABLE_SERVICE_GUIDE_TITLE.es,
       staff: STAFF_GUIDE_TITLE.es,
+      "data-protection": DATA_PROTECTION_GUIDE_TITLE.es,
       purchases: PURCHASES_GUIDE_TITLE.es,
       "till-notices": TILL_NOTICES_GUIDE_TITLE.es,
       "box-status": BOX_STATUS_GUIDE_TITLE.es,

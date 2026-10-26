@@ -13,9 +13,10 @@ to roles and account status.
 
 As an admin, you can add a person and send their invitation, resend an invitation, reset their
 PIN or login, and disable or re-enable their account. Resetting a PIN clears it; the person
-chooses its replacement. Resetting a login clears their credentials and sends a new invitation.
-Disabling an account also deletes the person's PIN, password, passkeys, two-factor settings and
-Google link. Re-enabling it sends a new invitation. Managers do not see these actions.
+chooses its replacement. Resetting a login clears their credentials and sends a new invitation if
+email is set up; for when Waitron refuses it or it changes nothing, see
+[Common losses](data-protection.md#breach-losses). Disabling an account also deletes the person's
+PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. Managers do not see these actions.
 
 If Waitron cannot verify your passkey, you can retry or choose **Use your password** to sign in.
 On the password screen, **I’ve forgotten my password** requests an email with a link to choose
@@ -51,6 +52,8 @@ is disabled, open their row menu and choose **Download their data**. You get the
 person gets from **Copy of your data**, with its `README.txt` in the language the person chose,
 or the venue's language if they have not chosen one. Managers do not see this action. Waitron
 keeps no list of these requests, so note the request and your answer in the venue's own records.
+For the one-month answer time and the venue's other duties, see
+[Data protection](data-protection.md#who-does-what).
 
 ## Download an invoice customer's data {#invoice-customer-data}
 
@@ -62,7 +65,8 @@ data** to get a ZIP with a PDF copy of each invoice, an `invoices.json` file wit
 number and address on each and every address the box emailed it to or tried to, and a
 `README.txt` in the venue's language. Managers do not see this action. A booking holds no
 tax number, so this search does not find bookings. Waitron keeps no list of these requests, so
-note the request and your answer in the venue's own records.
+note the request and your answer in the venue's own records. For the one-month answer time and the
+venue's other duties, see [Data protection](data-protection.md#who-does-what).
 
 ## Delete a staff role {#delete-staff-role}
 

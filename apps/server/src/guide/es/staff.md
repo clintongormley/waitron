@@ -14,8 +14,10 @@ se aplica al rol y al estado de la cuenta.
 Como administrador, puedes añadir personas y enviar su invitación, reenviar una invitación,
 restablecer el PIN o el acceso, y deshabilitar o volver a habilitar cuentas. Restablecer el PIN
 lo borra; la persona elige el nuevo. Restablecer el acceso borra sus credenciales y envía una
-nueva invitación. Deshabilitar una cuenta también borra su PIN, contraseña, llaves de acceso,
-verificación en dos pasos y vínculo con Google. Al volver a habilitarla se envía una nueva
+nueva invitación si el correo está configurado; si Waitron no lo permite o no cambia nada,
+consulta [Pérdidas habituales](data-protection.md#breach-losses). Deshabilitar una cuenta también
+borra su PIN, contraseña, llaves de acceso, verificación en dos pasos, códigos de recuperación y
+vínculo con Google. Al volver a habilitarla se envía una nueva
 invitación. Los gerentes no ven estas acciones.
 
 Si Waitron no puede verificar tu passkey, puedes reintentarlo o elegir **Usar tu contraseña**
@@ -56,6 +58,8 @@ menú de su fila y elige **Descargar sus datos**. Recibes los mismos archivos qu
 obtiene con **Copia de tus datos**, con su `README.txt` en el idioma que eligió la persona o, si
 no eligió ninguno, en el idioma del local. Los gerentes no ven esta acción. Waitron no guarda una
 lista de estas solicitudes, así que anota la solicitud y tu respuesta en los registros del local.
+El plazo de un mes para responder y las demás obligaciones del local están en
+[Protección de datos](data-protection.md#who-does-what).
 
 ## Descargar los datos de un cliente de factura {#invoice-customer-data}
 
@@ -68,7 +72,8 @@ pulsa **Descargar sus datos** para obtener un ZIP con una copia en PDF de cada f
 a las que la caja la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
 gerentes no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
 Waitron no guarda una lista de estas solicitudes, así que anota la solicitud y tu respuesta en los
-registros del local.
+registros del local. El plazo de un mes para responder y las demás obligaciones del local están en
+[Protección de datos](data-protection.md#who-does-what).
 
 ## Eliminar un rol de personal {#delete-staff-role}
 

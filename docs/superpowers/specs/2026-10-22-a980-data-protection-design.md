@@ -229,6 +229,13 @@ email's part before the `@` and its domain name keep their first and last charac
 so
 `marta.soler@example.test` logs as `m***r@e***e.test` (the S10 plan's decision 14)._
 
+_2026-10-26: S6 ([its plan](../plans/2026-10-26-a980-s6-guide-templates.md), Task 0). Row d3's
+"none stored" is too broad: a clock check's confirmation keeps the LAN address of each device that
+took part, in `clock_confirmations.proof` (`packages/fiscal-verifactu/src/clock-checks.ts`,
+`storedWitnesses`). No sign-in or session records an address; that confirmation is the one place
+an address taken from a request's connection is kept, and a print agent reports its own address,
+which Printers shows._
+
 ### 2.4 Copies and routes off the box
 
 | Route | What goes | Who receives it | Protection today | Ref |
@@ -303,6 +310,9 @@ rights, plus "una dirección electrónica u otro medio que permita acceder de fo
 inmediata a la restante información" (R23). The full notice carries every item of Article 13
 (R10). The drafts below use a fictional venue, **Bar Ejemplo S.L.**; the venue's adviser checks
 them. In the product they are templates in the help guide, in English and Spanish (S6, O10 (b)).
+
+_2026-10-26: S6's finish review changed the invoice and booking templates; the help guide's
+data-protection page holds the current text._
 
 **Staff** (shown today in invitation emails, account setup and the profile page when a link is
 configured, `apps/server/src/account-email.ts:132`, `apps/dashboard/src/screens/login-screen.ts:1129-1138`):
@@ -572,6 +582,14 @@ database in the bucket (`packages/stream/src/kit.ts:8-13`), and a leaked **confi
 holds every staff member's contact details and pay rate (§2.4 r4), so each asks the manager to
 change the passphrase or bucket keys and to weigh notification.
 
+_2026-10-26: S6 ([its plan](../plans/2026-10-26-a980-s6-guide-templates.md), Task 0) corrects two
+points above. No screen shows who was signed in, on which device, from when to when: **Devices**
+shows each device's **Last seen**, and a person's sign-ins per device are only in `sign-in.json`
+inside their data copy. And the Devices row actions are **Disable** and **Delete**, not "Revoke":
+Disable ends the device's open till sign-ins and stops it connecting but keeps its token hash, so it
+can ask to rejoin; Delete also clears the token hash. The guide's breach section orders the steps
+for a stolen device on that basis._
+
 ### 4.6 Record of processing
 
 The under-250 exemption does not apply where the processing "pueda entrañar un riesgo para los
@@ -682,6 +700,9 @@ or writes lives in translation files with English and Spanish: the dashboard's
 `apps/server/src/i18n/`, which exists now (`box-emails.ts`, `staff.ts` and others); Spain-only
 legal wording goes in `packages/country-es` with English beside it. A slice that changes a screen
 updates its guide page in English and Spanish (CLAUDE.md §3).
+
+_2026-10-26: S6's templates, record of processing and breach checklist are the guide page
+`apps/server/src/guide/<language>/data-protection.md`, served at `/help/<language>/data-protection`._
 
 | Slice | What | Migration | Fiscal | Permission | Tests | Gate |
 | --- | --- | --- | --- | --- | --- | --- |
