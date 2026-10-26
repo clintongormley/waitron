@@ -445,6 +445,14 @@ it("reads a folder that still holds anything outside the keep set as not emptied
   expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(false);
 });
 
+it("reads a recovery folder holding no records as not emptied", async () => {
+  const f = await abandoned();
+  await provision.emptyAbandonedBackupRecovery(f.anchor, recoveryId);
+  for (const name of await readdir(f.base))
+    if (/^\d+\.json$/.test(name)) await rm(join(f.base, name));
+  expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(false);
+});
+
 it("throws a failure to read the venue folder's emptied recovery folder unchanged, and keeps that folder", async () => {
   const f = await abandoned();
   const folder = dirname(venuePointer(f));
