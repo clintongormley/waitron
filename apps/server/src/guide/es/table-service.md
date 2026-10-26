@@ -138,6 +138,17 @@ Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como c
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
+## Dar a una mesa un nombre corto {#short-names}
+
+La caja muestra el nombre corto de una mesa donde hay poco espacio, como la barra Listo. En el
+**Plano de sala** del panel, cada mesa tiene un **Nombre corto** debajo de su **Nombre**, que se
+rellena a partir del nombre: «T1» para «Terraza 1», «Ven» para «Ventana», y un nombre de cuatro
+caracteres o menos tal cual. Sigue al nombre hasta que escribes uno propio, de hasta cinco
+caracteres, que no puede llevar «+» porque la caja lo usa para las mesas unidas. Dos mesas del
+local no pueden compartir un nombre corto, aunque cambien las mayúsculas: si Guardar dice «Terraza 1
+ya usa T1», escribe otro, como «Tb1». **Añadir mesas** muestra los nombres cortos que dará, y deja
+escribirlos cuando eliges nombres personalizados; **Añadir mesa unida** pide uno.
+
 ## Ver qué mesas tienen comida lista {#ready-bar}
 
 Cuando la cocina tiene platos listos, quieres saber a qué mesas llevarlos sin tener que ir a mirar.
