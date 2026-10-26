@@ -199,7 +199,18 @@ describe("till-floor-screen: a table's due service step", () => {
         nextReservation: { time: "21:30" },
         signals: [
           dueStepSignal("Dessert?"),
-          { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+          {
+            kind: "ready",
+            byStation: [
+              {
+                stationId: "bar",
+                stationName: "Bar",
+                count: 2,
+                oldestReadyAt: null,
+                readyWarningAfterMinutes: 3,
+              },
+            ],
+          },
           { kind: "bill_requested", requestedAt: inMinutes(-1) },
         ],
       }),

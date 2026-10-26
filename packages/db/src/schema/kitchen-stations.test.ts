@@ -164,6 +164,38 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     expect(engineErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
   });
 
+  it("a station row given no ready warning holds 3, and the database holds it in no order with the late flags", async () => {
+    const id = await seedStation(LOCATION_A, "Ready warning station");
+    const readyWarning = async () =>
+      (
+        await inTx((tx) =>
+          tx
+            .select({
+              readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes,
+              forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+            })
+            .from(kitchenStations)
+            .where(eq(kitchenStations.id, id)),
+        )
+      )[0];
+    expect(await readyWarning()).toEqual({
+      readyWarningAfterMinutes: 3,
+      forgottenAfterMinutes: 15,
+    });
+    for (const minutes of [20, 0]) {
+      await inTx((tx) =>
+        tx
+          .update(kitchenStations)
+          .set({ readyWarningAfterMinutes: minutes })
+          .where(eq(kitchenStations.id, id)),
+      );
+      expect(await readyWarning()).toEqual({
+        readyWarningAfterMinutes: minutes,
+        forgottenAfterMinutes: 15,
+      });
+    }
+  });
+
   it("rejects a SECOND default station per location (the WHERE is_default partial unique)", async () => {
     // A non-default sibling and a default at another location are both accepted, so the refusal is
     // the partial predicate and not a plain unique.

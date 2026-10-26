@@ -30,7 +30,7 @@ import {
   type BumpMode,
   type ChangesAfterSending,
   type StationColour,
-  type StationThresholds,
+  type StationTiming,
   type TicketGrouping,
 } from "@waitron/shared";
 import { stationColourChoices, type StationColourUser } from "./station-colour-choices.js";
@@ -49,7 +49,7 @@ export type StationEditorStation = {
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
   printerIds: readonly string[];
-} & StationThresholds;
+} & StationTiming;
 export interface StationEditorPrinter {
   id: string;
   name: string;
@@ -66,14 +66,20 @@ export type StationEditorSave = {
   printHeldWork?: boolean;
   bumpMode?: BumpMode;
   changesAfterSending?: ChangesAfterSending;
-} & Partial<StationThresholds>;
+} & Partial<StationTiming>;
 
-const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
+const TIMING_FIELDS = [
+  "warmAfterMinutes",
+  "overdueAfterMinutes",
+  "forgottenAfterMinutes",
+  "readyWarningAfterMinutes",
+] as const;
 type TimingField = (typeof TIMING_FIELDS)[number];
 const TIMING_LABELS = {
   warmAfterMinutes: "prep.health.warm",
   overdueAfterMinutes: "prep.health.overdue",
   forgottenAfterMinutes: "prep.health.forgotten",
+  readyWarningAfterMinutes: "prep.health.ready_warning",
 } as const;
 const isTimingField = (value: unknown): value is TimingField =>
   (TIMING_FIELDS as readonly unknown[]).includes(value);
@@ -127,15 +133,22 @@ const equal = (a: Draft, b: Draft) =>
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
-/** Each timing's own check, then the order. */
+export const isWholeMinutes = (value: number) =>
+  Number.isInteger(value) && value >= 1 && value <= 2_147_483_647;
+
+const timingMessage = (field: TimingField) =>
+  field === "readyWarningAfterMinutes"
+    ? t("prep.ready_warning_invalid")
+    : t("prep.threshold_invalid");
+
+/** Each timing's own check, then the order of the three late flags; the ready warning has none. */
 function timingErrors(draft: Draft): Partial<Record<TimingField, string>> {
   const errors: Partial<Record<TimingField, string>> = {};
   const minutes: Partial<Record<TimingField, number>> = {};
   for (const field of TIMING_FIELDS) {
     const text = draft[field].trim();
     const value = Number(text);
-    if (text === "" || !(Number.isInteger(value) && value >= 1 && value <= 2_147_483_647))
-      errors[field] = t("prep.threshold_invalid");
+    if (text === "" || !isWholeMinutes(value)) errors[field] = timingMessage(field);
     else minutes[field] = value;
   }
   const {
@@ -197,7 +210,8 @@ export function stationRefusalField(refusal: Refusal | undefined): Field | undef
 }
 
 function refusalText(refusal: Refusal): string {
-  switch (stationRefusalField(refusal)) {
+  const field = stationRefusalField(refusal);
+  switch (field) {
     case "name":
       return t("prep.name_taken");
     case "colour":
@@ -211,7 +225,7 @@ function refusalText(refusal: Refusal): string {
         ? `${t("prep.save_error")} ${t("prep.station_not_found")}`
         : t("prep.save_error");
     default:
-      return t("prep.threshold_invalid");
+      return timingMessage(field);
   }
 }
 
@@ -242,7 +256,7 @@ function changesOptions() {
   return CHANGES_AFTER_SENDING.map((value) => ({ value, label: t(CHANGES_LABELS[value]) }));
 }
 
-function timingDraft(station: StationThresholds) {
+function timingDraft(station: StationTiming) {
   return Object.fromEntries(TIMING_FIELDS.map((field) => [field, String(station[field])])) as {
     [K in TimingField]: string;
   };
@@ -288,7 +302,7 @@ export class StationEditor extends LitElement {
       }
       .timing-fields {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--wt-space-2);
         margin-block: var(--wt-space-2);
       }
@@ -324,6 +338,7 @@ export class StationEditor extends LitElement {
     warmAfterMinutes: "",
     overdueAfterMinutes: "",
     forgottenAfterMinutes: "",
+    readyWarningAfterMinutes: "",
   };
   @state() private attempted = false;
   /** A chosen printer left the printer list, so the draft lost it. */

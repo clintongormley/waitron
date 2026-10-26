@@ -26,10 +26,12 @@ interface KitchenLine {
   stationName: string;
   state: string;
   queuedAt: string;
+  readyAt: string | null;
   units: number;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
+  readyWarningAfterMinutes: number;
 }
 
 /** The fired kitchen lines of these bills still to serve, excluding items made at the till. */
@@ -46,6 +48,7 @@ async function readKitchenLines(
       stationName: kitchenStations.name,
       state: ticketItems.state,
       queuedAt: ticketItems.queuedAt,
+      readyAt: ticketItems.readyAt,
       quantity: firedQuantity,
       servedQuantity: workingOrderLines.servedQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -56,6 +59,7 @@ async function readKitchenLines(
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -105,18 +109,24 @@ function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSi
       stationId: line.stationId,
       stationName: line.stationName,
       count: 0,
+      oldestReadyAt: null,
+      readyWarningAfterMinutes: line.readyWarningAfterMinutes,
     };
     station.count += line.units;
+    if (
+      line.readyAt !== null &&
+      (station.oldestReadyAt === null ||
+        Date.parse(line.readyAt) < Date.parse(station.oldestReadyAt))
+    ) {
+      station.oldestReadyAt = line.readyAt;
+    }
     ready.set(line.stationId, station);
   }
   if (ready.size > 0) {
-    const byStation = [...ready.values()]
-      .sort(
-        (a, b) =>
-          compareStationNames(a.stationName, b.stationName) ||
-          a.stationId.localeCompare(b.stationId),
-      )
-      .map(({ stationId, stationName, count }) => ({ stationId, stationName, count }));
+    const byStation = [...ready.values()].sort(
+      (a, b) =>
+        compareStationNames(a.stationName, b.stationName) || a.stationId.localeCompare(b.stationId),
+    );
     signals.push({ kind: "ready", byStation });
   }
   const band = worstBand(lines.map((line) => classifyBand(Date.parse(line.queuedAt), nowMs, line)));

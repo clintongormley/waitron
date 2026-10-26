@@ -42,6 +42,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       warmAfterMinutes: 3,
       overdueAfterMinutes: 5,
       forgottenAfterMinutes: 15,
+      readyWarningAfterMinutes: 3,
     };
     el.printers = [
       { id: "epson", name: "Epson" },
@@ -82,7 +83,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       };
       await el.updateComplete;
       expect(timing("overdueAfterMinutes").error).toBe(
-        "Use whole minutes with warm < overdue < forgotten.",
+        "Use whole minutes with waiting < overdue < forgotten.",
       );
     }
     if (state === "timing invalid") {
@@ -93,7 +94,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
       await el.updateComplete;
       expect(timing("warmAfterMinutes").error).toBe(
-        "Use whole minutes with warm < overdue < forgotten.",
+        "Use whole minutes with waiting < overdue < forgotten.",
       );
     }
     if (state === "colour refused") {
@@ -129,7 +130,12 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
         )!.checked,
       ).toBe(!printing);
     }
-    for (const name of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"]) {
+    for (const name of [
+      "warmAfterMinutes",
+      "overdueAfterMinutes",
+      "forgottenAfterMinutes",
+      "readyWarningAfterMinutes",
+    ]) {
       await timing(name).updateComplete;
       const root = timing(name).shadowRoot!;
       const input = root.querySelector("input")!;

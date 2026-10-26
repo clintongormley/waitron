@@ -47,6 +47,7 @@ export const stationView: PrepStationsView = {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      readyWarningAfterMinutes: 3,
       showsRestOfOrder: false,
       printMovedSlips: true,
       ticketGrouping: "combined",

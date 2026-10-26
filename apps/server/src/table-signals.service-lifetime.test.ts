@@ -136,10 +136,15 @@ async function fixture({
         .where(eq(ticketItems.workingOrderLineId, line.id));
     }
   });
-  return order;
+  return { ...order, at };
 }
 
-async function expectedSignals(count: number, state: "ready" | "preparing", extras = false) {
+async function expectedSignals(
+  count: number,
+  state: "ready" | "preparing",
+  oldestReadyAt: string | null = null,
+  extras = false,
+) {
   if (count === 0) return [];
   const stations = await inTx(venue, (tx) =>
     tx.select({ id: kitchenStations.id, name: kitchenStations.name }).from(kitchenStations),
@@ -148,6 +153,8 @@ async function expectedSignals(count: number, state: "ready" | "preparing", extr
     stationId: id,
     stationName: stations.find((station) => station.id === id)!.name,
     count,
+    oldestReadyAt,
+    readyWarningAfterMinutes: 3,
   }));
   byStation.sort((a, b) => a.stationName.localeCompare(b.stationName));
   return [
@@ -174,7 +181,7 @@ describe("A773 no dispatch state — remaining kitchen signals", () => {
   ])("counts only $name still in service", async ({ count, ...options }) => {
     const order = await fixture(options);
     const before = await snapshot(order.billId);
-    const expected = await expectedSignals(count, "ready");
+    const expected = await expectedSignals(count, "ready", order.at);
 
     expect(await signalsOf(order)).toEqual({ bill: expected, table: expected });
     expect(await snapshot(order.billId)).toEqual(before);
@@ -198,7 +205,7 @@ describe("A773 no dispatch state — remaining kitchen signals", () => {
     async ({ count, ...options }) => {
       const order = await fixture({ ...options, extras: true });
       const before = await snapshot(order.billId);
-      const expected = await expectedSignals(count, "ready", true);
+      const expected = await expectedSignals(count, "ready", order.at, true);
 
       expect(before.lines).toHaveLength(2);
       expect(before.items).toHaveLength(2);

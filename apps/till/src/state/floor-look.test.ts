@@ -407,7 +407,15 @@ describe("mapLook", () => {
   it("reads each count from the member that has it, past signals and members that do not", () => {
     const station: TableSignal = {
       kind: "ready",
-      byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }],
+      byStation: [
+        {
+          stationId: "bar",
+          stationName: "Bar",
+          count: 2,
+          oldestReadyAt: null,
+          readyWarningAfterMinutes: 3,
+        },
+      ],
     };
     expect(mapLook([table({ signals: [wait("warm"), station] })], now).cue).toEqual({
       icon: "floor-ready",
@@ -434,8 +442,20 @@ describe("mapLook", () => {
     const ready: TableSignal = {
       kind: "ready",
       byStation: [
-        { stationId: "bar", stationName: "Bar", count: 1 },
-        { stationId: "grill", stationName: "Grill", count: 2 },
+        {
+          stationId: "bar",
+          stationName: "Bar",
+          count: 1,
+          oldestReadyAt: null,
+          readyWarningAfterMinutes: 3,
+        },
+        {
+          stationId: "grill",
+          stationName: "Grill",
+          count: 2,
+          oldestReadyAt: null,
+          readyWarningAfterMinutes: 3,
+        },
       ],
     };
     expect(mapLook([table({ signals: [ready] })], now).cue!.text).toBe("3");

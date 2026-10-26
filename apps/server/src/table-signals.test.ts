@@ -33,6 +33,7 @@ import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
+import { readBillSignals } from "./table-signals.js";
 import type { Logger } from "./logger.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 
@@ -123,6 +124,32 @@ async function queuedAgo(v: PartyVenue, billId: string, minutes: number): Promis
   );
 }
 
+/** Stores `iso` as the ready time of the bill's ticket items on line `lineNo`. */
+async function setReadyAt(
+  v: PartyVenue,
+  billId: string,
+  lineNo: number,
+  iso: string | null,
+): Promise<void> {
+  const line = await lineId(v, billId, lineNo);
+  await inTx(v, (tx) =>
+    tx.update(ticketItems).set({ readyAt: iso }).where(eq(ticketItems.workingOrderLineId, line)),
+  );
+}
+
+/** The earliest ready time stored on the bill's ticket items for the lines named `name`. */
+async function readyAtOf(v: PartyVenue, billId: string, name: string): Promise<string> {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ at: sql<string>`min(${ticketItems.readyAt})` })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(and(eq(ticketItems.workingOrderId, billId), eq(workingOrderLines.name, name))),
+  );
+  expect(row!.at).toEqual(expect.any(String));
+  return row!.at;
+}
+
 async function holdGroup(v: PartyVenue, partyId: string, ...names: string[]): Promise<string> {
   const placed = await inTx(v, (tx) =>
     placeGroups(tx, v.cfg, partyId, {
@@ -199,8 +226,20 @@ describe("the floor's attention signals", () => {
       {
         kind: "ready",
         byStation: [
-          { stationId: bar, stationName: "Barra", count: 1 },
-          { stationId: kitchen, stationName: "Cocina", count: 1 },
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: await readyAtOf(v, seated.tabId, "Caña"),
+            readyWarningAfterMinutes: 3,
+          },
+          {
+            stationId: kitchen,
+            stationName: "Cocina",
+            count: 1,
+            oldestReadyAt: await readyAtOf(v, seated.tabId, "Burger"),
+            readyWarningAfterMinutes: 3,
+          },
         ],
       },
     ]);
@@ -285,7 +324,18 @@ describe("the floor's attention signals", () => {
 
     expect((await floorRow(v, mesa2)).signals).toEqual([
       { kind: "service_step", steps: [{ stepId: bread, name: "Bread?", dueAt: doneAt }] },
-      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 1 }] },
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: await readyAtOf(v, tabId, "Caña"),
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
     ]);
   });
 
@@ -318,9 +368,21 @@ describe("the floor's attention signals", () => {
     await inTx(v, (tx) => snoozeReminder(tx, v.cfg, partyId, mains, 5, snooze));
     await makeReady(v, tabId, "Caña");
     const requestedAt = await askForBill(v, partyId);
+    const barReady = {
+      kind: "ready",
+      byStation: [
+        {
+          stationId: bar,
+          stationName: "Barra",
+          count: 3,
+          oldestReadyAt: await readyAtOf(v, tabId, "Caña"),
+          readyWarningAfterMinutes: 3,
+        },
+      ],
+    };
 
     expect((await floorRow(v, mesa2)).signals).toEqual([
-      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 3 }] },
+      barReady,
       { kind: "held", count: 1 },
       { kind: "release_due", groupId: mains, dueAt: await remindAtOf(v, mains) },
       { kind: "bill_requested", requestedAt },
@@ -331,9 +393,7 @@ describe("the floor's attention signals", () => {
     await pay(v, tabId, "21.00");
 
     // Paid, but the drinks still wait at the bar.
-    expect((await floorRow(v, mesa2)).signals).toEqual([
-      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 3 }] },
-    ]);
+    expect((await floorRow(v, mesa2)).signals).toEqual([barReady]);
     expect(await billRequestedAt(v, partyId)).toBeNull();
 
     for (const lineNo of [1, 2, 3]) {
@@ -366,18 +426,44 @@ describe("the floor's attention signals", () => {
     ] as const) {
       await makeReady(v, billId, name);
     }
+    const twoBar = await readyAtOf(v, two.tabId, "Caña");
+    const twoKitchen = await readyAtOf(v, two.tabId, "Burger");
+    const eightBar = await readyAtOf(v, eight.tabId, "Caña");
 
     expect((await floorRow(v, mesa2)).signals).toEqual([
       {
         kind: "ready",
         byStation: [
-          { stationId: bar, stationName: "Barra", count: 3 },
-          { stationId: kitchen, stationName: "Cocina", count: 1 },
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 3,
+            oldestReadyAt: twoBar,
+            readyWarningAfterMinutes: 3,
+          },
+          {
+            stationId: kitchen,
+            stationName: "Cocina",
+            count: 1,
+            oldestReadyAt: twoKitchen,
+            readyWarningAfterMinutes: 3,
+          },
         ],
       },
     ]);
     expect((await floorRow(v, mesa8)).signals).toEqual([
-      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 1 }] },
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: eightBar,
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
     ]);
 
     // One of the two cañas on line 1 goes out.
@@ -390,8 +476,20 @@ describe("the floor's attention signals", () => {
       {
         kind: "ready",
         byStation: [
-          { stationId: bar, stationName: "Barra", count: 2 },
-          { stationId: kitchen, stationName: "Cocina", count: 1 },
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 2,
+            oldestReadyAt: twoBar,
+            readyWarningAfterMinutes: 3,
+          },
+          {
+            stationId: kitchen,
+            stationName: "Cocina",
+            count: 1,
+            oldestReadyAt: twoKitchen,
+            readyWarningAfterMinutes: 3,
+          },
         ],
       },
     ]);
@@ -400,10 +498,32 @@ describe("the floor's attention signals", () => {
     await inTx(v, (tx) => serveLine(tx, v.cfg, two.tabId, 2));
 
     expect((await floorRow(v, mesa2)).signals).toEqual([
-      { kind: "ready", byStation: [{ stationId: kitchen, stationName: "Cocina", count: 1 }] },
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: kitchen,
+            stationName: "Cocina",
+            count: 1,
+            oldestReadyAt: twoKitchen,
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
     ]);
     expect((await floorRow(v, mesa8)).signals).toEqual([
-      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 1 }] },
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: eightBar,
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
     ]);
   });
 
@@ -442,8 +562,20 @@ describe("the floor's attention signals", () => {
       {
         kind: "ready",
         byStation: [
-          { stationId: bar, stationName: "Barra", count: 1 },
-          { stationId: kitchen, stationName: "Cocina", count: 1 },
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: await readyAtOf(v, tabId, "Caña"),
+            readyWarningAfterMinutes: 3,
+          },
+          {
+            stationId: kitchen,
+            stationName: "Cocina",
+            count: 1,
+            oldestReadyAt: await readyAtOf(v, tabId, "Pulpo"),
+            readyWarningAfterMinutes: 3,
+          },
         ],
       },
     ]);
@@ -763,7 +895,18 @@ describe("the floor's attention signals", () => {
     expect((await billsOn(v, from.partyId)).map((bill) => bill.status)).toEqual(["settled"]);
 
     const expected = [
-      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 1 }] },
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: await readyAtOf(v, from.tabId, "Caña"),
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
     ];
     expect((await floorRow(v, mesa2)).signals).toEqual(expected);
     expect((await floorRow(v, mesa8)).signals).toEqual(expected);
@@ -813,8 +956,11 @@ describe("the floor's attention signals", () => {
     const bar = await withBar(v);
     await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
     const lucia = await person(v, "Lucía");
+    const tabs = new Map<string, string>();
     const seatBusyTable = async (label: string) => {
-      const { partyId, tabId } = await seat(v, await v.table(label));
+      const tableId = await v.table(label);
+      const { partyId, tabId } = await seat(v, tableId);
+      tabs.set(tableId, tabId);
       await order(v, tabId, "Caña");
       await makeReady(v, tabId, "Caña");
       await holdGroup(v, partyId, "Burger");
@@ -857,9 +1003,169 @@ describe("the floor's attention signals", () => {
     }
     expect(three.rows[0]!.signals[1]).toEqual({
       kind: "ready",
-      byStation: [{ stationId: bar, stationName: "Barra", count: 1 }],
+      byStation: [
+        {
+          stationId: bar,
+          stationName: "Barra",
+          count: 1,
+          oldestReadyAt: await readyAtOf(v, tabs.get(three.rows[0]!.id)!, "Caña"),
+          readyWarningAfterMinutes: 3,
+        },
+      ],
     });
     expect(three.count).toBe(one.count);
+  });
+});
+
+describe("each station's oldest ready time", () => {
+  const at = (minute: string) => `2026-10-26T20:${minute}:00.000Z`;
+
+  /**
+   * Mesa 2 with a caña line per quantity, stamped in turn with `minutes`, and a burger stamped
+   * 20:03, all made ready.
+   */
+  async function readyTable(
+    quantities: readonly string[],
+    minutes: readonly string[] = ["04", "01"],
+  ) {
+    const v = await setupPartyVenue(suite.db);
+    const bar = await inTx(v, async (tx) => {
+      const { id } = await createStation(tx, v.cfg, {
+        name: "Barra",
+        thresholds: { readyWarningAfterMinutes: 6 },
+      });
+      await routeProductTo(tx, v.cfg, v.productId("Caña"), id);
+      return id;
+    });
+    const kitchen = await cocina(v);
+    const mesa2 = await v.table("Mesa 2");
+    const seated = await seat(v, mesa2);
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, seated.tabId, [
+        ...quantities.map((quantity) => ({ menuItemId: v.item("Caña"), quantity })),
+        { menuItemId: v.item("Burger"), quantity: "1" },
+      ]),
+    );
+    await makeReady(v, seated.tabId, "Caña");
+    await makeReady(v, seated.tabId, "Burger");
+    for (const [index, minute] of minutes.entries()) {
+      await setReadyAt(v, seated.tabId, index + 1, at(minute));
+    }
+    await setReadyAt(v, seated.tabId, quantities.length + 1, at("03"));
+    return { v, bar, kitchen, mesa2, ...seated };
+  }
+
+  it("each station's ready entry carries its oldest ready time and its own warning minutes", async () => {
+    const { v, bar, kitchen, mesa2 } = await readyTable(["1", "1"]);
+
+    expect((await floorRow(v, mesa2)).signals).toEqual([
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 2,
+            oldestReadyAt: at("01"),
+            readyWarningAfterMinutes: 6,
+          },
+          {
+            stationId: kitchen,
+            stationName: "Cocina",
+            count: 1,
+            oldestReadyAt: at("03"),
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it.each([
+    ["first", ["01", "04", "05"]],
+    ["between", ["04", "01", "05"]],
+    ["last", ["04", "05", "01"]],
+  ])(
+    "the oldest ready time is the earliest stamp when its line comes %s",
+    async (_place, minutes) => {
+      const { v, bar, mesa2 } = await readyTable(["1", "1", "1"], minutes);
+      const barEntry = (await floorRow(v, mesa2)).signals
+        .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
+        .find((entry) => entry.stationId === bar);
+
+      expect(barEntry).toMatchObject({ count: 3, oldestReadyAt: at("01") });
+    },
+  );
+
+  it("serving the oldest ready dish moves the oldest ready time to the next", async () => {
+    const { v, bar, mesa2, partyId, tabId } = await readyTable(["2", "1"]);
+    const barEntry = async () =>
+      (await floorRow(v, mesa2)).signals
+        .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
+        .find((entry) => entry.stationId === bar);
+
+    await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 2));
+    expect(await barEntry()).toMatchObject({ count: 2, oldestReadyAt: at("04") });
+
+    const line1 = await lineId(v, tabId, 1);
+    const serve = await command(v, partyId);
+    await inTx(v, (tx) =>
+      markServed(tx, v.cfg, partyId, [{ lineId: line1, quantity: "1" }], serve),
+    );
+    expect(await barEntry()).toMatchObject({ count: 1, oldestReadyAt: at("04") });
+  });
+
+  it("a ready dish with no stored ready time gives its station no oldest ready time", async () => {
+    const { v, bar, kitchen, mesa2, tabId } = await readyTable(["1", "1"]);
+    await setReadyAt(v, tabId, 3, null);
+    await setReadyAt(v, tabId, 2, null);
+
+    expect((await floorRow(v, mesa2)).signals).toEqual([
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 2,
+            oldestReadyAt: at("04"),
+            readyWarningAfterMinutes: 6,
+          },
+          {
+            stationId: kitchen,
+            stationName: "Cocina",
+            count: 1,
+            oldestReadyAt: null,
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("a table bill's ready signal read through readBillSignals carries the same two facts", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const bar = await withBar(v);
+    const { tabId } = await seat(v, await v.table("Mesa 2"));
+    await order(v, tabId, "Caña");
+    await makeReady(v, tabId, "Caña");
+    await setReadyAt(v, tabId, 1, at("02"));
+
+    const signals = await inTx(v, (tx) => readBillSignals(tx, [tabId], Date.now()));
+    expect(signals.get(tabId)).toEqual([
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: at("02"),
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
+    ]);
   });
 });
 
@@ -884,7 +1190,18 @@ describe("the counter's tab list", () => {
 
     expect(ana).toMatchObject({ label: "Ana", partyId: null });
     expect(ana.signals).toEqual([
-      { kind: "ready", byStation: [{ stationId: bar, stationName: "Barra", count: 1 }] },
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: bar,
+            stationName: "Barra",
+            count: 1,
+            oldestReadyAt: await readyAtOf(v, counterBill, "Caña"),
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
       { kind: "long_wait", band: "forgotten" },
     ]);
     expect(listed.find((row) => row.id === tabId)!.signals).toEqual([]);

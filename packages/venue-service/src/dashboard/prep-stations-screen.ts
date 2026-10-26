@@ -59,6 +59,7 @@ import "./station-editor.js";
 import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { stationColourChoices } from "./station-colour-choices.js";
 import {
+  isWholeMinutes,
   refusalOf,
   listedPrinterIds,
   stationPrinterOptions,
@@ -68,6 +69,7 @@ import {
 } from "./station-editor.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import {
+  DEFAULT_READY_WARNING_AFTER_MINUTES,
   DEFAULT_STATION_THRESHOLDS,
   firstUnusedStationColour,
   isStationColour,
@@ -161,6 +163,7 @@ export class PrepStationsScreen extends LitElement {
     name: "",
     colour: "red",
     ...DEFAULT_STATION_THRESHOLDS,
+    readyWarningAfterMinutes: DEFAULT_READY_WARNING_AFTER_MINUTES,
     printerIds: [],
   };
   @state() private fieldError: Record<string, string> = {};
@@ -763,6 +766,7 @@ export class PrepStationsScreen extends LitElement {
           warmAfterMinutes: station.warmAfterMinutes,
           overdueAfterMinutes: station.overdueAfterMinutes,
           forgottenAfterMinutes: station.forgottenAfterMinutes,
+          readyWarningAfterMinutes: station.readyWarningAfterMinutes,
         }}
         .printers=${this.view.printers}
         .stations=${this.#colourUsers()}
@@ -797,6 +801,7 @@ export class PrepStationsScreen extends LitElement {
       name: "",
       colour: firstUnusedStationColour(used),
       ...DEFAULT_STATION_THRESHOLDS,
+      readyWarningAfterMinutes: DEFAULT_READY_WARNING_AFTER_MINUTES,
       printerIds: [],
     };
     this.fieldError = {};
@@ -834,6 +839,8 @@ export class PrepStationsScreen extends LitElement {
       d.forgottenAfterMinutes <= d.overdueAfterMinutes
     )
       errors.forgottenAfterMinutes = t("prep.threshold_invalid");
+    if (!isWholeMinutes(d.readyWarningAfterMinutes))
+      errors.readyWarningAfterMinutes = t("prep.ready_warning_invalid");
     return errors;
   }
   async #saveStation() {
@@ -1088,7 +1095,7 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
         }}
         ><div class="form">
-          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
+          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#field("readyWarningAfterMinutes", t("prep.ready_warning"))}${this.#newStationPrinters()}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer">

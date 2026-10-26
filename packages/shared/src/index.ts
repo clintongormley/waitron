@@ -129,8 +129,14 @@ export {
 export type { ContentLanguageRules, ContentLanguages } from "./content-languages.js";
 export { capitaliseFirst } from "./capitalise.js";
 export { conjunctionList } from "./list.js";
-export { BAND_RANK, DEFAULT_STATION_THRESHOLDS, classifyBand, worstBand } from "./timing.js";
-export type { StationThresholds, TimingBand } from "./timing.js";
+export {
+  BAND_RANK,
+  DEFAULT_READY_WARNING_AFTER_MINUTES,
+  DEFAULT_STATION_THRESHOLDS,
+  classifyBand,
+  worstBand,
+} from "./timing.js";
+export type { StationThresholds, StationTiming, TimingBand } from "./timing.js";
 export type {
   KitchenSignal,
   ReadyAtStation,

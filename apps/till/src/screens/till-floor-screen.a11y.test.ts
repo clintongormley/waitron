@@ -516,8 +516,20 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
               {
                 kind: "ready",
                 byStation: [
-                  { stationId: "bar", stationName: "Bar", count: 3 },
-                  { stationId: "kitchen", stationName: "Kitchen", count: 1 },
+                  {
+                    stationId: "bar",
+                    stationName: "Bar",
+                    count: 3,
+                    oldestReadyAt: null,
+                    readyWarningAfterMinutes: 3,
+                  },
+                  {
+                    stationId: "kitchen",
+                    stationName: "Kitchen",
+                    count: 1,
+                    oldestReadyAt: null,
+                    readyWarningAfterMinutes: 3,
+                  },
                 ],
               },
               { kind: "long_wait", band: "warm" },
@@ -561,7 +573,15 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
             signals: [
               {
                 kind: "ready",
-                byStation: [{ stationId: "bar", stationName: "Bar", count: 3 }],
+                byStation: [
+                  {
+                    stationId: "bar",
+                    stationName: "Bar",
+                    count: 3,
+                    oldestReadyAt: null,
+                    readyWarningAfterMinutes: 3,
+                  },
+                ],
               },
               { kind: "long_wait", band: "overdue" },
               { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
@@ -774,7 +794,18 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
         const readyAt = (table: TableState): TableState => ({
           ...table,
           signals: [
-            { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+            {
+              kind: "ready",
+              byStation: [
+                {
+                  stationId: "bar",
+                  stationName: "Bar",
+                  count: 2,
+                  oldestReadyAt: null,
+                  readyWarningAfterMinutes: 3,
+                },
+              ],
+            },
           ],
         });
         const previous = currentLocale();

@@ -63,7 +63,15 @@ function table(over: Partial<TableState> & { enRoute?: number } = {}): TableStat
 const free = { party: null, state: "free", condition: "free", hasOpenTab: false } as const;
 const ready: TableSignal = {
   kind: "ready",
-  byStation: [{ stationId: "bar", stationName: "Bar", count: 1 }],
+  byStation: [
+    {
+      stationId: "bar",
+      stationName: "Bar",
+      count: 1,
+      oldestReadyAt: null,
+      readyWarningAfterMinutes: 3,
+    },
+  ],
 };
 const unsent = {
   billId: "wo-3",

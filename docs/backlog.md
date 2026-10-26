@@ -125,7 +125,10 @@ come after the list above:
   bar and List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data)
   in #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, and
   slice 3 (the handheld's bar: Floor, a ✎ button per table with this person's unsent dishes,
-  then "?" and ☰) in #2097, built from the build plan below; slices 6–7 are next. A773-2 builds the pass's part, and the phone's
+  then "?" and ☰) in #2097, built from the build plan below. Slice 6 (each prep station's Ready
+  warning time, 3 minutes by default, and the till's read carrying it) is in review, built from
+  the [build plan's slice 6](superpowers/plans/2026-10-24-a797-device-screens-build.md); slice 7
+  (the Ready bar's warning) is next. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -1434,16 +1437,29 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references.**
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
-- **A1059. Add station and the station editor draw the late flags differently.** Add draws three
-  full-width fields ("Warm after (min)" and so on); the editor one short row under "Late flags
-  (minutes)" (`prep-stations-screen.ts` `#dialog`, `station-editor.ts`). The owner's one-row
-  decision (A725) names the editor; ask whether Add should match. Left open by A756 PR 5.
+- **A1059. Add station and the station editor draw the late flags differently.** Add draws four
+  full-width fields; the editor draws its four two to a row under "Late flags (minutes)"
+  (`prep-stations-screen.ts` `#dialog`, `station-editor.ts`). Ask whether Add should match. Left
+  open by A756 PR 5.
 
 - **A1060. Ask whether A773's picture 10 replaces the station's three late-flag fields** with its
   one "Late after · 5 · 10 · 15 min" dropdown; A756 PR 5 kept A725's three (owner, 2026-10-15).
 
-- **A1061. At 1280 px the station editor's late-flags row and held-work note are wider than its fields**
-  [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-late-flags-row-and-held-work-note-are-wider-than-its-fields)
+- **A1134. Add station marks no field when the server refuses a minutes field.** The station editor
+  puts it under the field; A1136 is Add station's own-check half.
+  [Detail](backlog/kitchen.md#a1134-add-station-marks-no-field-when-the-server-refuses-a-minutes-field)
+
+- **A1135. No test catches `classifyBand` measuring from the wrong end.** Stryker's mutant turning
+  `nowMs - queuedAtMs` into `+` (`packages/shared/src/timing.ts`) survives: every case that asserts
+  a band starts the clock at 0. Fix: a case with a non-zero `queuedAtMs`. Found in A797 slice 6's
+  review; predates it.
+
+- **A1136. Add station's own check of a minutes field highlights nothing and puts its bottom line
+  inside the form.** The station editor does it right; A1134 is the server-refusal half.
+  [Detail](backlog/kitchen.md#a1136-add-stations-own-check-of-a-minutes-field-highlights-nothing-and-puts-its-bottom-line-inside-the-form)
+
+- **A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its fields**
+  [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-minutes-grid-and-held-work-note-are-wider-than-its-fields)
 
 - **A1062. Ask whether picture 10's Held courses dropdown, "Print when sent", replaces the station
   editor's switch "Print held groups in advance"** (left open by A756 PR 6).
@@ -2635,7 +2651,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
-  the build plan, and slice 3 (the handheld's bar) in #2097; slices 6–7 are next:
+  the build plan, and slice 3 (the handheld's bar) in #2097. Slice 6 (each prep station's Ready
+  warning time, 3 minutes by default, and the till's read carrying it) is in review, built from
+  the build plan's slice 6; slice 7 (the Ready bar's warning) is next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
@@ -2694,7 +2712,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A1107. Spanish calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its
   List card.** Seen, 2026-10-25 (the A797 slice 1 look, `g-details-window1-390-light-es.png` and
   `h-list-dining-390-light-es.png` in `~/waitron-campaign-c/a797-1-shots/`), for the same table.
-  A1076 is a different Spanish wording of the same flag, in the station editor.
 
 - **A1108. The till order screen's Sent panel reads "Sent !" and "Held ·".** Seen, 2026-10-25 (the
   A797 slice 1 look, `f-header-window1-1024-light-en.png` and `f-header-window1-1024-dark-es.png` in
@@ -4187,9 +4204,10 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
   [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 
-- **A1076. Spanish names the three late flags three ways**.
-  Left open by A756 PR 5.
-  [Detail](backlog/languages.md#a1076-spanish-names-the-three-late-flags-three-ways)
+- **A1137. The dashboard overview calls an Overdue order «Atrasado»; the station fields and the
+  till's signal say «Con retraso».** The overview's `overview.band_overdue`, `overview.overdue_count`
+  and `overview.overdue_none` (`apps/dashboard/src/i18n/strings.ts`) and the till's
+  `station.overdue_count` (`apps/till/src/i18n/strings.ts`) say «atrasado(s)». Decide which word wins.
 
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)

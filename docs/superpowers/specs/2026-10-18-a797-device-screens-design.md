@@ -375,6 +375,10 @@ Nothing about the layout is a setting except what the owner made one in Q42.
 | Venue (dashboard, Venue settings → Kitchen → **Late flags**, `apps/dashboard/src/screens/venue-settings-screen.ts:11`, `kitchen-screen.ts:22-28`; each station may override, `packages/venue-service/src/dashboard/station-editor.ts:54-59`; 2026-10-23, A756 PR 5: that panel and the overrides are gone, each station's three minutes are its own, set in the station editor and Add station) | **Ready warning after (min)**: 3 by default, a fourth field after "Warm after", "Overdue after" and "Forgotten after" | new (Q51 (c)) |
 | Venue (dashboard, floor-plan editor) | each table's **short name** | new (§3.7) |
 
+2026-10-26, slice 6: the Ready warning time is set in the station editor and Add station as a fourth
+field after Waiting, Overdue and Forgotten, and is in no order with them; see the build plan's slice
+6, D3 and D6.
+
 **How the profile's and the device's "Other stations' dishes" combine** (recommended, Q51 (d)): the
 profile sets the default for its passes; a device may choose Show or Hide for itself, or "Profile
 setting" to follow the profile, which is where every device starts. So a manager who changes the
@@ -432,6 +436,9 @@ named.
 | New order | T box | this bill's unsent dishes | **A773's pass card label "New order"** means a table's first send or a counter order (A773 design `:430-431`; A773-2 plan line 90) — Q51 (f) |
 | Added, Next course | P card labels | a later addition fired; a held group fired | none |
 | Overdue, Forgotten | K card band; T table states | late against the station's limits | Overdue's Spanish, see Warm |
+
+2026-10-26, slice 6: the station fields say Waiting, Overdue, Forgotten in English and «Esperando»,
+«Con retraso», «Olvidado» in Spanish (D5).
 
 ## 4. Worked examples (Bar Santet, Saturday dinner)
 
@@ -539,6 +546,9 @@ Each point is (read); the plan confirms it before relying on it.
   **2026-10-23 (A756 PR 5):** the two late-flag tables named above were dropped; each station's
   late flags are its own `kitchen_stations` columns, so a Ready warning time would be a further
   station column.
+  **2026-10-26, slice 6:** the column is `kitchen_stations.ready_warning_after_minutes`, and each
+  `ready` entry carries `oldestReadyAt` and `readyWarningAfterMinutes`; see the build plan's slice
+  6, D1 and D4.
 - **From when A757's waiting clock counts for a dish that is ready but not served** (the owner asked):
   **from when it was fired.** The table's Waiting, Overdue and Forgotten come from every fired,
   unserved dish (`apps/server/src/table-signals.ts:74-75`), timed from `queued_at`
