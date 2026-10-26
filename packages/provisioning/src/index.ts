@@ -223,6 +223,12 @@ export {
   type StartAgainUnit,
 } from "./first-setup-start-again-leftovers.js";
 export {
+  moveStartAgainUnits,
+  prepareSetAside,
+  setAsideDestinations,
+  type SetAsideIo,
+} from "./first-setup-start-again-set-aside.js";
+export {
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,
