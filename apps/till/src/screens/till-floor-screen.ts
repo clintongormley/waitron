@@ -864,9 +864,11 @@ export class TillFloorScreen extends LitElement {
         }
       }
 
-      /* wt-icon sets its own text colour, so it is named beside the heading. */
-      .ready-bar[data-warning] h2,
-      .ready-bar[data-warning] h2 wt-icon {
+      .ready-bar h2 wt-icon {
+        color: inherit;
+      }
+
+      .ready-bar[data-warning] h2 {
         color: var(--wt-color-warning);
       }
 
@@ -876,7 +878,7 @@ export class TillFloorScreen extends LitElement {
       }
 
       /* The shared hover cue, which the part rule above would otherwise override. */
-      .ready-tables wt-button[data-warning]::part(button):hover {
+      .ready-tables wt-button[data-warning]::part(button):hover:not(:disabled) {
         border-color: var(--wt-color-primary-text);
       }
 
@@ -926,9 +928,7 @@ export class TillFloorScreen extends LitElement {
    * identical classes. A table crossing into a worse band shows on the next refresh.
    */
   @property({ attribute: false }) reducedMotion?: boolean;
-  /** Injectable clock for whether a party's release reminder is due; unset reads the real one and
-   * redraws the floor when the next reminder falls due, each minute a held countdown changes, and
-   * when the Ready bar's minutes or warning change. */
+  /** Injectable clock; unset reads the real one, and `#watchReminders` schedules the redraws. */
   @property({ attribute: false }) now?: number;
 
   @state() private activeZone: string | undefined = undefined;
@@ -998,7 +998,7 @@ export class TillFloorScreen extends LitElement {
   #carried = new Map<string | null, { revision: number; answeredAt: number }>();
   #mapCopy = { locale: "", copy: { label: "", allergy: "" } };
 
-  /** The clock the last render judged reminders by. */
+  /** The clock the last render was drawn by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
   /** Zone keys of the tabs the strip does not show whole, by the end they are beyond. */
@@ -3045,8 +3045,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * The tables with food ready in the zones this Floor shows, warning tables first; Open opens the
-   * first listed, the one waiting longest.
+   * The tables with food ready in the zones this Floor shows: warning tables first, then the rest,
+   * each longest-waiting first; Open opens the first listed.
    */
   #readyBar(): TemplateResult | typeof nothing {
     if (!this.handheld) return nothing;
