@@ -6,7 +6,7 @@ import { TillTenderPay } from "./tender-pay.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
@@ -26,11 +26,11 @@ const jamon: TillProduct = {
 };
 
 /** A weighed dish whose one question is its variant, so Add opens the modifier picker. */
-const jamonWithVariants: TillProduct = {
-  ...jamon,
+const hamWithVariants: TillProduct = {
+  ...ham,
   variants: [
     {
-      ...sellingValuesOf(jamon),
+      ...sellingValuesOf(ham),
       id: "v-iberico",
       name: "Ibérico",
       unitPrice: "30.00",
@@ -38,7 +38,7 @@ const jamonWithVariants: TillProduct = {
       available: true,
     },
     {
-      ...sellingValuesOf(jamon),
+      ...sellingValuesOf(ham),
       id: "v-serrano",
       name: "Serrano",
       unitPrice: "10.00",
@@ -68,7 +68,7 @@ async function openPicker(store: WorkingOrderStore): Promise<{
   picker: TillModifierPicker;
 }> {
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-  store.emit("product-selected", jamonWithVariants);
+  store.emit("product-selected", hamWithVariants);
   await el.updateComplete;
   await type(el, "0.250");
   click(el, ".add");
@@ -83,7 +83,7 @@ afterEach(cleanupWidgets);
 it("rings a whole weight typed with a trailing decimal point", async () => {
   const store = new WorkingOrderStore();
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-  store.emit("product-selected", jamon);
+  store.emit("product-selected", ham);
   await el.updateComplete;
   await type(el, "2.");
   expect(query(el, ".add")!.hasAttribute("disabled")).toBe(false);
@@ -116,7 +116,7 @@ it("a second confirm from the picker before it closes rings the weighed dish onc
     const confirm = () =>
       picker.dispatchEvent(
         new CustomEvent("wt-modifier-confirm", {
-          detail: { product: { ...jamon, variantId: "v-iberico", unitPrice: "30.00" } },
+          detail: { product: { ...ham, variantId: "v-iberico", unitPrice: "30.00" } },
           bubbles: true,
           composed: true,
         }),
@@ -139,13 +139,13 @@ it("weighing only, shows nothing until a weighed dish is selected, then weighs i
   expect(el.shadowRoot!.textContent!.trim()).toBe("");
   expect(query(el, "wt-button")).toBeNull();
 
-  store.emit("product-selected", jamon);
+  store.emit("product-selected", ham);
   await el.updateComplete;
   await type(el, "0.250");
   click(el, ".add");
   await el.updateComplete;
 
-  expect(store.lines).toEqual([{ product: jamon, quantity: "0.250" }]);
+  expect(store.lines).toEqual([{ product: ham, quantity: "0.250" }]);
   expect(query(el, "wt-button")).toBeNull();
 });
 
@@ -153,7 +153,7 @@ it("decimal input weight is shown in Spanish and stored at the same quantity", a
   setLocale("es");
   const store = new WorkingOrderStore();
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-  store.emit("product-selected", jamon);
+  store.emit("product-selected", ham);
   await el.updateComplete;
   await type(el, "0.250");
   expect(query(el, ".kg")!.textContent).toBe("0,250");

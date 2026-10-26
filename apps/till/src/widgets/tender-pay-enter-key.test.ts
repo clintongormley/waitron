@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
 import type { TillProduct } from "../api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
@@ -51,7 +51,7 @@ afterEach(cleanupWidgets);
 
 it("Enter in the hold-label field parks the order under that label", async () => {
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
+  store.addProduct(coffee, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
   const parked = vi.fn();
   el.addEventListener("park-order", (e) => parked((e as CustomEvent).detail));
@@ -64,7 +64,7 @@ it("Enter in the hold-label field parks the order under that label", async () =>
 
 it("Enter in the card operation-number field confirms the card tender with that reference", async () => {
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
+  store.addProduct(coffee, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
   const confirmed = vi.fn();
   el.addEventListener("confirm-payment", (e) => confirmed((e as CustomEvent).detail));
@@ -80,7 +80,7 @@ it("Enter in the card operation-number field confirms the card tender with that 
 
 it("Enter in the tip field starts the integrated card collection with that tip", async () => {
   const store = new WorkingOrderStore();
-  store.addProduct(cafe, "1");
+  store.addProduct(coffee, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
     store,
     cardProvider: "stripe_terminal",
