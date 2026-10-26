@@ -909,7 +909,7 @@ jobs:
       - name: Merge the db coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/db" test:merge
 
-  # apps/server, SHARDED SIXTEEN WAYS, packed by measured duration
+  # apps/server, packed by measured duration
   # (`scripts/vitest-duration-sequencer.mjs`, table `apps/server/test-durations.json`) — the same
   # shard-and-merge mechanism as test-heavy above (see it for why one package can only be split by test
   # file, why the shards suppress thresholds and emit blobs, and why the merge job needs no Docker).
@@ -929,7 +929,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - id: checkout
         name: Check out the code
@@ -985,7 +985,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
-            --shard=${{ matrix.shard }}/16 \
+            --shard=${{ matrix.shard }}/20 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
             --exclude src/s3-rehearsal-scenarios.e2e.test.ts \

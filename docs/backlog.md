@@ -5264,8 +5264,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/first-fiscal-hour.e2e.test.ts` sets the floor under its shard**
   [Detail](backlog/ci.md#appsserversrcfirst-fiscal-houre2etestts-sets-the-floor-under-its-shard).
 
-- **The server's duration table is refreshed by hand.** Nothing says when
-  `apps/server/test-durations.json` has gone stale. Left open by A938.
+- **The server's duration table needs a staleness warning.** Flag missing files and
+  shards over four minutes from CI measurements; refreshing the table remains manual.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **The other sharded packages still use Vitest's file-count split.**
