@@ -37,8 +37,7 @@ export interface InvoiceCustomerDataDeps {
 const SEARCH_PATH = "/management-api/invoice-customers/personal-data";
 const DOWNLOAD_PATH = "/management-api/invoice-customers/personal-data/export";
 
-/** The query's one `taxId`, normalised. The URL is parsed here rather than by the router so a
- * repeated key is seen. */
+/** The query's one `taxId`, normalised. */
 function queriedTaxId(c: Context): string {
   const query = new URL(c.req.url).searchParams;
   const keys = [...query.keys()];

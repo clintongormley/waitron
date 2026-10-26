@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { getCountryPack } from "@waitron/country-packs";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction } from "@waitron/db";
@@ -19,6 +20,7 @@ import {
   mountInvoiceCustomerDataApi,
   type InvoiceCustomerDataDeps,
 } from "./invoice-customer-data-api.js";
+import { readInvoiceDocument } from "./invoice-document.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
 import {
   provisionInvoiceCustomerVenue,
@@ -39,6 +41,8 @@ const SEARCH = "/management-api/invoice-customers/personal-data";
 const DOWNLOAD = "/management-api/invoice-customers/personal-data/export";
 const ROUTES = [SEARCH, DOWNLOAD] as const;
 const logger = vi.fn();
+/** A valid NIE on no invoice in the fixture. */
+const UNKNOWN_VALID = "Y1234567X";
 const stubPdf = () => Promise.resolve(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
 
 function mounted(patch: Partial<InvoiceCustomerDataDeps> = {}) {
@@ -137,7 +141,8 @@ describe("the invoice customer search", () => {
   });
 
   it("answers an unknown number with no invoices", async () => {
-    const response = await ask(withTaxId(SEARCH, "Y1234567X"), fixture.venue.adminDashboard);
+    expect(getCountryPack("ES")!.taxIdentifier!.validate(UNKNOWN_VALID).valid).toBe(true);
+    const response = await ask(withTaxId(SEARCH, UNKNOWN_VALID), fixture.venue.adminDashboard);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ taxId: "Y1234567X", invoices: [] });
   });
@@ -152,12 +157,23 @@ describe("both routes", () => {
     }) as const;
 
   for (const route of ROUTES) {
-    it.each(["manager", "supervisor", "staff"] as const)(
-      `refuses a %s at ${route}`,
-      async (role) => {
-        await refused(await ask(withTaxId(route, "12345678Z"), callers()[role]), 403, notPermitted);
-      },
-    );
+    // A number on invoices and a valid one on none: a refused caller gets one answer for both,
+    // and nothing is read or rendered for them.
+    for (const taxId of ["12345678Z", UNKNOWN_VALID])
+      it.each(["manager", "supervisor", "staff"] as const)(
+        `refuses a %s asking for ${taxId} at ${route}, building nothing`,
+        async (role) => {
+          const render = vi.fn(stubPdf);
+          const readDocument = vi.fn(readInvoiceDocument);
+          await refused(
+            await ask(withTaxId(route, taxId), callers()[role], { render, readDocument }),
+            403,
+            notPermitted,
+          );
+          expect(render).not.toHaveBeenCalled();
+          expect(readDocument).not.toHaveBeenCalled();
+        },
+      );
 
     it(`checks the permission before the query at ${route}`, async () => {
       for (const query of ["?taxId=%%%", "?other=1"])
@@ -235,10 +251,14 @@ describe("both routes", () => {
 
 describe("the invoice customer download", () => {
   it("answers a number on no invoice as a missing customer", async () => {
-    await refused(await ask(withTaxId(DOWNLOAD, "Y1234567X"), fixture.venue.adminDashboard), 404, {
-      code: "invoice_customer.not_found",
-      params: {},
-    });
+    await refused(
+      await ask(withTaxId(DOWNLOAD, UNKNOWN_VALID), fixture.venue.adminDashboard),
+      404,
+      {
+        code: "invoice_customer.not_found",
+        params: {},
+      },
+    );
   });
 
   it("changes no row, not the administrator's last-seen time nor a waiting change", async () => {
