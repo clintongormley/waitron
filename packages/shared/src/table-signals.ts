@@ -39,6 +39,10 @@ export interface ReadyAtStation {
   stationId: string;
   stationName: string;
   count: number;
+  /** The earliest stored ready time of the dishes counted; null when none has one. */
+  oldestReadyAt: string | null;
+  /** This station's ready warning time. */
+  readyWarningAfterMinutes: number;
 }
 
 /** The signals a bill with no party can carry: the counter's tab list shows them. */

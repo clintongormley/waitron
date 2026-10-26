@@ -95,7 +95,15 @@ function table2(ready: number): TableState {
         : [
             {
               kind: "ready",
-              byStation: [{ stationId: "bar", stationName: "Bar", count: ready }],
+              byStation: [
+                {
+                  stationId: "bar",
+                  stationName: "Bar",
+                  count: ready,
+                  oldestReadyAt: null,
+                  readyWarningAfterMinutes: 3,
+                },
+              ],
             },
           ],
   });

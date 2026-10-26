@@ -156,8 +156,20 @@ describe("till-held-orders", () => {
         {
           kind: "ready",
           byStation: [
-            { stationId: "bar", stationName: "Bar", count: 2 },
-            { stationId: "kitchen", stationName: "Kitchen", count: 1 },
+            {
+              stationId: "bar",
+              stationName: "Bar",
+              count: 2,
+              oldestReadyAt: null,
+              readyWarningAfterMinutes: 3,
+            },
+            {
+              stationId: "kitchen",
+              stationName: "Kitchen",
+              count: 1,
+              oldestReadyAt: null,
+              readyWarningAfterMinutes: 3,
+            },
           ],
         },
         { kind: "long_wait", band: "overdue" },

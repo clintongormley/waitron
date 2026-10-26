@@ -42,7 +42,18 @@ describe("signalChips", () => {
     ],
     [
       "ready",
-      { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+      {
+        kind: "ready",
+        byStation: [
+          {
+            stationId: "bar",
+            stationName: "Bar",
+            count: 2,
+            oldestReadyAt: null,
+            readyWarningAfterMinutes: 3,
+          },
+        ],
+      },
       "floor-ready",
     ],
   ])("draws the %s chip with its icon", (_name, signal, icon) => {
@@ -83,8 +94,20 @@ describe("chipState", () => {
       {
         kind: "ready",
         byStation: [
-          { stationId: "bar", stationName: "Bar", count: 3 },
-          { stationId: "kitchen", stationName: "Kitchen", count: 1 },
+          {
+            stationId: "bar",
+            stationName: "Bar",
+            count: 3,
+            oldestReadyAt: null,
+            readyWarningAfterMinutes: 3,
+          },
+          {
+            stationId: "kitchen",
+            stationName: "Kitchen",
+            count: 1,
+            oldestReadyAt: null,
+            readyWarningAfterMinutes: 3,
+          },
         ],
       },
       { kind: "long_wait", band: "overdue" },

@@ -206,11 +206,24 @@ describe("groups with split-off extras", () => {
       )!;
       await advanceTicketItem(tx, v.cfg, fryer.id, "preparing");
       await advanceTicketItem(tx, v.cfg, fryer.id, "ready");
+      const [stamped] = await tx
+        .select({ readyAt: ticketItems.readyAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.id, fryer.id));
+      expect(stamped!.readyAt).toEqual(expect.any(String));
       expect(
         (await readBillSignals(tx, [placed.tabId], Date.now())).get(placed.tabId),
       ).toContainEqual({
         kind: "ready",
-        byStation: [{ stationId: v.stations.fryer, stationName: "Fryer", count: 2 }],
+        byStation: [
+          {
+            stationId: v.stations.fryer,
+            stationName: "Fryer",
+            count: 2,
+            oldestReadyAt: stamped!.readyAt,
+            readyWarningAfterMinutes: 3,
+          },
+        ],
       });
       await tx
         .update(ticketItems)

@@ -264,7 +264,15 @@ describe("till-table-details-sheet", () => {
         signals: [
           {
             kind: "ready",
-            byStation: [{ stationId: "s1", stationName: "Kitchen", count: 2 }],
+            byStation: [
+              {
+                stationId: "s1",
+                stationName: "Kitchen",
+                count: 2,
+                oldestReadyAt: null,
+                readyWarningAfterMinutes: 3,
+              },
+            ],
           },
         ],
       }),
@@ -331,7 +339,15 @@ describe("till-table-details-sheet", () => {
           signals: [
             {
               kind: "ready",
-              byStation: [{ stationId: "s1", stationName: "Kitchen", count: 3 }],
+              byStation: [
+                {
+                  stationId: "s1",
+                  stationName: "Kitchen",
+                  count: 3,
+                  oldestReadyAt: null,
+                  readyWarningAfterMinutes: 3,
+                },
+              ],
             },
           ],
         }),
@@ -511,7 +527,18 @@ describe("till-table-details-sheet", () => {
         ...seated,
         party: party(),
         signals: [
-          { kind: "ready", byStation: [{ stationId: "s1", stationName: "Kitchen", count: 1 }] },
+          {
+            kind: "ready",
+            byStation: [
+              {
+                stationId: "s1",
+                stationName: "Kitchen",
+                count: 1,
+                oldestReadyAt: null,
+                readyWarningAfterMinutes: 3,
+              },
+            ],
+          },
           { kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" },
         ],
       }),

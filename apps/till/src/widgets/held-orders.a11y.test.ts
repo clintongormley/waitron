@@ -63,7 +63,18 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
         label: "Ana",
         counts: { ordered: 9, unsent: 1, held: 2, waiting: 3, ready: 2 },
         signals: [
-          { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+          {
+            kind: "ready",
+            byStation: [
+              {
+                stationId: "bar",
+                stationName: "Bar",
+                count: 2,
+                oldestReadyAt: null,
+                readyWarningAfterMinutes: 3,
+              },
+            ],
+          },
           { kind: "long_wait", band: "warm" },
         ],
       },

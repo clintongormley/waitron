@@ -79,6 +79,8 @@ const ready = (...byStation: [string, string, number][]): TableSignal => ({
     stationId,
     stationName,
     count,
+    oldestReadyAt: null,
+    readyWarningAfterMinutes: 3,
   })),
 });
 

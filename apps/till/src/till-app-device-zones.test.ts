@@ -2346,7 +2346,20 @@ describe("a handheld's zones", () => {
   describe("the Ready bar and the remembered view", () => {
     const readyIn = (id: string, zoneId: string) => ({
       ...tableIn(id, zoneId),
-      signals: [{ kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] }],
+      signals: [
+        {
+          kind: "ready",
+          byStation: [
+            {
+              stationId: "bar",
+              stationName: "Bar",
+              count: 2,
+              oldestReadyAt: null,
+              readyWarningAfterMinutes: 3,
+            },
+          ],
+        },
+      ],
     });
     const readyTables = () => [readyIn("t-room", "room"), readyIn("t-garden", "garden")];
     const floorKeys = () =>

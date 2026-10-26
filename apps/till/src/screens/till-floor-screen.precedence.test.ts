@@ -400,7 +400,18 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
         party: party({ reminder: { groupId: "g2", dueAt: past }, unsentDrafts: [draft] }),
         signals: [
           dueStepSignal("Take order"),
-          { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+          {
+            kind: "ready",
+            byStation: [
+              {
+                stationId: "bar",
+                stationName: "Bar",
+                count: 2,
+                oldestReadyAt: null,
+                readyWarningAfterMinutes: 3,
+              },
+            ],
+          },
           { kind: "bill_requested", requestedAt: past },
           { kind: "release_due", groupId: "g2", dueAt: past },
           { kind: "held_unavailable", groupId: "g3", lineNames: ["Steak"] },
