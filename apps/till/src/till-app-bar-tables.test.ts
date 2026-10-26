@@ -396,6 +396,12 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await signIn(el);
     await toFloor(el);
     expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    expect(tableOrder(el)?.checkVisibility()).toBe(true);
+    expect(tableOrder(el)?.party?.id).toBe("v1");
+    expect(selected(el)).toEqual(["T4"]);
   });
 
   it("shows no button for another person's unsent order", async () => {
@@ -1024,7 +1030,7 @@ describe("till-app: a table left for another keeps its button", () => {
     await openT9(el);
     await flush(el, 6);
     const answerBefore = holdNextTablesRead([mesa4, mesa9WithAnas]);
-    const answerAfter = holdNextTablesRead([mesa4With("p1"), mesa9WithAnas]);
+    const answerAfter = holdNextTablesRead([mesa4, mesa9WithAnas]);
     const reads = api.getTablesState!.mock.calls.length;
     await toFloor(el);
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
@@ -1037,7 +1043,7 @@ describe("till-app: a table left for another keeps its button", () => {
     expect(bar(el)).toContain("✎ T4");
     answerAfter();
     await flush(el, 6);
-    expect(bar(el)).toContain("✎ T4");
+    expect(bar(el)).not.toContain("✎ T4");
   });
 
   it("keeps ✎ T4 when a floor read after its save fails", async () => {
