@@ -5,13 +5,11 @@ their full text.
 
 ## The Stripe webhook endpoint still has to be repointed by hand, at Stripe
 
-**Names left behind by the tenant-column removal (#378, 2026-09-16):**
-
-- **The Stripe webhook endpoint still has to be repointed by hand, at Stripe.** #378 shortened the
-  address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`; the endpoint registered in the
-  Stripe dashboard is outside this repository and will keep sending to the old one until somebody
-  changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
-  taken through a Stripe webhook.
+#378 shortened the
+address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`; the endpoint registered in the
+Stripe dashboard is outside this repository and will keep sending to the old one until somebody
+changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
+taken through a Stripe webhook.
 
 <a id="the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time"></a>
 
@@ -123,17 +121,16 @@ their checkout validity remains untested. History returns separate payment and r
 filtering each type returned the exact expected sets. The original payment's detail agrees by
 UUID, transaction code and client transaction id. See the
 [authenticated baseline and operator checklist](../research/2026-09-10-sumup-solo-experiments.md#9-a949-authenticated-baseline-2026-10-22).
-The 2026-10-21 `401` checkpoint remains historical. No checkout, refund or pairing write was sent.
 Published refund units still conflict with September's measurement; keep the adapter unchanged
 until the controlled live re-test settles this.
 
-- **The SumUp Solo experiments** ([runbook](../research/2026-09-10-sumup-solo-experiments.md)). Question
-  4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
-  so the owner chose a separate standalone card machine for the internet-down case
-  ([deli hardware](../superpowers/specs/2026-07-30-deli-hardware-design.md) §5). Still open: whether we
-  can look up a supplied reference before and after payment, whether a duplicate reference is
-  refused, actual reader webhook headers, signature-card handling, and a fresh immediate full
-  refund. September's full-refund result is not a measurement of a distinct authorisation void.
+Question 4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
+so the owner chose a separate standalone card machine for the internet-down case
+([deli hardware](../superpowers/specs/2026-07-30-deli-hardware-design.md) §5). Still open: whether we
+can look up a supplied reference before and after payment, whether a duplicate reference is
+refused, actual reader webhook headers, signature-card handling, and a fresh immediate full
+refund. September's full-refund result is not a measurement of a distinct authorisation void.
+[Runbook](../research/2026-09-10-sumup-solo-experiments.md).
 
 ## The deli's outage card machine
 
@@ -155,12 +152,12 @@ before the provider call, then recover an uncertain outcome without a fresh blin
 records separate payment/refund history rows and working detail lookups. Supplied-reference
 creation, standalone matching samples and current refund units remain open; no reconciler was built.
 
-- **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
-  interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
-  raises `payment.pending_outcome_unactionable` for a human. Note: a SumUp refund appears both as a
-  `REFUND` event inside the original transaction (`events` and `transaction_events`, which the
-  refund lookup reads) and as its own item of `type: REFUND` in the transaction history listing;
-  the original's `status` stays `SUCCESSFUL` (read on 2026-09-27 from three refunded transactions).
+Settlement-report audit and orphan self-heal. `resolvePending` is the
+interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
+raises `payment.pending_outcome_unactionable` for a human. Note: a SumUp refund appears both as a
+`REFUND` event inside the original transaction (`events` and `transaction_events`, which the
+refund lookup reads) and as its own item of `type: REFUND` in the transaction history listing;
+the original's `status` stays `SUCCESSFUL` (read on 2026-09-27 from three refunded transactions).
 
 ## What M7b2 left open (a manager clearing a stuck card payment, #702)
 
@@ -237,20 +234,19 @@ remain open. Follow the physical-card check in the
 [experiment checkpoint](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21)
 before deciding whether Waitron needs a signature step. Keep this entry open.
 
-- **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
-  built.** When a card or its issuer picks signature as the way it proves the person is who they say
-  (the card-scheme term is the Cardholder Verification Method), the payment is only complete once a
-  signature is captured, and the merchant is usually expected to keep it in case the payment is later
-  disputed. Three things to settle before this is a task, none of them verified yet: (1) whether our
-  readers — the SumUp Solo, and Stripe Terminal if it ever comes back — handle the signature entirely
-  on the reader and hand us a finished payment, or whether they hand the signature step back to us to
-  run on the waiter's screen; (2) if it lands on us, WHERE the signature is captured and kept (an
-  on-screen signature pad, or a printed receipt with a signature line the waiter files) and how that
-  record is stored and retrieved for a dispute; and (3) whether the fiscal receipt has to show
-  anything about it — this is a card-scheme rule, separate from the Veri\*Factu invoice record, so
-  confirm the two do not touch before assuming they are independent. Start by reading what the SumUp
-  Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
-  because if the reader owns the whole step there may be nothing for us to build.
+When a card or its issuer picks signature as the way it proves the person is who they say
+(the card-scheme term is the Cardholder Verification Method), the payment is only complete once a
+signature is captured, and the merchant is usually expected to keep it in case the payment is later
+disputed. Three things to settle before this is a task, none of them verified yet: (1) whether our
+readers — the SumUp Solo, and Stripe Terminal if it ever comes back — handle the signature entirely
+on the reader and hand us a finished payment, or whether they hand the signature step back to us to
+run on the waiter's screen; (2) if it lands on us, WHERE the signature is captured and kept (an
+on-screen signature pad, or a printed receipt with a signature line the waiter files) and how that
+record is stored and retrieved for a dispute; and (3) whether the fiscal receipt has to show
+anything about it — this is a card-scheme rule, separate from the Veri\*Factu invoice record, so
+confirm the two do not touch before assuming they are independent. Start by reading what the SumUp
+Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
+because if the reader owns the whole step there may be nothing for us to build.
 
 ## `finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled
 
@@ -433,27 +429,25 @@ the same column. Left open by the table actions plan.
 
 ## Loose ends left by A633
 
-- **Loose ends left by A633.**
-  - `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
-    that no source file opens a bare `.transaction(`.
-  - `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
-    although the normal suite reaches it (CLAUDE.md §2).
+- `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
+  that no source file opens a bare `.transaction(`.
+- `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
+  although the normal suite reaches it (CLAUDE.md §2).
 
 ## Loose ends left by W102 (NFC and equipment labels)
 
-- **Loose ends left by W102 (NFC and equipment labels).**
-  - **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
-    `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning
-    and a return from locking the phone. Simulated readers do not verify the phone.
-    [Detail](#check-nfc-pick-up-on-the-boxs-address)
-  - **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
-    Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable
-    one. Simulated writers do not verify the phone.
-    [Detail](#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
-  - **Check equipment labels on a physical venue printer.** Print a portable printer's label on
-    itself and a reader's label on another active printer, scan the paper and check the name and
-    code. Confirm neither print opens the drawer. Paper output remains unverified.
-    [Detail](#check-equipment-labels-on-a-physical-venue-printer)
+- **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
+  `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning
+  and a return from locking the phone. Simulated readers do not verify the phone.
+  [Detail](#check-nfc-pick-up-on-the-boxs-address)
+- **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
+  Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable
+  one. Simulated writers do not verify the phone.
+  [Detail](#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
+- **Check equipment labels on a physical venue printer.** Print a portable printer's label on
+  itself and a reader's label on another active printer, scan the paper and check the name and
+  code. Confirm neither print opens the drawer. Paper output remains unverified.
+  [Detail](#check-equipment-labels-on-a-physical-venue-printer)
 
 <a id="slice-2--the-handheld-nfcqr-link"></a>
 

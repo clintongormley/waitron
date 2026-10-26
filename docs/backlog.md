@@ -3638,8 +3638,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#the-stripe-webhook-endpoint-still-has-to-be-repointed-by-hand-at-stripe)
 
 - **Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.**
-  SumUp's older `refund` call still parses a 2xx or 4xx body as JSON, so a 404 answered with
-  an HTML page throws `SyntaxError`. Left open by A632.
+  Left open by A632.
   [Detail](backlog/payments.md#lift-reverseviastripe-and-reverseviasumup-into-one-neutral-reversal-primitive)
 
 - **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is the
@@ -3656,8 +3655,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
 - **The reconciler's card reversal records only after the provider call, with a fresh key each time.**
-  Next: give the reconciler's reversal the same durable-attempt rule. Post-invoice returns use
-  the durable `tender_refunds` path (A737 Part 2).
+  Next: give the reconciler's reversal the same durable-attempt rule.
   [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
 - **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**
@@ -3666,8 +3664,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#loose-ends-left-by-b28s-review-1005-not-acted-on-under-service-task-17-991)
 
 - **A placed order with no invoice is not checked against stored card payments when it is
-  cancelled.** Its cancel sees a card running at the reader in this process, but not a stored
-  payment its provider has not resolved, nor one captured and not yet filed. Left open by C126.
+  cancelled.** Left open by C126.
   [Detail](backlog/payments.md#a-placed-order-with-no-invoice-is-not-checked-against-stored-card-payments-when-it-is-cancelled)
 
 - **Task 4 (#832, every paper names all of a party's tables).** Not yet checked: the payment API's
@@ -3685,9 +3682,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   Solo online with the operator and follow the checklist; A949's 2026-10-22 checkpoint is in detail.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
-- **The deli's outage card machine.** Buy the standalone machine. A949's owner-decided matching,
-  outside-Waitron payments and cash-only cases remain open. Replace the design's estimated
-  prices with real quotes.
+- **The deli's outage card machine.** Buy the standalone machine and
+  replace estimated prices with real quotes.
   [Detail](backlog/payments.md#the-delis-outage-card-machine)
 
 - **The printer-cradle experiment** (hardware not yet owned). SumUp's OpenAPI has no `print` and no
@@ -3738,8 +3734,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   payment on the same bill meanwhile.
 
 - **A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show
-  the ticket.** The locked confirmation stays, and its Comprobar de nuevo replays the payment
-  and shows the ticket.
+  the ticket.**
   [Detail](backlog/payments.md#a-payment-whose-read-shows-it-settled-the-bill-needs-one-press-of-comprobar-de-nuevo-to-show-the-ticket)
 
 - **Check first: on a venue with no fiscal module, replaying a settled bill may throw** (read, not
@@ -3802,8 +3797,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#three-small-tip-display-gaps)
 
 - **A848. Show a clear message when the till pays, sends or moves an empty order.**
-  On the till, try paying, sending and moving an empty order; where no clear message shows,
-  add one in English and Spanish.
   [Detail](backlog/payments.md#a848-show-a-clear-message-when-the-till-pays-sends-or-moves-an-empty-order)
 
 - **The practice-mode simulator writes no `attempting` row**, so a switch during a practice card
