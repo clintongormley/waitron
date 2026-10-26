@@ -10,10 +10,9 @@ their full text.
 as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`: both Harbour
 Kitchen handovers (§§8–9) and the retained defaults (§§3, 5 and 7). M2 alone handles
 AEAT after either takeover; returning M1 transfers only fiscal originals and
-received AEAT outcomes. The earlier approval-question waits below are historical.
+received AEAT outcomes.
 Keep the remaining work open: exact formats, compatible A947 amendments, separate
-build authority and physical runtime qualification. The approved protocol body
-and Cloud contract bytes are unchanged.
+build authority and physical runtime qualification.
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed
@@ -23,57 +22,12 @@ and Cloud contract bytes are unchanged.
 Cloud accepts the revised direction at Waitron `d9252ac34f2b7e946e1154dd5af1a443c2c39ad4`:
 M2 alone handles AEAT after either takeover, preserving old originals' generating identities;
 returning M1 transfers missing fiscal originals and all received outcomes without AEAT contact.
-This supersedes the agreement/publication waits in the earlier dated blocks below. Next is
-**one short revised owner design question**, with both Harbour Kitchen examples and the retained
-proposed defaults. The [current design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
-pins the source wording and records A1034's completed test-service observation and limits.
-The Cloud publication's A1034-unrun note predates that result. Keep the item open: owner design
-approval, exact formats, compatible A947 amendments, separate build authority and physical runtime
-acceptance remain pending. No protocol recommendation changes in this publication update.
 
-**CURRENT correction, 2026-10-23, after the 15:37 and 15:40 owner answers:** the owner
-rejected emergency filing by returning M1. After either takeover, **M2 alone handles all AEAT
-communication**, filing copied and later-returned originals in their generating fiscal
-identities; only its new sales use M2's identity. Returning M1 transfers missing fiscal originals
-and all received AEAT outcomes, including those for copied originals, without contacting AEAT.
-The publication and direction blocks immediately below are historical; their filing assignment
-and next-question status are obsolete. Cloud #312 at `7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a`
-still carries the rejected assignment. G/D133 must amend and pin acceptance before **one short
-revised owner design question**, drafted in the [current design §11](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md#11-future-acceptance-and-the-cloud-agreement).
-A1034's [dated synthetic AEAT test-service observation](../superpowers/specs/2026-10-23-aeat-handover-tail-evidence.json)
-records accepted interleaved originals and a duplicate matched by fingerprint and installation.
-No revised Cloud agreement, legal or physical-handover receipt or build approval is claimed.
-
-**Canonical publication update, 2026-10-23:** Cloud's direction agreement is published
-in [PR #312](https://github.com/waitron-io/waitron-cloud/pull/312), at
-[`7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a`](https://github.com/waitron-io/waitron-cloud/blob/7e3ba8246a6d5dbeb4275ed7c00f2f34124c944a/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
-The [reviewed proposal](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
-now pins that publication and its full-document digest. The draft-publication waits below
-are historical. Next is the one combined owner design question with both worked examples,
-the proposed defaults and the explicit Cloud actor mapping. Keep the item open: design
-approval, exact formats, A947 amendments, separate build authority and runtime acceptance
-remain pending. No protocol recommendation changes in this status update.
-
-**Direction update, 2026-10-23:** Lane G agrees the replacement at Cloud draft
-[#312](https://github.com/waitron-io/waitron-cloud/pull/312), commit
-`a9399a4a390a62f45e4d4c636635ae6d715c1ecd`. The shared contract remains on that
-branch; its exact Cloud-main publication pin is still required before the one combined owner
-question. Cloud account, venue and operation authority must explicitly bind to the proposed
+Cloud account, venue and operation authority must explicitly bind to the proposed
 venue `node.promote` actor. Organisation ownership, support, purchase, matching email or a
 provider-resource stop alone grants no venue declaration/activation permission; missing binding
 waits. Local-to-local has no Cloud binding dependency. The authentication bridge's format,
 expiry/revocation/replay checks remain unbuilt and require joint specification and qualification.
-The previous proposal-state wording below is historical. Design approval, build authority and
-runtime acceptance remain pending.
-
-**CURRENT proposed owner-directed revision, 2026-10-23; no build approval.** The owner rejected the
-[old design](../superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md) at ~02:25 for
-requiring Cloud and excessive complexity, then supplied five points at ~02:58. The
-[replacement design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md) now applies the
-15:37 correction to the preceding reviewed revision. It awaits amended Cloud acceptance through
-G/D133, then **one short owner design question** referring to both Harbour Kitchen examples and
-the retained proposed defaults. Keep this item open;
-the original queue start is 2026-10-22 16:14.
 
 One protocol covers local-to-local, local-to-Cloud, Cloud-to-Cloud and Cloud-to-local. Local
 handover works with no Cloud or internet. Controlled: reachable M1 durably steps down, quiesces
@@ -130,13 +84,8 @@ business reconciliation and archive/deletion policy, not a reversal of emergency
 Cold restore stays an explicit fresh-chain/data-loss choice with its existing recovery
 source, operation, key and sole-recovery gates, no new hard-stop demand and no silent fallback.
 
-The old Waitron `db7cddeb2d38984b284b23e8e391e7ebd7cb9156` / Cloud
-`6700d6f2319ff0b62b0ccc27e833487935ad2174` direction agreement through Cloud #300 is
-superseded. The shared Cloud contract home remains `docs/waitron-integration-contract.md`
-in the Cloud repository. The revision proposes replacement A1018 text and identifies P6/P7,
-D88 and production §§3/6/9/12 wording to amend through G/D133, including the rejected emergency
-filing assignment in #312. Pin amended canonical acceptance before the one short question;
-no new agreement is asserted.
+The shared Cloud contract home remains `docs/waitron-integration-contract.md`
+in the Cloud repository.
 Wire details, the node-local inventory, Cloud authorisation mapping, separately authorised
 implementation and joint behavioural/adverse controls remain open. Runtime checks are UNRUN
 for this docs task; no provider work is authorised.
@@ -315,9 +264,7 @@ key stored in `venue.db` only in locked form. Do not reopen it. See
 
 ## A restored box whose cloud peer does not answer during its first start signs the next term and removes the marker
 
-**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
-node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
-Open:
+From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
 
 - A restored box whose cloud peer does not answer during its first start signs the next term and
   removes the marker; a fencing document the peer serves later at that same term reads as not
@@ -328,9 +275,7 @@ Open:
 
 ## The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the restored copy holds
 
-**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
-node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
-Open:
+From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
 
 - The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
   restored copy holds: a copy whose `nodes.public_key` for this node was rewritten, with its
@@ -340,9 +285,7 @@ Open:
 
 ## Only the start that finishes a restore checks the row's signature
 
-**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
-node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
-Open:
+From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
 
 - Only the start that finishes a restore checks the row's signature. A mirror or fenced start
   checks only that it can be read and is shaped as a document (A53); a start still finishing an
@@ -359,9 +302,7 @@ Open:
 
 ## On a start with NO restore marker, text that is not JSON or a machine list that is not a list fails with the generic text
 
-**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
-node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
-Open:
+From Task 9a (#630, `apps/server/src/rebuild-first-start.ts`):
 
 - On a start with NO restore marker, text that is not JSON or a machine list that is not a list
   fails with the generic text; a stored JSON null reads as no document, and a document breaking only
