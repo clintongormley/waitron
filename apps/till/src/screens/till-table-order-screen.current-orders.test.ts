@@ -343,9 +343,9 @@ describe("Current orders and Sent service", () => {
   });
 
   it("serves a weighed row whole, as there are no units to count", async () => {
-    const jamon = row("l-jamon", "Jamón", "0.250", { unitPrecision: 3 });
+    const ham = row("l-jamon", "Jamón", "0.250", { unitPrecision: 3 });
     const { el } = await mountSent({
-      currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [jamon])] }),
+      currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [ham])] }),
     });
     const serves = capture(el, "serve-lines");
     await chooseSentServing(el, "l-jamon");
