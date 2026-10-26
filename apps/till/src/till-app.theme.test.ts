@@ -143,7 +143,7 @@ const counterOffers: ZoneOfferCatalogue = {
   offers: [],
 };
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   menuItemId: "mi-cafe",
   catalogueId: "cat-default",
@@ -189,7 +189,7 @@ it("picking a theme in the person's menu with an unsent order open asks nothing 
   );
   await flush(el);
   const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
-  counter.store.addProduct(cafe, "1");
+  counter.store.addProduct(coffee, "1");
   // The counter basket is not a scope the language change asks about, so a staged edit stands
   // in for the unsaved work it does ask about.
   const coordinator = leaveCoordinatorFor(counter)!;

@@ -102,8 +102,11 @@ const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLi
   ...over,
 });
 
-/** Croquetas the kitchen has, and a caña at `canaPrice` (given away when not 2.50). */
-function heldOrder(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): HeldOrder {
+function heldOrder(
+  revision: number,
+  draughtBeerPrice = "2.50",
+  draughtBeerQuantity = "1.000",
+): HeldOrder {
   return {
     kitchenNote: {
       scope: { workingOrderId: "wo-9" },
@@ -125,14 +128,18 @@ function heldOrder(revision: number, canaPrice = "2.50", canaQuantity = "1.000")
       {
         workingOrderLineId: "l-2",
         productId: "cana",
-        quantity: canaQuantity,
-        product: product("cana", "Caña", canaPrice),
+        quantity: draughtBeerQuantity,
+        product: product("cana", "Caña", draughtBeerPrice),
       },
     ],
   } as HeldOrder;
 }
 
-function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): TabLines {
+function listing(
+  revision: number,
+  draughtBeerPrice = "2.50",
+  draughtBeerQuantity = "1.000",
+): TabLines {
   return {
     revision,
     lines: [
@@ -151,9 +158,9 @@ function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): 
         lineNo: 2,
         name: "Caña",
         productId: "cana",
-        quantity: canaQuantity,
-        unitPriceGross: canaPrice,
-        ...(canaPrice === "2.50" ? {} : { listUnitPriceGross: "2.50" }),
+        quantity: draughtBeerQuantity,
+        unitPriceGross: draughtBeerPrice,
+        ...(draughtBeerPrice === "2.50" ? {} : { listUnitPriceGross: "2.50" }),
       }),
     ],
   };
@@ -1350,11 +1357,11 @@ describe("till-app: comping a stored counter order", () => {
     expect(dialog(el)).toBeNull();
     expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
     expect(counter(el).store.revision).toBe(5);
-    const cana = basket(el).shadowRoot!.querySelectorAll(".line")[1]!;
-    expect(cana.querySelector(".line-total s")!.textContent).toBe(
+    const draughtBeer = basket(el).shadowRoot!.querySelectorAll(".line")[1]!;
+    expect(draughtBeer.querySelector(".line-total s")!.textContent).toBe(
       formatMoney("2.50", currentLocale()),
     );
-    expect(cana.querySelector(".line-total")!.textContent).toContain(
+    expect(draughtBeer.querySelector(".line-total")!.textContent).toContain(
       formatMoney("0.00", currentLocale()),
     );
     expect(banner(el)).toBeNull();
@@ -2022,7 +2029,7 @@ describe("till-app: the basket while the order is loaded again", () => {
 });
 
 describe("till-app: the basket's lock while the order is loaded again", () => {
-  const cafe = product("cafe", "Café", "1.50");
+  const coffee = product("cafe", "Café", "1.50");
 
   async function givenAway(reload: Promise<HeldOrder>): Promise<TillApp> {
     const el = await retrieved({
@@ -2044,7 +2051,7 @@ describe("till-app: the basket's lock while the order is loaded again", () => {
     emit(counter(el), "park-order", {});
     await flush(el);
     expect(counter(el).store.lineCount).toBe(0);
-    counter(el).store.addProduct(cafe, "1");
+    counter(el).store.addProduct(coffee, "1");
 
     expect(counter(el).store.lineCount).toBe(1);
     reload.resolve(heldOrder(5, "0.00"));
@@ -2058,7 +2065,7 @@ describe("till-app: the basket's lock while the order is loaded again", () => {
 
     emit(counter(el), "new-sale");
     await flush(el);
-    counter(el).store.addProduct(cafe, "1");
+    counter(el).store.addProduct(coffee, "1");
 
     expect(counter(el).store.lineCount).toBe(1);
   });
@@ -2071,7 +2078,7 @@ describe("till-app: the basket's lock while the order is loaded again", () => {
     emit(counter(el), "logout");
     await flush(el);
     const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
 
     expect(store.lineCount).toBe(3);
     reload.resolve(heldOrder(5, "0.00"));
@@ -2092,7 +2099,7 @@ describe("till-app: the basket's lock while the order is loaded again", () => {
     await press(el, inDialog(el, "[data-adjust-confirm]"));
 
     expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
-    counter(el).store.addProduct(cafe, "1");
+    counter(el).store.addProduct(coffee, "1");
     expect(counter(el).store.lineCount).toBe(3);
   });
 
@@ -2118,13 +2125,13 @@ describe("till-app: the basket's lock while the order is loaded again", () => {
       inDialog(el, "[data-adjust-confirm]").click();
       await settle();
       await settle();
-      counter(el).store.addProduct(cafe, "1");
+      counter(el).store.addProduct(coffee, "1");
       expect(counter(el).store.lineCount).toBe(2);
 
       await vi.advanceTimersByTimeAsync(150_000);
       await settle();
       expect(signal?.aborted).toBe(true);
-      counter(el).store.addProduct(cafe, "1");
+      counter(el).store.addProduct(coffee, "1");
       expect(counter(el).store.lineCount).toBe(3);
 
       reload.resolve(heldOrder(5, "0.00"));

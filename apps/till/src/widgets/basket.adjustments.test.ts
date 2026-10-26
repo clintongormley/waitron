@@ -24,8 +24,8 @@ const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   allergens: null,
 });
 
-const croquetas = product("croquetas", "Croquetas", "3.00");
-const cana = product("cana", "Caña", "0.00");
+const croquettes = product("croquetas", "Croquetas", "3.00");
+const draughtBeer = product("cana", "Caña", "0.00");
 const burger = product("burger", "Hamburguesa", "10.00");
 
 const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLine => ({
@@ -51,7 +51,6 @@ const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLi
   ...over,
 });
 
-/** Two croquetas the kitchen has, a caña given away, and an unsent burger with bacon. */
 const listed: TabLine[] = [
   tabLine({
     id: "l-1",
@@ -83,8 +82,8 @@ const listed: TabLine[] = [
 ];
 
 const basketLines = (): OrderLine[] => [
-  { workingOrderLineId: "l-1", product: croquetas, quantity: "2" },
-  { workingOrderLineId: "l-2", product: cana, quantity: "1" },
+  { workingOrderLineId: "l-1", product: croquettes, quantity: "2" },
+  { workingOrderLineId: "l-2", product: draughtBeer, quantity: "1" },
   {
     workingOrderLineId: "l-3",
     product: burger,
@@ -570,7 +569,7 @@ describe("till-basket: no adjustments until the basket matches the stored order"
 
   it("offers none on a walk-up basket", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(croquetas, "2");
+    store.addProduct(croquettes, "2");
     const el = await mount(store, null);
     expect(none(el)).toBe(0);
     expect(rows(el)[0]!.querySelector(".remove")).not.toBeNull();
