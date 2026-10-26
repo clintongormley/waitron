@@ -24,6 +24,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { ServerRouter } from "./api/server-router.js";
 
 // T4 holds party v1 on bill wo-4 and T9 party v9 on bill wo-9, both in zone z1, whose Lunch menu
 // offers Beer, Steak and Flan. Ana is p1, Sam p2.
@@ -862,6 +863,95 @@ describe("till-app: a table left for another keeps its button", () => {
     expect(tableOrder(el)!.retainedDraft?.lines).toHaveLength(1);
     await openT9(el);
     expect(bar(el)).toContain("✎ T4");
+    await flush(el, 6);
+    expect(bar(el)).toContain("✎ T4");
+  });
+
+  /** T4 left for T9 with Beer unsaved: T4's save fails and its button stays. */
+  async function failT4Save(el: TillApp, answer: (answer?: SaveAnswer) => void): Promise<void> {
+    await openT9(el);
+    await flush(el, 6);
+    answer("failed");
+    await flush(el, 6);
+    expect(bar(el)).toContain("✎ T4");
+  }
+
+  it("drops T4's kept button once T4 is reopened, its kept copy discarded and T4 left again", async () => {
+    const { el, answer } = await leaveT4ForT9();
+    await failT4Save(el, answer);
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    const candidate = tableOrder(el)!.retainedDraft!;
+    expect(candidate.lines).toHaveLength(1);
+    emit(tableOrder(el)!, "resolve-draft-candidate", { candidate, apply: false });
+    await flush(el, 6);
+    expect(tableOrder(el)!.retainedDraft ?? null).toBeNull();
+
+    const reads = api.getTablesState!.mock.calls.length;
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: true });
+    await flush(el, 6);
+    expect(tableOrder(el)?.party?.id).toBe("v9");
+    expect(api.getTablesState!.mock.calls.length).toBeGreaterThan(reads);
+    expect(bar(el).some((tab) => tab.includes("T4"))).toBe(false);
+  });
+
+  it("gives the next person no button for the last person's kept table after a restart with no sign-out", async () => {
+    const { el, answer } = await leaveT4ForT9();
+    await failT4Save(el, answer);
+    emit(shell(el), "device-unauthorized");
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+    await signIn(el, "p2", "Sam");
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]"]);
+  });
+
+  it("drops the kept button when the server changes", async () => {
+    const data = new Map<string, string>();
+    const router = new ServerRouter({
+      origin: "https://box.deli.test",
+      fetchImpl: vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }) as unknown as typeof fetch,
+      storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
+    });
+    api = stubApi(phone, { getTablesState: vi.fn().mockResolvedValue([mesa4, mesa9WithAnas]) });
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api: api as unknown as TillApi,
+      router,
+    });
+    await openMesa(el);
+    const answer = holdNextSave();
+    await tap(el, "Beer");
+    await failT4Save(el, answer);
+    router.dispatchEvent(
+      new CustomEvent("server-changed", {
+        detail: { from: "https://box.deli.test", to: "https://cloud.deli.test" },
+      }),
+    );
+    await flush(el, 6);
+    await signIn(el);
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]"]);
+  });
+
+  it("lets only a floor read started after the save answered drop the kept button", async () => {
+    const { el, answer } = await leaveT4ForT9();
+    await openT9(el);
+    await flush(el, 6);
+    const answerBefore = holdNextTablesRead([mesa4, mesa9WithAnas]);
+    const answerAfter = holdNextTablesRead([mesa4With("p1"), mesa9WithAnas]);
+    const reads = api.getTablesState!.mock.calls.length;
+    await toFloor(el);
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    answer();
+    await flush(el, 6);
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 2);
+
+    answerBefore();
+    await flush(el, 6);
+    expect(bar(el)).toContain("✎ T4");
+    answerAfter();
     await flush(el, 6);
     expect(bar(el)).toContain("✎ T4");
   });
