@@ -54,9 +54,13 @@ const failed = (code: string, label: string) =>
  * `other`; null when nothing is there or a real folder is. A Move never puts files through one.
  */
 async function notASetAsideFolder(root: string, io: SetAsideIo): Promise<string | null> {
+  return notAFolder(join(root, START_AGAIN_SET_ASIDE_DIR), io);
+}
+
+async function notAFolder(path: string, io: SetAsideIo): Promise<string | null> {
   let info;
   try {
-    info = await io.lstat(join(root, START_AGAIN_SET_ASIDE_DIR));
+    info = await io.lstat(path);
   } catch (error) {
     if (codeOf(error) === "ENOENT") return null;
     throw error;
@@ -252,16 +256,18 @@ async function makeDestinationFolders(
   const under = destinationRoots(roots, record.setAside);
   for (const root of ["state", "venue"] as const) {
     if (!record.listed.units.some((unit) => unit.root === root)) continue;
-    const found = await notASetAsideFolder(under[root], io).catch((error: unknown) =>
-      codeOf(error),
-    );
-    if (found !== null) throw failed(found, setAsideLabel(roots, under[root]));
+    const at = under[root] === roots.stateDir ? "state" : "venue";
+    // The Move made every folder below the root; a link or file there now would take the pieces
+    // somewhere else.
+    for (const folder of chain(under[root], folders[root]).slice(1)) {
+      const found = await notAFolder(folder, io).catch((error: unknown) => codeOf(error));
+      if (found !== null) throw failed(found, `${at}/${relative(under[root], folder)}`);
+    }
     try {
       // Made without a sync before the record; each folder's entry is synced before a piece lands.
       await io.mkdir(folders[root], { recursive: true, mode: MODE });
       for (const folder of chain(under[root], folders[root])) await syncFolder(folder);
     } catch (error) {
-      const at = under[root] === roots.stateDir ? "state" : "venue";
       throw failed(codeOf(error), `${at}/${record.setAside[root]}`);
     }
   }
