@@ -1923,6 +1923,27 @@ export const en = {
   "person.save_email": "Save email",
   "person.resend_invitation": "Send new invitation",
   "person.download_data": "Download their data",
+  "invoice_customer.heading": "Find a customer by tax number",
+  "invoice_customer.tax_id": "Tax number",
+  "invoice_customer.tax_id_hint": "For example ES12345678Z",
+  "invoice_customer.tax_id_invalid":
+    "Use only letters and digits; spaces, dots, hyphens and an ES at the start are ignored.",
+  "invoice_customer.find": "Find",
+  "invoice_customer.none":
+    "No full invoice names this tax number. Letter case, spaces, dots, hyphens and an ES at the start make no difference, so check the letters and digits.",
+  "invoice_customer.count": "{count} full invoices name this tax number.",
+  "invoice_customer.count_one": "1 full invoice names this tax number.",
+  "invoice_customer.col.invoice": "Invoice",
+  "invoice_customer.col.issued": "Issued",
+  "invoice_customer.col.name": "Name on the invoice",
+  "invoice_customer.col.total": "Total",
+  "invoice_customer.preparing": "Preparing a copy of the customer's data…",
+  "invoice_customer.not_permitted":
+    "Only an administrator can find and download a customer's data, and this account can no longer do it. Sign in as an administrator to do it: this signs you out here first.",
+  "invoice_customer.vanished":
+    "The box listed these invoices a moment ago and now finds none. That is a fault in Waitron.",
+  "invoice_customer.read_only":
+    "This is a read-only copy of the box, where anyone who reaches it is signed in as an administrator, so finding a customer by tax number is switched off here. Do it on the box itself.",
   "allergen.add": "Add allergen",
   "allergen.search": "Search allergens",
   "allergen.no_matches": "No matching allergens.",
@@ -5326,6 +5347,27 @@ export const es: Record<StringKey, string> = {
   "person.save_email": "Guardar correo",
   "person.resend_invitation": "Enviar nueva invitación",
   "person.download_data": "Descargar sus datos",
+  "invoice_customer.heading": "Buscar un cliente por NIF",
+  "invoice_customer.tax_id": "NIF",
+  "invoice_customer.tax_id_hint": "Por ejemplo, ES12345678Z",
+  "invoice_customer.tax_id_invalid":
+    "Usa solo letras y números; se ignoran los espacios, los puntos, los guiones y un ES al principio.",
+  "invoice_customer.find": "Buscar",
+  "invoice_customer.none":
+    "Ninguna factura completa lleva este NIF. Las mayúsculas, los espacios, los puntos, los guiones y un ES al principio no cambian nada, así que revisa las letras y los números.",
+  "invoice_customer.count": "{count} facturas completas llevan este NIF.",
+  "invoice_customer.count_one": "1 factura completa lleva este NIF.",
+  "invoice_customer.col.invoice": "Factura",
+  "invoice_customer.col.issued": "Emitida",
+  "invoice_customer.col.name": "Nombre en la factura",
+  "invoice_customer.col.total": "Total",
+  "invoice_customer.preparing": "Preparando una copia de los datos del cliente…",
+  "invoice_customer.not_permitted":
+    "Solo un administrador puede buscar y descargar los datos de un cliente, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para hacerlo: antes se cierra tu sesión aquí.",
+  "invoice_customer.vanished":
+    "La caja mostró estas facturas hace un momento y ahora no encuentra ninguna. Es un fallo de Waitron.",
+  "invoice_customer.read_only":
+    "Esta es una copia de solo lectura de la caja, donde cualquiera que llegue entra como administrador, así que aquí no se puede buscar a un cliente por NIF. Hazlo en la propia caja.",
   "allergen.add": "Añadir alérgeno",
   "allergen.search": "Buscar alérgenos",
   "allergen.no_matches": "No hay alérgenos coincidentes.",

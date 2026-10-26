@@ -11230,9 +11230,8 @@ describe("after the server comes back", () => {
   const down = { code: "connection.failed" };
 
   function failing(client: Api, ...names: (keyof DashboardApi)[]): () => void {
-    const reads = names.map(
-      (name) => [client[name], client[name].getMockImplementation()] as const,
-    );
+    const mocks = client as Record<keyof DashboardApi, ReturnType<typeof vi.fn>>;
+    const reads = names.map((name) => [mocks[name], mocks[name].getMockImplementation()] as const);
     for (const [read] of reads) read.mockRejectedValue(down);
     return () => {
       for (const [read, answer] of reads) read.mockImplementation(answer!);

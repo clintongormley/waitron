@@ -1739,3 +1739,38 @@ it("downloads another person's personal data by id with the server's file name",
   expect(init.credentials).toBe("include");
   expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
 });
+
+it("finds an invoice customer by the typed tax number, not passively", async () => {
+  const answer = { taxId: "12345678Z", invoices: [] };
+  const fetchImpl = vi.fn().mockResolvedValue(Response.json(answer));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.findInvoiceCustomer("es 12/345")).toEqual(answer);
+
+  const [[url, init]] = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(url).toBe("/management-api/invoice-customers/personal-data?taxId=es%2012%2F345");
+  expect(init.method).toBe("GET");
+  expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
+});
+
+it("downloads an invoice customer's data by tax number with the server's file name", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(
+    new Response(new Uint8Array([0x50, 0x4b, 0x05, 0x06]), {
+      status: 200,
+      headers: {
+        "content-type": "application/zip",
+        "content-disposition": 'attachment; filename="invoice-customer-12345678Z-2026-10-26.zip"',
+      },
+    }),
+  );
+  const api = new DashboardApi("", fetchImpl);
+
+  const out = await api.downloadInvoiceCustomerData("12345678Z");
+
+  expect(out.fileName).toBe("invoice-customer-12345678Z-2026-10-26.zip");
+  expect([...new Uint8Array(await out.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 0x05, 0x06]);
+  const [[url, init]] = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(url).toBe("/management-api/invoice-customers/personal-data/export?taxId=12345678Z");
+  expect(init.method).toBe("GET");
+  expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
+});

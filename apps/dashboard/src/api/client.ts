@@ -374,6 +374,11 @@ export interface RosterEntry {
   displayName: string;
 }
 
+export interface InvoiceCustomerSearchDto {
+  taxId: string;
+  invoices: { invoice: string; issuedAt: string; name: string; total: string }[];
+}
+
 export interface PersonSummary {
   personId: string;
   displayName: string;
@@ -2371,6 +2376,20 @@ export class DashboardApi {
   downloadPersonalData(personId: string): Promise<DownloadedFile> {
     return this.#request<DownloadedFile>(
       `/management-api/staff/${encodeURIComponent(personId)}/personal-data/export`,
+      "GET",
+      undefined,
+      { as: "file" },
+    );
+  }
+  findInvoiceCustomer(taxId: string): Promise<InvoiceCustomerSearchDto> {
+    return this.#request<InvoiceCustomerSearchDto>(
+      `/management-api/invoice-customers/personal-data?taxId=${encodeURIComponent(taxId)}`,
+      "GET",
+    );
+  }
+  downloadInvoiceCustomerData(taxId: string): Promise<DownloadedFile> {
+    return this.#request<DownloadedFile>(
+      `/management-api/invoice-customers/personal-data/export?taxId=${encodeURIComponent(taxId)}`,
       "GET",
       undefined,
       { as: "file" },
