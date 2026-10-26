@@ -945,6 +945,39 @@ it("leaves a sealed Cloud wait and its request as they were when an open after t
   expect(answer.requestId).toBe(f.approved.requestId);
 });
 
+it("refuses an open after a seal as a conflict when another tab's Start moves the sealed request before the open reads it", async () => {
+  const f = await cloudFixture();
+  f.service.sealLapsed();
+  const gate = barrier();
+  const reached = barrier();
+  const real = (await vi.importActual<typeof filesystem>("node:fs/promises")).mkdtemp;
+  const held = vi.mocked(filesystem.mkdtemp).mockImplementation(async (prefix, options) => {
+    if (prefix.includes("waitron-backup-proof-")) {
+      reached.resolve();
+      await gate.promise;
+    }
+    return real(prefix, options);
+  });
+  const opening = f.service.open(f.request, client);
+  opening.catch(() => {});
+  let started: { requestId: string };
+  try {
+    await reached.promise;
+    started = await f.service.cloudStart("B");
+  } finally {
+    gate.resolve();
+    held.mockRestore();
+  }
+  await expect(opening).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(started.requestId).toBe(f.approved.requestId);
+  expect(f.service.runningInMemory()).toBe(true);
+  f.service.cloudRenew("B");
+  expect(await f.service.cloudStatus("B")).toMatchObject({
+    state: "approved",
+    requestId: f.approved.requestId,
+  });
+});
+
 it("answers Check on a sealed Cloud recovery from its own request, and leases nothing", async () => {
   const f = await cloudFixture();
   f.service.sealLapsed();
@@ -1229,6 +1262,22 @@ it("starts a new Cloud recovery after a stopped one is discarded in the same ser
   clock.advance(LEASE + 1);
   expect(() => f.service.cloudRenew("A")).toThrow(refused);
 });
+
+it.each(["A", "C"])(
+  "tells holder %s of a new Cloud recovery's wait that the owner is needed after it releases, not that the old one was discarded",
+  async (holder) => {
+    const f = await closedCloudSession();
+    expect((await f.service.cloudStatus("A")).state).toBe("approved");
+    clock.advance(LEASE + 1);
+    f.service.sealLapsed();
+    const at = await discard(f, f.session.recoveryId);
+    expect(() => f.service.cloudRenew("A")).toThrow(discardedAt(at));
+    expect((await f.service.cloudStart(holder)).state).toBe("awaiting_owner");
+    f.service.cloudRenew(holder);
+    f.service.cloudRelease(holder);
+    expect(() => f.service.cloudRenew(holder)).toThrow(refused);
+  },
+);
 
 it("answers owner-required for an unknown session once a new recovery is under way beside the tombstone", async () => {
   const f = await preparedSession();

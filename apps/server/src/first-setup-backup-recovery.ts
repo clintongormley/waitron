@@ -228,6 +228,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     )
       return;
     wait.holders.set(holder, performance.now());
+    retiredHolders.delete(holder);
     wait.lastActiveAt = new Date().toISOString();
   };
   const handOver = (recoveryId: string) => cloudWaits.get(recoveryId)?.holders.clear();
@@ -843,6 +844,11 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
         });
         const { recoveryId, sealedId } = before;
         const cloudId = sealedId ?? recoveryId;
+        // A Start since the first turn may have moved the sealed id's client to a new id.
+        const cloudClient = async () => {
+          if (sealedId !== undefined && !clouds.has(sealedId)) conflict();
+          return (await cloudFor(cloudId)).client;
+        };
         // Decrypted copies and key derivation stay outside the retained roots and their action lock.
         const scratch = await mkdtemp(join(tmpdir(), "waitron-backup-proof-"));
         let selected: Selected | undefined;
@@ -861,8 +867,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               ...options.sources,
               ...(request.source.kind === "cloud"
                 ? {
-                    cloudRecovery:
-                      options.cloud === undefined ? undefined : (await cloudFor(cloudId)).client,
+                    cloudRecovery: options.cloud === undefined ? undefined : await cloudClient(),
                   }
                 : {}),
               stateDir: scratch,
