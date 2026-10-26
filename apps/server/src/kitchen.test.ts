@@ -19,6 +19,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   AppError,
+  DEFAULT_READY_WARNING_AFTER_MINUTES,
   DEFAULT_STATION_THRESHOLDS,
   STATION_COLOURS,
   locationId as brandLocationId,
@@ -493,6 +494,17 @@ describe("kitchen-station config", () => {
     const id = randomUUID();
     await db.insert(kitchenStations).values({ id, locationId: cfg.locationId, name: "Bare" });
     expect(await storedMinutes(id)).toEqual(DEFAULT_STATION_THRESHOLDS);
+  });
+
+  it("a station row given no ready warning takes the schema's default, equal to DEFAULT_READY_WARNING_AFTER_MINUTES", async () => {
+    const cfg = await setupVenue();
+    const id = randomUUID();
+    await db.insert(kitchenStations).values({ id, locationId: cfg.locationId, name: "Bare" });
+    const [row] = await db
+      .select({ readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id));
+    expect(row!.readyWarningAfterMinutes).toBe(DEFAULT_READY_WARNING_AFTER_MINUTES);
   });
 
   it("createStation and updateStation write the station's own row, and an omitted field keeps its value", async () => {

@@ -19,6 +19,8 @@ export const kitchenStations = table(
     warmAfterMinutes: count("warm_after_minutes").notNull().default(5),
     overdueAfterMinutes: count("overdue_after_minutes").notNull().default(10),
     forgottenAfterMinutes: count("forgotten_after_minutes").notNull().default(15),
+    // A CHECK on this column would rebuild this table.
+    readyWarningAfterMinutes: count("ready_warning_after_minutes").notNull().default(3),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
     showsRestOfOrder: flag("shows_rest_of_order").notNull().default(false),
