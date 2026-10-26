@@ -196,3 +196,40 @@ it.each(GUIDE_LANGUAGES)("serves the till notices guide in %s with its sections"
     "notices",
   ]);
 });
+
+it.each(GUIDE_LANGUAGES)("serves the data protection guide in %s with its sections", (lang) => {
+  expect(GUIDE_PAGES).toContain("data-protection");
+  const markdown = readGuide(root, lang, "data-protection");
+  expect(markdown).toBeDefined();
+  expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+    "who-does-what",
+    "staff-notice",
+    "invoice-notice",
+    "booking-notice",
+    "full-notice",
+    "record",
+    "breach",
+    "breach-records",
+    "breach-losses",
+  ]);
+});
+
+// Weaker than its name: it looks for three phrases, not for every way of saying whether to notify.
+it("the data protection guide marks placeholders and never says whether to notify", () => {
+  const html = (lang: Language) => rendered(lang, "data-protection")?.html ?? "";
+  const section = (lang: Language, id: string) => {
+    const start = html(lang).indexOf(`<section id="${id}"`);
+    expect(start, `${lang} #${id}`).toBeGreaterThanOrEqual(0);
+    return html(lang).slice(start, html(lang).indexOf("</section>", start));
+  };
+  for (const id of ["staff-notice", "invoice-notice", "full-notice"]) {
+    expect(section("en", id), id).toContain("<em>");
+  }
+  for (const lang of GUIDE_LANGUAGES) {
+    const text = html(lang).toLowerCase();
+    expect(text, lang).not.toBe("");
+    for (const verdict of ["you must notify", "debes notificar", "no es necesario notificar"]) {
+      expect(text, `${lang}: ${verdict}`).not.toContain(verdict);
+    }
+  }
+});
