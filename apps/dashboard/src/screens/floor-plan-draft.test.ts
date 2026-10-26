@@ -257,6 +257,36 @@ describe("short names", () => {
       problem: "parts_too_few",
     });
   });
+
+  it.each([
+    ["T1+T2", "short_name_plus"],
+    ["1+2", "short_name_plus"],
+    ["+", "short_name_plus"],
+    ["T12", null],
+  ])("checkDraft refuses a new or changed short name holding +: %s", (shortName, problem) => {
+    const d = addTables(
+      { tables: [] },
+      [{ label: "Terrace", shortName, seats: null, fixed: false }],
+      counter("new"),
+    );
+    expect(checkDraft(d)).toEqual(problem === null ? null : { key: "new:1", problem });
+  });
+
+  it("an untouched stored short name with + is left alone, and a changed one is not", () => {
+    const d = draftFromPlan({
+      ...plan,
+      tables: [{ ...shortNamePlan().tables[0]!, id: "a", label: "1+2", shortName: "1+2" }],
+    });
+    expect(checkDraft(d)).toBeNull();
+    const changed = patchTable(d, "a", { shortName: "1+3" });
+    expect(checkDraft(changed)).toEqual({ key: "a", problem: "short_name_plus" });
+    expect(checkDraft(patchTable(changed, "a", { shortName: "1+2" }))).toBeNull();
+  });
+
+  it("the full-width plus is not refused", () => {
+    const d = patchTable(draftFromPlan(shortNamePlan()), "b", { shortName: "T1\uFF0BT2" });
+    expect(checkDraft(d)).toBeNull();
+  });
 });
 
 describe("floor plan draft", () => {

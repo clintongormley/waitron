@@ -27,6 +27,7 @@ import {
   MAX_SEATS,
   addTables,
   followName,
+  refusesPlus,
   sendChange,
   tableName,
   type FloorPlanDraft,
@@ -224,7 +225,9 @@ export class FloorPlanAddTables extends LitElement {
     if (form.naming === "automatic" && count !== null) {
       for (const label of this.#automatic(form, count)) {
         const shortName = proposeShortName(label);
-        errors.prefix = taken(shortName);
+        errors.prefix = refusesPlus(undefined, shortName)
+          ? t("floor_plan_editor.short_name_plus")
+          : taken(shortName);
         if (errors.prefix !== "") break;
         holders.set(shortNameKey(shortName), label);
       }
@@ -243,6 +246,7 @@ export class FloorPlanAddTables extends LitElement {
         if (shortName === "") return t("floor_plan_editor.short_name_missing");
         if (shortNameLength(shortName) > SHORT_NAME_MAX)
           return t("floor_plan_editor.short_name_too_long");
+        if (refusesPlus(undefined, shortName)) return t("floor_plan_editor.short_name_plus");
         const problem = taken(shortName);
         if (problem === "") {
           holders.set(shortNameKey(shortName), tableName({ label: form.names[i] ?? "" }));

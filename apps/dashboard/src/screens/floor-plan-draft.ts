@@ -25,6 +25,8 @@ export interface DraftTable {
   parts: readonly string[] | null;
   /** Read from the plan and never sent: the server works out a kept size itself. */
   keptSize: { width: number; height: number } | null;
+  /** The plan's stored short name, never sent: a "+" stored before the check is kept untouched. */
+  savedShortName?: string;
 }
 
 export interface FloorPlanDraft {
@@ -76,6 +78,7 @@ export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
       placement: t.placement === null ? null : { ...t.placement },
       parts: t.partIds.length === 0 ? null : [...t.partIds],
       keptSize: t.keptSize === null ? null : { ...t.keptSize },
+      ...(t.shortName === null ? {} : { savedShortName: t.shortName }),
     })),
   };
 }
@@ -176,8 +179,17 @@ export type DraftProblem =
   | "label_repeated"
   | "short_name_missing"
   | "short_name_too_long"
+  | "short_name_plus"
   | "short_name_repeated"
   | "parts_too_few";
+
+/** The till joins table names with "+" (`mergeLabel`), so a new one would read as a join. */
+export function refusesPlus(
+  table: Pick<DraftTable, "savedShortName"> | undefined,
+  shortName: string,
+): boolean {
+  return shortName.includes("+") && shortName !== table?.savedShortName;
+}
 
 export interface DraftCheck {
   key: string;
@@ -199,6 +211,7 @@ export function checkDraft(draft: FloorPlanDraft): DraftCheck | null {
     if (shortName === "") return { key: t.key, problem: "short_name_missing" };
     if (shortNameLength(shortName) > SHORT_NAME_MAX)
       return { key: t.key, problem: "short_name_too_long" };
+    if (refusesPlus(t, shortName)) return { key: t.key, problem: "short_name_plus" };
     const earlier = shortNames.get(shortNameKey(shortName));
     if (earlier !== undefined)
       return {

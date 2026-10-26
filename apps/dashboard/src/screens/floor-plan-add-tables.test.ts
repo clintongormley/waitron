@@ -444,3 +444,24 @@ it("a custom short name blank, too long, used by the draft or twice in the batch
   expect(changes).toEqual([]);
   expect(addDialog(el).open).toBe(true);
 });
+
+it("a custom short name holding + is refused beside its field", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await setNames(el, ["Patio 1"]);
+  await set(el, shortNameFields(el)[0]!, "A+B");
+  await pressAdd(el);
+  expect(shortNameFields(el)[0]!.error).toBe("Leave out +: it marks joined tables.");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  expect(changes).toEqual([]);
+});
+
+it("automatic short names holding + are refused beside Prefix", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await set(el, addField(el, "prefix"), "1+");
+  expect(preview(el)).toBe("1+ 1");
+  await pressAdd(el);
+  expect(addField(el, "prefix").error).toBe("Leave out +: it marks joined tables.");
+  expect(changes).toEqual([]);
+});

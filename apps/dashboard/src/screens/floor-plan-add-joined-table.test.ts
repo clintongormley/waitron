@@ -427,3 +427,16 @@ it("A747 reopening after a manually edited add suggests totals again", async () 
   await choose(el, ["c3", "c4"]);
   expect(field(el, "seats").value).toBe("8");
 });
+
+it("refuses a short name holding + beside the field", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await set(el, "table-name", "Long table");
+  await set(el, "seats", "10");
+  await choose(el, ["c3", "c4"]);
+  await set(el, "short-name", "A+B");
+  await pressAdd(el);
+  expect(field(el, "short-name").error).toBe("Leave out +: it marks joined tables.");
+  expect(formError(el)).toBe("Correct the highlighted fields to continue.");
+  expect(changes).toEqual([]);
+});

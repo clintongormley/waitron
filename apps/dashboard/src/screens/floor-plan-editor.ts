@@ -48,6 +48,7 @@ import {
   deleteTable,
   draftFromPlan,
   joinedTableOf,
+  refusesPlus,
   rekeyDraft,
   rekeyWith,
   restoreTable,
@@ -162,6 +163,7 @@ function tableProblem(draft: FloorPlanDraft, key: string): DraftCheck | null {
   const shortName = table.shortName.trim();
   if (shortName === "") return { key, problem: "short_name_missing" };
   if (shortNameLength(shortName) > SHORT_NAME_MAX) return { key, problem: "short_name_too_long" };
+  if (refusesPlus(table, shortName)) return { key, problem: "short_name_plus" };
   const holder = draft.tables.find(
     (t) => t.key !== key && shortNameKey(t.shortName.trim()) === shortNameKey(shortName),
   );
@@ -175,6 +177,7 @@ const CHECK_FIELDS: Record<DraftCheck["problem"], FloorPlanField> = {
   label_repeated: "label",
   short_name_missing: "shortName",
   short_name_too_long: "shortName",
+  short_name_plus: "shortName",
   short_name_repeated: "shortName",
   parts_too_few: "parts",
 };
@@ -189,6 +192,8 @@ function checkText(check: DraftCheck): string {
       return t("floor_plan_editor.short_name_missing");
     case "short_name_too_long":
       return t("floor_plan_editor.short_name_too_long");
+    case "short_name_plus":
+      return t("floor_plan_editor.short_name_plus");
     case "short_name_repeated":
       return fill("floor_plan_editor.short_name_taken", {
         takenBy: check.takenBy!,

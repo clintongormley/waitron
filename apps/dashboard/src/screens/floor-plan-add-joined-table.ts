@@ -28,6 +28,7 @@ import {
   followName,
   freeTables,
   placeTable,
+  refusesPlus,
   seatCount,
   sendChange,
   tableName,
@@ -203,6 +204,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
     if (shortName === "") return t("floor_plan_editor.short_name_missing");
     if (shortNameLength(shortName) > SHORT_NAME_MAX)
       return t("floor_plan_editor.short_name_too_long");
+    if (refusesPlus(undefined, shortName)) return t("floor_plan_editor.short_name_plus");
     const holder = this.draft.tables.find(
       (table) => shortNameKey(table.shortName.trim()) === shortNameKey(shortName),
     );

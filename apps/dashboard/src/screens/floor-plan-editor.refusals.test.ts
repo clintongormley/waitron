@@ -1371,3 +1371,31 @@ it("a server refusal of Long table's parts shows under its Made of", async () =>
   expect(panelField(el, "made-of").error).toBe("Check the floor plan's tables and try again");
   expect(panelField(el, "seats").error).toBe("");
 });
+
+it("a table named 1+2 stored with no short name shows its proposal 1+2, refused at Save until another is typed", async () => {
+  await wide();
+  const joinedName = (): FloorPlan => ({
+    ...plan(),
+    tables: plan().tables.map((t) => (t.id === "m1" ? { ...t, label: "1+2" } : t)),
+  });
+  const api = stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedName()) });
+  const el = await open(api);
+  await change(el, changePlacement(draftFromPlan(joinedName()), "m1", { x: 5, y: 4 }));
+  await select(el, "m1");
+  expect(panelField(el, "short-name").value).toBe("1+2");
+  await press(el, "save");
+  expect(api.saveFloorPlan).not.toHaveBeenCalled();
+  expect(el.fieldError).toEqual({
+    key: "m1",
+    field: "shortName",
+    message: "Leave out +: it marks joined tables.",
+  });
+  expect(panelField(el, "short-name").error).toBe("Leave out +: it marks joined tables.");
+  await typeIntoPanel(el, "short-name", "12");
+  await press(el, "save");
+  expect(
+    vi
+      .mocked(api.saveFloorPlan)
+      .mock.calls[0]![2].tables.find((t: { key: string }) => t.key === "m1")!.shortName,
+  ).toBe("12");
+});
