@@ -1943,7 +1943,7 @@ export const en = {
   "invoice_customer.vanished":
     "The box listed these invoices a moment ago and now finds none. That is a fault in Waitron.",
   "invoice_customer.read_only":
-    "This is a read-only copy of the box, where anyone who reaches it is signed in as an administrator, so finding a customer by tax number is switched off here. Do it on the box itself.",
+    "This is a read-only copy of the box, so finding a customer by tax number is switched off here. Do it on the box itself.",
   "allergen.add": "Add allergen",
   "allergen.search": "Search allergens",
   "allergen.no_matches": "No matching allergens.",
@@ -5367,7 +5367,7 @@ export const es: Record<StringKey, string> = {
   "invoice_customer.vanished":
     "La caja mostró estas facturas hace un momento y ahora no encuentra ninguna. Es un fallo de Waitron.",
   "invoice_customer.read_only":
-    "Esta es una copia de solo lectura de la caja, donde cualquiera que llegue entra como administrador, así que aquí no se puede buscar a un cliente por NIF. Hazlo en la propia caja.",
+    "Esta es una copia de solo lectura de la caja, así que aquí no se puede buscar a un cliente por NIF. Hazlo en la propia caja.",
   "allergen.add": "Añadir alérgeno",
   "allergen.search": "Buscar alérgenos",
   "allergen.no_matches": "No hay alérgenos coincidentes.",

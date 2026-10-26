@@ -60,8 +60,7 @@ export function mountInvoiceCustomerDataApi(
       permission: "personal_data.export",
       touch: false,
     });
-  // A mirror signs everyone in as an administrator, and a lookup by a typed tax number is wider
-  // than one person's download, so both routes stay closed there (decision 14).
+  // Closed on a mirror for good: the owner decided on 2026-10-26 that a mirror serves no dashboard.
   const refuseOnMirror = () => {
     if (deps.onMirror()) throw new AppError("node.read_only", {});
   };

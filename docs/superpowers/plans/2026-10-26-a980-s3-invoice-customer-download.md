@@ -1,7 +1,9 @@
 # A980 slice S3: find an invoice customer by tax number, and download what the box holds about them
 
 **Status: plan, 2026-10-26, rounds 1 and 3 of review folded. Nothing was built when this was
-written.** The reviews, the claim check and the runner's rulings are in
+written.** **2026-10-26 pointer:** the owner withdrew A1111 the same morning (a mirror serves no
+dashboard; lane B's `questions.md`, "OWNER DECISION (2026-10-26 ~04:25 CET)"), so decision 14's
+refusal on a mirror is permanent; wording below that waits for A1111 is superseded. The reviews, the claim check and the runner's rulings are in
 `/Users/clintongormley/waitron-campaign-b/a980-s3-plan-review/` (`round1-review.md`,
 `round1-claims.md`, `round1-rulings.md`, `round3-review.md`, `round3-rulings.md`). Design:
 [A980 data protection, revision 2](../specs/2026-10-22-a980-data-protection-design.md) §2.2 (the
