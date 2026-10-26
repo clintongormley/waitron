@@ -134,16 +134,32 @@ A cleared step comes back when the moment it starts from happens again, such as 
 being served. A step that repeats every few minutes after the last order comes back with each
 repeat: **Done** clears the one on show, and another order starts the count again.
 
+## Get back to your tables with unsent dishes {#unsent-tables}
+
+On a busy shift it is easy to start an order at one table, get called to another, and forget the
+dishes you never sent. So on a phone or tablet the bar at the top shows **Floor**, then a button
+such as **✎ T4**, by the table's short name, for each table where you have dishes not yet sent;
+however many of your bills there hold unsent dishes, a table gets one button. Tap a button to go
+back to that table. The table you are at is highlighted, and once nothing of yours is unsent there
+its button loses the ✎ and goes when you leave, while a table you leave with dishes still unsent
+keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
+table you are at, and at any other table when the Floor next updates its tables.
+
+Tapping **Floor** after a table opens that table's zone, if this device shows it. Everything else is
+in **More** (☰): your name and clock actions when the bar has no room for them, which on a phone is
+always, the screens your profile allows, **Settings** (**Zones on this device**, **Equipment**,
+**Language** and **Theme**) and **Log out**.
+
 ## Give a table a short name {#short-names}
 
-A phone or tablet shows a table's short name in the Ready bar, where space is tight. In the
-dashboard's **Floor plan**, each table has a **Short name** under its **Name**, filled in from the
-name: "T1" for "Terrace 1", "Win" for "Window", and a name of four characters or fewer as it is. It
-follows the name until you type your own, of up to five characters, which cannot contain "+"
-because the till uses it for tables joined together. Two tables of the venue cannot share a short
-name, whatever the capitals: if Save says "Terrace 1 already uses T1", type another, such as "Tb1".
-**Add tables** shows the short names it will give, and lets you type them when you choose custom
-names; **Add joined table** asks for one.
+A phone or tablet shows a table's short name in the bar's table buttons and the Ready bar, where
+space is tight. In the dashboard's **Floor plan**, each table has a **Short name** under its
+**Name**, filled in from the name: "T1" for "Terrace 1", "Win" for "Window", and a name of four
+characters or fewer as it is. It follows the name until you type your own, of up to five characters,
+which cannot contain "+" because the till uses it for tables joined together. Two tables of the
+venue cannot share a short name, whatever the capitals: if Save says "Terrace 1 already uses T1",
+type another, such as "Tb1". **Add tables** shows the short names it will give, and lets you type
+them when you choose custom names; **Add joined table** asks for one.
 
 ## See which tables have food ready {#ready-bar}
 
@@ -168,8 +184,8 @@ opens as a map when it has tables placed on its plan, and as a list when it has 
 A device shows every zone its profile allows. If you only work the terrace, the other zones get in
 the way, so you can choose which of them this device shows and which one it opens on. On a till,
 open **More** (☰), then **Settings**, then **Zones on this device**. On a phone or tablet, open
-**More** (☰) and choose **Zones on this device**. Tick **Show** for each zone you want, choose the
-one that **Opens first**, and tap **Save**.
+**More** (☰) and choose **Zones on this device**, under **Settings**. Tick **Show** for each zone
+you want, choose the one that **Opens first**, and tap **Save**.
 
 The **Floor** then shows only the zones you chose, and with a single zone it shows no zone tabs at
 all. A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A

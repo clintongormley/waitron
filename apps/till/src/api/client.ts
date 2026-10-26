@@ -899,7 +899,8 @@ export interface UnsentDraft {
   ownerId: string;
   ownerName: string;
   lineCount: number;
-  /** When the New order was last saved, as the box stored it. */
+  /** The draft's `updated_at` as the box stored it: every change to the draft moves it, not only a
+   * save of its dishes. */
   savedAt: string;
 }
 

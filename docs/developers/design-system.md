@@ -2307,24 +2307,25 @@ in `packages/ui/src/help-mode.test.ts`). `wt-help-switch` is the button that tur
 the dashboard shows one in its banner and turns help off whenever it returns to the sign-in screen
 (see "Dashboard banner").
 
-On the till, `till-shell` alone draws a `wt-help-switch`, on its bar: on a
-till, first in the bar's session row, before the person's menu and More; on a handheld, after the
-language chooser (or where it stood, once it has moved into More) and before the person's name and
-More. It is never in More, and the kitchen display, kiosk mode (whose shell draws no bar) and the
-lock screen (drawn in the shell's place) have none. On a till at phone width nothing else leaves
-the bar for it, so the tab strip, which already scrolls sideways there, gets narrower: 8 px wide at
-320 px with a long name, pinned as a known limit in `till-shell.help-phone.test.ts` and left to the
-owner in the backlog. Help goes off whenever the till shows its lock screen (`#setScreen` in
-`till-app.ts`): logging out, the idle sign-out, a move to another server and boot all pass
-through it, and a new person signs in only from there, so the next person starts with help off; a
-profile switch and a change of tab keep it as it was. With help on, six menu options carry a badge
-through `wt-menu-row`: Profile, Settings (a till's More), Equipment, Transfers and Pass (a
-handheld's More) and Fix my hours (the person menu). A button on the bar carries none, because a
-till's tab strip scrolls and would cut off a badge hung over its corner. `till-shell`'s `:host` sets
-the till's badge to a 32 px target with a 24 px circle; a menu row's badge
-keeps its `--wt-tap-min` square. Tests: `till-shell.help.test.ts` (where the switch sits),
-`till-shell.help-phone.test.ts` (the bar at phone width), `till-app.help-mode.test.ts` (off on lock)
-and `till-shell.menu-help.test.ts` (the menu badges).
+On the till, `till-shell` alone draws a `wt-help-switch`, on its bar: on a till, first in the bar's
+session row, before the person's menu and More; on a handheld, after the person's name while the
+name is on the bar, and before More, so "?" and More stay together at the end whether or not the
+name is in More. It is never in More, and the kitchen display, kiosk mode (whose shell draws no bar)
+and the lock screen (drawn in the shell's place) have none. On a till at phone width nothing else
+leaves the bar for it, so the tab strip, which already scrolls sideways there, gets narrower: 8 px
+wide at 320 px with a long name, pinned as a known limit in `till-shell.help-phone.test.ts` and left
+to the owner in the backlog. Help goes off whenever the till shows its lock screen (`#setScreen` in
+`till-app.ts`): logging out, the idle sign-out, a move to another server and boot all pass through
+it, and a new person signs in only from there, so the next person starts with help off; a profile
+switch and a change of tab keep it as it was. With help on, these menu options carry a badge through
+`wt-menu-row`: Profile (either More), Settings (a till's More), Pass, Transfers, Zones on this
+device and Equipment (a handheld's More) and Fix my hours (the person menu, or a handheld's More
+while the name is in it). A button on the bar carries none, because a till's tab strip scrolls and
+would cut off a badge hung over its corner. `till-shell`'s `:host` sets the till's badge to a 32 px
+target with a 24 px circle; a menu row's badge keeps its `--wt-tap-min` square. Tests:
+`till-shell.help.test.ts` (where the switch sits), `till-shell.help-phone.test.ts` (the bar at phone
+width), `till-app.help-mode.test.ts` (off on lock) and `till-shell.menu-help.test.ts` (the menu
+badges).
 
 The till's screens carry badges too, each built by `helpBadge` (`apps/till/src/widgets/help-badge.ts`)
 with its text from `apps/till/src/i18n/help-strings.ts`. Counter: Park, the Guests field, and the
@@ -5288,35 +5289,32 @@ being blocked must not stop filtering.
 The production server serves app HTML for browser navigation under `/manage` and `/tabs`. APIs and
 static assets keep their own responses; setup continues to use its existing root page.
 
-The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each
-app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
-header, after the logo; in the dashboard's banner only while nobody is signed in, just after the
-Theme chooser with nothing following it (signed in, the languages are a `layout="group"` row in the
-account menu; see "Dashboard banner"); inside More on a signed-in till; on a handheld, in the shell
-bar before the operator's name while that is on the bar, and before More when the bar has it, as in
-the counter screen's own header (which it draws only when not embedded in the shell, and the app
-always embeds it); in the shell bar the Help switch sits between them. On a handheld at phone
-width, when the bar does not fit with it, the chooser moves to the end of More, after Theme, as the
-same `layout="group"` row a till's More holds, and comes back to the bar when the screen widens; it
-never moves while More is open. A till screen with no top bar —
-the sign-in and join screens, the kitchen display and kiosk mode, whose shell draws no bar — holds
-it at the top right, above the content.
+The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each app
+puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card header,
+after the logo; in the dashboard's banner only while nobody is signed in, just after the Theme
+chooser with nothing following it (signed in, the languages are a `layout="group"` row in the
+account menu; see "Dashboard banner"); inside More on a signed-in till; on a signed-in handheld,
+inside More at every width, in its Settings group after Equipment and before Theme, as the same
+`layout="group"` row a till's More holds, and never on the bar. The counter screen's own header
+draws one only when not embedded in the shell, and the app always embeds it. A till screen with no
+top bar — the sign-in and join screens, the kitchen display and kiosk mode, whose shell draws no bar
+— holds it at the top right, above the content.
 
-The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card
-header, the till's sign-in and join screens and the kitchen display's and kiosk mode's corner, and in the
+The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card header,
+the till's sign-in and join screens and the kitchen display's and kiosk mode's corner, and in the
 dashboard's banner while nobody is signed in (signed in, Theme is in the account menu; see
 "Dashboard banner"). The counter screen's own header has none, because the till never shows that
-header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in
-person's menu under their name. On a handheld, that menu can move inside More and keeps Theme
-after Log out. On a till, Log out is in More while Theme and clock actions stay under the person's
-name. Measured 2026-10-17 in A681's re-look of the till's person menu: as three rows before Log out, the group pushed Log out
-below the visible More menu at 360×640, 360×740, 320×740 and 390×664. Measured 2026-10-17
-in the real-browser look for A681: with the chooser on the bar, at 360 px the tab strip got 148 px
-of the 178 px its tabs needed, and "Sala" showed as "Sa". A theme pick applies at once and never
-asks about unsaved work, unlike a language pick on the till. The dashboard banner's dark
-lockup follows the choice (its `<source>`'s `media` is `all` for Dark, `not all` for Light, and
-`(prefers-color-scheme: dark)` for Follow device), and the printable node recovery page takes the
-screen's resolved `color-scheme` rather than `light dark`.
+header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in person's
+menu under their name, Log out is in More, and the clock actions stay under the name. On a signed-in
+handheld, Theme and Log out are both in More, never in the name's menu: Theme last in the Settings
+group, and Log out last of all. Measured 2026-10-17 in A681's re-look of the till's person menu: as
+three rows before Log out, the group pushed Log out below the visible More menu at 360×640, 360×740,
+320×740 and 390×664. Measured 2026-10-17 in the real-browser look for A681: with the chooser on the
+bar, at 360 px the tab strip got 148 px of the 178 px its tabs needed, and "Sala" showed as "Sa". A
+theme pick applies at once and never asks about unsaved work, unlike a language pick on the till.
+The dashboard banner's dark lockup follows the choice (its `<source>`'s `media` is `all` for Dark,
+`not all` for Light, and `(prefers-color-scheme: dark)` for Follow device), and the printable node
+recovery page takes the screen's resolved `color-scheme` rather than `light dark`.
 
 A till keeps Counter, Floor, Parked, Waiting, Transfers and Pass on a permanent, horizontally
 scrollable strip, subject to the device and person's permissions. Parked, Waiting and Transfers
@@ -5325,23 +5323,40 @@ removes the animation. The Help switch, the operator and More remain reachable w
 Parked or Waiting changes the Counter menu-side view while keeping its basket. Returning to
 Counter restores the menu. An order already in the basket is excluded from the Parked view and count.
 
-More permanently holds Find a bill, My schedule, Profile when there is a profile choice, Language,
-Settings and Log out. Settings holds Equipment and Zones on this device. Kitchen appears only
-under Testing on Demo or Preparation installs with the existing kitchen permission. Live tills
-keep Kitchen off their navigation; kitchen displays retain their own fixed primary screen.
-Find a bill opens Bills and Transactions. Its Back returns to Counter without replacing the basket;
-a transaction receipt keeps the page's tab, query and server page for its own Back action.
+On a till, More permanently holds Find a bill, My schedule, Profile when there is a profile choice,
+Language, Settings and Log out. Settings holds Equipment and Zones on this device. Kitchen appears
+only under Testing on Demo or Preparation installs with the existing kitchen permission. Live tills
+keep Kitchen off their navigation; kitchen displays retain their own fixed primary screen. Find a
+bill opens Bills and Transactions. Its Back returns to Counter without replacing the basket; a
+transaction receipt keeps the page's tab, query and server page for its own Back action.
 
-A handheld keeps the adaptive bar. On a phone it puts secondary actions in More; wider, it moves
-items there only as needed. The brand mark (the venue's logo, `size="bar"`, with the word "Waitron"
-as its fallback; the word alone with no logo) is the first thing to leave, and is never drawn at
-phone width. While the logo has failed and the bar leaves it out at its first step, the bar steps
-back every `VENUE_LOGO_RETRY_MS` so the box can ask for the image again. Find a bill stays in More.
-Its action priority remains Pass, Kitchen, My schedule, Profile, Equipment and Transfers.
-Zones on this device stays in More, like Find a bill, between Profile and Equipment. The tabs
-stay on the bar while items return as room
-becomes available, and so does the language chooser above phone width; at phone width it moves to
-the end of More when the bar does not fit (see the language chooser paragraph above). Opening More holds its contents steady until it closes.
+A handheld's bar (A797 slice 3) holds the brand mark while it fits, Floor, then one button for each
+table where the signed-in person has unsent dishes, then the person's name while it fits, the Help
+switch and More, and nothing else. A table button (`bar-table` in `till-shell.ts`, built by
+`barTables` in `apps/till/src/state/bar-tables.ts`) is a `role="tab"` in the bar's tab list, drawn
+with the `.tab` look: the map's ✎ (`floor-unsent`) and the table's short name, its accessible name
+"{table} unsent" / «{table} sin enviar» while it shows ✎. An open party gets one button however many
+of its bills hold an open New order of this person's with lines; a party that is not open gets none;
+a table in a zone the device does not show keeps its button. The table on screen is the selected
+tab, with or without ✎, and Floor is selected when no button is. A table left for another table
+keeps its ✎ while its save is out, then until a floor read started after the save answered takes its
+place, and for as long as the save has failed. When the buttons do not fit, the strip scrolls
+sideways. Order has no tab on a handheld.
+
+Above phone width the bar fits itself, and only two things ever leave it: the brand mark first, then
+the name, which moves into More with its clock actions. The brand mark (the venue's logo,
+`size="bar"`, with the word "Waitron" as its fallback; the word alone with no logo) shows whenever
+everything fits, and is never drawn at phone width, where the name is always in More. While the logo
+has failed and the bar leaves it out at its first step, the bar steps back every
+`VENUE_LOGO_RETRY_MS` so the box can ask for the image again. Every other entry is in More at every
+width, in this order, the groups separated by a token-coloured rule: the name with its clock state,
+the clock actions, My hours and Fix my hours, while the name is in More; Pass, Kitchen, Find a bill,
+My schedule, Profile and Transfers, each where offered; a `role="group"` headed Settings ("Settings"
+/ «Ajustes») holding Zones on this device, Equipment, the language chooser and Theme; then Log out.
+With the name on the bar, its menu holds only the clock actions, My hours and Fix my hours, and
+without the clock the name is drawn alone. Opening More holds its contents steady until it closes.
+Floor, tapped after a table, opens the Floor on that table's zone when the device shows that zone
+(`#floorReturnZone` in `till-app.ts`), and otherwise as it did before slice 3.
 
 After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation
@@ -5379,7 +5394,8 @@ screens; there is no saved screen layout or screen editor.
 
 `builtInScreensFor` in `apps/till/src/built-in-screens.ts` owns these choices. `till-shell` renders
 the header; `TillApp` mounts Counter, Floor, Order and Kitchen directly. Opening a table on a till
-opens Order over Floor. On a handheld it selects the primary Order screen. A kitchen display needs
+opens Order over Floor. On a handheld it shows the Order screen, which has no tab there: the open
+table's button on the bar stands for it. A kitchen display needs
 `act-as-kds` before any station, pass, pass-monitor or selection notice is mounted. Profile screen
 preferences and restored URLs retain their capability checks.
 
@@ -5392,23 +5408,23 @@ and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation 
 
 Zones on this device lets a till or a handheld show a subset of the profile's permitted zones and
 choose the starting zone: a till's is under ☰ → Settings, a handheld's under ☰ → Zones on this
-device. These choices stay with the device and profile across operators and restarts. A display
-choice grants no permission. On a till, Counter is one tab for one counter zone and a checked list
-for several, and Floor contains only selected table zones. A handheld has no Counter, so its Floor
-contains every selected zone, counter zones included. A handheld opens on its "Opens first" zone
-only once a choice is saved (the zones read's `saved`); before that it opens where it always has,
-on the URL's zone or the first tab. A handheld whose zones read fails at sign-in says so, holds no
-choice and shows every permitted zone until a later read applies one. Floor's pills disappear with
-one zone. The pills, List/Map and zone menu share one toolbar, including at phone width. A till
-with no permitted zones shows an explanation, Settings and Retry. A table in a zone the device does
-not show takes no new picks and cannot send or change its New order there. Saving a choice that
-hides the open table's zone while it holds unsent dishes is refused; other tables' unsent dishes
-are not checked. Live narrowing keeps the current order or payment in place, refuses new
-forbidden picks and reconciles navigation when safe; while the open table's unsent dishes hold it
-back, that table can still send or remove them, and the narrowing applies once they are gone.
-When this device can no longer serve that table's zone (the waiting choice's `zones` leave it out),
-the table cannot send or remove them either, the zones dialog refuses a save there in the status
-line's words, and the narrowing applies once the person leaves the table.
+device, in ☰'s Settings group. These choices stay with the device and profile across operators and
+restarts. A display choice grants no permission. On a till, Counter is one tab for one counter zone
+and a checked list for several, and Floor contains only selected table zones. A handheld has no
+Counter, so its Floor contains every selected zone, counter zones included. A handheld opens on its
+"Opens first" zone only once a choice is saved (the zones read's `saved`); before that it opens
+where it always has, on the URL's zone or the first tab. A handheld whose zones read fails at
+sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
+Floor's pills disappear with one zone. The pills, List/Map and zone menu share one toolbar,
+including at phone width. A till with no permitted zones shows an explanation, Settings and Retry. A
+table in a zone the device does not show takes no new picks and cannot send or change its New order
+there. Saving a choice that hides the open table's zone while it holds unsent dishes is refused;
+other tables' unsent dishes are not checked. Live narrowing keeps the current order or payment in
+place, refuses new forbidden picks and reconciles navigation when safe; while the open table's
+unsent dishes hold it back, that table can still send or remove them, and the narrowing applies once
+they are gone. When this device can no longer serve that table's zone (the waiting choice's `zones`
+leave it out), the table cannot send or remove them either, the zones dialog refuses a save there in
+the status line's words, and the narrowing applies once the person leaves the table.
 
 ### The kitchen screen's late-send mark
 

@@ -138,17 +138,34 @@ Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como c
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
+## Volver a tus mesas con platos sin enviar {#unsent-tables}
+
+En un turno con mucho trabajo es fácil empezar un pedido en una mesa, que te llamen desde otra y
+olvidar los platos que no llegaste a enviar. Por eso, en un móvil o una tableta, la barra de arriba
+muestra **Sala** y después un botón como **✎ M4**, con el nombre corto de la mesa, por cada mesa
+donde tienes platos sin enviar; aunque varias cuentas tuyas tengan platos sin enviar allí, la mesa
+tiene un solo botón. Toca un botón para volver a esa mesa. La mesa en la que estás aparece
+resaltada, y cuando ya no queda nada tuyo sin enviar en ella su botón pierde el ✎ y desaparece al
+salir, mientras que una mesa de la que sales con platos aún sin enviar conserva su botón con ✎. Si
+otra persona se queda con tu cuenta, deja de contar como tuya: al momento en la mesa en la que
+estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas.
+
+Si tocas **Sala** después de una mesa, se abre la zona de esa mesa, si este dispositivo la muestra.
+Todo lo demás está en **Más** (☰): tu nombre y las acciones de fichaje cuando no caben en la barra,
+lo que en un móvil ocurre siempre, las pantallas que permite tu perfil, **Ajustes** (**Zonas en este
+dispositivo**, **Equipo**, **Idioma** y **Tema**) y **Salir**.
+
 ## Dar a una mesa un nombre corto {#short-names}
 
-Un móvil o una tableta muestra el nombre corto de una mesa en la barra Listo, donde hay poco
-espacio. En el
-**Plano de sala** del panel, cada mesa tiene un **Nombre corto** debajo de su **Nombre**, que se
-rellena a partir del nombre: «T1» para «Terraza 1», «Ven» para «Ventana», y un nombre de cuatro
-caracteres o menos tal cual. Sigue al nombre hasta que escribes uno propio, de hasta cinco
-caracteres, que no puede llevar «+» porque la caja lo usa para las mesas unidas. Dos mesas del
-local no pueden compartir un nombre corto, aunque cambien las mayúsculas: si Guardar dice «Terraza 1
-ya usa T1», escribe otro, como «Tb1». **Añadir mesas** muestra los nombres cortos que dará, y deja
-escribirlos cuando eliges nombres personalizados; **Añadir mesa unida** pide uno.
+Un móvil o una tableta muestra el nombre corto de una mesa en los botones de mesa de la barra y en
+la barra Listo, donde hay poco espacio. En el **Plano de sala** del panel, cada mesa tiene un
+**Nombre corto** debajo de su **Nombre**, que se rellena a partir del nombre: «T1» para «Terraza 1»,
+«Ven» para «Ventana», y un nombre de cuatro caracteres o menos tal cual. Sigue al nombre hasta que
+escribes uno propio, de hasta cinco caracteres, que no puede llevar «+» porque la caja lo usa para
+las mesas unidas. Dos mesas del local no pueden compartir un nombre corto, aunque cambien las
+mayúsculas: si Guardar dice «Terraza 1 ya usa T1», escribe otro, como «Tb1». **Añadir mesas**
+muestra los nombres cortos que dará, y deja escribirlos cuando eliges nombres personalizados;
+**Añadir mesa unida** pide uno.
 
 ## Ver qué mesas tienen comida lista {#ready-bar}
 
@@ -175,8 +192,8 @@ tiene ninguna.
 Un dispositivo muestra todas las zonas que permite su perfil. Si solo atiendes la terraza, las demás
 zonas estorban, así que puedes elegir cuáles muestra este dispositivo y en cuál se abre. En una
 caja, abre **Más** (☰), luego **Ajustes** y luego **Zonas en este dispositivo**. En un móvil o una
-tableta, abre **Más** (☰) y elige **Zonas en este dispositivo**. Marca **Mostrar** en cada zona que
-quieras, elige la que **Abre primero** y toca **Guardar**.
+tableta, abre **Más** (☰) y elige **Zonas en este dispositivo**, en **Ajustes**. Marca **Mostrar**
+en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
 Desde entonces, **Sala** muestra solo las zonas que has elegido, y con una sola zona no muestra
 pestañas de zona. Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de

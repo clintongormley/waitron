@@ -1040,8 +1040,9 @@ may predate that branch:
   [build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), as is slice 5 (the
   Ready bar on a handheld's Floor and List/Map kept per zone on the device), landed in #2063.
   Slice 1 (table short names, data) landed in #2076; slice 2 (the dashboard's short-name field,
-  which refuses a "+") landed in #2083, both built from the same plan, and slice 3 is next. Build
-  slices (design §8), in the owner's
+  which refuses a "+") landed in #2083, both built from the same plan. Slice 3 (the handheld's bar:
+  Floor, a ✎ button per table with this person's unsent dishes, then "?" and ☰, everything else in
+  ☰) is in review, built from the plan's slice 3; slices 6–7 are next. Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
@@ -1759,24 +1760,24 @@ or payment in progress keeps its context, with the grid/default change deferred 
 The implementation choices and acceptance cases are in the
 [A740 plan](../superpowers/plans/2026-10-16-a740-zones-on-device.md).
 
-2026-10-24 (A797 slice 4): a handheld has the same choice, under ☰ → Zones on this device. It
-narrows the handheld's Floor, which keeps every chosen zone, counter zones included, and blocks
-work on a hidden zone's tables there as on a till. A handheld opens on its "Opens first" zone only
-once a choice is saved (the zones read's `saved`); its new-order start stays the profile's, from an
-unchanged `GET /api/default-service-zone/offers`. A handheld whose zones read fails at sign-in
-holds no choice and allows every zone until a later read applies one. A live narrowing held back
-by the open table's unsent dishes now says "Send or remove this table's unsent dishes to hide its
-zone." on both device kinds: that table can still send or remove them, but takes no new picks, and
-a table in a zone the device already hides does not hold the narrowing back. Leaving the table
-alone does not let the narrowing apply, because leaving keeps the table's New order on the device
-(found while building). When this device can no longer serve the table's zone (the waiting
-choice's `zones` leave it out, for example because a manager took it off the profile), the table
-cannot send or remove them either: the box refuses a party's draft writes and sends in a zone
-outside the profile (`service_zone.not_allowed`; the draft route cases in
+2026-10-24 (A797 slice 4): a handheld has the same choice, under ☰ → Zones on this device (in ☰'s
+Settings group since slice 3). It narrows the handheld's Floor, which keeps every chosen zone,
+counter zones included, and blocks work on a hidden zone's tables there as on a till. A handheld
+opens on its "Opens first" zone only once a choice is saved (the zones read's `saved`); its
+new-order start stays the profile's, from an unchanged `GET /api/default-service-zone/offers`. A
+handheld whose zones read fails at sign-in holds no choice and allows every zone until a later read
+applies one. A live narrowing held back by the open table's unsent dishes now says "Send or remove
+this table's unsent dishes to hide its zone." on both device kinds: that table can still send or
+remove them, but takes no new picks, and a table in a zone the device already hides does not hold
+the narrowing back. Leaving the table alone does not let the narrowing apply, because leaving keeps
+the table's New order on the device (found while building). When this device can no longer serve the
+table's zone (the waiting choice's `zones` leave it out, for example because a manager took it off
+the profile), the table cannot send or remove them either: the box refuses a party's draft writes
+and sends in a zone outside the profile (`service_zone.not_allowed`; the draft route cases in
 `apps/server/src/till-api.profile-zones.test.ts`). The line, and the zones dialog's refusal of a
 save at that table, say "This device can no longer serve this table's zone. Leave the table to hide
-it.", and leaving the table applies the narrowing (found by review).
-[Build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
+it.", and leaving the table applies the narrowing (found by review). [Build
+plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
 
 
 - **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either

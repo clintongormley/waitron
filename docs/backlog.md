@@ -124,7 +124,9 @@ come after the list above:
   nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready
   bar and List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data)
   in #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built
-  from the build plan below; slice 3 is next. A773-2 builds the pass's part, and the phone's
+  from the build plan below. Slice 3 (the handheld's bar: Floor, a ✎ button per table with this
+  person's unsent dishes, then "?" and ☰) is in review, built from the build plan's slice 3;
+  slices 6–7 are next. A773-2 builds the pass's part, and the phone's
   order screen waits for A803's slice 3: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -1782,6 +1784,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
   the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
 
+- **A1120. A handheld stays on the table after its last send, so its button shows highlighted
+  without ✎** (for A797 slice 10). The design's worked example 1 (§4) and Q51 (b) describe Ana
+  sending everything at T9 and staying on it, its bar button highlighted without ✎ until she taps
+  Floor. Today a send that empties the New order returns a handheld to the Floor (`#returnToFloor`
+  at the end of the send in `apps/till/src/till-app.ts`). Slice 3 kept that (its D13, the driver's
+  ruling of 2026-10-26) because what the order screen does after a send is slice 10's, the
+  handheld's order screen at phone width:
+  [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §4 and §10 (Q51 (b)).
+
 - **A1057. A handheld whose profile allows no zones shows a blank Floor.** Seen, 2026-10-24 (A797
   slice 4's finish review, a browser probe on the branch): a till in that state shows the
   empty-zones page with Settings and Retry, but a handheld's home is always the Floor
@@ -2063,7 +2074,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   overflows the 552 px it is given, so Log out sits below the menu's bottom edge and nothing says
   the menu scrolls. The look hid A681's Theme row and Log out was still below the edge, so this is
   believed to predate A681 (not run on `main`). A681 puts the Theme row after Log out, so at 360×640
-  and 390×664 that row is the part that needs a scroll. Decide whether More should show that it
+  and 390×664 that row is the part that needs a scroll. On a handheld, since A797 slice 3, Log out
+  is last in ☰, after the Settings group (design §3.1), so with every entry offered it needs a
+  scroll at 360×640 (the build plan's slice 3, D6). Decide whether More should show that it
   scrolls, or hold fewer items on a short screen.
 
 - **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
@@ -2715,7 +2728,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A773-2. Slice 4 (zones on a handheld) landed in #2041 and slice 5 (the Ready bar and
   List/Map kept per zone on the device) in #2063, and slice 1 (table short names, data) in
   #2076, and slice 2 (the dashboard's short-name field, which refuses a "+") in #2083, built from
-  the build plan; slice 3 is next:
+  the build plan. Slice 3 (the handheld's bar) is in review, built from the build plan's slice 3;
+  slices 6–7 are next:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate

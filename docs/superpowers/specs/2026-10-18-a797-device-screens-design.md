@@ -213,7 +213,10 @@ screen is drawn highlighted, like a selected tab. The owner's rules (Q42 (a)):
   screen it keeps its highlighted button, without ✎ once nothing of this person's is unsent there;
   when the person leaves it, the button goes. A finished table (Finish table, or the party gone)
   has no New order left, so it never has a button. With no unsent dishes anywhere the bar is Floor,
-  "?" and ☰.
+  "?" and ☰. 2026-10-26, slice 3: a send that empties the New order still returns the handheld to
+  the Floor, so the highlighted button without ✎ shows after removing the last unsent dish, after a
+  takeover, or on a table opened with nothing unsent, not after a send; staying on the table after
+  a send is slice 10's (the build plan's slice 3, D13; backlog A1120).
 - **"✎ T4" rather than "‹ T4"** (the owner asked whether a plain "T4" reads as "back to T4"):
   recommended, because the button is there *because* something is unsent, and ✎ says that with the
   same mark the map draws on the same table; the highlighted button says "you are here". A "‹"
@@ -233,8 +236,14 @@ Everything else is in ☰: the person's name and clock actions, theme and, new, 
 > Settings: Zones on this device · Card reader · printer · Language · Theme
 > Log out
 
+2026-10-26, slice 3: Equipment keeps its name and dialog for picture 01's 'Card reader · printer'
+row, Language and Theme keep today's controls, Log out is last and needs a scroll on a short phone,
+and a table button opens its table as the Floor does until slice 11 chooses the bill; see the build
+plan's slice 3, D6–D9.
+
 On a tablet the bar has room for the name as well (picture 06). A582's "?" stays on the bar at every
-width.
+width. 2026-10-26, slice 3: the brand mark stays on the bar at the first fitting step, before Floor,
+and is the first thing to leave when the bar runs out of room (the build plan's slice 3, D15).
 
 **Floor** (picture 01): the zone tabs, with A757's mark on a tab whose zone holds an urgent table,
 the zone's ⋯ menu (List/Map, Add spare, Taken off, Reset plan, as today), and the tables drawn as
@@ -459,7 +468,8 @@ named.
    (2026-10-24, the build plan's slice 4: in the demo, Luis's Floor has no zone tabs only once he
    also unticks the Upstairs bar, a counter zone his profile allows, because a handheld's Floor
    keeps every chosen zone, counter zones included. On a handheld the entry is ☰ → Zones on this
-   device itself, not under Settings (plan D6).)
+   device itself, not under Settings (plan D6).) (2026-10-26, slice 3: the entry now sits in ☰'s
+   Settings group, under its heading.)
 
 ## 5. What the server and data side needs
 
