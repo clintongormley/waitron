@@ -80,8 +80,6 @@ Each stays open until the owner answers it. "The picture" is
    and a `duty.degraded` log line for the pass that parks it). The alternative is refreshing the
    held alert before the check resolves its Stripe account.
 
-The Stripe tip screen, the plan's sixth point, is its own entry above.
-
 7. **The alert reads "1 card payments … refund them … with each"** for a single payment: the alert
    wording has no singular form, like the other payment alerts beside it.
 8. **The dialog changes width when an outcome is chosen** (244 px empty, 372 px with the longest
@@ -436,18 +434,9 @@ the same column. Left open by the table actions plan.
 
 ## Loose ends left by W102 (NFC and equipment labels)
 
-- **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
-  `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning
-  and a return from locking the phone. Simulated readers do not verify the phone.
-  [Detail](#check-nfc-pick-up-on-the-boxs-address)
-- **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
-  Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable
-  one. Simulated writers do not verify the phone.
-  [Detail](#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
-- **Check equipment labels on a physical venue printer.** Print a portable printer's label on
-  itself and a reader's label on another active printer, scan the paper and check the name and
-  code. Confirm neither print opens the drawer. Paper output remains unverified.
-  [Detail](#check-equipment-labels-on-a-physical-venue-printer)
+- [Check NFC pick-up on the box's address](#check-nfc-pick-up-on-the-boxs-address).
+- [Check NFC sticker writing and locking on the box's address](#check-nfc-sticker-writing-and-locking-on-the-boxs-address).
+- [Check equipment labels on a physical venue printer](#check-equipment-labels-on-a-physical-venue-printer).
 
 <a id="slice-2--the-handheld-nfcqr-link"></a>
 
