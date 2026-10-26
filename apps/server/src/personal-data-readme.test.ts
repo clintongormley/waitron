@@ -421,4 +421,48 @@ ${ASK}
       spanishReadme(ACTIONS_FILES_SET),
     );
   });
+
+  const ADJUSTMENTS_FILES_SET = ["profile.json", "sign-in.json", "adjustments.json"];
+
+  it("writes every section in English with the adjustments file", () => {
+    expect(personalDataReadme({ ...base, files: ADJUSTMENTS_FILES_SET })).toBe(`${HEAD}
+
+What each file holds
+${PROFILE_LINE}
+${SIGN_IN_LINE}
+- adjustments.json: the voids, comps and discounts on a bill that you made giving a reason, or approved for someone else: how many of each kind (cancel for a void, comp for an item given free, discount_percent and discount_amount); for each one, when it happened, the order number, the item and how much of it (none for a discount on the whole bill), the percentage of a percentage discount, the amount it took off the bill, the list value of what it applied to (the item, or the whole bill), the reason chosen, how far the item had got (unsent, held, fired or served), whether the charge was kept, whether preparation had started, and your part in it. Kept to account for what is taken off the venue's bills, and who decided it.
+${MACHINE}
+
+${ORIGIN}
+
+Who else receives it
+${BACKUP}
+${CONFIG_EXPORT}
+${EMAIL}
+${GOOGLE}
+
+How long it is kept
+${PROFILE_KEPT}
+${DISABLE_KEPT}
+${SESSIONS_KEPT}
+${CLEANUP_KEPT}
+- Nothing in the box deletes or changes a void, comp or discount once it is recorded.
+${DECIDES}
+
+${RIGHTS}
+${ASK}
+`);
+  });
+
+  it("writes every section in Spanish with the adjustments file", () => {
+    const w = PERSONAL_DATA_README_WORDS.es;
+    const words = ADJUSTMENTS_FILES_SET.map((name) => ({ name, file: w.files[name] }));
+    for (const { name, file } of words) expect(file, name).toBeDefined();
+    const adjustments = w.files["adjustments.json"]!;
+    expect(adjustments.sentTo).toBeUndefined();
+    expect(adjustments.kept).toHaveLength(1);
+    expect(personalDataReadme({ ...base, language: "es", files: ADJUSTMENTS_FILES_SET })).toBe(
+      spanishReadme(ADJUSTMENTS_FILES_SET),
+    );
+  });
 });

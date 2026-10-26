@@ -3,8 +3,9 @@
 // were found by reading each `*_id`/`*_to` column's schema comment and the A664 audit (plan
 // decision 2), so a person column under any other name is missed until someone reads it. It reads
 // `@waitron/db`'s schema alone: the tables its root exports, and, for the three it does not, the
-// newest drizzle snapshot's columns. Other modules' actor columns are in the backlog point headed
-// The rest of "who did what" in the download, in docs/backlog/data-protection.md, not here.
+// newest drizzle snapshot's columns. The adjustments module's actor columns are classified by
+// packages/adjustments/src/personal-data.coverage.test.ts; other modules' are in the backlog point
+// headed The rest of "who did what" in the download, in docs/backlog/data-protection.md, not here.
 // And it proves a column was classified, not that the actions part honours the classification
 // (personal-data-actions.test.ts does that).
 import { readFileSync, readdirSync } from "node:fs";
@@ -40,7 +41,6 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "incidents.acknowledged_by",
     "invoice_deliveries.person_id",
     "invoice_pdf_downloads.person_id",
-    "line_service_cancellations.actor_id",
     "membership_clearances.person_id",
     "membership_removals.person_id",
     "order_amendments.actor_id",
@@ -63,6 +63,11 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "working_order_lines.credited_to",
   ].map((column) => [column, NOT_YET_REASON]),
 );
+
+const COVERED_ELSEWHERE: Record<string, string> = {
+  "line_service_cancellations.actor_id":
+    "the kept-charge cancel's requester; checked against its one writer of a new cancellation, line-cancel.ts's keep-charge branch, which writes the adjustments row the adjustments module's part lists (a split copies the row with its actor); a new writer must write an adjustment too",
+};
 
 const NOT_A_PERSON: Record<string, string> = {
   "print_jobs.claimed_by": "the claiming print agent's id",
@@ -180,7 +185,12 @@ describe("actions personal-data classification", () => {
         .filter((column) => ACTOR_COLUMN.test(column.name))
         .map((column) => `${config.name}.${column.name}`),
     );
-    const lists = [READ, Object.keys(NOT_YET), Object.keys(NOT_A_PERSON)];
+    const lists = [
+      READ,
+      Object.keys(NOT_YET),
+      Object.keys(COVERED_ELSEWHERE),
+      Object.keys(NOT_A_PERSON),
+    ];
     const classified = lists.flat();
     expect(classified.filter((column, index) => classified.indexOf(column) !== index)).toEqual([]);
     expect(actorColumns.sort()).toEqual(classified.sort());

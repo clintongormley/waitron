@@ -90,6 +90,8 @@ export const adjustments = table(
       name: "adjustments_working_order_fk",
     }).onDelete("restrict"),
     index("adjustments_order_reason_idx").on(t.workingOrderId, t.reasonId),
+    index("adjustments_requested_by_idx").on(t.requestedBy),
+    index("adjustments_approved_by_idx").on(t.approvedBy),
     check("adjustments_action_ck", enumCheck(t.action)),
     check("adjustments_stage_ck", enumCheck(t.stage)),
     check("adjustments_reason_name_ck", sql`length(trim(${t.reasonName})) > 0`),

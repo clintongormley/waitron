@@ -440,6 +440,9 @@ is only this node's location's (the S2b plan's decisions 2 and 6).
 were recorded, refunds and cash-drawer openings, not line voids; the admin's action is **Download
 their data** in the person's row menu on **Users** (the S2c plan's decisions 3, 5 and 11).
 
+2026-10-26: S2d adds `adjustments.json`: the voids, comps and discounts the person made giving a
+reason, or approved (the S2d plan's decisions 2 and 4).
+
 `time-record` reuses the existing export (`apps/server/src/attendance-export-api.ts:77-80`).
 `actions.csv` lists sale numbers and amounts, never another person's data. The JSON files are the
 Article 20 copy. Waitron keeps no list of requests (O7); the venue notes the request and its

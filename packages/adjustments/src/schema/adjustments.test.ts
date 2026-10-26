@@ -11,6 +11,8 @@ describe("adjustments declarations", () => {
     ]);
     expect(config.indexes.map((index) => [index.config.name, index.config.unique])).toEqual([
       ["adjustments_order_reason_idx", false],
+      ["adjustments_requested_by_idx", false],
+      ["adjustments_approved_by_idx", false],
     ]);
     expect(config.checks.map((check) => check.name).sort()).toEqual([
       "adjustments_action_ck",

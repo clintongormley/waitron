@@ -903,7 +903,7 @@ export class ProfileScreen extends LitElement {
                   aria-label=${t("profile.data_copy_help_label")}
                   guide-href=${guideHref("staff.own-data")}
                   guide-label=${t("profile.data_copy_help_guide")}
-                  >${t("profile.data_copy_help")}</wt-help-tooltip
+                  >${t("profile.data_copy_holds")}</wt-help-tooltip
                 ></span
               >
               <span class="field-meta">${t("profile.data_copy_hint")}</span>

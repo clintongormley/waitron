@@ -15,3 +15,4 @@ export { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
 export { ADJUSTMENTS_PROVISIONING, NOT_SERVED_REASON } from "./provisioning.js";
 export { ADJUSTMENTS_ROUTES } from "./routes.js";
 export { ADJUSTMENTS_BACKUP_VERIFICATION } from "./backup-verification.js";
+export { ADJUSTMENTS_PERSONAL_DATA } from "./personal-data.js";
